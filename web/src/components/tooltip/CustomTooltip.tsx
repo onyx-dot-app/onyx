@@ -8,6 +8,7 @@ import React, {
   JSX,
 } from "react";
 import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 
 // Create a context for the tooltip group
 const TooltipGroupContext = createContext<{
@@ -31,7 +32,7 @@ export const TooltipGroup: React.FC<{
     <TooltipGroupContext.Provider
       value={{ groupHovered, setGroupHovered, hoverCountRef }}
     >
-      <div className={`inline-flex ${gap}`}>{children}</div>
+      <div className={cn("inline-flex", gap)}>{children}</div>
     </TooltipGroupContext.Provider>
   );
 };
@@ -134,17 +135,17 @@ export const CustomTooltip = ({
         !disabled &&
         createPortal(
           <div
-            className={`fixed z-[1000] overflow-hidden rounded-md text-neutral-50 
+            className={`fixed z-[1000] overflow-hidden rounded-md text-neutral-50
               ${className}
               ${citation ? "max-w-[350px]" : "max-w-40"} ${
                 large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"
-              } 
+              }
             transform -translate-x-1/2 text-xs
             ${
               light
                 ? "bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50"
                 : "bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900"
-            } 
+            }
             px-2 py-1.5 shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2`}
             style={{
               top: `${tooltipPosition.top}px`,
@@ -155,7 +156,7 @@ export const CustomTooltip = ({
               <div
                 className={`absolute w-2 h-2 ${
                   position === "top" ? "bottom-1" : "-top-1"
-                } left-1/2 transform -translate-x-1/2 rotate-45 
+                } left-1/2 transform -translate-x-1/2 rotate-45
                 ${
                   light
                     ? "bg-neutral-200 dark:bg-neutral-800"
