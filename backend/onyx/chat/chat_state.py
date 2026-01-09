@@ -12,11 +12,8 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.tools.models import ToolCallInfo
-from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import wait_on_background
-
-logger = setup_logger()
 
 
 class ChatStateContainer:
@@ -203,4 +200,9 @@ def run_chat_loop_with_state_containers(
         try:
             completion_callback(state_container)
         except Exception as e:
-            logger.exception(f"Failed to call completion callback: {e}")
+            emitter.emit(
+                Packet(
+                    placement=Placement(turn_index=0),
+                    obj=PacketException(type="error", exception=e),
+                )
+            )
