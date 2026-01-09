@@ -62,7 +62,6 @@ import React from "react";
  */
 export interface SectionProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
-  vertical?: boolean;
   horizontal?: boolean;
   gap?: number;
   padding?: number;
@@ -79,7 +78,6 @@ export interface SectionProps
 }
 
 export function Section({
-  vertical,
   horizontal,
   gap = 1,
   padding = 0,
@@ -93,9 +91,7 @@ export function Section({
   vCenter,
   ...rest
 }: SectionProps) {
-  // Determine direction: horizontal overrides vertical, default is vertical
-  const isHorizontal = horizontal ? true : vertical ? false : false;
-  const direction = isHorizontal ? "flex-row" : "flex-col";
+  const direction = horizontal ? "flex-row" : "flex-col";
   const width = fit ? "w-fit" : "w-full";
 
   // For horizontal layouts (flex-row):
@@ -108,7 +104,7 @@ export function Section({
   let justifyContent = "justify-center";
   let alignItems = "items-center";
 
-  if (isHorizontal) {
+  if (horizontal) {
     // Horizontal layout: left/right/hCenter → justify-content
     justifyContent = left
       ? "justify-start"
