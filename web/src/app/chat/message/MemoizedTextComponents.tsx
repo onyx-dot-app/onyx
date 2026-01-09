@@ -184,10 +184,15 @@ export const MemoizedLink = memo(
   }
 );
 
+interface MemoizedParagraphProps {
+  className?: string;
+  children?: React.ReactNode;
+}
+
 export const MemoizedParagraph = memo(function MemoizedParagraph({
   className,
   children,
-}: any) {
+}: MemoizedParagraphProps) {
   return (
     <Text as="p" mainContentBody className={className}>
       {children}
