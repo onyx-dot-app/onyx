@@ -72,7 +72,7 @@ export default function ProviderModal({
           onClose={() => onOpenChange(false)}
         />
 
-        <Modal.Body twoTone>{children}</Modal.Body>
+        <Modal.Body>{children}</Modal.Body>
 
         {onSubmit && (
           <Modal.Footer>

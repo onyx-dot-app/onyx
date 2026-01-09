@@ -154,7 +154,7 @@ export default function AddMCPServerModal({
                 onClose={() => handleModalClose(false)}
               />
 
-              <Modal.Body twoTone>
+              <Modal.Body>
                 <FormField
                   id="name"
                   name="name"

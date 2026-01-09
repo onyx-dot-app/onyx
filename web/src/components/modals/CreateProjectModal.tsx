@@ -42,7 +42,7 @@ export default function CreateProjectModal() {
           description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
           onClose={() => modal.toggle(false)}
         />
-        <Modal.Body twoTone>
+        <Modal.Body>
           <FieldInput
             label="Project Name"
             placeholder="What are you working on?"

@@ -111,7 +111,7 @@ export default function FeedbackModal({
               ))}
             </div>
           )}
-          <Modal.Body twoTone>
+          <Modal.Body>
             <FieldInput
               label="Feedback"
               placeholder={`What did you ${feedbackType} about this response?`}

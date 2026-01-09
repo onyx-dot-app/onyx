@@ -370,7 +370,7 @@ export default function AddOpenAPIActionModal({
                     onClose={handleClose}
                   />
 
-                  <Modal.Body twoTone>
+                  <Modal.Body>
                     <FormField
                       id="openapi-schema"
                       name="definition"

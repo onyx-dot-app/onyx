@@ -37,7 +37,7 @@ export default function ConfirmationModalLayout({
           description={description}
           onClose={onClose}
         />
-        <Modal.Body twoTone>
+        <Modal.Body>
           {typeof children === "string" ? (
             <Text as="p" text03>
               {children}

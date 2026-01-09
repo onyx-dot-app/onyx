@@ -79,7 +79,7 @@ export function ChatPopup() {
           icon={headerIcon}
           title={popupTitle || "Welcome to Onyx!"}
         />
-        <Modal.Body twoTone>
+        <Modal.Body>
           <div className="overflow-y-auto text-left">
             <ReactMarkdown
               className="prose prose-neutral dark:prose-invert max-w-full"

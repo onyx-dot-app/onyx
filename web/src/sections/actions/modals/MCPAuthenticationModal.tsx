@@ -354,7 +354,7 @@ export default function MCPAuthenticationModal({
 
             return (
               <Form className="flex flex-col h-full">
-                <Modal.Body twoTone>
+                <Modal.Body>
                   <div className="flex flex-col gap-4 p-2">
                     {/* Authentication Type */}
                     <FormField

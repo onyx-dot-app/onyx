@@ -212,7 +212,7 @@ export default function UserFilesModal({
             </div>
           </Modal.Header>
 
-          <Modal.Body twoTone>
+          <Modal.Body>
             {/* File display section */}
             {filtered.length === 0 ? (
               <div className="p-4 flex w-full h-full items-center justify-center">

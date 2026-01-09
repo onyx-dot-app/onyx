@@ -341,7 +341,7 @@ export default function OpenAPIAuthenticationModal({
             dirty,
           }) => (
             <Form className="flex flex-col h-full">
-              <Modal.Body twoTone>
+              <Modal.Body>
                 {oauthConfigError && (
                   <div className="mb-3">
                     <Text
