@@ -146,7 +146,8 @@ export const CustomTooltip = ({
               large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto",
               light
                 ? "bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50"
-                : "bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900"
+                : "bg-neutral-900 dark:bg-neutral-200 text-neutral-50 dark:text-neutral-900",
+              className
             )}
             style={{
               top: `${tooltipPosition.top}px`,
