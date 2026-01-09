@@ -683,14 +683,14 @@ def handle_stream_message_objects(
         db_session.rollback()
     finally:
         try:
-            if redis_client is not None:
+            if "redis_client" in locals() and "chat_session" in locals():
                 set_processing_status(
                     chat_session.id,
                     redis_client,
                     False,
                 )
-        except Exception as e:
-            logger.exception("Error in setting processing status", e)
+        except Exception:
+            logger.exception("Error in setting processing status")
 
 
 def stream_chat_message_objects(
