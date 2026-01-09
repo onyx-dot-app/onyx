@@ -505,7 +505,7 @@ def run_llm_loop(
             # in-flight citations
             # It can be cleaned up but not super trivial or worthwhile right now
             just_ran_web_search = False
-            tool_responses, citation_mapping = run_tool_calls(
+            parallel_tool_call_results = run_tool_calls(
                 tool_calls=tool_calls,
                 tools=final_tools,
                 message_history=truncated_message_history,
@@ -516,6 +516,8 @@ def run_llm_loop(
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
             )
+            tool_responses = parallel_tool_call_results.tool_responses
+            citation_mapping = parallel_tool_call_results.updated_citation_mapping
 
             # Failure case, give something reasonable to the LLM to try again
             if tool_calls and not tool_responses:

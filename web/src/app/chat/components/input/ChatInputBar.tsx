@@ -210,6 +210,12 @@ const ChatInputBar = React.memo(
         }
       }, [message]);
 
+      useEffect(() => {
+        if (initialMessage) {
+          setMessage(initialMessage);
+        }
+      }, [initialMessage]);
+
       // Detect height changes and notify parent for scroll adjustment
       useEffect(() => {
         if (!containerRef.current) return;
