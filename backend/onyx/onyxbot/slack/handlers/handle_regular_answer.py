@@ -35,6 +35,7 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import SlackRateLimiter
 from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.utils.logger import OnyxLoggingAdapter
 
 srl = SlackRateLimiter()
@@ -236,6 +237,7 @@ def handle_regular_answer(
                 retrieval_details=retrieval_details,
                 rerank_settings=None,  # Rerank customization supported in Slack flow
                 db_session=db_session,
+                origin=MessageOrigin.SLACKBOT,
             )
 
         # if it's a DM or ephemeral message, answer based on private documents.

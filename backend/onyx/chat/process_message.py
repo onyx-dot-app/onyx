@@ -78,6 +78,10 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
+from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -329,6 +333,24 @@ def handle_stream_message_objects(
             tenant_id=tenant_id,
             distinct_id=user.email if user else tenant_id,
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
+        )
+
+        # Track user message in PostHog for analytics
+        fetch_versioned_implementation_with_fallback(
+            module="onyx.utils.telemetry",
+            attribute="event_telemetry",
+            fallback=noop_fallback,
+        )(
+            distinct_id=user.email if user else tenant_id,
+            event="user_message_sent",
+            properties={
+                "origin": new_msg_req.origin.value,
+                "has_files": len(new_msg_req.file_descriptors) > 0,
+                "has_project": chat_session.project_id is not None,
+                "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
+                "deep_research": new_msg_req.deep_research,
+                "tenant_id": tenant_id,
+            },
         )
 
         llm = get_llm_for_persona(
@@ -723,6 +745,7 @@ def stream_chat_message_objects(
         deep_research=new_msg_req.deep_research,
         parent_message_id=new_msg_req.parent_message_id,
         chat_session_id=new_msg_req.chat_session_id,
+        origin=new_msg_req.origin,
     )
     return handle_stream_message_objects(
         new_msg_req=translated_new_msg_req,
