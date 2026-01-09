@@ -630,7 +630,6 @@ async def handle_send_chat_message(
         finally:
             logger.debug("Stream consumer finished")
 
-    # Start the producer in a background thread
     run_in_background(producer)
 
     return StreamingResponse(stream_from_buffer(), media_type="text/event-stream")
