@@ -33,7 +33,7 @@ interface OrientationLayoutProps extends LabelLayoutProps {
  * ```
  */
 export interface VerticalLayoutProps extends OrientationLayoutProps {
-  subDescription?: string;
+  subDescription?: React.ReactNode;
 }
 function VerticalInputLayout({
   children,

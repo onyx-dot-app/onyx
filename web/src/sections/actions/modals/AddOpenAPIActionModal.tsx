@@ -3,9 +3,9 @@
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Text from "@/refresh-components/texts/Text";
-import { FormField } from "@/refresh-components/form/FormField";
+import * as InputLayouts from "@/layouts/input-layouts";
+import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,7 +21,7 @@ import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { Formik, Form } from "formik";
+import { Formik, Form, useField } from "formik";
 import * as Yup from "yup";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -33,6 +33,8 @@ import {
 } from "@opal/icons";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { Section } from "@/layouts/general-layouts";
+import EmptyMessage from "@/refresh-components/EmptyMessage";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
@@ -69,28 +71,6 @@ function prettifyDefinition(definition: any) {
   return JSON.stringify(definition, null, 2);
 }
 
-interface SchemaActionsProps {
-  definition: string;
-  onFormat: () => void;
-}
-
-function SchemaActions({ definition, onFormat }: SchemaActionsProps) {
-  return (
-    <div className="flex flex-col">
-      <CopyIconButton
-        tertiary
-        getCopyText={() => definition}
-        tooltip="Copy definition"
-      />
-      <IconButton
-        tertiary
-        icon={SvgBracketCurly}
-        tooltip="Format definition"
-        onClick={onFormat}
-      />
-    </div>
-  );
-}
 export default function AddOpenAPIActionModal({
   skipOverlay = false,
   onSuccess,
@@ -107,7 +87,6 @@ export default function AddOpenAPIActionModal({
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | undefined>(undefined);
   const [url, setUrl] = useState<string | undefined>(undefined);
-  const [definitionError, setDefinitionError] = useState<string | null>(null);
   const isEditMode = Boolean(existingTool);
 
   const handleModalClose = useCallback(
@@ -136,7 +115,8 @@ export default function AddOpenAPIActionModal({
   const handleFormat = useCallback(
     (
       definition: string,
-      setFieldValue: (field: string, value: any) => void
+      setFieldValue: (field: string, value: any) => void,
+      setFieldError: (field: string, message: string) => void
     ) => {
       if (!definition.trim()) {
         return;
@@ -147,51 +127,52 @@ export default function AddOpenAPIActionModal({
           parseJsonWithTrailingCommas(definition)
         );
         setFieldValue("definition", formatted);
-        setDefinitionError(null);
+        setFieldError("definition", "");
       } catch {
-        setDefinitionError("Invalid JSON format");
+        setFieldError("definition", "Invalid JSON format");
       }
     },
     []
   );
 
-  const validateDefinition = useCallback(async (rawDefinition: string) => {
-    if (!rawDefinition.trim()) {
-      setMethodSpecs(null);
-      setDefinitionError(null);
-      return;
-    }
-
-    try {
-      const parsedDefinition = parseJsonWithTrailingCommas(rawDefinition);
-      const derivedName = parsedDefinition?.info?.title;
-      const derivedDescription = parsedDefinition?.info?.description;
-      const derivedUrl = parsedDefinition?.servers?.[0]?.url;
-
-      setName(derivedName);
-      setDescription(derivedDescription);
-      setUrl(derivedUrl);
-
-      const response = await validateToolDefinition({
-        definition: parsedDefinition,
-      });
-
-      if (response.error) {
+  const validateDefinition = useCallback(
+    async (
+      rawDefinition: string,
+      setFieldError: (field: string, message: string) => void
+    ) => {
+      if (!rawDefinition.trim()) {
         setMethodSpecs(null);
-        setDefinitionError(response.error);
-      } else {
-        setMethodSpecs(response.data ?? []);
-        setDefinitionError(null);
+        setFieldError("definition", "");
+        return;
       }
-    } catch {
-      setMethodSpecs(null);
-      setDefinitionError("Invalid JSON format");
-    }
-  }, []);
 
-  const debouncedValidateDefinition = useMemo(
-    () => debounce(validateDefinition, 300),
-    [validateDefinition]
+      try {
+        const parsedDefinition = parseJsonWithTrailingCommas(rawDefinition);
+        const derivedName = parsedDefinition?.info?.title;
+        const derivedDescription = parsedDefinition?.info?.description;
+        const derivedUrl = parsedDefinition?.servers?.[0]?.url;
+
+        setName(derivedName);
+        setDescription(derivedDescription);
+        setUrl(derivedUrl);
+
+        const response = await validateToolDefinition({
+          definition: parsedDefinition,
+        });
+
+        if (response.error) {
+          setMethodSpecs(null);
+          setFieldError("definition", response.error);
+        } else {
+          setMethodSpecs(response.data ?? []);
+          setFieldError("definition", "");
+        }
+      } catch {
+        setMethodSpecs(null);
+        setFieldError("definition", "Invalid JSON format");
+      }
+    },
+    []
   );
 
   const hasOAuthConfig = Boolean(existingTool?.oauth_config_id);
@@ -334,20 +315,22 @@ export default function AddOpenAPIActionModal({
             onSubmit={handleSubmit}
             enableReinitialize
           >
-            {({
-              values,
-              errors,
-              touched,
-              handleChange,
-              handleBlur,
-              setFieldValue,
-              dirty,
-            }) => {
+            {({ values, setFieldValue, setFieldError, dirty }) => {
+              // Create debounced validation with setFieldError
+              const debouncedValidateDefinition = useMemo(
+                () =>
+                  debounce(
+                    (def: string) => validateDefinition(def, setFieldError),
+                    300
+                  ),
+                [setFieldError]
+              );
+
               // Effect for validating definition
               useEffect(() => {
                 if (!values.definition.trim()) {
                   setMethodSpecs(null);
-                  setDefinitionError(null);
+                  setFieldError("definition", "");
                   debouncedValidateDefinition.cancel();
                   return () => {
                     debouncedValidateDefinition.cancel();
@@ -359,10 +342,14 @@ export default function AddOpenAPIActionModal({
                 return () => {
                   debouncedValidateDefinition.cancel();
                 };
-              }, [values.definition]);
+              }, [
+                values.definition,
+                debouncedValidateDefinition,
+                setFieldError,
+              ]);
 
               return (
-                <Form className="gap-0">
+                <Form>
                   <Modal.Header
                     icon={SvgActions}
                     title={modalTitle}
@@ -371,73 +358,65 @@ export default function AddOpenAPIActionModal({
                   />
 
                   <Modal.Body>
-                    <FormField
-                      id="openapi-schema"
+                    <InputLayouts.Vertical
                       name="definition"
-                      className="gap-2"
-                      state={
-                        (errors.definition && touched.definition) ||
-                        definitionError
-                          ? "error"
-                          : touched.definition
-                            ? "success"
-                            : "idle"
+                      label="OpenAPI Schema Definition"
+                      subDescription={
+                        <>
+                          Specify an OpenAPI schema that defines the APIs you
+                          want to make available as part of this action. Learn
+                          more about{" "}
+                          <span className="inline-flex">
+                            <SimpleTooltip
+                              tooltip={`Open ${DOCS_ADMINS_PATH}/actions/openapi`}
+                              side="top"
+                            >
+                              <Link
+                                href={`${DOCS_ADMINS_PATH}/actions/openapi`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="underline"
+                              >
+                                OpenAPI actions
+                              </Link>
+                            </SimpleTooltip>
+                          </span>
+                          .
+                        </>
                       }
                     >
-                      <FormField.Label className="tracking-tight">
-                        OpenAPI Schema Definition
-                      </FormField.Label>
-                      <FormField.Control asChild>
-                        <InputTextArea
-                          id="definition"
+                      <div className="group/DefinitionTextAreaField relative">
+                        {values.definition.trim() && (
+                          <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
+                            <CopyIconButton
+                              internal
+                              getCopyText={() => values.definition}
+                              tooltip="Copy definition"
+                            />
+                            <IconButton
+                              internal
+                              icon={SvgBracketCurly}
+                              tooltip="Format definition"
+                              onClick={() =>
+                                handleFormat(
+                                  values.definition,
+                                  setFieldValue,
+                                  setFieldError
+                                )
+                              }
+                            />
+                          </div>
+                        )}
+                        <InputTextAreaField
                           name="definition"
-                          value={values.definition}
-                          onChange={handleChange}
-                          onBlur={handleBlur}
                           rows={14}
                           placeholder="Enter your OpenAPI schema here"
                           className="text-text-04 font-main-ui-mono"
-                          action={
-                            values.definition.trim() ? (
-                              <SchemaActions
-                                definition={values.definition}
-                                onFormat={() =>
-                                  handleFormat(values.definition, setFieldValue)
-                                }
-                              />
-                            ) : null
-                          }
                         />
-                      </FormField.Control>
-                      <FormField.Description>
-                        Specify an OpenAPI schema that defines the APIs you want
-                        to make available as part of this action. Learn more
-                        about{" "}
-                        <span className="inline-flex">
-                          <SimpleTooltip
-                            tooltip={`Open ${DOCS_ADMINS_PATH}/actions/openapi`}
-                            side="top"
-                          >
-                            <Link
-                              href={`${DOCS_ADMINS_PATH}/actions/openapi`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="underline"
-                            >
-                              OpenAPI actions
-                            </Link>
-                          </SimpleTooltip>
-                        </span>
-                        .
-                      </FormField.Description>
-                      <FormField.Message
-                        messages={{
-                          error: definitionError || errors.definition,
-                        }}
-                      />
-                    </FormField>
+                      </div>
+                    </InputLayouts.Vertical>
 
-                    <Separator className="my-0 py-0" />
+                    <Separator noPadding />
 
                     {methodSpecs && methodSpecs.length > 0 ? (
                       <>
@@ -455,8 +434,8 @@ export default function AddOpenAPIActionModal({
                             description="URL found in the schema. Only connect to servers you trust."
                           />
                         )}
-                        <Separator className="my-0 py-0" />
-                        <div className="flex flex-col gap-2">
+                        <Separator noPadding />
+                        <Section gap={0.5}>
                           {methodSpecs.map((method) => (
                             <ToolItem
                               key={`${method.method}-${method.path}-${method.name}`}
@@ -471,68 +450,71 @@ export default function AddOpenAPIActionModal({
                               }}
                             />
                           ))}
-                        </div>
+                        </Section>
                       </>
                     ) : (
-                      <div className="flex flex-row gap-3 items-start p-1.5 rounded-08 border border-border-01 border-dashed">
-                        <div className="rounded-08 bg-background-tint-01 p-1 flex items-center justify-center">
-                          <SvgActions className="size-4 stroke-text-03" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <Text as="p" mainUiAction text03>
-                            No actions found
-                          </Text>
-                          <Text as="p" secondaryBody text03>
-                            Provide OpenAPI schema to preview actions here.
-                          </Text>
-                        </div>
-                      </div>
+                      <EmptyMessage
+                        title="No Actions Found"
+                        icon={SvgActions}
+                        description="Provide OpenAPI schema to preview actions here."
+                      />
                     )}
+
                     {showAuthenticationStatus && (
-                      <FormField state="idle">
-                        <div className="flex items-start justify-between w-full">
-                          <div className="flex flex-col gap-0 items-start flex-1">
-                            <FormField.Label
-                              leftIcon={
-                                <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-                              }
-                            >
+                      <Section
+                        flexDirection="row"
+                        justifyContent="between"
+                        alignItems="start"
+                        gap={1}
+                      >
+                        <Section gap={0.25} alignItems="start">
+                          <Section
+                            flexDirection="row"
+                            gap={0.5}
+                            alignItems="center"
+                            fit
+                          >
+                            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                            <Text>
                               {existingTool?.enabled
                                 ? "Authenticated & Enabled"
                                 : "Authentication configured"}
-                            </FormField.Label>
-                            {authenticationDescription && (
-                              <FormField.Description className="pl-5">
-                                {authenticationDescription}
-                              </FormField.Description>
-                            )}
-                          </div>
-                          <FormField.Control asChild>
-                            <div className="flex gap-2 items-center justify-end">
-                              <IconButton
-                                icon={SvgUnplug}
-                                tertiary
-                                type="button"
-                                tooltip="Disable action"
-                                onClick={() => {
-                                  if (!existingTool || !onDisconnectTool) {
-                                    return;
-                                  }
-                                  onDisconnectTool(existingTool);
-                                }}
-                              />
-                              <Button
-                                secondary
-                                type="button"
-                                onClick={handleEditAuthenticationClick}
-                                disabled={!onEditAuthentication}
-                              >
-                                Edit Configs
-                              </Button>
-                            </div>
-                          </FormField.Control>
-                        </div>
-                      </FormField>
+                            </Text>
+                          </Section>
+                          {authenticationDescription && (
+                            <Text secondaryBody text03 className="pl-5">
+                              {authenticationDescription}
+                            </Text>
+                          )}
+                        </Section>
+                        <Section
+                          flexDirection="row"
+                          gap={0.5}
+                          alignItems="center"
+                          fit
+                        >
+                          <IconButton
+                            icon={SvgUnplug}
+                            tertiary
+                            type="button"
+                            tooltip="Disable action"
+                            onClick={() => {
+                              if (!existingTool || !onDisconnectTool) {
+                                return;
+                              }
+                              onDisconnectTool(existingTool);
+                            }}
+                          />
+                          <Button
+                            secondary
+                            type="button"
+                            onClick={handleEditAuthenticationClick}
+                            disabled={!onEditAuthentication}
+                          >
+                            Edit Configs
+                          </Button>
+                        </Section>
+                      </Section>
                     )}
                   </Modal.Body>
 

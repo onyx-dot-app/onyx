@@ -46,7 +46,6 @@ const validationSchema = Yup.object().shape({
 export default function AddMCPServerModal({
   skipOverlay = false,
   activeServer,
-  setActiveServer,
   disconnectModal,
   manageServerModal,
   onServerCreated,
@@ -143,7 +142,7 @@ export default function AddMCPServerModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ dirty }) => (
+          {({ isValid, dirty }) => (
             <Form>
               <Modal.Header
                 icon={SvgServer}
@@ -256,7 +255,11 @@ export default function AddMCPServerModal({
                 >
                   Cancel
                 </Button>
-                <Button primary type="submit" disabled={isSubmitting || !dirty}>
+                <Button
+                  primary
+                  type="submit"
+                  disabled={isSubmitting || !isValid || !dirty}
+                >
                   {isSubmitting
                     ? isEditMode
                       ? "Saving..."
