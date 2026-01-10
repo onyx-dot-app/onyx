@@ -10,7 +10,7 @@ aiofiles==25.1.0
     # via aioboto3
 aiohappyeyeballs==2.6.1
     # via aiohttp
-aiohttp==3.13.2
+aiohttp==3.13.3
     # via
     #   aiobotocore
     #   litellm
@@ -289,7 +289,7 @@ parameterized==0.9.0
     # via cohere
 pillow==12.0.0
     # via sentence-transformers
-prometheus-client==0.21.0
+prometheus-client==0.23.1
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator
@@ -463,7 +463,7 @@ typing-inspection==0.4.2
     # via pydantic
 tzdata==2025.2
     # via kombu
-urllib3==2.6.2
+urllib3==2.6.3
     # via
     #   botocore
     #   requests

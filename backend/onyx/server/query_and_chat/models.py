@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -34,6 +35,17 @@ from onyx.server.query_and_chat.streaming_models import Packet
 
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
+
+
+class MessageOrigin(str, Enum):
+    """Origin of a chat message for telemetry tracking."""
+
+    WEBAPP = "webapp"
+    CHROME_EXTENSION = "chrome_extension"
+    API = "api"
+    SLACKBOT = "slackbot"
+    UNKNOWN = "unknown"
+    UNSET = "unset"
 
 
 if TYPE_CHECKING:
@@ -93,6 +105,9 @@ class SendMessageRequest(BaseModel):
 
     deep_research: bool = False
 
+    # Origin of the message for telemetry tracking
+    origin: MessageOrigin = MessageOrigin.UNSET
+
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
     # - null: regeneration from root (first message)
@@ -104,11 +119,17 @@ class SendMessageRequest(BaseModel):
     chat_session_id: UUID | None = None
     chat_session_info: ChatSessionCreationRequest | None = None
 
+    # When True (default), returns StreamingResponse with SSE
+    # When False, returns ChatFullResponse with complete data
+    stream: bool = True
+
     @model_validator(mode="after")
     def check_chat_session_id_or_info(self) -> "SendMessageRequest":
+        # If neither is provided, default to creating a new chat session using the
+        # default ChatSessionCreationRequest values.
         if self.chat_session_id is None and self.chat_session_info is None:
-            raise ValueError(
-                "Either chat_session_id or chat_session_info must be provided."
+            return self.model_copy(
+                update={"chat_session_info": ChatSessionCreationRequest()}
             )
         if self.chat_session_id is not None and self.chat_session_info is not None:
             raise ValueError(
@@ -177,6 +198,9 @@ class CreateChatMessageRequest(ChunkContext):
     forced_tool_ids: list[int] | None = None
 
     deep_research: bool = False
+
+    # Origin of the message for telemetry tracking
+    origin: MessageOrigin = MessageOrigin.UNKNOWN
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":

@@ -17,16 +17,17 @@ from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
 from onyx.server.manage.models import VersionResponse
 from onyx.server.models import StatusResponse
+from onyx.server.utils import PUBLIC_API_TAGS
 
 router = APIRouter()
 
 
-@router.get("/health")
+@router.get("/health", tags=PUBLIC_API_TAGS)
 def healthcheck() -> StatusResponse:
     return StatusResponse(success=True, message="ok")
 
 
-@router.get("/auth/type")
+@router.get("/auth/type", tags=PUBLIC_API_TAGS)
 def get_auth_type() -> AuthTypeResponse:
     return AuthTypeResponse(
         auth_type=AUTH_TYPE,
@@ -36,12 +37,12 @@ def get_auth_type() -> AuthTypeResponse:
     )
 
 
-@router.get("/version")
+@router.get("/version", tags=PUBLIC_API_TAGS)
 def get_version() -> VersionResponse:
     return VersionResponse(backend_version=__version__)
 
 
-@router.get("/versions")
+@router.get("/versions", tags=PUBLIC_API_TAGS)
 def get_versions() -> AllVersions:
     """
     Fetches the latest stable and beta versions of Onyx Docker images.

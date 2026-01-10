@@ -1,7 +1,14 @@
+import time
+
+from onyx.configs.constants import MessageType
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.conftest import DocumentBuilderType
+
+TERMINATED_RESPONSE_MESSAGE = (
+    "Response was terminated prior to completion, try regenerating."
+)
 
 
 def test_send_two_messages(basic_user: DATestUser) -> None:
@@ -104,3 +111,59 @@ def test_send_message__basic_searches(
     # short doc should be more relevant and thus first
     assert response.top_documents[0].document_id == short_doc.id
     assert response.top_documents[1].document_id == long_doc.id
+
+
+def test_send_message_disconnect_and_cleanup(
+    reset: None, admin_user: DATestUser
+) -> None:
+    """
+    Test that when a client disconnects mid-stream:
+    1. Client sends a message and disconnects after receiving just 1 packet
+    2. Client checks to see that their message ends up completed
+
+    Note: There is an interim period (between disconnect and checkup) where we expect
+    to see some sort of 'loading' message.
+    """
+    LLMProviderManager.create(user_performing_action=admin_user)
+
+    test_chat_session = ChatSessionManager.create(user_performing_action=admin_user)
+
+    # Send a message and disconnect after receiving just 1 packet
+    ChatSessionManager.send_message_with_disconnect(
+        chat_session_id=test_chat_session.id,
+        message="What are some important events that happened today?",
+        user_performing_action=admin_user,
+        disconnect_after_packets=1,
+    )
+
+    # Every 5 seconds, check if we have the latest state of the chat session up to a minute
+    increment_seconds = 1
+    max_seconds = 60
+    msg = TERMINATED_RESPONSE_MESSAGE
+
+    for _ in range(max_seconds // increment_seconds):
+        time.sleep(increment_seconds)
+
+        # Get the chat history
+        chat_history = ChatSessionManager.get_chat_history(
+            chat_session=test_chat_session,
+            user_performing_action=admin_user,
+        )
+
+        # Find the assistant message
+        assistant_message = None
+        for chat_obj in chat_history:
+            if chat_obj.message_type == MessageType.ASSISTANT:
+                assistant_message = chat_obj
+                break
+
+        assert assistant_message is not None, "Assistant message should exist"
+        msg = assistant_message.message
+
+        if msg != TERMINATED_RESPONSE_MESSAGE:
+            break
+
+    assert msg != TERMINATED_RESPONSE_MESSAGE, (
+        f"Assistant message should no longer be the terminated response message after cleanup, "
+        f"got: {msg}"
+    )

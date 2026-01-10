@@ -22,6 +22,6 @@
 
 .input-disabled {
   background-color: var(--background-neutral-03);
-  border: none;
+  border: 1px solid transparent;
   cursor: not-allowed;
 }

@@ -22,7 +22,7 @@ export default function ExceptionTraceModal({
           title="Full Exception Trace"
           onClose={onOutsideClick}
         />
-        <Modal.Body className="overflow-y-auto overflow-x-hidden pr-3 max-h-[70vh]">
+        <Modal.Body>
           <div className="mb-6">
             {!copyClicked ? (
               <button

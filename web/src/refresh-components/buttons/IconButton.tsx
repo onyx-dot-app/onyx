@@ -303,6 +303,7 @@ export default function IconButton({
 
   const buttonElement = (
     <button
+      type="button"
       className={cn(
         "flex items-center justify-center h-fit w-fit group/IconButton",
         internal ? "p-1" : "p-2",

@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
@@ -17,6 +18,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import Delta
@@ -31,6 +33,7 @@ from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
+from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -45,7 +48,6 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -277,6 +279,7 @@ def _extract_tool_call_kickoffs(
 
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
+    llm_config: LLMConfig,
 ) -> LanguageModelInput:
     """Convert a list of ChatMessageSimple to LanguageModelInput format.
 
@@ -284,8 +287,23 @@ def translate_history_to_llm_format(
     handling different message types and image files for multimodal support.
     """
     messages: list[ChatCompletionMessage] = []
+    last_cacheable_msg_idx = -1
+    all_previous_msgs_cacheable = True
 
-    for msg in history:
+    for idx, msg in enumerate(history):
+        # if the message is being added to the history
+        if msg.message_type in [
+            MessageType.SYSTEM,
+            MessageType.USER,
+            MessageType.ASSISTANT,
+            MessageType.TOOL_CALL_RESPONSE,
+        ]:
+            all_previous_msgs_cacheable = (
+                all_previous_msgs_cacheable and msg.should_cache
+            )
+            if all_previous_msgs_cacheable:
+                last_cacheable_msg_idx = idx
+
         if msg.message_type == MessageType.SYSTEM:
             system_msg = SystemMessage(
                 role="system",
@@ -395,7 +413,7 @@ def translate_history_to_llm_format(
             assistant_msg_with_tool = AssistantMessage(
                 role="assistant",
                 content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
-                tool_calls=tool_calls if tool_calls else None,
+                tool_calls=tool_calls or None,
             )
             messages.append(assistant_msg_with_tool)
 
@@ -417,6 +435,18 @@ def translate_history_to_llm_format(
                 f"Unknown message type {msg.message_type} in history. Skipping message."
             )
 
+    # prompt caching: rely on should_cache in ChatMessageSimple to
+    # pick the split point for the cacheable prefix and suffix
+    if last_cacheable_msg_idx != -1:
+        processed_messages, _ = process_with_prompt_cache(
+            llm_config=llm_config,
+            cacheable_prefix=messages[: last_cacheable_msg_idx + 1],
+            suffix=messages[last_cacheable_msg_idx + 1 :],
+            continuation=False,
+        )
+        assert isinstance(processed_messages, list)  # for mypy
+        messages = processed_messages
+
     return messages
 
 
@@ -427,6 +457,10 @@ def _increment_turns(
         return turn_index + 1, None
     else:
         return turn_index, sub_turn_index + 1
+
+
+def _delta_has_action(delta: Delta) -> bool:
+    return bool(delta.content or delta.reasoning_content or delta.tool_calls)
 
 
 def run_llm_step_pkt_generator(
@@ -499,7 +533,7 @@ def run_llm_step_pkt_generator(
     tab_index = placement.tab_index
     sub_turn_index = placement.sub_turn_index
 
-    llm_msg_history = translate_history_to_llm_format(history)
+    llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = 0
 
     # Uncomment the line below to log the entire message history to the console
@@ -526,6 +560,8 @@ def run_llm_step_pkt_generator(
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
         )
+        stream_start_time = time.monotonic()
+        first_action_recorded = False
         for packet in llm.stream(
             prompt=llm_msg_history,
             tools=tool_definitions,
@@ -543,7 +579,13 @@ def run_llm_step_pkt_generator(
                     "cache_read_input_tokens": usage.cache_read_input_tokens,
                     "cache_creation_input_tokens": usage.cache_creation_input_tokens,
                 }
+                # Note: LLM cost tracking is now handled in multi_llm.py
             delta = packet.choice.delta
+            if not first_action_recorded and _delta_has_action(delta):
+                span_generation.span_data.time_to_first_action_seconds = (
+                    time.monotonic() - stream_start_time
+                )
+                first_action_recorded = True
 
             if custom_token_processor:
                 # The custom token processor can modify the deltas for specific custom logic
@@ -702,6 +744,15 @@ def run_llm_step_pkt_generator(
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
             flush_delta, processor_state = custom_token_processor(None, processor_state)
+            if (
+                not first_action_recorded
+                and flush_delta is not None
+                and _delta_has_action(flush_delta)
+            ):
+                span_generation.span_data.time_to_first_action_seconds = (
+                    time.monotonic() - stream_start_time
+                )
+                first_action_recorded = True
             if flush_delta and flush_delta.tool_calls:
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)

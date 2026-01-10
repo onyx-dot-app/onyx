@@ -136,7 +136,7 @@ export default function IndexAttemptErrorsModal({
           }
           onClose={onClose}
         />
-        <Modal.Body className="flex flex-col gap-4 min-h-0">
+        <Modal.Body>
           {!isResolvingErrors && (
             <div className="flex flex-col gap-2 flex-shrink-0">
               <Text as="p">

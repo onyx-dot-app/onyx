@@ -6,6 +6,22 @@ from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
 
+def filter_web_search_results_with_no_title_or_snippet(
+    results: list[WebSearchResult],
+) -> list[WebSearchResult]:
+    """Filter out results that have neither a title nor a snippet.
+
+    Some providers can return entries that only include a URL. Downstream uses
+    titles/snippets for display and prompting, so we drop those empty entries
+    centrally (rather than duplicating the check in each client).
+    """
+    filtered: list[WebSearchResult] = []
+    for result in results:
+        if result.title.strip() or result.snippet.strip():
+            filtered.append(result)
+    return filtered
+
+
 def truncate_search_result_content(content: str, max_chars: int = 15000) -> str:
     """Truncate search result content to a maximum number of characters"""
     if len(content) <= max_chars:

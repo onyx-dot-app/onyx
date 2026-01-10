@@ -5,6 +5,7 @@ An overview can be found in the README.md file in this directory.
 
 import re
 import traceback
+from collections.abc import Callable
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
@@ -28,6 +30,7 @@ from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ProjectSearchConfig
 from onyx.chat.models import StreamingError
+from onyx.chat.models import ToolCallResponse
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
@@ -43,6 +46,7 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.memory import get_memories
+from onyx.db.models import ChatMessage
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
@@ -65,6 +69,7 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolUsage
@@ -75,18 +80,14 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
+from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-
-
-class ToolCallException(Exception):
-    """Exception raised for errors during tool calls."""
-
-    def __init__(self, message: str, tool_name: str | None = None):
-        super().__init__(message)
-        self.tool_name = tool_name
 
 
 def _extract_project_file_texts_and_images(
@@ -285,6 +286,8 @@ def handle_stream_message_objects(
     additional_context: str | None = None,
     # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
+    # Optional external state container for non-streaming access to accumulated state
+    external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
 
@@ -334,6 +337,24 @@ def handle_stream_message_objects(
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
+        # Track user message in PostHog for analytics
+        fetch_versioned_implementation_with_fallback(
+            module="onyx.utils.telemetry",
+            attribute="event_telemetry",
+            fallback=noop_fallback,
+        )(
+            distinct_id=user.email if user else tenant_id,
+            event="user_message_sent",
+            properties={
+                "origin": new_msg_req.origin.value,
+                "has_files": len(new_msg_req.file_descriptors) > 0,
+                "has_project": chat_session.project_id is not None,
+                "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
+                "deep_research": new_msg_req.deep_research,
+                "tenant_id": tenant_id,
+            },
+        )
+
         llm = get_llm_for_persona(
             persona=persona,
             user=user,
@@ -342,6 +363,14 @@ def handle_stream_message_objects(
             long_term_logger=long_term_logger,
         )
         token_counter = get_llm_token_counter(llm)
+
+        # Check LLM cost limits before using the LLM (only for Onyx-managed keys)
+
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=tenant_id,
+            llm_provider_api_key=llm.config.api_key,
+        )
 
         # Verify that the user specified files actually belong to the user
         verify_user_files(
@@ -523,8 +552,20 @@ def handle_stream_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session.id, redis_client)
 
-        # Create state container for accumulating partial results
-        state_container = ChatStateContainer()
+        # Use external state container if provided, otherwise create internal one
+        # External container allows non-streaming callers to access accumulated state
+        state_container = external_state_container or ChatStateContainer()
+
+        def llm_loop_completion_callback(
+            state_container: ChatStateContainer,
+        ) -> None:
+            llm_loop_completion_handle(
+                state_container=state_container,
+                db_session=db_session,
+                chat_session_id=str(chat_session.id),
+                is_connected=check_is_connected,
+                assistant_message=assistant_response,
+            )
 
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
@@ -541,6 +582,7 @@ def handle_stream_message_objects(
 
             yield from run_chat_loop_with_state_containers(
                 run_deep_research_llm_loop,
+                llm_loop_completion_callback,
                 is_connected=check_is_connected,
                 emitter=emitter,
                 state_container=state_container,
@@ -557,6 +599,7 @@ def handle_stream_message_objects(
         else:
             yield from run_chat_loop_with_state_containers(
                 run_llm_loop,
+                llm_loop_completion_callback,
                 is_connected=check_is_connected,  # Not passed through to run_llm_loop
                 emitter=emitter,
                 state_container=state_container,
@@ -573,51 +616,6 @@ def handle_stream_message_objects(
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
             )
-
-        # Determine if stopped by user
-        completed_normally = check_is_connected()
-        if not completed_normally:
-            logger.debug(f"Chat session {chat_session.id} stopped by user")
-
-        # Build final answer based on completion status
-        if completed_normally:
-            if state_container.answer_tokens is None:
-                raise RuntimeError(
-                    "LLM run completed normally but did not return an answer."
-                )
-            final_answer = state_container.answer_tokens
-        else:
-            # Stopped by user - append stop message
-            if state_container.answer_tokens:
-                final_answer = (
-                    state_container.answer_tokens
-                    + " ... The generation was stopped by the user here."
-                )
-            else:
-                final_answer = "The generation was stopped by the user."
-
-        # Build citation_docs_info from accumulated citations in state container
-        citation_docs_info: list[CitationDocInfo] = []
-        seen_citation_nums: set[int] = set()
-        for citation_num, search_doc in state_container.citation_to_doc.items():
-            if citation_num not in seen_citation_nums:
-                seen_citation_nums.add(citation_num)
-                citation_docs_info.append(
-                    CitationDocInfo(
-                        search_doc=search_doc,
-                        citation_number=citation_num,
-                    )
-                )
-
-        save_chat_turn(
-            message_text=final_answer,
-            reasoning_tokens=state_container.reasoning_tokens,
-            citation_docs_info=citation_docs_info,
-            tool_calls=state_container.tool_calls,
-            db_session=db_session,
-            assistant_message=assistant_response,
-            is_clarification=state_container.is_clarification,
-        )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
@@ -636,15 +634,7 @@ def handle_stream_message_objects(
         error_msg = str(e)
         stack_trace = traceback.format_exc()
 
-        if isinstance(e, ToolCallException):
-            yield StreamingError(
-                error=error_msg,
-                stack_trace=stack_trace,
-                error_code="TOOL_CALL_FAILED",
-                is_retryable=True,
-                details={"tool_name": e.tool_name} if e.tool_name else None,
-            )
-        elif llm:
+        if llm:
             client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
                 e, llm
             )
@@ -677,6 +667,57 @@ def handle_stream_message_objects(
 
         db_session.rollback()
         return
+
+
+def llm_loop_completion_handle(
+    state_container: ChatStateContainer,
+    is_connected: Callable[[], bool],
+    db_session: Session,
+    chat_session_id: str,
+    assistant_message: ChatMessage,
+) -> None:
+    # Determine if stopped by user
+    completed_normally = is_connected()
+    # Build final answer based on completion status
+    if completed_normally:
+        if state_container.answer_tokens is None:
+            raise RuntimeError(
+                "LLM run completed normally but did not return an answer."
+            )
+        final_answer = state_container.answer_tokens
+    else:
+        # Stopped by user - append stop message
+        logger.debug(f"Chat session {chat_session_id} stopped by user")
+        if state_container.answer_tokens:
+            final_answer = (
+                state_container.answer_tokens
+                + " ... \n\nGeneration was stopped by the user."
+            )
+        else:
+            final_answer = "The generation was stopped by the user."
+
+    # Build citation_docs_info from accumulated citations in state container
+    citation_docs_info: list[CitationDocInfo] = []
+    seen_citation_nums: set[int] = set()
+    for citation_num, search_doc in state_container.citation_to_doc.items():
+        if citation_num not in seen_citation_nums:
+            seen_citation_nums.add(citation_num)
+            citation_docs_info.append(
+                CitationDocInfo(
+                    search_doc=search_doc,
+                    citation_number=citation_num,
+                )
+            )
+
+    save_chat_turn(
+        message_text=final_answer,
+        reasoning_tokens=state_container.reasoning_tokens,
+        citation_docs_info=citation_docs_info,
+        tool_calls=state_container.tool_calls,
+        db_session=db_session,
+        assistant_message=assistant_message,
+        is_clarification=state_container.is_clarification,
+    )
 
 
 def stream_chat_message_objects(
@@ -725,6 +766,7 @@ def stream_chat_message_objects(
         deep_research=new_msg_req.deep_research,
         parent_message_id=new_msg_req.parent_message_id,
         chat_session_id=new_msg_req.chat_session_id,
+        origin=new_msg_req.origin,
     )
     return handle_stream_message_objects(
         new_msg_req=translated_new_msg_req,
@@ -789,4 +831,84 @@ def gather_stream(
         message_id=message_id,
         error_msg=error_msg,
         top_documents=top_documents,
+    )
+
+
+@log_function_time()
+def gather_stream_full(
+    packets: AnswerStream,
+    state_container: ChatStateContainer,
+) -> ChatFullResponse:
+    """
+    Aggregate streaming packets and state container into a complete ChatFullResponse.
+
+    This function consumes all packets from the stream and combines them with
+    the accumulated state from the ChatStateContainer to build a complete response
+    including answer, reasoning, citations, and tool calls.
+
+    Args:
+        packets: The stream of packets from handle_stream_message_objects
+        state_container: The state container that accumulates tool calls, reasoning, etc.
+
+    Returns:
+        ChatFullResponse with all available data
+    """
+    answer: str | None = None
+    citations: list[CitationInfo] = []
+    error_msg: str | None = None
+    message_id: int | None = None
+    top_documents: list[SearchDoc] = []
+    chat_session_id: UUID | None = None
+
+    for packet in packets:
+        if isinstance(packet, Packet):
+            if isinstance(packet.obj, AgentResponseStart):
+                if packet.obj.final_documents:
+                    top_documents = packet.obj.final_documents
+            elif isinstance(packet.obj, AgentResponseDelta):
+                if answer is None:
+                    answer = ""
+                if packet.obj.content:
+                    answer += packet.obj.content
+            elif isinstance(packet.obj, CitationInfo):
+                citations.append(packet.obj)
+        elif isinstance(packet, StreamingError):
+            error_msg = packet.error
+        elif isinstance(packet, MessageResponseIDInfo):
+            message_id = packet.reserved_assistant_message_id
+        elif isinstance(packet, CreateChatSessionID):
+            chat_session_id = packet.chat_session_id
+
+    if message_id is None:
+        raise ValueError("Message ID is required")
+
+    # Use state_container for complete answer (handles edge cases gracefully)
+    final_answer = state_container.get_answer_tokens() or answer or ""
+
+    # Get reasoning from state container (None when model doesn't produce reasoning)
+    reasoning = state_container.get_reasoning_tokens()
+
+    # Convert ToolCallInfo list to ToolCallResponse list
+    tool_call_responses = [
+        ToolCallResponse(
+            tool_name=tc.tool_name,
+            tool_arguments=tc.tool_call_arguments,
+            tool_result=tc.tool_call_response,
+            search_docs=tc.search_docs,
+            generated_images=tc.generated_images,
+            pre_reasoning=tc.reasoning_tokens,
+        )
+        for tc in state_container.get_tool_calls()
+    ]
+
+    return ChatFullResponse(
+        answer=final_answer,
+        answer_citationless=remove_answer_citations(final_answer),
+        pre_answer_reasoning=reasoning,
+        tool_calls=tool_call_responses,
+        top_documents=top_documents,
+        citation_info=citations,
+        message_id=message_id,
+        chat_session_id=chat_session_id,
+        error_msg=error_msg,
     )

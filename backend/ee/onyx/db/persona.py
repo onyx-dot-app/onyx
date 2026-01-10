@@ -34,6 +34,7 @@ def make_persona_private(
                 create_notification(
                     user_id=user_id,
                     notif_type=NotificationType.PERSONA_SHARED,
+                    title="A new agent was shared with you!",
                     db_session=db_session,
                     additional_data=PersonaSharedNotificationData(
                         persona_id=persona_id,

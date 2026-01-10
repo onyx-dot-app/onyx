@@ -120,6 +120,14 @@ VALID_EMAIL_DOMAINS = (
     if _VALID_EMAIL_DOMAINS_STR
     else []
 )
+
+# Disposable email blocking - blocks temporary/throwaway email addresses
+# Set to empty string to disable disposable email blocking
+DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
+    "DISPOSABLE_EMAIL_DOMAINS_URL",
+    "https://disposable.github.io/disposable-email-domains/domains.json",
+)
+
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
 OAUTH_CLIENT_ID = (
@@ -191,6 +199,10 @@ OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
+
+ENABLE_OPENSEARCH_FOR_ONYX = (
+    os.environ.get("ENABLE_OPENSEARCH_FOR_ONYX", "").lower() == "true"
+)
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
 # NOTE: this is used if and only if the vespa config server is accessible via a
@@ -556,6 +568,7 @@ JIRA_CONNECTOR_LABELS_TO_SKIP = [
 JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
     os.environ.get("JIRA_CONNECTOR_MAX_TICKET_SIZE", 100 * 1024)
 )
+JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
@@ -667,10 +680,6 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
     os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 8
 )
 
-# Maximum number of user file connector credential pairs to index in a single batch
-# Setting this number too high may overload the indexing process
-USER_FILE_INDEXING_LIMIT = int(os.environ.get("USER_FILE_INDEXING_LIMIT") or 100)
-
 # Maximum file size in a document to be indexed
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
@@ -742,7 +751,27 @@ BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
 # Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
 # Maximum concurrency for Braintrust evaluations
-BRAINTRUST_MAX_CONCURRENCY = int(os.environ.get("BRAINTRUST_MAX_CONCURRENCY") or 5)
+# None means unlimited concurrency, otherwise specify a number
+_braintrust_concurrency = os.environ.get("BRAINTRUST_MAX_CONCURRENCY")
+BRAINTRUST_MAX_CONCURRENCY = (
+    int(_braintrust_concurrency) if _braintrust_concurrency else None
+)
+
+#####
+# Scheduled Evals Configuration
+#####
+# Comma-separated list of Braintrust dataset names to run on schedule
+SCHEDULED_EVAL_DATASET_NAMES = [
+    name.strip()
+    for name in os.environ.get("SCHEDULED_EVAL_DATASET_NAMES", "").split(",")
+    if name.strip()
+]
+# Email address to use for search permissions during scheduled evals
+SCHEDULED_EVAL_PERMISSIONS_EMAIL = os.environ.get(
+    "SCHEDULED_EVAL_PERMISSIONS_EMAIL", "roshan@onyx.app"
+)
+# Braintrust project name to use for scheduled evals
+SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 
 #####
 # Langfuse Configuration
@@ -800,6 +829,11 @@ ENTERPRISE_EDITION_ENABLED = (
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
 
+#####
+# Image Generation Configuration (DEPRECATED)
+# These environment variables will be deprecated soon.
+# To configure image generation, please visit the Image Generation page in the Admin Panel.
+#####
 # Azure Image Configurations
 AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
     "AZURE_DALLE_API_VERSION"
@@ -884,6 +918,19 @@ DEV_MODE = os.environ.get("DEV_MODE", "").lower() == "true"
 
 INTEGRATION_TESTS_MODE = os.environ.get("INTEGRATION_TESTS_MODE", "").lower() == "true"
 
+#####
+# Captcha Configuration (for cloud signup protection)
+#####
+# Enable captcha verification for new user registration
+CAPTCHA_ENABLED = os.environ.get("CAPTCHA_ENABLED", "").lower() == "true"
+
+# Google reCAPTCHA secret key (server-side validation)
+RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "")
+
+# Minimum score threshold for reCAPTCHA v3 (0.0-1.0, higher = more likely human)
+# 0.5 is the recommended default
+RECAPTCHA_SCORE_THRESHOLD = float(os.environ.get("RECAPTCHA_SCORE_THRESHOLD", "0.5"))
+
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
@@ -937,3 +984,15 @@ S3_GENERATE_LOCAL_CHECKSUM = (
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
 VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
+
+
+#####
+# Default LLM API Keys (for cloud deployments)
+# These are Onyx-managed API keys provided to tenants by default
+#####
+OPENAI_DEFAULT_API_KEY = os.environ.get("OPENAI_DEFAULT_API_KEY")
+ANTHROPIC_DEFAULT_API_KEY = os.environ.get("ANTHROPIC_DEFAULT_API_KEY")
+COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
+VERTEXAI_DEFAULT_CREDENTIALS = os.environ.get("VERTEXAI_DEFAULT_CREDENTIALS")
+VERTEXAI_DEFAULT_LOCATION = os.environ.get("VERTEXAI_DEFAULT_LOCATION", "global")
+OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")

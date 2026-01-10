@@ -71,7 +71,7 @@ def run_jobs() -> None:
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docfetching@%n",
-        "--queues=connector_doc_fetching,user_files_indexing",
+        "--queues=connector_doc_fetching",
     ]
 
     cmd_beat = [

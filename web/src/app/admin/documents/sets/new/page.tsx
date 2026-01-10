@@ -63,7 +63,7 @@ function Main() {
 
 const Page = () => {
   return (
-    <div className="container">
+    <>
       <BackButton />
 
       <AdminPageTitle
@@ -72,7 +72,7 @@ const Page = () => {
       />
 
       <Main />
-    </div>
+    </>
   );
 };
 

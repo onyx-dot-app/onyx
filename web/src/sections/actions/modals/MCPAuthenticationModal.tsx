@@ -327,7 +327,6 @@ export default function MCPAuthenticationModal({
           icon={SvgArrowExchange}
           title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
           description="Authenticate your connection to start using the MCP server."
-          className="p-4"
         />
 
         <Formik<MCPAuthFormValues>
@@ -355,7 +354,7 @@ export default function MCPAuthenticationModal({
 
             return (
               <Form className="flex flex-col h-full">
-                <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
+                <Modal.Body>
                   <div className="flex flex-col gap-4 p-2">
                     {/* Authentication Type */}
                     <FormField
@@ -641,7 +640,7 @@ export default function MCPAuthenticationModal({
                   )}
                 </Modal.Body>
 
-                <Modal.Footer className="gap-2">
+                <Modal.Footer>
                   <Button
                     main
                     tertiary

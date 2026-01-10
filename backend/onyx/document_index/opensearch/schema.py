@@ -1,9 +1,11 @@
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import Self
 
 from pydantic import BaseModel
 from pydantic import field_serializer
+from pydantic import model_validator
 
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
@@ -33,6 +35,21 @@ DOCUMENT_ID_FIELD_NAME = "document_id"
 CHUNK_INDEX_FIELD_NAME = "chunk_index"
 MAX_CHUNK_SIZE_FIELD_NAME = "max_chunk_size"
 TENANT_ID_FIELD_NAME = "tenant_id"
+BLURB_FIELD_NAME = "blurb"
+
+
+def get_opensearch_doc_chunk_id(
+    document_id: str, chunk_index: int, max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
+) -> str:
+    """
+    Returns a unique identifier for the chunk.
+
+    TODO(andrei): Add source type to this.
+    TODO(andrei): Add tenant ID to this.
+    TODO(andrei): Sanitize document_id in the event it contains characters that
+    are not allowed in OpenSearch IDs.
+    """
+    return f"{document_id}__{max_chunk_size}__{chunk_index}"
 
 
 class DocumentChunk(BaseModel):
@@ -47,7 +64,10 @@ class DocumentChunk(BaseModel):
 
     document_id: str
     chunk_index: int
-    # The maximum number of tokens this chunk's content can hold.
+    # The maximum number of tokens this chunk's content can hold. Previously
+    # there was a concept of large chunks, this is a generic concept of that. We
+    # can choose to have any size of chunks in the index and they should be
+    # distinct from one another.
     max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
 
     # Either both should be None or both should be non-None.
@@ -64,26 +84,41 @@ class DocumentChunk(BaseModel):
     last_updated: datetime | None = None
     created_at: datetime | None = None
 
-    public: bool = False
+    public: bool
     access_control_list: list[str] | None = None
+    # Defaults to False, currently gets written during update not index.
     hidden: bool = False
 
     global_boost: float = 1.0
 
-    semantic_identifier: str | None = None
+    semantic_identifier: str
     image_file_name: str | None = None
-    source_links: list[str] | None = None
+    # Contains a string representation of a dict which maps offset into the raw
+    # chunk text to the link corresponding to that point.
+    source_links: str | None = None
+    blurb: str
 
     document_sets: list[str] | None = None
     project_ids: list[int] | None = None
 
     tenant_id: str | None = None
 
-    def get_opensearch_doc_chunk_id(self) -> str:
-        """
-        Returns a unique identifier for the chunk.
-        """
-        return f"{self.source_type}__{self.document_id}__{self.max_chunk_size}__{self.chunk_index}"
+    @model_validator(mode="after")
+    def check_num_tokens_fits_within_max_chunk_size(self) -> Self:
+        if self.num_tokens > self.max_chunk_size:
+            raise ValueError(
+                "Bug: Num tokens must be less than or equal to max chunk size."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def check_title_and_title_vector_are_consistent(self) -> Self:
+        # title and title_vector should both either be None or not.
+        if self.title is not None and self.title_vector is None:
+            raise ValueError("Bug: Title vector must not be None if title is not None.")
+        if self.title_vector is not None and self.title is None:
+            raise ValueError("Bug: Title must not be None if title vector is not None.")
+        return self
 
     @field_serializer("last_updated", "created_at", mode="plain")
     def serialize_datetime_fields_to_epoch_millis(
@@ -175,8 +210,11 @@ class DocumentSchema:
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
-                # Number of tokens in the chunk's content.
-                NUM_TOKENS_FIELD_NAME: {"type": "integer", "store": True},
+                # See TODO in _convert_onyx_chunk_to_opensearch_document. I
+                # don't want to actually add this to the schema until we know
+                # for sure we need it. If we decide we don't I will remove this.
+                # # Number of tokens in the chunk's content.
+                # NUM_TOKENS_FIELD_NAME: {"type": "integer", "store": True},
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
                 # Application logic should store in the format key:::value.
                 METADATA_FIELD_NAME: {"type": "keyword"},
@@ -187,13 +225,16 @@ class DocumentSchema:
                     # would make sense to sort by date.
                     "doc_values": True,
                 },
-                CREATED_AT_FIELD_NAME: {
-                    "type": "date",
-                    "format": "epoch_millis",
-                    # For some reason date defaults to False, even though it
-                    # would make sense to sort by date.
-                    "doc_values": True,
-                },
+                # See TODO in _convert_onyx_chunk_to_opensearch_document. I
+                # don't want to actually add this to the schema until we know
+                # for sure we need it. If we decide we don't I will remove this.
+                # CREATED_AT_FIELD_NAME: {
+                #     "type": "date",
+                #     "format": "epoch_millis",
+                #     # For some reason date defaults to False, even though it
+                #     # would make sense to sort by date.
+                #     "doc_values": True,
+                # },
                 # Access control fields.
                 # Whether the doc is public. Could have fallen under access
                 # control list but is such a broad and critical filter that it
@@ -225,6 +266,13 @@ class DocumentSchema:
                 },
                 # Same as above; used to link to the source doc.
                 SOURCE_LINKS_FIELD_NAME: {
+                    "type": "keyword",
+                    "index": False,
+                    "doc_values": False,
+                    "store": False,
+                },
+                # Same as above; used to quickly summarize the doc in the UI.
+                BLURB_FIELD_NAME: {
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,

@@ -9,13 +9,7 @@ from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ee.onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
-from ee.onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
-from ee.onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
-from ee.onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
-from ee.onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
-from ee.onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import TenantByDomainResponse
 from ee.onyx.server.tenants.models import TenantCreationPayload
@@ -27,11 +21,18 @@ from ee.onyx.server.tenants.user_mapping import add_users_to_tenant
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
 from onyx.auth.users import exceptions
+from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
+from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.configs.app_configs import DEV_MODE
+from onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
+from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
+from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
+from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.configs.constants import MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.image_generation import create_default_image_gen_config_from_api_key
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.llm import upsert_llm_provider
@@ -330,6 +331,14 @@ def configure_default_api_keys(db_session: Session) -> None:
             is_auto_mode=True,
         )
         _upsert(openai_provider)
+
+        # Create default image generation config using the OpenAI API key
+        try:
+            create_default_image_gen_config_from_api_key(
+                db_session, OPENAI_DEFAULT_API_KEY
+            )
+        except Exception as e:
+            logger.error(f"Failed to create default image gen config: {e}")
     else:
         logger.info(
             "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"

@@ -20,7 +20,7 @@ export function AdminTextField({
   type = "text",
   isTextArea = false,
   disabled = false,
-  autoCompleteDisabled = true,
+  autoCompleteEnabled,
   error,
   defaultHeight,
   isCode = false,
@@ -45,7 +45,7 @@ export function AdminTextField({
   isTextArea?: boolean;
   disabled?: boolean;
   noPadding?: boolean;
-  autoCompleteDisabled?: boolean;
+  autoCompleteEnabled?: boolean;
   error?: string;
   defaultHeight?: string;
   isCode?: boolean;
@@ -112,7 +112,7 @@ export function AdminTextField({
           `}
         disabled={disabled}
         placeholder={placeholder}
-        autoComplete={autoCompleteDisabled ? "off" : undefined}
+        autoComplete={autoCompleteEnabled ? undefined : "off"}
         {...(onChange ? { onChange } : {})}
       />
 

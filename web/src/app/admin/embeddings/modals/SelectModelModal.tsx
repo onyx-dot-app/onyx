@@ -30,7 +30,7 @@ export default function SelectModelModal({
             you will need to undergo a complete re-indexing. Are you sure?
           </Text>
         </Modal.Body>
-        <Modal.Footer className="p-4 gap-2 justify-end">
+        <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
           <Button secondary onClick={onCancel}>
             Cancel

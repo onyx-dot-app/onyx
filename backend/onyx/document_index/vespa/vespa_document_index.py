@@ -28,6 +28,7 @@ from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
@@ -60,25 +61,11 @@ from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
 
 
-logger = setup_logger()
+logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
 # default it emits INFO-level logs for every request.
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
-
-
-class TenantState(BaseModel):
-    """
-    Captures the tenant-related state for an instance of VespaDocumentIndex.
-
-    TODO(andrei): If we find that we need this for Opensearch too, just move
-    this to interfaces_new.py.
-    """
-
-    model_config = {"frozen": True}
-
-    tenant_id: str
-    multitenant: bool
 
 
 def _enrich_basic_chunk_info(
@@ -228,7 +215,6 @@ def _update_single_chunk(
     doc_id: str,
     http_client: httpx.Client,
     update_request: MetadataUpdateRequest,
-    new_doc_id: str | None,
 ) -> None:
     """Updates a single document chunk in Vespa.
 
@@ -264,11 +250,6 @@ def _update_single_chunk(
         model_config = {"frozen": True}
         assign: list[int]
 
-    # TODO(andrei): Very temporary, delete soon.
-    class _DocumentId(BaseModel):
-        model_config = {"frozen": True}
-        assign: str
-
     class _VespaPutFields(BaseModel):
         model_config = {"frozen": True}
         # The names of these fields are based the Vespa schema. Changes to the
@@ -279,8 +260,6 @@ def _update_single_chunk(
         access_control_list: _AccessControl | None = None
         hidden: _Hidden | None = None
         user_project: _UserProjects | None = None
-        # TODO(andrei): Very temporary, delete soon.
-        document_id: _DocumentId | None = None
 
     class _VespaPutRequest(BaseModel):
         model_config = {"frozen": True}
@@ -315,10 +294,6 @@ def _update_single_chunk(
         if update_request.project_ids is not None
         else None
     )
-    # TODO(andrei): Very temporary, delete soon.
-    document_id_update: _DocumentId | None = (
-        _DocumentId(assign=new_doc_id) if new_doc_id is not None else None
-    )
 
     vespa_put_fields = _VespaPutFields(
         boost=boost_update,
@@ -326,8 +301,6 @@ def _update_single_chunk(
         access_control_list=access_update,
         hidden=hidden_update,
         user_project=user_projects_update,
-        # TODO(andrei): Very temporary, delete soon.
-        document_id=document_id_update,
     )
 
     vespa_put_request = _VespaPutRequest(
@@ -396,10 +369,6 @@ class VespaDocumentIndex(DocumentIndex):
                 get_vespa_http_client
             )
         self._multitenant = tenant_state.multitenant
-        if self._multitenant:
-            assert (
-                self._tenant_id
-            ), "Bug: Must supply a tenant id if in multitenant mode."
 
     def verify_and_create_index_if_necessary(
         self, embedding_dim: int, embedding_precision: EmbeddingPrecision
@@ -557,10 +526,6 @@ class VespaDocumentIndex(DocumentIndex):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
-        # TODO(andrei), WARNING: Very temporary, this is not the interface we want
-        # in Updatable, we only have this to continue supporting
-        # user_file_docid_migration_task for Vespa which should be done soon.
-        old_doc_id_to_new_doc_id: dict[str, str],
     ) -> None:
         # WARNING: This method can be called by vespa_metadata_sync_task, which
         # is kicked off by check_for_vespa_sync_task, notably before a document
@@ -601,8 +566,6 @@ class VespaDocumentIndex(DocumentIndex):
                             doc_id,
                             httpx_client,
                             update_request,
-                            # NOTE: The key is the raw ID, not the sanitized ID.
-                            new_doc_id=old_doc_id_to_new_doc_id.get(doc_id, None),
                         )
 
                     logger.info(

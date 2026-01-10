@@ -19,11 +19,14 @@ from onyx.utils.retry_wrapper import retry_builder
 logger = setup_logger()
 
 
-# TODO can probably break this up
 class ExaClient(WebSearchProvider, WebContentProvider):
     def __init__(self, api_key: str, num_results: int = 10) -> None:
         self.exa = Exa(api_key=api_key)
         self._num_results = num_results
+
+    @property
+    def supports_site_filter(self) -> bool:
+        return False
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
@@ -37,20 +40,25 @@ class ExaClient(WebSearchProvider, WebContentProvider):
             num_results=self._num_results,
         )
 
-        return [
-            WebSearchResult(
-                title=result.title or "",
-                link=result.url,
-                snippet=result.highlights[0] if result.highlights else "",
-                author=result.author,
-                published_date=(
-                    time_str_to_utc(result.published_date)
-                    if result.published_date
-                    else None
-                ),
+        results: list[WebSearchResult] = []
+        for result in response.results:
+            title = (result.title or "").strip()
+            snippet = (result.highlights[0] if result.highlights else "").strip()
+            results.append(
+                WebSearchResult(
+                    title=title,
+                    link=result.url,
+                    snippet=snippet,
+                    author=result.author,
+                    published_date=(
+                        time_str_to_utc(result.published_date)
+                        if result.published_date
+                        else None
+                    ),
+                )
             )
-            for result in response.results
-        ]
+
+        return results
 
     def test_connection(self) -> dict[str, str]:
         try:
@@ -89,16 +97,23 @@ class ExaClient(WebSearchProvider, WebContentProvider):
             livecrawl="preferred",
         )
 
-        return [
-            WebContent(
-                title=result.title or "",
-                link=result.url,
-                full_content=result.text or "",
-                published_date=(
-                    time_str_to_utc(result.published_date)
-                    if result.published_date
-                    else None
-                ),
+        # Exa can return partial/empty content entries; skip those to avoid
+        # downstream prompt + UI pollution.
+        contents: list[WebContent] = []
+        for result in response.results:
+            title = (result.title or "").strip()
+            full_content = (result.text or "").strip()
+            contents.append(
+                WebContent(
+                    title=title,
+                    link=result.url,
+                    full_content=full_content,
+                    published_date=(
+                        time_str_to_utc(result.published_date)
+                        if result.published_date
+                        else None
+                    ),
+                )
             )
-            for result in response.results
-        ]
+
+        return contents

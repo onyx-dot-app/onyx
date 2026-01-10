@@ -39,6 +39,7 @@ class ChatStateContainer:
         self.citation_to_doc: CitationMapping = {}
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
+        # Note: LLM cost tracking is now handled in multi_llm.py
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -93,6 +94,7 @@ class ChatStateContainer:
 
 def run_chat_loop_with_state_containers(
     func: Callable[..., None],
+    completion_callback: Callable[[ChatStateContainer], None],
     is_connected: Callable[[], bool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -195,3 +197,12 @@ def run_chat_loop_with_state_containers(
         # Skip waiting if user disconnected to exit quickly.
         if is_connected():
             wait_on_background(thread)
+        try:
+            completion_callback(state_container)
+        except Exception as e:
+            emitter.emit(
+                Packet(
+                    placement=Placement(turn_index=last_turn_index + 1),
+                    obj=PacketException(type="error", exception=e),
+                )
+            )
