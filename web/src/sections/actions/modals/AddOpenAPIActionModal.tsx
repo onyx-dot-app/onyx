@@ -21,7 +21,7 @@ import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { Formik, Form, useField } from "formik";
+import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -306,243 +306,237 @@ export default function AddOpenAPIActionModal({
       : "Add Action";
 
   return (
-    <>
-      <Modal open={isOpen} onOpenChange={handleModalClose}>
-        <Modal.Content tall skipOverlay={skipOverlay}>
-          <Formik
-            initialValues={initialValues}
-            validationSchema={validationSchema}
-            onSubmit={handleSubmit}
-            enableReinitialize
-          >
-            {({ values, setFieldValue, setFieldError, dirty }) => {
-              // Create debounced validation with setFieldError
-              const debouncedValidateDefinition = useMemo(
-                () =>
-                  debounce(
-                    (def: string) => validateDefinition(def, setFieldError),
-                    300
-                  ),
-                [setFieldError]
-              );
+    <Modal open={isOpen} onOpenChange={handleModalClose}>
+      <Modal.Content tall skipOverlay={skipOverlay}>
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+          enableReinitialize
+        >
+          {({ values, setFieldValue, setFieldError, dirty }) => {
+            // Create debounced validation with setFieldError
+            const debouncedValidateDefinition = useMemo(
+              () =>
+                debounce(
+                  (def: string) => validateDefinition(def, setFieldError),
+                  300
+                ),
+              [setFieldError]
+            );
 
-              // Effect for validating definition
-              useEffect(() => {
-                if (!values.definition.trim()) {
-                  setMethodSpecs(null);
-                  setFieldError("definition", "");
-                  debouncedValidateDefinition.cancel();
-                  return () => {
-                    debouncedValidateDefinition.cancel();
-                  };
-                }
-
-                debouncedValidateDefinition(values.definition);
-
+            // Effect for validating definition
+            useEffect(() => {
+              if (!values.definition.trim()) {
+                setMethodSpecs(null);
+                setFieldError("definition", "");
+                debouncedValidateDefinition.cancel();
                 return () => {
                   debouncedValidateDefinition.cancel();
                 };
-              }, [
-                values.definition,
-                debouncedValidateDefinition,
-                setFieldError,
-              ]);
+              }
 
-              return (
-                <Form>
-                  <Modal.Header
-                    icon={SvgActions}
-                    title={modalTitle}
-                    description={modalDescription}
-                    onClose={handleClose}
-                  />
+              debouncedValidateDefinition(values.definition);
 
-                  <Modal.Body>
-                    <InputLayouts.Vertical
-                      name="definition"
-                      label="OpenAPI Schema Definition"
-                      subDescription={
-                        <>
-                          Specify an OpenAPI schema that defines the APIs you
-                          want to make available as part of this action. Learn
-                          more about{" "}
-                          <span className="inline-flex">
-                            <SimpleTooltip
-                              tooltip={`Open ${DOCS_ADMINS_PATH}/actions/openapi`}
-                              side="top"
-                            >
-                              <Link
-                                href={`${DOCS_ADMINS_PATH}/actions/openapi`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="underline"
-                              >
-                                OpenAPI actions
-                              </Link>
-                            </SimpleTooltip>
-                          </span>
-                          .
-                        </>
-                      }
-                    >
-                      <div className="group/DefinitionTextAreaField relative">
-                        {values.definition.trim() && (
-                          <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
-                            <CopyIconButton
-                              internal
-                              getCopyText={() => values.definition}
-                              tooltip="Copy definition"
-                            />
-                            <IconButton
-                              internal
-                              icon={SvgBracketCurly}
-                              tooltip="Format definition"
-                              onClick={() =>
-                                handleFormat(
-                                  values.definition,
-                                  setFieldValue,
-                                  setFieldError
-                                )
-                              }
-                            />
-                          </div>
-                        )}
-                        <InputTextAreaField
-                          name="definition"
-                          rows={14}
-                          placeholder="Enter your OpenAPI schema here"
-                          className="text-text-04 font-main-ui-mono"
-                        />
-                      </div>
-                    </InputLayouts.Vertical>
+              return () => {
+                debouncedValidateDefinition.cancel();
+              };
+            }, [values.definition, debouncedValidateDefinition, setFieldError]);
 
-                    <Separator noPadding />
+            return (
+              <Form>
+                <Modal.Header
+                  icon={SvgActions}
+                  title={modalTitle}
+                  description={modalDescription}
+                  onClose={handleClose}
+                />
 
-                    {methodSpecs && methodSpecs.length > 0 ? (
+                <Modal.Body>
+                  <InputLayouts.Vertical
+                    name="definition"
+                    label="OpenAPI Schema Definition"
+                    subDescription={
                       <>
-                        {name && (
-                          <InfoBlock
-                            icon={getActionIcon(url || "", name || "")}
-                            title={name}
-                            description={description}
-                          />
-                        )}
-                        {url && (
-                          <InfoBlock
-                            icon={SvgAlertCircle}
-                            title={url || ""}
-                            description="URL found in the schema. Only connect to servers you trust."
-                          />
-                        )}
-                        <Separator noPadding />
-                        <Section gap={0.5}>
-                          {methodSpecs.map((method) => (
-                            <ToolItem
-                              key={`${method.method}-${method.path}-${method.name}`}
-                              name={method.name}
-                              description={
-                                method.summary || "No summary provided"
-                              }
-                              variant="openapi"
-                              openApiMetadata={{
-                                method: method.method,
-                                path: method.path,
-                              }}
-                            />
-                          ))}
-                        </Section>
-                      </>
-                    ) : (
-                      <EmptyMessage
-                        title="No Actions Found"
-                        icon={SvgActions}
-                        description="Provide OpenAPI schema to preview actions here."
-                      />
-                    )}
-
-                    {showAuthenticationStatus && (
-                      <Section
-                        flexDirection="row"
-                        justifyContent="between"
-                        alignItems="start"
-                        gap={1}
-                      >
-                        <Section gap={0.25} alignItems="start">
-                          <Section
-                            flexDirection="row"
-                            gap={0.5}
-                            alignItems="center"
-                            fit
+                        Specify an OpenAPI schema that defines the APIs you want
+                        to make available as part of this action. Learn more
+                        about{" "}
+                        <span className="inline-flex">
+                          <SimpleTooltip
+                            tooltip={`Open ${DOCS_ADMINS_PATH}/actions/openapi`}
+                            side="top"
                           >
-                            <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-                            <Text>
-                              {existingTool?.enabled
-                                ? "Authenticated & Enabled"
-                                : "Authentication configured"}
-                            </Text>
-                          </Section>
-                          {authenticationDescription && (
-                            <Text secondaryBody text03 className="pl-5">
-                              {authenticationDescription}
-                            </Text>
-                          )}
-                        </Section>
+                            <Link
+                              href={`${DOCS_ADMINS_PATH}/actions/openapi`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                            >
+                              OpenAPI actions
+                            </Link>
+                          </SimpleTooltip>
+                        </span>
+                        .
+                      </>
+                    }
+                  >
+                    <div className="group/DefinitionTextAreaField relative">
+                      {values.definition.trim() && (
+                        <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
+                          <CopyIconButton
+                            internal
+                            getCopyText={() => values.definition}
+                            tooltip="Copy definition"
+                          />
+                          <IconButton
+                            internal
+                            icon={SvgBracketCurly}
+                            tooltip="Format definition"
+                            onClick={() =>
+                              handleFormat(
+                                values.definition,
+                                setFieldValue,
+                                setFieldError
+                              )
+                            }
+                          />
+                        </div>
+                      )}
+                      <InputTextAreaField
+                        name="definition"
+                        rows={14}
+                        placeholder="Enter your OpenAPI schema here"
+                        className="font-main-ui-mono"
+                      />
+                    </div>
+                  </InputLayouts.Vertical>
+
+                  <Separator noPadding />
+
+                  {methodSpecs && methodSpecs.length > 0 ? (
+                    <>
+                      {name && (
+                        <InfoBlock
+                          icon={getActionIcon(url || "", name || "")}
+                          title={name}
+                          description={description}
+                        />
+                      )}
+                      {url && (
+                        <InfoBlock
+                          icon={SvgAlertCircle}
+                          title={url || ""}
+                          description="URL found in the schema. Only connect to servers you trust."
+                        />
+                      )}
+                      <Separator noPadding />
+                      <Section gap={0.5}>
+                        {methodSpecs.map((method) => (
+                          <ToolItem
+                            key={`${method.method}-${method.path}-${method.name}`}
+                            name={method.name}
+                            description={
+                              method.summary || "No summary provided"
+                            }
+                            variant="openapi"
+                            openApiMetadata={{
+                              method: method.method,
+                              path: method.path,
+                            }}
+                          />
+                        ))}
+                      </Section>
+                    </>
+                  ) : (
+                    <EmptyMessage
+                      title="No Actions Found"
+                      icon={SvgActions}
+                      description="Provide OpenAPI schema to preview actions here."
+                    />
+                  )}
+
+                  {showAuthenticationStatus && (
+                    <Section
+                      flexDirection="row"
+                      justifyContent="between"
+                      alignItems="start"
+                      gap={1}
+                    >
+                      <Section gap={0.25} alignItems="start">
                         <Section
                           flexDirection="row"
                           gap={0.5}
                           alignItems="center"
                           fit
                         >
-                          <IconButton
-                            icon={SvgUnplug}
-                            tertiary
-                            type="button"
-                            tooltip="Disable action"
-                            onClick={() => {
-                              if (!existingTool || !onDisconnectTool) {
-                                return;
-                              }
-                              onDisconnectTool(existingTool);
-                            }}
-                          />
-                          <Button
-                            secondary
-                            type="button"
-                            onClick={handleEditAuthenticationClick}
-                            disabled={!onEditAuthentication}
-                          >
-                            Edit Configs
-                          </Button>
+                          <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                          <Text>
+                            {existingTool?.enabled
+                              ? "Authenticated & Enabled"
+                              : "Authentication configured"}
+                          </Text>
                         </Section>
+                        {authenticationDescription && (
+                          <Text secondaryBody text03 className="pl-5">
+                            {authenticationDescription}
+                          </Text>
+                        )}
                       </Section>
-                    )}
-                  </Modal.Body>
+                      <Section
+                        flexDirection="row"
+                        gap={0.5}
+                        alignItems="center"
+                        fit
+                      >
+                        <IconButton
+                          icon={SvgUnplug}
+                          tertiary
+                          type="button"
+                          tooltip="Disable action"
+                          onClick={() => {
+                            if (!existingTool || !onDisconnectTool) {
+                              return;
+                            }
+                            onDisconnectTool(existingTool);
+                          }}
+                        />
+                        <Button
+                          secondary
+                          type="button"
+                          onClick={handleEditAuthenticationClick}
+                          disabled={!onEditAuthentication}
+                        >
+                          Edit Configs
+                        </Button>
+                      </Section>
+                    </Section>
+                  )}
+                </Modal.Body>
 
-                  <Modal.Footer>
-                    <Button
-                      main
-                      secondary
-                      type="button"
-                      onClick={handleClose}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      main
-                      primary
-                      type="submit"
-                      disabled={isSubmitting || !dirty}
-                    >
-                      {primaryButtonLabel}
-                    </Button>
-                  </Modal.Footer>
-                </Form>
-              );
-            }}
-          </Formik>
-        </Modal.Content>
-      </Modal>
-    </>
+                <Modal.Footer>
+                  <Button
+                    main
+                    secondary
+                    type="button"
+                    onClick={handleClose}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    main
+                    primary
+                    type="submit"
+                    disabled={isSubmitting || !dirty}
+                  >
+                    {primaryButtonLabel}
+                  </Button>
+                </Modal.Footer>
+              </Form>
+            );
+          }}
+        </Formik>
+      </Modal.Content>
+    </Modal>
   );
 }
