@@ -27,12 +27,6 @@ MAX_WAIT_TIME_SECONDS = 120
 POLL_INTERVAL_SECONDS = 5
 
 
-# @pytest.fixture(scope="module", autouse=True)
-# def reset_for_module() -> None:
-#     """Reset all data once before running any tests in this module."""
-#     reset_all()
-
-
 def _create_provider_with_api(
     admin_user: DATestUser,
     name: str,
@@ -235,51 +229,51 @@ def test_auto_mode_provider_gets_synced_from_github_config(
     )
 
 
-# def test_manual_mode_provider_not_affected_by_auto_sync(
-#     reset: None,
-#     admin_user: DATestUser,
-# ) -> None:
-#     """
-#     Test that a provider in Manual mode is NOT affected by auto sync.
+def test_manual_mode_provider_not_affected_by_auto_sync(
+    reset: None,
+    admin_user: DATestUser,
+) -> None:
+    """
+    Test that a provider in Manual mode is NOT affected by auto sync.
 
-#     This test:
-#     1. Creates an OpenAI provider in Manual mode with custom models
-#     2. Waits for a period longer than the sync interval
-#     3. Verifies the models remain unchanged
-#     """
-#     custom_model = "my-custom-finetuned-model"
+    This test:
+    1. Creates an OpenAI provider in Manual mode with custom models
+    2. Waits for a period longer than the sync interval
+    3. Verifies the models remain unchanged
+    """
+    custom_model = "my-custom-finetuned-model"
 
-#     # Create a provider in Manual mode
-#     provider = _create_provider_with_api(
-#         admin_user=admin_user,
-#         name="test-manual-mode-unchanged",
-#         provider_type="openai",
-#         default_model=custom_model,
-#         is_auto_mode=False,  # Manual mode
-#         model_configurations=[
-#             {"name": custom_model, "is_visible": True},
-#             {"name": "another-custom-model", "is_visible": True},
-#         ],
-#     )
+    # Create a provider in Manual mode
+    provider = _create_provider_with_api(
+        admin_user=admin_user,
+        name="test-manual-mode-unchanged",
+        provider_type="openai",
+        default_model=custom_model,
+        is_auto_mode=False,  # Manual mode
+        model_configurations=[
+            {"name": custom_model, "is_visible": True},
+            {"name": "another-custom-model", "is_visible": True},
+        ],
+    )
 
-#     assert provider["is_auto_mode"] is False
-#     initial_models = {m["name"] for m in provider["model_configurations"]}
-#     print(f"Created manual mode provider with models: {initial_models}")
+    assert provider["is_auto_mode"] is False
+    initial_models = {m["name"] for m in provider["model_configurations"]}
+    print(f"Created manual mode provider with models: {initial_models}")
 
-#     # Wait for longer than the sync interval
-#     wait_time = 15  # Should be longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS
-#     print(f"Waiting {wait_time}s to ensure sync task runs...")
-#     time.sleep(wait_time)
+    # Wait for longer than the sync interval
+    wait_time = 15  # Should be longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS
+    print(f"Waiting {wait_time}s to ensure sync task runs...")
+    time.sleep(wait_time)
 
-#     # Verify models are unchanged
-#     updated_provider = _get_provider_by_id(admin_user, provider["id"])
-#     current_models = {m["name"] for m in updated_provider["model_configurations"]}
+    # Verify models are unchanged
+    updated_provider = _get_provider_by_id(admin_user, provider["id"])
+    current_models = {m["name"] for m in updated_provider["model_configurations"]}
 
-#     assert current_models == initial_models, (
-#         f"Manual mode provider models should not change. "
-#         f"Initial: {initial_models}, Current: {current_models}"
-#     )
+    assert current_models == initial_models, (
+        f"Manual mode provider models should not change. "
+        f"Initial: {initial_models}, Current: {current_models}"
+    )
 
-#     assert (
-#         updated_provider["default_model_name"] == custom_model
-#     ), f"Manual mode default model should remain {custom_model}"
+    assert (
+        updated_provider["default_model_name"] == custom_model
+    ), f"Manual mode default model should remain {custom_model}"

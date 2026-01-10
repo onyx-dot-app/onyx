@@ -12,10 +12,7 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-
-logger = setup_logger()
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
 # we might be able to reduce this greatly if we can run a unified
@@ -170,9 +167,6 @@ if ENTERPRISE_EDITION_ENABLED:
 
 # Add the Auto LLM update task if the config URL is set (has a default)
 if AUTO_LLM_CONFIG_URL:
-    logger.info(
-        f"Adding Auto LLM update task with interval {AUTO_LLM_UPDATE_INTERVAL_SECONDS}"
-    )
     beat_task_templates.append(
         {
             "name": "check-for-auto-llm-update",
