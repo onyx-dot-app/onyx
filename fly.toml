@@ -1,15 +1,15 @@
-# fly.toml app configuration file generated for onyx on 2026-01-10T12:37:57Z
+# fly.toml app configuration file generated for onyx on 2026-01-10T13:42:37Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
 app = 'onyx'
-primary_region = 'nrt'
+primary_region = 'iad'
 
 [build]
 
 [http_service]
-  internal_port = 8000
+  internal_port = 8080
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
