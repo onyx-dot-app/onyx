@@ -3,6 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications
@@ -44,9 +45,9 @@ def create_release_notifications_for_versions(
     # because the only difference is an email string prefix.
     user_ids = list(
         db_session.scalars(
-            select(User.id).where(  # type: ignore[call-overload]
+            select(User.id).where(
                 User.is_active == True,  # noqa: E712
-                User.role.is_web_login(),
+                User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]),
             )
         ).all()
     )
