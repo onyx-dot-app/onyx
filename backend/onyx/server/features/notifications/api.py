@@ -35,7 +35,7 @@ def get_notifications_api(
 
     notifications = [
         NotificationModel.from_model(notif)
-        for notif in get_notifications(user, db_session, include_dismissed=False)
+        for notif in get_notifications(user, db_session, include_dismissed=True)
     ]
     return notifications
 

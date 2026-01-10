@@ -48,7 +48,9 @@ export default function NotificationsPopover({
 
     // External links open in new tab
     if (link.startsWith("http://") || link.startsWith("https://")) {
-      handleDismiss(notification.id);
+      if (!notification.dismissed) {
+        handleDismiss(notification.id);
+      }
       window.open(link, "_blank");
       return;
     }
@@ -105,22 +107,28 @@ export default function NotificationsPopover({
           ) : (
             <div className="flex flex-col py-2">
               {notifications.map((notification) => (
-                <LineItem
+                <div
                   key={notification.id}
-                  icon={getNotificationIcon(notification.notif_type)}
-                  description={notification.description ?? undefined}
-                  onClick={() => handleNotificationClick(notification)}
-                  rightChildren={
-                    <IconButton
-                      internal
-                      icon={SvgX}
-                      onClick={(e) => handleDismiss(notification.id, e)}
-                      tooltip="Dismiss"
-                    />
-                  }
+                  className={notification.dismissed ? "opacity-50" : ""}
                 >
-                  {notification.title}
-                </LineItem>
+                  <LineItem
+                    icon={getNotificationIcon(notification.notif_type)}
+                    description={notification.description ?? undefined}
+                    onClick={() => handleNotificationClick(notification)}
+                    rightChildren={
+                      !notification.dismissed ? (
+                        <IconButton
+                          internal
+                          icon={SvgX}
+                          onClick={(e) => handleDismiss(notification.id, e)}
+                          tooltip="Dismiss"
+                        />
+                      ) : undefined
+                    }
+                  >
+                    {notification.title}
+                  </LineItem>
+                </div>
               ))}
             </div>
           )}

@@ -65,6 +65,8 @@ function SettingsPopover({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  const undismissedCount =
+    notifications?.filter((n) => !n.dismissed).length ?? 0;
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
@@ -107,10 +109,8 @@ function SettingsPopover({
             icon={SvgBell}
             onClick={onOpenNotifications}
           >
-            {`Notifications ${
-              notifications && notifications.length > 0
-                ? `(${notifications.length})`
-                : ""
+            {`Notifications${
+              undismissedCount > 0 ? ` (${undismissedCount})` : ""
             }`}
           </LineItem>,
           <LineItem
@@ -156,7 +156,9 @@ export default function Settings({ folded }: SettingsProps) {
   );
 
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
-  const hasNotifications = notifications && notifications.length > 0;
+  const undismissedCount =
+    notifications?.filter((n) => !n.dismissed).length ?? 0;
+  const hasNotifications = undismissedCount > 0;
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {

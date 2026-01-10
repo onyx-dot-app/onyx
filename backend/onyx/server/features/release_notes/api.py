@@ -28,8 +28,8 @@ logger = setup_logger()
 
 
 def _is_valid_version(version: str) -> bool:
-    """Check if version matches vX.Y.Z pattern (with optional suffix)."""
-    return bool(re.match(r"^v\d+\.\d+\.\d+", version))
+    """Check if version matches vX.Y.Z or vX.Y.Z-suffix.N pattern exactly."""
+    return bool(re.match(r"^v\d+\.\d+\.\d+(-[a-zA-Z]+\.\d+)?$", version))
 
 
 def _is_version_gte(v1: str, v2: str) -> bool:
@@ -85,12 +85,13 @@ def _parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntr
     if not all_entries:
         raise ValueError("Could not parse any release note entries from MDX.")
 
-    # Filter to entries >= __version__
+    # Filter to valid versions >= __version__
     if __version__ and _is_valid_version(__version__):
         entries = [
             entry
             for entry in all_entries
-            if _is_version_gte(entry.version, __version__)
+            if _is_valid_version(entry.version)
+            and _is_version_gte(entry.version, __version__)
         ]
     else:
         entries = all_entries[:1]
@@ -201,7 +202,8 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
         new_etag = response.headers.get("ETag")
         _save_fetch_metadata(new_etag)
 
-        # Create notifications (database handles deduplication)
+        # Create notifications, sorted to create them in the order of release
+        entries = sorted(entries, key=lambda x: x.version, reverse=False)
         create_release_notifications_for_versions(db_session, entries)
 
     except Exception as e:

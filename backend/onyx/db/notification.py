@@ -83,6 +83,11 @@ def get_notifications(
         query = query.where(Notification.dismissed.is_(False))
     if notif_type:
         query = query.where(Notification.notif_type == notif_type)
+    # Sort: undismissed first, then by date (newest first)
+    query = query.order_by(
+        Notification.dismissed.asc(),
+        Notification.first_shown.desc(),
+    )
     return list(db_session.execute(query).scalars().all())
 
 

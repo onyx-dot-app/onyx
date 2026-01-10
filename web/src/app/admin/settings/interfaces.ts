@@ -54,6 +54,8 @@ export interface Notification {
   title: string;
   description: string | null;
   dismissed: boolean;
+  first_shown: string;
+  last_shown: string;
   additional_data?: {
     persona_id?: number;
     link?: string;
