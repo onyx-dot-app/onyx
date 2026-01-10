@@ -208,19 +208,23 @@ const HumanMessage = React.memo(function HumanMessage({
                 onCopy={(e) => {
                   e.preventDefault();
                   const selection = window.getSelection();
-                  if (!selection) {
+                  if (!selection || !selection.rangeCount) {
                     e.clipboardData.setData("text/plain", content);
                     return;
                   }
 
+                  const range = selection.getRangeAt(0);
                   const selectedText = selection
                     .toString()
                     .replace(/\n{2,}/g, "\n")
                     .trim();
 
-                  // If user selected a portion within the content, copy that portion
-                  // Otherwise (selection extends outside, e.g. includes "steps"), copy just the message content
-                  if (content.includes(selectedText)) {
+                  // Check if selection is within this element using DOM containment
+                  if (
+                    textContentRef.current?.contains(
+                      range.commonAncestorContainer
+                    )
+                  ) {
                     e.clipboardData.setData("text/plain", selectedText);
                   } else {
                     e.clipboardData.setData("text/plain", content);
