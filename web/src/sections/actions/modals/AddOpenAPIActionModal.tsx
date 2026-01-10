@@ -82,7 +82,6 @@ export default function AddOpenAPIActionModal({
   onDisconnectTool,
 }: AddOpenAPIActionModalProps) {
   const { isOpen, toggle } = useModal();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [methodSpecs, setMethodSpecs] = useState<MethodSpec[] | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | undefined>(undefined);
@@ -212,9 +211,7 @@ export default function AddOpenAPIActionModal({
     onEditAuthentication(existingTool);
   }, [existingTool, onEditAuthentication, handleClose]);
 
-  const handleSubmit = async (values: OpenAPIActionFormValues) => {
-    setIsSubmitting(true);
-
+  async function handleSubmit(values: OpenAPIActionFormValues) {
     try {
       const parsedDefinition = parseJsonWithTrailingCommas(values.definition);
       const derivedName = parsedDefinition?.info?.title;
@@ -288,22 +285,13 @@ export default function AddOpenAPIActionModal({
           : "Failed to create OpenAPI action",
         type: "error",
       });
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+  }
 
   const modalTitle = isEditMode ? "Edit OpenAPI action" : "Add OpenAPI action";
   const modalDescription = isEditMode
     ? "Update the OpenAPI schema for this action."
     : "Add OpenAPI schema to add custom actions.";
-  const primaryButtonLabel = isSubmitting
-    ? isEditMode
-      ? "Saving..."
-      : "Adding..."
-    : isEditMode
-      ? "Save Changes"
-      : "Add Action";
 
   return (
     <Modal open={isOpen} onOpenChange={handleModalClose}>
@@ -314,7 +302,14 @@ export default function AddOpenAPIActionModal({
           onSubmit={handleSubmit}
           enableReinitialize
         >
-          {({ values, setFieldValue, setFieldError, dirty }) => {
+          {({ values, setFieldValue, setFieldError, dirty, isSubmitting }) => {
+            const primaryButtonLabel = isSubmitting
+              ? isEditMode
+                ? "Saving..."
+                : "Adding..."
+              : isEditMode
+                ? "Save Changes"
+                : "Add Action";
             // Create debounced validation with setFieldError
             const debouncedValidateDefinition = useMemo(
               () =>
