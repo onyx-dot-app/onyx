@@ -128,7 +128,7 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatSessions();
+  const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { assistantPreferences } = useAssistantPreferences();
   const { forcedToolIds } = useForcedTools();
@@ -246,8 +246,9 @@ export function useChatController({
       router.push(newUrl as Route, { scroll: false });
     }
 
-    // Refresh sidebar so chat appears (will show as "New Chat" initially)
-    // Will be updated again after naming completes
+    // Refresh sidebar - the chat was already optimistically added via addPendingChatSession
+    // so it will show as "New Chat". This refresh ensures we get the latest server state
+    // and will be called again after naming completes.
     refreshChatSessions();
     fetchProjects();
   };
@@ -482,6 +483,14 @@ export function useChatController({
           searchParamBasedChatSessionName,
           projectId ? parseInt(projectId) : null
         );
+
+        // Optimistically add the new chat session to the sidebar cache
+        // This ensures "New Chat" appears immediately, even before any messages are saved
+        addPendingChatSession({
+          chatSessionId: currChatSessionId,
+          personaId: liveAssistant?.id || 0,
+          projectId: projectId ? parseInt(projectId) : null,
+        });
       } else {
         // Use the existing session ID from props or from the store
         currChatSessionId =
