@@ -22,11 +22,7 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
-
-
-logger = setup_logger()
 
 
 def update_group_llm_provider_relationships__no_commit(
@@ -589,24 +585,11 @@ def update_default_vision_provider(
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     """Fetch all LLM providers that are in Auto mode."""
-    # Debug logging for integration test troubleshooting
-    try:
-        db_url = str(db_session.get_bind().url)
-        # Mask password if present
-        if "@" in db_url:
-            parts = db_url.split("@")
-            db_url = parts[0].rsplit(":", 1)[0] + ":***@" + parts[1]
-        logger.info(f"fetch_auto_mode_providers: Database URL = {db_url}")
-    except Exception as e:
-        logger.warning(f"fetch_auto_mode_providers: Could not get DB URL: {e}")
-
     query = (
         select(LLMProviderModel)
         .where(LLMProviderModel.is_auto_mode.is_(True))
         .options(selectinload(LLMProviderModel.model_configurations))
     )
-    logger.info(f"fetch_auto_mode_providers: Query = {query}")
-
     return list(db_session.scalars(query).all())
 
 
