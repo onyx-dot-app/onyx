@@ -10,8 +10,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgEdit } from "@opal/icons";
-import FileDisplay from "./FileDisplay";
-import { useTripleClickSelect } from "./useTripleClickSelect";
+import FileDisplay from "@/app/chat/message/FileDisplay";
+import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
 
 interface MessageEditingProps {
   content: string;

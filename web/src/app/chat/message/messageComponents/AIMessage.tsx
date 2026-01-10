@@ -62,7 +62,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
-import { useTripleClickSelect } from "@/app/chat/message/useTripleClickSelect";
+import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
