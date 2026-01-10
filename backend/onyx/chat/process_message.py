@@ -8,6 +8,7 @@ import traceback
 from collections.abc import Callable
 from uuid import UUID
 
+from redis.client import Redis
 from sqlalchemy.orm import Session
 
 from onyx.chat.chat_processing_checker import set_processing_status
@@ -48,6 +49,7 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
+from onyx.db.models import ChatSession
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
@@ -289,6 +291,8 @@ def handle_stream_message_objects(
     tenant_id = get_current_tenant_id()
 
     llm: LLM | None = None
+    chat_session: ChatSession | None = None
+    redis_client: Redis | None = None
 
     user_id = user.id if user is not None else None
     llm_user_identifier = (
@@ -653,7 +657,7 @@ def handle_stream_message_objects(
         db_session.rollback()
     finally:
         try:
-            if "redis_client" in locals() and "chat_session" in locals():
+            if redis_client is not None and chat_session is not None:
                 set_processing_status(
                     chat_session.id,
                     redis_client,
