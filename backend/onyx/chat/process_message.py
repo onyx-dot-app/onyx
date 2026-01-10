@@ -538,7 +538,7 @@ def handle_stream_message_objects(
         set_processing_status(
             chat_session_id=chat_session.id,
             redis_client=redis_client,
-            is_processing=True,
+            value=True,
         )
 
         # Use external state container if provided, otherwise create internal one
@@ -661,7 +661,7 @@ def handle_stream_message_objects(
                 set_processing_status(
                     chat_session_id=chat_session.id,
                     redis_client=redis_client,
-                    is_processing=False,
+                    value=False,
                 )
         except Exception:
             logger.exception("Error in setting processing status")
