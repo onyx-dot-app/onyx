@@ -470,12 +470,15 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 """Wrapper for parallel execution with pre-built filters."""
                 return self._retrieve_indexed_documents_with_filters(requests, filters)
 
+            # Extract query context for relevance-based content extraction
+            query_context = override_kwargs.query_context
+
             # Run indexed retrieval and crawling in parallel for all URLs
             # This allows us to compare results and pick the best representation
             indexed_result, crawled_result = run_functions_tuples_in_parallel(
                 [
                     (_retrieve_indexed_with_filters, (all_requests,)),
-                    (self._fetch_web_content, (urls,)),
+                    (self._fetch_web_content, (urls, query_context)),
                 ],
                 allow_failures=True,
             )
@@ -769,12 +772,12 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         return merged_sections
 
     def _fetch_web_content(
-        self, urls: list[str]
+        self, urls: list[str], query: str | None = None
     ) -> tuple[list[InferenceSection], list[str]]:
         if not urls:
             return [], []
 
-        raw_web_contents = self._provider.contents(urls)
+        raw_web_contents = self._provider.contents(urls, query=query)
         # Treat "no title and no content" as a failure for that URL, but don't
         # include the empty entry in downstream prompting/sections.
         failed_urls: list[str] = [

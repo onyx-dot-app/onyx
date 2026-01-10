@@ -24,5 +24,14 @@ class WebContent(BaseModel):
 
 class WebContentProvider(ABC):
     @abstractmethod
-    def contents(self, urls: Sequence[str]) -> list[WebContent]:
-        pass
+    def contents(
+        self, urls: Sequence[str], query: str | None = None
+    ) -> list[WebContent]:
+        """Fetch content from the given URLs.
+
+        Args:
+            urls: URLs to fetch content from.
+            query: Optional query context for relevance-based content extraction.
+                   When provided, implementations may use this to prioritize
+                   relevant portions of large pages to reduce memory usage.
+        """

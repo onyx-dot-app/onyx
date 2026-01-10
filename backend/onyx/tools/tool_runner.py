@@ -324,6 +324,7 @@ def run_tool_calls(
             override_kwargs = OpenURLToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
                 citation_mapping=url_to_citation,
+                query_context=last_user_message,
             )
             starting_citation_num += 100
 

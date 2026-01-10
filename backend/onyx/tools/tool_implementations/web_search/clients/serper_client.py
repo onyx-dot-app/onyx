@@ -99,7 +99,11 @@ class SerperClient(WebSearchProvider, WebContentProvider):
         logger.info("Web search provider test succeeded for Serper.")
         return {"status": "ok"}
 
-    def contents(self, urls: Sequence[str]) -> list[WebContent]:
+    def contents(
+        self, urls: Sequence[str], query: str | None = None
+    ) -> list[WebContent]:
+        # Note: Serper doesn't support query-based relevance filtering
+        # The query parameter is accepted for interface compatibility but not used
         if not urls:
             return []
 

@@ -140,6 +140,8 @@ class OpenURLToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
     citation_mapping: dict[str, int]
+    # Query context for relevance-based content extraction from large web pages
+    query_context: str | None = None
 
 
 # None indicates that the default value should be used

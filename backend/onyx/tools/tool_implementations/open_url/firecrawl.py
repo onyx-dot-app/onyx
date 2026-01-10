@@ -48,7 +48,11 @@ class FirecrawlClient(WebContentProvider):
     def last_error(self) -> str | None:
         return self._last_error
 
-    def contents(self, urls: Sequence[str]) -> list[WebContent]:
+    def contents(
+        self, urls: Sequence[str], query: str | None = None
+    ) -> list[WebContent]:
+        # Note: Firecrawl doesn't support query-based relevance filtering
+        # The query parameter is accepted for interface compatibility but not used
         if not urls:
             return []
 

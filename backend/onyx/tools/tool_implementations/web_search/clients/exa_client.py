@@ -90,7 +90,11 @@ class ExaClient(WebSearchProvider, WebContentProvider):
         return {"status": "ok"}
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def contents(self, urls: Sequence[str]) -> list[WebContent]:
+    def contents(
+        self, urls: Sequence[str], query: str | None = None
+    ) -> list[WebContent]:
+        # Note: Exa doesn't support query-based relevance filtering in contents API
+        # The query parameter is accepted for interface compatibility but not used
         response = self.exa.get_contents(
             urls=list(urls),
             text=True,
