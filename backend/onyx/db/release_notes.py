@@ -3,7 +3,6 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications
@@ -47,21 +46,15 @@ def create_release_notifications_for_versions(
         db_session.scalars(
             select(User.id).where(  # type: ignore[call-overload]
                 User.is_active == True,  # noqa: E712
-                User.role.in_(
-                    [
-                        UserRole.BASIC,
-                        UserRole.ADMIN,
-                        UserRole.CURATOR,
-                        UserRole.GLOBAL_CURATOR,
-                    ]
-                ),
+                User.role.is_web_login(),
             )
         ).all()
     )
 
     total_created = 0
     for entry in release_note_entries:
-        # Convert version to anchor format: v2.7.0 -> v2-7-0
+        # Convert version to anchor format for external docs links
+        # v2.7.0 -> v2-7-0
         version_anchor = entry.version.replace(".", "-")
         link = f"{DOCS_CHANGELOG_BASE_URL}#{version_anchor}"
 
