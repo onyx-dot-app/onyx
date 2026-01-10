@@ -431,7 +431,18 @@ export default function AddOpenAPIActionModal({
   );
 
   const handleSubmit = async (values: OpenAPIActionFormValues) => {
-    const parsedDefinition = parseJsonWithTrailingCommas(values.definition);
+    let parsedDefinition;
+    try {
+      parsedDefinition = parseJsonWithTrailingCommas(values.definition);
+    } catch (error) {
+      console.error("Error parsing OpenAPI definition:", error);
+      setPopup({
+        message: "Invalid JSON format in OpenAPI schema definition",
+        type: "error",
+      });
+      return;
+    }
+
     const derivedName = parsedDefinition?.info?.title;
     const derivedDescription = parsedDefinition?.info?.description;
 
