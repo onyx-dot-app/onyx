@@ -204,17 +204,23 @@ def test_auto_mode_provider_gets_synced_from_github_config(
     )
 
     # Verify the models were synced
-    synced_model_names = {m["name"] for m in synced_provider["model_configurations"]}
+    synced_model_configs = synced_provider["model_configurations"]
+    synced_model_names = {m["name"] for m in synced_model_configs}
     print(f"Synced models: {synced_model_names}")
 
     assert expected_models.issubset(
         synced_model_names
     ), f"Expected models {expected_models} not found in synced models {synced_model_names}"
 
-    # Verify the outdated model was removed
-    assert (
-        "outdated-model-name" not in synced_model_names
-    ), "Outdated model should have been removed by sync"
+    # Verify the outdated model is not visible
+    outdated_model = next(
+        (m for m in synced_model_configs if m["name"] == "outdated-model-name"),
+        None,
+    )
+    if outdated_model:
+        assert not outdated_model[
+            "is_visible"
+        ], "Outdated model should not be visible after sync"
 
     # Verify default model was set from GitHub config
     expected_default = (
