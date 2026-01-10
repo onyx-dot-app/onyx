@@ -26,6 +26,7 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
+import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
   file: ProjectFile,
@@ -202,12 +203,16 @@ export default function UserFilesModal({
             </Section>
           </Modal.Header>
 
-          <Modal.Body padding={0.5} gap={0.5} alignItems="center">
+          <Modal.Body
+            padding={filtered.length === 0 ? 0.5 : 0}
+            gap={0.5}
+            alignItems="center"
+          >
             {/* File display section */}
             {filtered.length === 0 ? (
               <Text text03>No files found</Text>
             ) : (
-              <>
+              <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (
@@ -251,7 +256,7 @@ export default function UserFilesModal({
                     text={recentFiles.length === 1 ? "File" : "Files"}
                   />
                 )}
-              </>
+              </ScrollIndicatorDiv>
             )}
           </Modal.Body>
 
