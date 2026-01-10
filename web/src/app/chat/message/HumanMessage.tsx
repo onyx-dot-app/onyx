@@ -11,6 +11,7 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgEdit } from "@opal/icons";
 import FileDisplay from "./FileDisplay";
+import { useTripleClickSelect } from "./useTripleClickSelect";
 
 interface MessageEditingProps {
   content: string;
@@ -139,6 +140,10 @@ const HumanMessage = React.memo(function HumanMessage({
 
   const [isEditing, setIsEditing] = useState(false);
 
+  // Ref for the text content element (for triple-click selection)
+  const textContentRef = useRef<HTMLDivElement>(null);
+  const handleTripleClick = useTripleClickSelect(textContentRef);
+
   // Use nodeId for switching (finding position in siblings)
   const indexInSiblings = otherMessagesCanSwitchTo?.indexOf(nodeId);
   // indexOf returns -1 if not found, treat that as undefined
@@ -195,18 +200,30 @@ const HumanMessage = React.memo(function HumanMessage({
           <>
             <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
               <div
+                ref={textContentRef}
                 className={
-                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3 cursor-text"
                 }
+                onMouseDown={handleTripleClick}
                 onCopy={(e) => {
+                  e.preventDefault();
                   const selection = window.getSelection();
-                  if (selection) {
-                    e.preventDefault();
-                    const text = selection
-                      .toString()
-                      .replace(/\n{2,}/g, "\n")
-                      .trim();
-                    e.clipboardData.setData("text/plain", text);
+                  if (!selection) {
+                    e.clipboardData.setData("text/plain", content);
+                    return;
+                  }
+
+                  const selectedText = selection
+                    .toString()
+                    .replace(/\n{2,}/g, "\n")
+                    .trim();
+
+                  // If user selected a portion within the content, copy that portion
+                  // Otherwise (selection extends outside, e.g. includes "steps"), copy just the message content
+                  if (content.includes(selectedText)) {
+                    e.clipboardData.setData("text/plain", selectedText);
+                  } else {
+                    e.clipboardData.setData("text/plain", content);
                   }
                 }}
               >
