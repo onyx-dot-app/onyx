@@ -48,24 +48,6 @@ export enum NotificationType {
   RELEASE_NOTES = "release_notes",
 }
 
-export type ContentSectionType = "text" | "heading" | "image" | "callout";
-
-export interface ContentSection {
-  type: ContentSectionType;
-  content?: string; // For text, heading, callout (alt text for image)
-  level?: number; // For heading: 1-4
-  src?: string; // For image
-  variant?: string; // For callout: "warning", "info", "note", "tip"
-}
-
-export interface ReleaseNoteEntry {
-  version: string;
-  date: string;
-  tags: string[];
-  title: string;
-  sections: ContentSection[];
-}
-
 export interface Notification {
   id: number;
   notif_type: string;

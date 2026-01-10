@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
@@ -15,7 +14,6 @@ import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import ReleaseNotesModal from "@/components/modals/ReleaseNotesModal";
 
 function getNotificationIcon(
   notifType: string
@@ -38,8 +36,6 @@ export default function NotificationsPopover({
   onNavigate,
 }: NotificationsPopoverProps) {
   const router = useRouter();
-  const [selectedNotification, setSelectedNotification] =
-    useState<Notification | null>(null);
   const {
     data: notifications,
     mutate,
@@ -47,18 +43,19 @@ export default function NotificationsPopover({
   } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
 
   const handleNotificationClick = (notification: Notification) => {
-    // For release notes notifications, show modal instead of navigating
-    if (notification.notif_type === NotificationType.RELEASE_NOTES) {
-      setSelectedNotification(notification);
+    const link = notification.additional_data?.link;
+    if (!link) return;
+
+    // External links open in new tab
+    if (link.startsWith("http://") || link.startsWith("https://")) {
+      handleDismiss(notification.id);
+      window.open(link, "_blank");
       return;
     }
 
-    // For other notification types, navigate to the link
-    const link = notification.additional_data?.link;
-    if (link) {
-      onNavigate();
-      router.push(link as Route);
-    }
+    // Relative links navigate internally
+    onNavigate();
+    router.push(link as Route);
   };
 
   const handleDismiss = async (
@@ -79,13 +76,6 @@ export default function NotificationsPopover({
     } catch (error) {
       console.error("Error dismissing notification:", error);
     }
-  };
-
-  const handleModalClose = () => {
-    if (selectedNotification) {
-      handleDismiss(selectedNotification.id);
-    }
-    setSelectedNotification(null);
   };
 
   return (
@@ -136,18 +126,6 @@ export default function NotificationsPopover({
           )}
         </div>
       </div>
-
-      {selectedNotification &&
-        selectedNotification.notif_type === NotificationType.RELEASE_NOTES && (
-          <ReleaseNotesModal
-            version={
-              selectedNotification.additional_data?.version ??
-              selectedNotification.additional_data?.latest_version ??
-              ""
-            }
-            onClose={handleModalClose}
-          />
-        )}
     </>
   );
 }

@@ -7,6 +7,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications
+from onyx.server.features.release_notes.constants import DOCS_CHANGELOG_BASE_URL
 from onyx.server.features.release_notes.models import ReleaseNoteEntry
 from onyx.utils.logger import setup_logger
 
@@ -60,8 +61,14 @@ def create_release_notifications_for_versions(
 
     total_created = 0
     for entry in release_note_entries:
-        # Only store version - full content is fetched from /api/release-notes
-        additional_data: dict[str, str] = {"version": entry.version}
+        # Convert version to anchor format: v2.7.0 -> v2-7-0
+        version_anchor = entry.version.replace(".", "-")
+        link = f"{DOCS_CHANGELOG_BASE_URL}#{version_anchor}"
+
+        additional_data: dict[str, str] = {
+            "version": entry.version,
+            "link": link,
+        }
 
         created_count = batch_create_notifications(
             user_ids,

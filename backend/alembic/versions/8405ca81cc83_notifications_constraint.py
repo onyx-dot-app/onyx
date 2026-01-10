@@ -1,7 +1,7 @@
 """notifications constraint
 
 Revision ID: 8405ca81cc83
-Revises: 5c3dca366b35
+Revises: a3c1a7904cd0
 Create Date: 2026-01-07 16:43:44.855156
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "8405ca81cc83"
-down_revision = "5c3dca366b35"
+down_revision = "a3c1a7904cd0"
 branch_labels = None
 depends_on = None
 
@@ -23,10 +23,7 @@ def upgrade() -> None:
     # Uses COALESCE to handle NULL additional_data (NULLs are normally distinct
     # in unique constraints, but we want NULL == NULL for deduplication).
     # The '{}' represents an empty JSONB object as the NULL replacement.
-    #
-    # NOTE: Cannot use CONCURRENTLY inside a transaction, so this will lock
-    # the table briefly. For large deployments, consider running this manually
-    # outside of alembic: CREATE INDEX CONCURRENTLY ...
+
     op.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS ix_notification_user_type_data
