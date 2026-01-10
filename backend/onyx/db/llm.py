@@ -620,7 +620,9 @@ def sync_auto_mode_models(
 
     # Build the list of all visible models from the config
     # All models in the config are visible (default + additional_visible_models)
-    recommended_visible_models = llm_recommendations.get_visible_models(provider.name)
+    recommended_visible_models = llm_recommendations.get_visible_models(
+        provider.provider
+    )
     recommended_visible_model_names = [
         model.name for model in recommended_visible_models
     ]
