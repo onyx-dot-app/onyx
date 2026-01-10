@@ -212,15 +212,18 @@ def test_auto_mode_provider_gets_synced_from_github_config(
         synced_model_names
     ), f"Expected models {expected_models} not found in synced models {synced_model_names}"
 
-    # Verify the outdated model is not visible
+    # Verify the outdated model still exists but is not visible
+    # (Auto mode marks removed models as not visible, it doesn't delete them)
     outdated_model = next(
         (m for m in synced_model_configs if m["name"] == "outdated-model-name"),
         None,
     )
-    if outdated_model:
-        assert not outdated_model[
-            "is_visible"
-        ], "Outdated model should not be visible after sync"
+    assert (
+        outdated_model is not None
+    ), "Outdated model should still exist after sync (marked invisible, not deleted)"
+    assert not outdated_model[
+        "is_visible"
+    ], "Outdated model should not be visible after sync"
 
     # Verify default model was set from GitHub config
     expected_default = (
