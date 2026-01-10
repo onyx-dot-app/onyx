@@ -9,7 +9,9 @@ from onyx.db.models import User
 from onyx.db.notification import dismiss_notification
 from onyx.db.notification import get_notification_by_id
 from onyx.db.notification import get_notifications
-from onyx.server.features.release_notes.api import ensure_release_notes_fresh_and_notify
+from onyx.server.features.release_notes.utils import (
+    ensure_release_notes_fresh_and_notify,
+)
 from onyx.server.settings.models import Notification as NotificationModel
 
 router = APIRouter(prefix="/notifications")

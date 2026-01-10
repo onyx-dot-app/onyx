@@ -1,4 +1,4 @@
-"""Utilities for checking release notes and creating notifications."""
+"""Utility functions for release notes parsing and caching."""
 
 import re
 from datetime import datetime
@@ -27,12 +27,12 @@ logger = setup_logger()
 # ============================================================================
 
 
-def _is_valid_version(version: str) -> bool:
+def is_valid_version(version: str) -> bool:
     """Check if version matches vX.Y.Z or vX.Y.Z-suffix.N pattern exactly."""
     return bool(re.match(r"^v\d+\.\d+\.\d+(-[a-zA-Z]+\.\d+)?$", version))
 
 
-def _is_version_gte(v1: str, v2: str) -> bool:
+def is_version_gte(v1: str, v2: str) -> bool:
     """Check if v1 >= v2. Strips suffixes like -cloud.X or -beta.X."""
 
     def parse_version(v: str) -> tuple[int, int, int]:
@@ -53,7 +53,7 @@ def _is_version_gte(v1: str, v2: str) -> bool:
 # ============================================================================
 
 
-def _parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry]:
+def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry]:
     """Parse MDX content into ReleaseNoteEntry objects for versions >= __version__."""
     all_entries = []
 
@@ -86,12 +86,12 @@ def _parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntr
         raise ValueError("Could not parse any release note entries from MDX.")
 
     # Filter to valid versions >= __version__
-    if __version__ and _is_valid_version(__version__):
+    if __version__ and is_valid_version(__version__):
         entries = [
             entry
             for entry in all_entries
-            if _is_valid_version(entry.version)
-            and _is_version_gte(entry.version, __version__)
+            if is_valid_version(entry.version)
+            and is_version_gte(entry.version, __version__)
         ]
     else:
         entries = all_entries[:1]
@@ -104,7 +104,7 @@ def _parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntr
 # ============================================================================
 
 
-def _get_cached_etag() -> str | None:
+def get_cached_etag() -> str | None:
     """Get the cached GitHub ETag from Redis."""
     redis_client = get_shared_redis_client()
     try:
@@ -117,7 +117,7 @@ def _get_cached_etag() -> str | None:
         return None
 
 
-def _get_last_fetch_time() -> datetime | None:
+def get_last_fetch_time() -> datetime | None:
     """Get the last fetch timestamp from Redis."""
     redis_client = get_shared_redis_client()
     try:
@@ -136,7 +136,7 @@ def _get_last_fetch_time() -> datetime | None:
         return None
 
 
-def _save_fetch_metadata(etag: str | None) -> None:
+def save_fetch_metadata(etag: str | None) -> None:
     """Save ETag and fetch timestamp to Redis."""
     redis_client = get_shared_redis_client()
     now = datetime.now(timezone.utc)
@@ -149,9 +149,9 @@ def _save_fetch_metadata(etag: str | None) -> None:
         logger.error(f"Failed to save fetch metadata to Redis: {e}")
 
 
-def _is_cache_stale() -> bool:
+def is_cache_stale() -> bool:
     """Check if we should fetch from GitHub."""
-    last_fetch = _get_last_fetch_time()
+    last_fetch = get_last_fetch_time()
     if last_fetch is None:
         return True
     age = datetime.now(timezone.utc) - last_fetch
@@ -170,14 +170,14 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
     Called from /api/notifications endpoint. Uses ETag for efficient
     GitHub requests. Database handles notification deduplication.
     """
-    if not _is_cache_stale():
+    if not is_cache_stale():
         return
 
     logger.debug("Checking GitHub for release notes updates.")
 
     # Use ETag for conditional request
     headers: dict[str, str] = {}
-    etag = _get_cached_etag()
+    etag = get_cached_etag()
     if etag:
         headers["If-None-Match"] = etag
 
@@ -192,15 +192,15 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
         if response.status_code == 304:
             # Content unchanged, just update timestamp
             logger.debug("Release notes unchanged (304).")
-            _save_fetch_metadata(etag)
+            save_fetch_metadata(etag)
             return
 
         response.raise_for_status()
 
         # Parse and create notifications
-        entries = _parse_mdx_to_release_note_entries(response.text)
+        entries = parse_mdx_to_release_note_entries(response.text)
         new_etag = response.headers.get("ETag")
-        _save_fetch_metadata(new_etag)
+        save_fetch_metadata(new_etag)
 
         # Create notifications, sorted to create them in the order of release
         entries = sorted(entries, key=lambda x: x.version, reverse=False)
