@@ -59,9 +59,11 @@ export default function EmptyMessage({
         </div>
         <Section alignItems="start" gap={0}>
           <Text text03>{title}</Text>
-          <Text text03 secondaryBody>
-            {description}
-          </Text>
+          {description && (
+            <Text text03 secondaryBody>
+              {description}
+            </Text>
+          )}
         </Section>
       </Section>
     </Card>
