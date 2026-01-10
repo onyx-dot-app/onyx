@@ -290,11 +290,16 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    is_processing = is_chat_session_processing(session_id, get_redis_client())
-    # Edit the last message to indicate loading (Overriding default message value)
-    if is_processing and chat_message_details:
-        chat_message_details[-1].message = (
-            "Message is loading... Please refresh the page soon."
+    try:
+        is_processing = is_chat_session_processing(session_id, get_redis_client())
+        # Edit the last message to indicate loading (Overriding default message value)
+        if is_processing and chat_message_details:
+            chat_message_details[-1].message = (
+                "Message is loading... Please refresh the page soon."
+            )
+    except Exception:
+        logger.exception(
+            "An error occurred while checking if the chat session is processing"
         )
 
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
