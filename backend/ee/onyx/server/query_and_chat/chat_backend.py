@@ -23,6 +23,7 @@ from onyx.db.models import User
 from onyx.llm.factory import get_llm_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -100,6 +101,7 @@ def handle_simplified_chat_message(
         chunks_below=0,
         full_doc=chat_message_req.full_doc,
         structured_response_format=chat_message_req.structured_response_format,
+        origin=MessageOrigin.API,
     )
 
     packets = stream_chat_message_objects(
@@ -203,6 +205,7 @@ def handle_send_message_simple_with_history(
         chunks_below=0,
         full_doc=req.full_doc,
         structured_response_format=req.structured_response_format,
+        origin=MessageOrigin.API,
     )
 
     packets = stream_chat_message_objects(

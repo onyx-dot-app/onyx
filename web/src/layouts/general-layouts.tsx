@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 import { WithoutStyles } from "@/types";
-import React from "react";
+import React, { forwardRef } from "react";
 
 export type FlexDirection = "row" | "column";
-export type JustifyContent = "start" | "center" | "end";
+export type JustifyContent = "start" | "center" | "end" | "between";
 export type AlignItems = "start" | "center" | "end";
 
 const directionClassMap: Record<FlexDirection, string> = {
@@ -14,6 +14,7 @@ const justifyClassMap: Record<JustifyContent, string> = {
   start: "justify-start",
   center: "justify-center",
   end: "justify-end",
+  between: "justify-between",
 };
 const alignClassMap: Record<AlignItems, string> = {
   start: "items-start",
@@ -81,30 +82,39 @@ export interface SectionProps
   wrap?: boolean;
 }
 
-export function Section({
-  flexDirection = "column",
-  justifyContent = "center",
-  alignItems = "center",
-  gap = 1,
-  padding = 0,
-  fit,
-  wrap,
-  ...rest
-}: SectionProps) {
-  const width = fit ? "w-fit" : "w-full";
+const Section = forwardRef<HTMLDivElement, SectionProps>(
+  (
+    {
+      flexDirection = "column",
+      justifyContent = "center",
+      alignItems = "center",
+      gap = 1,
+      padding = 0,
+      fit,
+      wrap,
+      ...rest
+    },
+    ref
+  ) => {
+    const width = fit ? "w-fit" : "w-full";
 
-  return (
-    <div
-      className={cn(
-        "flex w-full",
-        wrap && "flex-wrap",
-        justifyClassMap[justifyContent],
-        alignClassMap[alignItems],
-        width,
-        directionClassMap[flexDirection]
-      )}
-      style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
-      {...rest}
-    />
-  );
-}
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "flex",
+          wrap && "flex-wrap",
+          justifyClassMap[justifyContent],
+          alignClassMap[alignItems],
+          width,
+          directionClassMap[flexDirection]
+        )}
+        style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
+        {...rest}
+      />
+    );
+  }
+);
+Section.displayName = "Section";
+
+export { Section };

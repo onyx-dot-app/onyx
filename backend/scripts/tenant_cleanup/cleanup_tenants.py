@@ -34,6 +34,7 @@ from scripts.tenant_cleanup.cleanup_utils import execute_control_plane_query
 from scripts.tenant_cleanup.cleanup_utils import find_worker_pod
 from scripts.tenant_cleanup.cleanup_utils import get_tenant_status
 from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
+from scripts.tenant_cleanup.cleanup_utils import TenantNotFoundInControlPlaneError
 
 
 def signal_handler(signum: int, frame: object) -> None:
@@ -418,6 +419,9 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> bool:
     """
     print(f"Starting cleanup for tenant: {tenant_id}")
 
+    # Track if tenant was not found in control plane (for force mode)
+    tenant_not_found_in_control_plane = False
+
     # Check tenant status first
     print(f"\n{'=' * 80}")
     try:
@@ -457,8 +461,25 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> bool:
             if response.lower() != "yes":
                 print("Cleanup aborted - could not verify tenant status")
                 return False
+    except TenantNotFoundInControlPlaneError as e:
+        # Tenant/table not found in control plane
+        error_str = str(e)
+        print(f"⚠️  WARNING: Tenant not found in control plane: {error_str}")
+        tenant_not_found_in_control_plane = True
+
+        if force:
+            print(
+                "[FORCE MODE] Tenant not found in control plane - continuing with dataplane cleanup only"
+            )
+        else:
+            response = input("Continue anyway? Type 'yes' to confirm: ")
+            if response.lower() != "yes":
+                print("Cleanup aborted - tenant not found in control plane")
+                return False
     except Exception as e:
-        print(f"⚠️  WARNING: Failed to check tenant status: {e}")
+        # Other errors (not "not found")
+        error_str = str(e)
+        print(f"⚠️  WARNING: Failed to check tenant status: {error_str}")
 
         if force:
             print(f"Skipping cleanup for tenant {tenant_id} in force mode")
@@ -516,8 +537,14 @@ def cleanup_tenant(tenant_id: str, pod_name: str, force: bool = False) -> bool:
     else:
         print("Step 2 skipped by user")
 
-    # Step 3: Clean up control plane
-    if confirm_step(
+    # Step 3: Clean up control plane (skip if tenant not found in control plane with --force)
+    if tenant_not_found_in_control_plane:
+        print(f"\n{'=' * 80}")
+        print(
+            "Step 3/3: Skipping control plane cleanup (tenant not found in control plane)"
+        )
+        print(f"{'=' * 80}\n")
+    elif confirm_step(
         "Step 3/3: Delete control plane records (tenant_notification, tenant_config, subscription, tenant)",
         force,
     ):

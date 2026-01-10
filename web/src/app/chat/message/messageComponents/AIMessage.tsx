@@ -62,6 +62,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
+import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -125,6 +126,7 @@ const AIMessage = React.memo(function AIMessage({
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
+  const handleTripleClick = useTripleClickSelect(markdownRef);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
@@ -536,7 +538,8 @@ const AIMessage = React.memo(function AIMessage({
         <div className="max-w-message-max break-words pl-4 w-full">
           <div
             ref={markdownRef}
-            className="overflow-x-visible max-w-content-max focus:outline-none select-text"
+            className="overflow-x-visible max-w-content-max focus:outline-none select-text cursor-text"
+            onMouseDown={handleTripleClick}
             onCopy={(e) => {
               if (markdownRef.current) {
                 handleCopy(e, markdownRef as RefObject<HTMLDivElement>);

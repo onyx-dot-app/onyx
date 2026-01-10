@@ -37,7 +37,7 @@ interface InlineFileManagementProps {
   onRefresh: () => void;
 }
 
-export function InlineFileManagement({
+export default function InlineFileManagement({
   connectorId,
   onRefresh,
 }: InlineFileManagementProps) {
@@ -360,7 +360,7 @@ export function InlineFileManagement({
             description="When you save these changes, the following will happen:"
           />
 
-          <Modal.Body className="px-6 space-y-3">
+          <Modal.Body>
             {selectedFilesToRemove.size > 0 && (
               <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-md">
                 <Text
@@ -402,7 +402,7 @@ export function InlineFileManagement({
             )}
           </Modal.Body>
 
-          <Modal.Footer className="p-6 pt-4">
+          <Modal.Footer>
             <Button
               onClick={() => setShowSaveConfirm(false)}
               secondary
@@ -410,7 +410,7 @@ export function InlineFileManagement({
             >
               Cancel
             </Button>
-            <Button onClick={handleConfirmSave} primary disabled={isSaving}>
+            <Button onClick={handleConfirmSave} disabled={isSaving}>
               {isSaving ? "Saving..." : "Confirm & Save"}
             </Button>
           </Modal.Footer>

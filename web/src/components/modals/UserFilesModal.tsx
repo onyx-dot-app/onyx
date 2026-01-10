@@ -14,10 +14,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
-import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import useFilter from "@/hooks/useFilter";
 import {
   SvgEye,
   SvgFiles,
@@ -26,6 +24,9 @@ import {
   SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
+import useFilter from "@/hooks/useFilter";
+import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
   file: ProjectFile,
@@ -127,16 +128,13 @@ export default function UserFilesModal({
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
   useEffect(() => {
-    if (selectedFileIds) {
-      setSelectedIds(new Set(selectedFileIds));
-    } else {
-      setSelectedIds(new Set());
-    }
+    if (selectedFileIds) setSelectedIds(new Set(selectedFileIds));
+    else setSelectedIds(new Set());
   }, [selectedFileIds]);
 
   const selectedCount = selectedIds.size;
 
-  const handleDeselectAll = () => {
+  function handleDeselectAll() {
     selectedIds.forEach((id) => {
       const file = recentFiles.find((f) => f.id === id);
       if (file) {
@@ -144,7 +142,7 @@ export default function UserFilesModal({
       }
     });
     setSelectedIds(new Set());
-  };
+  }
 
   const files = useMemo(
     () =>
@@ -180,7 +178,7 @@ export default function UserFilesModal({
         >
           <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
-            <div className="flex flex-row items-center gap-2">
+            <Section flexDirection="row" gap={0.5}>
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
@@ -202,19 +200,19 @@ export default function UserFilesModal({
                   Add Files
                 </CreateButton>
               )}
-            </div>
+            </Section>
           </Modal.Header>
 
-          <Modal.Body className="flex flex-col flex-1 overflow-hidden bg-background-tint-01">
+          <Modal.Body
+            padding={filtered.length === 0 ? 0.5 : 0}
+            gap={0.5}
+            alignItems="center"
+          >
             {/* File display section */}
             {filtered.length === 0 ? (
-              <div className="p-4 flex w-full h-full items-center justify-center">
-                <Text as="p" text03>
-                  No files found
-                </Text>
-              </div>
+              <Text text03>No files found</Text>
             ) : (
-              <ScrollIndicatorDiv className="p-2 gap-2" variant="shadow">
+              <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (
@@ -262,10 +260,10 @@ export default function UserFilesModal({
             )}
           </Modal.Body>
 
-          <Modal.Footer className="flex items-center justify-between p-4">
+          <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
-              <div className="flex items-center gap-2">
+              <Section flexDirection="row" justifyContent="start" gap={0.5}>
                 <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected
@@ -274,7 +272,7 @@ export default function UserFilesModal({
                   icon={SvgEye}
                   internal
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
-                  className={showOnlySelected ? "bg-background-tint-02" : ""}
+                  transient={showOnlySelected}
                 />
                 <IconButton
                   icon={SvgXCircle}
@@ -282,11 +280,11 @@ export default function UserFilesModal({
                   onClick={handleDeselectAll}
                   disabled={selectedCount === 0}
                 />
-              </div>
+              </Section>
             )}
 
             {/* Right side: Done button */}
-            <Button secondary onClick={() => toggle(false)} className="ml-auto">
+            <Button secondary onClick={() => toggle(false)}>
               Done
             </Button>
           </Modal.Footer>

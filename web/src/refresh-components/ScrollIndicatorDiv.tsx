@@ -97,7 +97,7 @@ export default function ScrollIndicatorDiv({
   };
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-y-hidden flex flex-col">
+    <div className="relative flex-1 min-h-0 overflow-y-hidden flex flex-col w-full">
       {/* Top indicator */}
       {!disableIndicators && showTopIndicator && (
         <div
