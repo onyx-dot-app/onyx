@@ -532,7 +532,7 @@ export default function ActionsPopover({
     setSearchToolEnabled(true);
   };
 
-  const toggleTool = (toolId: number) => {
+  const handleToggleTool = (toolId: number) => {
     const wasDisabled = disabledToolIds.includes(toolId);
     toggleToolForCurrentAssistant(toolId);
 
@@ -579,7 +579,7 @@ export default function ActionsPopover({
             tool={tool}
             disabled={disabledToolIds.includes(tool.id)}
             isForced={forcedToolIds.includes(tool.id)}
-            onToggle={() => toggleTool(tool.id)}
+            onToggle={() => handleToggleTool(tool.id)}
             onForceToggle={() => toggleForcedTool(tool.id)}
             onSourceManagementOpen={() => setSecondaryView({ type: "sources" })}
             hasNoConnectors={hasNoConnectors}
