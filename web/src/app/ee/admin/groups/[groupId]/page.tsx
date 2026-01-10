@@ -51,7 +51,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   }
 
   return (
-    <div className="container">
+    <>
       <BackButton />
 
       <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />
@@ -66,7 +66,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
       ) : (
         <div>Unable to fetch User Group :(</div>
       )}
-    </div>
+    </>
   );
 };
 

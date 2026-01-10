@@ -43,6 +43,12 @@ class ExaClient(WebSearchProvider, WebContentProvider):
     def _search_exa(
         self, query: str, include_domains: list[str] | None = None
     ) -> list[WebSearchResult]:
+    @property
+    def supports_site_filter(self) -> bool:
+        return False
+
+    @retry_builder(tries=3, delay=1, backoff=2)
+    def search(self, query: str) -> list[WebSearchResult]:
         response = self.exa.search_and_contents(
             query,
             type="auto",
@@ -54,20 +60,25 @@ class ExaClient(WebSearchProvider, WebContentProvider):
             include_domains=include_domains,
         )
 
-        return [
-            WebSearchResult(
-                title=result.title or "",
-                link=result.url,
-                snippet=result.highlights[0] if result.highlights else "",
-                author=result.author,
-                published_date=(
-                    time_str_to_utc(result.published_date)
-                    if result.published_date
-                    else None
-                ),
+        results: list[WebSearchResult] = []
+        for result in response.results:
+            title = (result.title or "").strip()
+            snippet = (result.highlights[0] if result.highlights else "").strip()
+            results.append(
+                WebSearchResult(
+                    title=title,
+                    link=result.url,
+                    snippet=snippet,
+                    author=result.author,
+                    published_date=(
+                        time_str_to_utc(result.published_date)
+                        if result.published_date
+                        else None
+                    ),
+                )
             )
-            for result in response.results
-        ]
+
+        return results
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
@@ -121,16 +132,23 @@ class ExaClient(WebSearchProvider, WebContentProvider):
             livecrawl="preferred",
         )
 
-        return [
-            WebContent(
-                title=result.title or "",
-                link=result.url,
-                full_content=result.text or "",
-                published_date=(
-                    time_str_to_utc(result.published_date)
-                    if result.published_date
-                    else None
-                ),
+        # Exa can return partial/empty content entries; skip those to avoid
+        # downstream prompt + UI pollution.
+        contents: list[WebContent] = []
+        for result in response.results:
+            title = (result.title or "").strip()
+            full_content = (result.text or "").strip()
+            contents.append(
+                WebContent(
+                    title=title,
+                    link=result.url,
+                    full_content=full_content,
+                    published_date=(
+                        time_str_to_utc(result.published_date)
+                        if result.published_date
+                        else None
+                    ),
+                )
             )
-            for result in response.results
-        ]
+
+        return contents

@@ -1,27 +1,24 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { Shortcut } from "@/app/chat/nrf/interfaces";
+import { useTheme } from "next-themes";
 import { notifyExtensionOfThemeChange } from "@/lib/extension/utils";
 import {
   darkExtensionImages,
   lightExtensionImages,
   LocalStorageKeys,
 } from "@/lib/extension/constants";
+import { ThemePreference } from "@/lib/types";
 
 interface NRFPreferencesContextValue {
-  theme: string;
-  setTheme: (t: string) => void;
+  theme: ThemePreference;
+  setTheme: (t: ThemePreference) => void;
   defaultLightBackgroundUrl: string;
   setDefaultLightBackgroundUrl: (val: string) => void;
   defaultDarkBackgroundUrl: string;
   setDefaultDarkBackgroundUrl: (val: string) => void;
-  shortcuts: Shortcut[];
-  setShortcuts: (s: Shortcut[]) => void;
   useOnyxAsNewTab: boolean;
   setUseOnyxAsNewTab: (v: boolean) => void;
-  showShortcuts: boolean;
-  setShowShortcuts: (v: boolean) => void;
 }
 
 const NRFPreferencesContext = createContext<
@@ -37,7 +34,7 @@ function useLocalStorageState<T>(
       const storedValue = localStorage.getItem(key);
       return storedValue ? JSON.parse(storedValue) : defaultValue;
     }
-    return undefined;
+    return defaultValue;
   });
 
   const setValue = (value: T) => {
@@ -58,9 +55,10 @@ export function NRFPreferencesProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [theme, setTheme] = useLocalStorageState<string>(
+  const { setTheme: setNextThemesTheme } = useTheme();
+  const [theme, setThemeState] = useLocalStorageState<ThemePreference>(
     LocalStorageKeys.THEME,
-    "dark"
+    ThemePreference.DARK
   );
   const [defaultLightBackgroundUrl, setDefaultLightBackgroundUrl] =
     useLocalStorageState<string>(
@@ -72,21 +70,25 @@ export function NRFPreferencesProvider({
       LocalStorageKeys.DARK_BG_URL,
       firstDarkExtensionImage
     );
-  const [shortcuts, setShortcuts] = useLocalStorageState<Shortcut[]>(
-    LocalStorageKeys.SHORTCUTS,
-    []
-  );
-  const [showShortcuts, setShowShortcuts] = useLocalStorageState<boolean>(
-    LocalStorageKeys.SHOW_SHORTCUTS,
-    false
-  );
   const [useOnyxAsNewTab, setUseOnyxAsNewTab] = useLocalStorageState<boolean>(
     LocalStorageKeys.USE_ONYX_AS_NEW_TAB,
     true
   );
 
+  // Sync NRF theme with next-themes to enable Tailwind dark mode classes
+  // This ensures the HTML element gets the 'dark' class for Tailwind dark: classes to work
   useEffect(() => {
-    if (theme === "dark") {
+    setNextThemesTheme(theme);
+  }, [theme, setNextThemesTheme]);
+
+  // Wrapper function to update both local state and next-themes
+  const setTheme = (newTheme: ThemePreference) => {
+    setThemeState(newTheme);
+    setNextThemesTheme(newTheme);
+  };
+
+  useEffect(() => {
+    if (theme === ThemePreference.DARK) {
       notifyExtensionOfThemeChange(theme, defaultDarkBackgroundUrl);
     } else {
       notifyExtensionOfThemeChange(theme, defaultLightBackgroundUrl);
@@ -102,12 +104,8 @@ export function NRFPreferencesProvider({
         setDefaultLightBackgroundUrl,
         defaultDarkBackgroundUrl,
         setDefaultDarkBackgroundUrl,
-        shortcuts,
-        setShortcuts,
         useOnyxAsNewTab,
         setUseOnyxAsNewTab,
-        showShortcuts,
-        setShowShortcuts,
       }}
     >
       {children}

@@ -4,6 +4,7 @@ import {
   Packet,
   PacketType,
   ReasoningPacket,
+  StopReason,
 } from "../../services/streamingModels";
 import {
   FullChatState,
@@ -128,6 +129,7 @@ export function RendererComponent({
   onComplete,
   animate,
   stopPacketSeen,
+  stopReason,
   useShortRenderer = false,
   children,
 }: {
@@ -136,6 +138,7 @@ export function RendererComponent({
   onComplete: () => void;
   animate: boolean;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   useShortRenderer?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
@@ -154,6 +157,7 @@ export function RendererComponent({
       animate={animate}
       renderType={renderType}
       stopPacketSeen={stopPacketSeen}
+      stopReason={stopReason}
     >
       {children}
     </RendererFn>

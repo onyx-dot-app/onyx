@@ -5,6 +5,7 @@ An overview can be found in the README.md file in this directory.
 
 import re
 import traceback
+from collections.abc import Callable
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -45,6 +46,7 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.memory import get_memories
+from onyx.db.models import ChatMessage
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
@@ -78,18 +80,14 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
+from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-
-
-class ToolCallException(Exception):
-    """Exception raised for errors during tool calls."""
-
-    def __init__(self, message: str, tool_name: str | None = None):
-        super().__init__(message)
-        self.tool_name = tool_name
 
 
 def _extract_project_file_texts_and_images(
@@ -339,6 +337,24 @@ def handle_stream_message_objects(
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
+        # Track user message in PostHog for analytics
+        fetch_versioned_implementation_with_fallback(
+            module="onyx.utils.telemetry",
+            attribute="event_telemetry",
+            fallback=noop_fallback,
+        )(
+            distinct_id=user.email if user else tenant_id,
+            event="user_message_sent",
+            properties={
+                "origin": new_msg_req.origin.value,
+                "has_files": len(new_msg_req.file_descriptors) > 0,
+                "has_project": chat_session.project_id is not None,
+                "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
+                "deep_research": new_msg_req.deep_research,
+                "tenant_id": tenant_id,
+            },
+        )
+
         llm = get_llm_for_persona(
             persona=persona,
             user=user,
@@ -540,6 +556,17 @@ def handle_stream_message_objects(
         # External container allows non-streaming callers to access accumulated state
         state_container = external_state_container or ChatStateContainer()
 
+        def llm_loop_completion_callback(
+            state_container: ChatStateContainer,
+        ) -> None:
+            llm_loop_completion_handle(
+                state_container=state_container,
+                db_session=db_session,
+                chat_session_id=str(chat_session.id),
+                is_connected=check_is_connected,
+                assistant_message=assistant_response,
+            )
+
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
         # for stop signals. run_llm_loop itself doesn't know about stopping.
@@ -555,6 +582,7 @@ def handle_stream_message_objects(
 
             yield from run_chat_loop_with_state_containers(
                 run_deep_research_llm_loop,
+                llm_loop_completion_callback,
                 is_connected=check_is_connected,
                 emitter=emitter,
                 state_container=state_container,
@@ -571,6 +599,7 @@ def handle_stream_message_objects(
         else:
             yield from run_chat_loop_with_state_containers(
                 run_llm_loop,
+                llm_loop_completion_callback,
                 is_connected=check_is_connected,  # Not passed through to run_llm_loop
                 emitter=emitter,
                 state_container=state_container,
@@ -587,51 +616,6 @@ def handle_stream_message_objects(
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
             )
-
-        # Determine if stopped by user
-        completed_normally = check_is_connected()
-        if not completed_normally:
-            logger.debug(f"Chat session {chat_session.id} stopped by user")
-
-        # Build final answer based on completion status
-        if completed_normally:
-            if state_container.answer_tokens is None:
-                raise RuntimeError(
-                    "LLM run completed normally but did not return an answer."
-                )
-            final_answer = state_container.answer_tokens
-        else:
-            # Stopped by user - append stop message
-            if state_container.answer_tokens:
-                final_answer = (
-                    state_container.answer_tokens
-                    + " ... The generation was stopped by the user here."
-                )
-            else:
-                final_answer = "The generation was stopped by the user."
-
-        # Build citation_docs_info from accumulated citations in state container
-        citation_docs_info: list[CitationDocInfo] = []
-        seen_citation_nums: set[int] = set()
-        for citation_num, search_doc in state_container.citation_to_doc.items():
-            if citation_num not in seen_citation_nums:
-                seen_citation_nums.add(citation_num)
-                citation_docs_info.append(
-                    CitationDocInfo(
-                        search_doc=search_doc,
-                        citation_number=citation_num,
-                    )
-                )
-
-        save_chat_turn(
-            message_text=final_answer,
-            reasoning_tokens=state_container.reasoning_tokens,
-            citation_docs_info=citation_docs_info,
-            tool_calls=state_container.tool_calls,
-            db_session=db_session,
-            assistant_message=assistant_response,
-            is_clarification=state_container.is_clarification,
-        )
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
@@ -650,15 +634,7 @@ def handle_stream_message_objects(
         error_msg = str(e)
         stack_trace = traceback.format_exc()
 
-        if isinstance(e, ToolCallException):
-            yield StreamingError(
-                error=error_msg,
-                stack_trace=stack_trace,
-                error_code="TOOL_CALL_FAILED",
-                is_retryable=True,
-                details={"tool_name": e.tool_name} if e.tool_name else None,
-            )
-        elif llm:
+        if llm:
             client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
                 e, llm
             )
@@ -691,6 +667,57 @@ def handle_stream_message_objects(
 
         db_session.rollback()
         return
+
+
+def llm_loop_completion_handle(
+    state_container: ChatStateContainer,
+    is_connected: Callable[[], bool],
+    db_session: Session,
+    chat_session_id: str,
+    assistant_message: ChatMessage,
+) -> None:
+    # Determine if stopped by user
+    completed_normally = is_connected()
+    # Build final answer based on completion status
+    if completed_normally:
+        if state_container.answer_tokens is None:
+            raise RuntimeError(
+                "LLM run completed normally but did not return an answer."
+            )
+        final_answer = state_container.answer_tokens
+    else:
+        # Stopped by user - append stop message
+        logger.debug(f"Chat session {chat_session_id} stopped by user")
+        if state_container.answer_tokens:
+            final_answer = (
+                state_container.answer_tokens
+                + " ... \n\nGeneration was stopped by the user."
+            )
+        else:
+            final_answer = "The generation was stopped by the user."
+
+    # Build citation_docs_info from accumulated citations in state container
+    citation_docs_info: list[CitationDocInfo] = []
+    seen_citation_nums: set[int] = set()
+    for citation_num, search_doc in state_container.citation_to_doc.items():
+        if citation_num not in seen_citation_nums:
+            seen_citation_nums.add(citation_num)
+            citation_docs_info.append(
+                CitationDocInfo(
+                    search_doc=search_doc,
+                    citation_number=citation_num,
+                )
+            )
+
+    save_chat_turn(
+        message_text=final_answer,
+        reasoning_tokens=state_container.reasoning_tokens,
+        citation_docs_info=citation_docs_info,
+        tool_calls=state_container.tool_calls,
+        db_session=db_session,
+        assistant_message=assistant_message,
+        is_clarification=state_container.is_clarification,
+    )
 
 
 def stream_chat_message_objects(
@@ -739,6 +766,7 @@ def stream_chat_message_objects(
         deep_research=new_msg_req.deep_research,
         parent_message_id=new_msg_req.parent_message_id,
         chat_session_id=new_msg_req.chat_session_id,
+        origin=new_msg_req.origin,
     )
     return handle_stream_message_objects(
         new_msg_req=translated_new_msg_req,

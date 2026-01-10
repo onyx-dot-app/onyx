@@ -102,10 +102,10 @@ export default function Page(props: {
   const documentSetId = parseInt(params.documentSetId);
 
   return (
-    <div className="container">
+    <>
       <BackButton />
 
       <Main documentSetId={documentSetId} />
-    </div>
+    </>
   );
 }

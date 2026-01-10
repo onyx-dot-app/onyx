@@ -189,7 +189,6 @@ export const OAuthConfigForm = ({
                   label="Configuration Name:"
                   subtext="A friendly name to identify this OAuth configuration (e.g., 'GitHub OAuth', 'Google OAuth')"
                   placeholder="e.g., GitHub OAuth"
-                  autoCompleteDisabled={true}
                 />
 
                 <TextFormField
@@ -197,7 +196,6 @@ export const OAuthConfigForm = ({
                   label="Authorization URL:"
                   subtext="The OAuth provider's authorization endpoint"
                   placeholder="e.g., https://github.com/login/oauth/authorize"
-                  autoCompleteDisabled={true}
                 />
 
                 <TextFormField
@@ -205,7 +203,6 @@ export const OAuthConfigForm = ({
                   label="Token URL:"
                   subtext="The OAuth provider's token exchange endpoint"
                   placeholder="e.g., https://github.com/login/oauth/access_token"
-                  autoCompleteDisabled={true}
                 />
 
                 <TextFormField
@@ -221,7 +218,6 @@ export const OAuthConfigForm = ({
                       ? "Enter new client ID to update"
                       : "Your client ID"
                   }
-                  autoCompleteDisabled={true}
                 />
 
                 <TextFormField
@@ -240,7 +236,6 @@ export const OAuthConfigForm = ({
                       : "Your client secret"
                   }
                   type="password"
-                  autoCompleteDisabled={true}
                 />
 
                 <TextFormField
@@ -248,7 +243,6 @@ export const OAuthConfigForm = ({
                   label="Scopes (optional):"
                   subtext="Comma-separated list of OAuth scopes to request (e.g., 'repo, user')"
                   placeholder="e.g., repo, user"
-                  autoCompleteDisabled={true}
                 />
               </Modal.Body>
               <Modal.Footer className="w-full">

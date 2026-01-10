@@ -35,6 +35,7 @@ DOCUMENT_ID_FIELD_NAME = "document_id"
 CHUNK_INDEX_FIELD_NAME = "chunk_index"
 MAX_CHUNK_SIZE_FIELD_NAME = "max_chunk_size"
 TENANT_ID_FIELD_NAME = "tenant_id"
+BLURB_FIELD_NAME = "blurb"
 
 
 def get_opensearch_doc_chunk_id(
@@ -83,16 +84,19 @@ class DocumentChunk(BaseModel):
     last_updated: datetime | None = None
     created_at: datetime | None = None
 
-    public: bool = False
+    public: bool
     access_control_list: list[str] | None = None
+    # Defaults to False, currently gets written during update not index.
     hidden: bool = False
 
     global_boost: float = 1.0
 
-    # TODO(andrei): Make this non-nullable in a followup.
-    semantic_identifier: str | None = None
+    semantic_identifier: str
     image_file_name: str | None = None
-    source_links: list[str] | None = None
+    # Contains a string representation of a dict which maps offset into the raw
+    # chunk text to the link corresponding to that point.
+    source_links: str | None = None
+    blurb: str
 
     document_sets: list[str] | None = None
     project_ids: list[int] | None = None
@@ -206,8 +210,11 @@ class DocumentSchema:
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
-                # Number of tokens in the chunk's content.
-                NUM_TOKENS_FIELD_NAME: {"type": "integer", "store": True},
+                # See TODO in _convert_onyx_chunk_to_opensearch_document. I
+                # don't want to actually add this to the schema until we know
+                # for sure we need it. If we decide we don't I will remove this.
+                # # Number of tokens in the chunk's content.
+                # NUM_TOKENS_FIELD_NAME: {"type": "integer", "store": True},
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
                 # Application logic should store in the format key:::value.
                 METADATA_FIELD_NAME: {"type": "keyword"},
@@ -218,13 +225,16 @@ class DocumentSchema:
                     # would make sense to sort by date.
                     "doc_values": True,
                 },
-                CREATED_AT_FIELD_NAME: {
-                    "type": "date",
-                    "format": "epoch_millis",
-                    # For some reason date defaults to False, even though it
-                    # would make sense to sort by date.
-                    "doc_values": True,
-                },
+                # See TODO in _convert_onyx_chunk_to_opensearch_document. I
+                # don't want to actually add this to the schema until we know
+                # for sure we need it. If we decide we don't I will remove this.
+                # CREATED_AT_FIELD_NAME: {
+                #     "type": "date",
+                #     "format": "epoch_millis",
+                #     # For some reason date defaults to False, even though it
+                #     # would make sense to sort by date.
+                #     "doc_values": True,
+                # },
                 # Access control fields.
                 # Whether the doc is public. Could have fallen under access
                 # control list but is such a broad and critical filter that it
@@ -256,6 +266,13 @@ class DocumentSchema:
                 },
                 # Same as above; used to link to the source doc.
                 SOURCE_LINKS_FIELD_NAME: {
+                    "type": "keyword",
+                    "index": False,
+                    "doc_values": False,
+                    "store": False,
+                },
+                # Same as above; used to quickly summarize the doc in the UI.
+                BLURB_FIELD_NAME: {
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,

@@ -55,8 +55,7 @@ def test_projects_flow(
         user_performing_action=basic_user,
     )
     assert len(upload_result.user_files) == 2
-    assert len(upload_result.non_accepted_files) == 0
-    assert len(upload_result.unsupported_files) == 0
+    assert len(upload_result.rejected_files) == 0
     project_files = ProjectManager.get_project_files(
         project_id=file_project.id,
         user_performing_action=basic_user,

@@ -23,7 +23,7 @@ async function Page() {
     (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
   return (
-    <div className="container">
+    <>
       <BackButton />
       <AdminPageTitle
         title="New Standard Answer"
@@ -33,7 +33,7 @@ async function Page() {
       <StandardAnswerCreationForm
         standardAnswerCategories={standardAnswerCategories}
       />
-    </div>
+    </>
   );
 }
 

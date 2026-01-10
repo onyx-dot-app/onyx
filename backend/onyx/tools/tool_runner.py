@@ -11,7 +11,9 @@ from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
+from onyx.tools.models import ParallelToolCallResponse
 from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
@@ -27,6 +29,7 @@ logger = setup_logger()
 
 QUERIES_FIELD = "queries"
 URLS_FIELD = "urls"
+GENERIC_TOOL_ERROR_MESSAGE = "Tool failed with error: {error}"
 
 # Mapping of tool name to the field that should be merged when multiple calls exist
 MERGEABLE_TOOL_FIELDS: dict[str, str] = {
@@ -91,7 +94,7 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
     return merged_calls
 
 
-def _run_single_tool(
+def _safe_run_single_tool(
     tool: Tool,
     tool_call: ToolCallKickoff,
     override_kwargs: Any,
@@ -99,7 +102,18 @@ def _run_single_tool(
     """Execute a single tool and return its response.
 
     This function is designed to be run in parallel via run_functions_tuples_in_parallel.
+
+    Exception handling:
+    - ToolCallException: Expected errors from tool execution (e.g., invalid input,
+      API failures). Uses the exception's llm_facing_message for LLM consumption.
+    - Other exceptions: Unexpected errors. Uses a generic error message.
+
+    In all cases (success or failure):
+    - SectionEnd packet is emitted to signal tool completion
+    - tool_call is set on the response for downstream processing
     """
+    tool_response: ToolResponse | None = None
+
     with function_span(tool.name) as span_fn:
         span_fn.span_data.input = str(tool_call.tool_args)
         try:
@@ -109,19 +123,47 @@ def _run_single_tool(
                 **tool_call.tool_args,
             )
             span_fn.span_data.output = tool_response.llm_facing_response
-        except Exception as e:
-            logger.error(f"Error running tool {tool.name}: {e}")
+        except ToolCallException as e:
+            # ToolCallException is an expected error from tool execution
+            # Use llm_facing_message which is specifically designed for LLM consumption
+            logger.error(f"Tool call error for {tool.name}: {e}")
             tool_response = ToolResponse(
                 rich_response=None,
-                llm_facing_response="Tool execution failed with: " + str(e),
+                llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(
+                    error=e.llm_facing_message
+                ),
             )
             _error_tracing.attach_error_to_current_span(
                 SpanError(
-                    message="Error running tool",
+                    message="Tool call error (expected)",
                     data={
                         "tool_name": tool.name,
+                        "tool_call_id": tool_call.tool_call_id,
+                        "tool_args": tool_call.tool_args,
+                        "error": str(e),
+                        "llm_facing_message": e.llm_facing_message,
+                        "stack_trace": traceback.format_exc(),
+                        "error_type": "ToolCallException",
+                    },
+                )
+            )
+        except Exception as e:
+            # Unexpected error during tool execution
+            logger.error(f"Unexpected error running tool {tool.name}: {e}")
+            tool_response = ToolResponse(
+                rich_response=None,
+                llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(error=str(e)),
+            )
+            _error_tracing.attach_error_to_current_span(
+                SpanError(
+                    message="Tool execution error (unexpected)",
+                    data={
+                        "tool_name": tool.name,
+                        "tool_call_id": tool_call.tool_call_id,
+                        "tool_args": tool_call.tool_args,
                         "error": str(e),
                         "stack_trace": traceback.format_exc(),
+                        "error_type": type(e).__name__,
                     },
                 )
             )
@@ -148,37 +190,76 @@ def run_tool_calls(
     user_info: str | None,
     citation_mapping: dict[int, str],
     next_citation_num: int,
+    # Max number of tools to run concurrently (and overall) in this batch.
+    # If set, tool calls beyond this limit are dropped.
+    max_concurrent_tools: int | None = None,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
-) -> tuple[list[ToolResponse], dict[int, str]]:
-    """Run multiple tool calls in parallel and update citation mappings.
+) -> ParallelToolCallResponse:
+    """Run (optionally merged) tool calls in parallel and update citation mappings.
 
-    Merges tool calls for SearchTool, WebSearchTool, and OpenURLTool before execution.
-    All tools are executed in parallel, and citation mappings are updated
-    from search tool responses.
+    Before execution, tool calls for `SearchTool`, `WebSearchTool`, and `OpenURLTool`
+    are merged so repeated calls are collapsed into a single call per tool:
+    - `SearchTool` / `WebSearchTool`: merge the `queries` list
+    - `OpenURLTool`: merge the `urls` list
+
+    Tools are executed in parallel (threadpool). For tools that generate citations,
+    each tool call is assigned a **distinct** `starting_citation_num` range to avoid
+    citation number collisions when running concurrently (the range is advanced by
+    100 per tool call).
+
+    The provided `citation_mapping` may be mutated in-place: any new
+    `SearchDocsResponse.citation_mapping` entries are merged into it.
 
     Args:
-        tool_calls: List of tool calls to execute
-        tools: List of available tools
-        message_history: Chat message history for context
-        memories: User memories, if available
-        user_info: User information string, if available
-        citation_mapping: Current citation number to URL mapping
-        next_citation_num: Next citation number to use
-        skip_search_query_expansion: Whether to skip query expansion for search tools
+        tool_calls: List of tool calls to execute.
+        tools: List of available tool instances.
+        message_history: Chat message history (used to find the most recent user query
+            for `SearchTool` override kwargs).
+        memories: User memories, if available (passed through to `SearchTool`).
+        user_info: User information string, if available (passed through to `SearchTool`).
+        citation_mapping: Current citation number to URL mapping. May be updated with
+            new citations produced by search tools.
+        next_citation_num: The next citation number to allocate from.
+        max_concurrent_tools: Max number of tools to run in this batch. If set, any
+            tool calls after this limit are dropped (not queued).
+        skip_search_query_expansion: Whether to skip query expansion for `SearchTool`
+            (intended for repeated search calls within the same chat turn).
 
     Returns:
-        A tuple containing:
-            - List of ToolResponse objects (each with tool_call set)
-            - Updated citation mapping dictionary
+        A `ParallelToolCallResponse` containing:
+        - `tool_responses`: `ToolResponse` objects for successfully dispatched tool calls
+          (each has `tool_call` set). If a tool execution fails at the threadpool layer,
+          its entry will be omitted.
+        - `updated_citation_mapping`: The updated citation mapping dictionary.
     """
-    # Merge tool calls for SearchTool and WebSearchTool
+    # Merge tool calls for SearchTool, WebSearchTool, and OpenURLTool
     merged_tool_calls = _merge_tool_calls(tool_calls)
 
     if not merged_tool_calls:
-        return [], citation_mapping
+        return ParallelToolCallResponse(
+            tool_responses=[],
+            updated_citation_mapping=citation_mapping,
+        )
 
     tools_by_name = {tool.name: tool for tool in tools}
+
+    # Drop unknown tools (and don't let them count against the cap)
+    filtered_tool_calls: list[ToolCallKickoff] = []
+    for tool_call in merged_tool_calls:
+        if tool_call.tool_name not in tools_by_name:
+            logger.warning(f"Tool {tool_call.tool_name} not found in tools list")
+            continue
+        filtered_tool_calls.append(tool_call)
+
+    # Apply safety cap (drop tool calls beyond the cap)
+    if max_concurrent_tools is not None:
+        if max_concurrent_tools <= 0:
+            return ParallelToolCallResponse(
+                tool_responses=[],
+                updated_citation_mapping=citation_mapping,
+            )
+        filtered_tool_calls = filtered_tool_calls[:max_concurrent_tools]
 
     # Get starting citation number from citation processor to avoid conflicts with project files
     starting_citation_num = next_citation_num
@@ -203,11 +284,7 @@ def run_tool_calls(
     # Each tool gets a unique starting citation number to avoid conflicts when running in parallel
     tool_run_params: list[tuple[Tool, ToolCallKickoff, Any]] = []
 
-    for tool_call in merged_tool_calls:
-        if tool_call.tool_name not in tools_by_name:
-            logger.warning(f"Tool {tool_call.tool_name} not found in tools list")
-            continue
-
+    for tool_call in filtered_tool_calls:
         tool = tools_by_name[tool_call.tool_name]
 
         # Emit the tool start packet before running the tool
@@ -254,23 +331,29 @@ def run_tool_calls(
 
     # Run all tools in parallel
     functions_with_args = [
-        (_run_single_tool, (tool, tool_call, override_kwargs))
+        (_safe_run_single_tool, (tool, tool_call, override_kwargs))
         for tool, tool_call, override_kwargs in tool_run_params
     ]
 
-    tool_responses: list[ToolResponse] = run_functions_tuples_in_parallel(
+    tool_run_results: list[ToolResponse | None] = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=True,  # Continue even if some tools fail
+        max_workers=max_concurrent_tools,
     )
 
     # Process results and update citation_mapping
-    for tool_response in tool_responses:
-        if tool_response and isinstance(
-            tool_response.rich_response, SearchDocsResponse
-        ):
-            new_citations = tool_response.rich_response.citation_mapping
+    for result in tool_run_results:
+        if result is None:
+            continue
+
+        if result and isinstance(result.rich_response, SearchDocsResponse):
+            new_citations = result.rich_response.citation_mapping
             if new_citations:
                 # Merge new citations into the existing mapping
                 citation_mapping.update(new_citations)
 
-    return tool_responses, citation_mapping
+    tool_responses = [result for result in tool_run_results if result is not None]
+    return ParallelToolCallResponse(
+        tool_responses=tool_responses,
+        updated_citation_mapping=citation_mapping,
+    )

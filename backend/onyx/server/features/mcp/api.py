@@ -8,11 +8,7 @@ from enum import Enum
 from secrets import token_urlsafe
 from typing import cast
 from typing import Literal
-from urllib.parse import parse_qsl
-from urllib.parse import urlencode
 from urllib.parse import urlparse
-from urllib.parse import urlsplit
-from urllib.parse import urlunsplit
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -337,60 +333,6 @@ def make_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-async def discover_auth_server_url(
-    oauth_auth: OAuthClientProvider, oauth_url: str, well_known_override: str
-) -> str:
-    """
-    Only call this function when the client provider's context contains a non-None oauth_metadata
-    """
-    oauth_metadata_request = oauth_auth._create_oauth_metadata_request(
-        well_known_override
-    )
-    import httpx
-
-    async with httpx.AsyncClient() as client:
-        oauth_metadata_response = await client.send(oauth_metadata_request)
-
-    if oauth_metadata_response.status_code == 200:
-        await oauth_auth._handle_oauth_metadata_response(oauth_metadata_response)
-        assert oauth_auth.context.oauth_metadata  # guaranteed by caller
-        # need to do this explicitly because we're overwriting the scope in the client metadata
-        oauth_auth.context.client_metadata.scope = " ".join(
-            oauth_auth.context.oauth_metadata.scopes_supported or []
-        )
-        prev_oauth_url_parts = urlsplit(oauth_url)
-        # Construct new URL by adding query params from previous OAuth URL to the authorization endpoint
-        # Update scope in the OAuth URL with the new client metadata scopes
-        if oauth_auth.context.client_metadata.scope:
-            prev_query_params = dict(parse_qsl(prev_oauth_url_parts.query))
-            prev_query_params["scope"] = oauth_auth.context.client_metadata.scope
-            prev_oauth_url_parts = prev_oauth_url_parts._replace(
-                query=urlencode(prev_query_params)
-            )
-        parsed_auth_endpoint = urlsplit(
-            str(oauth_auth.context.oauth_metadata.authorization_endpoint)
-        )
-        existing_query_params = dict(parse_qsl(parsed_auth_endpoint.query))
-        prev_query_params = dict(parse_qsl(prev_oauth_url_parts.query))
-
-        # Merge query parameters (previous params take precedence)
-        merged_params = {**existing_query_params, **prev_query_params}
-
-        # Reconstruct the URL with merged query parameters
-        oauth_url = urlunsplit(
-            parsed_auth_endpoint._replace(query=urlencode(merged_params))
-        )
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Failed to retrieve OAuth metadata: Code"
-                f" {oauth_metadata_response.status_code} text: {oauth_metadata_response.text}"
-            ),
-        )
-    return oauth_url
-
-
 class MCPOauthState(BaseModel):
     server_id: int
     return_path: str
@@ -463,6 +405,8 @@ async def _connect_oauth(
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
             scope=REQUESTED_SCOPE,  # TODO: allow specifying scopes?
+            # Must specify auth method so client_secret is actually sent during token exchange
+            token_endpoint_auth_method="client_secret_post",
         )
         config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(
             mode="json"
@@ -594,27 +538,6 @@ async def _connect_oauth(
                         status_code=400, detail=f"OAuth initialization failed: {str(e)}"
                     )
             raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
-
-        # TODO: this is a hack that lets us work around the broken discovery mechanisms
-        # in the mcp client library when using Okta as Idp. Okta's discovery urls
-        # put the well-known section at the end, and before the mcp client library
-        # tries that variant it tries to use just the base path + well known. this path
-        # is valid for Okta (returns 200), giving the wrong metadata.
-
-        if oauth_auth.context.auth_server_url and oauth_auth.context.oauth_metadata:
-
-            parsed_url = urlsplit(oauth_auth.context.auth_server_url)
-
-            query_params = dict(parse_qsl(parsed_url.query))
-            well_known_override = query_params.get("well_known_override")
-            # effectively copied from the mcp client library
-            if well_known_override:
-                oauth_url = await discover_auth_server_url(
-                    oauth_auth, oauth_url, well_known_override
-                )
-                # TODO: at the moment we do not handle dynamic client registration in this flow.
-                # It's meant as a hack to work with edge case Idps with discovery urls that disagree
-                # with the ones the client library talks with.
 
         logger.info(
             f"Connected to auth url: {oauth_url} for mcp server: {mcp_server.name}"
@@ -929,9 +852,13 @@ def _db_mcp_server_to_api_mcp_server(
                         client_info_raw
                     )
                 if client_info:
+                    if not client_info.client_id or not client_info.client_secret:
+                        raise ValueError(
+                            "Stored client info had empty client ID or secret"
+                        )
                     admin_credentials = {
                         "client_id": client_info.client_id,
-                        "client_secret": client_info.client_secret or "",
+                        "client_secret": client_info.client_secret,
                     }
                 else:
                     admin_credentials = {}
@@ -961,9 +888,11 @@ def _db_mcp_server_to_api_mcp_server(
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
             if client_info:
+                if not client_info.client_id or not client_info.client_secret:
+                    raise ValueError("Stored client info had empty client ID or secret")
                 admin_credentials = {
                     "client_id": client_info.client_id,
-                    "client_secret": client_info.client_secret or "",
+                    "client_secret": client_info.client_secret,
                 }
             else:
                 admin_credentials = {}
