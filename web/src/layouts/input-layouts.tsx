@@ -5,7 +5,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 
-export interface OrientationLayoutProps extends LabelLayoutProps {
+interface OrientationLayoutProps extends LabelLayoutProps {
   name?: string;
   children?: React.ReactNode;
 }
@@ -32,26 +32,28 @@ export interface OrientationLayoutProps extends LabelLayoutProps {
  * </Vertical>
  * ```
  */
+export interface VerticalLayoutProps extends OrientationLayoutProps {
+  subDescription?: React.ReactNode;
+}
 function VerticalInputLayout({
   children,
+  subDescription,
 
   name,
   ...fieldLabelProps
-}: OrientationLayoutProps) {
+}: VerticalLayoutProps) {
   return (
     <div className="flex flex-col w-full h-full gap-1">
       <LabelLayout name={name} {...fieldLabelProps} />
       {children}
       {name && <ErrorLayout name={name} />}
+      {subDescription && (
+        <Text secondaryBody text03>
+          {subDescription}
+        </Text>
+      )}
     </div>
   );
-}
-
-export interface HorizontalLayoutProps extends OrientationLayoutProps {
-  /** Align input to the start (top) of the label/description */
-  start?: boolean;
-  /** Align input to the center (middle) of the label/description */
-  center?: boolean;
 }
 
 /**
@@ -96,6 +98,12 @@ export interface HorizontalLayoutProps extends OrientationLayoutProps {
  * </Horizontal>
  * ```
  */
+export interface HorizontalLayoutProps extends OrientationLayoutProps {
+  /** Align input to the start (top) of the label/description */
+  start?: boolean;
+  /** Align input to the center (middle) of the label/description */
+  center?: boolean;
+}
 function HorizontalInputLayout({
   children,
 
@@ -136,15 +144,6 @@ function HorizontalInputLayout({
   );
 }
 
-export interface LabelLayoutProps {
-  name?: string;
-  label?: string;
-  optional?: boolean;
-  description?: string;
-  start?: boolean;
-  center?: boolean;
-}
-
 /**
  * LabelLayout - A reusable label component for form fields
  *
@@ -171,6 +170,14 @@ export interface LabelLayoutProps {
  * />
  * ```
  */
+export interface LabelLayoutProps {
+  name?: string;
+  label?: string;
+  optional?: boolean;
+  description?: string;
+  start?: boolean;
+  center?: boolean;
+}
 function LabelLayout({
   name,
   label,
@@ -214,10 +221,6 @@ function LabelLayout({
   );
 }
 
-interface FieldErrorLayoutProps {
-  name: string;
-}
-
 /**
  * ErrorLayout - Displays Formik field validation errors
  *
@@ -240,6 +243,9 @@ interface FieldErrorLayoutProps {
  * This component uses Formik's `useField` hook internally and requires
  * the component to be rendered within a Formik context.
  */
+interface FieldErrorLayoutProps {
+  name: string;
+}
 function ErrorLayout({ name }: FieldErrorLayoutProps) {
   const [, meta] = useField(name);
   const { status } = useFormikContext();

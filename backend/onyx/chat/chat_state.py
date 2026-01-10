@@ -94,6 +94,7 @@ class ChatStateContainer:
 
 def run_chat_loop_with_state_containers(
     func: Callable[..., None],
+    completion_callback: Callable[[ChatStateContainer], None],
     is_connected: Callable[[], bool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -196,3 +197,12 @@ def run_chat_loop_with_state_containers(
         # Skip waiting if user disconnected to exit quickly.
         if is_connected():
             wait_on_background(thread)
+        try:
+            completion_callback(state_container)
+        except Exception as e:
+            emitter.emit(
+                Packet(
+                    placement=Placement(turn_index=last_turn_index + 1),
+                    obj=PacketException(type="error", exception=e),
+                )
+            )

@@ -60,6 +60,7 @@ from onyx.server.query_and_chat.models import ChatSessionsResponse
 from onyx.server.query_and_chat.models import DocumentSearchPagination
 from onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.server.query_and_chat.models import DocumentSearchResponse
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import OneShotQARequest
 from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.server.query_and_chat.models import SearchSessionDetailResponse
@@ -251,6 +252,7 @@ def get_answer_stream(
     )
 
     # Also creates a new chat session
+    # Origin is hardcoded to API since this endpoint is only accessible via API calls
     request = prepare_chat_message_request(
         message_text=combined_message,
         user=user,
@@ -261,6 +263,7 @@ def get_answer_stream(
         rerank_settings=query_request.rerank_settings,
         db_session=db_session,
         skip_gen_ai_answer_generation=query_request.skip_gen_ai_answer_generation,
+        origin=MessageOrigin.API,
     )
 
     packets = stream_chat_message_objects(

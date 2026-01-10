@@ -124,7 +124,6 @@ export const StandardAnswerCreationForm = ({
                   label="Any of these keywords, separated by spaces"
                   tooltip="A question must match these keywords in order to trigger the answer."
                   placeholder="ticket problem issue"
-                  autoCompleteDisabled={true}
                 />
               ) : (
                 <TextFormField
@@ -132,7 +131,6 @@ export const StandardAnswerCreationForm = ({
                   label="All of these keywords, in any order, separated by spaces"
                   tooltip="A question must match these keywords in order to trigger the answer."
                   placeholder="it ticket"
-                  autoCompleteDisabled={true}
                 />
               )}
               <BooleanFormField

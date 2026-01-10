@@ -37,7 +37,7 @@ interface InlineFileManagementProps {
   onRefresh: () => void;
 }
 
-export function InlineFileManagement({
+export default function InlineFileManagement({
   connectorId,
   onRefresh,
 }: InlineFileManagementProps) {
@@ -410,7 +410,7 @@ export function InlineFileManagement({
             >
               Cancel
             </Button>
-            <Button onClick={handleConfirmSave} primary disabled={isSaving}>
+            <Button onClick={handleConfirmSave} disabled={isSaving}>
               {isSaving ? "Saving..." : "Confirm & Save"}
             </Button>
           </Modal.Footer>

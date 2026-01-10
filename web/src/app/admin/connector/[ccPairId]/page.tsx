@@ -25,7 +25,7 @@ import {
 } from "./ConfigDisplay";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
-import { InlineFileManagement } from "./InlineFileManagement";
+import InlineFileManagement from "./InlineFileManagement";
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {

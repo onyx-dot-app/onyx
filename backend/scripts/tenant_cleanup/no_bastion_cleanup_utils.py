@@ -10,19 +10,19 @@ import sys
 from pathlib import Path
 
 
-def find_worker_pod(context: str | None = None) -> str:
+class TenantNotFoundInControlPlaneError(Exception):
+    """Exception raised when tenant/table is not found in control plane."""
+
+
+def find_worker_pod(context: str) -> str:
     """Find a user file processing worker pod using kubectl.
 
     Args:
-        context: Optional kubectl context to use
+        context: kubectl context to use
     """
-    print(
-        f"Finding user file processing worker pod{f' in context {context}' if context else ''}..."
-    )
+    print(f"Finding user file processing worker pod in context {context}...")
 
-    cmd = ["kubectl", "get", "po"]
-    if context:
-        cmd.extend(["--context", context])
+    cmd = ["kubectl", "get", "po", "--context", context]
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
@@ -43,17 +43,15 @@ def find_worker_pod(context: str | None = None) -> str:
     raise RuntimeError("No running user file processing worker pod found")
 
 
-def find_background_pod(context: str | None = None) -> str:
-    """Find a background/api-server pod for control plane operations.
+def find_background_pod(context: str) -> str:
+    """Find a pod for control plane operations.
 
     Args:
-        context: Optional kubectl context to use
+        context: kubectl context to use
     """
-    print(f"Finding background/api pod{f' in context {context}' if context else ''}...")
+    print(f"Finding control plane pod in context {context}...")
 
-    cmd = ["kubectl", "get", "po"]
-    if context:
-        cmd.extend(["--context", context])
+    cmd = ["kubectl", "get", "po", "--context", context]
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
@@ -65,16 +63,15 @@ def find_background_pod(context: str | None = None) -> str:
 
     random.shuffle(lines)
 
-    # Try to find api-server, background worker, or any celery worker
+    # Try to find control plane pods
     for line in lines:
         if (
             any(
                 name in line
                 for name in [
-                    "api-server",
-                    "celery-worker-light",
-                    "celery-worker-primary",
-                    "background",
+                    "background-processing-deployment",
+                    "subscription-deployment",
+                    "tenants-deployment",
                 ]
             )
             and "Running" in line
@@ -106,20 +103,23 @@ def confirm_step(message: str, force: bool = False) -> bool:
 
 
 def execute_control_plane_query_from_pod(
-    pod_name: str, query: str, context: str | None = None
+    pod_name: str, query: str, context: str
 ) -> dict:
     """Execute a SQL query against control plane database from within a pod.
 
     Args:
         pod_name: The Kubernetes pod name to execute from
         query: The SQL query to execute
-        context: Optional kubectl context for control plane cluster
+        context: kubectl context for control plane cluster
 
     Returns:
         Dict with 'success' bool, 'stdout' str, and optional 'error' str
     """
     # Create a Python script to run the query
     # This script tries multiple environment variable patterns
+
+    # NOTE: whuang 01/08/2026: POSTGRES_CONTROL_* don't exist. This uses pattern 2 currently.
+
     query_script = f'''
 import os
 from sqlalchemy import create_engine, text
@@ -175,9 +175,7 @@ with engine.connect() as conn:
     script_path = "/tmp/control_plane_query.py"
 
     try:
-        cmd_write = ["kubectl", "exec", pod_name]
-        if context:
-            cmd_write.extend(["--context", context])
+        cmd_write = ["kubectl", "exec", "--context", context, pod_name]
         cmd_write.extend(
             [
                 "--",
@@ -194,9 +192,7 @@ with engine.connect() as conn:
         )
 
         # Execute the script
-        cmd_exec = ["kubectl", "exec", pod_name]
-        if context:
-            cmd_exec.extend(["--context", context])
+        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
         cmd_exec.extend(["--", "python", script_path])
 
         result = subprocess.run(
@@ -220,19 +216,20 @@ with engine.connect() as conn:
         }
 
 
-def get_tenant_status(
-    pod_name: str, tenant_id: str, context: str | None = None
-) -> str | None:
+def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None:
     """
     Get tenant status from control plane database via pod.
 
     Args:
         pod_name: The pod to execute the query from
         tenant_id: The tenant ID to look up
-        context: Optional kubectl context for control plane cluster
+        context: kubectl context for control plane cluster
 
     Returns:
         Tenant status string (e.g., 'GATED_ACCESS', 'ACTIVE') or None if not found
+
+    Raises:
+        TenantNotFoundInControlPlaneError: If the tenant record is not found in the table
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
@@ -241,8 +238,9 @@ def get_tenant_status(
     result = execute_control_plane_query_from_pod(pod_name, query, context)
 
     if not result["success"]:
+        error_msg = result.get("error", "Unknown error")
         print(
-            f"✗ Failed to get tenant status for {tenant_id}: {result.get('error', 'Unknown error')}",
+            f"✗ Failed to get tenant status for {tenant_id}: {error_msg}",
             file=sys.stderr,
         )
         return None
@@ -257,23 +255,27 @@ def get_tenant_status(
                 print(f"✓ Tenant status: {status}")
                 return status
 
+        # Tenant record not found in control plane table
         print("⚠ Tenant not found in control plane")
-        return None
+        raise TenantNotFoundInControlPlaneError(
+            f"Tenant {tenant_id} not found in control plane database"
+        )
 
+    except TenantNotFoundInControlPlaneError:
+        # Re-raise without wrapping
+        raise
     except (json.JSONDecodeError, KeyError, IndexError) as e:
         print(f"✗ Failed to parse tenant status: {e}", file=sys.stderr)
         return None
 
 
-def execute_control_plane_delete(
-    pod_name: str, query: str, context: str | None = None
-) -> bool:
+def execute_control_plane_delete(pod_name: str, query: str, context: str) -> bool:
     """Execute a DELETE query against control plane database from pod.
 
     Args:
         pod_name: The pod to execute the query from
         query: The DELETE query to execute
-        context: Optional kubectl context for control plane cluster
+        context: kubectl context for control plane cluster
 
     Returns:
         True if successful, False otherwise

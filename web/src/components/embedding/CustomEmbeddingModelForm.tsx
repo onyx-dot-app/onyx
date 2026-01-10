@@ -70,7 +70,6 @@ export function CustomEmbeddingModelForm({
                 embeddingType
               )} model`}
               placeholder="e.g. 'all-MiniLM-L6-v2'"
-              autoCompleteDisabled={true}
             />
 
             <TextFormField
@@ -79,7 +78,6 @@ export function CustomEmbeddingModelForm({
               subtext="The dimension of the model's embeddings"
               placeholder="e.g. '1536'"
               type="number"
-              autoCompleteDisabled={true}
             />
 
             <BooleanFormField
@@ -93,14 +91,12 @@ export function CustomEmbeddingModelForm({
               name="query_prefix"
               label="Query Prefix:"
               subtext="Prefix for query embeddings"
-              autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="passage_prefix"
               label="Passage Prefix:"
               subtext="Prefix for passage embeddings"
-              autoCompleteDisabled={true}
             />
 
             <Button

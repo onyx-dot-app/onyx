@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
@@ -25,6 +25,8 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
+import useFilter from "@/hooks/useFilter";
+import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
   file: ProjectFile,
@@ -117,7 +119,6 @@ export default function UserFilesModal({
   onUnpickRecent,
 }: UserFilesModalProps) {
   const { isOpen, toggle } = useModal();
-  const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(selectedFileIds || [])
   );
@@ -127,16 +128,13 @@ export default function UserFilesModal({
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
   useEffect(() => {
-    if (selectedFileIds) {
-      setSelectedIds(new Set(selectedFileIds));
-    } else {
-      setSelectedIds(new Set());
-    }
+    if (selectedFileIds) setSelectedIds(new Set(selectedFileIds));
+    else setSelectedIds(new Set());
   }, [selectedFileIds]);
 
   const selectedCount = selectedIds.size;
 
-  const handleDeselectAll = () => {
+  function handleDeselectAll() {
     selectedIds.forEach((id) => {
       const file = recentFiles.find((f) => f.id === id);
       if (file) {
@@ -144,24 +142,17 @@ export default function UserFilesModal({
       }
     });
     setSelectedIds(new Set());
-  };
+  }
 
-  const filtered = useMemo(() => {
-    let files = recentFiles;
+  const files = useMemo(
+    () =>
+      showOnlySelected
+        ? recentFiles.filter((projectFile) => selectedIds.has(projectFile.id))
+        : recentFiles,
+    [showOnlySelected, recentFiles, selectedIds]
+  );
 
-    // Filter by search term
-    const s = search.trim().toLowerCase();
-    if (s) {
-      files = files.filter((f) => f.name.toLowerCase().includes(s));
-    }
-
-    // Filter by selected status
-    if (showOnlySelected) {
-      files = files.filter((f) => selectedIds.has(f.id));
-    }
-
-    return files;
-  }, [recentFiles, search, showOnlySelected, selectedIds]);
+  const { query, setQuery, filtered } = useFilter(files, (file) => file.name);
 
   return (
     <>
@@ -191,8 +182,8 @@ export default function UserFilesModal({
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
                 leftSearchIcon
                 autoComplete="off"
                 tabIndex={0}
@@ -212,12 +203,16 @@ export default function UserFilesModal({
             </Section>
           </Modal.Header>
 
-          <Modal.Body padding={0.5} gap={0.5} alignItems="center">
+          <Modal.Body
+            padding={filtered.length === 0 ? 0.5 : 0}
+            gap={0.5}
+            alignItems="center"
+          >
             {/* File display section */}
             {filtered.length === 0 ? (
               <Text text03>No files found</Text>
             ) : (
-              <>
+              <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (
@@ -255,13 +250,13 @@ export default function UserFilesModal({
                 })}
 
                 {/* File count divider - only show when not searching or filtering */}
-                {!search.trim() && !showOnlySelected && (
+                {!query.trim() && !showOnlySelected && (
                   <CounterSeparator
                     count={recentFiles.length}
                     text={recentFiles.length === 1 ? "File" : "Files"}
                   />
                 )}
-              </>
+              </ScrollIndicatorDiv>
             )}
           </Modal.Body>
 
