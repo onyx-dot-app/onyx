@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Response
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -96,25 +97,26 @@ def upsert_search_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key to content provider - create if doesn't exist, update if exists
+    # Sync Exa key to content provider - atomic upsert to avoid race conditions
     if (
         request.provider_type == WebSearchProviderType.EXA
         and request.api_key_changed
         and request.api_key
     ):
-        exa_content_provider = fetch_web_content_provider_by_type(
-            WebContentProviderType.EXA, db_session
+        stmt = (
+            insert(InternetContentProvider)
+            .values(
+                name="Exa",
+                provider_type=WebContentProviderType.EXA.value,
+                api_key=request.api_key,
+                is_active=False,
+            )
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
         )
-        if exa_content_provider is not None:
-            exa_content_provider.api_key = request.api_key
-        else:
-            # Create Exa content provider with the same key
-            exa_content_provider = InternetContentProvider()
-            exa_content_provider.name = "Exa"
-            exa_content_provider.provider_type = WebContentProviderType.EXA.value
-            exa_content_provider.api_key = request.api_key
-            exa_content_provider.is_active = False
-            db_session.add(exa_content_provider)
+        db_session.execute(stmt)
         db_session.flush()
 
     db_session.commit()
@@ -268,25 +270,26 @@ def upsert_content_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key to search provider - create if doesn't exist, update if exists
+    # Sync Exa key to search provider - atomic upsert to avoid race conditions
     if (
         request.provider_type == WebContentProviderType.EXA
         and request.api_key_changed
         and request.api_key
     ):
-        exa_search_provider = fetch_web_search_provider_by_type(
-            WebSearchProviderType.EXA, db_session
+        stmt = (
+            insert(InternetSearchProvider)
+            .values(
+                name="Exa",
+                provider_type=WebSearchProviderType.EXA.value,
+                api_key=request.api_key,
+                is_active=False,
+            )
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
         )
-        if exa_search_provider is not None:
-            exa_search_provider.api_key = request.api_key
-        else:
-            # Create Exa search provider with the same key
-            exa_search_provider = InternetSearchProvider()
-            exa_search_provider.name = "Exa"
-            exa_search_provider.provider_type = WebSearchProviderType.EXA.value
-            exa_search_provider.api_key = request.api_key
-            exa_search_provider.is_active = False
-            db_session.add(exa_search_provider)
+        db_session.execute(stmt)
         db_session.flush()
 
     db_session.commit()
