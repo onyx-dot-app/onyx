@@ -218,6 +218,10 @@ export default function ActionsPopover({
     return true;
   });
 
+  const searchToolId =
+    displayTools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)?.id ??
+    0;
+
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
     if (selectedAssistant == null || selectedAssistant.id == null) return;
@@ -496,13 +500,59 @@ export default function ActionsPopover({
 
   const configuredSources = getConfiguredSources(availableSources);
 
+  const numSourcesEnabled = configuredSources.filter((source) =>
+    isSourceEnabled(source.uniqueKey)
+  ).length;
+  const searchToolDisabled = disabledToolIds.includes(searchToolId);
+
+  // Set search tool to a specific enabled/disabled state (only toggles if needed)
+  const setSearchToolEnabled = (enabled: boolean) => {
+    if (enabled && searchToolDisabled) {
+      toggleToolForCurrentAssistant(searchToolId);
+    } else if (!enabled && !searchToolDisabled) {
+      toggleToolForCurrentAssistant(searchToolId);
+    }
+  };
+
+  const handleSourceToggle = (sourceUniqueKey: string) => {
+    const willEnable = !isSourceEnabled(sourceUniqueKey);
+    const newEnabledCount = numSourcesEnabled + (willEnable ? 1 : -1);
+
+    toggleSource(sourceUniqueKey);
+    setSearchToolEnabled(newEnabledCount > 0);
+  };
+
+  const handleDisableAllSources = () => {
+    disableAllSources();
+    setSearchToolEnabled(false);
+  };
+
+  const handleEnableAllSources = () => {
+    enableAllSources();
+    setSearchToolEnabled(true);
+  };
+
+  const toggleTool = (toolId: number) => {
+    const wasDisabled = disabledToolIds.includes(toolId);
+    toggleToolForCurrentAssistant(toolId);
+
+    if (toolId === searchToolId) {
+      // Sync sources with the new search tool state
+      if (wasDisabled) {
+        enableAllSources();
+      } else {
+        disableAllSources();
+      }
+    }
+  };
+
   const sourceToggleItems: SwitchListItem[] = configuredSources.map(
     (source) => ({
       id: source.uniqueKey,
       label: source.displayName,
       leading: <SourceIcon sourceType={source.internalName} iconSize={16} />,
       isEnabled: isSourceEnabled(source.uniqueKey),
-      onToggle: () => toggleSource(source.uniqueKey),
+      onToggle: () => handleSourceToggle(source.uniqueKey),
     })
   );
 
@@ -529,7 +579,7 @@ export default function ActionsPopover({
             tool={tool}
             disabled={disabledToolIds.includes(tool.id)}
             isForced={forcedToolIds.includes(tool.id)}
-            onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+            onToggle={() => toggleTool(tool.id)}
             onForceToggle={() => toggleForcedTool(tool.id)}
             onSourceManagementOpen={() => setSecondaryView({ type: "sources" })}
             hasNoConnectors={hasNoConnectors}
@@ -591,8 +641,8 @@ export default function ActionsPopover({
       items={sourceToggleItems}
       searchPlaceholder="Search Filters"
       allDisabled={allSourcesDisabled}
-      onDisableAll={disableAllSources}
-      onEnableAll={enableAllSources}
+      onDisableAll={handleDisableAllSources}
+      onEnableAll={handleEnableAllSources}
       disableAllLabel="Disable All Sources"
       enableAllLabel="Enable All Sources"
       onBack={() => setSecondaryView(null)}
