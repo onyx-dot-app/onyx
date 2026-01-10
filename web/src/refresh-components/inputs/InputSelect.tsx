@@ -340,7 +340,6 @@ interface InputSelectItemProps extends Omit<LineItemProps, "heavyForced"> {
   /** Optional callback when item is selected */
   onClick?: (event: React.SyntheticEvent) => void;
 }
-
 const InputSelectItem = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Item>,
   InputSelectItemProps
@@ -412,7 +411,6 @@ InputSelectItem.displayName = "InputSelectItem";
  */
 interface InputSelectGroupProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Group> {}
-
 const InputSelectGroup = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Group>,
   InputSelectGroupProps
@@ -439,7 +437,6 @@ InputSelectGroup.displayName = "InputSelectGroup";
  */
 interface InputSelectLabelProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label> {}
-
 const InputSelectLabel = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Label>,
   InputSelectLabelProps
@@ -477,7 +474,6 @@ InputSelectLabel.displayName = "InputSelectLabel";
  * ```
  */
 type InputSelectSeparatorProps = WithoutStyles<SeparatorProps>;
-
 const InputSelectSeparator = React.forwardRef<
   React.ComponentRef<typeof Separator>,
   InputSelectSeparatorProps
