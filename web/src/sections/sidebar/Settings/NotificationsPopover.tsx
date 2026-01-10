@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
+import { usePostHog } from "posthog-js/react";
 import {
   Notification,
   NotificationType,
@@ -36,6 +37,7 @@ export default function NotificationsPopover({
   onNavigate,
 }: NotificationsPopoverProps) {
   const router = useRouter();
+  const posthog = usePostHog();
   const {
     data: notifications,
     mutate,
@@ -45,6 +47,13 @@ export default function NotificationsPopover({
   const handleNotificationClick = (notification: Notification) => {
     const link = notification.additional_data?.link;
     if (!link) return;
+
+    // Track release notes clicks
+    if (notification.notif_type === NotificationType.RELEASE_NOTES) {
+      posthog?.capture("release_notification_clicked", {
+        version: notification.additional_data?.version,
+      });
+    }
 
     // External links open in new tab
     if (link.startsWith("http://") || link.startsWith("https://")) {
