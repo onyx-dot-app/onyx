@@ -110,7 +110,7 @@ export default function ActionsPopover({
     });
 
   // Store previously enabled sources when search tool is disabled
-  const previouslyEnabledSourcesRef = useRef<string[]>([]);
+  const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -544,25 +544,13 @@ export default function ActionsPopover({
 
     if (toolId === searchToolId) {
       if (wasDisabled) {
-        // Enabling search tool - restore previously enabled sources (or all if none were stored)
-        const previousSources = previouslyEnabledSourcesRef.current;
-        if (previousSources.length > 0) {
-          // Restore previously enabled sources
-          previousSources.forEach((sourceKey) => {
-            if (!isSourceEnabled(sourceKey)) {
-              toggleSource(sourceKey);
-            }
-          });
-        } else {
-          enableAllSources();
-        }
+        // Enabling - restore previous sources or enable all
+        const previous = previouslyEnabledSourcesRef.current;
+        setSelectedSources(previous.length > 0 ? previous : configuredSources);
         previouslyEnabledSourcesRef.current = [];
       } else {
-        // Disabling search tool - store currently enabled sources first
-        const enabledSources = configuredSources
-          .filter((source) => isSourceEnabled(source.uniqueKey))
-          .map((source) => source.uniqueKey);
-        previouslyEnabledSourcesRef.current = enabledSources;
+        // Disabling - store current sources then disable all
+        previouslyEnabledSourcesRef.current = [...selectedSources];
         disableAllSources();
       }
     }
