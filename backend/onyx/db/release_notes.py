@@ -2,11 +2,13 @@
 
 from urllib.parse import urlencode
 
+from sqlalchemy import not_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import INSTANCE_TYPE
+from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import ONYX_UTM_SOURCE
 from onyx.db.models import User
@@ -43,15 +45,13 @@ def create_release_notifications_for_versions(
         logger.debug("No release note entries to notify about")
         return 0
 
-    # Get active users
-    # NOTE: This also sends notifications to API key "users"
-    # There's no quick way to filter out API keys
-    # because the only difference is an email string prefix.
+    # Get active users and exclude API key users
     user_ids = list(
         db_session.scalars(
             select(User.id).where(  # type: ignore
                 User.is_active == True,  # noqa: E712
                 User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]),
+                not_(User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
             )
         ).all()
     )
