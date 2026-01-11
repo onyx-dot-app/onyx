@@ -1016,9 +1016,10 @@ export function useSourcePreferences({
         );
 
         // Find sources that were enabled in the previous preference
-        const enabledSources = validSources.filter(
-          (source: SourceMetadata) => sourcePreferences[source.uniqueKey!]
-        );
+        const enabledSources = validSources.filter((source: SourceMetadata) => {
+          if (!source.uniqueKey) return true; // Enable by default if key missing
+          return sourcePreferences[source.uniqueKey];
+        });
 
         // Merge valid saved sources with new sources (enable new sources by default)
         const mergedSources = [...enabledSources, ...newSources];
