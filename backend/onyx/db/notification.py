@@ -17,6 +17,7 @@ def create_notification(
     title: str,
     description: str | None = None,
     additional_data: dict | None = None,
+    autocommit: bool = True,
 ) -> Notification:
     # Check if an undismissed notification of the same type and data exists
     existing_notification = (
@@ -33,7 +34,8 @@ def create_notification(
     if existing_notification:
         # Update the last_shown timestamp
         existing_notification.last_shown = func.now()
-        db_session.commit()
+        if autocommit:
+            db_session.commit()
         return existing_notification
 
     # Create a new notification if none exists
@@ -48,7 +50,8 @@ def create_notification(
         additional_data=additional_data,
     )
     db_session.add(notification)
-    db_session.commit()
+    if autocommit:
+        db_session.commit()
     return notification
 
 
