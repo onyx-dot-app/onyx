@@ -314,12 +314,7 @@ function ChatHeader() {
       )}
 
       {(isMobile || customHeaderContent || currentChatSessionId) && (
-        <header
-          className={cn(
-            "sticky top-0 z-sticky w-full flex flex-row justify-center items-center py-3 px-4 h-16",
-            isMobile ? "bg-background-tint-01" : "bg-transparent"
-          )}
-        >
+        <header className="sticky top-0 z-sticky w-full flex flex-row justify-center items-center py-3 px-4 h-16 bg-background-tint-01 2xl:bg-transparent">
           {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
           <div className="flex-1">
             <IconButton
