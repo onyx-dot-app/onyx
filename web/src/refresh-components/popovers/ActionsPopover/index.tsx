@@ -4,7 +4,6 @@ import {
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
-  SYSTEM_TOOL_ICONS,
   WEB_SEARCH_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import { useState, useEffect } from "react";
@@ -21,6 +20,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
+  ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAssistantPreferences } from "@/app/chat/hooks/useAssistantPreferences";
@@ -45,20 +45,60 @@ import MCPLineItem, {
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 
-const SYSTEM_TOOL_IDS = new Set(Object.keys(SYSTEM_TOOL_ICONS));
 const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
   "This action is not configured yet. Ask an admin to enable it.";
+const UNAVAILABLE_TOOL_TOOLTIP_ADMIN_FALLBACK =
+  "This action is not configured yet. If you have access, enable it in the admin panel.";
 const UNAVAILABLE_TOOL_TOOLTIPS: Record<string, string> = {
   [IMAGE_GENERATION_TOOL_ID]:
     "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.",
   [WEB_SEARCH_TOOL_ID]:
     "Web search requires a configured provider. If you have access, set one up under Settings > Web Search, or ask an admin.",
   [PYTHON_TOOL_ID]:
-    "Code Interpreter requires the service to be configured with a valid base URL. Ask an admin to set it up.",
+    "Code Interpreter requires the service to be configured with a valid base URL. If you have access, configure it in the admin panel, or ask an admin.",
 };
-const getUnavailableToolTooltip = (inCodeToolId?: string | null) =>
+const getUnavailableToolTooltip = (
+  inCodeToolId?: string | null,
+  canAdminConfigure?: boolean
+) =>
   (inCodeToolId && UNAVAILABLE_TOOL_TOOLTIPS[inCodeToolId]) ??
-  UNAVAILABLE_TOOL_TOOLTIP_FALLBACK;
+  (canAdminConfigure
+    ? UNAVAILABLE_TOOL_TOOLTIP_ADMIN_FALLBACK
+    : UNAVAILABLE_TOOL_TOOLTIP_FALLBACK);
+
+const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
+  [IMAGE_GENERATION_TOOL_ID]: {
+    href: "/admin/configuration/image-generation",
+    tooltip: "Configure Image Generation",
+  },
+  [WEB_SEARCH_TOOL_ID]: {
+    href: "/admin/configuration/web-search",
+    tooltip: "Configure Web Search",
+  },
+  KnowledgeGraphTool: {
+    href: "/admin/kg",
+    tooltip: "Configure Knowledge Graph",
+  },
+};
+
+const OPENAPI_ADMIN_CONFIG = {
+  href: "/admin/actions/open-api",
+  tooltip: "Manage OpenAPI Actions",
+};
+
+const getAdminConfigureInfo = (
+  tool: ToolSnapshot
+): { href: string; tooltip: string } | null => {
+  if (tool.in_code_tool_id && ADMIN_CONFIG_LINKS[tool.in_code_tool_id]) {
+    return ADMIN_CONFIG_LINKS[tool.in_code_tool_id] ?? null;
+  }
+
+  if (!tool.in_code_tool_id && !tool.mcp_server_id) {
+    return OPENAPI_ADMIN_CONFIG;
+  }
+
+  return null;
+};
 
 // Get source metadata for configured sources - deduplicated by source type
 function getConfiguredSources(
@@ -197,14 +237,9 @@ export default function ActionsPopover({
   };
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
-  // and filter out tools that are not available
   // Also filter out internal search tool for basic users when there are no connectors
   // Also filter out tools that are not chat-selectable (e.g., OpenURL)
   const displayTools = selectedAssistant.tools.filter((tool) => {
-    const isSystemTool =
-      !!tool.in_code_tool_id && SYSTEM_TOOL_IDS.has(tool.in_code_tool_id);
-    const isToolAvailable = availableToolIdSet.has(tool.id);
-
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
@@ -226,9 +261,6 @@ export default function ActionsPopover({
     if (tool.in_code_tool_id === SEARCH_TOOL_ID && (isAdmin || isCurator)) {
       return true;
     }
-
-    // Filter out tools that are not available
-    if (!isToolAvailable && !isSystemTool) return false;
 
     // Filter out internal search tool for non-admin/curator users when there are no connectors
     if (
@@ -553,10 +585,11 @@ export default function ActionsPopover({
             const isToolAvailable = availableToolIdSet.has(tool.id);
             const isUnavailable =
               !isToolAvailable && tool.in_code_tool_id !== SEARCH_TOOL_ID;
-            const showImageGenConfigure =
-              isUnavailable &&
-              tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID &&
-              (isAdmin || isCurator);
+            const canAdminConfigure = isAdmin || isCurator;
+            const adminConfigureInfo =
+              isUnavailable && canAdminConfigure
+                ? getAdminConfigureInfo(tool)
+                : null;
             return (
               <ActionLineItem
                 key={tool.id}
@@ -566,12 +599,15 @@ export default function ActionsPopover({
                 isUnavailable={isUnavailable}
                 unavailableReason={
                   isUnavailable
-                    ? getUnavailableToolTooltip(tool.in_code_tool_id)
+                    ? getUnavailableToolTooltip(
+                        tool.in_code_tool_id,
+                        canAdminConfigure
+                      )
                     : undefined
                 }
-                showAdminConfigure={showImageGenConfigure}
-                adminConfigureHref="/admin/configuration/image-generation"
-                adminConfigureTooltip="Configure Image Generation"
+                showAdminConfigure={!!adminConfigureInfo}
+                adminConfigureHref={adminConfigureInfo?.href}
+                adminConfigureTooltip={adminConfigureInfo?.tooltip}
                 onToggle={() => toggleToolForCurrentAssistant(tool.id)}
                 onForceToggle={() => toggleForcedTool(tool.id)}
                 onSourceManagementOpen={() =>
