@@ -304,7 +304,6 @@ const ChatButton = memo(
           await togglePinnedAgent(agent, true);
         }
       }
-      route({ chatSessionId: chatSession.id });
     }
 
     async function handleRename(newName: string) {
@@ -449,6 +448,7 @@ const ChatButton = memo(
       >
         <PopoverAnchor>
           <SidebarTab
+            href={`/chat?chatId=${chatSession.id}`}
             onClick={handleClick}
             transient={active}
             rightChildren={rightMenu}

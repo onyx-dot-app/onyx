@@ -58,7 +58,6 @@ const AgentButton = memo(({ agent }: AgentButtonProps) => {
     if (!isActuallyPinned) {
       await togglePinnedAgent(agent, true);
     }
-    route({ agentId: agent.id });
   };
 
   return (
@@ -67,6 +66,7 @@ const AgentButton = memo(({ agent }: AgentButtonProps) => {
         <SidebarTab
           key={agent.id}
           leftIcon={() => <AgentAvatar agent={agent} />}
+          href={`/chat?assistantId=${agent.id}`}
           onClick={handleClick}
           transient={isCurrentAgent}
           rightChildren={
