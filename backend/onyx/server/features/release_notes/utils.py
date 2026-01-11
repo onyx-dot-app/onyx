@@ -69,20 +69,15 @@ def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry
     for match in re.finditer(update_pattern, mdx_content, re.DOTALL):
         version = match.group(1)
         date = match.group(2)
-        tags_str = match.group(3)
 
-        tags: list[str] = []
-        if tags_str:
-            tags = re.findall(r'"([^"]+)"', tags_str)
-
-        all_entries.append(
-            ReleaseNoteEntry(
-                version=version,
-                date=date,
-                tags=tags,
-                title=f"Onyx {version} is available!",
+        if is_valid_version(version):
+            all_entries.append(
+                ReleaseNoteEntry(
+                    version=version,
+                    date=date,
+                    title=f"Onyx {version} is available!",
+                )
             )
-        )
 
     if not all_entries:
         raise ValueError("Could not parse any release note entries from MDX.")
@@ -90,13 +85,12 @@ def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry
     # Filter to valid versions >= __version__
     if __version__ and is_valid_version(__version__):
         entries = [
-            entry
-            for entry in all_entries
-            if is_valid_version(entry.version)
-            and is_version_gte(entry.version, __version__)
+            entry for entry in all_entries if is_version_gte(entry.version, __version__)
         ]
     else:
-        entries = all_entries[:1]
+        # If not recognized version
+        # likely `development` and we should show all entries
+        entries = all_entries
 
     return entries
 
