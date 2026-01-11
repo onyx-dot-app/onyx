@@ -509,6 +509,20 @@ export default function ActionsPopover({
   const searchToolDisabled =
     searchToolId !== null && disabledToolIds.includes(searchToolId);
 
+  // Sync search tool state with sources on mount/when states change
+  useEffect(() => {
+    if (searchToolId === null) return;
+
+    const hasEnabledSources = numSourcesEnabled > 0;
+    if (hasEnabledSources && searchToolDisabled) {
+      // Sources are enabled but search tool is disabled - enable it
+      toggleToolForCurrentAssistant(searchToolId);
+    } else if (!hasEnabledSources && !searchToolDisabled) {
+      // No sources enabled but search tool is enabled - disable it
+      toggleToolForCurrentAssistant(searchToolId);
+    }
+  }, [searchToolId, numSourcesEnabled, searchToolDisabled]);
+
   // Set search tool to a specific enabled/disabled state (only toggles if needed)
   const setSearchToolEnabled = (enabled: boolean) => {
     if (searchToolId === null) return;
