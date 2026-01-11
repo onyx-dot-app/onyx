@@ -1,7 +1,7 @@
 "use client";
 
 import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Popover,
   PopoverContent,
@@ -108,6 +108,9 @@ export default function ActionsPopover({
       selectedSources,
       setSelectedSources,
     });
+
+  // Store previously enabled sources when search tool is disabled
+  const previouslyEnabledSourcesRef = useRef<string[]>([]);
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -540,10 +543,26 @@ export default function ActionsPopover({
     toggleToolForCurrentAssistant(toolId);
 
     if (toolId === searchToolId) {
-      // Sync sources with the new search tool state
       if (wasDisabled) {
-        enableAllSources();
+        // Enabling search tool - restore previously enabled sources (or all if none were stored)
+        const previousSources = previouslyEnabledSourcesRef.current;
+        if (previousSources.length > 0) {
+          // Restore previously enabled sources
+          previousSources.forEach((sourceKey) => {
+            if (!isSourceEnabled(sourceKey)) {
+              toggleSource(sourceKey);
+            }
+          });
+        } else {
+          enableAllSources();
+        }
+        previouslyEnabledSourcesRef.current = [];
       } else {
+        // Disabling search tool - store currently enabled sources first
+        const enabledSources = configuredSources
+          .filter((source) => isSourceEnabled(source.uniqueKey))
+          .map((source) => source.uniqueKey);
+        previouslyEnabledSourcesRef.current = enabledSources;
         disableAllSources();
       }
     }
