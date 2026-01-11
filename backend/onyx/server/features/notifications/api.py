@@ -13,7 +13,9 @@ from onyx.server.features.release_notes.utils import (
     ensure_release_notes_fresh_and_notify,
 )
 from onyx.server.settings.models import Notification as NotificationModel
+from onyx.utils.logger import setup_logger
 
+logger = setup_logger()
 router = APIRouter(prefix="/notifications")
 
 
@@ -33,7 +35,15 @@ def get_notifications_api(
     - Explicitly announcing breaking changes
     """
     # If more background checks are added, this should be moved to a helper function
-    ensure_release_notes_fresh_and_notify(db_session)
+    try:
+        ensure_release_notes_fresh_and_notify(db_session)
+    except Exception as e:
+        # Log error but don't fail the entire endpoint
+        # Users can still see their existing notifications
+        logger.error(
+            f"Failed to check for release notes in notifications endpoint: {e}",
+            exc_info=True,
+        )
 
     notifications = [
         NotificationModel.from_model(notif)
