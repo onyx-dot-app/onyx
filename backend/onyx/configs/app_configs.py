@@ -996,3 +996,9 @@ COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
 VERTEXAI_DEFAULT_CREDENTIALS = os.environ.get("VERTEXAI_DEFAULT_CREDENTIALS")
 VERTEXAI_DEFAULT_LOCATION = os.environ.get("VERTEXAI_DEFAULT_LOCATION", "global")
 OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
+
+INSTANCE_TYPE = (
+    "managed"
+    if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
+    else "cloud" if AUTH_TYPE == AuthType.CLOUD else "self_hosted"
+)

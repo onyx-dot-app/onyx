@@ -1,10 +1,14 @@
 """Database functions for release notes functionality."""
 
+from urllib.parse import urlencode
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.app_configs import INSTANCE_TYPE
 from onyx.configs.constants import NotificationType
+from onyx.configs.constants import ONYX_UTM_SOURCE
 from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications
 from onyx.server.features.release_notes.constants import DOCS_CHANGELOG_BASE_URL
@@ -57,7 +61,16 @@ def create_release_notifications_for_versions(
         # Convert version to anchor format for external docs links
         # v2.7.0 -> v2-7-0
         version_anchor = entry.version.replace(".", "-")
-        link = f"{DOCS_CHANGELOG_BASE_URL}#{version_anchor}"
+
+        # Build UTM parameters for tracking
+        utm_params = {
+            "utm_source": ONYX_UTM_SOURCE,
+            "utm_medium": "notification",
+            "utm_campaign": INSTANCE_TYPE,
+            "utm_content": f"release_notes-{entry.version}",
+        }
+
+        link = f"{DOCS_CHANGELOG_BASE_URL}#{version_anchor}?{urlencode(utm_params)}"
 
         additional_data: dict[str, str] = {
             "version": entry.version,
