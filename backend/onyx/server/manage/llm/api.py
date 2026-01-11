@@ -408,9 +408,7 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    all_providers = fetch_existing_llm_providers(
-        db_session, exclude_image_generation_providers=True
-    )
+    all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = fetch_user_group_ids(db_session, user) if user else set()
     is_admin = user and user.role == UserRole.ADMIN
 
@@ -506,9 +504,7 @@ def list_llm_providers_for_persona(
         )
 
     is_admin = user is not None and user.role == UserRole.ADMIN
-    all_providers = fetch_existing_llm_providers(
-        db_session, exclude_image_generation_providers=True
-    )
+    all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     llm_provider_list: list[LLMProviderDescriptor] = []

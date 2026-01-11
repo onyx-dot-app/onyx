@@ -374,7 +374,7 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 def fetch_existing_llm_providers(
     db_session: Session,
     only_public: bool = False,
-    exclude_image_generation_providers: bool = False,
+    exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
     """Fetch all LLM providers with optional filtering.
 
