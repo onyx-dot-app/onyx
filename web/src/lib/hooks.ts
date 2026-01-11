@@ -936,7 +936,7 @@ interface UseSourcePreferencesProps {
 }
 
 interface SourcePreferencesSnapshot {
-  sourcePreferences: Record<string, boolean>; // uniqueId -> enabled status
+  sourcePreferences: Record<string, boolean>; // uniqueKey -> enabled status
   sources: SourceMetadata[];
 }
 
