@@ -60,7 +60,7 @@ export default function NotificationsPopover({
       if (!notification.dismissed) {
         handleDismiss(notification.id);
       }
-      window.open(link, "_blank");
+      window.open(link, "_blank", "noopener,noreferrer");
       return;
     }
 

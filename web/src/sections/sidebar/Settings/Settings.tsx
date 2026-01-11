@@ -116,7 +116,13 @@ function SettingsPopover({
           <LineItem
             key="help-faq"
             icon={SvgExternalLink}
-            onClick={() => window.open("https://docs.onyx.app", "_blank")}
+            onClick={() =>
+              window.open(
+                "https://docs.onyx.app",
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }
           >
             Help & FAQ
           </LineItem>,
