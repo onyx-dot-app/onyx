@@ -3,7 +3,6 @@
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { usePinnedAgents, useCurrentAgent } from "@/hooks/useAgents";
-import { useAppRouter } from "@/hooks/appNavigation";
 import { cn, noProp } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -48,7 +47,6 @@ export interface AgentButtonProps {
 }
 
 const AgentButton = memo(({ agent }: AgentButtonProps) => {
-  const route = useAppRouter();
   const currentAgent = useCurrentAgent();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
