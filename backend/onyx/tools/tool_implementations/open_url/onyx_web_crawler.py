@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Sequence
 
@@ -230,6 +231,10 @@ class OnyxWebCrawler(WebContentProvider):
             if total_chars >= MAX_TOTAL_CONTENT_CHARS:
                 break
 
+            # Note: Slicing by character position may create malformed HTML fragments
+            # (e.g., splitting mid-tag). This is intentional - BeautifulSoup handles
+            # malformed HTML gracefully, and the alternative (parsing full HTML first)
+            # defeats the memory optimization purpose of this two-pass approach.
             region_html = html_str[start:end]
 
             try:
@@ -287,8 +292,8 @@ class OnyxWebCrawler(WebContentProvider):
 
         Uses the existing NLTK-based stopword removal from onyx.context.search.utils.
         """
-        # Split query into words first
-        words = re.split(r"[^a-zA-Z0-9]+", query)
+        # Split query into words (handles Unicode properly)
+        words = query.split()
         words = [w for w in words if w]  # Remove empty strings
 
         if not words:
@@ -305,20 +310,18 @@ class OnyxWebCrawler(WebContentProvider):
     def _find_keyword_positions(self, html_str: str, keywords: list[str]) -> list[int]:
         """Find all positions where keywords appear in the HTML string.
 
+        Uses word boundary matching to avoid partial matches (e.g., "cat" in "category").
+
         Returns a list of character positions where matches were found.
         """
         positions: list[int] = []
         html_lower = html_str.lower()
 
         for keyword in keywords:
-            # Find all occurrences of this keyword
-            start = 0
-            while True:
-                pos = html_lower.find(keyword, start)
-                if pos == -1:
-                    break
-                positions.append(pos)
-                start = pos + 1
+            # Use word boundaries to match whole words only
+            pattern = r"\b" + re.escape(keyword) + r"\b"
+            for match in re.finditer(pattern, html_lower):
+                positions.append(match.start())
 
         # Sort and dedupe positions
         return sorted(set(positions))
@@ -367,14 +370,8 @@ class OnyxWebCrawler(WebContentProvider):
             r"<title[^>]*>(.*?)</title>", html_str, re.IGNORECASE | re.DOTALL
         )
         if match:
-            # Basic HTML entity decoding for common cases
             title = match.group(1).strip()
             title = re.sub(r"<[^>]+>", "", title)  # Remove any nested tags
-            title = title.replace("&amp;", "&")
-            title = title.replace("&lt;", "<")
-            title = title.replace("&gt;", ">")
-            title = title.replace("&quot;", '"')
-            title = title.replace("&#39;", "'")
-            title = title.replace("&nbsp;", " ")
+            title = html.unescape(title)  # Decode all HTML entities
             return title.strip()
         return ""
