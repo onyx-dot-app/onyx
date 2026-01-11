@@ -2,7 +2,6 @@
 
 from urllib.parse import urlencode
 
-from sqlalchemy import not_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -51,7 +50,7 @@ def create_release_notifications_for_versions(
             select(User.id).where(  # type: ignore
                 User.is_active == True,  # noqa: E712
                 User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]),
-                not_(User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+                User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN).is_(False),
             )
         ).all()
     )
