@@ -8,7 +8,13 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { noProp } from "@/lib/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
-// ASTERISK OPERATOR (U+2217) - better sized than bullet (•)
+/**
+ * Custom mask character for password display.
+ *
+ * We use ASTERISK OPERATOR (U+2217) instead of the browser's native password
+ * masking (typically bullet •) to follow our design guidelines. This requires
+ * custom change handling logic to track the real value while displaying masks.
+ */
 const MASK_CHARACTER = "∗";
 
 // Backend placeholder pattern - indicates a stored value that can't be revealed
@@ -20,6 +26,97 @@ const BACKEND_PLACEHOLDER_PATTERN = /^•+$/; // All bullet characters (U+2022)
  */
 function isBackendPlaceholder(value: string): boolean {
   return !!value && BACKEND_PLACEHOLDER_PATTERN.test(value);
+}
+
+interface SelectionRange {
+  start: number;
+  end: number;
+}
+
+interface MaskedInputChangeResult {
+  newValue: string;
+  cursorPosition: number;
+}
+
+/**
+ * Computes the real value from a masked input change event.
+ *
+ * Since we display mask characters (∗) instead of the actual password,
+ * we need to reverse-engineer what the user typed/deleted by comparing
+ * the new display value with the previous real value and selection state.
+ *
+ * @param newDisplayValue - The new value from the input (mix of masks and typed chars)
+ * @param previousValue - The actual password value before the change
+ * @param cursorPosition - Current cursor position after the change
+ * @param previousSelection - Selection range before the change occurred
+ * @returns The computed real value and where to place the cursor
+ */
+function computeMaskedInputChange(
+  newDisplayValue: string,
+  previousValue: string,
+  cursorPosition: number,
+  previousSelection: SelectionRange
+): MaskedInputChangeResult {
+  const oldLength = previousValue.length;
+  const newLength = newDisplayValue.length;
+  const hadSelection = previousSelection.end > previousSelection.start;
+
+  // Field was cleared
+  if (newLength === 0) {
+    return { newValue: "", cursorPosition: 0 };
+  }
+
+  // Text was selected and replaced/deleted
+  if (hadSelection) {
+    const selectionLength = previousSelection.end - previousSelection.start;
+    const insertedLength = newLength - oldLength + selectionLength;
+
+    // Extract inserted characters from their position in the display value
+    const insertedChars = newDisplayValue.slice(
+      previousSelection.start,
+      previousSelection.start + insertedLength
+    );
+
+    const newValue =
+      previousValue.slice(0, previousSelection.start) +
+      insertedChars +
+      previousValue.slice(previousSelection.end);
+
+    return {
+      newValue,
+      cursorPosition: previousSelection.start + insertedChars.length,
+    };
+  }
+
+  // Characters were added (typed or pasted) without selection
+  if (newLength > oldLength) {
+    const charsAdded = newLength - oldLength;
+    const insertPos = cursorPosition - charsAdded;
+    const addedChars = newDisplayValue.slice(insertPos, cursorPosition);
+
+    return {
+      newValue:
+        previousValue.slice(0, insertPos) +
+        addedChars +
+        previousValue.slice(insertPos),
+      cursorPosition,
+    };
+  }
+
+  // Characters were deleted without selection
+  if (newLength < oldLength) {
+    const charsDeleted = oldLength - newLength;
+    const deleteEnd = cursorPosition + charsDeleted;
+
+    return {
+      newValue:
+        previousValue.slice(0, cursorPosition) + previousValue.slice(deleteEnd),
+      cursorPosition,
+    };
+  }
+
+  // Same length without selection - no change
+  return { newValue: previousValue, cursorPosition };
 }
 
 export interface PasswordInputTypeInProps
@@ -125,84 +222,36 @@ const PasswordInputTypeIn = React.forwardRef<
 
   const handleChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      // When visible, pass through directly - no masking needed
       if (!isHidden) {
         onChange?.(e);
         return;
       }
 
       const input = e.target;
-      const newDisplayValue = input.value;
-      const cursorPos = input.selectionStart ?? newDisplayValue.length;
-      const oldLength = realValue.length;
-      const newLength = newDisplayValue.length;
+      const cursorPos = input.selectionStart ?? input.value.length;
 
-      // Get the selection range from before the change
-      const prevSelStart = selectionRef.current.start;
-      const prevSelEnd = selectionRef.current.end;
-      const hadSelection = prevSelEnd > prevSelStart;
+      // Compute the real value from the masked input change
+      const result = computeMaskedInputChange(
+        input.value,
+        realValue,
+        cursorPos,
+        selectionRef.current
+      );
 
-      let newRealValue: string;
-      let newCursorPos = cursorPos;
-
-      if (newLength === 0) {
-        // Field was cleared
-        newRealValue = "";
-        newCursorPos = 0;
-      } else if (hadSelection) {
-        // Text was selected and replaced/deleted
-        // Extract non-mask characters from the new display value (these are the inserted chars)
-        const insertedChars = newDisplayValue
-          .split("")
-          .filter((char) => char !== MASK_CHARACTER)
-          .join("");
-
-        // Replace the selected portion with the inserted characters
-        newRealValue =
-          realValue.slice(0, prevSelStart) +
-          insertedChars +
-          realValue.slice(prevSelEnd);
-        newCursorPos = prevSelStart + insertedChars.length;
-      } else if (newLength > oldLength) {
-        // Characters were added (typed or pasted) without selection
-        const charsAdded = newLength - oldLength;
-        const insertPos = cursorPos - charsAdded;
-        const addedChars = newDisplayValue.slice(insertPos, cursorPos);
-        newRealValue =
-          realValue.slice(0, insertPos) +
-          addedChars +
-          realValue.slice(insertPos);
-        newCursorPos = cursorPos;
-      } else if (newLength < oldLength) {
-        // Characters were deleted without selection
-        const charsDeleted = oldLength - newLength;
-        const deleteStart = cursorPos;
-        const deleteEnd = cursorPos + charsDeleted;
-        newRealValue =
-          realValue.slice(0, deleteStart) + realValue.slice(deleteEnd);
-        newCursorPos = cursorPos;
-      } else {
-        // Same length without selection - shouldn't happen, but handle gracefully
-        newRealValue = realValue;
-        newCursorPos = cursorPos;
-      }
-
-      // Restore cursor position after React re-renders
+      // Restore cursor position after React re-renders with new masked value
       requestAnimationFrame(() => {
         if (input && document.activeElement === input) {
-          input.setSelectionRange(newCursorPos, newCursorPos);
+          input.setSelectionRange(result.cursorPosition, result.cursorPosition);
         }
       });
 
-      // Synthetic event for Formik - only includes essential properties
+      // Create synthetic event for Formik compatibility
       const syntheticEvent = {
-        target: {
-          name: input.name,
-          value: newRealValue,
-          type: "text",
-        },
+        target: { name: input.name, value: result.newValue, type: "text" },
         currentTarget: {
           name: input.name,
-          value: newRealValue,
+          value: result.newValue,
           type: "text",
         },
         type: "change",
