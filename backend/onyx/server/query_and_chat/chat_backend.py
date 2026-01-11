@@ -297,9 +297,9 @@ def get_chat_session(
         is_processing = is_chat_session_processing(session_id, get_redis_client())
         # Edit the last message to indicate loading (Overriding default message value)
         if is_processing and chat_message_details:
-            chat_message_details[-1].message = (
-                "Message is loading... Please refresh the page soon."
-            )
+            last_msg = chat_message_details[-1]
+            if last_msg.message_type == MessageType.ASSISTANT:
+                last_msg.message = "Message is loading... Please refresh the page soon."
     except Exception:
         logger.exception(
             "An error occurred while checking if the chat session is processing"
