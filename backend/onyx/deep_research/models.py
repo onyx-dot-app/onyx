@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
 from onyx.chat.citation_processor import CitationMapping
+from onyx.context.search.models import SearchDoc
 from onyx.tools.models import ToolCallKickoff
 
 
@@ -20,3 +21,5 @@ class CombinedResearchAgentCallResult(BaseModel):
     # which ones failed
     intermediate_reports: list[str | None]
     citation_mapping: CitationMapping
+    # Per-agent cited docs for persistence when loading chat sessions
+    per_agent_cited_docs: list[list[SearchDoc] | None]

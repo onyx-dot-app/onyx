@@ -150,6 +150,9 @@ def generate_final_report(
             is_deep_research=True,
         )
 
+        # Save citation mapping to state_container so citations are persisted
+        state_container.set_citation_mapping(citation_processor.citation_to_doc)
+
         final_report = llm_step_result.answer
         if final_report is None:
             raise ValueError("LLM failed to generate the final deep research report")
@@ -606,6 +609,8 @@ def run_deep_research_llm_loop(
                         continue
 
                     current_tool_call = research_agent_calls[tab_index]
+                    # Get per-agent cited docs for persistence
+                    agent_cited_docs = research_results.per_agent_cited_docs[tab_index]
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,
                         turn_index=orchestrator_start_turn_index
@@ -621,7 +626,7 @@ def run_deep_research_llm_loop(
                         or most_recent_reasoning,
                         tool_call_arguments=current_tool_call.tool_args,
                         tool_call_response=report,
-                        search_docs=None,  # Intermediate docs are not saved/shown
+                        search_docs=agent_cited_docs,
                         generated_images=None,
                     )
                     state_container.add_tool_call(tool_call_info)
