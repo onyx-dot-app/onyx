@@ -59,7 +59,8 @@ function SettingsPopover({
   const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
   );
   const router = useRouter();
   const pathname = usePathname();
