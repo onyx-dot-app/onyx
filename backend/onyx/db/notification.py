@@ -2,7 +2,9 @@ from datetime import datetime
 from datetime import timezone
 from uuid import UUID
 
+from sqlalchemy import cast
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -24,10 +26,19 @@ def create_notification(
     # Previously, we only matched the first identical, undismissed notification
     # Now, we assume some uniqueness to notifications
     # If we previously issued a notification that was dismissed, we no longer issue a new one
+
+    # Normalize additional_data to match the unique index behavior
+    # The index uses COALESCE(additional_data, '{}'::jsonb)
+    # We need to match this logic in our query
+    additional_data_normalized = additional_data if additional_data is not None else {}
+
     existing_notification = (
         db_session.query(Notification)
         .filter_by(user_id=user_id, notif_type=notif_type)
-        .filter(Notification.additional_data == additional_data)
+        .filter(
+            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
+            == additional_data_normalized
+        )
         .first()
     )
 
