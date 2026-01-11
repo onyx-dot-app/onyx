@@ -119,12 +119,6 @@ class OnyxWebCrawler(WebContentProvider):
         if is_pdf_resource(url, content_type, content_sniff):
             text_content, metadata = extract_pdf_text(response.content)
             title = title_from_pdf_metadata(metadata) or title_from_url(url)
-            # Apply truncation to PDFs as well
-            if len(text_content) > MAX_TOTAL_CONTENT_CHARS:
-                omitted = len(text_content) - MAX_TOTAL_CONTENT_CHARS
-                text_content = text_content[
-                    :MAX_TOTAL_CONTENT_CHARS
-                ] + TRUNCATION_MARKER.format(omitted=omitted)
             return WebContent(
                 title=title,
                 link=url,
@@ -186,7 +180,10 @@ class OnyxWebCrawler(WebContentProvider):
                 content_type=content_type,
                 fallback_encoding=fallback_encoding,
             )
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                f"decode_html_bytes failed for {url}, falling back to UTF-8: {e}"
+            )
             html_str = html_bytes.decode("utf-8", errors="ignore")
 
         # If page is small enough or no query, just parse normally
@@ -244,7 +241,8 @@ class OnyxWebCrawler(WebContentProvider):
                 # Capture title from first region that has one
                 if not title and parsed.title:
                     title = parsed.title
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to parse region [{start}:{end}] for {url}: {e}")
                 continue
 
             if region_text:
