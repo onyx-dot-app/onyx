@@ -942,8 +942,12 @@ export default function AgentEditorPage({
             );
 
             const hasUploadingFiles = values.user_file_ids.some(
-              (fileId: string) =>
-                fileStatusMap.get(fileId) === UserFileStatus.UPLOADING
+              (fileId: string) => {
+                const status = fileStatusMap.get(fileId);
+                return (
+                  status === undefined || status === UserFileStatus.UPLOADING
+                );
+              }
             );
 
             const hasProcessingFiles = values.user_file_ids.some(
@@ -1256,8 +1260,9 @@ export default function AgentEditorPage({
                                   {hasProcessingFiles && (
                                     <Text as="p" text03 secondaryBody>
                                       Onyx is still processing your uploaded
-                                      files, the agent can be used but it will
-                                      not have access to all the files.
+                                      files. You can create the agent now, but
+                                      it will not have access to all files until
+                                      processing completes.
                                     </Text>
                                   )}
                                 </GeneralLayouts.Section>
