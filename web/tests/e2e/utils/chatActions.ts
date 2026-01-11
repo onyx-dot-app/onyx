@@ -78,5 +78,5 @@ export async function switchModel(page: Page, modelName: string) {
 
 export async function startNewChat(page: Page) {
   await page.getByTestId("AppSidebar/new-session").click();
-  await expect(page.getByTestId("chat-intro")).toBeVisible();
+  await expect(page.getByTestId("onyx-logo")).toBeVisible();
 }

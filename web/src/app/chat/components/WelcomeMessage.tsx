@@ -1,10 +1,7 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import {
-  GREETING_MESSAGES,
-  getRandomGreeting,
-} from "@/lib/chat/greetingMessages";
+import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -48,12 +45,10 @@ export default function WelcomeMessage({
           className="flex flex-row items-center gap-3"
         >
           <AgentAvatar agent={agent} size={36} />
-          <Text as="p" headingH2>
-            {agent.name}
-          </Text>
+          <Text headingH2>{agent.name}</Text>
         </div>
         {agent.description && (
-          <Text as="p" secondaryBody text03>
+          <Text secondaryBody text03>
             {agent.description}
           </Text>
         )}
@@ -65,12 +60,5 @@ export default function WelcomeMessage({
   // before rendering
   if (!content) return null;
 
-  return (
-    <div
-      data-testid="chat-intro"
-      className="flex flex-col items-center justify-center"
-    >
-      {content}
-    </div>
-  );
+  return content;
 }
