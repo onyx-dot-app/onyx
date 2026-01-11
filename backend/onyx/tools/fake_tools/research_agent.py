@@ -14,7 +14,6 @@ from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.dr_mock_tools import (
     get_research_agent_additional_tool_definitions,
@@ -593,17 +592,11 @@ def run_research_agent_calls(
 
     updated_citation_mapping = citation_mapping
     updated_answers: list[str | None] = []
-    per_agent_cited_docs: list[list[SearchDoc] | None] = []
 
     for result in research_agent_call_results:
         if result is None:
             updated_answers.append(None)
-            per_agent_cited_docs.append(None)
             continue
-
-        # Collect cited docs for this agent before collapsing
-        agent_cited_docs = list(result.citation_mapping.values())
-        per_agent_cited_docs.append(agent_cited_docs if agent_cited_docs else None)
 
         updated_answer, updated_citation_mapping = collapse_citations(
             answer_text=result.intermediate_report,
@@ -615,5 +608,4 @@ def run_research_agent_calls(
     return CombinedResearchAgentCallResult(
         intermediate_reports=updated_answers,
         citation_mapping=updated_citation_mapping,
-        per_agent_cited_docs=per_agent_cited_docs,
     )

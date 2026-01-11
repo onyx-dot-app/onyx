@@ -610,7 +610,6 @@ def run_deep_research_llm_loop(
 
                     current_tool_call = research_agent_calls[tab_index]
                     # Get per-agent cited docs for persistence
-                    agent_cited_docs = research_results.per_agent_cited_docs[tab_index]
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,
                         turn_index=orchestrator_start_turn_index
@@ -626,7 +625,7 @@ def run_deep_research_llm_loop(
                         or most_recent_reasoning,
                         tool_call_arguments=current_tool_call.tool_args,
                         tool_call_response=report,
-                        search_docs=agent_cited_docs,
+                        search_docs=None,  # Intermediate docs are not saved/shown
                         generated_images=None,
                     )
                     state_container.add_tool_call(tool_call_info)

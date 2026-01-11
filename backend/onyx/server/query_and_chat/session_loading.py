@@ -22,7 +22,6 @@ from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedDocs
 from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
 from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
@@ -204,7 +203,6 @@ def create_custom_tool_packets(
 def create_research_agent_packets(
     research_task: str,
     report_content: str | None,
-    cited_docs: list[SearchDoc] | None,
     turn_index: int,
     tab_index: int = 0,
 ) -> list[Packet]:
@@ -213,7 +211,6 @@ def create_research_agent_packets(
     - ResearchAgentStart with the research task
     - IntermediateReportStart to signal report begins
     - IntermediateReportDelta with the report content (if available)
-    - IntermediateReportCitedDocs with cited documents
     - SectionEnd to mark completion
     """
     packets: list[Packet] = []
@@ -240,14 +237,6 @@ def create_research_agent_packets(
             Packet(
                 placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 obj=IntermediateReportDelta(content=report_content),
-            )
-        )
-
-        # Emit IntermediateReportCitedDocs
-        packets.append(
-            Packet(
-                placement=Placement(turn_index=turn_index, tab_index=tab_index),
-                obj=IntermediateReportCitedDocs(cited_docs=cited_docs),
             )
         )
 
@@ -486,24 +475,10 @@ def translate_assistant_message_to_packets(
                             tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
                             or "Could not fetch saved research task.",
                         )
-                        # Convert DB SearchDocs to SearchDoc pydantic models
-                        cited_docs: list[SearchDoc] | None = (
-                            [
-                                SearchDoc(
-                                    **translate_db_search_doc_to_saved_search_doc(
-                                        doc
-                                    ).model_dump()
-                                )
-                                for doc in tool_call.search_docs
-                            ]
-                            if tool_call.search_docs
-                            else None
-                        )
                         packet_list.extend(
                             create_research_agent_packets(
                                 research_task=research_task,
                                 report_content=tool_call.tool_call_response,
-                                cited_docs=cited_docs,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
                             )
