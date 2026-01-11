@@ -65,6 +65,12 @@ const PasswordInputTypeIn = React.forwardRef<
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
 
+  // Track selection range before changes occur
+  const selectionRef = React.useRef<{ start: number; end: number }>({
+    start: 0,
+    end: 0,
+  });
+
   const realValue = String(value || "");
   const hasValue = realValue.length > 0;
   const effectiveNonRevealable =
@@ -94,6 +100,29 @@ const PasswordInputTypeIn = React.forwardRef<
     [onBlur]
   );
 
+  // Track selection on any interaction that might change it
+  const handleSelect = React.useCallback(
+    (e: React.SyntheticEvent<HTMLInputElement>) => {
+      const target = e.target as HTMLInputElement;
+      selectionRef.current = {
+        start: target.selectionStart ?? 0,
+        end: target.selectionEnd ?? 0,
+      };
+    },
+    []
+  );
+
+  const handleKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      const target = e.target as HTMLInputElement;
+      selectionRef.current = {
+        start: target.selectionStart ?? 0,
+        end: target.selectionEnd ?? 0,
+      };
+    },
+    []
+  );
+
   const handleChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!isHidden) {
@@ -101,61 +130,78 @@ const PasswordInputTypeIn = React.forwardRef<
         return;
       }
 
-      const newDisplayValue = e.target.value;
-      const cursorPos = e.target.selectionStart ?? newDisplayValue.length;
+      const input = e.target;
+      const newDisplayValue = input.value;
+      const cursorPos = input.selectionStart ?? newDisplayValue.length;
       const oldLength = realValue.length;
       const newLength = newDisplayValue.length;
 
+      // Get the selection range from before the change
+      const prevSelStart = selectionRef.current.start;
+      const prevSelEnd = selectionRef.current.end;
+      const hadSelection = prevSelEnd > prevSelStart;
+
       let newRealValue: string;
+      let newCursorPos = cursorPos;
 
       if (newLength === 0) {
         // Field was cleared
         newRealValue = "";
+        newCursorPos = 0;
+      } else if (hadSelection) {
+        // Text was selected and replaced/deleted
+        // Extract non-mask characters from the new display value (these are the inserted chars)
+        const insertedChars = newDisplayValue
+          .split("")
+          .filter((char) => char !== MASK_CHARACTER)
+          .join("");
+
+        // Replace the selected portion with the inserted characters
+        newRealValue =
+          realValue.slice(0, prevSelStart) +
+          insertedChars +
+          realValue.slice(prevSelEnd);
+        newCursorPos = prevSelStart + insertedChars.length;
       } else if (newLength > oldLength) {
-        // Characters were added (typed or pasted)
+        // Characters were added (typed or pasted) without selection
         const charsAdded = newLength - oldLength;
-        // Extract the new characters from the display value at cursor position
         const insertPos = cursorPos - charsAdded;
         const addedChars = newDisplayValue.slice(insertPos, cursorPos);
-        // Insert at the correct position in the real value
         newRealValue =
           realValue.slice(0, insertPos) +
           addedChars +
           realValue.slice(insertPos);
+        newCursorPos = cursorPos;
       } else if (newLength < oldLength) {
-        // Characters were deleted
+        // Characters were deleted without selection
         const charsDeleted = oldLength - newLength;
-        // Delete from the correct position in the real value
         const deleteStart = cursorPos;
         const deleteEnd = cursorPos + charsDeleted;
         newRealValue =
           realValue.slice(0, deleteStart) + realValue.slice(deleteEnd);
+        newCursorPos = cursorPos;
       } else {
-        // Same length - character was replaced (e.g., select + type)
-        // Find the position where the non-mask character is
-        const replacePos = newDisplayValue
-          .split("")
-          .findIndex((char) => char !== MASK_CHARACTER);
-        if (replacePos !== -1) {
-          const newChar = newDisplayValue[replacePos];
-          newRealValue =
-            realValue.slice(0, replacePos) +
-            newChar +
-            realValue.slice(replacePos + 1);
-        } else {
-          newRealValue = realValue;
-        }
+        // Same length without selection - shouldn't happen, but handle gracefully
+        newRealValue = realValue;
+        newCursorPos = cursorPos;
       }
+
+      // Restore cursor position after React re-renders
+      requestAnimationFrame(() => {
+        if (input && document.activeElement === input) {
+          input.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      });
 
       // Synthetic event for Formik - only includes essential properties
       const syntheticEvent = {
         target: {
-          name: e.target.name,
+          name: input.name,
           value: newRealValue,
           type: "text",
         },
         currentTarget: {
-          name: e.currentTarget.name,
+          name: input.name,
           value: newRealValue,
           type: "text",
         },
@@ -183,6 +229,8 @@ const PasswordInputTypeIn = React.forwardRef<
       onChange={handleChange}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onSelect={handleSelect}
+      onKeyDown={handleKeyDown}
       disabled={disabled}
       showClearButton={showClearButton}
       autoComplete="off"
