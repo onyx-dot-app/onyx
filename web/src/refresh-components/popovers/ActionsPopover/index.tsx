@@ -220,7 +220,7 @@ export default function ActionsPopover({
 
   const searchToolId =
     displayTools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)?.id ??
-    0;
+    null;
 
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
@@ -503,10 +503,13 @@ export default function ActionsPopover({
   const numSourcesEnabled = configuredSources.filter((source) =>
     isSourceEnabled(source.uniqueKey)
   ).length;
-  const searchToolDisabled = disabledToolIds.includes(searchToolId);
+  const searchToolDisabled =
+    searchToolId !== null && disabledToolIds.includes(searchToolId);
 
   // Set search tool to a specific enabled/disabled state (only toggles if needed)
   const setSearchToolEnabled = (enabled: boolean) => {
+    if (searchToolId === null) return;
+
     if (enabled && searchToolDisabled) {
       toggleToolForCurrentAssistant(searchToolId);
     } else if (!enabled && !searchToolDisabled) {
