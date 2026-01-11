@@ -102,12 +102,18 @@ export default function ActionsPopover({
     selectedAssistant.id
   );
 
-  const { enableAllSources, disableAllSources, toggleSource, isSourceEnabled } =
-    useSourcePreferences({
-      availableSources,
-      selectedSources,
-      setSelectedSources,
-    });
+  const {
+    sourcesInitialized,
+    enableSources,
+    enableAllSources,
+    disableAllSources,
+    toggleSource,
+    isSourceEnabled,
+  } = useSourcePreferences({
+    availableSources,
+    selectedSources,
+    setSelectedSources,
+  });
 
   // Store previously enabled sources when search tool is disabled
   const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
@@ -511,7 +517,7 @@ export default function ActionsPopover({
 
   // Sync search tool state with sources on mount/when states change
   useEffect(() => {
-    if (searchToolId === null) return;
+    if (searchToolId === null || !sourcesInitialized) return;
 
     const hasEnabledSources = numSourcesEnabled > 0;
     if (hasEnabledSources && searchToolDisabled) {
@@ -521,7 +527,13 @@ export default function ActionsPopover({
       // No sources enabled but search tool is enabled - disable it
       toggleToolForCurrentAssistant(searchToolId);
     }
-  }, [searchToolId, numSourcesEnabled, searchToolDisabled]);
+  }, [
+    searchToolId,
+    numSourcesEnabled,
+    searchToolDisabled,
+    sourcesInitialized,
+    toggleToolForCurrentAssistant,
+  ]);
 
   // Set search tool to a specific enabled/disabled state (only toggles if needed)
   const setSearchToolEnabled = (enabled: boolean) => {
@@ -560,7 +572,11 @@ export default function ActionsPopover({
       if (wasDisabled) {
         // Enabling - restore previous sources or enable all
         const previous = previouslyEnabledSourcesRef.current;
-        setSelectedSources(previous.length > 0 ? previous : configuredSources);
+        if (previous.length > 0) {
+          enableSources(previous);
+        } else {
+          enableAllSources();
+        }
         previouslyEnabledSourcesRef.current = [];
       } else {
         // Disabling - store current sources then disable all
