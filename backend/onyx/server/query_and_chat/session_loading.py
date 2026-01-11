@@ -412,6 +412,7 @@ def translate_assistant_message_to_packets(
 
             # Process each tool call in this turn
             for tool_call in tool_calls_in_turn:
+                # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
 
