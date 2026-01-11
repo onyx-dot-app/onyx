@@ -33,6 +33,7 @@ import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgChevronDown } from "@opal/icons";
+import { ChatHeader } from "@/layouts/app-layouts";
 
 export interface ChatUIHandle {
   scrollToBottom: () => boolean;
@@ -246,10 +247,11 @@ const ChatUI = React.memo(
           <div
             key={currentChatSessionId}
             ref={scrollContainerRef}
-            className="flex flex-1 justify-center min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
+            className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
             onScroll={handleScroll}
           >
-            <div className="w-[min(50rem,100%)] px-4">
+            <ChatHeader />
+            <div className="w-[min(50rem,100%)] px-4 mx-auto">
               {messages.map((message, i) => {
                 const messageReactComponentKey = `message-${message.nodeId}`;
                 const parentMessage = message.parentNodeId

@@ -1,21 +1,16 @@
 /**
- * App Page Layout Component
+ * App Page Layout Components
  *
- * Primary layout component for chat/application pages. Handles white-labeling,
- * chat session actions (share, move, delete), and responsive header/footer rendering.
- *
- * Features:
- * - Custom header/footer content from enterprise settings
- * - Share chat functionality
- * - Move chat to project (with confirmation for custom agents)
- * - Delete chat with confirmation
- * - Mobile-responsive sidebar toggle
- * - Conditional rendering based on chat state
+ * Layout components for chat/application pages including:
+ * - AppRoot: Main layout wrapper with custom footer
+ * - ChatHeader: Sticky header with share, move, delete actions (rendered inside ChatUI)
  *
  * @example
  * ```tsx
- * import AppLayouts from "@/layouts/app-layouts";
+ * import AppLayouts, { ChatHeader } from "@/layouts/app-layouts";
  *
+ * // ChatHeader is used inside ChatUI's scroll container for sticky behavior
+ * // AppRoot wraps the entire chat page
  * export default function ChatPage() {
  *   return (
  *     <AppLayouts.Root>
@@ -89,7 +84,21 @@ const footerMarkdownComponents = {
   },
 } satisfies Partial<Components>;
 
-function AppHeader() {
+/**
+ * Chat Header Component
+ *
+ * Sticky header for chat pages with share, move, and delete actions.
+ * Rendered inside ChatUI's scroll container for sticky behavior.
+ *
+ * Features:
+ * - Sticky positioning within scroll container
+ * - Transparent on desktop, solid on mobile
+ * - Share chat functionality
+ * - Move chat to project (with confirmation for custom agents)
+ * - Delete chat with confirmation
+ * - Mobile-responsive sidebar toggle
+ */
+function ChatHeader() {
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -305,7 +314,12 @@ function AppHeader() {
       )}
 
       {(isMobile || customHeaderContent || currentChatSessionId) && (
-        <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+        <header
+          className={cn(
+            "sticky top-0 z-sticky w-full flex flex-row justify-center items-center py-3 px-4 h-16",
+            isMobile ? "bg-background-tint-01" : "bg-transparent"
+          )}
+        >
           {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
           <div className="flex-1">
             <IconButton
@@ -391,14 +405,11 @@ function AppFooter() {
 /**
  * App Root Component
  *
- * Wraps chat pages with white-labeling chrome (custom header/footer) and
- * provides chat session management actions.
+ * Wraps chat pages with custom footer.
  *
  * Layout Structure:
  * ```
  * ┌──────────────────────────────────┐
- * │ Header (custom or with actions)  │
- * ├──────────────────────────────────┤
  * │                                  │
  * │ Content Area (children)          │
  * │                                  │
@@ -407,37 +418,29 @@ function AppFooter() {
  * └──────────────────────────────────┘
  * ```
  *
- * Features:
- * - Renders custom header content from enterprise settings
- * - Shows sidebar toggle on mobile
- * - "Share Chat" button for current chat session
- * - Kebab menu with "Move to Project" and "Delete" options
- * - Move confirmation modal for custom agent chats
- * - Delete confirmation modal
- * - Renders custom footer disclaimer from enterprise settings
- *
- * State Management:
- * - Manages multiple modals (share, move, delete)
- * - Handles project search/filtering in move modal
- * - Integrates with projects context for chat operations
- * - Uses settings context for white-labeling
- * - Uses chat sessions hook for current session
- *
- * @example
- * ```tsx
- * // Basic usage in a chat page
- * <AppLayouts.Root>
- *   <ChatInterface />
- * </AppLayouts.Root>
- *
- * // The header will show:
- * // - Mobile: Sidebar toggle button
- * // - Desktop: Share button + kebab menu (when chat session exists)
- * // - Custom header text (if configured)
- *
- * // The footer will show custom disclaimer (if configured)
- * ```
+ * Note: ChatHeader is rendered inside ChatUI's scroll container
+ * for sticky behavior, not in this root component.
  */
+/**
+ * Mobile sidebar toggle shown when no chat session is active.
+ * ChatHeader handles this when a chat session exists.
+ */
+function MobileSidebarFallback() {
+  const { isMobile } = useScreenSize();
+  const { setFolded } = useAppSidebarContext();
+  const { currentChatSessionId } = useChatSessions();
+
+  // Only show on mobile when there's no chat session
+  // (ChatHeader handles the sidebar toggle when chat session exists)
+  if (!isMobile || currentChatSessionId) return null;
+
+  return (
+    <div className="w-full py-3 px-4 h-16">
+      <IconButton icon={SvgSidebar} onClick={() => setFolded(false)} internal />
+    </div>
+  );
+}
+
 export interface AppRootProps {
   children?: React.ReactNode;
 }
@@ -448,11 +451,11 @@ function AppRoot({ children }: AppRootProps) {
       breakout of their immediate containers using cqw units.
     */
     <div className="@container flex flex-col h-full w-full">
-      <AppHeader />
+      <MobileSidebarFallback />
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
       <AppFooter />
     </div>
   );
 }
 
-export { AppRoot as Root };
+export { AppRoot as Root, ChatHeader };
