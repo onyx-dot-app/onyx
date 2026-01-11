@@ -178,7 +178,7 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
     Called from /api/notifications endpoint. Uses ETag for efficient
     GitHub requests. Database handles notification deduplication.
 
-    Since all users will triger this via notification fetch,
+    Since all users will trigger this via notification fetch,
     uses Redis lock to prevent concurrent GitHub requests when cache is stale.
     """
     if not is_cache_stale():
@@ -188,7 +188,7 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
     redis_client = get_shared_redis_client()
     lock = redis_client.lock(
         OnyxRedisLocks.RELEASE_NOTES_FETCH_LOCK,
-        timeout=60,  # 60 second timeout for the lock
+        timeout=90,  # 90 second timeout for the lock
     )
 
     # Non-blocking acquire - if we can't get the lock, another request is handling it

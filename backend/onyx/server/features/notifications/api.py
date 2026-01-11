@@ -37,13 +37,10 @@ def get_notifications_api(
     # If more background checks are added, this should be moved to a helper function
     try:
         ensure_release_notes_fresh_and_notify(db_session)
-    except Exception as e:
-        # Log error but don't fail the entire endpoint
+    except Exception:
+        # Log exception but don't fail the entire endpoint
         # Users can still see their existing notifications
-        logger.error(
-            f"Failed to check for release notes in notifications endpoint: {e}",
-            exc_info=True,
-        )
+        logger.exception("Failed to check for release notes in notifications endpoint")
 
     notifications = [
         NotificationModel.from_model(notif)
