@@ -1,5 +1,6 @@
 import { Form, Formik, FormikProps } from "formik";
 import { TextFormField } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -91,13 +92,10 @@ function OllamaFormContent({
         placeholder={DEFAULT_API_BASE}
       />
 
-      <TextFormField
+      <PasswordInputTypeInField
         name="custom_config.OLLAMA_API_KEY"
         label="API Key (Optional)"
         subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
-        placeholder=""
-        type="password"
-        showPasswordToggle
       />
 
       <DisplayModels

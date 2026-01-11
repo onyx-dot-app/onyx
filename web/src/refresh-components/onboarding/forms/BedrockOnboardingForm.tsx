@@ -364,6 +364,7 @@ function BedrockFormFields(props: OnboardingFormChildProps<BedrockFormValues>) {
                           : "Complete authentication first"
                         : "Fetch available models"
                     }
+                    aria-label="Fetch available models"
                     disabled={disabled || isFetchingModels || isFetchDisabled}
                   />
                 }

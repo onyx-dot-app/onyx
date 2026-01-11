@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -193,11 +194,10 @@ function BedrockFormInternals({
                 label="AWS Access Key ID"
                 placeholder="AKIAIOSFODNN7EXAMPLE"
               />
-              <TextFormField
+              <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
                 label="AWS Secret Access Key"
                 placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                type="password"
               />
             </div>
           </TabsContent>
@@ -210,11 +210,10 @@ function BedrockFormInternals({
             )}
           >
             <div className="flex flex-col gap-4">
-              <TextFormField
+              <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
                 label="AWS Bedrock Long-term API Key"
                 placeholder="Your long-term API key"
-                type="password"
               />
             </div>
           </TabsContent>
