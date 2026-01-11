@@ -609,7 +609,6 @@ def run_deep_research_llm_loop(
                         continue
 
                     current_tool_call = research_agent_calls[tab_index]
-                    # Get per-agent cited docs for persistence
                     tool_call_info = ToolCallInfo(
                         parent_tool_call_id=None,
                         turn_index=orchestrator_start_turn_index
