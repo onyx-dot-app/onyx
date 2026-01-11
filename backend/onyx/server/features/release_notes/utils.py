@@ -8,6 +8,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from onyx import __version__
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.release_notes import create_release_notifications_for_versions
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.server.features.release_notes.constants import AUTO_REFRESH_THRESHOLD_SECONDS
@@ -32,20 +33,21 @@ def is_valid_version(version: str) -> bool:
     return bool(re.match(r"^v\d+\.\d+\.\d+(-[a-zA-Z]+\.\d+)?$", version))
 
 
+def parse_version_tuple(version: str) -> tuple[int, int, int]:
+    """Parse version string to tuple for semantic sorting."""
+    clean = re.sub(r"^v", "", version)
+    clean = re.sub(r"-.*$", "", clean)
+    parts = clean.split(".")
+    return (
+        int(parts[0]) if len(parts) > 0 else 0,
+        int(parts[1]) if len(parts) > 1 else 0,
+        int(parts[2]) if len(parts) > 2 else 0,
+    )
+
+
 def is_version_gte(v1: str, v2: str) -> bool:
     """Check if v1 >= v2. Strips suffixes like -cloud.X or -beta.X."""
-
-    def parse_version(v: str) -> tuple[int, int, int]:
-        clean = re.sub(r"^v", "", v)
-        clean = re.sub(r"-.*$", "", clean)
-        parts = clean.split(".")
-        return (
-            int(parts[0]) if len(parts) > 0 else 0,
-            int(parts[1]) if len(parts) > 1 else 0,
-            int(parts[2]) if len(parts) > 2 else 0,
-        )
-
-    return parse_version(v1) >= parse_version(v2)
+    return parse_version_tuple(v1) >= parse_version_tuple(v2)
 
 
 # ============================================================================
@@ -130,7 +132,19 @@ def get_last_fetch_time() -> datetime | None:
             if isinstance(fetched_at_str, bytes)
             else str(fetched_at_str)
         )
-        return datetime.fromisoformat(decoded)
+
+        last_fetch = datetime.fromisoformat(decoded)
+
+        # Defensively ensure timezone awareness
+        # fromisoformat() returns naive datetime if input lacks timezone
+        if last_fetch.tzinfo is None:
+            # Assume UTC for naive datetimes
+            last_fetch = last_fetch.replace(tzinfo=timezone.utc)
+        else:
+            # Convert to UTC if timezone-aware
+            last_fetch = last_fetch.astimezone(timezone.utc)
+
+        return last_fetch
     except Exception as e:
         logger.error(f"Failed to get last fetch time from Redis: {e}")
         return None
@@ -169,42 +183,66 @@ def ensure_release_notes_fresh_and_notify(db_session: Session) -> None:
 
     Called from /api/notifications endpoint. Uses ETag for efficient
     GitHub requests. Database handles notification deduplication.
+
+    Since all users will triger this via notification fetch,
+    uses Redis lock to prevent concurrent GitHub requests when cache is stale.
     """
     if not is_cache_stale():
         return
 
-    logger.debug("Checking GitHub for release notes updates.")
+    # Acquire lock to prevent concurrent fetches
+    redis_client = get_shared_redis_client()
+    lock = redis_client.lock(
+        OnyxRedisLocks.RELEASE_NOTES_FETCH_LOCK,
+        timeout=60,  # 60 second timeout for the lock
+    )
 
-    # Use ETag for conditional request
-    headers: dict[str, str] = {}
-    etag = get_cached_etag()
-    if etag:
-        headers["If-None-Match"] = etag
+    # Non-blocking acquire - if we can't get the lock, another request is handling it
+    acquired = lock.acquire(blocking=False)
+    if not acquired:
+        logger.debug("Another request is already fetching release notes, skipping.")
+        return
 
     try:
-        response = httpx.get(
-            GITHUB_CHANGELOG_RAW_URL,
-            headers=headers,
-            timeout=FETCH_TIMEOUT,
-            follow_redirects=True,
-        )
+        logger.debug("Checking GitHub for release notes updates.")
 
-        if response.status_code == 304:
-            # Content unchanged, just update timestamp
-            logger.debug("Release notes unchanged (304).")
-            save_fetch_metadata(etag)
-            return
+        # Use ETag for conditional request
+        headers: dict[str, str] = {}
+        etag = get_cached_etag()
+        if etag:
+            headers["If-None-Match"] = etag
 
-        response.raise_for_status()
+        try:
+            response = httpx.get(
+                GITHUB_CHANGELOG_RAW_URL,
+                headers=headers,
+                timeout=FETCH_TIMEOUT,
+                follow_redirects=True,
+            )
 
-        # Parse and create notifications
-        entries = parse_mdx_to_release_note_entries(response.text)
-        new_etag = response.headers.get("ETag")
-        save_fetch_metadata(new_etag)
+            if response.status_code == 304:
+                # Content unchanged, just update timestamp
+                logger.debug("Release notes unchanged (304).")
+                save_fetch_metadata(etag)
+                return
 
-        # Create notifications, sorted to create them in the order of release
-        entries = sorted(entries, key=lambda x: x.version, reverse=False)
-        create_release_notifications_for_versions(db_session, entries)
+            response.raise_for_status()
 
-    except Exception as e:
-        logger.error(f"Failed to check release notes: {e}")
+            # Parse and create notifications
+            entries = parse_mdx_to_release_note_entries(response.text)
+            new_etag = response.headers.get("ETag")
+            save_fetch_metadata(new_etag)
+
+            # Create notifications, sorted semantically to create them in chronological order
+            entries = sorted(entries, key=lambda x: parse_version_tuple(x.version))
+            create_release_notifications_for_versions(db_session, entries)
+
+        except Exception as e:
+            logger.error(f"Failed to check release notes: {e}")
+            # Update timestamp even on failure to prevent retry storms
+            # We don't save etag on failure to allow retry with conditional request
+            save_fetch_metadata(None)
+    finally:
+        # Always release the lock
+        if lock.owned():
+            lock.release()

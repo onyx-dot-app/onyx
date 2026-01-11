@@ -423,6 +423,9 @@ class OnyxRedisLocks:
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
 
+    # Release notes
+    RELEASE_NOTES_FETCH_LOCK = "da_lock:release_notes_fetch"
+
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
