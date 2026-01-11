@@ -214,7 +214,7 @@ class OnyxWebCrawler(WebContentProvider):
 
         # Expand match positions to include context and merge overlapping regions
         regions = self._expand_and_merge_regions(
-            match_positions, len(html_str), CONTEXT_CHARS_PER_MATCH
+            match_positions, len(html_str), CONTEXT_CHARS_PER_MATCH, html_str
         )
 
         logger.info(f"Merged into {len(regions)} regions to parse: {url}")
@@ -228,10 +228,8 @@ class OnyxWebCrawler(WebContentProvider):
             if total_chars >= MAX_TOTAL_CONTENT_CHARS:
                 break
 
-            # Note: Slicing by character position may create malformed HTML fragments
-            # (e.g., splitting mid-tag). This is intentional - BeautifulSoup handles
-            # malformed HTML gracefully, and the alternative (parsing full HTML first)
-            # defeats the memory optimization purpose of this two-pass approach.
+            # Region boundaries are snapped to tag edges to avoid cutting mid-tag.
+            # Unbalanced open/close tags may still occur, but BeautifulSoup handles that.
             region_html = html_str[start:end]
 
             try:
@@ -329,6 +327,7 @@ class OnyxWebCrawler(WebContentProvider):
         positions: list[int],
         total_length: int,
         context_size: int,
+        html_str: str,
     ) -> list[tuple[int, int]]:
         """Expand match positions to include context and merge overlapping regions.
 
@@ -336,6 +335,7 @@ class OnyxWebCrawler(WebContentProvider):
             positions: Sorted list of match positions
             total_length: Total length of the HTML string
             context_size: Number of chars to include around each match
+            html_str: The HTML string (used for tag boundary snapping)
 
         Returns:
             List of (start, end) tuples representing non-overlapping regions
@@ -360,7 +360,34 @@ class OnyxWebCrawler(WebContentProvider):
             else:
                 merged.append((start, end))
 
-        return merged
+        # Snap boundaries to tag edges to avoid cutting mid-tag
+        return [
+            self._snap_to_tag_boundaries(start, end, html_str) for start, end in merged
+        ]
+
+    def _snap_to_tag_boundaries(
+        self, start: int, end: int, html_str: str
+    ) -> tuple[int, int]:
+        """Adjust start/end positions to avoid cutting through HTML tags.
+
+        - start: scan backwards to find '>', start after it
+        - end: scan forwards to find '<', end before it
+
+        This ensures we don't slice mid-tag (e.g., '<div cla').
+        """
+        # Snap start: find the nearest '>' before start, begin after it
+        if start > 0:
+            gt_pos = html_str.rfind(">", 0, start)
+            if gt_pos != -1:
+                start = gt_pos + 1
+
+        # Snap end: find the nearest '<' after end, stop before it
+        if end < len(html_str):
+            lt_pos = html_str.find("<", end)
+            if lt_pos != -1:
+                end = lt_pos
+
+        return start, end
 
     def _extract_title_fast(self, html_str: str) -> str:
         """Extract title from HTML using regex (fast, no full parse)."""
