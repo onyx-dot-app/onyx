@@ -1182,7 +1182,10 @@ export default function AgentEditorPage({
 
                             {values.enable_knowledge &&
                               values.knowledge_source === "user_knowledge" && (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section
+                                  gap={0.5}
+                                  alignItems="start"
+                                >
                                   <FilePickerPopover
                                     trigger={(open) => (
                                       <CreateButton transient={open}>
@@ -1219,6 +1222,7 @@ export default function AgentEditorPage({
                                       flexDirection="row"
                                       wrap
                                       gap={0.5}
+                                      justifyContent="start"
                                     >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
