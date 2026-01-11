@@ -1024,10 +1024,8 @@ export function useSourcePreferences({
         const mergedSources = [...enabledSources, ...newSources];
         setSelectedSources(mergedSources);
 
-        // Persist the merged state if there were any new sources
-        if (newSources.length > 0) {
-          persistSourcePreferencesState(mergedSources, availableSourceMetadata);
-        }
+        // Persist the merged state
+        persistSourcePreferencesState(mergedSources, availableSourceMetadata);
       } else {
         // First time user or invalid data - enable all sources by default
         setSelectedSources(availableSourceMetadata);
