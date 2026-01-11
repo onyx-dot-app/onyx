@@ -112,8 +112,8 @@ function GenerateReportInput({
                 "w-[300px] justify-start text-left font-normal",
                 !dateRange && "text-muted-foreground"
               )}
+              leftIcon={CalendarIcon}
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
               {dateRange?.from ? (
                 dateRange.to ? (
                   <>
