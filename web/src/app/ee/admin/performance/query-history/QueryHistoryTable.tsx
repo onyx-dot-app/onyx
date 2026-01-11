@@ -61,14 +61,14 @@ function QueryHistoryTableRow({
       className="hover:bg-accent-background cursor-pointer relative select-none"
     >
       <TableCell>
-        <Text as="p" className="whitespace-normal line-clamp-5">
+        <Text className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_user_message ||
             chatSessionMinimal.name ||
             "-"}
         </Text>
       </TableCell>
       <TableCell>
-        <Text as="p" className="whitespace-normal line-clamp-5">
+        <Text className="whitespace-normal line-clamp-5">
           {chatSessionMinimal.first_ai_message || "-"}
         </Text>
       </TableCell>
@@ -86,7 +86,7 @@ function QueryHistoryTableRow({
           href={
             `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
           }
-          className="absolute w-full h-full left-0"
+          className="absolute w-full h-full left-0 top-0"
         ></Link>
       </td>
     </TableRow>

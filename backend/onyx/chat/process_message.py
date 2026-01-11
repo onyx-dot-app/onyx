@@ -8,8 +8,10 @@ import traceback
 from collections.abc import Callable
 from uuid import UUID
 
+from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.chat.chat_processing_checker import set_processing_status
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_state import run_chat_loop_with_state_containers
 from onyx.chat.chat_utils import convert_chat_history
@@ -47,6 +49,7 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
+from onyx.db.models import ChatSession
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
@@ -292,6 +295,8 @@ def handle_stream_message_objects(
     tenant_id = get_current_tenant_id()
 
     llm: LLM | None = None
+    chat_session: ChatSession | None = None
+    redis_client: Redis | None = None
 
     user_id = user.id if user is not None else None
     llm_user_identifier = (
@@ -552,6 +557,12 @@ def handle_stream_message_objects(
         def check_is_connected() -> bool:
             return check_stop_signal(chat_session.id, redis_client)
 
+        set_processing_status(
+            chat_session_id=chat_session.id,
+            redis_client=redis_client,
+            value=True,
+        )
+
         # Use external state container if provided, otherwise create internal one
         # External container allows non-streaming callers to access accumulated state
         state_container = external_state_container or ChatStateContainer()
@@ -666,7 +677,16 @@ def handle_stream_message_objects(
             )
 
         db_session.rollback()
-        return
+    finally:
+        try:
+            if redis_client is not None and chat_session is not None:
+                set_processing_status(
+                    chat_session_id=chat_session.id,
+                    redis_client=redis_client,
+                    value=False,
+                )
+        except Exception:
+            logger.exception("Error in setting processing status")
 
 
 def llm_loop_completion_handle(

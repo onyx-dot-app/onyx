@@ -10,6 +10,8 @@ TERMINATED_RESPONSE_MESSAGE = (
     "Response was terminated prior to completion, try regenerating."
 )
 
+LOADING_RESPONSE_MESSAGE = "Message is loading... Please refresh the page soon."
+
 
 def test_send_two_messages(basic_user: DATestUser) -> None:
     # Create a chat session
@@ -160,10 +162,10 @@ def test_send_message_disconnect_and_cleanup(
         assert assistant_message is not None, "Assistant message should exist"
         msg = assistant_message.message
 
-        if msg != TERMINATED_RESPONSE_MESSAGE:
+        if msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE:
             break
 
-    assert msg != TERMINATED_RESPONSE_MESSAGE, (
+    assert msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE, (
         f"Assistant message should no longer be the terminated response message after cleanup, "
         f"got: {msg}"
     )

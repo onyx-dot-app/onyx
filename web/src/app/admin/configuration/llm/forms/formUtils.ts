@@ -130,20 +130,20 @@ export const filterModelConfigurations = (
 };
 
 // Helper to get model configurations for auto mode
+// In auto mode, we include ALL models but preserve their visibility status
+// Models in the auto config are visible, others are created but not visible
 export const getAutoModeModelConfigurations = (
   modelConfigurations: ModelConfiguration[]
 ): ModelConfiguration[] => {
-  return modelConfigurations
-    .filter((m) => m.is_visible)
-    .map(
-      (modelConfiguration): ModelConfiguration => ({
-        name: modelConfiguration.name,
-        is_visible: true,
-        max_input_tokens: modelConfiguration.max_input_tokens ?? null,
-        supports_image_input: modelConfiguration.supports_image_input,
-        display_name: modelConfiguration.display_name,
-      })
-    );
+  return modelConfigurations.map(
+    (modelConfiguration): ModelConfiguration => ({
+      name: modelConfiguration.name,
+      is_visible: modelConfiguration.is_visible,
+      max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+      supports_image_input: modelConfiguration.supports_image_input,
+      display_name: modelConfiguration.display_name,
+    })
+  );
 };
 
 export const submitLLMProvider = async <T extends BaseLLMFormValues>({
