@@ -102,25 +102,49 @@ const PasswordInputTypeIn = React.forwardRef<
       }
 
       const newDisplayValue = e.target.value;
+      const cursorPos = e.target.selectionStart ?? newDisplayValue.length;
       const oldLength = realValue.length;
       const newLength = newDisplayValue.length;
 
       let newRealValue: string;
 
       if (newLength === 0) {
+        // Field was cleared
         newRealValue = "";
       } else if (newLength > oldLength) {
-        const addedChars = newDisplayValue
-          .split("")
-          .filter((char) => char !== MASK_CHARACTER)
-          .join("");
+        // Characters were added (typed or pasted)
+        const charsAdded = newLength - oldLength;
+        // Extract the new characters from the display value at cursor position
+        const insertPos = cursorPos - charsAdded;
+        const addedChars = newDisplayValue.slice(insertPos, cursorPos);
+        // Insert at the correct position in the real value
         newRealValue =
-          addedChars.length > 0 ? realValue + addedChars : realValue;
+          realValue.slice(0, insertPos) +
+          addedChars +
+          realValue.slice(insertPos);
       } else if (newLength < oldLength) {
+        // Characters were deleted
         const charsDeleted = oldLength - newLength;
-        newRealValue = realValue.slice(0, -charsDeleted);
+        // Delete from the correct position in the real value
+        const deleteStart = cursorPos;
+        const deleteEnd = cursorPos + charsDeleted;
+        newRealValue =
+          realValue.slice(0, deleteStart) + realValue.slice(deleteEnd);
       } else {
-        newRealValue = realValue;
+        // Same length - character was replaced (e.g., select + type)
+        // Find the position where the non-mask character is
+        const replacePos = newDisplayValue
+          .split("")
+          .findIndex((char) => char !== MASK_CHARACTER);
+        if (replacePos !== -1) {
+          const newChar = newDisplayValue[replacePos];
+          newRealValue =
+            realValue.slice(0, replacePos) +
+            newChar +
+            realValue.slice(replacePos + 1);
+        } else {
+          newRealValue = realValue;
+        }
       }
 
       // Synthetic event for Formik - only includes essential properties
