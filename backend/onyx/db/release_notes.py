@@ -45,7 +45,7 @@ def create_release_notifications_for_versions(
     # because the only difference is an email string prefix.
     user_ids = list(
         db_session.scalars(
-            select(User.id).where(
+            select(User.id).where(  # type: ignore
                 User.is_active == True,  # noqa: E712
                 User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]),
             )
