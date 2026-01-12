@@ -44,58 +44,44 @@ EXPECTED_TOOL_NAME_MAPPING = {
 
 def upgrade() -> None:
     conn = op.get_bind()
-    conn.execute(sa.text("BEGIN"))
 
-    try:
-        # Mapping of in_code_tool_id to the NAME constant from each tool class
-        # These match the .name property of each tool implementation
-        tool_name_mapping = EXPECTED_TOOL_NAME_MAPPING
+    # Mapping of in_code_tool_id to the NAME constant from each tool class
+    # These match the .name property of each tool implementation
+    tool_name_mapping = EXPECTED_TOOL_NAME_MAPPING
 
-        # Update the name column for each tool based on its in_code_tool_id
-        for in_code_tool_id, expected_name in tool_name_mapping.items():
-            conn.execute(
-                sa.text(
-                    """
-                    UPDATE tool
-                    SET name = :expected_name
-                    WHERE in_code_tool_id = :in_code_tool_id
-                    """
-                ),
-                {
-                    "expected_name": expected_name,
-                    "in_code_tool_id": in_code_tool_id,
-                },
-            )
-
-        conn.execute(sa.text("COMMIT"))
-    except Exception as e:
-        conn.execute(sa.text("ROLLBACK"))
-        raise e
+    # Update the name column for each tool based on its in_code_tool_id
+    for in_code_tool_id, expected_name in tool_name_mapping.items():
+        conn.execute(
+            sa.text(
+                """
+                UPDATE tool
+                SET name = :expected_name
+                WHERE in_code_tool_id = :in_code_tool_id
+                """
+            ),
+            {
+                "expected_name": expected_name,
+                "in_code_tool_id": in_code_tool_id,
+            },
+        )
 
 
 def downgrade() -> None:
     conn = op.get_bind()
-    conn.execute(sa.text("BEGIN"))
 
-    try:
-        # Reverse the migration by setting name back to in_code_tool_id
-        # This matches the original pattern where name was the class name
-        for in_code_tool_id, current_name in CURRENT_TOOL_NAME_MAPPING.items():
-            conn.execute(
-                sa.text(
-                    """
-                    UPDATE tool
-                    SET name = :current_name
-                    WHERE in_code_tool_id = :in_code_tool_id
-                    """
-                ),
-                {
-                    "current_name": current_name,
-                    "in_code_tool_id": in_code_tool_id,
-                },
-            )
-
-        conn.execute(sa.text("COMMIT"))
-    except Exception as e:
-        conn.execute(sa.text("ROLLBACK"))
-        raise e
+    # Reverse the migration by setting name back to in_code_tool_id
+    # This matches the original pattern where name was the class name
+    for in_code_tool_id, current_name in CURRENT_TOOL_NAME_MAPPING.items():
+        conn.execute(
+            sa.text(
+                """
+                UPDATE tool
+                SET name = :current_name
+                WHERE in_code_tool_id = :in_code_tool_id
+                """
+            ),
+            {
+                "current_name": current_name,
+                "in_code_tool_id": in_code_tool_id,
+            },
+        )
