@@ -33,7 +33,7 @@ import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgChevronDown } from "@opal/icons";
-import { ChatHeader } from "@/layouts/app-layouts";
+import ChatHeader from "@/app/chat/components/ChatHeader";
 
 export interface ChatUIHandle {
   scrollToBottom: () => boolean;
