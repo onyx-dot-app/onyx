@@ -10,6 +10,7 @@ import {
   GmailServiceAccountCredentialJson,
   GoogleDriveCredentialJson,
   GoogleDriveServiceAccountCredentialJson,
+  BoxCredentialJson,
 } from "@/lib/connectors/credentials";
 
 export const useGmailCredentials = (connector: string) => {
@@ -71,5 +72,21 @@ export const useGoogleDriveCredentials = (connector: string) => {
 
   return {
     liveGDriveCredential: liveGDriveCredential,
+  };
+};
+
+export const useBoxCredentials = (connector: string) => {
+  const { data: credentialsData } = usePublicCredentials();
+
+  const boxJwtCredential: Credential<BoxCredentialJson> | undefined =
+    credentialsData?.find(
+      (credential) =>
+        credential.credential_json?.box_jwt_config &&
+        credential.admin_public &&
+        credential.source === connector
+    );
+
+  return {
+    liveBoxCredential: boxJwtCredential,
   };
 };

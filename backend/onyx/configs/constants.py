@@ -103,6 +103,7 @@ KV_GMAIL_CRED_KEY = "gmail_app_credential"
 KV_GMAIL_SERVICE_ACCOUNT_KEY = "gmail_service_account_key"
 KV_GOOGLE_DRIVE_CRED_KEY = "google_drive_app_credential"
 KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY = "google_drive_service_account_key"
+KV_BOX_JWT_CONFIG = "box_jwt_config"
 KV_GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"
 KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
@@ -210,6 +211,7 @@ class DocumentSource(str, Enum):
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
     DRUPAL_WIKI = "drupal_wiki"
+    BOX = "box"
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
@@ -631,6 +633,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
+    DocumentSource.BOX: "box - files and folders",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }

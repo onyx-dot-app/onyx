@@ -504,6 +504,7 @@ export enum ValidSources {
   DrupalWiki = "drupal_wiki",
   Imap = "imap",
   Bitbucket = "bitbucket",
+  Box = "box",
   TestRail = "testrail",
 
   // Federated Connectors

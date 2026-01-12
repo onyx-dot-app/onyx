@@ -565,6 +565,19 @@ class GoogleServiceAccountCredentialRequest(BaseModel):
     google_primary_admin: str | None = None  # email of user to impersonate
 
 
+class BoxJWTConfig(BaseModel):
+    """Box JWT configuration from JSON file."""
+
+    boxAppSettings: dict[str, Any]
+    enterpriseID: str | None = None
+
+    model_config = {"extra": "allow"}  # Allow extra fields in case Box adds more
+
+
+class BoxJWTCredentialRequest(BaseModel):
+    box_primary_admin_user_id: str | None = None  # user ID to impersonate
+
+
 class FileUploadResponse(BaseModel):
     file_paths: list[str]
     file_names: list[str]

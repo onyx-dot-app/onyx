@@ -16,6 +16,7 @@ from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import TEAMS_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.external_permissions.box.doc_sync import box_doc_sync
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from ee.onyx.external_permissions.github.doc_sync import github_doc_sync
@@ -132,6 +133,13 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=gmail_doc_sync,
             initial_index_should_sync=False,
+        ),
+    ),
+    DocumentSource.BOX: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=box_doc_sync,
+            initial_index_should_sync=True,
         ),
     ),
     DocumentSource.GITHUB: SyncConfig(

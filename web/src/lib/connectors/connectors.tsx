@@ -1236,6 +1236,31 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  box: {
+    description: "Configure Box connector",
+    values: [
+      {
+        type: "checkbox",
+        query: "Index all accessible files?",
+        label: "Include All Files",
+        name: "include_all_files",
+        description:
+          "If checked, the connector will index all files accessible to the authenticated user.",
+        optional: false,
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter folder IDs or URLs (optional):",
+        label: "Folder IDs",
+        name: "folder_ids",
+        description:
+          "Comma-separated list of Box folder IDs or URLs to index. Leave empty if 'Include All Files' is checked.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   s3: {
     description: "Configure S3 connector",
     values: [
