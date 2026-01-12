@@ -28,12 +28,12 @@ function isBackendPlaceholder(value: string): boolean {
   return !!value && BACKEND_PLACEHOLDER_PATTERN.test(value);
 }
 
-interface SelectionRange {
+export interface SelectionRange {
   start: number;
   end: number;
 }
 
-interface MaskedInputChangeResult {
+export interface MaskedInputChangeResult {
   newValue: string;
   cursorPosition: number;
 }
@@ -51,7 +51,7 @@ interface MaskedInputChangeResult {
  * @param previousSelection - Selection range before the change occurred
  * @returns The computed real value and where to place the cursor
  */
-function computeMaskedInputChange(
+export function computeMaskedInputChange(
   newDisplayValue: string,
   previousValue: string,
   cursorPosition: number,
@@ -197,20 +197,9 @@ const PasswordInputTypeIn = React.forwardRef<
     [onBlur]
   );
 
-  // Track selection on any interaction that might change it
-  const handleSelect = React.useCallback(
+  // Track selection before any change occurs (used by both onSelect and onKeyDown)
+  const captureSelection = React.useCallback(
     (e: React.SyntheticEvent<HTMLInputElement>) => {
-      const target = e.target as HTMLInputElement;
-      selectionRef.current = {
-        start: target.selectionStart ?? 0,
-        end: target.selectionEnd ?? 0,
-      };
-    },
-    []
-  );
-
-  const handleKeyDown = React.useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
       const target = e.target as HTMLInputElement;
       selectionRef.current = {
         start: target.selectionStart ?? 0,
@@ -278,8 +267,8 @@ const PasswordInputTypeIn = React.forwardRef<
       onChange={handleChange}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onSelect={handleSelect}
-      onKeyDown={handleKeyDown}
+      onSelect={captureSelection}
+      onKeyDown={captureSelection}
       disabled={disabled}
       showClearButton={showClearButton}
       autoComplete="off"
