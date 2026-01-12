@@ -961,11 +961,25 @@ export function useSourcePreferences({
     try {
       const res = JSON.parse(saved);
 
-      // Validate the snapshot
-      if (res.sourcePreferences === undefined) {
+      // Validate the snapshot structure
+      if (
+        typeof res !== "object" ||
+        res === null ||
+        typeof res.sourcePreferences !== "object" ||
+        res.sourcePreferences === null ||
+        Array.isArray(res.sourcePreferences)
+      ) {
         return null;
       }
-      return res;
+
+      // Validate that all values in sourcePreferences are booleans
+      for (const value of Object.values(res.sourcePreferences)) {
+        if (typeof value !== "boolean") {
+          return null;
+        }
+      }
+
+      return res as SourcePreferencesSnapshot;
     } catch {
       return null;
     }
