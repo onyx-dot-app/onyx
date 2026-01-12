@@ -65,7 +65,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
-  const { agent: fullAgent } = useAgent(agent.id);
+  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -89,9 +89,12 @@ export default function AgentCard({ agent }: AgentCardProps) {
 
       if (error) {
         console.error("Failed to share agent:", error);
+      } else {
+        // Revalidate the agent data to reflect the changes
+        refreshAgent();
       }
     },
-    [fullAgent]
+    [fullAgent, refreshAgent]
   );
 
   return (
