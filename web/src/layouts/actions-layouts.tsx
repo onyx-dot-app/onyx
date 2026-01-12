@@ -71,6 +71,7 @@ import { WithoutStyles } from "@/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgMcp } from "@opal/icons";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { Section, SectionProps } from "@/layouts/general-layouts";
 
 /**
  * Actions Layout Context
@@ -163,12 +164,10 @@ function useActionsLayoutContext() {
  * </ActionsLayouts.Root>
  * ```
  */
-export type ActionsRootProps = WithoutStyles<
-  React.HTMLAttributes<HTMLDivElement>
->;
+export type ActionsRootProps = SectionProps;
 
 function ActionsRoot(props: ActionsRootProps) {
-  return <div className="flex flex-col" {...props} />;
+  return <Section gap={0} padding={0} {...props} />;
 }
 
 /**
