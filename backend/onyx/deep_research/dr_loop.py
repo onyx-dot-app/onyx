@@ -260,6 +260,7 @@ def run_deep_research_llm_loop(
                 if not llm_step_result.tool_calls:
                     # Mark this turn as a clarification question
                     state_container.set_is_clarification(True)
+                    span.span_data.output = "clarification_required"
 
                     emitter.emit(
                         Packet(
