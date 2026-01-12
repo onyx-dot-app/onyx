@@ -21,6 +21,7 @@ backend/tests/regression/search_quality/*.json
 backend/onyx/evals/data/
 backend/onyx/evals/one_off/*.json
 *.log
+*.csv
 
 # secret files
 .env
@@ -56,6 +57,3 @@ node_modules
 
 # plans
 plans/
-
-# CSV files (data files that shouldn't be tracked)
-*.csv
