@@ -12,12 +12,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -464,7 +459,7 @@ export default function AgentsNavigationPage() {
               open={creatorFilterOpen}
               onOpenChange={setCreatorFilterOpen}
             >
-              <PopoverTrigger asChild>
+              <Popover.Trigger asChild>
                 <FilterButton
                   leftIcon={SvgUser}
                   active={selectedCreatorIds.size > 0}
@@ -473,8 +468,8 @@ export default function AgentsNavigationPage() {
                 >
                   {creatorFilterButtonText}
                 </FilterButton>
-              </PopoverTrigger>
-              <PopoverContent align="start">
+              </Popover.Trigger>
+              <Popover.Content align="start">
                 <PopoverMenu medium>
                   {[
                     <InputTypeIn
@@ -530,13 +525,13 @@ export default function AgentsNavigationPage() {
                     }),
                   ]}
                 </PopoverMenu>
-              </PopoverContent>
+              </Popover.Content>
             </Popover>
             <Popover
               open={actionsFilterOpen}
               onOpenChange={setActionsFilterOpen}
             >
-              <PopoverTrigger asChild>
+              <Popover.Trigger asChild>
                 <FilterButton
                   leftIcon={SvgActions}
                   transient={actionsFilterOpen}
@@ -550,8 +545,8 @@ export default function AgentsNavigationPage() {
                 >
                   {actionsFilterButtonText}
                 </FilterButton>
-              </PopoverTrigger>
-              <PopoverContent align="start">
+              </Popover.Trigger>
+              <Popover.Content align="start">
                 <PopoverMenu medium>
                   {[
                     <InputTypeIn
@@ -637,7 +632,7 @@ export default function AgentsNavigationPage() {
                     }),
                   ]}
                 </PopoverMenu>
-              </PopoverContent>
+              </Popover.Content>
             </Popover>
           </div>
         </div>

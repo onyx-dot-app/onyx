@@ -101,6 +101,15 @@ export type PacketType =
   | UserKnowledgeFilePacket
   | Packet;
 
+// Origin of the message for telemetry tracking.
+// Keep in sync with backend: backend/onyx/server/query_and_chat/models.py::MessageOrigin
+export type MessageOrigin =
+  | "webapp"
+  | "chrome_extension"
+  | "api"
+  | "slackbot"
+  | "unknown";
+
 export interface SendMessageParams {
   message: string;
   fileDescriptors?: FileDescriptor[];
@@ -116,6 +125,8 @@ export interface SendMessageParams {
   modelProvider?: string;
   modelVersion?: string;
   temperature?: number;
+  // Origin of the message for telemetry tracking
+  origin?: MessageOrigin;
 }
 
 export async function* sendMessage({
@@ -131,6 +142,7 @@ export async function* sendMessage({
   modelProvider,
   modelVersion,
   temperature,
+  origin,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   // Build payload for new send-chat-message API
   const payload = {
@@ -150,6 +162,8 @@ export async function* sendMessage({
             model_version: modelVersion,
           }
         : null,
+    // Default to "unknown" for consistency with backend; callers should set explicitly
+    origin: origin ?? "unknown",
   };
 
   const body = JSON.stringify(payload);

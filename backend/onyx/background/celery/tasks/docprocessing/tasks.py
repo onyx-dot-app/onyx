@@ -41,9 +41,11 @@ from onyx.background.indexing.checkpointing_utils import (
 )
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempts
+from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
+from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import MilestoneRecordType
@@ -62,6 +64,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -828,16 +831,39 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             for cc_pair_id in primary_cc_pair_ids:
                 lock_beat.reacquire()
 
-                if is_in_repeated_error_state(
-                    cc_pair_id=cc_pair_id,
-                    search_settings_id=current_search_settings.id,
+                cc_pair = get_connector_credential_pair_from_id(
                     db_session=db_session,
+                    cc_pair_id=cc_pair_id,
+                )
+
+                # if already in repeated error state, don't do anything
+                # this is important so that we don't keep pausing the connector
+                # immediately upon a user un-pausing it to manually re-trigger and
+                # recover.
+                if (
+                    cc_pair
+                    and not cc_pair.in_repeated_error_state
+                    and is_in_repeated_error_state(
+                        cc_pair=cc_pair,
+                        search_settings_id=current_search_settings.id,
+                        db_session=db_session,
+                    )
                 ):
                     set_cc_pair_repeated_error_state(
                         db_session=db_session,
                         cc_pair_id=cc_pair_id,
                         in_repeated_error_state=True,
                     )
+                    # When entering repeated error state, also pause the connector
+                    # to prevent continued indexing retry attempts burning through embedding credits.
+                    # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
+                    # models. Also, they are more prone to repeated failures -> eventual success.
+                    if AUTH_TYPE == AuthType.CLOUD:
+                        update_connector_credential_pair_from_id(
+                            db_session=db_session,
+                            cc_pair_id=cc_pair.id,
+                            status=ConnectorCredentialPairStatus.PAUSED,
+                        )
 
         # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
         # Heavy check, should_index(), is called in _kickoff_indexing_tasks

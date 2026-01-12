@@ -274,6 +274,8 @@
   --background-tint-inverted-02: var(--tint-90);
   --background-tint-inverted-01: var(--tint-95);
   --background-tint-inverted-00: var(--grey-100);
+  --background-tint-light-01: var(--tint-02);
+  --background-tint-dark-01: var(--tint-95);
 
   /* Border */
   --border-01: var(--grey-10);
@@ -470,6 +472,8 @@
   --background-tint-inverted-02: var(--tint-05);
   --background-tint-inverted-01: var(--tint-02);
   --background-tint-inverted-00: var(--grey-00);
+  --background-tint-light-01: var(--tint-02);
+  --background-tint-dark-01: var(--tint-95);
 
   /* Border */
   --border-01: var(--grey-80);

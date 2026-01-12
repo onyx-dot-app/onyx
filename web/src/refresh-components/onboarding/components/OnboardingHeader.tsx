@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { STEP_CONFIG, HAS_FINISHED_ONBOARDING_KEY } from "../constants";
+import { STEP_CONFIG } from "../constants";
 import { OnboardingActions, OnboardingState } from "../types";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -12,12 +12,14 @@ type OnboardingHeaderProps = {
   state: OnboardingState;
   actions: OnboardingActions;
   handleHideOnboarding: () => void;
+  handleFinishOnboarding: () => void;
 };
 
 const OnboardingHeaderInner = ({
   state: onboardingState,
   actions: onboardingActions,
   handleHideOnboarding,
+  handleFinishOnboarding,
 }: OnboardingHeaderProps) => {
   const iconPercentage =
     STEP_CONFIG[onboardingState.currentStep].iconPercentage;
@@ -28,8 +30,7 @@ const OnboardingHeaderInner = ({
 
   const handleButtonClick = () => {
     if (isCompleteStep) {
-      localStorage.setItem(HAS_FINISHED_ONBOARDING_KEY, "true");
-      handleHideOnboarding();
+      handleFinishOnboarding();
     } else {
       onboardingActions.nextStep();
     }

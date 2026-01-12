@@ -4,10 +4,12 @@ import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/Modal";
 import { useModalClose } from "../contexts/ModalContext";
+import { Section } from "@/layouts/general-layouts";
 
 export interface ConfirmationModalProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;
+  description?: string;
   children?: React.ReactNode;
 
   submit: React.ReactNode;
@@ -18,6 +20,7 @@ export interface ConfirmationModalProps {
 export default function ConfirmationModalLayout({
   icon,
   title,
+  description,
   children,
 
   submit,
@@ -28,9 +31,14 @@ export default function ConfirmationModalLayout({
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose?.()}>
-      <Modal.Content mini className="z-confirmation">
-        <Modal.Header icon={icon} title={title} onClose={onClose} />
-        <Modal.Body className="p-4 bg-background-tint-01">
+      <Modal.Content mini>
+        <Modal.Header
+          icon={icon}
+          title={title}
+          description={description}
+          onClose={onClose}
+        />
+        <Modal.Body>
           {typeof children === "string" ? (
             <Text as="p" text03>
               {children}
@@ -39,7 +47,7 @@ export default function ConfirmationModalLayout({
             children
           )}
         </Modal.Body>
-        <Modal.Footer className="w-full p-4 gap-2">
+        <Modal.Footer>
           {!hideCancel && (
             <Button secondary onClick={onClose} type="button">
               Cancel

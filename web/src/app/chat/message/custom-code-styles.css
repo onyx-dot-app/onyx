@@ -235,3 +235,24 @@ pre[class*="language-"] {
 
   scrollbar-color: #4b5563 #1f2937;
 }
+
+/*
+ * Table breakout container - allows tables to extend beyond their parent's
+ * constrained width to use the full container query width (100cqw).
+ *
+ * Requires an ancestor element with `container-type: inline-size` (@container in Tailwind).
+ *
+ * How the math works:
+ * - width: 100cqw → expand to full container query width
+ * - marginLeft: calc((100% - 100cqw) / 2) → negative margin pulls element left
+ *   (100% is parent width, 100cqw is larger, so result is negative)
+ * - paddingLeft/Right: calc((100cqw - 100%) / 2) → padding keeps content aligned
+ *   with original position while allowing scroll area to extend
+ */
+.markdown-table-breakout {
+  overflow-x: auto;
+  width: 100cqw;
+  margin-left: calc((100% - 100cqw) / 2);
+  padding-left: calc((100cqw - 100%) / 2);
+  padding-right: calc((100cqw - 100%) / 2);
+}

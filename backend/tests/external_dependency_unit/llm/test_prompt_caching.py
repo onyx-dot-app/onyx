@@ -397,6 +397,7 @@ def test_anthropic_prompt_caching_reduces_costs(
     not os.environ.get(VERTEX_LOCATION_ENV),
     reason="VERTEX_LOCATION required for Vertex AI context caching (e.g., 'us-central1')",
 )
+@pytest.mark.skip(reason="Vertex AI prompt caching is disabled for now")
 def test_google_genai_prompt_caching_reduces_costs(
     db_session: Session,
 ) -> None:

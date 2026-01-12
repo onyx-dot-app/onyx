@@ -328,8 +328,8 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
             submitDisabled={!formikProps.isValid || !formikProps.dirty}
             isSubmitting={isSubmitting}
           >
-            <Form className="flex flex-col gap-0">
-              <div className="flex flex-col p-4 gap-4 bg-background-tint-01 w-full">
+            <Form className="w-full">
+              <div className="flex flex-col gap-4 w-full">
                 {children(childProps)}
               </div>
             </Form>

@@ -7,12 +7,7 @@ import {
 } from "@/app/chat/projects/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -21,7 +16,6 @@ import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { PopoverAnchor } from "@radix-ui/react-popover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -143,7 +137,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
 
       {/* Project Folder */}
       <Popover onOpenChange={setPopoverOpen}>
-        <PopoverAnchor>
+        <Popover.Anchor>
           <SidebarTab
             leftIcon={() => (
               <IconButton
@@ -161,7 +155,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
             focused={isEditing}
             rightChildren={
               <>
-                <PopoverTrigger asChild onClick={noProp()}>
+                <Popover.Trigger asChild onClick={noProp()}>
                   <div>
                     <IconButton
                       icon={SvgMoreHorizontal}
@@ -173,11 +167,11 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                       internal
                     />
                   </div>
-                </PopoverTrigger>
+                </Popover.Trigger>
 
-                <PopoverContent side="right" align="end">
+                <Popover.Content side="right" align="end">
                   <PopoverMenu>{popoverItems}</PopoverMenu>
-                </PopoverContent>
+                </Popover.Content>
               </>
             }
           >
@@ -191,7 +185,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
               project.name
             )}
           </SidebarTab>
-        </PopoverAnchor>
+        </Popover.Anchor>
       </Popover>
 
       {/* Project Chat-Sessions */}

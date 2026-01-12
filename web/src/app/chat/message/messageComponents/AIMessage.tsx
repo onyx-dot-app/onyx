@@ -61,6 +61,8 @@ import FeedbackModal, {
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+import Text from "@/refresh-components/texts/Text";
+import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -124,6 +126,7 @@ const AIMessage = React.memo(function AIMessage({
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
+  const handleTripleClick = useTripleClickSelect(markdownRef);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
@@ -535,7 +538,8 @@ const AIMessage = React.memo(function AIMessage({
         <div className="max-w-message-max break-words pl-4 w-full">
           <div
             ref={markdownRef}
-            className="overflow-x-visible max-w-content-max focus:outline-none select-text"
+            className="overflow-x-visible max-w-content-max focus:outline-none select-text cursor-text"
+            onMouseDown={handleTripleClick}
             onCopy={(e) => {
               if (markdownRef.current) {
                 handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
@@ -543,8 +547,14 @@ const AIMessage = React.memo(function AIMessage({
             }}
           >
             {groupedPackets.length === 0 ? (
-              // Show blinking dot when no content yet but message is generating
-              <BlinkingDot addMargin />
+              // Show blinking dot when no content yet, or stopped message if user cancelled
+              stopReason === StopReason.USER_CANCELLED ? (
+                <Text as="p" secondaryBody text04>
+                  User has stopped generation
+                </Text>
+              ) : (
+                <BlinkingDot addMargin />
+              )
             ) : (
               (() => {
                 // Simple split: tools vs non-tools
@@ -600,10 +610,18 @@ const AIMessage = React.memo(function AIMessage({
                           }}
                           animate={false}
                           stopPacketSeen={stopPacketSeen}
+                          stopReason={stopReason}
                         >
                           {({ content }) => <div>{content}</div>}
                         </RendererComponent>
                       ))}
+                      {/* Show stopped message when user cancelled and no display content */}
+                      {displayGroups.length === 0 &&
+                        stopReason === StopReason.USER_CANCELLED && (
+                          <Text as="p" secondaryBody text04>
+                            User has stopped generation
+                          </Text>
+                        )}
                     </div>
                   </>
                 );

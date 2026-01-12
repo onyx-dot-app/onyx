@@ -252,14 +252,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # Store session factory instead of session for thread-safety
         # When tools are called in parallel, each thread needs its own session
-        # TODO ensure this works!!!
         self._session_bind = db_session.get_bind()
         self._session_factory = sessionmaker(bind=self._session_bind)
 
         self._id = tool_id
 
     def _get_thread_safe_session(self) -> Session:
-        """Create a new database session for the current thread.
+        """Create a new database session for the current thread. Note this is only safe for the ORM caches/identity maps,
+        pending objects, flush state, etc. But it is still using the same underlying database connection.
 
         This ensures thread-safety when the search tool is called in parallel.
         Each parallel execution gets its own isolated database session with

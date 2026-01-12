@@ -8,7 +8,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
 
 export interface SimpleTooltipProps
   extends React.ComponentPropsWithoutRef<typeof TooltipContent> {
@@ -53,11 +52,7 @@ export default function SimpleTooltip({
           {triggerChild}
         </TooltipTrigger>
         {!disabled && (
-          <TooltipContent
-            side={side}
-            className={cn("max-w-[30rem]", className)}
-            {...rest}
-          >
+          <TooltipContent side={side} className={className} {...rest}>
             <Text as="p" textLight05>
               {hoverContent}
             </Text>

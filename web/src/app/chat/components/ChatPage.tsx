@@ -19,7 +19,7 @@ import ChatInputBar, {
   ChatInputBarHandle,
 } from "@/app/chat/components/input/ChatInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useCCPairs from "@/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
@@ -204,12 +204,13 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     hasAnyProvider: llmManager.hasAnyProvider,
     isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
+    userId: user?.id,
   });
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
-    return (ccPairs ?? []).map((ccPair) => ccPair.source);
+    return ccPairs.map((ccPair) => ccPair.source);
   }, [ccPairs]);
 
   const sources: SourceMetadata[] = useMemo(() => {
@@ -672,6 +673,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   currentProjectId === null && (
                     <OnboardingFlow
                       handleHideOnboarding={hideOnboarding}
+                      handleFinishOnboarding={finishOnboarding}
                       state={onboardingState}
                       actions={onboardingActions}
                       llmDescriptors={llmDescriptors}

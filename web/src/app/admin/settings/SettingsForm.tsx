@@ -320,7 +320,7 @@ export function SettingsForm() {
                 anyone to use Onyx without signing in.
               </p>
             </Modal.Body>
-            <Modal.Footer className="p-4 flex justify-end gap-2">
+            <Modal.Footer>
               <Button secondary onClick={() => setShowConfirmModal(false)}>
                 Cancel
               </Button>

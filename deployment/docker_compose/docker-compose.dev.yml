@@ -2,11 +2,11 @@
 # This file exposes service ports for development and testing purposes
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
 #
 # Or set COMPOSE_FILE environment variable:
 #   export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
-#   docker compose up -d
+#   docker compose up -d --wait
 
 services:
   api_server:
