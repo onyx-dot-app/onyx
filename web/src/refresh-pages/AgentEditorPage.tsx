@@ -630,6 +630,10 @@ export default function AgentEditorPage({
         existingAgent?.tools?.some((t) => t.id === openApiTool.id) ?? false,
       ])
     ),
+
+    // Sharing
+    shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
+    shared_group_ids: existingAgent?.groups ?? [],
   };
 
   const validationSchema = Yup.object().shape({
@@ -781,8 +785,8 @@ export default function AgentEditorPage({
         llm_model_provider_override: values.llm_model_provider_override || null,
         llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,
-        users: undefined, // TODO: Handle restricted access users
-        groups: [], // TODO: Handle groups
+        users: values.shared_user_ids,
+        groups: values.shared_group_ids,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
@@ -920,15 +924,6 @@ export default function AgentEditorPage({
   return (
     <>
       {popup}
-
-      <shareAgentModal.Provider>
-        <Modal
-          open={shareAgentModal.isOpen}
-          onOpenChange={shareAgentModal.toggle}
-        >
-          <ShareAgentModal agent={existingAgent} />
-        </Modal>
-      </shareAgentModal.Provider>
 
       <div
         data-testid="AgentsEditorPage/container"
@@ -1465,6 +1460,23 @@ export default function AgentEditorPage({
                     </SettingsLayouts.Body>
                   </SettingsLayouts.Root>
                 </Form>
+
+                <shareAgentModal.Provider>
+                  <Modal
+                    open={shareAgentModal.isOpen}
+                    onOpenChange={shareAgentModal.toggle}
+                  >
+                    <ShareAgentModal
+                      agent={existingAgent}
+                      initialUserIds={values.shared_user_ids}
+                      initialGroupIds={values.shared_group_ids}
+                      onShare={(userIds, groupIds) => {
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                      }}
+                    />
+                  </Modal>
+                </shareAgentModal.Provider>
               </>
             );
           }}

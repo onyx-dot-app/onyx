@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
 import {
   MinimalPersonaSnapshot,
   Persona,
 } from "@/app/admin/assistants/interfaces";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import { SvgLink, SvgOrganization, SvgShare, SvgUsers } from "@opal/icons";
-import { addUsersToAssistantSharedList } from "@/lib/assistants/shareAssistant";
+import {
+  SvgCheck,
+  SvgLink,
+  SvgOrganization,
+  SvgShare,
+  SvgUsers,
+} from "@opal/icons";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -18,133 +23,218 @@ import Separator from "@/refresh-components/Separator";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgUser } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
+import Text from "@/refresh-components/texts/Text";
 import useUsers from "@/hooks/useUsers";
-import useFilter from "@/hooks/useFilter";
+import useGroups from "@/hooks/useGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useUser } from "@/components/user/UserProvider";
+import useFilter from "@/hooks/useFilter";
+import { Formik } from "formik";
 
 export interface ShareAgentModalProps {
   agent?: MinimalPersonaSnapshot;
+  initialUserIds?: string[];
+  initialGroupIds?: number[];
+  onShare?: (userIds: string[], groupIds: number[]) => void;
 }
 
-export default function ShareAgentModal({ agent }: ShareAgentModalProps) {
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [isSharing, setIsSharing] = useState(false);
+export default function ShareAgentModal({
+  agent,
+  initialUserIds = [],
+  initialGroupIds = [],
+  onShare,
+}: ShareAgentModalProps) {
   const { data: usersData } = useUsers({ includeApiKeys: false });
-  const {
-    query: searchQuery,
-    setQuery: setSearchQuery,
-    filtered: filteredUsers,
-  } = useFilter(usersData?.accepted ?? [], (user) => user.email);
+  const { data: groupsData } = useGroups();
+  const { user: currentUser } = useUser();
   const shareAgentModal = useModal();
 
-  async function handleShare() {
-    if (selectedUserIds.length === 0) return;
-    setIsSharing(true);
+  // Filter out current user from the list
+  const usersWithoutCurrent = useMemo(
+    () =>
+      (usersData?.accepted ?? []).filter((user) => user.id !== currentUser?.id),
+    [usersData?.accepted, currentUser?.id]
+  );
 
-    try {
-      // Type assertion needed because addUsersToAssistantSharedList expects full Persona
-      // but works fine with MinimalPersonaSnapshot as it only needs id and users array
-      const error = await addUsersToAssistantSharedList(
-        agent as Persona,
-        selectedUserIds
-      );
-      if (error) return;
-
-      setSelectedUserIds([]);
-    } finally {
-      setIsSharing(false);
-    }
-  }
-
-  function handleClose() {
-    setSelectedUserIds([]);
-    shareAgentModal.toggle(false);
-  }
+  // Use separate useFilter for users and groups
+  const {
+    query,
+    setQuery: setUserSearchQuery,
+    filtered: filteredUsers,
+  } = useFilter(usersWithoutCurrent, (user) => user.email);
+  const { setQuery: setGroupSearchQuery, filtered: filteredGroups } = useFilter(
+    groupsData ?? [],
+    (group) => group.name
+  );
 
   function handleCopyLink() {
     if (!agent?.id) return;
 
     const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
     navigator.clipboard.writeText(url);
+    shareAgentModal.toggle(false);
   }
 
   return (
-    <Modal.Content tall>
-      <Modal.Header icon={SvgShare} title="Share Agent" onClose={handleClose} />
+    <Formik
+      initialValues={{
+        selectedUserIds: initialUserIds,
+        selectedGroupIds: initialGroupIds,
+      }}
+      onSubmit={(values) => {
+        onShare?.(values.selectedUserIds, values.selectedGroupIds);
+        shareAgentModal.toggle(false);
+      }}
+      enableReinitialize
+    >
+      {({ values, setFieldValue, handleSubmit, resetForm, dirty }) => {
+        function handleClose() {
+          resetForm();
+          shareAgentModal.toggle(false);
+        }
 
-      <Modal.Body padding={0.5}>
-        <Card borderless padding={0.5}>
-          <Tabs defaultValue="Users & Groups">
-            <Tabs.List>
-              <Tabs.Trigger icon={SvgUsers} value="Users & Groups">
-                Users &amp; Groups
-              </Tabs.Trigger>
-              <Tabs.Trigger icon={SvgOrganization} value="Your Organization">
-                Your Organization
-              </Tabs.Trigger>
-            </Tabs.List>
+        return (
+          <Modal.Content tall>
+            <Modal.Header
+              icon={SvgShare}
+              title="Share Agent"
+              onClose={handleClose}
+            />
 
-            <Tabs.Content value="Users & Groups">
-              <Section gap={0.5} alignItems="start">
-                <InputTypeIn
-                  placeholder="Add users, groups, and accounts"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                {filteredUsers.length > 0 && (
-                  <Section gap={0.25} alignItems="start">
-                    {filteredUsers.map((user) => (
-                      <LineItem key={user.id} icon={SvgUser}>
-                        {user.email}
-                      </LineItem>
-                    ))}
-                  </Section>
-                )}
-              </Section>
-            </Tabs.Content>
-            <Tabs.Content value="Your Organization" padding={0.5}>
-              <InputLayouts.Horizontal
-                label="Publish This Agent"
-                description="Make this agent available to everyone in your organization."
-              >
-                <Switch />
-              </InputLayouts.Horizontal>
-              <Separator noPadding />
-              <InputLayouts.Horizontal
-                label="Feature This Agent"
-                description="Show this agent in the featured section in the explore list for everyone in your organization. This will also pin the agent for any new users."
-              >
-                <Switch />
-              </InputLayouts.Horizontal>
-            </Tabs.Content>
-          </Tabs>
-        </Card>
-      </Modal.Body>
+            <Modal.Body padding={0.5}>
+              <Card borderless padding={0.5}>
+                <Tabs defaultValue="Users & Groups">
+                  <Tabs.List>
+                    <Tabs.Trigger icon={SvgUsers} value="Users & Groups">
+                      Users &amp; Groups
+                    </Tabs.Trigger>
+                    <Tabs.Trigger
+                      icon={SvgOrganization}
+                      value="Your Organization"
+                    >
+                      Your Organization
+                    </Tabs.Trigger>
+                  </Tabs.List>
 
-      <Modal.Footer>
-        <BasicModalFooter
-          left={
-            agent ? (
-              <Button secondary leftIcon={SvgLink} onClick={handleCopyLink}>
-                Copy Link
-              </Button>
-            ) : undefined
-          }
-          cancel={
-            <Button secondary onClick={handleClose} disabled={isSharing}>
-              Done
-            </Button>
-          }
-          submit={
-            <Button
-              onClick={handleShare}
-              disabled={selectedUserIds.length === 0 || isSharing}
-            >
-              Share
-            </Button>
-          }
-        />
-      </Modal.Footer>
-    </Modal.Content>
+                  <Tabs.Content value="Users & Groups">
+                    <Section gap={0.5} alignItems="start">
+                      <InputTypeIn
+                        placeholder="Add users, groups, and accounts"
+                        value={query}
+                        onChange={(e) => {
+                          setUserSearchQuery(query);
+                          setGroupSearchQuery(query);
+                        }}
+                      />
+                      {(filteredUsers.length > 0 ||
+                        filteredGroups.length > 0) && (
+                        <Section gap={0.25} alignItems="stretch">
+                          {filteredUsers.map((user) => {
+                            const isSelected = values.selectedUserIds.includes(
+                              user.id
+                            );
+                            const isOwner = agent?.owner?.id === user.id;
+                            return (
+                              <LineItem
+                                key={`user-${user.id}`}
+                                icon={isSelected ? SvgCheck : SvgUser}
+                                selected={isSelected}
+                                onClick={() => {
+                                  const newUserIds = isSelected
+                                    ? values.selectedUserIds.filter(
+                                        (id) => id !== user.id
+                                      )
+                                    : [...values.selectedUserIds, user.id];
+                                  setFieldValue("selectedUserIds", newUserIds);
+                                }}
+                                rightChildren={
+                                  isOwner ? (
+                                    <Text as="p" mainUiMuted text03>
+                                      Owner
+                                    </Text>
+                                  ) : undefined
+                                }
+                              >
+                                {user.email}
+                              </LineItem>
+                            );
+                          })}
+                          {filteredGroups.map((group) => {
+                            const isSelected = values.selectedGroupIds.includes(
+                              group.id
+                            );
+                            return (
+                              <LineItem
+                                key={`group-${group.id}`}
+                                icon={isSelected ? SvgCheck : SvgUsers}
+                                selected={isSelected}
+                                onClick={() => {
+                                  const newGroupIds = isSelected
+                                    ? values.selectedGroupIds.filter(
+                                        (id) => id !== group.id
+                                      )
+                                    : [...values.selectedGroupIds, group.id];
+                                  setFieldValue(
+                                    "selectedGroupIds",
+                                    newGroupIds
+                                  );
+                                }}
+                              >
+                                {group.name}
+                              </LineItem>
+                            );
+                          })}
+                        </Section>
+                      )}
+                    </Section>
+                  </Tabs.Content>
+                  <Tabs.Content value="Your Organization" padding={0.5}>
+                    <InputLayouts.Horizontal
+                      label="Publish This Agent"
+                      description="Make this agent available to everyone in your organization."
+                    >
+                      <Switch />
+                    </InputLayouts.Horizontal>
+                    <Separator noPadding />
+                    <InputLayouts.Horizontal
+                      label="Feature This Agent"
+                      description="Show this agent in the featured section in the explore list for everyone in your organization. This will also pin the agent for any new users."
+                    >
+                      <Switch />
+                    </InputLayouts.Horizontal>
+                  </Tabs.Content>
+                </Tabs>
+              </Card>
+            </Modal.Body>
+
+            <Modal.Footer>
+              <BasicModalFooter
+                left={
+                  agent ? (
+                    <Button
+                      secondary
+                      leftIcon={SvgLink}
+                      onClick={handleCopyLink}
+                    >
+                      Copy Link
+                    </Button>
+                  ) : undefined
+                }
+                cancel={
+                  <Button secondary onClick={handleClose}>
+                    Done
+                  </Button>
+                }
+                submit={
+                  <Button onClick={() => handleSubmit()} disabled={!dirty}>
+                    Share
+                  </Button>
+                }
+              />
+            </Modal.Footer>
+          </Modal.Content>
+        );
+      }}
+    </Formik>
   );
 }
