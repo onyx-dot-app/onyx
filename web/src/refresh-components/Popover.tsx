@@ -104,7 +104,7 @@ interface PopoverContentProps
   wide?: boolean;
 }
 const PopoverContent = React.forwardRef<
-  React.ElementRef<typeof PopoverPrimitive.Content>,
+  React.ComponentRef<typeof PopoverPrimitive.Content>,
   PopoverContentProps
 >(({ wide, align = "center", sideOffset = 4, ...props }, ref) => {
   const width = wide ? "wide" : "main";
@@ -133,8 +133,8 @@ function SeparatorHelper() {
 }
 
 const sizeClasses = {
-  small: ["w-[10rem]"],
-  medium: ["w-[15.5rem]"],
+  small: "w-[10rem]",
+  medium: "w-[15.5rem]",
 };
 
 export default Object.assign(PopoverRoot, {
