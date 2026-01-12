@@ -24,11 +24,6 @@
 import { cn, ensureHrefProtocol } from "@/lib/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import useChatSessions from "@/hooks/useChatSessions";
-import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
-import useScreenSize from "@/hooks/useScreenSize";
-import { SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
@@ -102,26 +97,6 @@ function AppFooter() {
 }
 
 /**
- * Sidebar toggle shown on small screens when no chat session is active.
- * ChatHeader handles this when a chat session exists.
- */
-function SmallScreenSidebarFallback() {
-  const { isMobile } = useScreenSize();
-  const { setFolded } = useAppSidebarContext();
-  const { currentChatSessionId } = useChatSessions();
-
-  // Only show on small screens when there's no chat session
-  // (ChatHeader handles the sidebar toggle when chat session exists)
-  if (!isMobile || currentChatSessionId) return null;
-
-  return (
-    <div className="w-full py-3 px-4 h-16">
-      <IconButton icon={SvgSidebar} onClick={() => setFolded(false)} internal />
-    </div>
-  );
-}
-
-/**
  * App Root Component
  *
  * Wraps chat pages with custom footer.
@@ -150,7 +125,6 @@ function AppRoot({ children }: AppRootProps) {
       breakout of their immediate containers using cqw units.
     */
     <div className="@container flex flex-col h-full w-full">
-      <SmallScreenSidebarFallback />
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
       <AppFooter />
     </div>
