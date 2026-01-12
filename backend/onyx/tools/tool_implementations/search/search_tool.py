@@ -703,11 +703,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 : override_kwargs.num_hits
             ]
 
-            # Convert InferenceSections to SearchDocs for emission
-            search_docs = convert_inference_sections_to_search_docs(
-                top_sections, is_internet=False
-            )
-
             secondary_flows_user_query = (
                 override_kwargs.original_query
                 or semantic_query
@@ -844,12 +839,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 f"document expansion: {document_expansion_elapsed:.3f}s)"
             )
 
-            # TODO: extension - this can include the smaller set of approved docs to be saved/displayed in the UI
-            # for replaying. Currently the full set is returned and saved.
             return ToolResponse(
-                # Typically the rich response will give more docs in case it needs to be displayed in the UI
+                # Return only the LLM-selected docs for UI display and replay consistency
                 rich_response=SearchDocsResponse(
-                    search_docs=search_docs, citation_mapping=citation_mapping
+                    search_docs=final_ui_docs, citation_mapping=citation_mapping
                 ),
                 # The LLM facing response typically includes less docs to cut down on noise and token usage
                 llm_facing_response=docs_str,
