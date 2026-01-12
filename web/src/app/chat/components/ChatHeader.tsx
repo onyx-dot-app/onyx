@@ -265,7 +265,9 @@ export default function ChatHeader() {
       )}
 
       {(isMobile || customHeaderContent || currentChatSessionId) && (
-        <StickyHeader>
+        <StickyHeader
+          className={cn(!customHeaderContent && "2xl:bg-transparent")}
+        >
           {/* Left - contains the icon-button to fold the AppSidebar on small screens */}
           <div className="flex-1">
             <IconButton

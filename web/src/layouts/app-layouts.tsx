@@ -67,7 +67,7 @@ function StickyHeader({ children, className }: StickyHeaderProps) {
   return (
     <header
       className={cn(
-        "sticky top-0 z-sticky w-full flex flex-row justify-center items-center py-3 px-4 h-16 bg-background-tint-01 2xl:bg-transparent",
+        "sticky top-0 z-sticky w-full flex flex-row justify-center items-center py-3 px-4 h-16 bg-background-tint-01",
         className
       )}
     >
