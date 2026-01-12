@@ -1,3 +1,5 @@
+"use client";
+
 import {
   type User,
   UserRole,
@@ -26,7 +28,6 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   Select,
   SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -35,13 +36,7 @@ import { useUser } from "@/components/user/UserProvider";
 import { LeaveOrganizationButton } from "./buttons/LeaveOrganizationButton";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import ResetPasswordModal from "./ResetPasswordModal";
-import {
-  MoreHorizontal,
-  LogOut,
-  UserMinus,
-  UserX,
-  KeyRound,
-} from "lucide-react";
+import { LogOut, UserMinus } from "lucide-react";
 import Popover from "@/refresh-components/Popover";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgKey, SvgMoreHorizontal } from "@opal/icons";
@@ -265,7 +260,7 @@ export default function SignedUpUserTable({
         <Popover.Trigger asChild>
           <IconButton secondary icon={SvgMoreHorizontal} />
         </Popover.Trigger>
-        <Popover.Content className="w-48">
+        <Popover.Content wide>
           <div className="grid gap-1">
             {NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
               <LeaveOrganizationButton

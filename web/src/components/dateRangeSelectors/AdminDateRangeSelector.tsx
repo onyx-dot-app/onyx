@@ -64,7 +64,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
               : "Pick a date range"}
           </Button>
         </Popover.Trigger>
-        <Popover.Content className="w-auto p-0" align="start">
+        <Popover.Content align="start">
           <Calendar
             initialFocus
             mode="range"

@@ -124,7 +124,7 @@ function GenerateReportInput({
               )}
             </Button>
           </Popover.Trigger>
-          <Popover.Content className="w-auto p-0" align="start">
+          <Popover.Content align="start">
             <Calendar
               initialFocus
               mode="range"

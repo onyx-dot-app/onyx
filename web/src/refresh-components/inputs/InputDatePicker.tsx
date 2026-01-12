@@ -6,6 +6,7 @@ import Popover from "@/refresh-components/Popover";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useState } from "react";
 import { SvgCalendar } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
 
 export interface InputDatePickerProps {
   selectedDate: Date | null;
@@ -41,50 +42,52 @@ export default function InputDatePicker({
           {selectedDate ? selectedDate.toLocaleDateString() : "Select Date"}
         </Button>
       </Popover.Trigger>
-      <Popover.Content className="flex w-full flex-col items-center p-2 gap-3 data-[state=open]:animate-fade-in-scale data-[state=closed]:animate-fade-out-scale">
-        <div className="flex flex-row items-center justify-center gap-2 w-full">
-          <InputSelect
-            value={`${extractYear(displayedMonth)}`}
-            onValueChange={(value) => {
-              const year = parseInt(value);
-              setDisplayedMonth(new Date(year, 0));
+      <Popover.Content>
+        <Section padding={0.25}>
+          <Section flexDirection="row" gap={0.5}>
+            <InputSelect
+              value={`${extractYear(displayedMonth)}`}
+              onValueChange={(value) => {
+                const year = parseInt(value);
+                setDisplayedMonth(new Date(year, 0));
+              }}
+            >
+              <InputSelect.Trigger />
+              <InputSelect.Content>
+                {years.map((year) => (
+                  <InputSelect.Item key={year} value={`${year}`}>
+                    {year}
+                  </InputSelect.Item>
+                ))}
+              </InputSelect.Content>
+            </InputSelect>
+            <Button
+              onClick={() => {
+                const now = new Date();
+                setSelectedDate(now);
+                setDisplayedMonth(now);
+                setOpen(false);
+              }}
+            >
+              Today
+            </Button>
+          </Section>
+          <Calendar
+            mode="single"
+            selected={selectedDate ?? undefined}
+            onSelect={(date) => {
+              if (date) {
+                setSelectedDate(date);
+                setOpen(false);
+              }
             }}
-          >
-            <InputSelect.Trigger />
-            <InputSelect.Content>
-              {years.map((year) => (
-                <InputSelect.Item key={year} value={`${year}`}>
-                  {year}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
-          <Button
-            onClick={() => {
-              const now = new Date();
-              setSelectedDate(now);
-              setDisplayedMonth(now);
-              setOpen(false);
-            }}
-          >
-            Today
-          </Button>
-        </div>
-        <Calendar
-          mode="single"
-          selected={selectedDate ?? undefined}
-          onSelect={(date) => {
-            if (date) {
-              setSelectedDate(date);
-              setOpen(false);
-            }
-          }}
-          month={displayedMonth}
-          onMonthChange={setDisplayedMonth}
-          fromDate={new Date(validStartYear, 0)}
-          toDate={new Date()}
-          showOutsideDays={false}
-        />
+            month={displayedMonth}
+            onMonthChange={setDisplayedMonth}
+            fromDate={new Date(validStartYear, 0)}
+            toDate={new Date()}
+            showOutsideDays={false}
+          />
+        </Section>
       </Popover.Content>
     </Popover>
   );

@@ -28,6 +28,7 @@ import {
   SvgRefreshCw,
 } from "@opal/icons";
 import { IconProps } from "@/components/icons/icons";
+import { Section } from "@/layouts/general-layouts";
 
 interface LLMOption {
   name: string;
@@ -388,8 +389,8 @@ export default function LLMPopover({
           </SelectButton>
         </div>
       </Popover.Trigger>
-      <Popover.Content side="top" align="end" className="w-[280px] p-1.5">
-        <div className="flex flex-col gap-2">
+      <Popover.Content wide>
+        <Section gap={0.5}>
           {/* Search Input */}
           <InputTypeIn
             ref={searchInputRef}
@@ -517,7 +518,7 @@ export default function LLMPopover({
               </div>
             </>
           )}
-        </div>
+        </Section>
       </Popover.Content>
     </Popover>
   );
