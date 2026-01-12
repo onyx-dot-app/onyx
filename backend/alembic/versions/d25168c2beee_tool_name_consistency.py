@@ -17,20 +17,19 @@ branch_labels = None
 depends_on = None
 
 
-# Mapping of in_code_tool_id to the NAME constant from each tool class
-# These are the currently seeded tool names
-CURRENT_TOOL_NAME_MAPPING = {
-    "SearchTool": "SearchTool",
-    "WebSearchTool": "WebSearchTool",
-    "ImageGenerationTool": "ImageGenerationTool",
-    "PythonTool": "PythonTool",
-    "OpenURLTool": "OpenURLTool",
-    "KnowledgeGraphTool": "KnowledgeGraphTool",
-    "ResearchAgent": "ResearchAgent",
-}
+# Currently the seeded tools have the in_code_tool_id == name
+CURRENT_TOOL_NAME_MAPPING = [
+    "SearchTool",
+    "WebSearchTool",
+    "ImageGenerationTool",
+    "PythonTool",
+    "OpenURLTool",
+    "KnowledgeGraphTool",
+    "ResearchAgent",
+]
 
-# Mapping of in_code_tool_id to the NAME constant from each tool class
-# These are the expected tool names
+# Mapping of in_code_tool_id -> name
+# These are the expected names that we want in the database
 EXPECTED_TOOL_NAME_MAPPING = {
     "SearchTool": "internal_search",
     "WebSearchTool": "web_search",
@@ -71,7 +70,7 @@ def downgrade() -> None:
 
     # Reverse the migration by setting name back to in_code_tool_id
     # This matches the original pattern where name was the class name
-    for in_code_tool_id, current_name in CURRENT_TOOL_NAME_MAPPING.items():
+    for in_code_tool_id in CURRENT_TOOL_NAME_MAPPING:
         conn.execute(
             sa.text(
                 """
@@ -81,7 +80,7 @@ def downgrade() -> None:
                 """
             ),
             {
-                "current_name": current_name,
+                "current_name": in_code_tool_id,
                 "in_code_tool_id": in_code_tool_id,
             },
         )
