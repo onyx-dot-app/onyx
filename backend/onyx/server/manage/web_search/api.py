@@ -97,26 +97,25 @@ def upsert_search_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key to content provider - atomic upsert to avoid race conditions
+    # Sync Exa key of search engine to content provider
     if (
         request.provider_type == WebSearchProviderType.EXA
         and request.api_key_changed
         and request.api_key
     ):
-        stmt = (
-            insert(InternetContentProvider)
-            .values(
+        existing_content_provider = fetch_web_content_provider_by_type(
+            WebContentProviderType.EXA, db_session
+        )
+        if existing_content_provider:
+            existing_content_provider.api_key = request.api_key
+        else:
+            stmt = insert(InternetContentProvider).values(
                 name="Exa",
                 provider_type=WebContentProviderType.EXA.value,
                 api_key=request.api_key,
                 is_active=False,
             )
-            .on_conflict_do_update(
-                index_elements=["name"],
-                set_={"api_key": request.api_key},
-            )
-        )
-        db_session.execute(stmt)
+            db_session.execute(stmt)
         db_session.flush()
 
     db_session.commit()
@@ -270,26 +269,25 @@ def upsert_content_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key to search provider - atomic upsert to avoid race conditions
+    # Sync Exa key of content provider to search provider
     if (
         request.provider_type == WebContentProviderType.EXA
         and request.api_key_changed
         and request.api_key
     ):
-        stmt = (
-            insert(InternetSearchProvider)
-            .values(
+        existing_search_provider = fetch_web_search_provider_by_type(
+            WebSearchProviderType.EXA, db_session
+        )
+        if existing_search_provider:
+            existing_search_provider.api_key = request.api_key
+        else:
+            stmt = insert(InternetSearchProvider).values(
                 name="Exa",
                 provider_type=WebSearchProviderType.EXA.value,
                 api_key=request.api_key,
                 is_active=False,
             )
-            .on_conflict_do_update(
-                index_elements=["name"],
-                set_={"api_key": request.api_key},
-            )
-        )
-        db_session.execute(stmt)
+            db_session.execute(stmt)
         db_session.flush()
 
     db_session.commit()
