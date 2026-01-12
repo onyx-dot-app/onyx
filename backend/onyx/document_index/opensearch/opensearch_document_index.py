@@ -3,6 +3,9 @@ import json
 import httpx
 
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    get_experts_stores_representations,
+)
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -59,10 +62,7 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         content=chunk.content,
         source_links=json.loads(chunk.source_links) if chunk.source_links else None,
         image_file_id=chunk.image_file_id,
-        # TODO(andrei) Yuhong says he doesn't think we need that anymore. Used
-        # if a section needed to be split into diff chunks. A section is a part
-        # of a doc that a link will take you to. But don't chunks have their own
-        # links? Look at this in a followup.
+        # Deprecated. Fill in some reasonable default.
         section_continuation=False,
         document_id=chunk.document_id,
         source_type=DocumentSource(chunk.source_type),
@@ -77,27 +77,20 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         # a search result, do that in a followup.
         score=None,
         hidden=chunk.hidden,
-        # TODO(andrei): Don't worry about these for now.
-        # is_relevant
-        # relevance_explanation
-        # TODO(andrei): Same comment as in
-        # _convert_onyx_chunk_to_opensearch_document.
         metadata=json.loads(chunk.metadata),
         # TODO(andrei): The vector DB needs to supply this. I vaguely know
         # OpenSearch can from the documentation I've seen till now, look at this
         # in a followup.
         match_highlights=[],
-        # TODO(andrei) This content is not queried on, it is only used to clean
-        # appended content to chunks. Consider storing a chunk content index
-        # instead of a full string when working on chunk content augmentation.
-        doc_summary="",
+        # TODO(andrei) Consider storing a chunk content index instead of a full
+        # string when working on chunk content augmentation.
+        doc_summary=chunk.doc_summary,
         # TODO(andrei) Same thing as contx ret above, LLM gens context for each
         # chunk.
-        chunk_context="",
+        chunk_context=chunk.chunk_context,
         updated_at=chunk.last_updated,
-        # primary_owners TODO(andrei)
-        # secondary_owners TODO(andrei)
-        # large_chunk_reference_ids TODO(andrei): Don't worry about this one.
+        primary_owners=chunk.primary_owners,
+        secondary_owners=chunk.secondary_owners,
         # TODO(andrei): This is the suffix appended to the end of the chunk
         # content to assist querying. There are better ways we can do this, for
         # ex. keeping an index of where to string split from.
@@ -122,29 +115,26 @@ def _convert_onyx_chunk_to_opensearch_document(
         title_vector=chunk.title_embedding,
         content=chunk.content,
         content_vector=chunk.embeddings.full_embedding,
-        # TODO(andrei): We should know this. Reason to have this is convenience,
-        # but it could also change when you change your embedding model, maybe
-        # we can remove it, Yuhong to look at this. Hardcoded to some nonsense
-        # value for now.
-        num_tokens=0,
         source_type=chunk.source_document.source.value,
         metadata=json.dumps(chunk.source_document.metadata),
         last_updated=chunk.source_document.doc_updated_at,
-        # TODO(andrei): Don't currently see an easy way of porting this, and
-        # besides some connectors genuinely don't have this data. Look at this
-        # closer in a followup. Always defaults to None for now.
-        # created_at=None,
         public=chunk.access.is_public,
         access_control_list=list(chunk.access.to_acl()),
         global_boost=chunk.boost,
         semantic_identifier=chunk.source_document.semantic_identifier,
-        # TODO(andrei): Ask Chris more about this later. Always defaults to None
-        # for now.
-        image_file_id=None,
+        image_file_id=chunk.image_file_id,
         source_links=json.dumps(chunk.source_links) if chunk.source_links else None,
         blurb=chunk.blurb,
+        doc_summary=chunk.doc_summary,
+        chunk_context=chunk.chunk_context,
         document_sets=list(chunk.document_sets) if chunk.document_sets else None,
         project_ids=list(chunk.user_project) if chunk.user_project else None,
+        primary_owners=get_experts_stores_representations(
+            chunk.source_document.primary_owners
+        ),
+        secondary_owners=get_experts_stores_representations(
+            chunk.source_document.secondary_owners
+        ),
         # TODO(andrei): Consider not even getting this from
         # DocMetadataAwareIndexChunk and instead using OpenSearchDocumentIndex's
         # instance variable. One source of truth -> less chance of a very bad
