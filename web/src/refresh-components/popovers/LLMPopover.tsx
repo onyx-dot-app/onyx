@@ -402,16 +402,10 @@ export default function LLMPopover({
           />
 
           {/* Model List with Vendor Groups */}
-          <PopoverMenu
-            scrollContainerRef={scrollContainerRef}
-            className="w-full max-h-[22.5rem]"
-          >
+          <PopoverMenu scrollContainerRef={scrollContainerRef}>
             {isLoadingProviders
               ? [
-                  <div
-                    key="loading"
-                    className="flex items-center gap-2 px-2 py-3"
-                  >
+                  <div key="loading" className="flex items-center gap-2 py-3">
                     <SimpleLoader />
                     <Text secondaryBody text03>
                       Loading models...
@@ -420,7 +414,7 @@ export default function LLMPopover({
                 ]
               : groupedOptions.length === 0
                 ? [
-                    <div key="empty" className="px-2 py-3">
+                    <div key="empty" className="py-3">
                       <Text secondaryBody text03>
                         No models found
                       </Text>
@@ -456,7 +450,7 @@ export default function LLMPopover({
                               className="border-none pt-1"
                             >
                               {/* Group Header */}
-                              <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1 px-1.5">
+                              <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1">
                                 <div className="flex items-center gap-1 shrink-0">
                                   <div className="flex items-center justify-center size-5 shrink-0">
                                     <group.Icon size={16} />
@@ -497,7 +491,7 @@ export default function LLMPopover({
           {user?.preferences?.temperature_override_enabled && (
             <>
               <div className="border-t border-border-02 mx-2" />
-              <div className="flex flex-col w-full py-2 px-2 gap-2">
+              <div className="flex flex-col w-full py-2 gap-2">
                 <Slider
                   value={[localTemperature]}
                   max={llmManager.maxTemperature}

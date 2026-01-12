@@ -4,7 +4,7 @@ import React, { forwardRef } from "react";
 
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
-export type AlignItems = "start" | "center" | "end";
+export type AlignItems = "start" | "center" | "end" | "stretch";
 
 const directionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
@@ -20,6 +20,7 @@ const alignClassMap: Record<AlignItems, string> = {
   start: "items-start",
   center: "items-center",
   end: "items-end",
+  stretch: "items-stretch",
 };
 
 /**
