@@ -56,3 +56,6 @@ node_modules
 
 # plans
 plans/
+
+# CSV files (data files that shouldn't be tracked)
+*.csv
