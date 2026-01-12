@@ -1528,23 +1528,27 @@ export default function AgentEditorPage({
                         </GeneralLayouts.Section>
                       </SimpleCollapsible>
 
-                      <Separator noPadding />
+                      {existingAgent && (
+                        <>
+                          <Separator noPadding />
 
-                      <Card>
-                        <InputLayouts.Horizontal
-                          label="Delete This Agent"
-                          description="Anyone using this agent will no longer be able to access it."
-                          center
-                        >
-                          <Button
-                            secondary
-                            danger
-                            onClick={() => deleteAgentModal.toggle(true)}
-                          >
-                            Delete Agent
-                          </Button>
-                        </InputLayouts.Horizontal>
-                      </Card>
+                          <Card>
+                            <InputLayouts.Horizontal
+                              label="Delete This Agent"
+                              description="Anyone using this agent will no longer be able to access it."
+                              center
+                            >
+                              <Button
+                                secondary
+                                danger
+                                onClick={() => deleteAgentModal.toggle(true)}
+                              >
+                                Delete Agent
+                              </Button>
+                            </InputLayouts.Horizontal>
+                          </Card>
+                        </>
+                      )}
                     </SettingsLayouts.Body>
                   </SettingsLayouts.Root>
                 </Form>
