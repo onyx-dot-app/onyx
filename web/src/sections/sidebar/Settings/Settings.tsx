@@ -212,7 +212,7 @@ export default function Settings({ folded }: SettingsProps) {
             </SidebarTab>
           </div>
         </Popover.Trigger>
-        <Popover.Content align="end" side="right" medium>
+        <Popover.Content align="end" side="right" medium={popupState === "Settings"}>
           {popupState === "Settings" && (
             <SettingsPopover
               onClose={() => setPopupState(undefined)}
