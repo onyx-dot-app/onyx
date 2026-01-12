@@ -89,7 +89,9 @@ def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry
         ]
     elif "nightly" in __version__:
         # Just show the latest entry for nightly versions
-        entries = all_entries[:1]
+        entries = sorted(
+            all_entries, key=lambda x: parse_version_tuple(x.version), reverse=True
+        )[:1]
     else:
         # If not recognized version
         # likely `development` and we should show all entries
