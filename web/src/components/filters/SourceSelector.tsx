@@ -16,8 +16,7 @@ import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateR
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import Calendar from "@/refresh-components/Calendar";
-import { Popover, PopoverTrigger } from "@/components/ui/popover";
-import { PopoverContent } from "@radix-ui/react-popover";
+import Popover from "@/refresh-components/Popover";
 import { CalendarIcon } from "lucide-react";
 import { getTimeAgoString } from "@/lib/dateUtils";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
@@ -271,7 +270,7 @@ export function HorizontalSourceSelector({
   return (
     <div className="flex flex-nowrap  space-x-2">
       <Popover>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <div
             className={`
               border
@@ -298,8 +297,8 @@ export function HorizontalSourceSelector({
 
             {timeRange?.from ? getTimeAgoString(timeRange.from) : "Since"}
           </div>
-        </PopoverTrigger>
-        <PopoverContent
+        </Popover.Trigger>
+        <Popover.Content
           className="bg-background-search-filter border-border border rounded-md z-[200] p-0"
           align="start"
         >
@@ -321,7 +320,7 @@ export function HorizontalSourceSelector({
             }}
             className="rounded-md"
           />
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
 
       {existingSources.length > 0 && (

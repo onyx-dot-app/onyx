@@ -1,9 +1,5 @@
 import React from "react";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover"; // shadcn popover
+import Popover from "@/refresh-components/Popover";
 import { FiBook, FiMap, FiTag, FiCalendar } from "react-icons/fi";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import Calendar from "@/refresh-components/Calendar";
@@ -94,7 +90,7 @@ export function HorizontalSourceSelector({
     <div className="flex flex-row flex-wrap items-center space-x-2">
       {/* Date Range Popover */}
       <Popover>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <button
             className="
               flex items-center space-x-1 border
@@ -110,8 +106,8 @@ export function HorizontalSourceSelector({
                 : "Date Range"}
             </span>
           </button>
-        </PopoverTrigger>
-        <PopoverContent
+        </Popover.Trigger>
+        <Popover.Content
           className="bg-background-search-filter border border-border rounded-md z-[200] p-2"
           align="start"
         >
@@ -133,7 +129,7 @@ export function HorizontalSourceSelector({
             }}
             className="rounded-md"
           />
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
 
       {/* Sources Popover */}

@@ -7,12 +7,7 @@ import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/app/chat/projects/projectsService";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverMenu,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { FiMoreHorizontal } from "react-icons/fi";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCallback, useState, useMemo } from "react";
@@ -216,7 +211,7 @@ export function ChatSessionMorePopup({
     <div>
       <div className="-my-1">
         <Popover open={popoverOpen} onOpenChange={handlePopoverOpenChange}>
-          <PopoverTrigger
+          <Popover.Trigger
             asChild
             onClick={(event) => {
               event.preventDefault();
@@ -234,15 +229,15 @@ export function ChatSessionMorePopup({
             >
               <FiMoreHorizontal size={iconSize} />
             </div>
-          </PopoverTrigger>
-          <PopoverContent
+          </Popover.Trigger>
+          <Popover.Content
             align="end"
             side="right"
             avoidCollisions
             sideOffset={8}
           >
             <PopoverMenu>{popoverItems}</PopoverMenu>
-          </PopoverContent>
+          </Popover.Content>
         </Popover>
       </div>
       {isDeleteModalOpen && (

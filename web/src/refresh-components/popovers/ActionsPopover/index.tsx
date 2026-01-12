@@ -7,12 +7,7 @@ import {
   WEB_SEARCH_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
 import { useState, useEffect } from "react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import SwitchList, {
   SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/SwitchList";
@@ -702,7 +697,7 @@ export default function ActionsPopover({
   return (
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <div data-testid="action-management-toggle">
             <IconButton
               icon={SvgSliders}
@@ -712,8 +707,8 @@ export default function ActionsPopover({
               disabled={disabled}
             />
           </div>
-        </PopoverTrigger>
-        <PopoverContent side="bottom" align="start">
+        </Popover.Trigger>
+        <Popover.Content side="bottom" align="start">
           <div data-testid="tool-options">
             {secondaryView
               ? secondaryView.type === "mcp"
@@ -721,7 +716,7 @@ export default function ActionsPopover({
                 : toolsView
               : primaryView}
           </div>
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
 
       {/* MCP API Key Modal */}
