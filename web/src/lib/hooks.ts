@@ -1016,23 +1016,26 @@ export function useSourcePreferences({
         // Filter out saved sources that no longer exist
         const { sourcePreferences } = savedSources;
 
-        const validSources = configuredSources.filter(
-          (source: SourceMetadata) => source.uniqueKey !== undefined
-        );
+        // Helper to check if there is a preference for a key
+        const hasPref = (key: string) =>
+          Object.prototype.hasOwnProperty.call(sourcePreferences, key);
 
-        // Find new sources that weren't in the previous saving
-        const oldSources = new Set(
-          validSources.map((s: SourceMetadata) => s.uniqueKey)
-        );
+        // Get sources with no preference
         const newSources = configuredSources.filter(
-          (availableSource) => !oldSources.has(availableSource.uniqueKey)
+          (source: SourceMetadata) => {
+            if (!source.uniqueKey) return true;
+            return !hasPref(source.uniqueKey);
+          }
         );
 
-        // Find sources that were enabled in the previous preference
-        const enabledSources = validSources.filter((source: SourceMetadata) => {
-          if (!source.uniqueKey) return true; // Enable by default if key missing
-          return sourcePreferences[source.uniqueKey];
-        });
+        const enabledSources = configuredSources.filter(
+          (source: SourceMetadata) => {
+            if (!source.uniqueKey) return true;
+            return (
+              hasPref(source.uniqueKey) && sourcePreferences[source.uniqueKey]
+            );
+          }
+        );
 
         // Merge valid saved sources with new sources (enable new sources by default)
         const mergedSources = [...enabledSources, ...newSources];
