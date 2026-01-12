@@ -136,6 +136,17 @@ export default function Page() {
 
   const isLoading = isLoadingSearchProviders || isLoadingContentProviders;
 
+  // Exa shares API key between search and content providers
+  const exaSearchProvider = searchProviders.find(
+    (p) => p.provider_type === "exa"
+  );
+  const exaContentProvider = contentProviders.find(
+    (p) => p.provider_type === "exa"
+  );
+  const hasSharedExaKey =
+    (exaSearchProvider?.has_api_key || exaContentProvider?.has_api_key) ??
+    false;
+
   // Modal form state is owned by reducers
 
   const openSearchModal = (
@@ -316,17 +327,6 @@ export default function Page() {
       </div>
     );
   };
-
-  // Exa shares API key between search and content providers
-  const exaSearchProvider = searchProviders.find(
-    (p) => p.provider_type === "exa"
-  );
-  const exaContentProvider = contentProviders.find(
-    (p) => p.provider_type === "exa"
-  );
-  const hasSharedExaKey =
-    (exaSearchProvider?.has_api_key || exaContentProvider?.has_api_key) ??
-    false;
 
   const combinedContentProviders = useMemo(() => {
     const byType = new Map(
