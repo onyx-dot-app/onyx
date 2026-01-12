@@ -15,7 +15,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
@@ -262,14 +261,6 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             Packet(
                 placement=placement,
                 obj=SearchToolDocumentsDelta(documents=search_docs),
-            )
-        )
-
-        # Emit SectionEnd to signal search completion
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SectionEnd(),
             )
         )
 
