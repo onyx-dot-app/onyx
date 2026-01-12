@@ -2,7 +2,7 @@
 
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Tabs, TabsList, TabsTrigger } from "@/refresh-components/tabs/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import Separator from "@/refresh-components/Separator";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -252,16 +252,16 @@ export const AppearanceThemeSettings = forwardRef<
                   setFieldValue("logo_display_style", value)
                 }
               >
-                <TabsList className="w-full grid grid-cols-3">
-                  <TabsTrigger
+                <Tabs.List>
+                  <Tabs.Trigger
                     value="logo_and_name"
                     tooltip="Show both your application logo and name."
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
                     Logo & Name
-                  </TabsTrigger>
-                  <TabsTrigger
+                  </Tabs.Trigger>
+                  <Tabs.Trigger
                     value="logo_only"
                     disabled={!hasLogo}
                     tooltip={
@@ -273,8 +273,8 @@ export const AppearanceThemeSettings = forwardRef<
                     {...getPreviewHandlers("sidebar")}
                   >
                     Logo Only
-                  </TabsTrigger>
-                  <TabsTrigger
+                  </Tabs.Trigger>
+                  <Tabs.Trigger
                     value="name_only"
                     disabled={!hasApplicationName}
                     tooltip={
@@ -286,8 +286,8 @@ export const AppearanceThemeSettings = forwardRef<
                     {...getPreviewHandlers("sidebar")}
                   >
                     Name Only
-                  </TabsTrigger>
-                </TabsList>
+                  </Tabs.Trigger>
+                </Tabs.List>
               </Tabs>
             </FormField.Control>
             <FormField.Description>

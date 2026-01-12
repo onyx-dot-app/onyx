@@ -10,7 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
 import {
   Popover,
@@ -453,10 +453,10 @@ export default function AgentsNavigationPage() {
               value={activeTab}
               onValueChange={(value) => setActiveTab(value as "all" | "your")}
             >
-              <TabsList>
-                <TabsTrigger value="all">All Agents</TabsTrigger>
-                <TabsTrigger value="your">Your Agents</TabsTrigger>
-              </TabsList>
+              <Tabs.List>
+                <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
+                <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
+              </Tabs.List>
             </Tabs>
           </div>
           <div className="flex flex-row gap-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
@@ -147,15 +147,15 @@ const UsersTables = ({
 
   return (
     <Tabs defaultValue="current">
-      <TabsList>
-        <TabsTrigger value="current">Current Users</TabsTrigger>
-        <TabsTrigger value="invited">Invited Users</TabsTrigger>
+      <Tabs.List>
+        <Tabs.Trigger value="current">Current Users</Tabs.Trigger>
+        <Tabs.Trigger value="invited">Invited Users</Tabs.Trigger>
         {NEXT_PUBLIC_CLOUD_ENABLED && (
-          <TabsTrigger value="pending">Pending Users</TabsTrigger>
+          <Tabs.Trigger value="pending">Pending Users</Tabs.Trigger>
         )}
-      </TabsList>
+      </Tabs.List>
 
-      <TabsContent value="current">
+      <Tabs.Content value="current">
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
@@ -192,8 +192,8 @@ const UsersTables = ({
             />
           </CardContent>
         </Card>
-      </TabsContent>
-      <TabsContent value="invited">
+      </Tabs.Content>
+      <Tabs.Content value="invited">
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
@@ -216,9 +216,9 @@ const UsersTables = ({
             />
           </CardContent>
         </Card>
-      </TabsContent>
+      </Tabs.Content>
       {NEXT_PUBLIC_CLOUD_ENABLED && (
-        <TabsContent value="pending">
+        <Tabs.Content value="pending">
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center gap-1">
@@ -241,7 +241,7 @@ const UsersTables = ({
               />
             </CardContent>
           </Card>
-        </TabsContent>
+        </Tabs.Content>
       )}
     </Tabs>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import Text from "@/components/ui/text";
 import { useState } from "react";
 import {
@@ -141,48 +141,35 @@ function Main() {
       </CreateButton>
       {isPaidEnterpriseFeaturesEnabled && (
         <Tabs
-          className="mt-2"
           value={tabIndex.toString()}
           onValueChange={(val) => setTabIndex(parseInt(val))}
         >
-          <TabsList>
-            <TabsTrigger value="0" className="flex items-center gap-2">
-              <SvgGlobe
-                aria-hidden="true"
-                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
-              />
+          <Tabs.List>
+            <Tabs.Trigger value="0" icon={SvgGlobe}>
               Global
-            </TabsTrigger>
-            <TabsTrigger value="1" className="flex items-center gap-2">
-              <SvgUser
-                aria-hidden="true"
-                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
-              />
+            </Tabs.Trigger>
+            <Tabs.Trigger value="1" icon={SvgUser}>
               User
-            </TabsTrigger>
-            <TabsTrigger value="2" className="flex items-center gap-2">
-              <SvgUsers
-                aria-hidden="true"
-                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
-              />
+            </Tabs.Trigger>
+            <Tabs.Trigger value="2" icon={SvgUsers}>
               User Groups
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="0">
+            </Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value="0">
             <GenericTokenRateLimitTable
               fetchUrl={GLOBAL_TOKEN_FETCH_URL}
               title={"Global Token Rate Limits"}
               description={GLOBAL_DESCRIPTION}
             />
-          </TabsContent>
-          <TabsContent value="1">
+          </Tabs.Content>
+          <Tabs.Content value="1">
             <GenericTokenRateLimitTable
               fetchUrl={USER_TOKEN_FETCH_URL}
               title={"User Token Rate Limits"}
               description={USER_DESCRIPTION}
             />
-          </TabsContent>
-          <TabsContent value="2">
+          </Tabs.Content>
+          <Tabs.Content value="2">
             <GenericTokenRateLimitTable
               fetchUrl={USER_GROUP_FETCH_URL}
               title={"User Group Token Rate Limits"}
@@ -196,7 +183,7 @@ function Main() {
                 )
               }
             />
-          </TabsContent>
+          </Tabs.Content>
         </Tabs>
       )}
 

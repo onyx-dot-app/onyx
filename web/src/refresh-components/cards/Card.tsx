@@ -50,11 +50,13 @@ const classNames = {
 export interface CardProps extends GeneralLayouts.SectionProps {
   // card variants
   translucent?: boolean;
+  borderless?: boolean;
   disabled?: boolean;
 }
 
 export default function Card({
   translucent,
+  borderless,
   disabled,
 
   padding = 1,
@@ -64,7 +66,13 @@ export default function Card({
   const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
 
   return (
-    <div className={cn("rounded-16 w-full h-full", classNames[variant])}>
+    <div
+      className={cn(
+        "rounded-16 w-full h-full",
+        classNames[variant],
+        borderless && "border-none"
+      )}
+    >
       <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
     </div>
   );
