@@ -229,7 +229,7 @@ multidict==6.7.0
     #   yarl
 networkx==3.5
     # via torch
-numpy==1.26.4
+numpy==2.4.1
     # via
     #   accelerate
     #   onyx

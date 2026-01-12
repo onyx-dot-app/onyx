@@ -9,7 +9,7 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
-    from unstructured_client.models import operations  # type: ignore
+    from unstructured_client.models import operations
 
 
 logger = setup_logger()
@@ -55,19 +55,19 @@ def _sdk_partition_request(
 
 def unstructured_to_text(file: IO[Any], file_name: str) -> str:
     from unstructured.staging.base import dict_to_elements
-    from unstructured_client import UnstructuredClient  # type: ignore
+    from unstructured_client import UnstructuredClient
 
     logger.debug(f"Starting to read file: {file_name}")
     req = _sdk_partition_request(file, file_name, strategy="fast")
 
     unstructured_client = UnstructuredClient(api_key_auth=get_unstructured_api_key())
 
-    response = unstructured_client.general.partition(req)
-    elements = dict_to_elements(response.elements)
+    response = unstructured_client.general.partition(request=req)
 
     if response.status_code != 200:
         err = f"Received unexpected status code {response.status_code} from Unstructured API."
         logger.error(err)
         raise ValueError(err)
 
+    elements = dict_to_elements(response.elements or [])
     return "\n\n".join(str(el) for el in elements)
