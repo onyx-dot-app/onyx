@@ -103,19 +103,20 @@ def upsert_search_provider_endpoint(
         and request.api_key_changed
         and request.api_key
     ):
-        existing_content_provider = fetch_web_content_provider_by_type(
-            WebContentProviderType.EXA, db_session
-        )
-        if existing_content_provider:
-            existing_content_provider.api_key = request.api_key
-        else:
-            stmt = insert(InternetContentProvider).values(
+        stmt = (
+            insert(InternetContentProvider)
+            .values(
                 name="Exa",
                 provider_type=WebContentProviderType.EXA.value,
                 api_key=request.api_key,
                 is_active=False,
             )
-            db_session.execute(stmt)
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
+        )
+        db_session.execute(stmt)
         db_session.flush()
 
     db_session.commit()
@@ -275,19 +276,20 @@ def upsert_content_provider_endpoint(
         and request.api_key_changed
         and request.api_key
     ):
-        existing_search_provider = fetch_web_search_provider_by_type(
-            WebSearchProviderType.EXA, db_session
-        )
-        if existing_search_provider:
-            existing_search_provider.api_key = request.api_key
-        else:
-            stmt = insert(InternetSearchProvider).values(
+        stmt = (
+            insert(InternetSearchProvider)
+            .values(
                 name="Exa",
                 provider_type=WebSearchProviderType.EXA.value,
                 api_key=request.api_key,
                 is_active=False,
             )
-            db_session.execute(stmt)
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
+        )
+        db_session.execute(stmt)
         db_session.flush()
 
     db_session.commit()
