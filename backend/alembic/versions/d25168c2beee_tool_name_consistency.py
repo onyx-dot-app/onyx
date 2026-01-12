@@ -1,7 +1,7 @@
 """tool_name_consistency
 
 Revision ID: d25168c2beee
-Revises: 19a896a66d3f
+Revises: a3c1a7904cd0
 Create Date: 2026-01-11 17:54:40.135777
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d25168c2beee"
-down_revision = "19a896a66d3f"
+down_revision = "a3c1a7904cd0"
 branch_labels = None
 depends_on = None
 

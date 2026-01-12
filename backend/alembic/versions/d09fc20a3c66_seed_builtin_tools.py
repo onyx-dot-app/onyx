@@ -1,7 +1,7 @@
 """seed_builtin_tools
 
 Revision ID: d09fc20a3c66
-Revises: a3c1a7904cd0
+Revises: b7ec9b5b505f
 Create Date: 2025-09-09 19:32:16.824373
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d09fc20a3c66"
-down_revision = "a3c1a7904cd0"
+down_revision = "b7ec9b5b505f"
 branch_labels = None
 depends_on = None
 
