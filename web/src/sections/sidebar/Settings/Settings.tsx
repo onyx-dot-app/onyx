@@ -10,12 +10,7 @@ import { useUser } from "@/components/user/UserProvider";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
@@ -187,7 +182,7 @@ export default function Settings({ folded }: SettingsProps) {
       </userSettingsModal.Provider>
 
       <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <div id="onyx-user-dropdown">
             <SidebarTab
               leftIcon={({ className }) => (
@@ -216,8 +211,8 @@ export default function Settings({ folded }: SettingsProps) {
               {displayName}
             </SidebarTab>
           </div>
-        </PopoverTrigger>
-        <PopoverContent align="end" side="right">
+        </Popover.Trigger>
+        <Popover.Content align="end" side="right">
           {popupState === "Settings" && (
             <SettingsPopover
               onClose={() => setPopupState(undefined)}
@@ -231,7 +226,7 @@ export default function Settings({ folded }: SettingsProps) {
               onNavigate={() => setPopupState(undefined)}
             />
           )}
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
     </>
   );

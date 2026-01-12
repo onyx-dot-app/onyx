@@ -236,6 +236,7 @@ class NotificationType(str, Enum):
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
     RELEASE_NOTES = "release_notes"
+    ASSISTANT_FILES_READY = "assistant_files_ready"
 
 
 class BlobType(str, Enum):

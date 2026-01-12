@@ -25,11 +25,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageSelector } from "@/components/PageSelector";
 import Separator from "@/refresh-components/Separator";
 import { DateRangePickerValue } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover from "@/refresh-components/Popover";
 import Calendar from "@/refresh-components/Calendar";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/Spinner";
@@ -105,7 +101,7 @@ function GenerateReportInput({
       </Text>
       <div className="grid gap-2 mb-3">
         <Popover>
-          <PopoverTrigger asChild>
+          <Popover.Trigger asChild>
             <Button
               secondary
               className={cn(
@@ -127,8 +123,8 @@ function GenerateReportInput({
                 <span>Pick a date range</span>
               )}
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
+          </Popover.Trigger>
+          <Popover.Content align="start">
             <Calendar
               initialFocus
               mode="range"
@@ -199,7 +195,7 @@ function GenerateReportInput({
                 All time
               </Button>
             </div>
-          </PopoverContent>
+          </Popover.Content>
         </Popover>
       </div>
       <Button

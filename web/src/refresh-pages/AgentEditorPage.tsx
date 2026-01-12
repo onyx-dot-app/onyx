@@ -52,12 +52,7 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverMenu,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
@@ -204,7 +199,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
       />
 
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <InputAvatar className="group/InputAvatar relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
             {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
             <CustomAgentAvatar
@@ -220,8 +215,8 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               Edit
             </Button>
           </InputAvatar>
-        </PopoverTrigger>
-        <PopoverContent>
+        </Popover.Trigger>
+        <Popover.Content>
           <PopoverMenu medium>
             {[
               <LineItem
@@ -255,7 +250,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               </div>,
             ]}
           </PopoverMenu>
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
     </>
   );
@@ -937,6 +932,24 @@ export default function AgentEditorPage({
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
+            const fileStatusMap = new Map(
+              allRecentFiles.map((f) => [f.id, f.status])
+            );
+
+            const hasUploadingFiles = values.user_file_ids.some(
+              (fileId: string) => {
+                const status = fileStatusMap.get(fileId);
+                return (
+                  status === undefined || status === UserFileStatus.UPLOADING
+                );
+              }
+            );
+
+            const hasProcessingFiles = values.user_file_ids.some(
+              (fileId: string) =>
+                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
+            );
+
             return (
               <>
                 <FormWarningsEffect />
@@ -1004,7 +1017,12 @@ export default function AgentEditorPage({
                           </Button>
                           <Button
                             type="submit"
-                            disabled={isSubmitting || !isValid || !dirty}
+                            disabled={
+                              isSubmitting ||
+                              !isValid ||
+                              !dirty ||
+                              hasUploadingFiles
+                            }
                           >
                             {existingAgent ? "Save" : "Create"}
                           </Button>
@@ -1163,7 +1181,10 @@ export default function AgentEditorPage({
 
                             {values.enable_knowledge &&
                               values.knowledge_source === "user_knowledge" && (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section
+                                  gap={0.5}
+                                  alignItems="start"
+                                >
                                   <FilePickerPopover
                                     trigger={(open) => (
                                       <CreateButton transient={open}>
@@ -1200,6 +1221,7 @@ export default function AgentEditorPage({
                                       flexDirection="row"
                                       wrap
                                       gap={0.5}
+                                      justifyContent="start"
                                     >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
@@ -1229,6 +1251,14 @@ export default function AgentEditorPage({
                                         );
                                       })}
                                     </GeneralLayouts.Section>
+                                  )}
+                                  {hasProcessingFiles && (
+                                    <Text as="p" text03 secondaryBody>
+                                      Onyx is still processing your uploaded
+                                      files. You can create the agent now, but
+                                      it will not have access to all files until
+                                      processing completes.
+                                    </Text>
                                   )}
                                 </GeneralLayouts.Section>
                               )}

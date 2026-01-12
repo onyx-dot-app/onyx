@@ -22,6 +22,7 @@ def create_notification(
     title: str,
     description: str | None = None,
     additional_data: dict | None = None,
+    autocommit: bool = True,
 ) -> Notification:
     # Previously, we only matched the first identical, undismissed notification
     # Now, we assume some uniqueness to notifications
@@ -46,7 +47,8 @@ def create_notification(
         # Update the last_shown timestamp if the notification is not dismissed
         if not existing_notification.dismissed:
             existing_notification.last_shown = func.now()
-            db_session.commit()
+            if autocommit:
+                db_session.commit()
         return existing_notification
 
     # Create a new notification if none exists
@@ -61,7 +63,8 @@ def create_notification(
         additional_data=additional_data,
     )
     db_session.add(notification)
-    db_session.commit()
+    if autocommit:
+        db_session.commit()
     return notification
 
 

@@ -1209,6 +1209,7 @@ export default function Page() {
         onApiKeyChange={(value) =>
           dispatchSearchModal({ type: "SET_API_KEY", value })
         }
+        isStoredApiKey={searchModal.apiKeyValue === MASKED_API_KEY_PLACEHOLDER}
         optionalField={
           selectedProviderType === "google_pse"
             ? {
@@ -1334,6 +1335,7 @@ export default function Page() {
         onApiKeyChange={(value) =>
           dispatchContentModal({ type: "SET_API_KEY", value })
         }
+        isStoredApiKey={contentModal.apiKeyValue === MASKED_API_KEY_PLACEHOLDER}
         optionalField={
           selectedContentProviderType === "firecrawl"
             ? {
