@@ -107,7 +107,7 @@ def _should_enable_slack_search(persona: Persona) -> bool:
         return True
 
     # Custom persona with document sets - enable Slack search
-    return bool(persona.document_sets or [])
+    return bool(persona.document_sets)
 
 
 def _extract_project_file_texts_and_images(
