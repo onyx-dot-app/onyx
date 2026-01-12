@@ -401,7 +401,7 @@ def translate_assistant_message_to_packets(
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
-                    if tool.in_code_tool_id == RESEARCH_AGENT_DB_NAME:
+                    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
                         research_agent_count += 1
 
                     # Handle different tool types
