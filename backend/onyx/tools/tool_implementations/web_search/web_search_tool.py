@@ -265,13 +265,22 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         )
 
         # Format for LLM
-        docs_str, citation_mapping = convert_inference_sections_to_llm_string(
-            top_sections=inference_sections,
-            citation_start=override_kwargs.starting_citation_num,
-            limit=None,  # Already truncated
-            include_source_type=False,
-            include_link=True,
-        )
+        if not all_search_results:
+            docs_str = json.dumps(
+                {
+                    "results": [],
+                    "message": "The web search completed but returned no results for any of the queries. Do not search again.",
+                }
+            )
+            citation_mapping: dict[int, str] = {}
+        else:
+            docs_str, citation_mapping = convert_inference_sections_to_llm_string(
+                top_sections=inference_sections,
+                citation_start=override_kwargs.starting_citation_num,
+                limit=None,  # Already truncated
+                include_source_type=False,
+                include_link=True,
+            )
 
         return ToolResponse(
             rich_response=SearchDocsResponse(

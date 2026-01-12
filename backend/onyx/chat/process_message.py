@@ -401,7 +401,10 @@ def handle_stream_message_objects(
         if new_msg_req.parent_message_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
             # Auto-place after the latest message in the chain
             parent_message = chat_history[-1] if chat_history else root_message
-        elif new_msg_req.parent_message_id is None:
+        elif (
+            new_msg_req.parent_message_id is None
+            or new_msg_req.parent_message_id == root_message.id
+        ):
             # None = regeneration from root
             parent_message = root_message
             # Truncate history since we're starting from root
