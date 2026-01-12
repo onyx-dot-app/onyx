@@ -995,10 +995,9 @@ export function useSourcePreferences({
 
     const snapshot: SourcePreferencesSnapshot = {
       sourcePreferences: Object.fromEntries(
-        allKnownSources.map((src) => [
-          src.uniqueKey,
-          enabledKeys.has(src.uniqueKey),
-        ])
+        allKnownSources
+          .filter((src) => src.uniqueKey !== undefined)
+          .map((src) => [src.uniqueKey, enabledKeys.has(src.uniqueKey)])
       ),
     };
 
