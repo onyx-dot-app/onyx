@@ -351,7 +351,7 @@ greenlet==3.2.4
     #   sqlalchemy
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.67.1
+grpcio==1.67.1 ; python_full_version < '3.14'
     # via
     #   google-api-core
     #   google-cloud-resource-manager
@@ -359,7 +359,17 @@ grpcio==1.67.1
     #   grpc-google-iam-v1
     #   grpcio-status
     #   litellm
-grpcio-status==1.67.1
+grpcio==1.76.0 ; python_full_version >= '3.14'
+    # via
+    #   google-api-core
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   litellm
+grpcio-status==1.67.1 ; python_full_version < '3.14'
+    # via google-api-core
+grpcio-status==1.76.0 ; python_full_version >= '3.14'
     # via google-api-core
 h11==0.16.0
     # via
@@ -506,6 +516,8 @@ langsmith==0.3.45
     #   langchain-core
 lazy-imports==1.0.1
     # via onyx
+legacy-cgi==2.6.4 ; python_full_version >= '3.13'
+    # via ddtrace
 litellm==1.80.11
     # via onyx
 locket==1.0.0
@@ -739,7 +751,19 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==5.29.5
+protobuf==5.29.5 ; python_full_version < '3.14'
+    # via
+    #   ddtrace
+    #   google-api-core
+    #   google-cloud-aiplatform
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   onnxruntime
+    #   opentelemetry-proto
+    #   proto-plus
+protobuf==6.33.4 ; python_full_version >= '3.14'
     # via
     #   ddtrace
     #   google-api-core
@@ -1148,6 +1172,7 @@ typing-extensions==4.15.0
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
+    #   grpcio
     #   huggingface-hub
     #   jira
     #   langchain-core
