@@ -49,7 +49,7 @@ import { deleteChatSession } from "@/app/chat/services/lib";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { PopoverMenu } from "@/components/ui/popover";
+import { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";

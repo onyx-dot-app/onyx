@@ -8,12 +8,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { useAppRouter } from "@/hooks/appNavigation";
 import {
   Project,
@@ -26,7 +21,6 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { PopoverAnchor } from "@radix-ui/react-popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
@@ -417,7 +411,7 @@ const ChatButton = memo(
 
     const rightMenu = (
       <>
-        <PopoverTrigger asChild onClick={noProp()}>
+        <Popover.Trigger asChild onClick={noProp()}>
           <div>
             <IconButton
               icon={SvgMoreHorizontal}
@@ -429,10 +423,10 @@ const ChatButton = memo(
               internal
             />
           </div>
-        </PopoverTrigger>
-        <PopoverContent side="right" align="start">
+        </Popover.Trigger>
+        <Popover.Content side="right" align="start">
           <PopoverMenu>{popoverItems}</PopoverMenu>
-        </PopoverContent>
+        </Popover.Content>
       </>
     );
 
@@ -446,7 +440,7 @@ const ChatButton = memo(
           }
         }}
       >
-        <PopoverAnchor>
+        <Popover.Anchor>
           <SidebarTab
             href={`/chat?chatId=${chatSession.id}`}
             onClick={handleClick}
@@ -464,7 +458,7 @@ const ChatButton = memo(
               displayName
             )}
           </SidebarTab>
-        </PopoverAnchor>
+        </Popover.Anchor>
       </Popover>
     );
 

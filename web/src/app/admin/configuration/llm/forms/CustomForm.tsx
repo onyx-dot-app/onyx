@@ -11,7 +11,7 @@ import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { ApiKeyField } from "./components/ApiKeyField";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { FormActionButtons } from "./components/FormActionButtons";
 import {
   submitLLMProvider,
@@ -190,7 +190,10 @@ export function CustomForm({
                       determine which fields are required.
                     </Text>
 
-                    <ApiKeyField label="[Optional] API Key" />
+                    <PasswordInputTypeInField
+                      name="api_key"
+                      label="[Optional] API Key"
+                    />
 
                     <TextFormField
                       name="api_base"

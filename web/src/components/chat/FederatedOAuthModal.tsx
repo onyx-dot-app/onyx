@@ -10,7 +10,6 @@ import { getSourceMetadata } from "@/lib/sources";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
-import Text from "@/refresh-components/texts/Text";
 import { SvgLink } from "@opal/icons";
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
@@ -55,16 +54,26 @@ function useFederatedOauthModal() {
     if (typeof window !== "undefined") {
       const newSkipCount = oAuthModalState.skipCount + 1;
 
-      // If we've reached the max skip count, show the "No problem!" modal first
       if (newSkipCount >= MAX_SKIP_COUNT) {
-        // Don't hide immediately - let the "No problem!" modal show
+        // Permanently hide the modal after max skips
+        const skipData = {
+          skipCount: newSkipCount,
+          hideUntil: 0,
+          permanentlyHidden: true,
+        };
+
+        localStorage.setItem(
+          "federatedOAuthModalSkipData",
+          JSON.stringify(skipData)
+        );
+
         setOAuthModalState({
-          hidden: false,
+          hidden: true,
           skipCount: newSkipCount,
         });
       } else {
-        // For first skip, hide after a delay to show "No problem!" modal
-        const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
+        // Hide for 1 hour after first skip
+        const oneHourFromNow = Date.now() + 60 * 60 * 1000;
 
         const skipData = {
           skipCount: newSkipCount,
@@ -85,33 +94,9 @@ function useFederatedOauthModal() {
     }
   };
 
-  // Handle the final dismissal of the "No problem!" modal
-  const handleOAuthModalFinalDismiss = () => {
-    if (typeof window !== "undefined") {
-      const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
-
-      const skipData = {
-        skipCount: oAuthModalState.skipCount,
-        hideUntil: oneHourFromNow,
-        permanentlyHidden: false,
-      };
-
-      localStorage.setItem(
-        "federatedOAuthModalSkipData",
-        JSON.stringify(skipData)
-      );
-
-      setOAuthModalState({
-        hidden: true,
-        skipCount: oAuthModalState.skipCount,
-      });
-    }
-  };
-
   return {
     oAuthModalState,
     handleOAuthModalSkip,
-    handleOAuthModalFinalDismiss,
   };
 }
 
@@ -120,15 +105,9 @@ export default function FederatedOAuthModal() {
   const router = useRouter();
 
   const {
-    oAuthModalState: { skipCount, hidden },
+    oAuthModalState: { hidden },
     handleOAuthModalSkip,
-    handleOAuthModalFinalDismiss,
   } = useFederatedOauthModal();
-
-  const onSkip =
-    skipCount >= MAX_SKIP_COUNT
-      ? handleOAuthModalFinalDismiss
-      : handleOAuthModalSkip;
 
   const { connectors: federatedConnectors, hasUnauthenticatedConnectors } =
     useFederatedOAuthStatus();
@@ -146,28 +125,6 @@ export default function FederatedOAuthModal() {
 
   const applicationName =
     settings?.enterpriseSettings?.application_name || "Onyx";
-
-  if (skipCount >= MAX_SKIP_COUNT) {
-    return (
-      <Modal open>
-        <Modal.Content small>
-          <Modal.Header icon={SvgLink} title="Heads Up!" />
-          <Modal.Body>
-            <Text as="p">
-              You can always connect your apps later by going to the{" "}
-              <strong>User Settings</strong> menu (click your profile icon) and
-              selecting <strong>Connectors</strong>.
-            </Text>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button onClick={onSkip} className="w-full">
-              Got it
-            </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>
-    );
-  }
 
   return (
     <Modal open>
@@ -212,7 +169,7 @@ export default function FederatedOAuthModal() {
           })}
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={onSkip} className="w-full">
+          <Button onClick={handleOAuthModalSkip} className="w-full">
             Skip for now
           </Button>
         </Modal.Footer>

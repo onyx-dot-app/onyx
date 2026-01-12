@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { PopoverMenu } from "@/components/ui/popover";
+import { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import type { IconProps } from "@opal/types";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
