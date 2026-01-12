@@ -18,23 +18,13 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser
-
-# Skip all tests in this module
-pytestmark = pytest.mark.skip(reason="Auto LLM update tests temporarily disabled")
 
 
 # How long to wait for the celery task to run and sync models
 # This should be longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS
-MAX_WAIT_TIME_SECONDS = 60
+MAX_WAIT_TIME_SECONDS = 120
 POLL_INTERVAL_SECONDS = 5
-
-
-@pytest.fixture(scope="module", autouse=True)
-def reset_for_module() -> None:
-    """Reset all data once before running any tests in this module."""
-    reset_all()
 
 
 def _create_provider_with_api(
@@ -142,6 +132,7 @@ def wait_for_model_sync(
 
 
 def test_auto_mode_provider_gets_synced_from_github_config(
+    reset: None,
     admin_user: DATestUser,
 ) -> None:
     """
@@ -156,7 +147,7 @@ def test_auto_mode_provider_gets_synced_from_github_config(
     # First, get the GitHub config to know what models we should expect
     github_config = get_auto_config(admin_user)
     if github_config is None:
-        pytest.skip("GitHub config not found")
+        pytest.fail("GitHub config not found")
 
     # Get expected models for OpenAI from the config
     if "openai" not in github_config.get("providers", {}):
@@ -207,17 +198,26 @@ def test_auto_mode_provider_gets_synced_from_github_config(
     )
 
     # Verify the models were synced
-    synced_model_names = {m["name"] for m in synced_provider["model_configurations"]}
+    synced_model_configs = synced_provider["model_configurations"]
+    synced_model_names = {m["name"] for m in synced_model_configs}
     print(f"Synced models: {synced_model_names}")
 
     assert expected_models.issubset(
         synced_model_names
     ), f"Expected models {expected_models} not found in synced models {synced_model_names}"
 
-    # Verify the outdated model was removed
+    # Verify the outdated model still exists but is not visible
+    # (Auto mode marks removed models as not visible, it doesn't delete them)
+    outdated_model = next(
+        (m for m in synced_model_configs if m["name"] == "outdated-model-name"),
+        None,
+    )
     assert (
-        "outdated-model-name" not in synced_model_names
-    ), "Outdated model should have been removed by sync"
+        outdated_model is not None
+    ), "Outdated model should still exist after sync (marked invisible, not deleted)"
+    assert not outdated_model[
+        "is_visible"
+    ], "Outdated model should not be visible after sync"
 
     # Verify default model was set from GitHub config
     expected_default = (
@@ -230,6 +230,7 @@ def test_auto_mode_provider_gets_synced_from_github_config(
 
 
 def test_manual_mode_provider_not_affected_by_auto_sync(
+    reset: None,
     admin_user: DATestUser,
 ) -> None:
     """

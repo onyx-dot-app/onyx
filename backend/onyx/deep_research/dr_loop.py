@@ -150,6 +150,9 @@ def generate_final_report(
             is_deep_research=True,
         )
 
+        # Save citation mapping to state_container so citations are persisted
+        state_container.set_citation_mapping(citation_processor.citation_to_doc)
+
         final_report = llm_step_result.answer
         if final_report is None:
             raise ValueError("LLM failed to generate the final deep research report")

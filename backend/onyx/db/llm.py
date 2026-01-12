@@ -374,7 +374,7 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 def fetch_existing_llm_providers(
     db_session: Session,
     only_public: bool = False,
-    exclude_image_generation_providers: bool = False,
+    exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
     """Fetch all LLM providers with optional filtering.
 
@@ -585,13 +585,12 @@ def update_default_vision_provider(
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     """Fetch all LLM providers that are in Auto mode."""
-    return list(
-        db_session.scalars(
-            select(LLMProviderModel)
-            .where(LLMProviderModel.is_auto_mode == True)  # noqa: E712
-            .options(selectinload(LLMProviderModel.model_configurations))
-        ).all()
+    query = (
+        select(LLMProviderModel)
+        .where(LLMProviderModel.is_auto_mode.is_(True))
+        .options(selectinload(LLMProviderModel.model_configurations))
     )
+    return list(db_session.scalars(query).all())
 
 
 def sync_auto_mode_models(
@@ -620,7 +619,9 @@ def sync_auto_mode_models(
 
     # Build the list of all visible models from the config
     # All models in the config are visible (default + additional_visible_models)
-    recommended_visible_models = llm_recommendations.get_visible_models(provider.name)
+    recommended_visible_models = llm_recommendations.get_visible_models(
+        provider.provider
+    )
     recommended_visible_model_names = [
         model.name for model in recommended_visible_models
     ]
@@ -635,11 +636,12 @@ def sync_auto_mode_models(
         ).all()
     }
 
-    # Remove models that are no longer in GitHub config
+    # Mark models that are no longer in GitHub config as not visible
     for model_name, model in existing_models.items():
         if model_name not in recommended_visible_model_names:
-            db_session.delete(model)
-            changes += 1
+            if model.is_visible:
+                model.is_visible = False
+                changes += 1
 
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:
@@ -669,7 +671,7 @@ def sync_auto_mode_models(
             changes += 1
 
     # In Auto mode, default model is always set from GitHub config
-    default_model = llm_recommendations.get_default_model(provider.name)
+    default_model = llm_recommendations.get_default_model(provider.provider)
     if default_model and provider.default_model_name != default_model.name:
         provider.default_model_name = default_model.name
         changes += 1

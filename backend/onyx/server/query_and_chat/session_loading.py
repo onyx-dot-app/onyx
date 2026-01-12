@@ -23,6 +23,7 @@ from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
+from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
@@ -35,6 +36,7 @@ from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -207,6 +209,7 @@ def create_research_agent_packets(
     """Create packets for research agent tool calls.
     This recreates the packet structure that ResearchAgentRenderer expects:
     - ResearchAgentStart with the research task
+    - IntermediateReportStart to signal report begins
     - IntermediateReportDelta with the report content (if available)
     - SectionEnd to mark completion
     """
@@ -222,6 +225,14 @@ def create_research_agent_packets(
 
     # Emit report content if available
     if report_content:
+        # Emit IntermediateReportStart before delta
+        packets.append(
+            Packet(
+                placement=Placement(turn_index=turn_index, tab_index=tab_index),
+                obj=IntermediateReportStart(),
+            )
+        )
+
         packets.append(
             Packet(
                 placement=Placement(turn_index=turn_index, tab_index=tab_index),
@@ -381,10 +392,17 @@ def translate_assistant_message_to_packets(
                     )
                 )
 
-            # Process each tool call in this turn
+            # Process each tool call in this turn (single pass).
+            # We buffer packets for the turn so we can conditionally prepend a TopLevelBranching
+            # packet (which must appear before any tool output in the turn).
+            research_agent_count = 0
+            turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
+                # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
+                    if tool.in_code_tool_id == RESEARCH_AGENT_DB_NAME:
+                        research_agent_count += 1
 
                     # Handle different tool types
                     if tool.in_code_tool_id in [
@@ -398,7 +416,7 @@ def translate_assistant_message_to_packets(
                             translate_db_search_doc_to_saved_search_doc(doc)
                             for doc in tool_call.search_docs
                         ]
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_search_packets(
                                 search_queries=queries,
                                 search_docs=search_docs,
@@ -418,7 +436,7 @@ def translate_assistant_message_to_packets(
                         urls = cast(
                             list[str], tool_call.tool_call_arguments.get("urls", [])
                         )
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_fetch_packets(
                                 fetch_docs,
                                 urls,
@@ -433,7 +451,7 @@ def translate_assistant_message_to_packets(
                                 GeneratedImage(**img)
                                 for img in tool_call.generated_images
                             ]
-                            packet_list.extend(
+                            turn_tool_packets.extend(
                                 create_image_generation_packets(
                                     images, turn_num, tab_index=tool_call.tab_index
                                 )
@@ -446,7 +464,7 @@ def translate_assistant_message_to_packets(
                             tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
                             or "Could not fetch saved research task.",
                         )
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_research_agent_packets(
                                 research_task=research_task,
                                 report_content=tool_call.tool_call_response,
@@ -457,7 +475,7 @@ def translate_assistant_message_to_packets(
 
                     else:
                         # Custom tool or unknown tool
-                        packet_list.extend(
+                        turn_tool_packets.extend(
                             create_custom_tool_packets(
                                 tool_name=tool.display_name or tool.name,
                                 response_type="text",
@@ -470,6 +488,18 @@ def translate_assistant_message_to_packets(
                 except Exception as e:
                     logger.warning(f"Error processing tool call {tool_call.id}: {e}")
                     continue
+
+            if research_agent_count > 1:
+                # Emit TopLevelBranching before processing any tool output in the turn.
+                packet_list.append(
+                    Packet(
+                        placement=Placement(turn_index=turn_num),
+                        obj=TopLevelBranching(
+                            num_parallel_branches=research_agent_count
+                        ),
+                    )
+                )
+            packet_list.extend(turn_tool_packets)
 
     # Determine the next turn_index for the final message
     # It should come after all tool calls

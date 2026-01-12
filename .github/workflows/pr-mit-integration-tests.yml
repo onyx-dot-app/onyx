@@ -301,7 +301,7 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
-          AUTO_LLM_UPDATE_INTERVAL_SECONDS=1
+          AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           EOF
 
       - name: Start Docker containers

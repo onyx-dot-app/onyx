@@ -48,7 +48,7 @@ class VertexAIPromptCacheProvider(PromptCacheProvider):
             cacheable_prefix=cacheable_prefix,
             suffix=suffix,
             continuation=continuation,
-            transform_cacheable=_add_vertex_cache_control,
+            transform_cacheable=None,  # TODO: support explicit caching
         )
 
     def extract_cache_metadata(
@@ -89,6 +89,10 @@ def _add_vertex_cache_control(
     not at the message level. This function converts string content to the array format
     and adds cache_control to the last content block in each cacheable message.
     """
+    # NOTE: unfortunately we need a much more sophisticated mechnism to support
+    # explict caching with vertex in the presence of tools and system messages
+    # (since they're supposed to be stripped out when setting cache_control)
+    # so we're deferring this to a future PR.
     updated: list[ChatCompletionMessage] = []
     for message in messages:
         mutated = dict(message)

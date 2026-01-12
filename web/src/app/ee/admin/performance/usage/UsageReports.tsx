@@ -30,10 +30,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
 import Calendar from "@/refresh-components/Calendar";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/Spinner";
+import { SvgCalendar } from "@opal/icons";
 
 function GenerateReportInput({
   onReportGenerated,
@@ -112,8 +112,8 @@ function GenerateReportInput({
                 "w-[300px] justify-start text-left font-normal",
                 !dateRange && "text-muted-foreground"
               )}
+              leftIcon={SvgCalendar}
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
               {dateRange?.from ? (
                 dateRange.to ? (
                   <>

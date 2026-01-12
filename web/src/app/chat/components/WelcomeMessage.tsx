@@ -1,10 +1,7 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import {
-  GREETING_MESSAGES,
-  getRandomGreeting,
-} from "@/lib/chat/greetingMessages";
+import { getRandomGreeting } from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -42,7 +39,7 @@ export default function WelcomeMessage({
     );
   } else if (agent) {
     content = (
-      <div className="flex flex-col items-center gap-3 w-full max-w-[50rem]">
+      <>
         <div
           data-testid="assistant-name-display"
           className="flex flex-row items-center gap-3"
@@ -57,7 +54,7 @@ export default function WelcomeMessage({
             {agent.description}
           </Text>
         )}
-      </div>
+      </>
     );
   }
 
@@ -68,7 +65,7 @@ export default function WelcomeMessage({
   return (
     <div
       data-testid="chat-intro"
-      className="flex flex-col items-center justify-center"
+      className="flex flex-col items-center justify-center gap-3 max-w-[50rem]"
     >
       {content}
     </div>
