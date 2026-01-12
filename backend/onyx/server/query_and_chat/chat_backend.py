@@ -16,8 +16,11 @@ from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
+from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
@@ -85,6 +88,7 @@ from onyx.server.query_and_chat.models import ChatSessionSummary
 from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.models import LLMOverride
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
@@ -288,6 +292,18 @@ def get_chat_session(
     chat_message_details = [
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
+
+    try:
+        is_processing = is_chat_session_processing(session_id, get_redis_client())
+        # Edit the last message to indicate loading (Overriding default message value)
+        if is_processing and chat_message_details:
+            last_msg = chat_message_details[-1]
+            if last_msg.message_type == MessageType.ASSISTANT:
+                last_msg.message = "Message is loading... Please refresh the page soon."
+    except Exception:
+        logger.exception(
+            "An error occurred while checking if the chat session is processing"
+        )
 
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
@@ -536,6 +552,11 @@ def handle_send_chat_message(
         distinct_id=user.email if user else tenant_id,
         event=MilestoneRecordType.RAN_QUERY,
     )
+
+    # Override origin to API when authenticated via API key or PAT
+    # to prevent clients from polluting telemetry data
+    if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
+        chat_message_req.origin = MessageOrigin.API
 
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:

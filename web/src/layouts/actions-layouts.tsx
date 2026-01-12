@@ -71,6 +71,7 @@ import { WithoutStyles } from "@/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgMcp } from "@opal/icons";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { Section, SectionProps } from "@/layouts/general-layouts";
 
 /**
  * Actions Layout Context
@@ -163,12 +164,10 @@ function useActionsLayoutContext() {
  * </ActionsLayouts.Root>
  * ```
  */
-export type ActionsRootProps = WithoutStyles<
-  React.HTMLAttributes<HTMLDivElement>
->;
+export type ActionsRootProps = SectionProps;
 
 function ActionsRoot(props: ActionsRootProps) {
-  return <div className="flex flex-col" {...props} />;
+  return <Section gap={0} padding={0} {...props} />;
 }
 
 /**
@@ -236,30 +235,28 @@ function ActionsHeader({
         isFolded ? "rounded-16" : "rounded-t-16"
       )}
     >
-      <div className="px-4">
-        <label
-          className="flex items-start justify-between gap-2 cursor-pointer"
-          htmlFor={name}
-        >
-          {/* Left: Icon, Title, Description */}
-          <div className="flex flex-col items-start">
-            <div className="flex items-center justify-center gap-2">
-              <div className="min-w-[18px]">
-                <Icon className="stroke-text-04" size={18} />
-              </div>
-              <Truncated mainContentEmphasis text04>
-                {title}
-              </Truncated>
+      <label
+        className="flex items-start justify-between gap-2 cursor-pointer px-4"
+        htmlFor={name}
+      >
+        {/* Left: Icon, Title, Description */}
+        <Section alignItems="start" gap={0} fit>
+          <Section flexDirection="row" gap={0.5}>
+            <div className="min-w-[18px]">
+              <Icon className="stroke-text-04" size={18} />
             </div>
-            <Truncated secondaryBody text03 className="pl-7">
-              {description}
+            <Truncated mainContentEmphasis text04>
+              {title}
             </Truncated>
-          </div>
+          </Section>
+          <Truncated secondaryBody text03 className="pl-7">
+            {description}
+          </Truncated>
+        </Section>
 
-          {/* Right: Actions */}
-          {rightChildren}
-        </label>
-      </div>
+        {/* Right: Actions */}
+        <Section fit>{rightChildren}</Section>
+      </label>
       <div {...props} className="px-2" />
     </div>
   );

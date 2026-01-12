@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
@@ -107,22 +109,27 @@ export function usePinnedAgents() {
   const serverPinnedAgents = useMemo(() => {
     if (agents.length === 0) return [];
 
-    const pinned = (user?.preferences.pinned_assistants ?? [])
+    // If pinned_assistants is null/undefined (never set), show default personas
+    // If it's an empty array (user explicitly unpinned all), show nothing
+    const pinnedIds = user?.preferences.pinned_assistants;
+    if (pinnedIds === null || pinnedIds === undefined) {
+      return agents.filter(
+        (agent) => agent.is_default_persona && agent.id !== 0
+      );
+    }
+
+    return pinnedIds
       .map((id) => agents.find((agent) => agent.id === id))
       .filter((agent): agent is MinimalPersonaSnapshot => !!agent);
-
-    // Fallback to default personas if no pinned agents
-    return pinned.length > 0
-      ? pinned
-      : agents.filter((agent) => agent.is_default_persona && agent.id !== 0);
   }, [agents, user?.preferences.pinned_assistants]);
 
   // Sync server data → local state when server data changes
+  // Only sync when agents have loaded (to avoid syncing empty during initial load)
   useEffect(() => {
-    if (serverPinnedAgents.length > 0) {
+    if (agents.length > 0) {
       setLocalPinnedAgents(serverPinnedAgents);
     }
-  }, [serverPinnedAgents]);
+  }, [serverPinnedAgents, agents.length]);
 
   // Toggle pin status - updates local state AND persists to server
   const togglePinnedAgent = useCallback(

@@ -85,12 +85,12 @@ export function Citation({
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out ml-1"
           >
             <span
-              className="flex items-center justify-center p-1 h-4
+              className="flex items-center justify-center p-1 h-4 max-w-[200px]
                          bg-background-tint-03 rounded-04
                          hover:bg-background-tint-04 shadow-sm"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
-              <Text figureSmallValue as="span">
+              <Text figureSmallValue as="span" className="truncate">
                 {citationText}
               </Text>
             </span>

@@ -229,7 +229,7 @@ multidict==6.7.0
     #   yarl
 networkx==3.5
     # via torch
-numpy==1.26.4
+numpy==2.4.1
     # via
     #   accelerate
     #   onyx
@@ -289,7 +289,7 @@ parameterized==0.9.0
     # via cohere
 pillow==12.0.0
     # via sentence-transformers
-prometheus-client==0.21.0
+prometheus-client==0.23.1
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator

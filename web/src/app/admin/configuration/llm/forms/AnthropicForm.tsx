@@ -6,7 +6,7 @@ import {
   ProviderFormContext,
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
-import { ApiKeyField } from "./components/ApiKeyField";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
@@ -94,7 +94,7 @@ export function AnthropicForm({
                   <Form className={LLM_FORM_CLASS_NAME}>
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <ApiKeyField />
+                    <PasswordInputTypeInField name="api_key" label="API Key" />
 
                     <DisplayModels
                       modelConfigurations={modelConfigurations}

@@ -10,7 +10,7 @@ import EnabledCount from "@/refresh-components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 
-interface ToolsListProps {
+export interface ToolsListProps {
   // Loading state
   isFetching?: boolean;
 
@@ -101,7 +101,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                   icon={SvgEye}
                   internal
                   onClick={onToggleShowOnlyEnabled}
-                  className={showOnlyEnabled ? "bg-background-tint-02" : ""}
+                  transient={showOnlyEnabled}
                   tooltip={
                     showOnlyEnabled ? "Show all tools" : "Show only enabled"
                   }
@@ -133,6 +133,6 @@ const ToolsList: React.FC<ToolsListProps> = ({
     </>
   );
 };
-
 ToolsList.displayName = "ToolsList";
+
 export default ToolsList;

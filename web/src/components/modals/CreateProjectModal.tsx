@@ -42,14 +42,14 @@ export default function CreateProjectModal() {
           description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
           onClose={() => modal.toggle(false)}
         />
-        <Modal.Body className="flex flex-col p-4 bg-background-tint-01">
+        <Modal.Body>
           <FieldInput
             label="Project Name"
             placeholder="What are you working on?"
             ref={fieldInputRef}
           />
         </Modal.Body>
-        <Modal.Footer className="flex flex-row justify-end gap-2 p-4 w-full">
+        <Modal.Footer>
           <Button secondary onClick={() => modal.toggle(false)}>
             Cancel
           </Button>

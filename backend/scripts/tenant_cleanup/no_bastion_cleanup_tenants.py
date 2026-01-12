@@ -5,10 +5,9 @@ All queries run directly from pods.
 Supports two-cluster architecture (data plane and control plane in separate clusters).
 
 Usage:
-    PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py <tenant_id> [--force]
-    PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py --csv <csv_file_path> [--force]
+    PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py <tenant_id> \
+        --data-plane-context <context> --control-plane-context <context> [--force]
 
-    With explicit contexts:
     PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py --csv <csv_file_path> \
         --data-plane-context <context> --control-plane-context <context> [--force]
 """
@@ -30,6 +29,10 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_background_pod
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_worker_pod
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import get_tenant_status
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import read_tenant_ids_from_csv
+from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
+    TenantNotFoundInControlPlaneError,
+)
+
 
 # Global lock for thread-safe operations
 _print_lock: Lock = Lock()
@@ -41,12 +44,12 @@ def signal_handler(signum: int, frame: object) -> None:
     sys.exit(1)
 
 
-def setup_scripts_on_pod(pod_name: str, context: str | None = None) -> None:
+def setup_scripts_on_pod(pod_name: str, context: str) -> None:
     """Copy all required scripts to the pod once at the beginning.
 
     Args:
         pod_name: Pod to copy scripts to
-        context: Optional kubectl context
+        context: kubectl context for the cluster
     """
     print("Setting up scripts on pod (one-time operation)...")
 
@@ -66,9 +69,7 @@ def setup_scripts_on_pod(pod_name: str, context: str | None = None) -> None:
         if not local_file.exists():
             raise FileNotFoundError(f"Script not found: {local_file}")
 
-        cmd_cp = ["kubectl", "cp"]
-        if context:
-            cmd_cp.extend(["--context", context])
+        cmd_cp = ["kubectl", "cp", "--context", context]
         cmd_cp.extend([str(local_file), f"{pod_name}:{remote_path}"])
 
         subprocess.run(cmd_cp, check=True, capture_output=True)
@@ -76,15 +77,13 @@ def setup_scripts_on_pod(pod_name: str, context: str | None = None) -> None:
     print("✓ All scripts copied to pod")
 
 
-def get_tenant_index_name(
-    pod_name: str, tenant_id: str, context: str | None = None
-) -> str:
+def get_tenant_index_name(pod_name: str, tenant_id: str, context: str) -> str:
     """Get the default index name for the given tenant by running script on pod.
 
     Args:
         pod_name: Data plane pod to execute on
         tenant_id: Tenant ID to process
-        context: Optional kubectl context for data plane cluster
+        context: kubectl context for data plane cluster
     """
     print(f"Getting default index name for tenant: {tenant_id}")
 
@@ -100,9 +99,7 @@ def get_tenant_index_name(
     try:
         # Copy script to pod
         print("  Copying script to pod...")
-        cmd_cp = ["kubectl", "cp"]
-        if context:
-            cmd_cp.extend(["--context", context])
+        cmd_cp = ["kubectl", "cp", "--context", context]
         cmd_cp.extend(
             [
                 str(index_name_script),
@@ -118,12 +115,9 @@ def get_tenant_index_name(
 
         # Execute script on pod
         print("  Executing script on pod...")
-        cmd_exec = ["kubectl", "exec"]
-        if context:
-            cmd_exec.extend(["--context", context])
+        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
         cmd_exec.extend(
             [
-                pod_name,
                 "--",
                 "python",
                 "/tmp/get_tenant_index_name.py",
@@ -168,25 +162,20 @@ def get_tenant_index_name(
         raise
 
 
-def get_tenant_users(
-    pod_name: str, tenant_id: str, context: str | None = None
-) -> list[str]:
+def get_tenant_users(pod_name: str, tenant_id: str, context: str) -> list[str]:
     """Get list of user emails from the tenant's data plane schema.
 
     Args:
         pod_name: Data plane pod to execute on
         tenant_id: Tenant ID to process
-        context: Optional kubectl context for data plane cluster
+        context: kubectl context for data plane cluster
     """
     # Script is already on pod from setup_scripts_on_pod()
     try:
         # Execute script on pod
-        cmd_exec = ["kubectl", "exec"]
-        if context:
-            cmd_exec.extend(["--context", context])
+        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
         cmd_exec.extend(
             [
-                pod_name,
                 "--",
                 "python",
                 "/tmp/get_tenant_users.py",
@@ -233,25 +222,20 @@ def get_tenant_users(
         return []
 
 
-def check_documents_deleted(
-    pod_name: str, tenant_id: str, context: str | None = None
-) -> None:
+def check_documents_deleted(pod_name: str, tenant_id: str, context: str) -> None:
     """Check if all documents and connector credential pairs have been deleted.
 
     Args:
         pod_name: Data plane pod to execute on
         tenant_id: Tenant ID to process
-        context: Optional kubectl context for data plane cluster
+        context: kubectl context for data plane cluster
     """
     # Script is already on pod from setup_scripts_on_pod()
     try:
         # Execute script on pod
-        cmd_exec = ["kubectl", "exec"]
-        if context:
-            cmd_exec.extend(["--context", context])
+        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
         cmd_exec.extend(
             [
-                pod_name,
                 "--",
                 "python",
                 "/tmp/check_documents_deleted.py",
@@ -305,25 +289,20 @@ def check_documents_deleted(
         raise
 
 
-def drop_data_plane_schema(
-    pod_name: str, tenant_id: str, context: str | None = None
-) -> None:
+def drop_data_plane_schema(pod_name: str, tenant_id: str, context: str) -> None:
     """Drop the PostgreSQL schema for the given tenant by running script on pod.
 
     Args:
         pod_name: Data plane pod to execute on
         tenant_id: Tenant ID to process
-        context: Optional kubectl context for data plane cluster
+        context: kubectl context for data plane cluster
     """
     # Script is already on pod from setup_scripts_on_pod()
     try:
         # Execute script on pod
-        cmd_exec = ["kubectl", "exec"]
-        if context:
-            cmd_exec.extend(["--context", context])
+        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
         cmd_exec.extend(
             [
-                pod_name,
                 "--",
                 "python",
                 "/tmp/cleanup_tenant_schema.py",
@@ -366,14 +345,14 @@ def drop_data_plane_schema(
 
 
 def cleanup_control_plane(
-    pod_name: str, tenant_id: str, context: str | None = None, force: bool = False
+    pod_name: str, tenant_id: str, context: str, force: bool = False
 ) -> None:
     """Clean up control plane data via pod queries.
 
     Args:
         pod_name: Control plane pod to execute on
         tenant_id: Tenant ID to process
-        context: Optional kubectl context for control plane cluster
+        context: kubectl context for control plane cluster
         force: Skip confirmations if True
     """
     print(f"Cleaning up control plane data for tenant: {tenant_id}")
@@ -413,8 +392,8 @@ def cleanup_tenant(
     tenant_id: str,
     data_plane_pod: str,
     control_plane_pod: str,
-    data_plane_context: str | None = None,
-    control_plane_context: str | None = None,
+    data_plane_context: str,
+    control_plane_context: str,
     force: bool = False,
 ) -> bool:
     """Main cleanup function that orchestrates all cleanup steps.
@@ -423,11 +402,14 @@ def cleanup_tenant(
         tenant_id: Tenant ID to process
         data_plane_pod: Data plane pod for schema operations
         control_plane_pod: Control plane pod for tenant record operations
-        data_plane_context: Optional kubectl context for data plane cluster
-        control_plane_context: Optional kubectl context for control plane cluster
+        data_plane_context: kubectl context for data plane cluster
+        control_plane_context: kubectl context for control plane cluster
         force: Skip confirmations if True
     """
     print(f"Starting cleanup for tenant: {tenant_id}")
+
+    # Track if tenant was not found in control plane (for force mode)
+    tenant_not_found_in_control_plane = False
 
     # Check tenant status first (from control plane)
     print(f"\n{'=' * 80}")
@@ -470,8 +452,25 @@ def cleanup_tenant(
             if response.lower() != "yes":
                 print("Cleanup aborted - could not verify tenant status")
                 return False
+    except TenantNotFoundInControlPlaneError as e:
+        # Tenant/table not found in control plane
+        error_str = str(e)
+        print(f"⚠️  WARNING: Tenant not found in control plane: {error_str}")
+        tenant_not_found_in_control_plane = True
+
+        if force:
+            print(
+                "[FORCE MODE] Tenant not found in control plane - continuing with dataplane cleanup only"
+            )
+        else:
+            response = input("Continue anyway? Type 'yes' to confirm: ")
+            if response.lower() != "yes":
+                print("Cleanup aborted - tenant not found in control plane")
+                return False
     except Exception as e:
-        print(f"⚠️  WARNING: Failed to check tenant status: {e}")
+        # Other errors (not "not found")
+        error_str = str(e)
+        print(f"⚠️  WARNING: Failed to check tenant status: {error_str}")
 
         if force:
             print(f"Skipping cleanup for tenant {tenant_id} in force mode")
@@ -528,8 +527,14 @@ def cleanup_tenant(
     else:
         print("Step 2 skipped by user")
 
-    # Step 3: Clean up control plane
-    if confirm_step(
+    # Step 3: Clean up control plane (skip if tenant not found in control plane with --force)
+    if tenant_not_found_in_control_plane:
+        print(f"\n{'=' * 80}")
+        print(
+            "Step 3/3: Skipping control plane cleanup (tenant not found in control plane)"
+        )
+        print(f"{'=' * 80}\n")
+    elif confirm_step(
         "Step 3/3: Delete control plane records (tenant_notification, tenant_config, subscription, tenant)",
         force,
     ):
@@ -560,12 +565,11 @@ def main() -> None:
 
     if len(sys.argv) < 2:
         print(
-            "Usage: PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py <tenant_id> [--force]"
+            "Usage: PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py <tenant_id> \\"
         )
         print(
-            "       PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py --csv <csv_file_path> [--force]"
+            "           --data-plane-context <context> --control-plane-context <context> [--force]"
         )
-        print("\nTwo-cluster architecture (with explicit contexts):")
         print(
             "       PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py --csv <csv_file_path> \\"
         )
@@ -575,20 +579,20 @@ def main() -> None:
         print("\nThis version runs ALL operations from pods (no bastion required)")
         print("\nArguments:")
         print(
-            "  tenant_id                  The tenant ID to clean up (required if not using --csv)"
+            "  tenant_id                   The tenant ID to clean up (required if not using --csv)"
         )
         print(
-            "  --csv PATH                 Path to CSV file containing tenant IDs to clean up"
+            "  --csv PATH                  Path to CSV file containing tenant IDs to clean up"
         )
-        print("  --force                    Skip all confirmation prompts (optional)")
+        print("  --force                     Skip all confirmation prompts (optional)")
         print(
-            "  --concurrency N            Process N tenants concurrently (default: 1)"
-        )
-        print(
-            "  --data-plane-context CTX   Kubectl context for data plane cluster (optional)"
+            "  --concurrency N             Process N tenants concurrently (default: 1)"
         )
         print(
-            "  --control-plane-context CTX Kubectl context for control plane cluster (optional)"
+            "  --data-plane-context CTX    Kubectl context for data plane cluster (required)"
+        )
+        print(
+            "  --control-plane-context CTX Kubectl context for control plane cluster (required)"
         )
         sys.exit(1)
 
@@ -620,7 +624,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Parse contexts
+    # Parse contexts (required)
     data_plane_context: str | None = None
     control_plane_context: str | None = None
 
@@ -649,6 +653,21 @@ def main() -> None:
             control_plane_context = sys.argv[idx + 1]
         except ValueError:
             pass
+
+    # Validate required contexts
+    if not data_plane_context:
+        print(
+            "Error: --data-plane-context is required",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if not control_plane_context:
+        print(
+            "Error: --control-plane-context is required",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Check for CSV mode
     if "--csv" in sys.argv:

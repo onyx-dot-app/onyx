@@ -7,6 +7,7 @@ from enum import Enum
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
+ONYX_UTM_SOURCE = "onyx_app"
 SLACK_USER_TOKEN_PREFIX = "xoxp-"
 SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
@@ -146,9 +147,6 @@ CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 
-# Doc ID migration can be long-running; use a longer TTL and renew periodically
-CELERY_USER_FILE_DOCID_MIGRATION_LOCK_TIMEOUT = 10 * 60  # 10 minutes (in seconds)
-
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
 CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
@@ -237,6 +235,8 @@ class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
+    RELEASE_NOTES = "release_notes"
+    ASSISTANT_FILES_READY = "assistant_files_ready"
 
 
 class BlobType(str, Enum):
@@ -365,9 +365,6 @@ class OnyxCeleryQueues:
     CONNECTOR_EXTERNAL_GROUP_SYNC = "connector_external_group_sync"
     CSV_GENERATION = "csv_generation"
 
-    # Indexing queue
-    USER_FILES_INDEXING = "user_files_indexing"
-
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
@@ -426,7 +423,9 @@ class OnyxRedisLocks:
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
-    USER_FILE_DOCID_MIGRATION_LOCK = "da_lock:user_file_docid_migration"
+
+    # Release notes
+    RELEASE_NOTES_FETCH_LOCK = "da_lock:release_notes_fetch"
 
 
 class OnyxRedisSignals:
@@ -533,7 +532,6 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
-    USER_FILE_DOCID_MIGRATION = "user_file_docid_migration"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"

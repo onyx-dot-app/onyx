@@ -369,10 +369,23 @@ class Notification(Base):
     dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
     last_shown: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     first_shown: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    title: Mapped[str] = mapped_column(String)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
 
     user: Mapped[User] = relationship("User", back_populates="notifications")
     additional_data: Mapped[dict | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+
+    # Unique constraint ix_notification_user_type_data on (user_id, notif_type, additional_data)
+    # ensures notification deduplication for batch inserts. Defined in migration 8405ca81cc83.
+    __table_args__ = (
+        Index(
+            "ix_notification_user_sort",
+            "user_id",
+            "dismissed",
+            desc("first_shown"),
+        ),
     )
 
 
@@ -532,7 +545,6 @@ class ConnectorCredentialPair(Base):
     """
 
     __tablename__ = "connector_credential_pair"
-    is_user_file: Mapped[bool] = mapped_column(Boolean, default=False)
     # NOTE: this `id` column has to use `Sequence` instead of `autoincrement=True`
     # due to some SQLAlchemy quirks + this not being a primary key column
     id: Mapped[int] = mapped_column(
@@ -3569,9 +3581,6 @@ class UserFile(Base):
         back_populates="user_files",
     )
     file_id: Mapped[str] = mapped_column(nullable=False)
-    document_id: Mapped[str] = mapped_column(
-        nullable=False
-    )  # TODO(subash): legacy document_id, will be removed in a future migration
     name: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=datetime.datetime.utcnow
@@ -3599,9 +3608,6 @@ class UserFile(Base):
 
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
-    document_id_migrated: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
 
     projects: Mapped[list["UserProject"]] = relationship(
         "UserProject",

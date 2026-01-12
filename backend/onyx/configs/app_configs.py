@@ -568,6 +568,7 @@ JIRA_CONNECTOR_LABELS_TO_SKIP = [
 JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
     os.environ.get("JIRA_CONNECTOR_MAX_TICKET_SIZE", 100 * 1024)
 )
+JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
@@ -678,10 +679,6 @@ INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
 INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
     os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 8
 )
-
-# Maximum number of user file connector credential pairs to index in a single batch
-# Setting this number too high may overload the indexing process
-USER_FILE_INDEXING_LIMIT = int(os.environ.get("USER_FILE_INDEXING_LIMIT") or 100)
 
 # Maximum file size in a document to be indexed
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
@@ -999,3 +996,9 @@ COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
 VERTEXAI_DEFAULT_CREDENTIALS = os.environ.get("VERTEXAI_DEFAULT_CREDENTIALS")
 VERTEXAI_DEFAULT_LOCATION = os.environ.get("VERTEXAI_DEFAULT_LOCATION", "global")
 OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
+
+INSTANCE_TYPE = (
+    "managed"
+    if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
+    else "cloud" if AUTH_TYPE == AuthType.CLOUD else "self_hosted"
+)

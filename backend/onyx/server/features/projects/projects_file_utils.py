@@ -11,6 +11,7 @@ from pydantic import Field
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.password_validation import is_file_password_protected
 from onyx.llm.factory import get_default_llm
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
@@ -187,6 +188,19 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
 
             # Otherwise, handle as text/document: extract text and count tokens
             elif extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+                if is_file_password_protected(
+                    file=upload.file,
+                    file_name=filename,
+                    extension=extension,
+                ):
+                    logger.warning(f"{filename} is password protected")
+                    results.rejected.append(
+                        RejectedFile(
+                            filename=filename, reason="Document is password protected"
+                        )
+                    )
+                    continue
+
                 text_content = extract_file_text(
                     file=upload.file,
                     file_name=filename,

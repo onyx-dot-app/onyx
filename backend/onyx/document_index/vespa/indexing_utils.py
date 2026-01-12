@@ -19,7 +19,6 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
-from onyx.document_index.vespa.shared_utils.utils import remove_invalid_unicode_chars
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
@@ -56,6 +55,7 @@ from onyx.document_index.vespa_constants import TITLE_EMBEDDING
 from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import remove_invalid_unicode_chars
 
 
 logger = setup_logger()

@@ -55,6 +55,7 @@ from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -117,6 +118,7 @@ def prepare_chat_message_request(
     llm_override: LLMOverride | None = None,
     allowed_tool_ids: list[int] | None = None,
     forced_tool_ids: list[int] | None = None,
+    origin: MessageOrigin | None = None,
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(
@@ -144,6 +146,7 @@ def prepare_chat_message_request(
         llm_override=llm_override,
         allowed_tool_ids=allowed_tool_ids,
         forced_tool_ids=forced_tool_ids,
+        origin=origin or MessageOrigin.UNKNOWN,
     )
 
 

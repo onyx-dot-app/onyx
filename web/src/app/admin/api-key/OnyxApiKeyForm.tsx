@@ -83,11 +83,7 @@ export default function OnyxApiKeyForm({
                   can be added or changed later!
                 </Text>
 
-                <TextFormField
-                  name="name"
-                  label="Name (optional):"
-                  autoCompleteDisabled={true}
-                />
+                <TextFormField name="name" label="Name (optional):" />
 
                 <SelectorFormField
                   // defaultValue is managed by Formik

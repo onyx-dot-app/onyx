@@ -5,10 +5,10 @@ import { QueryHistoryTable } from "@/app/ee/admin/performance/query-history/Quer
 import { SvgServer } from "@opal/icons";
 export default function QueryHistoryPage() {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="Query History" icon={SvgServer} />
 
       <QueryHistoryTable />
-    </div>
+    </>
   );
 }

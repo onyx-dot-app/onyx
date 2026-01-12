@@ -61,11 +61,11 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle icon={SvgThumbsUp} title="Document Feedback" />
 
       <Main />
-    </div>
+    </>
   );
 };
 

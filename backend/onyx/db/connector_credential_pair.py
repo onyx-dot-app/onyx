@@ -6,21 +6,15 @@ from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import exists
-from sqlalchemy import lateral
-from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
-from sqlalchemy import true
 from sqlalchemy import update
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
-from onyx.configs.app_configs import USER_FILE_INDEXING_LIMIT
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
@@ -120,7 +114,6 @@ def get_connector_credential_pairs_for_user(
     eager_load_connector: bool = False,
     eager_load_credential: bool = False,
     eager_load_user: bool = False,
-    include_user_files: bool = False,
     order_by_desc: bool = False,
     source: DocumentSource | None = None,
 ) -> list[ConnectorCredentialPair]:
@@ -148,9 +141,6 @@ def get_connector_credential_pairs_for_user(
 
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
-
-    if not include_user_files:
-        stmt = stmt.where(ConnectorCredentialPair.is_user_file.is_(False))
 
     if order_by_desc:
         stmt = stmt.order_by(desc(ConnectorCredentialPair.id))
@@ -186,15 +176,12 @@ def get_connector_credential_pairs_for_user_parallel(
 
 
 def get_connector_credential_pairs(
-    db_session: Session, ids: list[int] | None = None, include_user_files: bool = False
+    db_session: Session, ids: list[int] | None = None
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
 
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
-
-    if not include_user_files:
-        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
 
     return list(db_session.scalars(stmt).all())
 
@@ -242,15 +229,12 @@ def get_connector_credential_pair_for_user(
     connector_id: int,
     credential_id: int,
     user: User | None,
-    include_user_files: bool = False,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
     stmt = _add_user_filters(stmt, user, get_editable)
     stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
     stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
-    if not include_user_files:
-        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -377,8 +361,6 @@ def _update_connector_credential_pair(
         cc_pair.total_docs_indexed += net_docs
     if status is not None:
         cc_pair.status = status
-    if cc_pair.is_user_file:
-        cc_pair.status = ConnectorCredentialPairStatus.PAUSED
 
     db_session.commit()
 
@@ -444,27 +426,10 @@ def set_cc_pair_repeated_error_state(
     cc_pair_id: int,
     in_repeated_error_state: bool,
 ) -> None:
-    values: dict = {"in_repeated_error_state": in_repeated_error_state}
-
-    # When entering repeated error state, also pause the connector
-    # to prevent continued indexing retry attempts burning through embedding credits.
-    # However, don't pause if there's an active manual indexing trigger,
-    # which indicates the user wants to retry immediately.
-    # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
-    # models. Also, they are more prone to repeated failures -> eventual success.
-    if in_repeated_error_state and AUTH_TYPE == AuthType.CLOUD:
-        cc_pair = get_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=cc_pair_id,
-        )
-        # Only pause if there's no manual indexing trigger active
-        if cc_pair and cc_pair.indexing_trigger is None:
-            values["status"] = ConnectorCredentialPairStatus.PAUSED
-
     stmt = (
         update(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
-        .values(**values)
+        .values(in_repeated_error_state=in_repeated_error_state)
     )
     db_session.execute(stmt)
     db_session.commit()
@@ -536,7 +501,6 @@ def add_credential_to_connector(
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.SCHEDULED,
     last_successful_index_time: datetime | None = None,
     seeding_flow: bool = False,
-    is_user_file: bool = False,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
 
@@ -602,7 +566,6 @@ def add_credential_to_connector(
         access_type=access_type,
         auto_sync_options=auto_sync_options,
         last_successful_index_time=last_successful_index_time,
-        is_user_file=is_user_file,
     )
     db_session.add(association)
     db_session.flush()  # make sure the association has an id
@@ -699,63 +662,8 @@ def fetch_indexable_standard_connector_credential_pair_ids(
             )
         )
 
-    # Exclude user files. NOTE: some cc pairs have null for is_user_file instead of False
-    stmt = stmt.where(ConnectorCredentialPair.is_user_file.is_not(True))
-
     if limit:
         stmt = stmt.limit(limit)
-
-    return list(db_session.scalars(stmt))
-
-
-def fetch_indexable_user_file_connector_credential_pair_ids(
-    db_session: Session,
-    search_settings_id: int,
-    limit: int | None = USER_FILE_INDEXING_LIMIT,
-) -> list[int]:
-    """
-    Return up to `limit` user file connector_credential_pair IDs that still
-    need indexing for the given `search_settings_id`
-
-    A cc_pair is considered "needs indexing" if its most recent IndexAttempt
-    for this search_settings_id is either:
-        - Missing entirely (no attempts yet)
-        - Present but not SUCCESS status
-
-    Implementation details:
-        - Uses a LEFT JOIN LATERAL subquery to fetch only the single newest attempt
-            per cc_pair (`ORDER BY time_updated DESC LIMIT 1`), instead of joining all
-            attempts. This avoids scanning thousands of historical attempts and
-            keeps memory/CPU usage low
-        - `ON TRUE` is required in the lateral join because the correlation to
-            ConnectorCredentialPair.id happens inside the subquery itself
-        - NOTE: Shares some redundant logic with should_index() (TODO: combine)
-
-    Returns:
-        list[int]: connector_credential_pair IDs that should be indexed next
-    """
-    latest_attempt = lateral(
-        select(IndexAttempt.status)
-        .where(
-            IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
-            IndexAttempt.search_settings_id == search_settings_id,
-        )
-        .order_by(IndexAttempt.time_updated.desc())
-        .limit(1)
-    ).alias("latest_attempt")
-
-    stmt = (
-        select(ConnectorCredentialPair.id)
-        .outerjoin(latest_attempt, true())  # ON TRUE, Postgres-style lateral join
-        .where(
-            ConnectorCredentialPair.is_user_file.is_(True),
-            or_(
-                latest_attempt.c.status.is_(None),  # no attempts at all
-                latest_attempt.c.status != IndexingStatus.SUCCESS,  # latest != SUCCESS
-            ),
-        )
-        .limit(limit)  # Always apply a limit when fetching user file cc pairs
-    )
 
     return list(db_session.scalars(stmt))
 

@@ -55,7 +55,7 @@ export default function ModelSelectionConfirmationModal({
             </Callout>
           )}
         </Modal.Body>
-        <Modal.Footer className="p-4 gap-2 justify-end">
+        <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
           <Button secondary onClick={onCancel}>
             Cancel

@@ -16,11 +16,9 @@ from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import StarterMessage
 from onyx.db.models import User
-from onyx.db.notification import create_notification
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
@@ -52,7 +50,6 @@ from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
-from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.llm.api import get_valid_model_names_for_persona
@@ -386,18 +383,6 @@ def share_persona(
         user=user,
         db_session=db_session,
     )
-
-    for user_id in persona_share_request.user_ids:
-        # Don't notify the user that they have access to their own persona
-        if user_id != user.id:
-            create_notification(
-                user_id=user_id,
-                notif_type=NotificationType.PERSONA_SHARED,
-                db_session=db_session,
-                additional_data=PersonaSharedNotificationData(
-                    persona_id=persona_id,
-                ).model_dump(),
-            )
 
 
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)

@@ -29,6 +29,9 @@ from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderTestRequest
 from onyx.server.manage.web_search.models import WebSearchProviderUpsertRequest
 from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.tools.tool_implementations.open_url.utils import (
+    filter_web_contents_with_no_title_or_content,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     build_content_provider_from_config,
 )
@@ -353,7 +356,9 @@ def test_content_provider(
     # Actually test the API key by making a real content fetch call
     try:
         test_url = "https://example.com"
-        test_results = provider.contents([test_url])
+        test_results = filter_web_contents_with_no_title_or_content(
+            list(provider.contents([test_url]))
+        )
         if not test_results or not any(
             result.scrape_successful for result in test_results
         ):
