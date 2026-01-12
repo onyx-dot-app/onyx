@@ -164,6 +164,13 @@ const TabsTrigger = React.forwardRef<
     { tooltip, tooltipSide = "top", icon: Icon, children, disabled, ...props },
     ref
   ) => {
+    const inner = (
+      <>
+        {Icon && <Icon size={16} className="stroke-text-03" />}
+        <Text>{children}</Text>
+      </>
+    );
+
     const trigger = (
       <TabsPrimitive.Trigger
         ref={ref}
@@ -177,13 +184,12 @@ const TabsTrigger = React.forwardRef<
         )}
         {...props}
       >
-        {Icon && <Icon size={16} className="stroke-text-03" />}
         {tooltip && !disabled ? (
           <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
-            <Text>{children}</Text>
+            {inner}
           </SimpleTooltip>
         ) : (
-          <Text>{children}</Text>
+          inner
         )}
       </TabsPrimitive.Trigger>
     );
