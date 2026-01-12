@@ -59,6 +59,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgImage,
+  SvgLock,
   SvgOnyxOctagon,
   SvgSliders,
 } from "@opal/icons";
@@ -85,6 +86,8 @@ import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
+import Modal from "@/refresh-components/Modal";
+import ShareAgentModal from "@/sections/agents/ShareAgentModal";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -438,6 +441,7 @@ export default function AgentEditorPage({
   const appRouter = useAppRouter();
   const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -917,6 +921,10 @@ export default function AgentEditorPage({
     <>
       {popup}
 
+      <Modal open={shareModalOpen} onOpenChange={setShareModalOpen}>
+        <ShareAgentModal agent={existingAgent} />
+      </Modal>
+
       <div
         data-testid="AgentsEditorPage/container"
         aria-label="Agents Editor Page"
@@ -1381,6 +1389,22 @@ export default function AgentEditorPage({
                         }
                       >
                         <GeneralLayouts.Section>
+                          <Card>
+                            <InputLayouts.Horizontal
+                              label="Share This Agent"
+                              description="Share this agent with other users, groups, or everyone in your organization. "
+                              center
+                            >
+                              <Button
+                                secondary
+                                leftIcon={SvgLock}
+                                onClick={() => setShareModalOpen(true)}
+                              >
+                                Share
+                              </Button>
+                            </InputLayouts.Horizontal>
+                          </Card>
+
                           <Card>
                             <InputLayouts.Horizontal
                               name="llm_model"

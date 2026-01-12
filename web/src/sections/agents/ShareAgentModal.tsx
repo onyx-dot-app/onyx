@@ -16,11 +16,11 @@ import * as InputLayouts from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
 import Separator from "@/refresh-components/Separator";
 
-export interface AgentShareModalProps {
+export interface ShareAgentModalProps {
   agent?: MinimalPersonaSnapshot | Persona;
 }
 
-export default function AgentShareModal({ agent }: AgentShareModalProps) {
+export default function ShareAgentModal({ agent }: ShareAgentModalProps) {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [isSharing, setIsSharing] = useState(false);
 
