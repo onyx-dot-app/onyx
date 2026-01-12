@@ -113,6 +113,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
                         if result.published_date
                         else None
                     ),
+                    scrape_successful=bool(full_content),
                 )
             )
 
