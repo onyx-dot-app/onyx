@@ -634,6 +634,7 @@ export default function AgentEditorPage({
     // Sharing
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
     shared_group_ids: existingAgent?.groups ?? [],
+    is_public: existingAgent?.is_public ?? true,
   };
 
   const validationSchema = Yup.object().shape({
@@ -778,7 +779,7 @@ export default function AgentEditorPage({
             ? values.document_set_ids
             : [],
         num_chunks: numChunks,
-        is_public: existingAgent?.is_public ?? true,
+        is_public: values.is_public,
         // recency_bias: ...,
         // llm_filter_extraction: ...,
         llm_relevance_filter: false,
@@ -1470,9 +1471,11 @@ export default function AgentEditorPage({
                       agent={existingAgent}
                       initialUserIds={values.shared_user_ids}
                       initialGroupIds={values.shared_group_ids}
-                      onShare={(userIds, groupIds) => {
+                      initialIsPublic={values.is_public}
+                      onShare={(userIds, groupIds, isPublic) => {
                         setFieldValue("shared_user_ids", userIds);
                         setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
                       }}
                     />
                   </Modal>

@@ -18,7 +18,7 @@ import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as InputLayouts from "@/layouts/input-layouts";
-import Switch from "@/refresh-components/inputs/Switch";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import Separator from "@/refresh-components/Separator";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgUser } from "@opal/icons";
@@ -35,13 +35,15 @@ export interface ShareAgentModalProps {
   agent?: MinimalPersonaSnapshot;
   initialUserIds?: string[];
   initialGroupIds?: number[];
-  onShare?: (userIds: string[], groupIds: number[]) => void;
+  initialIsPublic?: boolean;
+  onShare?: (userIds: string[], groupIds: number[], isPublic: boolean) => void;
 }
 
 export default function ShareAgentModal({
   agent,
   initialUserIds = [],
   initialGroupIds = [],
+  initialIsPublic = true,
   onShare,
 }: ShareAgentModalProps) {
   const { data: usersData } = useUsers({ includeApiKeys: false });
@@ -67,6 +69,12 @@ export default function ShareAgentModal({
     (group) => group.name
   );
 
+  const initialValues = {
+    selectedUserIds: initialUserIds,
+    selectedGroupIds: initialGroupIds,
+    isPublic: initialIsPublic,
+  };
+
   function handleCopyLink() {
     if (!agent?.id) return;
 
@@ -77,12 +85,13 @@ export default function ShareAgentModal({
 
   return (
     <Formik
-      initialValues={{
-        selectedUserIds: initialUserIds,
-        selectedGroupIds: initialGroupIds,
-      }}
+      initialValues={initialValues}
       onSubmit={(values) => {
-        onShare?.(values.selectedUserIds, values.selectedGroupIds);
+        onShare?.(
+          values.selectedUserIds,
+          values.selectedGroupIds,
+          values.isPublic
+        );
         shareAgentModal.toggle(false);
       }}
       enableReinitialize
@@ -193,14 +202,7 @@ export default function ShareAgentModal({
                       label="Publish This Agent"
                       description="Make this agent available to everyone in your organization."
                     >
-                      <Switch />
-                    </InputLayouts.Horizontal>
-                    <Separator noPadding />
-                    <InputLayouts.Horizontal
-                      label="Feature This Agent"
-                      description="Show this agent in the featured section in the explore list for everyone in your organization. This will also pin the agent for any new users."
-                    >
-                      <Switch />
+                      <SwitchField name="isPublic" />
                     </InputLayouts.Horizontal>
                   </Tabs.Content>
                 </Tabs>
