@@ -465,6 +465,9 @@ class SearchDocsResponse(BaseModel):
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
+    # Document IDs that were selected by the LLM (subset of search_docs)
+    # If None, all docs are considered selected (backwards compatibility)
+    selected_doc_ids: set[str] | None = None
 
 
 class SavedSearchDoc(SearchDoc):

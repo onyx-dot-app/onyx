@@ -41,6 +41,7 @@ def _create_and_link_tool_calls(
     db_session: Session,
     default_tokenizer: BaseTokenizer,
     tool_call_to_search_doc_ids: dict[str, list[int]],
+    tool_call_to_selected_doc_db_ids: dict[str, set[int] | None] | None = None,
 ) -> None:
     """
     Create ToolCall entries and link parent references and SearchDocs.
@@ -58,6 +59,8 @@ def _create_and_link_tool_calls(
         db_session: Database session
         default_tokenizer: Tokenizer for calculating token counts
         tool_call_to_search_doc_ids: Mapping from tool_call_id to list of search_doc IDs
+        tool_call_to_selected_doc_db_ids: Mapping from tool_call_id to set of selected search_doc DB IDs.
+                                         If None for a tool_call, all docs are considered selected.
     """
     # Create all ToolCall objects first (without parent_tool_call_id set)
     # We'll update parent references after flushing to get IDs
@@ -143,10 +146,18 @@ def _create_and_link_tool_calls(
     for tool_call_obj in valid_tool_calls:
         search_doc_ids = tool_call_to_search_doc_ids.get(tool_call_obj.tool_call_id, [])
         if search_doc_ids:
+            # Get selected doc IDs for this tool call (None means all selected)
+            selected_doc_db_ids = None
+            if tool_call_to_selected_doc_db_ids is not None:
+                selected_doc_db_ids = tool_call_to_selected_doc_db_ids.get(
+                    tool_call_obj.tool_call_id
+                )
+
             add_search_docs_to_tool_call(
                 tool_call_id=tool_call_obj.id,
                 search_doc_ids=search_doc_ids,
                 db_session=db_session,
+                selected_doc_db_ids=selected_doc_db_ids,
             )
 
 
@@ -206,18 +217,22 @@ def save_chat_turn(
     # while ensuring different versions with different highlights are stored separately
     search_doc_key_to_id: dict[tuple[str, int, tuple[str, ...]], int] = {}
     tool_call_to_search_doc_ids: dict[str, list[int]] = {}
+    # Track which docs were selected by the LLM for each tool call
+    tool_call_to_selected_doc_db_ids: dict[str, set[int] | None] = {}
 
     # Process tool calls and their search docs
     for tool_call_info in tool_calls:
         if tool_call_info.search_docs:
             search_doc_ids_for_tool: list[int] = []
+            selected_doc_db_ids_for_tool: set[int] = set()
+
             for search_doc_py in tool_call_info.search_docs:
                 # Create a unique key for this SearchDoc version
                 search_doc_key = _create_search_doc_key(search_doc_py)
 
                 # Check if we've already created this exact SearchDoc version
                 if search_doc_key in search_doc_key_to_id:
-                    search_doc_ids_for_tool.append(search_doc_key_to_id[search_doc_key])
+                    db_search_doc_id = search_doc_key_to_id[search_doc_key]
                 else:
                     # Create new DB SearchDoc entry
                     db_search_doc = create_db_search_doc(
@@ -225,12 +240,27 @@ def save_chat_turn(
                         db_session=db_session,
                         commit=False,
                     )
-                    search_doc_key_to_id[search_doc_key] = db_search_doc.id
-                    search_doc_ids_for_tool.append(db_search_doc.id)
+                    db_search_doc_id = db_search_doc.id
+                    search_doc_key_to_id[search_doc_key] = db_search_doc_id
+
+                search_doc_ids_for_tool.append(db_search_doc_id)
+
+                # Check if this doc was selected by the LLM
+                if tool_call_info.selected_doc_ids is not None:
+                    if search_doc_py.document_id in tool_call_info.selected_doc_ids:
+                        selected_doc_db_ids_for_tool.add(db_search_doc_id)
 
             tool_call_to_search_doc_ids[tool_call_info.tool_call_id] = list(
                 set(search_doc_ids_for_tool)
             )
+
+            # Store selected doc DB IDs (None means all docs selected for backwards compat)
+            if tool_call_info.selected_doc_ids is not None:
+                tool_call_to_selected_doc_db_ids[tool_call_info.tool_call_id] = (
+                    selected_doc_db_ids_for_tool
+                )
+            else:
+                tool_call_to_selected_doc_db_ids[tool_call_info.tool_call_id] = None
 
     # 3. Collect all unique SearchDoc IDs from all tool calls to link to ChatMessage
     # Use a set to deduplicate by ID (since we've already deduplicated by key above)
@@ -304,6 +334,7 @@ def save_chat_turn(
         db_session=db_session,
         default_tokenizer=default_tokenizer,
         tool_call_to_search_doc_ids=tool_call_to_search_doc_ids,
+        tool_call_to_selected_doc_db_ids=tool_call_to_selected_doc_db_ids,
     )
 
     # 7. Build citations mapping from citation_docs_info

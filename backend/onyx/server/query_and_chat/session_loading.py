@@ -412,9 +412,13 @@ def translate_assistant_message_to_packets(
                         queries = cast(
                             list[str], tool_call.tool_call_arguments.get("queries", [])
                         )
+                        # Only load selected docs for replay (docs that were actually used by the LLM)
+                        selected_search_docs = tool_call.get_selected_search_docs(
+                            db_session
+                        )
                         search_docs: list[SavedSearchDoc] = [
                             translate_db_search_doc_to_saved_search_doc(doc)
-                            for doc in tool_call.search_docs
+                            for doc in selected_search_docs
                         ]
                         turn_tool_packets.extend(
                             create_search_packets(

@@ -551,10 +551,12 @@ def run_llm_loop(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
                     )
 
-                # Extract search_docs if this is a search tool response
+                # Extract search_docs and selected_doc_ids if this is a search tool response
                 search_docs = None
+                selected_doc_ids = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):
                     search_docs = tool_response.rich_response.search_docs
+                    selected_doc_ids = tool_response.rich_response.selected_doc_ids
                     if gathered_documents:
                         gathered_documents.extend(search_docs)
                     else:
@@ -584,6 +586,7 @@ def run_llm_loop(
                     tool_call_response=tool_response.llm_facing_response,
                     search_docs=search_docs,
                     generated_images=generated_images,
+                    selected_doc_ids=selected_doc_ids,
                 )
                 # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)

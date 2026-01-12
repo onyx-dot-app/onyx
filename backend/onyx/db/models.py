@@ -468,6 +468,9 @@ class ToolCall__SearchDoc(Base):
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id", ondelete="CASCADE"), primary_key=True
     )
+    # Indicates whether this doc was selected by the LLM for the final answer
+    # True = doc was selected/used, False = doc was retrieved but not selected
+    is_selected: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
 class Document__Tag(Base):
@@ -2278,6 +2281,18 @@ class ToolCall(Base):
         cascade="all, delete-orphan",
         single_parent=True,
     )
+
+    def get_selected_search_docs(self, db_session: "Session") -> list["SearchDoc"]:
+        """Get only the search docs that were selected by the LLM for the final answer."""
+        from sqlalchemy import select
+
+        stmt = (
+            select(SearchDoc)
+            .join(ToolCall__SearchDoc)
+            .where(ToolCall__SearchDoc.tool_call_id == self.id)
+            .where(ToolCall__SearchDoc.is_selected == True)  # noqa: E712
+        )
+        return list(db_session.execute(stmt).scalars().all())
 
 
 class SearchDoc(Base):

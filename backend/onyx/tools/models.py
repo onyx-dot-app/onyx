@@ -213,6 +213,9 @@ class ToolCallInfo(BaseModel):
     tool_call_response: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
+    # Set of document_ids that were selected by the LLM
+    # If None, all docs are considered selected (backwards compatibility)
+    selected_doc_ids: set[str] | None = None
 
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
