@@ -1,7 +1,7 @@
 """sync_exa_api_key_to_content_provider
 
 Revision ID: d1b637d7050a
-Revises: a3c1a7904cd0
+Revises: 8405ca81cc83
 Create Date: 2026-01-09 15:54:15.646249
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = "d1b637d7050a"
-down_revision = "a3c1a7904cd0"
+down_revision = "8405ca81cc83"
 branch_labels = None
 depends_on = None
 
