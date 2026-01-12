@@ -441,7 +441,7 @@ export default function AgentEditorPage({
   const appRouter = useAppRouter();
   const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
-  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const shareAgentModal = useCreateModal();
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -921,9 +921,14 @@ export default function AgentEditorPage({
     <>
       {popup}
 
-      <Modal open={shareModalOpen} onOpenChange={setShareModalOpen}>
-        <ShareAgentModal agent={existingAgent} />
-      </Modal>
+      <shareAgentModal.Provider>
+        <Modal
+          open={shareAgentModal.isOpen}
+          onOpenChange={shareAgentModal.toggle}
+        >
+          <ShareAgentModal agent={existingAgent} />
+        </Modal>
+      </shareAgentModal.Provider>
 
       <div
         data-testid="AgentsEditorPage/container"
@@ -1398,7 +1403,7 @@ export default function AgentEditorPage({
                               <Button
                                 secondary
                                 leftIcon={SvgLock}
-                                onClick={() => setShareModalOpen(true)}
+                                onClick={() => shareAgentModal.toggle(true)}
                               >
                                 Share
                               </Button>

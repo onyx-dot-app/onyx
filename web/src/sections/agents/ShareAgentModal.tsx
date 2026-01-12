@@ -20,6 +20,7 @@ import { SvgUser } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import useUsers from "@/hooks/useUsers";
 import useFilter from "@/hooks/useFilter";
+import { useModal } from "@/refresh-components/contexts/ModalContext";
 
 export interface ShareAgentModalProps {
   agent?: MinimalPersonaSnapshot;
@@ -34,6 +35,7 @@ export default function ShareAgentModal({ agent }: ShareAgentModalProps) {
     setQuery: setSearchQuery,
     filtered: filteredUsers,
   } = useFilter(usersData?.accepted ?? [], (user) => user.email);
+  const shareAgentModal = useModal();
 
   async function handleShare() {
     if (selectedUserIds.length === 0) return;
@@ -56,6 +58,14 @@ export default function ShareAgentModal({ agent }: ShareAgentModalProps) {
 
   function handleClose() {
     setSelectedUserIds([]);
+    shareAgentModal.toggle(false);
+  }
+
+  function handleCopyLink() {
+    if (!agent?.id) return;
+
+    const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
+    navigator.clipboard.writeText(url);
   }
 
   return (
@@ -114,9 +124,11 @@ export default function ShareAgentModal({ agent }: ShareAgentModalProps) {
       <Modal.Footer>
         <BasicModalFooter
           left={
-            <Button secondary leftIcon={SvgLink}>
-              Copy Link
-            </Button>
+            agent ? (
+              <Button secondary leftIcon={SvgLink} onClick={handleCopyLink}>
+                Copy Link
+              </Button>
+            ) : undefined
           }
           cancel={
             <Button secondary onClick={handleClose} disabled={isSharing}>
