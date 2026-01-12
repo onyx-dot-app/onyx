@@ -38,6 +38,7 @@ from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import FederatedConnectorSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.context.search.enums import OptionalSearchSetting
@@ -47,9 +48,13 @@ from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
+from onyx.db.federated import (
+    get_federated_connector_document_set_mappings_by_document_set_names,
+)
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
+from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
@@ -91,6 +96,42 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+
+
+def _should_enable_slack_search(
+    persona: Persona,
+    db_session: Session,
+) -> bool:
+    """Check if Slack federated search should be enabled for this persona.
+
+    Used to determine if Slack federated search should be enabled for web users.
+
+    Returns:
+        - True for default persona (ID == DEFAULT_PERSONA_ID) - allows global Slack search
+        - True if persona has document sets linked to Slack federated connectors
+        - False for custom personas with no Slack-connected document sets
+    """
+    # Default persona should always allow Slack search if user has OAuth token
+    if persona.id == DEFAULT_PERSONA_ID:
+        return True
+
+    # Custom persona without document sets - likely configured with user files only
+    if not persona.document_sets:
+        return False
+
+    # Custom persona with document sets - check if any are Slack-connected
+    document_set_names = [ds.name for ds in persona.document_sets]
+    slack_mappings = (
+        get_federated_connector_document_set_mappings_by_document_set_names(
+            db_session, document_set_names
+        )
+    )
+    return any(
+        mapping.federated_connector is not None
+        and mapping.federated_connector.source
+        == FederatedConnectorSource.FEDERATED_SLACK
+        for mapping in slack_mappings
+    )
 
 
 def _extract_project_file_texts_and_images(
@@ -504,6 +545,7 @@ def handle_stream_message_objects(
                 ),
                 bypass_acl=bypass_acl,
                 slack_context=slack_context,
+                enable_slack_search=_should_enable_slack_search(persona, db_session),
             ),
             custom_tool_config=CustomToolConfig(
                 chat_session_id=chat_session.id,

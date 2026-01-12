@@ -54,6 +54,7 @@ class SearchToolConfig(BaseModel):
     bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
+    enable_slack_search: bool = True
 
 
 class CustomToolConfig(BaseModel):
@@ -181,6 +182,7 @@ def construct_tools(
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
                     slack_context=search_tool_config.slack_context,
+                    enable_slack_search=search_tool_config.enable_slack_search,
                 )
 
                 tool_dict[db_tool_model.id] = [search_tool]
@@ -389,6 +391,7 @@ def construct_tools(
             project_id=search_tool_config.project_id,
             bypass_acl=search_tool_config.bypass_acl,
             slack_context=search_tool_config.slack_context,
+            enable_slack_search=search_tool_config.enable_slack_search,
         )
 
         tool_dict[search_tool_db_model.id] = [search_tool]
