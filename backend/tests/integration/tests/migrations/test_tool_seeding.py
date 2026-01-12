@@ -104,6 +104,9 @@ def test_tool_seeding_migration() -> None:
                 tool[2] == expected.display_name
             ), f"{expected.name} display name should be '{expected.display_name}'"
             assert (
+                tool[4] == expected.in_code_tool_id
+            ), f"{expected.name} in_code_tool_id should be '{expected.in_code_tool_id}'"
+            assert (
                 tool[5] is None
             ), f"{expected.name} should not have a user_id (builtin)"
 
