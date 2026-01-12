@@ -7,6 +7,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
+import Text from "./texts/Text";
 
 /**
  * Tabs Root Component
@@ -179,10 +180,10 @@ const TabsTrigger = React.forwardRef<
         {Icon && <Icon size={16} className="stroke-text-03" />}
         {tooltip && !disabled ? (
           <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
-            {children}
+            <Text>{children}</Text>
           </SimpleTooltip>
         ) : (
-          children
+          <Text>{children}</Text>
         )}
       </TabsPrimitive.Trigger>
     );
