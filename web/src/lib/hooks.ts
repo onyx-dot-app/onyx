@@ -1021,21 +1021,15 @@ export function useSourcePreferences({
           Object.prototype.hasOwnProperty.call(sourcePreferences, key);
 
         // Get sources with no preference
-        const newSources = configuredSources.filter(
-          (source: SourceMetadata) => {
-            if (!source.uniqueKey) return true;
-            return !hasPref(source.uniqueKey);
-          }
-        );
+        const newSources = configuredSources.filter((source) => {
+          return !hasPref(source.uniqueKey);
+        });
 
-        const enabledSources = configuredSources.filter(
-          (source: SourceMetadata) => {
-            if (!source.uniqueKey) return true;
-            return (
-              hasPref(source.uniqueKey) && sourcePreferences[source.uniqueKey]
-            );
-          }
-        );
+        const enabledSources = configuredSources.filter((source) => {
+          return (
+            hasPref(source.uniqueKey) && sourcePreferences[source.uniqueKey]
+          );
+        });
 
         // Merge valid saved sources with new sources (enable new sources by default)
         const mergedSources = [...enabledSources, ...newSources];
