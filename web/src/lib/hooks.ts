@@ -1017,9 +1017,7 @@ export function useSourcePreferences({
         const { sourcePreferences } = savedSources;
 
         const validSources = configuredSources.filter(
-          (source: SourceMetadata) =>
-            source.uniqueKey !== undefined &&
-            sourcePreferences[source.uniqueKey]
+          (source: SourceMetadata) => source.uniqueKey !== undefined
         );
 
         // Find new sources that weren't in the previous saving
