@@ -50,7 +50,7 @@ def create_release_notifications_for_versions(
             select(User.id).where(  # type: ignore
                 User.is_active == True,  # noqa: E712
                 User.role.notin_([UserRole.SLACK_USER, UserRole.EXT_PERM_USER]),
-                User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN).is_(False),
+                User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN).is_(False),  # type: ignore[attr-defined]
             )
         ).all()
     )
