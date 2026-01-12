@@ -52,12 +52,7 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverMenu,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
@@ -204,7 +199,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
       />
 
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <InputAvatar className="group/InputAvatar relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
             {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
             <CustomAgentAvatar
@@ -220,8 +215,8 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               Edit
             </Button>
           </InputAvatar>
-        </PopoverTrigger>
-        <PopoverContent>
+        </Popover.Trigger>
+        <Popover.Content>
           <PopoverMenu medium>
             {[
               <LineItem
@@ -255,7 +250,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               </div>,
             ]}
           </PopoverMenu>
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
     </>
   );

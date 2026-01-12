@@ -1,12 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  PopoverMenu,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { structureValue } from "@/lib/llm/utils";
 import {
@@ -33,6 +28,7 @@ import {
   SvgRefreshCw,
 } from "@opal/icons";
 import { IconProps } from "@/components/icons/icons";
+import { Section } from "@/layouts/general-layouts";
 
 interface LLMOption {
   name: string;
@@ -371,7 +367,7 @@ export default function LLMPopover({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild disabled={disabled}>
+      <Popover.Trigger asChild disabled={disabled}>
         <div data-testid="llm-popover-trigger">
           <SelectButton
             leftIcon={
@@ -392,9 +388,9 @@ export default function LLMPopover({
             {currentLlmDisplayName}
           </SelectButton>
         </div>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-[280px] p-1.5">
-        <div className="flex flex-col gap-2">
+      </Popover.Trigger>
+      <Popover.Content wide>
+        <Section gap={0.5}>
           {/* Search Input */}
           <InputTypeIn
             ref={searchInputRef}
@@ -522,8 +518,8 @@ export default function LLMPopover({
               </div>
             </>
           )}
-        </div>
-      </PopoverContent>
+        </Section>
+      </Popover.Content>
     </Popover>
   );
 }

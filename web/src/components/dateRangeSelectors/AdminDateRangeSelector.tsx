@@ -1,10 +1,6 @@
 import React, { memo, useState } from "react";
 import Calendar from "@/refresh-components/Calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover from "@/refresh-components/Popover";
 import Button from "@/refresh-components/buttons/Button";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -52,7 +48,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
   return (
     <div className="grid gap-2">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <Button
             secondary
             className={cn("justify-start", !value && "text-muted-foreground")}
@@ -67,8 +63,8 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
                 : format(value.from, "LLL dd, y")
               : "Pick a date range"}
           </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        </Popover.Trigger>
+        <Popover.Content align="start">
           <Calendar
             initialFocus
             mode="range"
@@ -103,7 +99,7 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
               </Button>
             ))}
           </div>
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
     </div>
   );
