@@ -63,7 +63,6 @@ import {
   SvgOnyxOctagon,
   SvgSliders,
   SvgTrash,
-  SvgX,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
