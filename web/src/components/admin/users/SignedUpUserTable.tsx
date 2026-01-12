@@ -260,7 +260,7 @@ export default function SignedUpUserTable({
         <Popover.Trigger asChild>
           <IconButton secondary icon={SvgMoreHorizontal} />
         </Popover.Trigger>
-        <Popover.Content wide>
+        <Popover.Content>
           <div className="grid gap-1">
             {NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
               <LeaveOrganizationButton

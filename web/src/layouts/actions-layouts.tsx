@@ -235,30 +235,28 @@ function ActionsHeader({
         isFolded ? "rounded-16" : "rounded-t-16"
       )}
     >
-      <div className="px-4">
-        <label
-          className="flex items-start justify-between gap-2 cursor-pointer"
-          htmlFor={name}
-        >
-          {/* Left: Icon, Title, Description */}
-          <div className="flex flex-col items-start">
-            <div className="flex items-center justify-center gap-2">
-              <div className="min-w-[18px]">
-                <Icon className="stroke-text-04" size={18} />
-              </div>
-              <Truncated mainContentEmphasis text04>
-                {title}
-              </Truncated>
+      <label
+        className="flex items-start justify-between gap-2 cursor-pointer px-4"
+        htmlFor={name}
+      >
+        {/* Left: Icon, Title, Description */}
+        <Section alignItems="start" gap={0} fit>
+          <Section flexDirection="row" gap={0.5}>
+            <div className="min-w-[18px]">
+              <Icon className="stroke-text-04" size={18} />
             </div>
-            <Truncated secondaryBody text03 className="pl-7">
-              {description}
+            <Truncated mainContentEmphasis text04>
+              {title}
             </Truncated>
-          </div>
+          </Section>
+          <Truncated secondaryBody text03 className="pl-7">
+            {description}
+          </Truncated>
+        </Section>
 
-          {/* Right: Actions */}
-          {rightChildren}
-        </label>
-      </div>
+        {/* Right: Actions */}
+        <Section fit>{rightChildren}</Section>
+      </label>
       <div {...props} className="px-2" />
     </div>
   );

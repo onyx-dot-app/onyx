@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import Separator from "@/refresh-components/Separator";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import { WithoutStyles } from "@/types";
+import { Section } from "@/layouts/general-layouts";
 
 /**
  * Popover Root Component
@@ -104,7 +105,7 @@ interface PopoverContentProps
   wide?: boolean;
 }
 const PopoverContent = React.forwardRef<
-  React.ElementRef<typeof PopoverPrimitive.Content>,
+  React.ComponentRef<typeof PopoverPrimitive.Content>,
   PopoverContentProps
 >(({ wide, align = "center", sideOffset = 4, ...props }, ref) => {
   const width = wide ? "wide" : "main";
@@ -133,8 +134,8 @@ function SeparatorHelper() {
 }
 
 const sizeClasses = {
-  small: ["w-[10rem]"],
-  medium: ["w-[15.5rem]"],
+  small: "w-[10rem]",
+  medium: "w-[15.5rem]",
 };
 
 export default Object.assign(PopoverRoot, {
@@ -190,9 +191,9 @@ export interface PopoverMenuProps {
   small?: boolean;
   medium?: boolean;
 
-  className?: string;
   children?: React.ReactNode[];
   footer?: React.ReactNode;
+
   // Ref for the scrollable container (useful for programmatic scrolling)
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
@@ -200,7 +201,6 @@ export function PopoverMenu({
   small,
   medium,
 
-  className,
   children,
   footer,
   scrollContainerRef,
@@ -217,13 +217,12 @@ export function PopoverMenu({
   const size = small ? "small" : medium ? "medium" : "small";
 
   return (
-    <div className="flex flex-col gap-1">
+    <Section alignItems="stretch">
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
         className={cn(
-          "flex flex-col gap-1 max-h-[20rem]",
-          sizeClasses[size],
-          className
+          "flex flex-col gap-1 max-h-[20rem] !w-full",
+          sizeClasses[size]
         )}
       >
         {filteredChildren.map((child, index) => (
@@ -245,6 +244,6 @@ export function PopoverMenu({
           {footer}
         </>
       )}
-    </div>
+    </Section>
   );
 }
