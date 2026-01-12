@@ -298,8 +298,8 @@ class OnyxWebCrawler(WebContentProvider):
         # Use existing NLTK stopword removal
         keywords = remove_stop_words_and_punctuation(words)
 
-        # Filter out very short words (likely not meaningful) and lowercase
-        keywords = [w.lower() for w in keywords if len(w) > 2]
+        # Lowercase for case-insensitive matching
+        keywords = [w.lower() for w in keywords]
 
         return keywords
 
