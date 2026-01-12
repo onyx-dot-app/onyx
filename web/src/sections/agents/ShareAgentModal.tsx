@@ -1,10 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -19,7 +16,6 @@ import { Card } from "@/refresh-components/cards";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as InputLayouts from "@/layouts/input-layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import Separator from "@/refresh-components/Separator";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgUser } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
@@ -30,26 +26,24 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/components/user/UserProvider";
 import useFilter from "@/hooks/useFilter";
 import { Formik } from "formik";
+import { useAgent } from "@/hooks/useAgents";
 
 export interface ShareAgentModalProps {
   agent?: MinimalPersonaSnapshot;
-  initialUserIds?: string[];
-  initialGroupIds?: number[];
-  initialIsPublic?: boolean;
   onShare?: (userIds: string[], groupIds: number[], isPublic: boolean) => void;
 }
 
 export default function ShareAgentModal({
   agent,
-  initialUserIds = [],
-  initialGroupIds = [],
-  initialIsPublic = true,
   onShare,
 }: ShareAgentModalProps) {
   const { data: usersData } = useUsers({ includeApiKeys: false });
   const { data: groupsData } = useGroups();
   const { user: currentUser } = useUser();
   const shareAgentModal = useModal();
+
+  // Fetch full agent data
+  const { agent: fullAgent, isLoading } = useAgent(agent?.id ?? null);
 
   // Filter out current user from the list
   const usersWithoutCurrent = useMemo(
@@ -70,9 +64,9 @@ export default function ShareAgentModal({
   );
 
   const initialValues = {
-    selectedUserIds: initialUserIds,
-    selectedGroupIds: initialGroupIds,
-    isPublic: initialIsPublic,
+    selectedUserIds: fullAgent?.users?.map((u) => u.id) ?? [],
+    selectedGroupIds: fullAgent?.groups ?? [],
+    isPublic: fullAgent?.is_public ?? true,
   };
 
   function handleCopyLink() {
@@ -80,7 +74,21 @@ export default function ShareAgentModal({
 
     const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
     navigator.clipboard.writeText(url);
-    shareAgentModal.toggle(false);
+  }
+
+  if (isLoading || !fullAgent) {
+    return (
+      <Modal.Content tall>
+        <Modal.Header
+          icon={SvgShare}
+          title="Share Agent"
+          onClose={() => shareAgentModal.toggle(false)}
+        />
+        <Modal.Body padding={0.5}>
+          <Text>Loading...</Text>
+        </Modal.Body>
+      </Modal.Content>
+    );
   }
 
   return (
@@ -131,8 +139,9 @@ export default function ShareAgentModal({
                         placeholder="Add users, groups, and accounts"
                         value={query}
                         onChange={(e) => {
-                          setUserSearchQuery(query);
-                          setGroupSearchQuery(query);
+                          const newQuery = e.target.value;
+                          setUserSearchQuery(newQuery);
+                          setGroupSearchQuery(newQuery);
                         }}
                       />
                       {(filteredUsers.length > 0 ||

@@ -962,6 +962,7 @@ export default function AgentEditorPage({
             return (
               <>
                 <FormWarningsEffect />
+
                 <userFilesModal.Provider>
                   <UserFilesModal
                     title="User Files"
@@ -1009,6 +1010,22 @@ export default function AgentEditorPage({
                     }}
                   />
                 </userFilesModal.Provider>
+
+                <shareAgentModal.Provider>
+                  <Modal
+                    open={shareAgentModal.isOpen}
+                    onOpenChange={shareAgentModal.toggle}
+                  >
+                    <ShareAgentModal
+                      agent={existingAgent}
+                      onShare={(userIds, groupIds, isPublic) => {
+                        setFieldValue("shared_user_ids", userIds);
+                        setFieldValue("shared_group_ids", groupIds);
+                        setFieldValue("is_public", isPublic);
+                      }}
+                    />
+                  </Modal>
+                </shareAgentModal.Provider>
 
                 <Form className="h-full w-full">
                   <SettingsLayouts.Root>
@@ -1461,25 +1478,6 @@ export default function AgentEditorPage({
                     </SettingsLayouts.Body>
                   </SettingsLayouts.Root>
                 </Form>
-
-                <shareAgentModal.Provider>
-                  <Modal
-                    open={shareAgentModal.isOpen}
-                    onOpenChange={shareAgentModal.toggle}
-                  >
-                    <ShareAgentModal
-                      agent={existingAgent}
-                      initialUserIds={values.shared_user_ids}
-                      initialGroupIds={values.shared_group_ids}
-                      initialIsPublic={values.is_public}
-                      onShare={(userIds, groupIds, isPublic) => {
-                        setFieldValue("shared_user_ids", userIds);
-                        setFieldValue("shared_group_ids", groupIds);
-                        setFieldValue("is_public", isPublic);
-                      }}
-                    />
-                  </Modal>
-                </shareAgentModal.Provider>
               </>
             );
           }}

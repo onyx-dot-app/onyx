@@ -437,22 +437,26 @@ export default function AgentsNavigationPage() {
       >
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
-            <InputTypeIn
-              ref={searchInputRef}
-              placeholder="Search agents..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              leftSearchIcon
-            />
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "all" | "your")}
-            >
-              <Tabs.List>
-                <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
-                <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
-              </Tabs.List>
-            </Tabs>
+            <div className="flex-[2]">
+              <InputTypeIn
+                ref={searchInputRef}
+                placeholder="Search agents..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                leftSearchIcon
+              />
+            </div>
+            <div className="flex-1">
+              <Tabs
+                value={activeTab}
+                onValueChange={(value) => setActiveTab(value as "all" | "your")}
+              >
+                <Tabs.List>
+                  <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
+                  <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
+                </Tabs.List>
+              </Tabs>
+            </div>
           </div>
           <div className="flex flex-row gap-2">
             <Popover
