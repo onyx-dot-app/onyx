@@ -197,7 +197,7 @@ Some tests are marked with `@pytest.mark.skip` if they require additional setup:
 
 ```bash
 # Run all tests, including skipped ones (will fail if not properly configured)
-pytest -v -s tests/daily/connectors/box/ --run-skipped
+pytest -v -s tests/daily/connectors/box/ -m "not skip"
 ```
 
 ## Test Structure

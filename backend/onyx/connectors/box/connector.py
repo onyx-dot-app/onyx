@@ -47,6 +47,18 @@ from onyx.utils.threadpool_concurrency import ThreadSafeDict
 logger = setup_logger()
 
 
+def _sanitize_error_message(error: Exception) -> str:
+    """Sanitize error message to avoid leaking sensitive data (URLs, tokens, etc.)."""
+    import re
+
+    error_str = str(error)
+    # Remove URLs
+    error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
+    # Remove potential tokens (long alphanumeric strings)
+    error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
+    return error_str
+
+
 def _parse_box_datetime_to_timestamp(modified_time_str: str | None) -> float | None:
     """Parse Box datetime string to Unix timestamp."""
     if not modified_time_str:
@@ -182,10 +194,22 @@ class BoxConnector(
             return None
 
         # Support JWT authentication from uploaded config
-        if DB_CREDENTIALS_DICT_BOX_JWT_CONFIG in credentials:
-            logger.info("Using JWT authentication")
-            jwt_config_json_str = credentials[DB_CREDENTIALS_DICT_BOX_JWT_CONFIG]
+        # JWT config may be in credentials (legacy) or loaded from KV store (preferred)
+        jwt_config_json_str = credentials.get(DB_CREDENTIALS_DICT_BOX_JWT_CONFIG)
+        if not jwt_config_json_str:
+            # Try loading from KV store (preferred method - avoids duplicating sensitive data)
+            try:
+                from onyx.connectors.box.box_kv import get_box_jwt_config
 
+                jwt_config_obj = get_box_jwt_config()
+                jwt_config_json_str = jwt_config_obj.model_dump_json()
+                logger.info("Loaded Box JWT config from KV store")
+            except Exception:
+                # If not in KV store either, continue to error below
+                pass
+
+        if jwt_config_json_str:
+            logger.info("Using JWT authentication")
             # Get primary admin user ID for impersonation
             primary_admin_user_id = credentials.get(
                 DB_CREDENTIALS_PRIMARY_ADMIN_USER_ID
@@ -197,9 +221,11 @@ class BoxConnector(
                 auth = BoxJWTAuth(config=jwt_config)
                 logger.info("Box JWT config loaded successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize Box BoxJWTAuth: {e}")
+                # Sanitize error message to avoid leaking sensitive data
+                sanitized_error = _sanitize_error_message(e)
+                logger.error(f"Failed to initialize Box BoxJWTAuth: {sanitized_error}")
                 raise ConnectorValidationError(
-                    f"Failed to initialize Box JWT authentication: {e}"
+                    f"Failed to initialize Box JWT authentication: {sanitized_error}"
                 )
 
             # If primary admin user ID is provided, use it for impersonation
@@ -452,11 +478,12 @@ class BoxConnector(
                 files_fetched += 1
                 if retrieved_file.error is not None:
                     failure_stage = retrieved_file.completion_stage.value
+                    sanitized_error = _sanitize_error_message(retrieved_file.error)
                     failure_message = (
                         f"retrieval failure during stage: {failure_stage}, "
                         f"user: {retrieved_file.user_id}, "
                         f"parent folder: {retrieved_file.parent_id}, "
-                        f"error: {retrieved_file.error}"
+                        f"error: {sanitized_error}"
                     )
                     logger.error(failure_message)
                     yield ConnectorFailure(

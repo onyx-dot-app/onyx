@@ -250,12 +250,22 @@ def _download_and_extract_sections(
             text, _ = read_docx_file(file_io)
             return [TextSection(link=link, text=text)]
 
-        elif file_ext in [".xlsx", ".xls"]:
+        elif file_ext == ".xlsx":
             text = xlsx_to_text(file_io, file_name=file_name)
             return [TextSection(link=link, text=text)] if text else []
 
-        elif file_ext in [".pptx", ".ppt"]:
+        elif file_ext == ".xls":
+            # Legacy Excel format - use generic extractor which can handle via unstructured API
+            text = extract_file_text(file_io, file_name)
+            return [TextSection(link=link, text=text)] if text else []
+
+        elif file_ext == ".pptx":
             text = pptx_to_text(file_io, file_name=file_name)
+            return [TextSection(link=link, text=text)] if text else []
+
+        elif file_ext == ".ppt":
+            # Legacy PowerPoint format - use generic extractor which can handle via unstructured API
+            text = extract_file_text(file_io, file_name)
             return [TextSection(link=link, text=text)] if text else []
 
         elif file_ext == ".txt":

@@ -20,18 +20,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from box_sdk_gen import BoxClient
-from box_sdk_gen import BoxJWTAuth
-from box_sdk_gen import JWTConfig
-from box_sdk_gen.managers.folders import CreateFolderParent
-from box_sdk_gen.schemas import File
-from box_sdk_gen.schemas import Folder
-
-from onyx.connectors.box.utils import parse_box_jwt_config
-
-# Add backend to path
+# Add backend to path before importing onyx modules
 backend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_path))
+
+from box_sdk_gen import BoxClient  # noqa: E402
+from box_sdk_gen import BoxJWTAuth  # noqa: E402
+from box_sdk_gen import JWTConfig  # noqa: E402
+from box_sdk_gen.managers.folders import CreateFolderParent  # noqa: E402
+from box_sdk_gen.schemas import File  # noqa: E402
+from box_sdk_gen.schemas import Folder  # noqa: E402
+
+from onyx.connectors.box.utils import parse_box_jwt_config  # noqa: E402
 
 
 def load_env_vars() -> None:
@@ -422,8 +422,11 @@ def create_file_structure(
         from tests.daily.connectors.box.consts_and_utils import (
             SPECIAL_FILE_ID_TO_CONTENT_MAP as _SPECIAL_MAP,
         )
-    except Exception:
-        _SPECIAL_MAP = {}
+    except Exception as e:
+        raise ImportError(
+            f"Failed to import SPECIAL_FILE_ID_TO_CONTENT_MAP from consts_and_utils: {e}. "
+            "This is required for special test file content. Please fix the import error."
+        ) from e
 
     for file_id in file_ids:
         file_name = f"file_{file_id}.txt"

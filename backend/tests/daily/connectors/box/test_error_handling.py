@@ -55,6 +55,9 @@ def test_connector_with_malformed_url(
 
     # Should extract what it can or handle gracefully
     assert connector is not None
+    # Verify that the connector extracted the folder ID from the URL (even if invalid)
+    # The connector should extract "123" from the URL path
+    assert "123" in connector._requested_folder_ids
 
 
 def test_connector_with_empty_folder_ids_string() -> None:

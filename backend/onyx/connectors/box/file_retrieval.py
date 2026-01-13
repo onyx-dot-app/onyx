@@ -32,13 +32,13 @@ def _should_include_file_by_time(
     try:
         mod_dt = datetime.fromisoformat(modified_time.replace("Z", "+00:00"))
         mod_ts = mod_dt.timestamp()
-        if start and mod_ts < start:
+        if start is not None and mod_ts < start:
             logger.debug(
                 f"Skipping file {file_dict.get('name')} - "
                 f"modified {mod_ts} < start {start}"
             )
             return False
-        if end and mod_ts > end:
+        if end is not None and mod_ts > end:
             logger.debug(
                 f"Skipping file {file_dict.get('name')} - "
                 f"modified {mod_ts} > end {end}"
@@ -107,24 +107,58 @@ def _get_folders_in_parent(
     """Get all folders in a parent folder."""
     logger.info(f"Getting folders in parent {parent_id}")
     try:
-        items = client.folders.get_folder_items(
-            folder_id=parent_id,
-            fields=["id", "name", "type", "modified_at", "created_at", "parent"],
-        )
-        logger.info(
-            f"Box API returned {len(items.entries)} total items for parent {parent_id}"
-        )
-        folder_count = 0
-        for item in items.entries:
-            if item.type.value == "folder":
-                folder_count += 1
-                logger.debug(
-                    f"Found folder in parent {parent_id}: {item.name} (id: {item.id})"
+        limit = BOX_API_MAX_ITEMS_PER_PAGE
+        marker: str | None = None
+        total_folders = 0
+        page_num = 0
+
+        while True:
+            page_num += 1
+            items = client.folders.get_folder_items(
+                folder_id=parent_id,
+                fields=["id", "name", "type", "modified_at", "created_at", "parent"],
+                limit=limit,
+                marker=marker,
+            )
+            logger.debug(
+                f"Box API page {page_num} for parent {parent_id}: {len(items.entries)} items"
+            )
+
+            for item in items.entries:
+                if item.type.value == "folder":
+                    total_folders += 1
+                    logger.debug(
+                        f"Found folder in parent {parent_id}: {item.name} (id: {item.id})"
+                    )
+                    yield _box_file_to_dict(item)
+
+            # Box API pagination: check if there are more pages
+            next_marker = getattr(items, "next_marker", None)
+            if next_marker:
+                marker = next_marker
+            elif items.entries and len(items.entries) == limit:
+                # Fallback: if next_marker is not available but we got a full page,
+                # use the last item's ID (legacy behavior, but may cause duplicates)
+                marker = items.entries[-1].id
+                logger.warning(
+                    f"Box API did not return next_marker for parent {parent_id}, "
+                    f"using last item ID as fallback: {marker}. "
+                    f"This may cause pagination issues."
                 )
-                yield _box_file_to_dict(item)
-        logger.info(f"Found {folder_count} folders in parent {parent_id}")
+            else:
+                break
+
+        logger.info(f"Found {total_folders} folders in parent {parent_id}")
     except Exception as e:
-        logger.warning(f"Error getting folders in parent {parent_id}: {e}")
+        # Sanitize error message to avoid leaking sensitive data (URLs, tokens, etc.)
+        import re
+
+        error_str = str(e)
+        # Remove URLs
+        error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
+        # Remove potential tokens (long alphanumeric strings)
+        error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
+        logger.warning(f"Error getting folders in parent {parent_id}: {error_str}")
         # Continue on error, similar to Google Drive behavior
 
 

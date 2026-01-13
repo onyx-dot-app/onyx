@@ -1,3 +1,5 @@
+"use client";
+
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
@@ -100,6 +102,22 @@ export const BoxJsonUpload = ({
       } finally {
         setIsUploading(false);
       }
+    };
+
+    reader.onerror = () => {
+      setPopup({
+        message: "Failed to read file. Please try again.",
+        type: "error",
+      });
+      setIsUploading(false);
+    };
+
+    reader.onabort = () => {
+      setPopup({
+        message: "File read was aborted. Please try again.",
+        type: "error",
+      });
+      setIsUploading(false);
     };
 
     reader.readAsText(file);
@@ -358,13 +376,20 @@ async function handleRevokeAccess(
     return;
   }
 
-  await adminDeleteCredential(existingCredential.id);
-  setPopup({
-    message: "Successfully revoked the Box credential!",
-    type: "success",
-  });
-
-  refreshCredentials();
+  const response = await adminDeleteCredential(existingCredential.id);
+  if (response.ok) {
+    setPopup({
+      message: "Successfully revoked the Box credential!",
+      type: "success",
+    });
+    refreshCredentials();
+  } else {
+    const errorMsg = await response.text();
+    setPopup({
+      message: `Failed to revoke Box credential - ${errorMsg}`,
+      type: "error",
+    });
+  }
 }
 
 export const BoxAuthSection = ({

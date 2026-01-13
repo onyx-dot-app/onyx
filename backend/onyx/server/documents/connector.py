@@ -94,6 +94,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
 )
+from onyx.db.credentials import cleanup_box_jwt_credentials
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
@@ -435,8 +436,8 @@ def delete_box_jwt_config_endpoint(
     """Delete Box JWT config."""
     try:
         delete_box_jwt_config()
-        # TODO: Add cleanup_box_credentials if needed
-        # cleanup_box_credentials(db_session=db_session)
+        # Clean up Box JWT credentials that reference the deleted JWT config
+        cleanup_box_jwt_credentials(db_session=db_session)
     except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

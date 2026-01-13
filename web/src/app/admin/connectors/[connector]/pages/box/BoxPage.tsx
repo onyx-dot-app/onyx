@@ -66,6 +66,10 @@ export const BoxMain = () => {
     );
   }
 
+  if (isJwtConfigError) {
+    return <ErrorCallout errorTitle="Failed to load Box JWT config." />;
+  }
+
   if (credentialsError || !credentialsData) {
     return <ErrorCallout errorTitle="Failed to load credentials." />;
   }

@@ -203,8 +203,9 @@ def assert_expected_docs_in_retrieved_docs(
     """
     Assert that expected file IDs are present in retrieved documents.
 
-    NOTE: This does NOT assert for an exact match.
-    It only checks to see if the expected file IDs are IN the retrieved doc list.
+    NOTE: This asserts for an exact match after filtering to valid prefixes.
+    It filters retrieved docs to those with the valid prefix, then asserts
+    that the expected file names and texts exactly match the filtered retrieved docs.
     """
     expected_file_names = {id_to_name(file_id) for file_id in expected_file_ids}
     expected_file_texts = {

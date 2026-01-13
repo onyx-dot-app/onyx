@@ -18,7 +18,6 @@ from tests.daily.connectors.box.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.box.consts_and_utils import FOLDER_1_2_FILE_IDS
 from tests.daily.connectors.box.consts_and_utils import FOLDER_1_FILE_IDS
 from tests.daily.connectors.box.consts_and_utils import FOLDER_1_URL
-from tests.daily.connectors.box.consts_and_utils import FOLDER_3_URL
 from tests.daily.connectors.box.consts_and_utils import load_all_docs
 from tests.daily.connectors.box.consts_and_utils import TEST_USER_1_ID
 
@@ -141,7 +140,7 @@ def test_restricted_access(
     admin_connector = box_jwt_connector_factory(
         user_key="admin",
         include_all_files=False,
-        folder_ids=FOLDER_3_URL,
+        folder_ids=ADMIN_FOLDER_3_URL,
     )
     admin_docs = load_all_docs(admin_connector)
     assert len(admin_docs) > 0

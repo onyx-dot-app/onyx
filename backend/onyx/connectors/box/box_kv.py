@@ -75,12 +75,14 @@ def build_box_jwt_creds(
     primary_admin_user_id: str | None = None,
     name: str | None = None,
 ) -> CredentialBase:
-    """Build CredentialBase from Box JWT config stored in KV store."""
-    jwt_config = get_box_jwt_config()
+    """Build CredentialBase from Box JWT config stored in KV store.
 
-    credential_dict = {
-        DB_CREDENTIALS_DICT_BOX_JWT_CONFIG: jwt_config.model_dump_json(),
-    }
+    Note: JWT config (including private key) is stored encrypted in KV store,
+    not in credential_json to avoid duplicating sensitive data in admin_public credentials.
+    """
+    # Don't include JWT config in credential_json - it's stored encrypted in KV store
+    # The connector will load it from KV store when needed
+    credential_dict: dict[str, Any] = {}
     if primary_admin_user_id:
         credential_dict[DB_CREDENTIALS_PRIMARY_ADMIN_USER_ID] = primary_admin_user_id
 
