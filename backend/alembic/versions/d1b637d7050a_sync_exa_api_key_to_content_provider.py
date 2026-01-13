@@ -37,29 +37,28 @@ def upgrade() -> None:
 
     if row:
         api_key = row[0]
-        # Check if Exa content provider already exists
-        existing = connection.execute(
+        # Create Exa content provider with the shared key
+        connection.execute(
             text(
                 """
-                SELECT id FROM internet_content_provider
-                WHERE provider_type = 'exa'
-                LIMIT 1
+                INSERT INTO internet_content_provider
+                (name, provider_type, api_key, is_active)
+                VALUES ('Exa', 'exa', :api_key, false)
+                ON CONFLICT (name) DO NOTHING
                 """
-            )
+            ),
+            {"api_key": api_key},
         )
-        if existing.fetchone() is None:
-            # Create Exa content provider with the shared key
-            connection.execute(
-                text(
-                    """
-                    INSERT INTO internet_content_provider
-                    (name, provider_type, api_key, is_active)
-                    VALUES ('Exa', 'exa', :api_key, false)
-                    """
-                ),
-                {"api_key": api_key},
-            )
 
 
 def downgrade() -> None:
-    pass
+    # Remove the Exa content provider that was created by this migration
+    connection = op.get_bind()
+    connection.execute(
+        text(
+            """
+            DELETE FROM internet_content_provider
+            WHERE provider_type = 'exa'
+            """
+        )
+    )
