@@ -164,7 +164,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
   const addPendingChatSession = useCallback(
     ({ chatSessionId, personaId, projectId }: PendingChatSessionParams) => {
       // Don't add sessions that belong to a project
-      if (projectId) {
+      if (projectId != null) {
         return;
       }
 
