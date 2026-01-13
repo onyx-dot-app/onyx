@@ -15,7 +15,7 @@ import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
+import { checkUserOwnsAssistant } from "@/lib/agents";
 import { useUser } from "@/components/user/UserProvider";
 import {
   SvgActions,
@@ -30,7 +30,7 @@ import {
 import { useCreateModal } from "./contexts/ModalContext";
 import Modal from "./Modal";
 import ShareAgentModal from "@/sections/agents/ShareAgentModal";
-import updateAgentSharedStatus from "@/lib/assistants/shareAgent";
+import updateAgentSharedStatus from "@/lib/agents";
 import { useAgent } from "@/hooks/useAgents";
 import { usePopup } from "@/components/admin/connectors/Popup";
 interface IconLabelProps {
