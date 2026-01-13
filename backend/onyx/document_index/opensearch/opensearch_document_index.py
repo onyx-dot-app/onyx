@@ -13,6 +13,10 @@ from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
+from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
+from onyx.document_index.chunk_content_enrichment import (
+    generate_enriched_content_for_chunk,
+)
 from onyx.document_index.interfaces import DocumentIndex as OldDocumentIndex
 from onyx.document_index.interfaces import (
     DocumentInsertionRecord as OldDocumentInsertionRecord,
@@ -99,13 +103,6 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
     )
 
 
-def _convert_inference_chunk_uncleaned_to_inference_chunk(
-    inference_chunk_uncleaned: InferenceChunkUncleaned,
-) -> InferenceChunk:
-    # TODO(andrei): Implement this.
-    return inference_chunk_uncleaned.to_inference_chunk()
-
-
 def _convert_onyx_chunk_to_opensearch_document(
     chunk: DocMetadataAwareIndexChunk,
 ) -> DocumentChunk:
@@ -114,7 +111,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         chunk_index=chunk.chunk_id,
         title=chunk.source_document.title,
         title_vector=chunk.title_embedding,
-        content=chunk.content,
+        content=generate_enriched_content_for_chunk(chunk),
         content_vector=chunk.embeddings.full_embedding,
         source_type=chunk.source_document.source.value,
         metadata=json.dumps(chunk.source_document.metadata),
@@ -452,7 +449,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
             opensearch_document_chunk = _convert_onyx_chunk_to_opensearch_document(
                 chunk
             )
-            # TODO(andrei): Enrich chunk content here.
             # TODO(andrei): After our client supports batch indexing, use that
             # here.
             self._os_client.index_document(opensearch_document_chunk)
@@ -526,18 +522,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 body=query_body,
                 search_pipeline_id=None,
             )
-            inference_chunks_uncleaned = [
+            inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
                 _convert_opensearch_chunk_to_inference_chunk_uncleaned(document_chunk)
                 for document_chunk in document_chunks
             ]
-            inference_chunks = [
-                _convert_inference_chunk_uncleaned_to_inference_chunk(
-                    inference_chunk_uncleaned
-                )
-                for inference_chunk_uncleaned in inference_chunks_uncleaned
-            ]
+            inference_chunks: list[InferenceChunk] = cleanup_content_for_chunks(
+                inference_chunks_uncleaned
+            )
             results.extend(inference_chunks)
-            # TODO(andrei): Clean chunk content here.
         return results
 
     def hybrid_retrieval(
@@ -557,21 +549,18 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_hits=num_to_retrieve,
             tenant_state=self._tenant_state,
         )
-        document_chunks = self._os_client.search(
+        document_chunks: list[DocumentChunk] = self._os_client.search(
             body=query_body,
             search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
         )
-        # TODO(andrei): Clean chunk content here.
-        inference_chunks_uncleaned = [
+        inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
             _convert_opensearch_chunk_to_inference_chunk_uncleaned(document_chunk)
             for document_chunk in document_chunks
         ]
-        inference_chunks = [
-            _convert_inference_chunk_uncleaned_to_inference_chunk(
-                inference_chunk_uncleaned
-            )
-            for inference_chunk_uncleaned in inference_chunks_uncleaned
-        ]
+        inference_chunks: list[InferenceChunk] = cleanup_content_for_chunks(
+            inference_chunks_uncleaned
+        )
+
         return inference_chunks
 
     def random_retrieval(
