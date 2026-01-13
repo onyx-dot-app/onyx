@@ -47,6 +47,7 @@ from onyx.document_index.opensearch.search import (
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
 
@@ -139,7 +140,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         # DocMetadataAwareIndexChunk and instead using OpenSearchDocumentIndex's
         # instance variable. One source of truth -> less chance of a very bad
         # bug in prod.
-        tenant_id=chunk.tenant_id,
+        tenant_id=TenantState(tenant_id=chunk.tenant_id, multitenant=MULTI_TENANT),
     )
 
 
