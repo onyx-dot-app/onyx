@@ -1,12 +1,14 @@
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from typing import Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
+from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import nullsfirst
 from sqlalchemy import or_
@@ -152,6 +154,7 @@ def get_chat_sessions_by_user(
     limit: int = 50,
     project_id: int | None = None,
     only_non_project_chats: bool = False,
+    include_failed_chats: bool = False,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)
 
@@ -170,6 +173,20 @@ def get_chat_sessions_by_user(
         stmt = stmt.where(ChatSession.project_id == project_id)
     elif only_non_project_chats:
         stmt = stmt.where(ChatSession.project_id.is_(None))
+
+    if not include_failed_chats:
+        non_system_message_exists_subq = (
+            exists()
+            .where(ChatMessage.chat_session_id == ChatSession.id)
+            .where(ChatMessage.message_type != MessageType.SYSTEM)
+            .correlate(ChatSession)
+        )
+
+        # Leeway for newly created chats that don't have messages yet
+        time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        recently_created = ChatSession.time_created >= time
+
+        stmt = stmt.where(or_(non_system_message_exists_subq, recently_created))
 
     result = db_session.execute(stmt)
     chat_sessions = result.scalars().all()

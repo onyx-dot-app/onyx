@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -34,6 +35,17 @@ from onyx.server.query_and_chat.streaming_models import Packet
 
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
+
+
+class MessageOrigin(str, Enum):
+    """Origin of a chat message for telemetry tracking."""
+
+    WEBAPP = "webapp"
+    CHROME_EXTENSION = "chrome_extension"
+    API = "api"
+    SLACKBOT = "slackbot"
+    UNKNOWN = "unknown"
+    UNSET = "unset"
 
 
 if TYPE_CHECKING:
@@ -92,6 +104,9 @@ class SendMessageRequest(BaseModel):
     internal_search_filters: BaseFilters | None = None
 
     deep_research: bool = False
+
+    # Origin of the message for telemetry tracking
+    origin: MessageOrigin = MessageOrigin.UNSET
 
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
@@ -183,6 +198,9 @@ class CreateChatMessageRequest(ChunkContext):
     forced_tool_ids: list[int] | None = None
 
     deep_research: bool = False
+
+    # Origin of the message for telemetry tracking
+    origin: MessageOrigin = MessageOrigin.UNKNOWN
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":

@@ -17,8 +17,7 @@ export interface Project {
 
 export interface CategorizedFiles {
   user_files: ProjectFile[];
-  non_accepted_files: string[];
-  unsupported_files: string[];
+  rejected_files: RejectedFile[];
 }
 
 export interface ProjectFile {
@@ -35,6 +34,11 @@ export interface ProjectFile {
   token_count: number | null;
   chunk_count: number | null;
   temp_id?: string | null;
+}
+
+export interface RejectedFile {
+  file_name: string;
+  reason: string;
 }
 
 export interface UserFileDeleteResult {

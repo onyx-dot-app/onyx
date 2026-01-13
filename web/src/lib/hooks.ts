@@ -935,6 +935,10 @@ interface UseSourcePreferencesProps {
   setSelectedSources: (sources: SourceMetadata[]) => void;
 }
 
+interface SourcePreferencesSnapshot {
+  sourcePreferences: Record<string, boolean>; // uniqueKey -> enabled status
+}
+
 const LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY = "selectedInternalSearchSources";
 
 export function useSourcePreferences({
@@ -944,23 +948,62 @@ export function useSourcePreferences({
 }: UseSourcePreferencesProps) {
   const [sourcesInitialized, setSourcesInitialized] = useState(false);
 
+  const configuredSources = useMemo(
+    () => getConfiguredSources(availableSources),
+    [availableSources]
+  );
+
   // Load saved source preferences from localStorage
-  const loadSavedSourcePreferences = () => {
+  const loadSavedSourcePreferences = (): SourcePreferencesSnapshot | null => {
     if (typeof window === "undefined") return null;
     const saved = localStorage.getItem(LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY);
     if (!saved) return null;
     try {
-      return JSON.parse(saved);
+      const res = JSON.parse(saved);
+
+      // Validate the snapshot structure
+      if (
+        typeof res !== "object" ||
+        res === null ||
+        typeof res.sourcePreferences !== "object" ||
+        res.sourcePreferences === null ||
+        Array.isArray(res.sourcePreferences)
+      ) {
+        return null;
+      }
+
+      // Validate that all values in sourcePreferences are booleans
+      for (const value of Object.values(res.sourcePreferences)) {
+        if (typeof value !== "boolean") {
+          return null;
+        }
+      }
+
+      return res as SourcePreferencesSnapshot;
     } catch {
       return null;
     }
   };
 
-  const persistSourcePreferencesState = (sources: SourceMetadata[]) => {
+  const persistSourcePreferencesState = (
+    enabledSources: SourceMetadata[],
+    allKnownSources: SourceMetadata[]
+  ) => {
     if (typeof window === "undefined") return;
+
+    const enabledKeys = new Set(enabledSources.map((s) => s.uniqueKey));
+
+    const snapshot: SourcePreferencesSnapshot = {
+      sourcePreferences: Object.fromEntries(
+        allKnownSources
+          .filter((src) => src.uniqueKey !== undefined)
+          .map((src) => [src.uniqueKey, enabledKeys.has(src.uniqueKey)])
+      ),
+    };
+
     localStorage.setItem(
       LS_SELECTED_INTERNAL_SEARCH_SOURCES_KEY,
-      JSON.stringify(sources)
+      JSON.stringify(snapshot)
     );
   };
 
@@ -968,55 +1011,53 @@ export function useSourcePreferences({
   useEffect(() => {
     if (!sourcesInitialized && availableSources.length > 0) {
       const savedSources = loadSavedSourcePreferences();
-      const availableSourceMetadata = getConfiguredSources(availableSources);
 
       if (savedSources !== null) {
         // Filter out saved sources that no longer exist
-        const validSavedSources = savedSources.filter(
-          (savedSource: SourceMetadata) =>
-            availableSourceMetadata.some(
-              (availableSource) =>
-                availableSource.uniqueKey === savedSource.uniqueKey
-            )
-        );
+        const { sourcePreferences } = savedSources;
 
-        // Find new sources that weren't in the saved preferences
-        const savedSourceKeys = new Set(
-          validSavedSources.map((s: SourceMetadata) => s.uniqueKey)
-        );
-        const newSources = availableSourceMetadata.filter(
-          (availableSource) => !savedSourceKeys.has(availableSource.uniqueKey)
-        );
+        // Helper to check if there is a preference for a key
+        const hasPref = (key: string) =>
+          Object.prototype.hasOwnProperty.call(sourcePreferences, key);
+
+        // Get sources with no preference
+        const newSources = configuredSources.filter((source) => {
+          return !hasPref(source.uniqueKey);
+        });
+
+        const enabledSources = configuredSources.filter((source) => {
+          return (
+            hasPref(source.uniqueKey) && sourcePreferences[source.uniqueKey]
+          );
+        });
 
         // Merge valid saved sources with new sources (enable new sources by default)
-        const mergedSources = [...validSavedSources, ...newSources];
+        const mergedSources = [...enabledSources, ...newSources];
         setSelectedSources(mergedSources);
 
-        // Persist the merged state if there were any new sources
-        if (newSources.length > 0) {
-          persistSourcePreferencesState(mergedSources);
-        }
+        // Persist the merged state
+        persistSourcePreferencesState(mergedSources, configuredSources);
       } else {
-        // First time user - enable all sources by default
-        setSelectedSources(availableSourceMetadata);
+        // First time user or invalid data - enable all sources by default
+        setSelectedSources(configuredSources);
+        persistSourcePreferencesState(configuredSources, configuredSources);
       }
       setSourcesInitialized(true);
     }
   }, [availableSources, sourcesInitialized, setSelectedSources]);
 
   const enableAllSources = () => {
-    const allSourceMetadata = getConfiguredSources(availableSources);
-    setSelectedSources(allSourceMetadata);
-    persistSourcePreferencesState(allSourceMetadata);
+    setSelectedSources(configuredSources);
+    persistSourcePreferencesState(configuredSources, configuredSources);
   };
 
   const disableAllSources = () => {
     setSelectedSources([]);
-    persistSourcePreferencesState([]);
+    persistSourcePreferencesState([], configuredSources);
   };
 
   const toggleSource = (sourceUniqueKey: string) => {
-    const configuredSource = getConfiguredSources(availableSources).find(
+    const configuredSource = configuredSources.find(
       (s) => s.uniqueKey === sourceUniqueKey
     );
     if (!configuredSource) return;
@@ -1035,11 +1076,11 @@ export function useSourcePreferences({
     }
 
     setSelectedSources(newSources);
-    persistSourcePreferencesState(newSources);
+    persistSourcePreferencesState(newSources, configuredSources);
   };
 
   const isSourceEnabled = (sourceUniqueKey: string) => {
-    const configuredSource = getConfiguredSources(availableSources).find(
+    const configuredSource = configuredSources.find(
       (s) => s.uniqueKey === sourceUniqueKey
     );
     if (!configuredSource) return false;

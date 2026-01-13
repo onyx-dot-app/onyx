@@ -267,7 +267,7 @@ export default function Page() {
   };
 
   return (
-    <div className="container">
+    <>
       <AdminPageTitle
         icon={SvgUploadCloud}
         title="Add Connector"
@@ -331,6 +331,6 @@ export default function Page() {
             </div>
           </div>
         ))}
-    </div>
+    </>
   );
 }

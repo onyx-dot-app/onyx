@@ -157,7 +157,7 @@ googleapis-common-protos==1.72.0
     #   grpcio-status
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.67.1
+grpcio==1.67.1 ; python_full_version < '3.14'
     # via
     #   google-api-core
     #   google-cloud-resource-manager
@@ -165,7 +165,17 @@ grpcio==1.67.1
     #   grpc-google-iam-v1
     #   grpcio-status
     #   litellm
-grpcio-status==1.67.1
+grpcio==1.76.0 ; python_full_version >= '3.14'
+    # via
+    #   google-api-core
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   litellm
+grpcio-status==1.67.1 ; python_full_version < '3.14'
+    # via google-api-core
+grpcio-status==1.76.0 ; python_full_version >= '3.14'
     # via google-api-core
 h11==0.16.0
     # via
@@ -229,7 +239,7 @@ multidict==6.7.0
     #   yarl
 networkx==3.5
     # via torch
-numpy==1.26.4
+numpy==2.4.1
     # via
     #   accelerate
     #   onyx
@@ -289,7 +299,7 @@ parameterized==0.9.0
     # via cohere
 pillow==12.0.0
     # via sentence-transformers
-prometheus-client==0.21.0
+prometheus-client==0.23.1
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator
@@ -306,7 +316,16 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==5.29.5
+protobuf==5.29.5 ; python_full_version < '3.14'
+    # via
+    #   google-api-core
+    #   google-cloud-aiplatform
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   proto-plus
+protobuf==6.33.4 ; python_full_version >= '3.14'
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -450,6 +469,7 @@ typing-extensions==4.15.0
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
+    #   grpcio
     #   huggingface-hub
     #   openai
     #   pydantic
@@ -463,7 +483,7 @@ typing-inspection==0.4.2
     # via pydantic
 tzdata==2025.2
     # via kombu
-urllib3==2.6.2
+urllib3==2.6.3
     # via
     #   botocore
     #   requests

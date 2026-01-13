@@ -4,6 +4,8 @@ import io
 from urllib.parse import unquote
 from urllib.parse import urlparse
 
+from bs4.dammit import UnicodeDammit
+
 from onyx.file_processing.extract_file_text import read_pdf_file
 
 PDF_MIME_TYPES = (
@@ -14,6 +16,39 @@ PDF_MIME_TYPES = (
     "text/pdf",
     "text/x-pdf",
 )
+
+
+def _charset_from_content_type(content_type: str | None) -> str | None:
+    if not content_type:
+        return None
+    for part in content_type.split(";"):
+        part = part.strip()
+        if part.lower().startswith("charset="):
+            charset = part.split("=", 1)[-1].strip().strip("\"'")
+            return charset or None
+    return None
+
+
+def decode_html_bytes(
+    content: bytes,
+    content_type: str | None = None,
+    fallback_encoding: str | None = None,
+) -> str:
+    override_encodings: list[str] = []
+    charset = _charset_from_content_type(content_type)
+    if charset:
+        override_encodings.append(charset)
+    if fallback_encoding and fallback_encoding not in override_encodings:
+        override_encodings.append(fallback_encoding)
+
+    unicode_dammit = UnicodeDammit(
+        content, override_encodings=override_encodings or None
+    )
+    if unicode_dammit.unicode_markup is not None:
+        return unicode_dammit.unicode_markup
+
+    encoding = override_encodings[0] if override_encodings else "utf-8"
+    return content.decode(encoding, errors="replace")
 
 
 def is_pdf_mime_type(content_type: str | None) -> bool:

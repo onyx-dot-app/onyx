@@ -686,12 +686,7 @@ class VespaIndex(DocumentIndex):
             project_ids=project_ids,
         )
 
-        old_doc_id_to_new_doc_id: dict[str, str] = dict()
-        if fields is not None and fields.document_id is not None:
-            old_doc_id_to_new_doc_id[doc_id] = fields.document_id
-        vespa_document_index.update(
-            [update_request], old_doc_id_to_new_doc_id=old_doc_id_to_new_doc_id
-        )
+        vespa_document_index.update([update_request])
 
     def delete_single(
         self,

@@ -40,6 +40,7 @@ class BaseChunk(BaseModel):
     source_links: dict[int, str] | None
     image_file_id: str | None
     # True if this Chunk's start is not at the start of a Section
+    # TODO(andrei): This is deprecated as of the OpenSearch migration. Remove.
     section_continuation: bool
 
 

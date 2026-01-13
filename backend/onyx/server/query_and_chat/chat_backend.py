@@ -16,8 +16,11 @@ from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
+from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
@@ -85,6 +88,7 @@ from onyx.server.query_and_chat.models import ChatSessionSummary
 from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.models import LLMOverride
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
@@ -99,6 +103,7 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -148,12 +153,13 @@ def _get_available_tokens_for_persona(
     )
 
 
-@router.get("/get-user-chat-sessions")
+@router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
 def get_user_chat_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
+    include_failed_chats: bool = False,
 ) -> ChatSessionsResponse:
     user_id = user.id if user is not None else None
 
@@ -164,6 +170,7 @@ def get_user_chat_sessions(
             db_session=db_session,
             project_id=project_id,
             only_non_project_chats=only_non_project_chats,
+            include_failed_chats=include_failed_chats,
         )
 
     except ValueError:
@@ -243,7 +250,7 @@ def update_chat_session_model(
     db_session.commit()
 
 
-@router.get("/get-chat-session/{session_id}")
+@router.get("/get-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
 def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
@@ -286,6 +293,18 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
+    try:
+        is_processing = is_chat_session_processing(session_id, get_redis_client())
+        # Edit the last message to indicate loading (Overriding default message value)
+        if is_processing and chat_message_details:
+            last_msg = chat_message_details[-1]
+            if last_msg.message_type == MessageType.ASSISTANT:
+                last_msg.message = "Message is loading... Please refresh the page soon."
+    except Exception:
+        logger.exception(
+            "An error occurred while checking if the chat session is processing"
+        )
+
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
     replay_packet_lists: list[list[Packet]] = []
@@ -315,7 +334,7 @@ def get_chat_session(
     )
 
 
-@router.post("/create-chat-session")
+@router.post("/create-chat-session", tags=PUBLIC_API_TAGS)
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
     user: User | None = Depends(current_chat_accessible_user),
@@ -407,7 +426,7 @@ def patch_chat_session(
     return None
 
 
-@router.delete("/delete-all-chat-sessions")
+@router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -418,7 +437,7 @@ def delete_all_chat_sessions(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/delete-chat-session/{session_id}")
+@router.delete("/delete-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
 def delete_chat_session_by_id(
     session_id: UUID,
     hard_delete: bool | None = None,
@@ -503,7 +522,7 @@ def handle_new_chat_message(
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@router.post("/send-chat-message", response_model=None)
+@router.post("/send-chat-message", response_model=None, tags=PUBLIC_API_TAGS)
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
@@ -533,6 +552,11 @@ def handle_send_chat_message(
         distinct_id=user.email if user else tenant_id,
         event=MilestoneRecordType.RAN_QUERY,
     )
+
+    # Override origin to API when authenticated via API key or PAT
+    # to prevent clients from polluting telemetry data
+    if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
+        chat_message_req.origin = MessageOrigin.API
 
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
@@ -757,7 +781,7 @@ class ChatSeedResponse(BaseModel):
     redirect_url: str
 
 
-@router.post("/seed-chat-session")
+@router.post("/seed-chat-session", tags=PUBLIC_API_TAGS)
 def seed_chat(
     chat_seed_request: ChatSeedRequest,
     # NOTE: This endpoint is designed for programmatic access (API keys, external services)
@@ -842,7 +866,7 @@ def seed_chat_from_slack(
     )
 
 
-@router.get("/file/{file_id:path}")
+@router.get("/file/{file_id:path}", tags=PUBLIC_API_TAGS)
 def fetch_chat_file(
     file_id: str,
     request: Request,
@@ -890,7 +914,7 @@ def fetch_chat_file(
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
-@router.get("/search")
+@router.get("/search", tags=PUBLIC_API_TAGS)
 async def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
@@ -970,7 +994,7 @@ async def search_chats(
     )
 
 
-@router.post("/stop-chat-session/{chat_session_id}")
+@router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
     user: User | None = Depends(current_user),

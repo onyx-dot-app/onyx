@@ -90,6 +90,10 @@ class EvalConfigurationOptions(BaseModel):
     search_permissions_email: str
     dataset_name: str
     no_send_logs: bool = False
+    # Optional override for Braintrust project (defaults to BRAINTRUST_PROJECT env var)
+    braintrust_project: str | None = None
+    # Optional experiment name for the eval run (shows in Braintrust UI)
+    experiment_name: str | None = None
 
     def get_configuration(self, db_session: Session) -> EvalConfiguration:
         persona_override_config = self.persona_override_config or PersonaOverrideConfig(

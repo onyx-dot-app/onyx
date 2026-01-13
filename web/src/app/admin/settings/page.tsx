@@ -6,7 +6,7 @@ import Text from "@/components/ui/text";
 import { SvgSettings } from "@opal/icons";
 export default function Page() {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="Workspace Settings" icon={SvgSettings} />
 
       <Text className="mb-8">
@@ -14,6 +14,6 @@ export default function Page() {
       </Text>
 
       <SettingsForm />
-    </div>
+    </>
   );
 }

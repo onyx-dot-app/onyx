@@ -38,14 +38,14 @@ export default function AddInstructionModal() {
           description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
           onClose={() => modal.toggle(false)}
         />
-        <Modal.Body className="bg-background-tint-01 p-4">
+        <Modal.Body>
           <InputTextarea
             value={instructionText}
             onChange={(event) => setInstructionText(event.target.value)}
             placeholder="Think step by step and show reasoning for complex problems. Use specific examples."
           />
         </Modal.Body>
-        <Modal.Footer className="flex flex-row justify-end gap-2 p-4 w-full">
+        <Modal.Footer>
           <Button secondary onClick={() => modal.toggle(false)}>
             Cancel
           </Button>

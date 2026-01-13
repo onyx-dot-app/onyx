@@ -1,3 +1,5 @@
+"use client";
+
 import {
   ChangeEvent,
   FC,
@@ -10,7 +12,7 @@ import {
 } from "react";
 import { ChevronDownIcon } from "./icons/icons";
 import { FiCheck, FiChevronDown, FiInfo } from "react-icons/fi";
-import { Popover } from "./popover/Popover";
+import Popover from "@/refresh-components/Popover";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgPlus } from "@opal/icons";
@@ -395,81 +397,69 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
       setIsOpen(false);
     };
 
-    const Content = (
-      <div
-        className={`
-          flex
-          text-sm
-          bg-background
-          px-3
-          py-1.5
-          rounded-lg
-          border
-          border-border
-          cursor-pointer`}
-      >
-        <p className="line-clamp-1">
-          {selectedOption?.name ||
-            (includeDefault
-              ? defaultValue || "Default"
-              : "Select an option...")}
-        </p>
-        <FiChevronDown className="my-auto ml-auto" />
-      </div>
-    );
-
-    const Dropdown = (
-      <div
-        ref={ref}
-        className={`
-        rounded-lg
-        flex
-        flex-col
-        bg-background
-        ${maxHeight || "max-h-96"}
-        overflow-y-auto
-        overscroll-contain`}
-      >
-        {includeDefault && (
-          <DefaultDropdownElement
-            key={-1}
-            name="Default"
-            onSelect={() => handleSelect(null)}
-            isSelected={selected === null}
-          />
-        )}
-        {options.map((option, ind) => {
-          const isSelected = option.value === selected;
-          return (
-            <DefaultDropdownElement
-              key={option.value}
-              name={option.name}
-              description={option.description}
-              onSelect={() => handleSelect(option.value)}
-              isSelected={isSelected}
-              icon={option.icon}
-              disabled={option.disabled}
-              disabledReason={option.disabledReason}
-            />
-          );
-        })}
-      </div>
-    );
-
     return (
-      <div onClick={() => setIsOpen(!isOpen)}>
-        <Popover
-          open={isOpen}
-          onOpenChange={(open) => setIsOpen(open)}
-          content={Content}
-          popover={Dropdown}
-          align="start"
-          side={side}
-          sideOffset={5}
-          matchWidth
-          triggerMaxWidth
-        />
-      </div>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover.Trigger asChild>
+          <div
+            className={`
+              flex
+              text-sm
+              bg-background
+              px-3
+              py-1.5
+              rounded-lg
+              border
+              border-border
+              cursor-pointer
+              w-full`}
+          >
+            <p className="line-clamp-1">
+              {selectedOption?.name ||
+                (includeDefault
+                  ? defaultValue || "Default"
+                  : "Select an option...")}
+            </p>
+            <FiChevronDown className="my-auto ml-auto" />
+          </div>
+        </Popover.Trigger>
+        <Popover.Content align="start" side={side} sideOffset={5}>
+          <div
+            ref={ref}
+            className={`
+              rounded-lg
+              flex
+              flex-col
+              bg-background
+              ${maxHeight || "max-h-96"}
+              overflow-y-auto
+              overscroll-contain`}
+          >
+            {includeDefault && (
+              <DefaultDropdownElement
+                key={-1}
+                name="Default"
+                onSelect={() => handleSelect(null)}
+                isSelected={selected === null}
+              />
+            )}
+            {options.map((option, ind) => {
+              const isSelected = option.value === selected;
+              return (
+                <DefaultDropdownElement
+                  key={option.value}
+                  name={option.name}
+                  description={option.description}
+                  onSelect={() => handleSelect(option.value)}
+                  isSelected={isSelected}
+                  icon={option.icon}
+                  disabled={option.disabled}
+                  disabledReason={option.disabledReason}
+                />
+              );
+            })}
+          </div>
+        </Popover.Content>
+      </Popover>
     );
   }
 );

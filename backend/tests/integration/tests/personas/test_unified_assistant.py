@@ -38,11 +38,11 @@ def test_unified_assistant(reset: None, admin_user: DATestUser) -> None:
     # Verify tools
     tools = unified_assistant.tools
     tool_names = [tool.name for tool in tools]
-    assert "SearchTool" in tool_names, "SearchTool not found in unified assistant"
+    assert "internal_search" in tool_names, "SearchTool not found in unified assistant"
     assert (
-        "ImageGenerationTool" in tool_names
+        "generate_image" in tool_names
     ), "ImageGenerationTool not found in unified assistant"
-    assert "WebSearchTool" in tool_names, "WebSearchTool not found in unified assistant"
+    assert "web_search" in tool_names, "WebSearchTool not found in unified assistant"
 
     # Verify no starter messages
     starter_messages = unified_assistant.starter_messages or []

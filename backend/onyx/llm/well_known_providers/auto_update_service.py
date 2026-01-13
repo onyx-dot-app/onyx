@@ -82,7 +82,6 @@ def fetch_llm_recommendations_from_github(
 
 def sync_llm_models_from_github(
     db_session: Session,
-    config: LLMRecommendations,
     force: bool = False,
 ) -> dict[str, int]:
     """Sync models from GitHub config to database for all Auto mode providers.
@@ -101,19 +100,24 @@ def sync_llm_models_from_github(
     Returns:
         Dict of provider_name -> number of changes made.
     """
-    # Skip if we've already processed this version (unless forced)
-    last_updated_at = _get_cached_last_updated_at()
-    if not force and last_updated_at and config.updated_at <= last_updated_at:
-        logger.debug("GitHub config unchanged, skipping sync")
-        return {}
-
     results: dict[str, int] = {}
 
     # Get all providers in Auto mode
     auto_providers = fetch_auto_mode_providers(db_session)
-
     if not auto_providers:
         logger.debug("No providers in Auto mode found")
+        return {}
+
+    # Fetch config from GitHub
+    config = fetch_llm_recommendations_from_github()
+    if not config:
+        logger.warning("Failed to fetch GitHub config")
+        return {}
+
+    # Skip if we've already processed this version (unless forced)
+    last_updated_at = _get_cached_last_updated_at()
+    if not force and last_updated_at and config.updated_at <= last_updated_at:
+        logger.debug("GitHub config unchanged, skipping sync")
         _set_cached_last_updated_at(config.updated_at)
         return {}
 

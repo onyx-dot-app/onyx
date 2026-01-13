@@ -236,10 +236,10 @@ USAGE_LIMIT_LLM_COST_CENTS_PAID = int(
 
 # Per-week chunks indexed limits
 USAGE_LIMIT_CHUNKS_INDEXED_TRIAL = int(
-    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_TRIAL", "10000")
+    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_TRIAL", 100_000)
 )
 USAGE_LIMIT_CHUNKS_INDEXED_PAID = int(
-    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PAID", "50000")
+    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PAID", 1_000_000)
 )
 
 # Per-week API calls using API keys or Personal Access Tokens

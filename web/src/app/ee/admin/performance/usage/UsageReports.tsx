@@ -25,15 +25,11 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageSelector } from "@/components/PageSelector";
 import Separator from "@/refresh-components/Separator";
 import { DateRangePickerValue } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
+import Popover from "@/refresh-components/Popover";
 import Calendar from "@/refresh-components/Calendar";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/Spinner";
+import { SvgCalendar } from "@opal/icons";
 
 function GenerateReportInput({
   onReportGenerated,
@@ -105,15 +101,15 @@ function GenerateReportInput({
       </Text>
       <div className="grid gap-2 mb-3">
         <Popover>
-          <PopoverTrigger asChild>
+          <Popover.Trigger asChild>
             <Button
               secondary
               className={cn(
                 "w-[300px] justify-start text-left font-normal",
                 !dateRange && "text-muted-foreground"
               )}
+              leftIcon={SvgCalendar}
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
               {dateRange?.from ? (
                 dateRange.to ? (
                   <>
@@ -127,8 +123,8 @@ function GenerateReportInput({
                 <span>Pick a date range</span>
               )}
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
+          </Popover.Trigger>
+          <Popover.Content align="start">
             <Calendar
               initialFocus
               mode="range"
@@ -199,7 +195,7 @@ function GenerateReportInput({
                 All time
               </Button>
             </div>
-          </PopoverContent>
+          </Popover.Content>
         </Popover>
       </div>
       <Button
@@ -406,7 +402,7 @@ export default function UsageReports() {
   return (
     <>
       {isWaitingForReport && <Spinner />}
-      <div className="container">
+      <>
         <GenerateReportInput
           onReportGenerated={handleReportGenerated}
           isWaitingForReport={isWaitingForReport}
@@ -446,7 +442,7 @@ export default function UsageReports() {
           isWaitingForReport={isWaitingForReport}
           onNewReportDetected={handleNewReportDetected}
         />
-      </div>
+      </>
     </>
   );
 }

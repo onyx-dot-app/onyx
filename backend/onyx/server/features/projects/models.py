@@ -52,10 +52,14 @@ class TokenCountResponse(BaseModel):
     total_tokens: int
 
 
+class RejectedFile(BaseModel):
+    file_name: str
+    reason: str
+
+
 class CategorizedFilesSnapshot(BaseModel):
     user_files: list[UserFileSnapshot]
-    non_accepted_files: list[str]
-    unsupported_files: list[str]
+    rejected_files: list[RejectedFile]
 
     @classmethod
     def from_result(cls, result: CategorizedFilesResult) -> "CategorizedFilesSnapshot":
@@ -64,8 +68,13 @@ class CategorizedFilesSnapshot(BaseModel):
                 UserFileSnapshot.from_model(user_file, temp_id_map=result.id_to_temp_id)
                 for user_file in result.user_files
             ],
-            non_accepted_files=result.non_accepted_files,
-            unsupported_files=result.unsupported_files,
+            rejected_files=[
+                RejectedFile(
+                    file_name=rejected_file.filename,
+                    reason=rejected_file.reason,
+                )
+                for rejected_file in result.rejected_files
+            ],
         )
 
 

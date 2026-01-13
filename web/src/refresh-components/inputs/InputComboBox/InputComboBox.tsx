@@ -364,7 +364,7 @@ const InputComboBox = ({
 
   return (
     <div ref={refs.setReference} className={cn("relative w-full", className)}>
-      <div className="relative">
+      <>
         <InputTypeIn
           ref={inputRef}
           placeholder={placeholder}
@@ -438,7 +438,7 @@ const InputComboBox = ({
           allowCreate={!strict}
           showCreateOption={showCreateOption}
         />
-      </div>
+      </>
 
       {/* Error message - only show internal error messages when not using external isError */}
       {!isValid && errorMessage && externalIsError === undefined && (

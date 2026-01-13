@@ -21,7 +21,7 @@ def test_first_user_is_admin(reset_multitenant: None) -> None:
     """Test that the first user of a tenant is automatically assigned ADMIN role."""
     unique = uuid4().hex
     test_user: DATestUser = UserManager.create(
-        name=f"test_{unique}", email=f"test_{unique}@test.com"
+        name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
@@ -31,7 +31,7 @@ def test_admin_can_create_credential(reset_multitenant: None) -> None:
     # Create admin user
     unique = uuid4().hex
     test_user: DATestUser = UserManager.create(
-        name=f"test_{unique}", email=f"test_{unique}@test.com"
+        name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
@@ -50,7 +50,7 @@ def test_admin_can_create_connector(reset_multitenant: None) -> None:
     # Create admin user
     unique = uuid4().hex
     test_user: DATestUser = UserManager.create(
-        name=f"test_{unique}", email=f"test_{unique}@test.com"
+        name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
@@ -69,7 +69,7 @@ def test_admin_can_create_and_verify_cc_pair(reset_multitenant: None) -> None:
     # Create admin user
     unique = uuid4().hex
     test_user: DATestUser = UserManager.create(
-        name=f"test_{unique}", email=f"test_{unique}@test.com"
+        name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 
@@ -115,7 +115,7 @@ def test_image_gen_config_created_on_tenant_provision(reset_multitenant: None) -
     """Test that image generation config is automatically created when a tenant is provisioned."""
     unique = uuid4().hex
     test_user: DATestUser = UserManager.create(
-        name=f"test_{unique}", email=f"test_{unique}@test.com"
+        name=f"test_{unique}", email=f"test_{unique}@example.com"
     )
     assert UserManager.is_role(test_user, UserRole.ADMIN)
 

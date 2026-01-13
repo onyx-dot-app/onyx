@@ -60,6 +60,7 @@ from onyx.server.query_and_chat.models import ChatSessionsResponse
 from onyx.server.query_and_chat.models import DocumentSearchPagination
 from onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.server.query_and_chat.models import DocumentSearchResponse
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import OneShotQARequest
 from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.server.query_and_chat.models import SearchSessionDetailResponse
@@ -68,6 +69,7 @@ from onyx.server.query_and_chat.models import TagResponse
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -101,7 +103,7 @@ def _normalize_pagination(limit: int | None, offset: int | None) -> tuple[int, i
     return resolved_limit, resolved_offset
 
 
-@basic_router.post("/document-search")
+@basic_router.post("/document-search", tags=PUBLIC_API_TAGS)
 def handle_search_request(
     search_request: DocumentSearchRequest,
     user: User | None = Depends(current_user),
@@ -250,6 +252,7 @@ def get_answer_stream(
     )
 
     # Also creates a new chat session
+    # Origin is hardcoded to API since this endpoint is only accessible via API calls
     request = prepare_chat_message_request(
         message_text=combined_message,
         user=user,
@@ -260,6 +263,7 @@ def get_answer_stream(
         rerank_settings=query_request.rerank_settings,
         db_session=db_session,
         skip_gen_ai_answer_generation=query_request.skip_gen_ai_answer_generation,
+        origin=MessageOrigin.API,
     )
 
     packets = stream_chat_message_objects(

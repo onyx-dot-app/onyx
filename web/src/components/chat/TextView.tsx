@@ -201,10 +201,9 @@ export default function TextView({
       }}
     >
       <Modal.Content
-        medium
+        large
         preventAccidentalClose={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
-        className="overflow-hidden h-[80dvh] max-h-[calc(100dvh-4rem)]"
       >
         <div className="relative flex flex-row items-center gap-2 p-4 shadow-01">
           <SvgFileText className="w-[1.5rem] h-[1.5rem] stroke-text-04 shrink-0" />
@@ -242,7 +241,7 @@ export default function TextView({
           </div>
         </div>
 
-        <Modal.Body className="p-0 flex-1 min-h-0 overflow-hidden bg-background-tint-01">
+        <Modal.Body>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
               <SimpleLoader className="h-8 w-8" />

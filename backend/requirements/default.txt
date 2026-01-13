@@ -5,7 +5,9 @@ aioboto3==15.1.0
 aiobotocore==2.24.0
     # via aioboto3
 aiofiles==25.1.0
-    # via aioboto3
+    # via
+    #   aioboto3
+    #   unstructured-client
 aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp==3.13.3
@@ -54,7 +56,7 @@ attrs==25.4.0
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.5
+authlib==1.6.6
     # via fastmcp
 babel==2.17.0
     # via courlan
@@ -62,6 +64,8 @@ backoff==2.2.1
     # via
     #   langfuse
     #   unstructured
+backports-tarfile==1.2.0 ; python_full_version < '3.12'
+    # via jaraco-context
 bcrypt==4.3.0
     # via pwdlib
 beartype==0.22.6
@@ -113,7 +117,6 @@ certifi==2025.11.12
     #   requests
     #   sentry-sdk
     #   trafilatura
-    #   unstructured-client
 cffi==2.0.0
     # via
     #   argon2-cffi-bindings
@@ -121,9 +124,7 @@ cffi==2.0.0
     #   pynacl
     #   zstandard
 chardet==5.2.0
-    # via
-    #   onyx
-    #   unstructured
+    # via onyx
 charset-normalizer==3.4.4
     # via
     #   htmldate
@@ -131,7 +132,7 @@ charset-normalizer==3.4.4
     #   pdfminer-six
     #   requests
     #   trafilatura
-    #   unstructured-client
+    #   unstructured
 chevron==0.14.0
     # via braintrust
 chonkie==1.0.10
@@ -147,6 +148,7 @@ click==8.3.1
     #   litellm
     #   magika
     #   nltk
+    #   python-oxmsg
     #   typer
     #   uvicorn
     #   zulip
@@ -160,6 +162,7 @@ cloudpickle==3.1.2
     # via
     #   dask
     #   distributed
+    #   pydocket
 cobble==0.1.4
     # via mammoth
 cohere==5.6.1
@@ -177,9 +180,12 @@ cryptography==46.0.3
     # via
     #   authlib
     #   msal
+    #   msoffcrypto-tool
     #   pdfminer-six
     #   pyjwt
+    #   secretstorage
     #   sendgrid
+    #   unstructured-client
 cyclopts==4.2.4
     # via fastmcp
 dask==2023.8.1
@@ -187,17 +193,13 @@ dask==2023.8.1
     #   distributed
     #   onyx
 dataclasses-json==0.6.7
-    # via
-    #   unstructured
-    #   unstructured-client
+    # via unstructured
 dateparser==1.2.2
     # via htmldate
 ddtrace==3.10.0
     # via onyx
 decorator==5.2.1
     # via retry
-deepdiff==8.6.1
-    # via unstructured-client
 defusedxml==0.7.1
     # via
     #   jira
@@ -244,6 +246,8 @@ exceptiongroup==1.3.0
     # via
     #   braintrust
     #   fastmcp
+fakeredis==2.33.0
+    # via pydocket
 fastapi==0.116.1
     # via
     #   fastapi-limiter
@@ -259,7 +263,7 @@ fastapi-users-db-sqlalchemy==5.0.0
     # via onyx
 fastavro==1.12.1
     # via cohere
-fastmcp==2.13.3
+fastmcp==2.14.2
     # via onyx
 fastuuid==0.14.0
     # via litellm
@@ -347,7 +351,7 @@ greenlet==3.2.4
     #   sqlalchemy
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.67.1
+grpcio==1.67.1 ; python_full_version < '3.14'
     # via
     #   google-api-core
     #   google-cloud-resource-manager
@@ -355,7 +359,17 @@ grpcio==1.67.1
     #   grpc-google-iam-v1
     #   grpcio-status
     #   litellm
-grpcio-status==1.67.1
+grpcio==1.76.0 ; python_full_version >= '3.14'
+    # via
+    #   google-api-core
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   litellm
+grpcio-status==1.67.1 ; python_full_version < '3.14'
+    # via google-api-core
+grpcio-status==1.76.0 ; python_full_version >= '3.14'
     # via google-api-core
 h11==0.16.0
     # via
@@ -367,12 +381,15 @@ hf-xet==1.2.0 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or 
     # via huggingface-hub
 hpack==4.1.0
     # via h2
+html5lib==1.1
+    # via unstructured
 htmldate==1.9.1
     # via trafilatura
 httpcore==1.0.9
     # via
     #   httpx
     #   onyx
+    #   unstructured-client
 httplib2==0.31.0
     # via
     #   google-api-python-client
@@ -413,11 +430,11 @@ idna==3.11
     #   email-validator
     #   httpx
     #   requests
-    #   unstructured-client
     #   yarl
 importlib-metadata==8.7.0
     # via
     #   dask
+    #   keyring
     #   litellm
     #   opentelemetry-api
 inflection==0.5.1
@@ -430,6 +447,16 @@ isodate==0.7.2
     # via
     #   python3-saml
     #   zeep
+jaraco-classes==3.4.0
+    # via keyring
+jaraco-context==6.0.2
+    # via keyring
+jaraco-functools==4.4.0
+    # via keyring
+jeepney==0.9.0 ; sys_platform == 'linux'
+    # via
+    #   keyring
+    #   secretstorage
 jinja2==3.1.6
     # via
     #   distributed
@@ -448,8 +475,6 @@ joblib==1.5.2
     # via nltk
 jsonpatch==1.33
     # via langchain-core
-jsonpath-python==1.0.6
-    # via unstructured-client
 jsonpointer==3.0.0
     # via jsonpatch
 jsonref==1.1.0
@@ -464,6 +489,8 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 justext==3.0.2
     # via trafilatura
+keyring==25.7.0
+    # via py-key-value-aio
 kombu==5.5.4
     # via celery
 langchain==0.3.23
@@ -489,12 +516,16 @@ langsmith==0.3.45
     #   langchain-core
 lazy-imports==1.0.1
     # via onyx
+legacy-cgi==2.6.4 ; python_full_version >= '3.13'
+    # via ddtrace
 litellm==1.80.11
     # via onyx
 locket==1.0.0
     # via
     #   distributed
     #   partd
+lupa==2.6
+    # via fakeredis
 lxml==5.3.0
     # via
     #   htmldate
@@ -532,13 +563,11 @@ markupsafe==3.0.3
     #   jinja2
     #   mako
     #   werkzeug
-marshmallow==3.26.1
-    # via
-    #   dataclasses-json
-    #   unstructured-client
+marshmallow==3.26.2
+    # via dataclasses-json
 matrix-client==0.3.2
     # via zulip
-mcp==1.19.0
+mcp==1.25.0
     # via
     #   fastmcp
     #   onyx
@@ -547,7 +576,10 @@ mdurl==0.1.2
 mistune==0.8.4
     # via onyx
 more-itertools==10.8.0
-    # via simple-salesforce
+    # via
+    #   jaraco-classes
+    #   jaraco-functools
+    #   simple-salesforce
 mpmath==1.3.0
     # via sympy
 msal==1.34.0
@@ -556,6 +588,8 @@ msal==1.34.0
     #   onyx
 msgpack==1.1.2
     # via distributed
+msoffcrypto-tool==5.4.2
+    # via onyx
 multidict==6.7.0
     # via
     #   aiobotocore
@@ -571,16 +605,13 @@ mypy-extensions==1.0.0
     # via
     #   mypy
     #   typing-inspect
-    #   unstructured-client
 nest-asyncio==1.6.0
-    # via
-    #   onyx
-    #   unstructured-client
+    # via onyx
 nltk==3.9.1
     # via
     #   onyx
     #   unstructured
-numpy==1.26.4
+numpy==2.4.1
     # via
     #   magika
     #   onnxruntime
@@ -595,6 +626,10 @@ oauthlib==3.2.2
     #   requests-oauthlib
 office365-rest-python-client==2.5.9
     # via onyx
+olefile==0.47
+    # via
+    #   msoffcrypto-tool
+    #   python-oxmsg
 onnxruntime==1.20.1
     # via magika
 openai==2.14.0
@@ -615,32 +650,40 @@ openpyxl==3.0.10
     #   onyx
 opensearch-py==3.0.0
     # via onyx
-opentelemetry-api==1.38.0
+opentelemetry-api==1.39.1
     # via
     #   ddtrace
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-exporter-prometheus
+    #   opentelemetry-instrumentation
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-exporter-otlp-proto-common==1.38.0
+    #   pydocket
+opentelemetry-exporter-otlp-proto-common==1.39.1
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-http==1.38.0
+opentelemetry-exporter-otlp-proto-http==1.39.1
     # via langfuse
-opentelemetry-proto==1.38.0
+opentelemetry-exporter-prometheus==0.60b1
+    # via pydocket
+opentelemetry-instrumentation==0.60b1
+    # via pydocket
+opentelemetry-proto==1.39.1
     # via
     #   onyx
     #   opentelemetry-exporter-otlp-proto-common
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-sdk==1.38.0
+opentelemetry-sdk==1.39.1
     # via
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-semantic-conventions==0.59b0
-    # via opentelemetry-sdk
-orderly-set==5.5.0
-    # via deepdiff
+    #   opentelemetry-exporter-prometheus
+opentelemetry-semantic-conventions==0.60b1
+    # via
+    #   opentelemetry-instrumentation
+    #   opentelemetry-sdk
 orjson==3.11.4 ; platform_python_implementation != 'PyPy'
     # via langsmith
 packaging==24.2
@@ -658,9 +701,9 @@ packaging==24.2
     #   langsmith
     #   marshmallow
     #   onnxruntime
+    #   opentelemetry-instrumentation
     #   pytest
     #   pywikibot
-    #   unstructured-client
 pandas==2.2.3
     # via markitdown
 parameterized==0.9.0
@@ -689,10 +732,12 @@ pluggy==1.6.0
     # via pytest
 ply==3.11
     # via stone
-prometheus-client==0.21.0
+prometheus-client==0.23.1
     # via
     #   onyx
+    #   opentelemetry-exporter-prometheus
     #   prometheus-fastapi-instrumentator
+    #   pydocket
 prometheus-fastapi-instrumentator==7.1.0
     # via onyx
 prompt-toolkit==3.0.52
@@ -706,7 +751,19 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==5.29.5
+protobuf==5.29.5 ; python_full_version < '3.14'
+    # via
+    #   ddtrace
+    #   google-api-core
+    #   google-cloud-aiplatform
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   onnxruntime
+    #   opentelemetry-proto
+    #   proto-plus
+protobuf==6.33.4 ; python_full_version >= '3.14'
     # via
     #   ddtrace
     #   google-api-core
@@ -731,9 +788,11 @@ pwdlib==0.2.1
     # via fastapi-users
 py==1.11.0
     # via retry
-py-key-value-aio==0.2.8
-    # via fastmcp
-py-key-value-shared==0.2.8
+py-key-value-aio==0.3.0
+    # via
+    #   fastmcp
+    #   pydocket
+py-key-value-shared==0.3.0
     # via py-key-value-aio
 pyairtable==3.0.1
     # via onyx
@@ -766,10 +825,13 @@ pydantic==2.11.7
     #   openapi-pydantic
     #   pyairtable
     #   pydantic-settings
+    #   unstructured-client
 pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.12.0
     # via mcp
+pydocket==0.16.3
+    # via fastmcp
 pyee==13.0.0
     # via playwright
 pygithub==2.5.0
@@ -779,6 +841,7 @@ pygments==2.19.2
 pyjwt==2.10.1
     # via
     #   fastapi-users
+    #   mcp
     #   msal
     #   pygithub
     #   simple-salesforce
@@ -788,7 +851,7 @@ pynacl==1.6.2
     # via pygithub
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.1.3
+pypdf==6.6.0
     # via
     #   onyx
     #   unstructured-client
@@ -820,7 +883,6 @@ python-dateutil==2.8.2
     #   onyx
     #   opensearch-py
     #   pandas
-    #   unstructured-client
 python-docx==1.1.2
     # via onyx
 python-dotenv==1.1.1
@@ -838,6 +900,8 @@ python-http-client==3.3.7
     # via sendgrid
 python-iso639==2025.11.16
     # via unstructured
+python-json-logger==4.0.0
+    # via pydocket
 python-magic==0.4.27
     # via unstructured
 python-multipart==0.0.20
@@ -845,6 +909,8 @@ python-multipart==0.0.20
     #   fastapi-users
     #   mcp
     #   onyx
+python-oxmsg==0.0.2
+    # via unstructured
 python-pptx==0.6.23
     # via
     #   markitdown
@@ -867,6 +933,8 @@ pywin32==311 ; sys_platform == 'win32'
     # via
     #   mcp
     #   pympler
+pywin32-ctypes==0.2.3 ; sys_platform == 'win32'
+    # via keyring
 pyyaml==6.0.3
     # via
     #   dask
@@ -881,8 +949,11 @@ rapidfuzz==3.13.0
     #   unstructured
 redis==5.0.8
     # via
+    #   fakeredis
     #   fastapi-limiter
     #   onyx
+    #   py-key-value-aio
+    #   pydocket
 referencing==0.36.2
     # via
     #   jsonschema
@@ -931,7 +1002,6 @@ requests==2.32.5
     #   stripe
     #   tiktoken
     #   unstructured
-    #   unstructured-client
     #   voyageai
     #   zeep
     #   zulip
@@ -958,6 +1028,7 @@ rich==14.2.0
     # via
     #   cyclopts
     #   fastmcp
+    #   pydocket
     #   rich-rst
     #   typer
 rich-rst==1.3.2
@@ -970,6 +1041,8 @@ rsa==4.9.1
     # via google-auth
 s3transfer==0.13.1
     # via boto3
+secretstorage==3.5.0 ; sys_platform == 'linux'
+    # via keyring
 sendgrid==6.12.5
     # via onyx
 sentry-sdk==2.14.0
@@ -988,12 +1061,12 @@ six==1.17.0
     #   atlassian-python-api
     #   dropbox
     #   google-auth-httplib2
+    #   html5lib
     #   hubspot-api-client
     #   langdetect
     #   markdownify
     #   python-dateutil
     #   stone
-    #   unstructured-client
 slack-sdk==3.20.2
     # via onyx
 smmap==5.0.2
@@ -1003,7 +1076,9 @@ sniffio==1.3.1
     #   anyio
     #   openai
 sortedcontainers==2.4.0
-    # via distributed
+    # via
+    #   distributed
+    #   fakeredis
 soupsieve==2.8
     # via beautifulsoup4
 sqlalchemy==2.0.15
@@ -1030,8 +1105,6 @@ supervisor==4.3.0
     # via onyx
 sympy==1.13.1
     # via onnxruntime
-tabulate==0.9.0
-    # via unstructured
 tblib==3.2.2
     # via distributed
 tenacity==9.1.2
@@ -1072,7 +1145,9 @@ tqdm==4.67.1
 trafilatura==1.12.2
     # via onyx
 typer==0.20.0
-    # via mcp
+    # via
+    #   mcp
+    #   pydocket
 types-awscrt==0.28.4
     # via botocore-stubs
 types-openpyxl==3.0.4.7
@@ -1097,9 +1172,11 @@ typing-extensions==4.15.0
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
+    #   grpcio
     #   huggingface-hub
     #   jira
     #   langchain-core
+    #   mcp
     #   mypy
     #   mypy-boto3-s3
     #   office365-rest-python-client
@@ -1112,9 +1189,11 @@ typing-extensions==4.15.0
     #   pyairtable
     #   pydantic
     #   pydantic-core
+    #   pydocket
     #   pyee
     #   pygithub
     #   python-docx
+    #   python-oxmsg
     #   referencing
     #   simple-salesforce
     #   sqlalchemy
@@ -1124,14 +1203,12 @@ typing-extensions==4.15.0
     #   typing-inspect
     #   typing-inspection
     #   unstructured
-    #   unstructured-client
     #   zulip
 typing-inspect==0.9.0
-    # via
-    #   dataclasses-json
-    #   unstructured-client
+    # via dataclasses-json
 typing-inspection==0.4.2
     # via
+    #   mcp
     #   pydantic
     #   pydantic-settings
 tzdata==2025.2
@@ -1141,15 +1218,15 @@ tzdata==2025.2
     #   tzlocal
 tzlocal==5.3.1
     # via dateparser
-unstructured==0.15.1
+unstructured==0.18.27
     # via onyx
-unstructured-client==0.25.4
+unstructured-client==0.42.6
     # via
     #   onyx
     #   unstructured
 uritemplate==4.2.0
     # via google-api-python-client
-urllib3==2.6.2
+urllib3==2.6.3
     # via
     #   asana
     #   botocore
@@ -1165,7 +1242,6 @@ urllib3==2.6.2
     #   sentry-sdk
     #   trafilatura
     #   types-requests
-    #   unstructured-client
 uvicorn==0.35.0
     # via
     #   fastmcp
@@ -1180,11 +1256,13 @@ voyageai==0.2.3
     # via onyx
 wcwidth==0.2.14
     # via prompt-toolkit
+webencodings==0.5.1
+    # via html5lib
 websockets==15.0.1
     # via
     #   fastmcp
     #   google-genai
-werkzeug==3.1.4
+werkzeug==3.1.5
     # via sendgrid
 wrapt==1.17.3
     # via
@@ -1194,6 +1272,7 @@ wrapt==1.17.3
     #   deprecated
     #   langfuse
     #   openinference-instrumentation
+    #   opentelemetry-instrumentation
     #   unstructured
 xlrd==2.0.2
     # via markitdown

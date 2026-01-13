@@ -232,10 +232,23 @@ def gather_stream_with_tools(packets: AnswerStream) -> GatherStreamResult:
     stream_end_time = time.time()
 
     if message_id is None:
-        raise ValueError("Message ID is required")
+        # If we got a streaming error, include it in the exception
+        if error_msg:
+            raise ValueError(f"Message ID is required. Stream error: {error_msg}")
+        raise ValueError(
+            f"Message ID is required. No MessageResponseIDInfo received. "
+            f"Tools called: {tools_called}"
+        )
 
+    # Allow empty answers for tool-only turns (e.g., in multi-turn evals)
+    # Some turns may only execute tools without generating a text response
     if answer is None:
-        raise RuntimeError("Answer was not generated")
+        logger.warning(
+            "No answer content generated. Tools called: %s. "
+            "This may be expected for tool-only turns.",
+            tools_called,
+        )
+        answer = ""
 
     # Calculate timings
     total_ms = (stream_end_time - stream_start_time) * 1000
@@ -484,15 +497,18 @@ def _get_multi_turn_answer_with_tools(
                 if configuration.search_permissions_email
                 else None
             )
+            # Cache user_id to avoid SQLAlchemy expiration issues
+            user_id = user.id if user else None
 
             # Create a single chat session for all turns
             chat_session = create_chat_session(
                 db_session=db_session,
                 description="Multi-turn eval session",
-                user_id=user.id if user else None,
+                user_id=user_id,
                 persona_id=DEFAULT_PERSONA_ID,
                 onyxbot_flow=True,
             )
+            chat_session_id = chat_session.id
 
             # Process each turn sequentially
             for turn_idx, msg in enumerate(messages):
@@ -539,7 +555,7 @@ def _get_multi_turn_answer_with_tools(
                 # Create request for this turn
                 # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
                 request = CreateChatMessageRequest(
-                    chat_session_id=chat_session.id,
+                    chat_session_id=chat_session_id,
                     parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
                     message=msg.message,
                     file_descriptors=[],

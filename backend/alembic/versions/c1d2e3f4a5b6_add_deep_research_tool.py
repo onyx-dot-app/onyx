@@ -7,7 +7,6 @@ Create Date: 2025-12-18 16:00:00.000000
 """
 
 from alembic import op
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_DB_NAME
 import sqlalchemy as sa
 
 
@@ -19,7 +18,7 @@ depends_on = None
 
 
 DEEP_RESEARCH_TOOL = {
-    "name": RESEARCH_AGENT_DB_NAME,
+    "name": "ResearchAgent",
     "display_name": "Research Agent",
     "description": "The Research Agent is a sub-agent that conducts research on a specific topic.",
     "in_code_tool_id": "ResearchAgent",

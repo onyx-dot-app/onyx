@@ -144,6 +144,7 @@ from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
@@ -553,7 +554,7 @@ def _normalize_file_names_for_backwards_compatibility(
     return file_names + file_locations[len(file_names) :]
 
 
-@router.post("/admin/connector/file/upload")
+@router.post("/admin/connector/file/upload", tags=PUBLIC_API_TAGS)
 def upload_files_api(
     files: list[UploadFile],
     _: User = Depends(current_curator_or_admin_user),
@@ -561,7 +562,7 @@ def upload_files_api(
     return upload_files(files, FileOrigin.OTHER)
 
 
-@router.get("/admin/connector/{connector_id}/files")
+@router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
     user: User = Depends(current_curator_or_admin_user),
@@ -621,7 +622,7 @@ def list_connector_files(
     return ConnectorFilesResponse(files=files)
 
 
-@router.post("/admin/connector/{connector_id}/files/update")
+@router.post("/admin/connector/{connector_id}/files/update", tags=PUBLIC_API_TAGS)
 def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
@@ -784,7 +785,7 @@ def update_connector_files(
     )
 
 
-@router.get("/admin/connector")
+@router.get("/admin/connector", tags=PUBLIC_API_TAGS)
 def get_connectors_by_credential(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -817,7 +818,7 @@ def get_connectors_by_credential(
 
 
 # Retrieves most recent failure cases for connectors that are currently failing
-@router.get("/admin/connector/failed-indexing-status")
+@router.get("/admin/connector/failed-indexing-status", tags=PUBLIC_API_TAGS)
 def get_currently_failed_indexing_status(
     secondary_index: bool = False,
     user: User = Depends(current_curator_or_admin_user),
@@ -905,7 +906,7 @@ def get_currently_failed_indexing_status(
     return indexing_statuses
 
 
-@router.get("/admin/connector/status")
+@router.get("/admin/connector/status", tags=PUBLIC_API_TAGS)
 def get_connector_status(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -944,7 +945,7 @@ def get_connector_status(
     ]
 
 
-@router.post("/admin/connector/indexing-status")
+@router.post("/admin/connector/indexing-status", tags=PUBLIC_API_TAGS)
 def get_connector_indexing_status(
     request: IndexingStatusRequest,
     user: User = Depends(current_curator_or_admin_user),
@@ -1361,7 +1362,7 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
     )
 
 
-@router.post("/admin/connector")
+@router.post("/admin/connector", tags=PUBLIC_API_TAGS)
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
     user: User = Depends(current_curator_or_admin_user),
@@ -1482,7 +1483,7 @@ def create_connector_with_mock_credential(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.patch("/admin/connector/{connector_id}")
+@router.patch("/admin/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def update_connector_from_model(
     connector_id: int,
     connector_data: ConnectorUpdateRequest,
@@ -1529,7 +1530,11 @@ def update_connector_from_model(
     )
 
 
-@router.delete("/admin/connector/{connector_id}", response_model=StatusResponse[int])
+@router.delete(
+    "/admin/connector/{connector_id}",
+    response_model=StatusResponse[int],
+    tags=PUBLIC_API_TAGS,
+)
 def delete_connector_by_id(
     connector_id: int,
     _: User = Depends(current_curator_or_admin_user),
@@ -1545,7 +1550,7 @@ def delete_connector_by_id(
         raise HTTPException(status_code=400, detail="Connector is not deletable")
 
 
-@router.post("/admin/connector/run-once")
+@router.post("/admin/connector/run-once", tags=PUBLIC_API_TAGS)
 def connector_run_once(
     run_info: RunConnectorRequest,
     _: User = Depends(current_curator_or_admin_user),
@@ -1699,7 +1704,7 @@ def google_drive_callback(
     return StatusResponse(success=True, message="Updated Google Drive access tokens")
 
 
-@router.get("/connector")
+@router.get("/connector", tags=PUBLIC_API_TAGS)
 def get_connectors(
     _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -1714,7 +1719,7 @@ def get_connectors(
     ]
 
 
-@router.get("/indexed-sources")
+@router.get("/indexed-sources", tags=PUBLIC_API_TAGS)
 def get_indexed_sources(
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -1725,7 +1730,7 @@ def get_indexed_sources(
     return IndexedSourcesResponse(sources=sources)
 
 
-@router.get("/connector/{connector_id}")
+@router.get("/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def get_connector_by_id(
     connector_id: int,
     _: User = Depends(current_user),
@@ -1759,7 +1764,7 @@ class BasicCCPairInfo(BaseModel):
     source: DocumentSource
 
 
-@router.get("/connector-status")
+@router.get("/connector-status", tags=PUBLIC_API_TAGS)
 def get_basic_connector_indexing_status(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
@@ -1786,7 +1791,6 @@ def trigger_indexing_for_cc_pair(
     from_beginning: bool,
     tenant_id: str,
     db_session: Session,
-    is_user_file: bool = False,
 ) -> int:
     try:
         possible_credential_ids = get_connector_credential_ids(connector_id, db_session)
@@ -1850,8 +1854,9 @@ def trigger_indexing_for_cc_pair(
                 f"indexing_trigger={indexing_mode}"
             )
 
+    priority = OnyxCeleryPriority.HIGH
+
     # run the beat task to pick up the triggers immediately
-    priority = OnyxCeleryPriority.HIGHEST if is_user_file else OnyxCeleryPriority.HIGH
     logger.info(f"Sending indexing check task with priority {priority}")
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,

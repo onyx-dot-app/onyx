@@ -13,6 +13,7 @@ import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -20,6 +21,11 @@ export interface ActionItemProps {
   label?: string;
   disabled: boolean;
   isForced: boolean;
+  isUnavailable?: boolean;
+  unavailableReason?: string;
+  showAdminConfigure?: boolean;
+  adminConfigureHref?: string;
+  adminConfigureTooltip?: string;
   onToggle: () => void;
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
@@ -35,6 +41,11 @@ export default function ActionLineItem({
   label: providedLabel,
   disabled,
   isForced,
+  isUnavailable = false,
+  unavailableReason,
+  showAdminConfigure = false,
+  adminConfigureHref,
+  adminConfigureTooltip = "Configure",
   onToggle,
   onForceToggle,
   onSourceManagementOpen,
@@ -62,12 +73,18 @@ export default function ActionLineItem({
   const isSearchToolAndNotInProject =
     tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
 
+  const tooltipText = isUnavailable ? unavailableReason : tool?.description;
+
   return (
-    <SimpleTooltip tooltip={tool?.description} className="max-w-[30rem]">
+    <SimpleTooltip tooltip={tooltipText} className="max-w-[30rem]">
       <div data-testid={`tool-option-${toolName}`}>
         <LineItem
           onClick={() => {
             if (isSearchToolWithNoConnectors) return;
+            if (isUnavailable) {
+              if (isForced) onForceToggle();
+              return;
+            }
             if (disabled) onToggle();
             onForceToggle();
             if (isSearchToolAndNotInProject && !isForced)
@@ -75,11 +92,13 @@ export default function ActionLineItem({
             else onClose?.();
           }}
           selected={isForced}
-          strikethrough={disabled || isSearchToolWithNoConnectors}
+          strikethrough={
+            disabled || isSearchToolWithNoConnectors || isUnavailable
+          }
           icon={Icon}
           rightChildren={
             <div className="flex flex-row items-center gap-1">
-              {tool?.oauth_config_id && toolAuthStatus && (
+              {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
                 <IconButton
                   icon={({ className }) => (
                     <SvgKey
@@ -100,7 +119,7 @@ export default function ActionLineItem({
                 />
               )}
 
-              {!isSearchToolWithNoConnectors && (
+              {!isSearchToolWithNoConnectors && !isUnavailable && (
                 <IconButton
                   icon={SvgSlash}
                   onClick={noProp(onToggle)}
@@ -109,6 +128,17 @@ export default function ActionLineItem({
                     !disabled && "invisible group-hover/LineItem:visible"
                   )}
                   tooltip={disabled ? "Enable" : "Disable"}
+                />
+              )}
+              {isUnavailable && showAdminConfigure && adminConfigureHref && (
+                <IconButton
+                  icon={SvgSettings}
+                  onClick={noProp(() => {
+                    router.push(adminConfigureHref as Route);
+                    onClose?.();
+                  })}
+                  internal
+                  tooltip={adminConfigureTooltip}
                 />
               )}
               {isSearchToolAndNotInProject && (

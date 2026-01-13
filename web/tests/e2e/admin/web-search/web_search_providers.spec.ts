@@ -68,7 +68,8 @@ test.describe("Web Search Provider Configuration", () => {
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
 
       // Enter API key - clear first in case modal opened with masked credentials
-      const apiKeyInput = page.locator('input[type="password"]');
+      // Note: PasswordInputTypeIn uses type="text" with custom ∗ masking per design guidelines
+      const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await apiKeyInput.clear();
       await apiKeyInput.fill(EXA_API_KEY!);
@@ -135,7 +136,7 @@ test.describe("Web Search Provider Configuration", () => {
       await searchEngineIdInput.fill(GOOGLE_PSE_SEARCH_ENGINE_ID!);
 
       // Enter API key
-      const apiKeyInput = page.locator('input[type="password"]');
+      const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await apiKeyInput.fill(GOOGLE_PSE_API_KEY!);
 
@@ -195,7 +196,7 @@ test.describe("Web Search Provider Configuration", () => {
         await searchEngineIdInput.waitFor({ state: "visible", timeout: 5000 });
         await searchEngineIdInput.fill(GOOGLE_PSE_SEARCH_ENGINE_ID!);
 
-        const apiKeyInput = page.locator('input[type="password"]');
+        const apiKeyInput = setupDialog.getByLabel(/api key/i);
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
         await apiKeyInput.fill(GOOGLE_PSE_API_KEY!);
 
@@ -225,9 +226,10 @@ test.describe("Web Search Provider Configuration", () => {
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
 
       // Verify the API key input shows masked value
-      const apiKeyInput = page.locator('input[type="password"]');
+      // PasswordInputTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
+      const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
-      await expect(apiKeyInput).toHaveValue("••••••••••••••••");
+      await expect(apiKeyInput).toHaveValue("∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗");
 
       // Immediately click Connect without changing anything
       const modalConnectButton = modalDialog.getByRole("button", {
@@ -285,7 +287,7 @@ test.describe("Web Search Provider Configuration", () => {
         await searchEngineIdInput.waitFor({ state: "visible", timeout: 5000 });
         await searchEngineIdInput.fill(GOOGLE_PSE_SEARCH_ENGINE_ID!);
 
-        const apiKeyInput = page.locator('input[type="password"]');
+        const apiKeyInput = setupDialog.getByLabel(/api key/i);
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
         await apiKeyInput.fill(GOOGLE_PSE_API_KEY!);
 
@@ -323,8 +325,9 @@ test.describe("Web Search Provider Configuration", () => {
       await searchEngineIdInput.fill("invalid-search-engine-id");
 
       // Do NOT change the API key - keep the masked value
-      const apiKeyInput = page.locator('input[type="password"]');
-      await expect(apiKeyInput).toHaveValue("••••••••••••••••");
+      // PasswordInputTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
+      const apiKeyInput = modalDialog.getByLabel(/api key/i);
+      await expect(apiKeyInput).toHaveValue("∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗");
 
       // Click Connect - should fail because search engine ID doesn't match the stored API key
       const modalConnectButton = modalDialog.getByRole("button", {
@@ -373,7 +376,7 @@ test.describe("Web Search Provider Configuration", () => {
         const exaDialog = page.getByRole("dialog", { name: /set up exa/i });
         await expect(exaDialog).toBeVisible({ timeout: 10000 });
 
-        const apiKeyInput = page.locator('input[type="password"]');
+        const apiKeyInput = exaDialog.getByLabel(/api key/i);
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
         await apiKeyInput.fill(EXA_API_KEY!);
 
@@ -403,7 +406,7 @@ test.describe("Web Search Provider Configuration", () => {
         await searchEngineIdInput.waitFor({ state: "visible", timeout: 5000 });
         await searchEngineIdInput.fill(GOOGLE_PSE_SEARCH_ENGINE_ID!);
 
-        const apiKeyInput = page.locator('input[type="password"]');
+        const apiKeyInput = googleDialog.getByLabel(/api key/i);
         await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
         await apiKeyInput.fill(GOOGLE_PSE_API_KEY!);
 

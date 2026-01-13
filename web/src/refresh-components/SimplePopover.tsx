@@ -1,14 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover from "@/refresh-components/Popover";
 
 export interface SimplePopoverProps
-  extends React.ComponentPropsWithoutRef<typeof PopoverContent> {
+  extends React.ComponentPropsWithoutRef<typeof Popover.Content> {
   onOpenChange?: (open: boolean) => void;
   trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
 }
@@ -27,10 +23,10 @@ export default function SimplePopover({
 
   return (
     <Popover open={open} onOpenChange={handleOnOpenChange}>
-      <PopoverTrigger asChild>
+      <Popover.Trigger asChild>
         <div>{typeof trigger === "function" ? trigger(open) : trigger}</div>
-      </PopoverTrigger>
-      <PopoverContent align="start" side="top" {...rest} />
+      </Popover.Trigger>
+      <Popover.Content align="start" side="top" {...rest} />
     </Popover>
   );
 }

@@ -25,6 +25,14 @@ const TooltipTrigger = React.forwardRef<
 ));
 TooltipTrigger.displayName = TooltipPrimitive.Trigger.displayName;
 
+type TooltipSize = "sm" | "md" | "lg";
+
+const tooltipSizeClasses: Record<TooltipSize, string> = {
+  sm: "px-2 py-1 max-w-[12rem]",
+  md: "px-3 py-2 max-w-[20rem]",
+  lg: "px-3 py-2 max-w-[30rem]",
+};
+
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content> & {
@@ -32,6 +40,7 @@ const TooltipContent = React.forwardRef<
     showTick?: boolean;
     tickSide?: "top" | "bottom" | "left" | "right";
     side?: "top" | "bottom" | "left" | "right";
+    size?: TooltipSize;
   }
 >(
   (
@@ -42,6 +51,7 @@ const TooltipContent = React.forwardRef<
       showTick = false,
       tickSide = "bottom",
       side = "top",
+      size = "lg",
       ...props
     },
     ref
@@ -52,7 +62,8 @@ const TooltipContent = React.forwardRef<
         sideOffset={sideOffset}
         side={side}
         className={cn(
-          "z-tooltip rounded-08 px-3 py-2 text-text-light-05 animate-in fade-in-0 zoom-in-95 bg-background-neutral-dark-03 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          "z-tooltip rounded-08 text-text-light-05 animate-in fade-in-0 zoom-in-95 bg-background-neutral-dark-03 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          tooltipSizeClasses[size],
           width,
           className
         )}

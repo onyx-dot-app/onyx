@@ -1,6 +1,9 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -27,13 +30,7 @@ import { DisplayModels } from "./components/DisplayModels";
 import { fetchBedrockModels } from "../utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/refresh-components/tabs/tabs";
-import { cn } from "@/lib/utils";
+import Tabs from "@/refresh-components/Tabs";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
@@ -160,64 +157,48 @@ function BedrockFormInternals({
           onValueChange={(value) =>
             formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
           }
-          className="mt-2"
         >
-          <TabsList>
-            <TabsTrigger value={AUTH_METHOD_IAM}>IAM Role</TabsTrigger>
-            <TabsTrigger value={AUTH_METHOD_ACCESS_KEY}>Access Key</TabsTrigger>
-            <TabsTrigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
+          <Tabs.List>
+            <Tabs.Trigger value={AUTH_METHOD_IAM}>IAM Role</Tabs.Trigger>
+            <Tabs.Trigger value={AUTH_METHOD_ACCESS_KEY}>
+              Access Key
+            </Tabs.Trigger>
+            <Tabs.Trigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
               Long-term API Key
-            </TabsTrigger>
-          </TabsList>
+            </Tabs.Trigger>
+          </Tabs.List>
 
-          <TabsContent
-            value={AUTH_METHOD_IAM}
-            className="data-[state=active]:animate-fade-in-scale"
-          >
+          <Tabs.Content value={AUTH_METHOD_IAM}>
             <Text as="p" text03>
               Uses the IAM role attached to your AWS environment. Recommended
               for EC2, ECS, Lambda, or other AWS services.
             </Text>
-          </TabsContent>
+          </Tabs.Content>
 
-          <TabsContent
-            value={AUTH_METHOD_ACCESS_KEY}
-            className={cn(
-              "data-[state=active]:animate-fade-in-scale",
-              "mt-4 ml-2"
-            )}
-          >
+          <Tabs.Content value={AUTH_METHOD_ACCESS_KEY}>
             <div className="flex flex-col gap-4">
               <TextFormField
                 name={FIELD_AWS_ACCESS_KEY_ID}
                 label="AWS Access Key ID"
                 placeholder="AKIAIOSFODNN7EXAMPLE"
               />
-              <TextFormField
+              <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
                 label="AWS Secret Access Key"
                 placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-                type="password"
               />
             </div>
-          </TabsContent>
+          </Tabs.Content>
 
-          <TabsContent
-            value={AUTH_METHOD_LONG_TERM_API_KEY}
-            className={cn(
-              "data-[state=active]:animate-fade-in-scale",
-              "mt-4 ml-2"
-            )}
-          >
+          <Tabs.Content value={AUTH_METHOD_LONG_TERM_API_KEY}>
             <div className="flex flex-col gap-4">
-              <TextFormField
+              <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
                 label="AWS Bedrock Long-term API Key"
                 placeholder="Your long-term API key"
-                type="password"
               />
             </div>
-          </TabsContent>
+          </Tabs.Content>
         </Tabs>
       </div>
 

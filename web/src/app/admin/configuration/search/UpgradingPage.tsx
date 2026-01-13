@@ -142,7 +142,7 @@ export default function UpgradingPage({
                 previous model and all progress will be lost.
               </div>
             </Modal.Body>
-            <Modal.Footer className="p-4 flex gap-x-2 w-full justify-end">
+            <Modal.Footer>
               <Button onClick={onCancel}>Confirm</Button>
               <Button onClick={() => setIsCancelling(false)} secondary>
                 Cancel

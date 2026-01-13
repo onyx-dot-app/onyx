@@ -111,7 +111,7 @@ export default function FeedbackModal({
               ))}
             </div>
           )}
-          <Modal.Body className="items-center justify-center bg-background-tint-01">
+          <Modal.Body>
             <FieldInput
               label="Feedback"
               placeholder={`What did you ${feedbackType} about this response?`}
@@ -119,7 +119,7 @@ export default function FeedbackModal({
               ref={fieldInputRef}
             />
           </Modal.Body>
-          <Modal.Footer className="flex flex-row p-4 items-center justify-end w-full gap-2">
+          <Modal.Footer>
             <Button onClick={() => modal.toggle(false)} secondary>
               Cancel
             </Button>

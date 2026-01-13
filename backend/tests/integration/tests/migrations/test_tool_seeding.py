@@ -1,8 +1,56 @@
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from tests.integration.common_utils.reset import downgrade_postgres
 from tests.integration.common_utils.reset import upgrade_postgres
+
+
+class ToolSeedingExpectedResult(BaseModel):
+    name: str
+    display_name: str
+    in_code_tool_id: str
+    user_id: str | None
+
+
+EXPECTED_TOOLS = {
+    "SearchTool": ToolSeedingExpectedResult(
+        name="internal_search",
+        display_name="Internal Search",
+        in_code_tool_id="SearchTool",
+        user_id=None,
+    ),
+    "ImageGenerationTool": ToolSeedingExpectedResult(
+        name="generate_image",
+        display_name="Image Generation",
+        in_code_tool_id="ImageGenerationTool",
+        user_id=None,
+    ),
+    "WebSearchTool": ToolSeedingExpectedResult(
+        name="web_search",
+        display_name="Web Search",
+        in_code_tool_id="WebSearchTool",
+        user_id=None,
+    ),
+    "KnowledgeGraphTool": ToolSeedingExpectedResult(
+        name="run_kg_search",
+        display_name="Knowledge Graph Search",
+        in_code_tool_id="KnowledgeGraphTool",
+        user_id=None,
+    ),
+    "PythonTool": ToolSeedingExpectedResult(
+        name="python",
+        display_name="Code Interpreter",
+        in_code_tool_id="PythonTool",
+        user_id=None,
+    ),
+    "ResearchAgent": ToolSeedingExpectedResult(
+        name="research_agent",
+        display_name="Research Agent",
+        in_code_tool_id="ResearchAgent",
+        user_id=None,
+    ),
+}
 
 
 def test_tool_seeding_migration() -> None:
@@ -49,56 +97,33 @@ def test_tool_seeding_migration() -> None:
             len(tools) == 8
         ), f"Should have created exactly 8 builtin tools, got {len(tools)}"
 
+        def validate_tool(expected: ToolSeedingExpectedResult) -> None:
+            tool = next((t for t in tools if t[1] == expected.name), None)
+            assert tool is not None, f"{expected.name} should exist"
+            assert (
+                tool[2] == expected.display_name
+            ), f"{expected.name} display name should be '{expected.display_name}'"
+            assert (
+                tool[4] == expected.in_code_tool_id
+            ), f"{expected.name} in_code_tool_id should be '{expected.in_code_tool_id}'"
+            assert (
+                tool[5] is None
+            ), f"{expected.name} should not have a user_id (builtin)"
+
         # Check SearchTool
-        search_tool = next((t for t in tools if t[1] == "SearchTool"), None)
-        assert search_tool is not None, "SearchTool should exist"
-        assert (
-            search_tool[2] == "Internal Search"
-        ), "SearchTool display name should be 'Internal Search'"
-        assert search_tool[5] is None, "SearchTool should not have a user_id (builtin)"
+        validate_tool(EXPECTED_TOOLS["SearchTool"])
 
         # Check ImageGenerationTool
-        img_tool = next((t for t in tools if t[1] == "ImageGenerationTool"), None)
-        assert img_tool is not None, "ImageGenerationTool should exist"
-        assert (
-            img_tool[2] == "Image Generation"
-        ), "ImageGenerationTool display name should be 'Image Generation'"
-        assert (
-            img_tool[5] is None
-        ), "ImageGenerationTool should not have a user_id (builtin)"
+        validate_tool(EXPECTED_TOOLS["ImageGenerationTool"])
 
         # Check WebSearchTool
-        web_tool = next((t for t in tools if t[1] == "WebSearchTool"), None)
-        assert web_tool is not None, "WebSearchTool should exist"
-        assert (
-            web_tool[2] == "Web Search"
-        ), "WebSearchTool display name should be 'Web Search'"
-        assert web_tool[5] is None, "WebSearchTool should not have a user_id (builtin)"
+        validate_tool(EXPECTED_TOOLS["WebSearchTool"])
 
         # Check KnowledgeGraphTool
-        kg_tool = next((t for t in tools if t[1] == "KnowledgeGraphTool"), None)
-        assert kg_tool is not None, "KnowledgeGraphTool should exist"
-        assert (
-            kg_tool[2] == "Knowledge Graph Search"
-        ), "KnowledgeGraphTool display name should be 'Knowledge Graph Search'"
-        assert (
-            kg_tool[5] is None
-        ), "KnowledgeGraphTool should not have a user_id (builtin)"
+        validate_tool(EXPECTED_TOOLS["KnowledgeGraphTool"])
 
         # Check PythonTool
-        python_tool = next((t for t in tools if t[1] == "PythonTool"), None)
-        assert python_tool is not None, "PythonTool should exist"
-        assert (
-            python_tool[2] == "Code Interpreter"
-        ), "PythonTool display name should be 'Code Interpreter'"
-        assert python_tool[5] is None, "PythonTool should not have a user_id (builtin)"
+        validate_tool(EXPECTED_TOOLS["PythonTool"])
 
         # Check ResearchAgent (Deep Research as a tool)
-        research_agent = next((t for t in tools if t[1] == "ResearchAgent"), None)
-        assert research_agent is not None, "ResearchAgent should exist"
-        assert (
-            research_agent[2] == "Research Agent"
-        ), "ResearchAgent display name should be 'Research Agent'"
-        assert (
-            research_agent[5] is None
-        ), "ResearchAgent should not have a user_id (builtin)"
+        validate_tool(EXPECTED_TOOLS["ResearchAgent"])
