@@ -203,11 +203,6 @@ export default function ActionsPopover({
   const hasNoDocumentSets =
     !isDefaultAgent && selectedAssistant.document_sets.length === 0;
 
-  // Track tools that user has explicitly unpinned (to prevent auto-pinning)
-  const [explicitlyUnpinnedToolIds, setExplicitlyUnpinnedToolIds] = useState<
-    Set<number>
-  >(new Set());
-
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
     [serverId: number]: {
@@ -241,7 +236,6 @@ export default function ActionsPopover({
   // Reset state when assistant changes
   useEffect(() => {
     setForcedToolIds([]);
-    setExplicitlyUnpinnedToolIds(new Set());
   }, [selectedAssistant.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
@@ -289,50 +283,27 @@ export default function ActionsPopover({
     [selectedAssistant.tools]
   );
 
-  const isExplicitlyUnpinned = useCallback(
-    (toolId: number) => explicitlyUnpinnedToolIds.has(toolId),
-    [explicitlyUnpinnedToolIds]
-  );
-
-  const markExplicitlyUnpinned = useCallback((toolId: number) => {
-    setExplicitlyUnpinnedToolIds((prev) => new Set(prev).add(toolId));
-  }, []);
-
-  const clearExplicitlyUnpinned = useCallback((toolId: number) => {
-    setExplicitlyUnpinnedToolIds((prev) => {
-      const next = new Set(prev);
-      next.delete(toolId);
-      return next;
-    });
-  }, []);
-
-  // Handle explicit force toggle from ActionLineItem - track unpinning
+  // Handle explicit force toggle from ActionLineItem
   const handleForceToggleWithTracking = useCallback(
     (toolId: number, wasForced: boolean) => {
-      if (wasForced) {
-        // User is unpinning - mark as explicitly unpinned
-        markExplicitlyUnpinned(toolId);
-      } else {
-        // User is pinning - clear the explicitly unpinned flag
-        clearExplicitlyUnpinned(toolId);
-
-        // If pinning internal search, enable all accessible sources
-        if (internalSearchTool && toolId === internalSearchTool.id) {
-          const sources = getConfiguredSources(availableSources);
-          const accessibleSources = sources.filter(
-            (s) =>
-              agentAccessibleSources === null ||
-              agentAccessibleSources.has(s.uniqueKey)
-          );
-          setSelectedSources(accessibleSources);
-        }
+      // If pinning internal search, enable all accessible sources
+      if (
+        !wasForced &&
+        internalSearchTool &&
+        toolId === internalSearchTool.id
+      ) {
+        const sources = getConfiguredSources(availableSources);
+        const accessibleSources = sources.filter(
+          (s) =>
+            agentAccessibleSources === null ||
+            agentAccessibleSources.has(s.uniqueKey)
+        );
+        setSelectedSources(accessibleSources);
       }
       toggleForcedTool(toolId);
     },
     [
       toggleForcedTool,
-      markExplicitlyUnpinned,
-      clearExplicitlyUnpinned,
       internalSearchTool,
       availableSources,
       agentAccessibleSources,
@@ -351,7 +322,7 @@ export default function ActionsPopover({
     );
     setSelectedSources(accessibleSources);
 
-    if (internalSearchTool && !isExplicitlyUnpinned(internalSearchTool.id)) {
+    if (internalSearchTool) {
       setForcedToolIds([internalSearchTool.id]);
     }
   }, [
@@ -359,7 +330,6 @@ export default function ActionsPopover({
     availableSources,
     setSelectedSources,
     internalSearchTool,
-    isExplicitlyUnpinned,
     setForcedToolIds,
   ]);
 
@@ -386,10 +356,8 @@ export default function ActionsPopover({
 
       if (internalSearchTool) {
         if (!wasEnabled) {
-          // Enabling a source - auto-pin if not explicitly unpinned
-          if (!isExplicitlyUnpinned(internalSearchTool.id)) {
-            setForcedToolIds([internalSearchTool.id]);
-          }
+          // Enabling a source - auto-pin internal search
+          setForcedToolIds([internalSearchTool.id]);
         } else {
           // Disabling a source - check if all sources will be disabled
           const remainingEnabled = configuredSources.filter(
@@ -400,7 +368,7 @@ export default function ActionsPopover({
             remainingEnabled.length === 0 &&
             forcedToolIds.includes(internalSearchTool.id)
           ) {
-            // All sources disabled - unpin (but don't mark as explicitly unpinned)
+            // All sources disabled - unpin
             setForcedToolIds([]);
           }
         }
@@ -409,7 +377,6 @@ export default function ActionsPopover({
     [
       baseToggleSource,
       internalSearchTool,
-      isExplicitlyUnpinned,
       isSourceEnabled,
       availableSources,
       forcedToolIds,

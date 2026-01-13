@@ -214,15 +214,15 @@ export function PopoverMenu({
     if (child !== null) return true;
     return index !== 0 && index !== definedChildren.length - 1;
   });
-  const size = small ? "small" : medium ? "medium" : "small";
+  const size = small ? "small" : medium ? "medium" : null;
 
   return (
     <Section alignItems="stretch">
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
         className={cn(
-          "flex flex-col gap-1 max-h-[20rem] !w-full",
-          sizeClasses[size]
+          "flex flex-col gap-1 max-h-[20rem]",
+          size ? sizeClasses[size] : "!w-full"
         )}
       >
         {filteredChildren.map((child, index) => (
