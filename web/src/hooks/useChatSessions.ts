@@ -163,6 +163,11 @@ export default function useChatSessions(): UseChatSessionsOutput {
   // The session will be automatically removed once it appears in the server response
   const addPendingChatSession = useCallback(
     ({ chatSessionId, personaId, projectId }: PendingChatSessionParams) => {
+      // Don't add sessions that belong to a project
+      if (projectId != null) {
+        return;
+      }
+
       // Don't add if already in pending store (duplicates are also filtered during merge)
       if (pendingSessionsStore.has(chatSessionId)) {
         return;

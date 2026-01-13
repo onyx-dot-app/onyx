@@ -7,18 +7,16 @@ import httpx
 from pydantic import BaseModel
 from retry import retry
 
-from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
 from onyx.configs.app_configs import RERANK_COUNT
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
-from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.db.enums import EmbeddingPrecision
+from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
@@ -128,79 +126,6 @@ def _enrich_basic_chunk_info(
         old_version=is_old_version,
     )
     return enriched_doc_info
-
-
-def _cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk]:
-    """Removes indexing-time content additions from chunks retrieved from Vespa.
-
-    During indexing, chunks are augmented with additional text to improve search
-    quality:
-    - Title prepended to content (for better keyword/semantic matching)
-    - Metadata suffix appended to content
-    - Contextual RAG: doc_summary (beginning) and chunk_context (end)
-
-    This function strips these additions before returning chunks to users,
-    restoring the original document content. Cleaning is applied in sequence:
-    1. Title removal:
-        - Full match: Strips exact title from beginning
-        - Partial match: If content starts with title[:BLURB_SIZE], splits on
-          RETURN_SEPARATOR to remove title section
-    2. Metadata suffix removal:
-        - Strips metadata_suffix from end, plus trailing RETURN_SEPARATOR
-    3. Contextual RAG removal:
-        - Strips doc_summary from beginning (if present)
-        - Strips chunk_context from end (if present)
-
-    Args:
-        chunks: Chunks as retrieved from Vespa with indexing augmentations
-            intact.
-
-    Returns:
-        Clean InferenceChunk objects with augmentations removed, containing only
-            the original document content that should be shown to users.
-    """
-
-    def _remove_title(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.title or not chunk.content:
-            return chunk.content
-
-        if chunk.content.startswith(chunk.title):
-            return chunk.content[len(chunk.title) :].lstrip()
-
-        # BLURB SIZE is by token instead of char but each token is at least 1 char
-        # If this prefix matches the content, it's assumed the title was prepended
-        if chunk.content.startswith(chunk.title[:BLURB_SIZE]):
-            return (
-                chunk.content.split(RETURN_SEPARATOR, 1)[-1]
-                if RETURN_SEPARATOR in chunk.content
-                else chunk.content
-            )
-        return chunk.content
-
-    def _remove_metadata_suffix(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.metadata_suffix:
-            return chunk.content
-        return chunk.content.removesuffix(chunk.metadata_suffix).rstrip(
-            RETURN_SEPARATOR
-        )
-
-    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
-        # remove document summary
-        if chunk.doc_summary and chunk.content.startswith(chunk.doc_summary):
-            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
-        # remove chunk context
-        if chunk.chunk_context and chunk.content.endswith(chunk.chunk_context):
-            chunk.content = chunk.content[
-                : len(chunk.content) - len(chunk.chunk_context)
-            ].rstrip()
-        return chunk.content
-
-    for chunk in chunks:
-        chunk.content = _remove_title(chunk)
-        chunk.content = _remove_metadata_suffix(chunk)
-        chunk.content = _remove_contextual_rag(chunk)
-
-    return [chunk.to_inference_chunk() for chunk in chunks]
 
 
 @retry(
@@ -590,7 +515,7 @@ class VespaDocumentIndex(DocumentIndex):
         ]
 
         if batch_retrieval:
-            return _cleanup_chunks(
+            return cleanup_content_for_chunks(
                 batch_search_api_retrieval(
                     index_name=self._index_name,
                     chunk_requests=sanitized_chunk_requests,
@@ -600,7 +525,7 @@ class VespaDocumentIndex(DocumentIndex):
                     get_large_chunks=False,
                 )
             )
-        return _cleanup_chunks(
+        return cleanup_content_for_chunks(
             parallel_visit_api_retrieval(
                 index_name=self._index_name,
                 chunk_requests=sanitized_chunk_requests,
@@ -670,7 +595,7 @@ class VespaDocumentIndex(DocumentIndex):
             "timeout": VESPA_TIMEOUT,
         }
 
-        return _cleanup_chunks(query_vespa(params))
+        return cleanup_content_for_chunks(query_vespa(params))
 
     def random_retrieval(
         self,
@@ -692,4 +617,4 @@ class VespaDocumentIndex(DocumentIndex):
             "ranking.properties.random.seed": random_seed,
         }
 
-        return _cleanup_chunks(query_vespa(params))
+        return cleanup_content_for_chunks(query_vespa(params))

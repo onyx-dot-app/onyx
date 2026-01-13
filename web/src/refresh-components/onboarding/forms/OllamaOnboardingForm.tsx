@@ -1,4 +1,6 @@
-import React, { useMemo, useState, useEffect } from "react";
+"use client";
+
+import { useMemo, useState, useEffect } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";

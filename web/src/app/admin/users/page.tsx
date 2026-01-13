@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Tabs from "@/refresh-components/Tabs";
+import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
@@ -145,18 +145,11 @@ const UsersTables = ({
     );
   }
 
-  return (
-    <Tabs defaultValue="current">
-      <Tabs.List>
-        <Tabs.Trigger value="current">Current Users</Tabs.Trigger>
-        <Tabs.Trigger value="invited">Invited Users</Tabs.Trigger>
-        {NEXT_PUBLIC_CLOUD_ENABLED && (
-          <Tabs.Trigger value="pending">Pending Users</Tabs.Trigger>
-        )}
-      </Tabs.List>
-
-      <Tabs.Content value="current">
-        <Card>
+  const tabs = SimpleTabs.generateTabs({
+    current: {
+      name: "Current Users",
+      content: (
+        <Card className="w-full">
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
@@ -192,9 +185,12 @@ const UsersTables = ({
             />
           </CardContent>
         </Card>
-      </Tabs.Content>
-      <Tabs.Content value="invited">
-        <Card>
+      ),
+    },
+    invited: {
+      name: "Invited Users",
+      content: (
+        <Card className="w-full">
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Invited Users</CardTitle>
@@ -216,9 +212,12 @@ const UsersTables = ({
             />
           </CardContent>
         </Card>
-      </Tabs.Content>
-      {NEXT_PUBLIC_CLOUD_ENABLED && (
-        <Tabs.Content value="pending">
+      ),
+    },
+    ...(NEXT_PUBLIC_CLOUD_ENABLED && {
+      pending: {
+        name: "Pending Users",
+        content: (
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center gap-1">
@@ -241,10 +240,12 @@ const UsersTables = ({
               />
             </CardContent>
           </Card>
-        </Tabs.Content>
-      )}
-    </Tabs>
-  );
+        ),
+      },
+    }),
+  });
+
+  return <SimpleTabs tabs={tabs} defaultValue="current" />;
 };
 
 const SearchableTables = () => {
