@@ -10,8 +10,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgEdit } from "@opal/icons";
-import FileDisplay from "@/app/chat/message/FileDisplay";
-import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
+import FileDisplay from "./FileDisplay";
 
 interface MessageEditingProps {
   content: string;
@@ -140,10 +139,6 @@ const HumanMessage = React.memo(function HumanMessage({
 
   const [isEditing, setIsEditing] = useState(false);
 
-  // Ref for the text content element (for triple-click selection)
-  const textContentRef = useRef<HTMLDivElement>(null);
-  const handleTripleClick = useTripleClickSelect(textContentRef);
-
   // Use nodeId for switching (finding position in siblings)
   const indexInSiblings = otherMessagesCanSwitchTo?.indexOf(nodeId);
   // indexOf returns -1 if not found, treat that as undefined
@@ -200,34 +195,18 @@ const HumanMessage = React.memo(function HumanMessage({
           <>
             <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
               <div
-                ref={textContentRef}
                 className={
-                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3 cursor-text"
+                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
                 }
-                onMouseDown={handleTripleClick}
                 onCopy={(e) => {
-                  e.preventDefault();
                   const selection = window.getSelection();
-                  if (!selection || !selection.rangeCount) {
-                    e.clipboardData.setData("text/plain", content);
-                    return;
-                  }
-
-                  const range = selection.getRangeAt(0);
-                  const selectedText = selection
-                    .toString()
-                    .replace(/\n{2,}/g, "\n")
-                    .trim();
-
-                  // Check if selection is within this element using DOM containment
-                  if (
-                    textContentRef.current?.contains(
-                      range.commonAncestorContainer
-                    )
-                  ) {
-                    e.clipboardData.setData("text/plain", selectedText);
-                  } else {
-                    e.clipboardData.setData("text/plain", content);
+                  if (selection) {
+                    e.preventDefault();
+                    const text = selection
+                      .toString()
+                      .replace(/\n{2,}/g, "\n")
+                      .trim();
+                    e.clipboardData.setData("text/plain", text);
                   }
                 }}
               >
