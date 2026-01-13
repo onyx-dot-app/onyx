@@ -198,7 +198,7 @@ def test_image_generation(
 
     if provider is None:
         raise HTTPException(
-            status_code=404,
+            status_code=400,
             detail="No provider provided",
         )
 
