@@ -55,10 +55,10 @@ export default function ConnectorWrapper({
   }
 
   const sourceMetadata = getSourceMetadata(connector);
-  const hasFederatedOption = sourceMetadata.federated === true;
+  const supportsFederated = sourceMetadata.federated === true;
 
   // Only show federated form if explicitly requested via URL parameter
-  const showFederatedForm = mode === "federated" && hasFederatedOption;
+  const showFederatedForm = mode === "federated" && supportsFederated;
 
   // For federated form, use the specialized form without FormProvider
   if (showFederatedForm) {

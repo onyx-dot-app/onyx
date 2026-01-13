@@ -117,17 +117,6 @@ function SourceTileTooltipWrapper({
               <strong>Existing Slack credentials found.</strong> Click to manage
               your Slack connector.
             </Text>
-          ) : sourceMetadata.federated ? (
-            <Text as="p" textLight05 secondaryBody>
-              {sourceMetadata.federatedTooltip ? (
-                sourceMetadata.federatedTooltip
-              ) : (
-                <>
-                  <strong>Federated Search.</strong> This will result in greater
-                  latency and lower search quality.
-                </>
-              )}
-            </Text>
           ) : null}
         </TooltipContent>
       </Tooltip>
