@@ -489,9 +489,21 @@ def upsert_documents(
             "link": insert_stmt.excluded.link,
             "primary_owners": insert_stmt.excluded.primary_owners,
             "secondary_owners": insert_stmt.excluded.secondary_owners,
-            "external_user_emails": insert_stmt.excluded.external_user_emails,
-            "external_user_group_ids": insert_stmt.excluded.external_user_group_ids,
-            "is_public": insert_stmt.excluded.is_public,
+            # Use COALESCE to preserve existing permissions when new values are NULL.
+            # This prevents subsequent indexing runs (which don't fetch permissions)
+            # from overwriting permissions set by permission sync jobs.
+            "external_user_emails": func.coalesce(
+                insert_stmt.excluded.external_user_emails,
+                DbDocument.external_user_emails,
+            ),
+            "external_user_group_ids": func.coalesce(
+                insert_stmt.excluded.external_user_group_ids,
+                DbDocument.external_user_group_ids,
+            ),
+            "is_public": func.coalesce(
+                insert_stmt.excluded.is_public,
+                DbDocument.is_public,
+            ),
             "doc_metadata": insert_stmt.excluded.doc_metadata,
         },
     )
