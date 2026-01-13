@@ -471,7 +471,7 @@ def upsert_documents(
                             ),
                             "is_public": doc.external_access.is_public,
                         }
-                        if includes_permissions
+                        if doc.external_access
                         else {}
                     ),
                     doc_metadata=doc.doc_metadata,
