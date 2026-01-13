@@ -60,12 +60,7 @@ import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Link from "next/link";
 
 export interface AdvancedConfig {
@@ -518,30 +513,27 @@ export default function AddConnector({
               hasFederatedOption ? (
                 <span className="inline-flex items-center gap-1.5">
                   {displayName}
-                  <TooltipProvider delayDuration={0}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-text-03 cursor-pointer">
-                          <SvgAlertCircle size={20} />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" size="lg">
-                        <div className="flex flex-col gap-2">
-                          <Text as="p" textLight05>
-                            A federated search option is available for this
-                            connector. It will result in greater latency and
-                            reduced search quality.
-                          </Text>
-                          <Link
-                            href={`/admin/connectors/${connector}?mode=federated`}
-                            className="text-action-link-04 hover:underline text-sm"
-                          >
-                            Use federated version anyways
-                          </Link>
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <SimpleTooltip
+                    tooltip={
+                      <div className="flex flex-col gap-2">
+                        <Text as="p" textLight05>
+                          A federated search option is available for this
+                          connector. It will result in greater latency and
+                          reduced search quality.
+                        </Text>
+                        <Link
+                          href={`/admin/connectors/${connector}?mode=federated`}
+                          className="text-action-link-04 hover:underline text-sm"
+                        >
+                          Use federated version instead →
+                        </Link>
+                      </div>
+                    }
+                    side="bottom"
+                    delayDuration={0}
+                  >
+                    <SvgAlertCircle size={20} />
+                  </SimpleTooltip>
                 </span>
               ) : (
                 displayName
