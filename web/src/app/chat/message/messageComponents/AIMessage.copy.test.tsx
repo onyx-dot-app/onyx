@@ -66,7 +66,7 @@ jest.mock("@/components/admin/connectors/Popup", () => ({
 
 jest.mock("@/hooks/useFeedbackController", () => ({
   __esModule: true,
-  useFeedbackController: () => ({ handleFeedbackChange: jest.fn() }),
+  default: () => ({ handleFeedbackChange: jest.fn() }),
 }));
 
 jest.mock("@/sections/modals/FeedbackModal", () => ({
