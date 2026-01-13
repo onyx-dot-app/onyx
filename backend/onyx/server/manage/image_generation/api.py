@@ -194,6 +194,8 @@ def test_image_generation(
         # Use directly provided credentials
         api_key = test_request.api_key
         provider = test_request.provider
+    elif test_request.custom_config is not None:
+        pass
     else:
         raise HTTPException(
             status_code=400,
@@ -224,6 +226,37 @@ def test_image_generation(
                 size="1024x1024",
                 n=1,
                 quality=quality,
+            )
+        elif provider == "vertex":
+            if not test_request.custom_config or not (
+                credentials := test_request.custom_config.get("vertex_credentials")
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="vertex_credentials is required for Vertex AI",
+                )
+
+            vertex_project_id = credentials.get("project_id")
+
+            if not vertex_project_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="vertex_project_id is required for Vertex AI",
+                )
+
+            vertex_location = test_request.custom_config.get(
+                "vertex_location", "global"
+            )
+
+            image_generation(
+                prompt="a simple blue circle on white background",
+                model=test_request.model_name,
+                size="1024x1024",
+                n=1,
+                quality=quality,
+                vertex_location=vertex_location,
+                vertex_project_id=vertex_project_id,
+                vertex_credentials=credentials,
             )
         else:
             image_generation(
