@@ -566,30 +566,33 @@ export default function AgentEditorPage({
     replace_base_system_prompt:
       existingAgent?.replace_base_system_prompt ?? false,
     reminders: existingAgent?.task_prompt ?? "",
+    // For new assistants, default to false for optional tools to avoid
+    // "Tool not available" errors when the tool isn't configured.
+    // For existing assistants, preserve the current tool configuration.
     image_generation:
-      (!!imageGenTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
-        )) ??
-      true,
+      !!imageGenTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+      ) ??
+        false),
     web_search:
-      (!!webSearchTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
-        )) ??
-      true,
+      !!webSearchTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
+      ) ??
+        false),
     open_url:
-      (!!openURLTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
-        )) ??
-      true,
+      !!openURLTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
+      ) ??
+        false),
     code_interpreter:
-      (!!codeInterpreterTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
-        )) ??
-      true,
+      !!codeInterpreterTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
+      ) ??
+        false),
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
