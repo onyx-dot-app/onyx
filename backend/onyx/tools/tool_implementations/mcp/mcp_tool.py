@@ -120,7 +120,7 @@ class MCPTool(Tool[None]):
             if self.connection_config:
                 headers.update(self.connection_config.config.get("headers", {}))
 
-            # Priority 3: OAuth token (overrides Authorization header)
+            # Priority 3: For pass-through OAuth, use the user's login OAuth token
             if self._user_oauth_token:
                 headers["Authorization"] = f"Bearer {self._user_oauth_token}"
 
