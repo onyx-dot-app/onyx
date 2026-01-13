@@ -87,7 +87,7 @@ import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
 import Modal from "@/refresh-components/Modal";
-import ShareAgentModal from "@/sections/agents/ShareAgentModal";
+import ShareAgentModalContents from "@/sections/modals/ShareAgentModalContents";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -1016,7 +1016,7 @@ export default function AgentEditorPage({
                     open={shareAgentModal.isOpen}
                     onOpenChange={shareAgentModal.toggle}
                   >
-                    <ShareAgentModal
+                    <ShareAgentModalContents
                       agent={existingAgent}
                       onShare={(userIds, groupIds, isPublic) => {
                         setFieldValue("shared_user_ids", userIds);

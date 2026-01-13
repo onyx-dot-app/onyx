@@ -29,7 +29,7 @@ import {
 } from "@opal/icons";
 import { useCreateModal } from "./contexts/ModalContext";
 import Modal from "./Modal";
-import ShareAgentModal from "@/sections/agents/ShareAgentModal";
+import ShareAgentModalContents from "@/sections/modals/ShareAgentModalContents";
 import updateAgentSharedStatus from "@/lib/agents";
 import { useAgent } from "@/hooks/useAgents";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -111,7 +111,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           open={shareAgentModal.isOpen}
           onOpenChange={shareAgentModal.toggle}
         >
-          <ShareAgentModal agent={agent} onShare={handleShare} />
+          <ShareAgentModalContents agent={agent} onShare={handleShare} />
         </Modal>
       </shareAgentModal.Provider>
 

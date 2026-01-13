@@ -28,15 +28,15 @@ import useFilter from "@/hooks/useFilter";
 import { Formik } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 
-export interface ShareAgentModalProps {
+export interface ShareAgentModalContentsProps {
   agent?: MinimalPersonaSnapshot;
   onShare?: (userIds: string[], groupIds: number[], isPublic: boolean) => void;
 }
 
-export default function ShareAgentModal({
+export default function ShareAgentModalContents({
   agent,
   onShare,
-}: ShareAgentModalProps) {
+}: ShareAgentModalContentsProps) {
   const { data: usersData } = useUsers({ includeApiKeys: false });
   const { data: groupsData } = useGroups();
   const { user: currentUser } = useUser();
