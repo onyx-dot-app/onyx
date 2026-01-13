@@ -1,5 +1,5 @@
 {
-  "name": "XXX",
+  "name": "web",
   "version": "1.0.0-dev",
   "version-comment": "version field must be SemVer or chromatic will barf",
   "private": true,
