@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
+from onyx.configs.app_configs import PERSISTENT_DOCUMENT_STORAGE_ENABLED
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -209,3 +210,16 @@ class DocumentIndexingBatchAdapter:
         )
 
         self.db_session.commit()
+
+        # Write to persistent storage if enabled
+        if PERSISTENT_DOCUMENT_STORAGE_ENABLED and filtered_documents:
+            try:
+                from onyx.indexing.persistent_document_writer import (
+                    get_persistent_document_writer,
+                )
+
+                writer = get_persistent_document_writer()
+                writer.write_documents(filtered_documents)
+            except Exception as e:
+                # Log but don't fail indexing
+                logger.warning(f"Failed to write documents to persistent storage: {e}")
