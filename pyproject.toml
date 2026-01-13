@@ -183,7 +183,7 @@ model_server = [
     "numpy==2.4.1",
     "safetensors==0.5.3",
     "sentence-transformers==4.0.2",
-    "torch==2.6.0",
+    "torch==2.9.1",
     "transformers==4.53.0",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]

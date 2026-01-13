@@ -1103,7 +1103,7 @@ stripe==10.12.0
     # via onyx
 supervisor==4.3.0
     # via onyx
-sympy==1.13.1
+sympy==1.14.0
     # via onnxruntime
 tblib==3.2.2
     # via distributed
