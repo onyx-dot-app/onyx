@@ -11,13 +11,13 @@ from onyx.auth.users import user_needs_to_be_verified
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
 from onyx.configs.constants import DEV_VERSION_PATTERN
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import STABLE_VERSION_PATTERN
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
 from onyx.server.manage.models import VersionResponse
 from onyx.server.models import StatusResponse
-from onyx.server.utils import PUBLIC_API_TAGS
 
 router = APIRouter()
 

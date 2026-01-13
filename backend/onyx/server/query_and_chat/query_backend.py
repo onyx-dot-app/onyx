@@ -20,6 +20,7 @@ from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import IndexFilters
@@ -69,7 +70,6 @@ from onyx.server.query_and_chat.models import TagResponse
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
