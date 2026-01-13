@@ -196,6 +196,12 @@ def test_image_generation(
         api_key = source_provider.api_key
         provider = source_provider.provider
 
+    if provider is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No provider provided",
+        )
+
     try:
         # Build image provider from credentials
         # If incorrect credentials are provided, this will raise an exception
