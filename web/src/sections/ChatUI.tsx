@@ -33,6 +33,7 @@ import { useUser } from "@/components/user/UserProvider";
 import { HORIZON_DISTANCE_PX } from "@/lib/constants";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgChevronDown } from "@opal/icons";
+import AgentMessage from "@/app/chat/message/messageComponents/AgentMessage";
 
 export interface ChatUIHandle {
   scrollToBottom: () => boolean;
@@ -315,7 +316,21 @@ const ChatUI = React.memo(
                       id={`message-${message.nodeId}`}
                       key={messageReactComponentKey}
                     >
-                      <AIMessage
+                      {/* <AIMessage
+                        rawPackets={message.packets}
+                        chatState={chatStateData}
+                        nodeId={message.nodeId}
+                        messageId={message.messageId}
+                        currentFeedback={message.currentFeedback}
+                        llmManager={llmManager}
+                        otherMessagesCanSwitchTo={
+                          parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                        }
+                        onMessageSelection={onMessageSelection}
+                        onRegenerate={createRegenerator}
+                        parentMessage={previousMessage}
+                      /> */}
+                      <AgentMessage
                         rawPackets={message.packets}
                         chatState={chatStateData}
                         nodeId={message.nodeId}

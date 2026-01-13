@@ -109,6 +109,8 @@ interface TabsTriggerProps
 
   icon?: React.FunctionComponent<IconProps>;
   children?: string;
+  /** Show loading spinner after label */
+  isLoading?: boolean;
 }
 
 /**
@@ -161,13 +163,27 @@ const TabsTrigger = React.forwardRef<
   TabsTriggerProps
 >(
   (
-    { tooltip, tooltipSide = "top", icon: Icon, children, disabled, ...props },
+    {
+      tooltip,
+      tooltipSide = "top",
+      icon: Icon,
+      children,
+      disabled,
+      isLoading,
+      ...props
+    },
     ref
   ) => {
     const inner = (
       <>
         {Icon && <Icon size={16} className="stroke-text-03" />}
         <Text>{children}</Text>
+        {isLoading && (
+          <span
+            className="inline-block w-3 h-3 border-2 border-text-03 border-t-transparent rounded-full animate-spin"
+            aria-label="Loading"
+          />
+        )}
       </>
     );
 
