@@ -238,7 +238,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
-        # Whether to enable Slack federated search (skip if persona has no Slack document sets)
+        # Whether to enable Slack federated search
         enable_slack_search: bool = True,
     ) -> None:
         super().__init__(emitter=emitter)
@@ -672,7 +672,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # This avoids the query multiplication problem where each Vespa query
             # would trigger a separate Slack search
             # Run if we have slack_context (bot) or user (might have OAuth token)
-            # Skip if persona has no Slack-connected document sets (enable_slack_search=False)
             if (
                 self.enable_slack_search
                 and (self.slack_context or self.user)
