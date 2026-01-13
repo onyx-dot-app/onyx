@@ -91,6 +91,7 @@ class ImageGenerationConfigUpdate(BaseModel):
     api_base: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
+    custom_config: dict[str, str] | None = None
 
     # If False and using new credentials mode, preserve existing API key from DB
     api_key_changed: bool = False
