@@ -4,9 +4,11 @@ These tests assume OpenSearch is running and test all implemented methods
 using real schemas, pipelines, and search queries from the codebase.
 """
 
+import json
 import uuid
 from collections.abc import Generator
-from typing import Any
+from datetime import datetime
+from datetime import timezone
 
 import pytest
 
@@ -21,18 +23,31 @@ from onyx.document_index.opensearch.search import (
     MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
 )
 from onyx.document_index.opensearch.search import MIN_MAX_NORMALIZATION_PIPELINE_NAME
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+
+
+def _patch_global_tenant_state(monkeypatch: pytest.MonkeyPatch, state: bool) -> None:
+    """Patches MULTI_TENANT wherever necessary for this test file.
+
+    Args:
+        monkeypatch: The test instance's monkeypatch instance, used for
+            patching.
+        state: The intended state of MULTI_TENANT.
+    """
+    monkeypatch.setattr("shared_configs.configs.MULTI_TENANT", state)
+    monkeypatch.setattr("onyx.document_index.opensearch.schema.MULTI_TENANT", state)
 
 
 def _create_test_document_chunk(
-    document_id: str = "test-doc-1",
-    chunk_index: int = 0,
-    content: str = "Test content",
+    document_id: str,
+    chunk_index: int,
+    content: str,
+    tenant_state: TenantState,
     content_vector: list[float] | None = None,
     title: str | None = None,
     title_vector: list[float] | None = None,
     public: bool = True,
     hidden: bool = False,
-    **kwargs: Any,
 ) -> DocumentChunk:
     if content_vector is None:
         # Generate dummy vector - 128 dimensions for fast testing.
@@ -42,20 +57,36 @@ def _create_test_document_chunk(
     if title is not None and title_vector is None:
         title_vector = [0.2] * 128
 
+    now = datetime.now(timezone.utc)
+    # We only store millisecond precision, so to make sure asserts work in this
+    # test file manually lose some precision from datetime.now().
+    now = now.replace(microsecond=(now.microsecond // 1000) * 1000)
+
     return DocumentChunk(
         document_id=document_id,
         chunk_index=chunk_index,
-        content=content,
-        content_vector=content_vector,
         title=title,
         title_vector=title_vector,
-        # This is not how tokenization necessarily works, this is just for quick
-        # testing.
-        num_tokens=len(content.split()),
+        content=content,
+        content_vector=content_vector,
         source_type="test_source",
+        metadata=json.dumps({}),
+        last_updated=now,
         public=public,
+        access_control_list=[],
         hidden=hidden,
-        **kwargs,
+        global_boost=0,
+        semantic_identifier="Test semantic identifier",
+        image_file_id=None,
+        source_links=None,
+        blurb="Test blurb",
+        doc_summary="Test doc summary",
+        chunk_context="Test chunk context",
+        document_sets=None,
+        project_ids=None,
+        primary_owners=None,
+        secondary_owners=None,
+        tenant_id=tenant_state,
     )
 
 
@@ -228,11 +259,15 @@ class TestOpenSearchClient:
             pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
         )
 
-    def test_index_document(self, test_client: OpenSearchClient) -> None:
+    def test_index_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests indexing a document."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -241,17 +276,22 @@ class TestOpenSearchClient:
             document_id="test-doc-1",
             chunk_index=0,
             content="Test content for indexing",
+            tenant_state=tenant_state,
         )
 
         # Under test and postcondition.
         # Should not raise.
         test_client.index_document(document=doc)
 
-    def test_index_duplicate_document(self, test_client: OpenSearchClient) -> None:
+    def test_index_duplicate_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests indexing a duplicate document raises an error."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -260,6 +300,7 @@ class TestOpenSearchClient:
             document_id="test-doc-duplicate",
             chunk_index=0,
             content="Duplicate test",
+            tenant_state=tenant_state,
         )
 
         # Index once - should succeed.
@@ -270,11 +311,15 @@ class TestOpenSearchClient:
         with pytest.raises(Exception, match="already exists"):
             test_client.index_document(document=doc)
 
-    def test_get_document(self, test_client: OpenSearchClient) -> None:
+    def test_get_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests getting a document."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -283,6 +328,7 @@ class TestOpenSearchClient:
             document_id="test-doc-get",
             chunk_index=0,
             content="Content to retrieve",
+            tenant_state=tenant_state,
         )
         test_client.index_document(document=original_doc)
 
@@ -297,11 +343,14 @@ class TestOpenSearchClient:
         # Postcondition.
         assert retrieved_doc == original_doc
 
-    def test_get_nonexistent_document(self, test_client: OpenSearchClient) -> None:
+    def test_get_nonexistent_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests getting a nonexistent document raises an error."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=False
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -312,11 +361,15 @@ class TestOpenSearchClient:
                 document_chunk_id="test_source__nonexistent__512__0"
             )
 
-    def test_delete_existing_document(self, test_client: OpenSearchClient) -> None:
+    def test_delete_existing_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests deleting an existing document returns True."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -325,6 +378,7 @@ class TestOpenSearchClient:
             document_id="test-doc-delete",
             chunk_index=0,
             content="Content to delete",
+            tenant_state=tenant_state,
         )
         test_client.index_document(document=doc)
 
@@ -342,11 +396,15 @@ class TestOpenSearchClient:
         with pytest.raises(Exception, match="404"):
             test_client.get_document(document_chunk_id=doc_chunk_id)
 
-    def test_delete_nonexistent_document(self, test_client: OpenSearchClient) -> None:
+    def test_delete_nonexistent_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests deleting a nonexistent document returns False."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -359,11 +417,15 @@ class TestOpenSearchClient:
         # Postcondition.
         assert result is False
 
-    def test_delete_by_query(self, test_client: OpenSearchClient) -> None:
+    def test_delete_by_query(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests deleting documents by query."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -374,7 +436,7 @@ class TestOpenSearchClient:
                 document_id="delete-me",
                 chunk_index=i,
                 content=f"Delete this {i}",
-                tenant_id="tenant-x",
+                tenant_state=tenant_state,
             )
             for i in range(3)
         ]
@@ -383,7 +445,7 @@ class TestOpenSearchClient:
                 document_id="keep-me",
                 chunk_index=0,
                 content="Keep this",
-                tenant_id="tenant-x",
+                tenant_state=tenant_state,
             )
         ]
 
@@ -393,7 +455,7 @@ class TestOpenSearchClient:
 
         query_body = DocumentQuery.delete_from_document_id_query(
             document_id="delete-me",
-            tenant_state=TenantState(tenant_id="tenant-x", multitenant=True),
+            tenant_state=tenant_state,
         )
 
         # Under test.
@@ -406,7 +468,7 @@ class TestOpenSearchClient:
         test_client.refresh_index()
         search_query = DocumentQuery.get_from_document_id_query(
             document_id="delete-me",
-            tenant_state=TenantState(tenant_id="tenant-x", multitenant=True),
+            tenant_state=tenant_state,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -418,7 +480,7 @@ class TestOpenSearchClient:
         # Verify other documents still exist.
         keep_query = DocumentQuery.get_from_document_id_query(
             document_id="keep-me",
-            tenant_state=TenantState(tenant_id="tenant-x", multitenant=True),
+            tenant_state=tenant_state,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -432,11 +494,15 @@ class TestOpenSearchClient:
         with pytest.raises(NotImplementedError):
             test_client.update_document()
 
-    def test_search_basic(self, test_client: OpenSearchClient) -> None:
+    def test_search_basic(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests basic search functionality."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=False
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -448,18 +514,21 @@ class TestOpenSearchClient:
                 chunk_index=0,
                 content="Python programming language tutorial",
                 content_vector=_generate_test_vector(0.1),
+                tenant_state=tenant_state,
             ),
             _create_test_document_chunk(
                 document_id="search-doc-2",
                 chunk_index=0,
                 content="How to make cheese",
                 content_vector=_generate_test_vector(0.2),
+                tenant_state=tenant_state,
             ),
             _create_test_document_chunk(
                 document_id="search-doc-3",
                 chunk_index=0,
                 content="C++ for newborns",
                 content_vector=_generate_test_vector(0.15),
+                tenant_state=tenant_state,
             ),
         ]
         for doc in docs:
@@ -476,7 +545,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id="", multitenant=False),
+            tenant_state=tenant_state,
         )
 
         # Under test.
@@ -491,12 +560,17 @@ class TestOpenSearchClient:
         )
 
     def test_search_with_pipeline(
-        self, test_client: OpenSearchClient, search_pipeline: None
+        self,
+        test_client: OpenSearchClient,
+        search_pipeline: None,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Tests search with a normalization pipeline."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=False
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -508,12 +582,14 @@ class TestOpenSearchClient:
                 chunk_index=0,
                 content="Machine learning algorithms for single-celled organisms",
                 content_vector=_generate_test_vector(0.3),
+                tenant_state=tenant_state,
             ),
             _create_test_document_chunk(
                 document_id="pipeline-doc-2",
                 chunk_index=0,
                 content="Deep learning shallow neural networks",
                 content_vector=_generate_test_vector(0.35),
+                tenant_state=tenant_state,
             ),
         ]
         for doc in docs:
@@ -530,7 +606,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id="", multitenant=False),
+            tenant_state=tenant_state,
         )
 
         # Under test.
@@ -546,11 +622,15 @@ class TestOpenSearchClient:
             for chunk in results
         )
 
-    def test_search_empty_index(self, test_client: OpenSearchClient) -> None:
+    def test_search_empty_index(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests search on an empty index returns an empty list."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=False
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -564,7 +644,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id="", multitenant=False),
+            tenant_state=tenant_state,
         )
 
         # Under test.
@@ -573,16 +653,23 @@ class TestOpenSearchClient:
         # Postcondition.
         assert len(results) == 0
 
-    def test_search_filters(self, test_client: OpenSearchClient) -> None:
-        """Tests search filters for public/hidden documents."""
+    def test_search_filters(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests search filters for public/hidden documents and tenant isolation.
+        """
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, True)
+        tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
+        tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_x.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
 
-        # Index documents with different public/hidden states.
+        # Index documents with different public/hidden and tenant states.
         docs = [
             _create_test_document_chunk(
                 document_id="public-doc-1",
@@ -590,7 +677,7 @@ class TestOpenSearchClient:
                 content="Public document content",
                 public=True,
                 hidden=False,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
                 document_id="hidden-doc-1",
@@ -598,7 +685,7 @@ class TestOpenSearchClient:
                 content="Hidden document content, spooky",
                 public=True,
                 hidden=True,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
                 document_id="private-doc-1",
@@ -606,7 +693,17 @@ class TestOpenSearchClient:
                 content="Private document content, btw my SSN is 123-45-6789",
                 public=False,
                 hidden=False,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
+            ),
+            _create_test_document_chunk(
+                document_id="should-not-exist-from-tenant-x-pov",
+                chunk_index=0,
+                content="This is an entirely different tenant, x should never see this",
+                # Make this as permissive as possible to exercise tenant
+                # isolation.
+                public=True,
+                hidden=False,
+                tenant_state=tenant_y,
             ),
         ]
         for doc in docs:
@@ -625,7 +722,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id="tenant-x", multitenant=True),
+            tenant_state=tenant_x,
         )
 
         # Under test.
@@ -637,17 +734,23 @@ class TestOpenSearchClient:
         assert results[0].document_id == "public-doc-1"
         assert results[0].public is True
         assert results[0].hidden is False
+        assert results[0].tenant_id == tenant_x
 
     def test_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
-        self, test_client: OpenSearchClient, search_pipeline: None
+        self,
+        test_client: OpenSearchClient,
+        search_pipeline: None,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """
         Tests search with a normalization pipeline and filters returns chunks
         with related content first.
         """
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, True)
+        tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_x.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -664,7 +767,7 @@ class TestOpenSearchClient:
                 ),  # Very close to query vector.
                 public=True,
                 hidden=False,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
                 document_id="somewhat-relevant-1",
@@ -673,7 +776,7 @@ class TestOpenSearchClient:
                 content_vector=_generate_test_vector(0.5),  # Far from query vector.
                 public=True,
                 hidden=False,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
                 document_id="not-very-relevant-1",
@@ -684,7 +787,7 @@ class TestOpenSearchClient:
                 ),  # Very far from query vector.
                 public=True,
                 hidden=False,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
             ),
             # These should be filtered out by public/hidden filters.
             _create_test_document_chunk(
@@ -694,7 +797,7 @@ class TestOpenSearchClient:
                 content_vector=_generate_test_vector(0.05),  # Very close but hidden.
                 public=True,
                 hidden=True,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
                 document_id="private-but-relevant-1",
@@ -703,7 +806,7 @@ class TestOpenSearchClient:
                 content_vector=_generate_test_vector(0.08),  # Very close but private.
                 public=False,
                 hidden=False,
-                tenant_id="tenant-x",
+                tenant_state=tenant_x,
             ),
         ]
         for doc in docs:
@@ -720,7 +823,7 @@ class TestOpenSearchClient:
             query_vector=query_vector,
             num_candidates=10,
             num_hits=5,
-            tenant_state=TenantState(tenant_id="tenant-x", multitenant=True),
+            tenant_state=tenant_x,
         )
 
         # Under test.
@@ -742,11 +845,15 @@ class TestOpenSearchClient:
         # Most relevant document should be first due to normalization pipeline.
         assert results[0].document_id == "highly-relevant-1"
 
-    def test_search_for_ids_basic(self, test_client: OpenSearchClient) -> None:
+    def test_search_for_ids_basic(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests search_for_ids method returns correct chunk IDs."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=False
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -754,14 +861,20 @@ class TestOpenSearchClient:
         # Index chunks for two different documents.
         doc1_chunks = [
             _create_test_document_chunk(
-                document_id="doc-1", chunk_index=i, content=f"Doc 1 Chunk {i}"
+                document_id="doc-1",
+                chunk_index=i,
+                content=f"Doc 1 Chunk {i}",
+                tenant_state=tenant_state,
             )
             for i in range(3)
         ]
 
         doc2_chunks = [
             _create_test_document_chunk(
-                document_id="doc-2", chunk_index=i, content=f"Doc 2 Chunk {i}"
+                document_id="doc-2",
+                chunk_index=i,
+                content=f"Doc 2 Chunk {i}",
+                tenant_state=tenant_state,
             )
             for i in range(2)
         ]
@@ -774,7 +887,7 @@ class TestOpenSearchClient:
         # Build query for doc-1.
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="doc-1",
-            tenant_state=TenantState(tenant_id="", multitenant=False),
+            tenant_state=tenant_state,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -800,14 +913,17 @@ class TestOpenSearchClient:
         assert set(chunk_ids) == expected_ids
 
     def test_delete_by_query_multitenant_isolation(
-        self, test_client: OpenSearchClient
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
         Tests delete_by_query respects tenant boundaries in multi-tenant mode.
         """
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, True)
+        tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
+        tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=True
+            vector_dimension=128, multitenant=tenant_x.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -815,34 +931,34 @@ class TestOpenSearchClient:
         # Index chunks for different doc IDs for different tenants.
         # NOTE: Since get_opensearch_doc_chunk_id doesn't include tenant_id yet,
         # we use different document IDs to avoid ID conflicts.
-        tenant_a_chunks = [
+        tenant_x_chunks = [
             _create_test_document_chunk(
-                document_id="doc-tenant-a",
+                document_id="doc-tenant-x",
                 chunk_index=i,
                 content=f"Tenant A Chunk {i}",
-                tenant_id="tenant-a",
+                tenant_state=tenant_x,
             )
             for i in range(3)
         ]
 
-        tenant_b_chunks = [
+        tenant_y_chunks = [
             _create_test_document_chunk(
-                document_id="doc-tenant-b",
+                document_id="doc-tenant-y",
                 chunk_index=i,
                 content=f"Tenant B Chunk {i}",
-                tenant_id="tenant-b",
+                tenant_state=tenant_y,
             )
             for i in range(2)
         ]
 
-        for chunk in tenant_a_chunks + tenant_b_chunks:
+        for chunk in tenant_x_chunks + tenant_y_chunks:
             test_client.index_document(document=chunk)
         test_client.refresh_index()
 
-        # Build deletion query for tenant-a only.
+        # Build deletion query for tenant-x only.
         query_body = DocumentQuery.get_from_document_id_query(
-            document_id="doc-tenant-a",
-            tenant_state=TenantState(tenant_id="tenant-a", multitenant=True),
+            document_id="doc-tenant-x",
+            tenant_state=tenant_x,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -858,22 +974,22 @@ class TestOpenSearchClient:
                 chunk_index=chunk.chunk_index,
                 max_chunk_size=chunk.max_chunk_size,
             )
-            for chunk in tenant_a_chunks
+            for chunk in tenant_x_chunks
         }
         assert set(chunk_ids) == expected_ids
 
         # Under test.
-        # Delete tenant-a chunks.
+        # Delete tenant-x chunks.
         for chunk_id in chunk_ids:
             result = test_client.delete_document(chunk_id)
             assert result is True
 
         # Postcondition.
-        # Verify tenant-a chunks are deleted.
+        # Verify tenant-x chunks are deleted.
         test_client.refresh_index()
         verify_query_a = DocumentQuery.get_from_document_id_query(
-            document_id="doc-tenant-a",
-            tenant_state=TenantState(tenant_id="tenant-a", multitenant=True),
+            document_id="doc-tenant-x",
+            tenant_state=tenant_x,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -882,36 +998,38 @@ class TestOpenSearchClient:
         remaining_a_ids = test_client.search_for_document_ids(body=verify_query_a)
         assert len(remaining_a_ids) == 0
 
-        # Verify tenant-b chunks still exist.
+        # Verify tenant-y chunks still exist.
         verify_query_b = DocumentQuery.get_from_document_id_query(
-            document_id="doc-tenant-b",
-            tenant_state=TenantState(tenant_id="tenant-b", multitenant=True),
+            document_id="doc-tenant-y",
+            tenant_state=tenant_y,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
             get_full_document=False,
         )
-        remaining_b_ids = test_client.search_for_document_ids(body=verify_query_b)
-        assert len(remaining_b_ids) == 2
-        expected_b_ids = {
+        remaining_y_ids = test_client.search_for_document_ids(body=verify_query_b)
+        assert len(remaining_y_ids) == 2
+        expected_y_ids = {
             get_opensearch_doc_chunk_id(
                 document_id=chunk.document_id,
                 chunk_index=chunk.chunk_index,
                 max_chunk_size=chunk.max_chunk_size,
             )
-            for chunk in tenant_b_chunks
+            for chunk in tenant_y_chunks
         }
-        assert set(remaining_b_ids) == expected_b_ids
+        assert set(remaining_y_ids) == expected_y_ids
 
     def test_delete_by_query_nonexistent_document(
-        self, test_client: OpenSearchClient
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
         Tests delete_by_query for non-existent document returns 0 deleted.
         """
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=False
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -921,7 +1039,7 @@ class TestOpenSearchClient:
         # Build deletion query.
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="nonexistent-doc",
-            tenant_state=TenantState(tenant_id="", multitenant=False),
+            tenant_state=tenant_state,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -934,11 +1052,15 @@ class TestOpenSearchClient:
         # Postcondition.
         assert len(chunk_ids) == 0
 
-    def test_search_for_document_ids(self, test_client: OpenSearchClient) -> None:
+    def test_search_for_document_ids(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Tests search_for_document_ids method returns correct chunk IDs."""
         # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=False
+            vector_dimension=128, multitenant=tenant_state.multitenant
         )
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -946,13 +1068,19 @@ class TestOpenSearchClient:
         # Index chunks for two different documents.
         doc1_chunks = [
             _create_test_document_chunk(
-                document_id="doc-1", chunk_index=i, content=f"Doc 1 Chunk {i}"
+                document_id="doc-1",
+                chunk_index=i,
+                content=f"Doc 1 Chunk {i}",
+                tenant_state=tenant_state,
             )
             for i in range(3)
         ]
         doc2_chunks = [
             _create_test_document_chunk(
-                document_id="doc-2", chunk_index=i, content=f"Doc 2 Chunk {i}"
+                document_id="doc-2",
+                chunk_index=i,
+                content=f"Doc 2 Chunk {i}",
+                tenant_state=tenant_state,
             )
             for i in range(2)
         ]
@@ -964,7 +1092,7 @@ class TestOpenSearchClient:
         # Build query for doc-1.
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="doc-1",
-            tenant_state=TenantState(tenant_id="", multitenant=False),
+            tenant_state=tenant_state,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
