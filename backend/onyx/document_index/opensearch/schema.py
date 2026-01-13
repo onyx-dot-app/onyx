@@ -27,7 +27,7 @@ ACCESS_CONTROL_LIST_FIELD_NAME = "access_control_list"
 HIDDEN_FIELD_NAME = "hidden"
 GLOBAL_BOOST_FIELD_NAME = "global_boost"
 SEMANTIC_IDENTIFIER_FIELD_NAME = "semantic_identifier"
-IMAGE_FILE_NAME_FIELD_NAME = "image_file_name"
+IMAGE_FILE_ID_FIELD_NAME = "image_file_id"
 SOURCE_LINKS_FIELD_NAME = "source_links"
 DOCUMENT_SETS_FIELD_NAME = "document_sets"
 PROJECT_IDS_FIELD_NAME = "project_ids"
@@ -71,37 +71,41 @@ class DocumentChunk(BaseModel):
     max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
 
     # Either both should be None or both should be non-None.
-    title: str | None = None
-    title_vector: list[float] | None = None
+    title: str | None
+    title_vector: list[float] | None
     content: str
     content_vector: list[float]
     # The actual number of tokens in the chunk.
     num_tokens: int
 
     source_type: str
-    # Application logic should store these strings the format key:::value.
-    metadata: list[str] | None = None
-    last_updated: datetime | None = None
+    # Contains a string representation of a dict which maps string key to either
+    # string value or list of string values.
+    # TODO(andrei): When we augment content with metadata this can just be an
+    # index pointer, and when we support metadata list that will just be a list
+    # of strings.
+    metadata: str
+    last_updated: datetime | None
     created_at: datetime | None = None
 
     public: bool
-    access_control_list: list[str] | None = None
+    access_control_list: list[str]
     # Defaults to False, currently gets written during update not index.
     hidden: bool = False
 
-    global_boost: float = 1.0
+    global_boost: int
 
     semantic_identifier: str
-    image_file_name: str | None = None
+    image_file_id: str | None
     # Contains a string representation of a dict which maps offset into the raw
     # chunk text to the link corresponding to that point.
-    source_links: str | None = None
+    source_links: str | None
     blurb: str
 
-    document_sets: list[str] | None = None
-    project_ids: list[int] | None = None
+    document_sets: list[str] | None
+    project_ids: list[int] | None
 
-    tenant_id: str | None = None
+    tenant_id: str | None
 
     @model_validator(mode="after")
     def check_num_tokens_fits_within_max_chunk_size(self) -> Self:
@@ -183,6 +187,7 @@ class DocumentSchema:
                     "fields": {
                         # Subfield accessed as title.keyword. Not indexed for
                         # values longer than 256 chars.
+                        # TODO(andrei): Ask Yuhong do we want this?
                         "keyword": {"type": "keyword", "ignore_above": 256}
                     },
                 },
@@ -200,6 +205,8 @@ class DocumentSchema:
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
+                # TODO(andrei): This is a tensor in Vespa. Also look at feature
+                # parity for these other method fields.
                 CONTENT_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
                     "dimension": vector_dimension,
@@ -216,8 +223,9 @@ class DocumentSchema:
                 # # Number of tokens in the chunk's content.
                 # NUM_TOKENS_FIELD_NAME: {"type": "integer", "store": True},
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
-                # Application logic should store in the format key:::value.
                 METADATA_FIELD_NAME: {"type": "keyword"},
+                # TODO(andrei): Check if Vespa stores seconds, we may wanna do
+                # seconds here not millis.
                 LAST_UPDATED_FIELD_NAME: {
                     "type": "date",
                     "format": "epoch_millis",
@@ -247,7 +255,7 @@ class DocumentSchema:
                 # all other search filters; up to search implementations to
                 # guarantee this.
                 HIDDEN_FIELD_NAME: {"type": "boolean"},
-                GLOBAL_BOOST_FIELD_NAME: {"type": "float"},
+                GLOBAL_BOOST_FIELD_NAME: {"type": "integer"},
                 # This field is only used for displaying a useful name for the
                 # doc in the UI and is not used for searching. Disabling these
                 # features to increase perf.
@@ -258,7 +266,7 @@ class DocumentSchema:
                     "store": False,
                 },
                 # Same as above; used to display an image along with the doc.
-                IMAGE_FILE_NAME_FIELD_NAME: {
+                IMAGE_FILE_ID_FIELD_NAME: {
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
@@ -285,6 +293,7 @@ class DocumentSchema:
                 DOCUMENT_ID_FIELD_NAME: {"type": "keyword"},
                 CHUNK_INDEX_FIELD_NAME: {"type": "integer"},
                 # The maximum number of tokens this chunk's content can hold.
+                # TODO(andrei): Can we generalize this to embedding type?
                 MAX_CHUNK_SIZE_FIELD_NAME: {"type": "integer"},
             }
         }
