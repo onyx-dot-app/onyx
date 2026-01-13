@@ -5,19 +5,6 @@ import {
 import { User } from "./types";
 import { checkUserIsNoAuthUser } from "./user";
 import { personaComparator } from "@/app/admin/assistants/lib";
-import { fetchSS } from "./utilsSS";
-
-// Types
-export type FetchAssistantsResponse = [MinimalPersonaSnapshot[], string | null];
-
-// Fetch assistants server-side
-export async function fetchAssistantsSS(): Promise<FetchAssistantsResponse> {
-  const response = await fetchSS("/persona");
-  if (response.ok) {
-    return [(await response.json()) as MinimalPersonaSnapshot[], null];
-  }
-  return [[], (await response.json()).detail || "Unknown Error"];
-}
 
 // Check ownership
 export function checkUserOwnsAssistant(

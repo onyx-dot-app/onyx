@@ -86,8 +86,7 @@ import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
-import Modal from "@/refresh-components/Modal";
-import ShareAgentModalContents from "@/sections/modals/ShareAgentModalContents";
+import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -1012,19 +1011,14 @@ export default function AgentEditorPage({
                 </userFilesModal.Provider>
 
                 <shareAgentModal.Provider>
-                  <Modal
-                    open={shareAgentModal.isOpen}
-                    onOpenChange={shareAgentModal.toggle}
-                  >
-                    <ShareAgentModalContents
-                      agent={existingAgent}
-                      onShare={(userIds, groupIds, isPublic) => {
-                        setFieldValue("shared_user_ids", userIds);
-                        setFieldValue("shared_group_ids", groupIds);
-                        setFieldValue("is_public", isPublic);
-                      }}
-                    />
-                  </Modal>
+                  <ShareAgentModal
+                    agent={existingAgent}
+                    onShare={(userIds, groupIds, isPublic) => {
+                      setFieldValue("shared_user_ids", userIds);
+                      setFieldValue("shared_group_ids", groupIds);
+                      setFieldValue("is_public", isPublic);
+                    }}
+                  />
                 </shareAgentModal.Provider>
 
                 <Form className="h-full w-full">
