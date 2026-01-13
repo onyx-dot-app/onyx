@@ -5,8 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "onyx"
 version = "0.0.0"
-# TODO(jamison): Upgrade dependencies until they're compatible with python >3.13.
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11"
 # Shared dependencies between backend and model_server
 dependencies = [
     "aioboto3==15.1.0",
