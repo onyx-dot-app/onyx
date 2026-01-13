@@ -589,7 +589,7 @@ urllib3==2.6.3
     #   types-requests
 uvicorn==0.35.0
     # via onyx
-virtualenv==20.35.4
+virtualenv==20.36.1
     # via pre-commit
 voyageai==0.2.3
     # via onyx
