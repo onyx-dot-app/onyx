@@ -9,6 +9,7 @@ import type { IconProps } from "@opal/types";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";
+import { cn } from "@/lib/utils";
 
 export interface SwitchListItem {
   id: string;
@@ -17,6 +18,8 @@ export interface SwitchListItem {
   leading?: React.ReactNode;
   isEnabled: boolean;
   onToggle: () => void;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }
 
 export interface SwitchListProps {
@@ -84,10 +87,13 @@ export default function SwitchList({
         </LineItem>,
 
         ...filteredItems.map((item) => {
+          const tooltip = item.disabled
+            ? item.disabledTooltip
+            : item.description;
           return (
             <SimpleTooltip
               key={item.id}
-              tooltip={item.description}
+              tooltip={tooltip}
               className="max-w-[30rem]"
             >
               <LineItem
@@ -102,8 +108,10 @@ export default function SwitchList({
                     checked={item.isEnabled}
                     onCheckedChange={item.onToggle}
                     aria-label={`Toggle ${item.label}`}
+                    disabled={item.disabled}
                   />
                 }
+                className={cn(item.disabled && "opacity-50")}
               >
                 {item.label}
               </LineItem>

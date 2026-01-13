@@ -6,7 +6,7 @@ import {
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import SwitchList, {
   SwitchListItem,
@@ -158,12 +158,55 @@ export default function ActionsPopover({
     selectedAssistant.id
   );
 
-  const { enableAllSources, disableAllSources, toggleSource, isSourceEnabled } =
-    useSourcePreferences({
-      availableSources,
-      selectedSources,
-      setSelectedSources,
+  const {
+    enableAllSources: baseEnableAllSources,
+    disableAllSources: baseDisableAllSources,
+    toggleSource: baseToggleSource,
+    isSourceEnabled,
+  } = useSourcePreferences({
+    availableSources,
+    selectedSources,
+    setSelectedSources,
+  });
+
+  const isDefaultAgent = selectedAssistant.id === 0;
+
+  // Get sources the agent has access to via document sets
+  // Default agent has access to all sources
+  const agentAccessibleSources = useMemo(() => {
+    if (isDefaultAgent) {
+      return null; // null means "all accessible"
+    }
+
+    const sourceSet = new Set<string>();
+
+    selectedAssistant.document_sets.forEach((docSet) => {
+      // Check cc_pair_summaries (regular connectors)
+      docSet.cc_pair_summaries?.forEach((ccPair) => {
+        // Normalize by removing federated_ prefix
+        const normalized = ccPair.source.replace("federated_", "");
+        sourceSet.add(normalized);
+      });
+
+      // Check federated_connector_summaries (federated connectors)
+      docSet.federated_connector_summaries?.forEach((fedConnector) => {
+        // Normalize by removing federated_ prefix
+        const normalized = fedConnector.source.replace("federated_", "");
+        sourceSet.add(normalized);
+      });
     });
+
+    return sourceSet;
+  }, [isDefaultAgent, selectedAssistant.document_sets]);
+
+  // Check if non-default agent has no document sets (Internal Search should be disabled)
+  const hasNoDocumentSets =
+    !isDefaultAgent && selectedAssistant.document_sets.length === 0;
+
+  // Track tools that user has explicitly unpinned (to prevent auto-pinning)
+  const [explicitlyUnpinnedToolIds, setExplicitlyUnpinnedToolIds] = useState<
+    Set<number>
+  >(new Set());
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -194,6 +237,12 @@ export default function ActionsPopover({
   const { assistantPreferences, setSpecificAssistantPreferences } =
     useAssistantPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
+
+  // Reset state when assistant changes
+  useEffect(() => {
+    setForcedToolIds([]);
+    setExplicitlyUnpinnedToolIds(new Set());
+  }, [selectedAssistant.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
 
@@ -230,6 +279,143 @@ export default function ActionsPopover({
       setForcedToolIds([toolId]);
     }
   };
+
+  // Get internal search tool reference for auto-pin logic
+  const internalSearchTool = useMemo(
+    () =>
+      selectedAssistant.tools.find(
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
+      ),
+    [selectedAssistant.tools]
+  );
+
+  const isExplicitlyUnpinned = useCallback(
+    (toolId: number) => explicitlyUnpinnedToolIds.has(toolId),
+    [explicitlyUnpinnedToolIds]
+  );
+
+  const markExplicitlyUnpinned = useCallback((toolId: number) => {
+    setExplicitlyUnpinnedToolIds((prev) => new Set(prev).add(toolId));
+  }, []);
+
+  const clearExplicitlyUnpinned = useCallback((toolId: number) => {
+    setExplicitlyUnpinnedToolIds((prev) => {
+      const next = new Set(prev);
+      next.delete(toolId);
+      return next;
+    });
+  }, []);
+
+  // Handle explicit force toggle from ActionLineItem - track unpinning
+  const handleForceToggleWithTracking = useCallback(
+    (toolId: number, wasForced: boolean) => {
+      if (wasForced) {
+        // User is unpinning - mark as explicitly unpinned
+        markExplicitlyUnpinned(toolId);
+      } else {
+        // User is pinning - clear the explicitly unpinned flag
+        clearExplicitlyUnpinned(toolId);
+
+        // If pinning internal search, enable all accessible sources
+        if (internalSearchTool && toolId === internalSearchTool.id) {
+          const sources = getConfiguredSources(availableSources);
+          const accessibleSources = sources.filter(
+            (s) =>
+              agentAccessibleSources === null ||
+              agentAccessibleSources.has(s.uniqueKey)
+          );
+          setSelectedSources(accessibleSources);
+        }
+      }
+      toggleForcedTool(toolId);
+    },
+    [
+      toggleForcedTool,
+      markExplicitlyUnpinned,
+      clearExplicitlyUnpinned,
+      internalSearchTool,
+      availableSources,
+      agentAccessibleSources,
+      setSelectedSources,
+    ]
+  );
+
+  // Wrapped source functions that auto-pin internal search when sources change
+  const enableAllSources = useCallback(() => {
+    // Only enable sources the agent has access to
+    const allConfiguredSources = getConfiguredSources(availableSources);
+    const accessibleSources = allConfiguredSources.filter(
+      (s) =>
+        agentAccessibleSources === null ||
+        agentAccessibleSources.has(s.uniqueKey)
+    );
+    setSelectedSources(accessibleSources);
+
+    if (internalSearchTool && !isExplicitlyUnpinned(internalSearchTool.id)) {
+      setForcedToolIds([internalSearchTool.id]);
+    }
+  }, [
+    agentAccessibleSources,
+    availableSources,
+    setSelectedSources,
+    internalSearchTool,
+    isExplicitlyUnpinned,
+    setForcedToolIds,
+  ]);
+
+  const disableAllSources = useCallback(() => {
+    baseDisableAllSources();
+    const willUnpin =
+      internalSearchTool && forcedToolIds.includes(internalSearchTool.id);
+    if (willUnpin) {
+      setForcedToolIds([]);
+    }
+  }, [
+    baseDisableAllSources,
+    internalSearchTool,
+    forcedToolIds,
+    setForcedToolIds,
+  ]);
+
+  const toggleSource = useCallback(
+    (sourceUniqueKey: string) => {
+      const wasEnabled = isSourceEnabled(sourceUniqueKey);
+      baseToggleSource(sourceUniqueKey);
+
+      const configuredSources = getConfiguredSources(availableSources);
+
+      if (internalSearchTool) {
+        if (!wasEnabled) {
+          // Enabling a source - auto-pin if not explicitly unpinned
+          if (!isExplicitlyUnpinned(internalSearchTool.id)) {
+            setForcedToolIds([internalSearchTool.id]);
+          }
+        } else {
+          // Disabling a source - check if all sources will be disabled
+          const remainingEnabled = configuredSources.filter(
+            (s) =>
+              s.uniqueKey !== sourceUniqueKey && isSourceEnabled(s.uniqueKey)
+          );
+          if (
+            remainingEnabled.length === 0 &&
+            forcedToolIds.includes(internalSearchTool.id)
+          ) {
+            // All sources disabled - unpin (but don't mark as explicitly unpinned)
+            setForcedToolIds([]);
+          }
+        }
+      }
+    },
+    [
+      baseToggleSource,
+      internalSearchTool,
+      isExplicitlyUnpinned,
+      isSourceEnabled,
+      availableSources,
+      forcedToolIds,
+      setForcedToolIds,
+    ]
+  );
 
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // Also filter out internal search tool for basic users when there are no connectors
@@ -548,7 +734,14 @@ export default function ActionsPopover({
 
   const configuredSources = getConfiguredSources(availableSources);
 
-  const sourceToggleItems: SwitchListItem[] = configuredSources.map(
+  // Only show sources the agent has access to
+  const accessibleConfiguredSources = configuredSources.filter(
+    (source) =>
+      agentAccessibleSources === null ||
+      agentAccessibleSources.has(source.uniqueKey)
+  );
+
+  const sourceToggleItems: SwitchListItem[] = accessibleConfiguredSources.map(
     (source) => ({
       id: source.uniqueKey,
       label: source.displayName,
@@ -561,6 +754,12 @@ export default function ActionsPopover({
   const allSourcesDisabled = configuredSources.every(
     (source) => !isSourceEnabled(source.uniqueKey)
   );
+
+  // Count enabled sources for display (only accessible sources)
+  const enabledSourceCount = accessibleConfiguredSources.filter((source) =>
+    isSourceEnabled(source.uniqueKey)
+  ).length;
+  const totalSourceCount = accessibleConfiguredSources.length;
 
   const primaryView = (
     <PopoverMenu medium>
@@ -604,14 +803,24 @@ export default function ActionsPopover({
                 adminConfigureHref={adminConfigureInfo?.href}
                 adminConfigureTooltip={adminConfigureInfo?.tooltip}
                 onToggle={() => toggleToolForCurrentAssistant(tool.id)}
-                onForceToggle={() => toggleForcedTool(tool.id)}
+                onForceToggle={() =>
+                  handleForceToggleWithTracking(
+                    tool.id,
+                    forcedToolIds.includes(tool.id)
+                  )
+                }
                 onSourceManagementOpen={() =>
                   setSecondaryView({ type: "sources" })
                 }
                 hasNoConnectors={hasNoConnectors}
+                hasNoDocumentSets={hasNoDocumentSets}
                 toolAuthStatus={getToolAuthStatus(tool)}
                 onOAuthAuthenticate={() => authenticateTool(tool)}
                 onClose={() => setOpen(false)}
+                sourceCounts={{
+                  enabled: enabledSourceCount,
+                  total: totalSourceCount,
+                }}
               />
             );
           })()
