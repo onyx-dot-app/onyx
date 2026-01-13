@@ -114,7 +114,7 @@ fastavro==1.12.1
     # via cohere
 fastuuid==0.14.0
     # via litellm
-filelock==3.20.1
+filelock==3.20.3
     # via
     #   huggingface-hub
     #   virtualenv
