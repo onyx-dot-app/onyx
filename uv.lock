@@ -1254,21 +1254,21 @@ wheels = [
 
 [[package]]
 name = "dask"
-version = "2023.8.1"
+version = "2025.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "cloudpickle" },
     { name = "fsspec" },
-    { name = "importlib-metadata" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.12'" },
     { name = "packaging" },
     { name = "partd" },
     { name = "pyyaml" },
     { name = "toolz" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/a2/c3514831fefa7790a26aed14df445456aa3fa7cdb99e4b91352702a1de82/dask-2023.8.1.tar.gz", hash = "sha256:5c4b402908938dc87506e0fc07fb0dfa329e59587adf34531cd300fe853b3bf8", size = 8532379, upload-time = "2023-08-18T20:25:54.949Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/db/33/eacaa72731f7fc64868caaf2d35060d50049eff889bd217263e68f76472f/dask-2025.11.0.tar.gz", hash = "sha256:23d59e624b80ee05b7cc8df858682cca58262c4c3b197ccf61da0f6543c8f7c3", size = 10984781, upload-time = "2025-11-06T16:56:51.535Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/b9/ea749b059b5e5eab6231fcd65b3680551a65392c9a37352ddffc17ce8616/dask-2023.8.1-py3-none-any.whl", hash = "sha256:53627bb324975624835a0f2b64b3b7e24afb4947ca5b371e0092c7e98adad0e2", size = 1194380, upload-time = "2023-08-18T20:25:44.193Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/54/a46920229d12c3a6e9f0081d1bdaeffad23c1826353ace95714faee926e5/dask-2025.11.0-py3-none-any.whl", hash = "sha256:08c35a8146c05c93b34f83cf651009129c42ee71762da7ca452fb7308641c2b8", size = 1477108, upload-time = "2025-11-06T16:56:44.892Z" },
 ]
 
 [[package]]
@@ -1435,7 +1435,7 @@ wheels = [
 
 [[package]]
 name = "distributed"
-version = "2023.8.1"
+version = "2025.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1454,9 +1454,9 @@ dependencies = [
     { name = "urllib3" },
     { name = "zict" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/a8/5295f714e05629b872fb1fe1d58098cc084fbb33a92d96fbafe742aeae92/distributed-2023.8.1.tar.gz", hash = "sha256:9eb00dfe08a75c9a450010869de0cbcada016c32bfee43e9b3a281787bdc9d61", size = 1080842, upload-time = "2023-08-18T20:25:52.312Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/be/085a60b627c1f2b795827ce41d4cc1e11e74ffdadcb5235ee5fb620f7929/distributed-2025.11.0.tar.gz", hash = "sha256:372c2f0c2faa890fc42188349969ba468161a9b356df49c4ca7d9a8d551a7ace", size = 2119140, upload-time = "2025-11-06T16:57:32.391Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/66/ad2b35fc69c351cfa03969cc86bb7da2c276c349900a08fdb98309193581/distributed-2023.8.1-py3-none-any.whl", hash = "sha256:4ceccb19b825c402b85b11c268d6ec3a5b92f77a67cc2a7018d11e4d85a74b0c", size = 990494, upload-time = "2023-08-18T20:25:47.526Z" },
+    { url = "https://files.pythonhosted.org/packages/46/ec/da78855318971c2be94d0283a41de6941a6b9f16146fb00babc74903ae01/distributed-2025.11.0-py3-none-any.whl", hash = "sha256:1794ff25b19ba347ccce563fb1dd5898c3bb30f500b15f8c20ad373f6281b30f", size = 1009248, upload-time = "2025-11-06T16:57:28.714Z" },
 ]
 
 [[package]]
@@ -4707,10 +4707,10 @@ requires-dist = [
     { name = "chardet", marker = "extra == 'backend'", specifier = "==5.2.0" },
     { name = "chonkie", marker = "extra == 'backend'", specifier = "==1.0.10" },
     { name = "cohere", specifier = "==5.6.1" },
-    { name = "dask", marker = "extra == 'backend'", specifier = "==2023.8.1" },
+    { name = "dask", marker = "extra == 'backend'", specifier = "==2025.11.0" },
     { name = "ddtrace", marker = "extra == 'backend'", specifier = "==3.10.0" },
     { name = "discord-py", marker = "extra == 'backend'", specifier = "==2.4.0" },
-    { name = "distributed", marker = "extra == 'backend'", specifier = "==2023.8.1" },
+    { name = "distributed", marker = "extra == 'backend'", specifier = "==2025.11.0" },
     { name = "dropbox", marker = "extra == 'backend'", specifier = "==12.0.2" },
     { name = "einops", marker = "extra == 'model-server'", specifier = "==0.8.1" },
     { name = "exa-py", marker = "extra == 'backend'", specifier = "==1.15.4" },
