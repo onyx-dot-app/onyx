@@ -251,6 +251,17 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:9000/api/health')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
   indexing_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
@@ -289,6 +300,17 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:9000/api/health')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
   relational_db:
     image: postgres:15.2-alpine
