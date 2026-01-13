@@ -46,6 +46,103 @@ from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
 
+# Cache for folder path lookups to avoid redundant API calls
+# Maps folder_id -> (folder_name, parent_id)
+_folder_cache: dict[str, tuple[str, str | None]] = {}
+
+
+def _get_folder_info(
+    service: GoogleDriveService, folder_id: str
+) -> tuple[str, str | None]:
+    """Fetch folder name and parent ID, with caching."""
+    if folder_id in _folder_cache:
+        return _folder_cache[folder_id]
+
+    try:
+        folder = (
+            service.files()
+            .get(
+                fileId=folder_id,
+                fields="name, parents",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+        folder_name = folder.get("name", "Unknown")
+        parents = folder.get("parents", [])
+        parent_id = parents[0] if parents else None
+        _folder_cache[folder_id] = (folder_name, parent_id)
+        return folder_name, parent_id
+    except HttpError as e:
+        logger.warning(f"Failed to get folder info for {folder_id}: {e}")
+        _folder_cache[folder_id] = ("Unknown", None)
+        return "Unknown", None
+
+
+def _get_drive_name(service: GoogleDriveService, drive_id: str) -> str:
+    """Fetch shared drive name."""
+    cache_key = f"drive_{drive_id}"
+    if cache_key in _folder_cache:
+        return _folder_cache[cache_key][0]
+
+    try:
+        drive = service.drives().get(driveId=drive_id).execute()
+        drive_name = drive.get("name", f"Shared Drive {drive_id}")
+        _folder_cache[cache_key] = (drive_name, None)
+        return drive_name
+    except HttpError as e:
+        logger.warning(f"Failed to get drive name for {drive_id}: {e}")
+        _folder_cache[cache_key] = (f"Shared Drive {drive_id}", None)
+        return f"Shared Drive {drive_id}"
+
+
+def build_folder_path(
+    file: GoogleDriveFileType,
+    service: GoogleDriveService,
+    drive_id: str | None = None,
+) -> list[str]:
+    """
+    Build the full folder path for a file by walking up the parent chain.
+    Returns a list of folder names from root to immediate parent.
+    """
+    path_parts: list[str] = []
+
+    # Get the file's parent folder ID
+    parents = file.get("parents", [])
+    if not parents:
+        # File is at root level
+        if drive_id:
+            return [_get_drive_name(service, drive_id)]
+        return ["My Drive"]
+
+    parent_id: str | None = parents[0]
+
+    # Walk up the folder hierarchy (limit to 50 levels to prevent infinite loops)
+    visited: set[str] = set()
+    for _ in range(50):
+        if not parent_id or parent_id in visited:
+            break
+        visited.add(parent_id)
+
+        folder_name, next_parent = _get_folder_info(service, parent_id)
+
+        # Check if we've reached the root (parent is the drive itself or no parent)
+        if next_parent is None:
+            # This folder's name is either the drive root or My Drive
+            if drive_id:
+                path_parts.insert(0, _get_drive_name(service, drive_id))
+            else:
+                # For My Drive, the root folder name is usually the user's name
+                # We'll use "My Drive" as a consistent label
+                path_parts.insert(0, "My Drive")
+            break
+        else:
+            path_parts.insert(0, folder_name)
+            parent_id = next_parent
+
+    return path_parts if path_parts else ["My Drive"]
+
+
 # This is not a standard valid unicode char, it is used by the docs advanced API to
 # represent smart chips (elements like dates and doc links).
 SMART_CHIP_CHAR = "\ue907"
@@ -526,12 +623,30 @@ def _convert_drive_item_to_document(
             else None
         )
 
+        # Build doc_metadata with hierarchy information
+        file_name = file.get("name", "")
+        mime_type = file.get("mimeType", "")
+        drive_id = file.get("driveId")
+
+        # Build full folder path by walking up the parent chain
+        source_path = build_folder_path(file, _get_drive_service(), drive_id)
+
+        doc_metadata = {
+            "hierarchy": {
+                "source_path": source_path,
+                "drive_id": drive_id,
+                "file_name": file_name,
+                "mime_type": mime_type,
+            }
+        }
+
         # Create the document
         return Document(
             id=doc_id,
             sections=sections,
             source=DocumentSource.GOOGLE_DRIVE,
-            semantic_identifier=file.get("name", ""),
+            semantic_identifier=file_name,
+            doc_metadata=doc_metadata,
             metadata={
                 "owner_names": ", ".join(
                     owner.get("displayName", "") for owner in file.get("owners", [])

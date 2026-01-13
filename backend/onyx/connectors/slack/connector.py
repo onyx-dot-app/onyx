@@ -234,6 +234,8 @@ def thread_to_doc(
         "\n", " "
     )
 
+    channel_name = channel["name"]
+
     return Document(
         id=_build_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
         sections=[
@@ -247,7 +249,14 @@ def thread_to_doc(
         semantic_identifier=doc_sem_id,
         doc_updated_at=get_latest_message_time(thread),
         primary_owners=valid_experts,
-        metadata={"Channel": channel["name"]},
+        doc_metadata={
+            "hierarchy": {
+                "source_path": [channel_name],
+                "channel_name": channel_name,
+                "channel_id": channel_id,
+            }
+        },
+        metadata={"Channel": channel_name},
         external_access=channel_access,
     )
 
