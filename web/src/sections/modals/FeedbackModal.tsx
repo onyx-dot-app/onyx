@@ -3,7 +3,7 @@
 import { FeedbackType } from "@/app/chat/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFeedbackController } from "../../hooks/useFeedbackController";
+import useFeedbackController from "@/hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";

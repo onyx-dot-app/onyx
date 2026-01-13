@@ -57,9 +57,9 @@ import { Message } from "@/app/chat/interfaces";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
-} from "../../components/modal/FeedbackModal";
+} from "@/sections/modals/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFeedbackController } from "../../hooks/useFeedbackController";
+import useFeedbackController from "@/hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
