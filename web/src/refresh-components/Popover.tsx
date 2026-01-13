@@ -95,22 +95,23 @@ const PopoverClose = PopoverPrimitive.Close;
  * ```
  */
 const widthClasses = {
-  main: "w-fit",
-  medium: "w-[12rem]",
-  wide: "w-[280px]",
+  fit: "w-fit",
+  md: "w-[12rem]",
+  lg: "w-[280px]",
 };
 interface PopoverContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
   > {
-  medium?: boolean;
-  wide?: boolean;
+  fit?: boolean;
+  md?: boolean;
+  lg?: boolean;
 }
 const PopoverContent = React.forwardRef<
   React.ComponentRef<typeof PopoverPrimitive.Content>,
   PopoverContentProps
->(({ medium, wide, align = "center", sideOffset = 4, ...props }, ref) => {
-  const width = medium ? "medium" : wide ? "wide" : "main";
+>(({ fit, md, lg, align = "center", sideOffset = 4, ...props }, ref) => {
+  const width = fit ? "fit" : md ? "md" : lg ? "lg" : "fit";
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -134,11 +135,6 @@ PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 function SeparatorHelper() {
   return <Separator className="py-0 px-2" />;
 }
-
-const sizeClasses = {
-  small: "w-[10rem]",
-  medium: "w-[15.5rem]",
-};
 
 export default Object.assign(PopoverRoot, {
   Trigger: PopoverTrigger,
@@ -188,10 +184,14 @@ export default Object.assign(PopoverRoot, {
  * </Popover.Menu>
  * ```
  */
+const sizeClasses = {
+  sm: "w-[10rem]",
+  md: "w-[15.5rem]",
+};
 export interface PopoverMenuProps {
   // size variants
-  small?: boolean;
-  medium?: boolean;
+  sm?: boolean;
+  md?: boolean;
 
   children?: React.ReactNode[];
   footer?: React.ReactNode;
@@ -200,8 +200,8 @@ export interface PopoverMenuProps {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 export function PopoverMenu({
-  small,
-  medium,
+  sm,
+  md,
 
   children,
   footer,
@@ -216,7 +216,7 @@ export function PopoverMenu({
     if (child !== null) return true;
     return index !== 0 && index !== definedChildren.length - 1;
   });
-  const size = small ? "small" : medium ? "medium" : "small";
+  const size = sm ? "sm" : md ? "md" : "sm";
 
   return (
     <Section alignItems="stretch">
