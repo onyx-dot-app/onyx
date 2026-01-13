@@ -204,7 +204,9 @@ def test_image_generation(
                 api_key=api_key,
                 api_base=test_request.api_base,
                 api_version=test_request.api_version,
-                deployment_name=test_request.deployment_name,
+                deployment_name=(
+                    test_request.deployment_name or test_request.model_name
+                ),
             ),
         )
     except ValueError:

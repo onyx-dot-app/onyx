@@ -198,7 +198,10 @@ def construct_tools(
                             api_key=cast(str, img_generation_llm_config.api_key),
                             api_base=img_generation_llm_config.api_base,
                             api_version=img_generation_llm_config.api_version,
-                            deployment_name=img_generation_llm_config.deployment_name,
+                            deployment_name=(
+                                img_generation_llm_config.deployment_name
+                                or img_generation_llm_config.model_name
+                            ),
                         ),
                         provider=img_generation_llm_config.model_provider,
                         model=img_generation_llm_config.model_name,
