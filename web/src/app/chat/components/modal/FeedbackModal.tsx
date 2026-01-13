@@ -1,34 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedbackType } from "@/app/chat/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import FieldInput from "@/refresh-components/inputs/FieldInput";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { useKeyPress } from "@/hooks/useKeyPress";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFeedbackController } from "../../hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
-
-const predefinedPositiveFeedbackOptions = process.env
-  .NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS
-  ? process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS.split(",")
-  : [];
-
-const predefinedNegativeFeedbackOptions = process.env
-  .NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS
-  ? process.env.NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS.split(",")
-  : [
-      "Retrieved documents were not relevant",
-      "AI misread the documents",
-      "Cited source had incorrect information",
-    ];
+import { Formik } from "formik";
+import * as Yup from "yup";
+import * as InputLayouts from "@/layouts/input-layouts";
+import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 
 export interface FeedbackModalProps {
   feedbackType: FeedbackType;
   messageId: number;
+}
+
+interface FeedbackFormValues {
+  additional_feedback: string;
 }
 
 export default function FeedbackModal({
@@ -36,57 +26,35 @@ export default function FeedbackModal({
   messageId,
 }: FeedbackModalProps) {
   const modal = useModal();
-  // const { isOpen, toggleModal, getModalData } = useChatModal();
-  const [predefinedFeedback, setPredefinedFeedback] = useState<
-    string | undefined
-  >();
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
-  const fieldInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = useCallback(async () => {
-    if (
-      (!predefinedFeedback || predefinedFeedback === "") &&
-      (!fieldInputRef.current || fieldInputRef.current.value === "")
-    )
-      return;
+  const initialValues: FeedbackFormValues = {
+    additional_feedback: "",
+  };
 
-    const feedbackText =
-      fieldInputRef.current?.value || predefinedFeedback || "";
+  const validationSchema = Yup.object({
+    additional_feedback:
+      feedbackType === "dislike"
+        ? Yup.string().required("Feedback is required")
+        : Yup.string(),
+  });
+
+  async function handleSubmit(values: FeedbackFormValues) {
+    const feedbackText = values.additional_feedback;
 
     const success = await handleFeedbackChange(
       messageId,
       feedbackType,
       feedbackText,
-      predefinedFeedback
+      undefined
     );
 
     // Only close modal if submission was successful
     if (success) {
       modal.toggle(false);
     }
-  }, [
-    predefinedFeedback,
-    feedbackType,
-    handleFeedbackChange,
-    messageId,
-    modal.toggle,
-  ]);
-
-  useEffect(() => {
-    if (predefinedFeedback) {
-      handleSubmit();
-    }
-  }, [predefinedFeedback, handleSubmit]);
-
-  useKeyPress(handleSubmit, "Enter");
-
-  const predefinedFeedbackOptions =
-    feedbackType === "like"
-      ? predefinedPositiveFeedbackOptions
-      : predefinedNegativeFeedbackOptions;
-
-  const icon = feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown;
+  }
 
   return (
     <>
@@ -95,36 +63,56 @@ export default function FeedbackModal({
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
         <Modal.Content mini>
           <Modal.Header
-            icon={icon}
-            title="Provide Additional Feedback"
+            icon={feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown}
+            title="Feedback"
             onClose={() => modal.toggle(false)}
           />
-          {predefinedFeedbackOptions.length > 0 && (
-            <div className="flex flex-col p-4 gap-1">
-              {predefinedFeedbackOptions.map((feedback, index) => (
-                <LineItem
-                  key={index}
-                  onClick={() => setPredefinedFeedback(feedback)}
-                >
-                  {feedback}
-                </LineItem>
-              ))}
-            </div>
-          )}
-          <Modal.Body>
-            <FieldInput
-              label="Feedback"
-              placeholder={`What did you ${feedbackType} about this response?`}
-              className="!w-full"
-              ref={fieldInputRef}
-            />
-          </Modal.Body>
-          <Modal.Footer>
-            <Button onClick={() => modal.toggle(false)} secondary>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit}>Submit</Button>
-          </Modal.Footer>
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            onSubmit={handleSubmit}
+          >
+            {({
+              isSubmitting,
+              handleSubmit: formikHandleSubmit,
+              dirty,
+              isValid,
+            }) => (
+              <>
+                <Modal.Body>
+                  <InputLayouts.Vertical
+                    name="additional_feedback"
+                    label="Provide Additional Details"
+                    optional={feedbackType === "like"}
+                  >
+                    <InputTextAreaField
+                      name="additional_feedback"
+                      placeholder={`What did you ${feedbackType} about this response?`}
+                    />
+                  </InputLayouts.Vertical>
+                </Modal.Body>
+
+                <Modal.Footer>
+                  <Button
+                    onClick={() => modal.toggle(false)}
+                    secondary
+                    type="button"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => formikHandleSubmit()}
+                    disabled={
+                      isSubmitting ||
+                      (feedbackType === "dislike" && (!dirty || !isValid))
+                    }
+                  >
+                    {isSubmitting ? "Submitting..." : "Submit"}
+                  </Button>
+                </Modal.Footer>
+              </>
+            )}
+          </Formik>
         </Modal.Content>
       </Modal>
     </>
