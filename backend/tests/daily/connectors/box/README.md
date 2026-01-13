@@ -34,7 +34,7 @@ The Box connector test suite contains comprehensive integration tests for the Bo
 1. In your app settings, go to the **Configuration** tab
 2. **Important**: Enable **Read** permissions in the application scopes
    - This is required for the connector to download files
-   - Read permissions are sufficient for downloading files; Write permissions are not required
+   - **Note**: For running the test setup script (`setup_box_test_env.py`), you will also need **Write** permissions to create folders and files. However, for normal connector operation (indexing files), only **Read** permissions are required.
 3. Note your **Client ID** and **Client Secret** (you'll need these later)
 
 ### 3. Generate and Download JWT Configuration
@@ -196,8 +196,11 @@ pytest -v -s tests/daily/connectors/box/ -k "permission"
 Some tests are marked with `@pytest.mark.skip` if they require additional setup:
 
 ```bash
-# Run all tests, including skipped ones (will fail if not properly configured)
-pytest -v -s tests/daily/connectors/box/ -m "not skip"
+# Run all tests, excluding skipped ones (default behavior)
+pytest -v -s tests/daily/connectors/box/
+
+# To run skipped tests, you need to remove the @pytest.mark.skip decorator from the test functions
+# or use pytest's marker filtering (skipped tests are not included by default)
 ```
 
 ## Test Structure
@@ -280,5 +283,5 @@ The `consts_and_utils.py` file contains:
 
 - The test environment creates a significant number of files and folders. Consider using a dedicated Box enterprise or test account.
 - Some tests require multiple users for full coverage. At minimum, `test_user_1` is required for permission tests.
-- The setup script is idempotent - you can run it multiple times, but it will create duplicate files if folders already exist.
+- The setup script handles existing folders and files gracefully (detects and reuses them when possible), but if you run it multiple times without cleaning up, it may create duplicate files with the same names in the same folders. For a clean test environment, delete the test folders between runs or use a fresh test account.
 - File IDs in the tests are placeholders. The actual file IDs in Box will be different, but the connector uses file names for matching.

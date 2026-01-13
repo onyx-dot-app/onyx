@@ -3633,7 +3633,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = "==25.1.0" },
     { name = "boto3", marker = "extra == 'backend'", specifier = "==1.39.11" },
     { name = "boto3-stubs", extras = ["s3"], marker = "extra == 'backend'", specifier = "==1.39.11" },
-    { name = "boxsdk", marker = "extra == 'backend'", specifier = ">=10" },
+    { name = "boxsdk", marker = "extra == 'backend'", specifier = "==10.3.0" },
     { name = "braintrust", marker = "extra == 'backend'", specifier = "==0.3.9" },
     { name = "brotli", specifier = ">=1.2.0" },
     { name = "celery", marker = "extra == 'backend'", specifier = "==5.5.1" },

@@ -310,27 +310,34 @@ export const BoxJsonUploadSection = ({
               <Button
                 danger
                 onClick={async () => {
-                  const response = await fetch(
-                    "/api/manage/admin/connector/box/jwt-config",
-                    {
-                      method: "DELETE",
+                  try {
+                    const response = await fetch(
+                      "/api/manage/admin/connector/box/jwt-config",
+                      {
+                        method: "DELETE",
+                      }
+                    );
+
+                    if (response.ok) {
+                      mutate("/api/manage/admin/connector/box/jwt-config");
+                      mutate(buildSimilarCredentialInfoURL(ValidSources.Box));
+
+                      setPopup({
+                        message: "Successfully deleted Box JWT config",
+                        type: "success",
+                      });
+                      setLocalJwtConfigData(undefined);
+                      handleSuccess();
+                    } else {
+                      const errorMsg = await response.text();
+                      setPopup({
+                        message: `Failed to delete JWT config - ${errorMsg}`,
+                        type: "error",
+                      });
                     }
-                  );
-
-                  if (response.ok) {
-                    mutate("/api/manage/admin/connector/box/jwt-config");
-                    mutate(buildSimilarCredentialInfoURL(ValidSources.Box));
-
+                  } catch (error) {
                     setPopup({
-                      message: "Successfully deleted Box JWT config",
-                      type: "success",
-                    });
-                    setLocalJwtConfigData(undefined);
-                    handleSuccess();
-                  } else {
-                    const errorMsg = await response.text();
-                    setPopup({
-                      message: `Failed to delete JWT config - ${errorMsg}`,
+                      message: `Failed to delete JWT config - ${error}`,
                       type: "error",
                     });
                   }

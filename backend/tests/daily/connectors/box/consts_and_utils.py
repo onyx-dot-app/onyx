@@ -224,6 +224,20 @@ def assert_expected_docs_in_retrieved_docs(
         if doc.semantic_identifier.startswith(_VALID_PREFIX)
     ]
 
+    # Check for duplicate semantic identifiers before building mapping
+    semantic_identifiers = [doc.semantic_identifier for doc in valid_retrieved_docs]
+    seen_identifiers = set()
+    duplicates = []
+    for identifier in semantic_identifiers:
+        if identifier in seen_identifiers:
+            duplicates.append(identifier)
+        seen_identifiers.add(identifier)
+    if duplicates:
+        raise AssertionError(
+            f"Found duplicate semantic_identifiers in retrieved docs: {duplicates}. "
+            f"This indicates a bug in the connector that returns the same document multiple times."
+        )
+
     # Create mapping from file name to file text to detect mismatches
     retrieved_name_to_text: dict[str, str] = {}
     for doc in valid_retrieved_docs:

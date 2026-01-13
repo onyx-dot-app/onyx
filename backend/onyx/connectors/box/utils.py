@@ -45,8 +45,20 @@ def parse_box_jwt_config(env_str: str) -> dict[str, Any]:
                 0,
             )
 
+    # Validate that config is a dictionary with the expected structure
+    if not isinstance(config, dict):
+        raise TypeError(
+            f"Expected Box JWT config to be a dict, got {type(config).__name__}"
+        )
+    if "boxAppSettings" not in config:
+        raise ValueError("Box JWT config missing required 'boxAppSettings' field")
+    if not isinstance(config["boxAppSettings"], dict):
+        raise TypeError(
+            f"Expected boxAppSettings to be a dict, got {type(config['boxAppSettings']).__name__}"
+        )
+
     # Ensure private key has actual newlines (not \n sequences)
-    if "boxAppSettings" in config and "appAuth" in config["boxAppSettings"]:
+    if "appAuth" in config["boxAppSettings"]:
         private_key = config["boxAppSettings"]["appAuth"].get("privateKey", "")
         if private_key and "\\n" in private_key:
             # Convert \n sequences to actual newlines

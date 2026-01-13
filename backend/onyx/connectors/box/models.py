@@ -76,7 +76,9 @@ class BoxCheckpoint(ConnectorCheckpoint):
     def serialize_completion_map(
         self, completion_map: ThreadSafeDict[str, StageCompletion], _info: Any
     ) -> dict[str, StageCompletion]:
-        return completion_map._dict
+        # Use copy() method to get a thread-safe snapshot instead of accessing _dict directly
+        # This maintains thread safety and avoids exposing mutable internal state
+        return completion_map.copy()
 
     @field_validator("completion_map", mode="before")
     def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:

@@ -402,7 +402,7 @@ def upsert_gmail_service_account_credential(
 
 @router.get("/admin/connector/box/jwt-config")
 def check_box_jwt_config_exist(
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> dict[str, str]:
     """Check if Box JWT config exists."""
     try:
