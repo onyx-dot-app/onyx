@@ -47,11 +47,11 @@ function SourceTileTooltipWrapper({
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
     // Check for sources marked as federated OR sources with federated option
-    if (!sourceMetadata.federated && !federatedConnectors) {
+    if (!sourceMetadata.federated || !federatedConnectors) {
       return null;
     }
 
-    return federatedConnectors?.find(
+    return federatedConnectors.find(
       (connector) =>
         federatedSourceToRegularSource(connector.source) ===
         sourceMetadata.internalName
@@ -71,12 +71,7 @@ function SourceTileTooltipWrapper({
       return `/admin/federated/${existingFederatedConnector.id}`;
     }
 
-    // For federated-only sources (federated: true), use the federated form
-    if (sourceMetadata.federated) {
-      return sourceMetadata.adminUrl;
-    }
-
-    // For all other sources (including Slack with hasFederatedOption), use the regular admin URL
+    // For all other sources (including Slack), use the regular admin URL
     return sourceMetadata.adminUrl;
   }, [existingFederatedConnector, sourceMetadata]);
 
