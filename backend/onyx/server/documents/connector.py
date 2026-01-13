@@ -446,7 +446,7 @@ def delete_box_jwt_config_endpoint(
 @router.put("/admin/connector/box/jwt-credential")
 def upsert_box_jwt_credential(
     jwt_credential_request: BoxJWTCredentialRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     """Special API which allows the creation of a credential for Box JWT.

@@ -18,7 +18,7 @@ The Box connector test suite contains comprehensive integration tests for the Bo
 2. **Box JWT Application**: A Box application configured with JWT authentication
 3. **Test Users**: At least one test user (test_user_1) is required for permission tests
 4. **Python Environment**: Backend dependencies installed (see `backend/requirements`)
-5. **Write Permissions**: The Box application must have write permissions to download files
+5. **Read Permissions**: The Box application must have read permissions to download files
 
 ## Setting Up Box JWT Application
 
@@ -32,9 +32,9 @@ The Box connector test suite contains comprehensive integration tests for the Bo
 ### 2. Configure Application Settings
 
 1. In your app settings, go to the **Configuration** tab
-2. **Important**: Enable **Write** permissions in the application scopes
+2. **Important**: Enable **Read** permissions in the application scopes
    - This is required for the connector to download files
-   - Without write permissions, file downloads will fail
+   - Read permissions are sufficient for downloading files; Write permissions are not required
 3. Note your **Client ID** and **Client Secret** (you'll need these later)
 
 ### 3. Generate and Download JWT Configuration

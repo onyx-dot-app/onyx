@@ -31,6 +31,20 @@ def parse_box_jwt_config(env_str: str) -> dict[str, Any]:
         # Now parse the JSON
         config = json.loads(unescaped)
 
+    # Handle case where double-parsing returns a string instead of dict
+    # (e.g., if the JSON was double-encoded as a JSON string)
+    if isinstance(config, str):
+        # Try parsing the string as JSON again
+        try:
+            config = json.loads(config)
+        except json.JSONDecodeError:
+            # If it's not valid JSON, raise an error
+            raise json.JSONDecodeError(
+                "Double-parsed JSON returned a string that is not valid JSON",
+                config,
+                0,
+            )
+
     # Ensure private key has actual newlines (not \n sequences)
     if "boxAppSettings" in config and "appAuth" in config["boxAppSettings"]:
         private_key = config["boxAppSettings"]["appAuth"].get("privateKey", "")

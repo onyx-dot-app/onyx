@@ -63,18 +63,28 @@ def _handle_box_download_error(file_id: str, error: Exception) -> bytes:
         ):
             is_403 = True
 
+    # Sanitize error message to avoid leaking sensitive data (URLs, tokens, etc.)
+    error_str = str(error)
+    # Remove potential URLs and tokens from error message
+    import re
+
+    # Remove URLs
+    error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
+    # Remove potential tokens (long alphanumeric strings)
+    error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
+
     # Log based on error type
     if is_403:
         logger.warning(
             f"Permission denied (403) downloading Box file {file_id}. "
             f"This may be due to file-level permissions or Box app scope limitations. "
-            f"Error: {error}"
+            f"Error: {error_str}"
         )
     else:
         logger.error(
             f"Failed to download Box file {file_id}"
             + (f" (status={status_code})" if status_code else "")
-            + f": {error}"
+            + f": {error_str}"
         )
 
     return bytes()
@@ -113,6 +123,7 @@ def download_box_file(client: BoxClient, file_id: str, size_threshold: int) -> b
     """
     Download the file from Box.
     """
+    download_stream = None
     try:
         # Box SDK v10 downloads files using download_file method
         # This returns a stream that we need to read
@@ -138,13 +149,20 @@ def download_box_file(client: BoxClient, file_id: str, size_threshold: int) -> b
                 logger.warning(
                     f"File {file_id} exceeds size threshold of {size_threshold}. Skipping."
                 )
-                download_stream.close()
                 return bytes()
 
-        download_stream.close()
         return content_bytes
     except Exception as e:
         return _handle_box_download_error(file_id, e)
+    finally:
+        # Ensure stream is closed on all paths (success, exception, early return)
+        if download_stream is not None:
+            try:
+                download_stream.close()
+            except Exception as close_error:
+                logger.warning(
+                    f"Error closing download stream for file {file_id}: {close_error}"
+                )
 
 
 def _download_and_extract_sections(

@@ -222,21 +222,21 @@ def assert_expected_docs_in_retrieved_docs(
         for doc in retrieved_docs
         if doc.semantic_identifier.startswith(_VALID_PREFIX)
     ]
-    valid_retrieved_file_names = set(
-        [doc.semantic_identifier for doc in valid_retrieved_docs]
-    )
-    valid_retrieved_texts = set(
-        [
-            " - ".join(
-                [
-                    section.text
-                    for section in doc.sections
-                    if isinstance(section, TextSection) and section.text is not None
-                ]
-            )
-            for doc in valid_retrieved_docs
-        ]
-    )
+
+    # Create mapping from file name to file text to detect mismatches
+    retrieved_name_to_text: dict[str, str] = {}
+    for doc in valid_retrieved_docs:
+        text = " - ".join(
+            [
+                section.text
+                for section in doc.sections
+                if isinstance(section, TextSection) and section.text is not None
+            ]
+        )
+        retrieved_name_to_text[doc.semantic_identifier] = text
+
+    valid_retrieved_file_names = set(retrieved_name_to_text.keys())
+    valid_retrieved_texts = set(retrieved_name_to_text.values())
 
     # Check file names
     print_discrepancies(
@@ -251,6 +251,18 @@ def assert_expected_docs_in_retrieved_docs(
         retrieved=valid_retrieved_texts,
     )
     assert expected_file_texts == valid_retrieved_texts
+
+    # Verify that each file name has the correct corresponding text
+    # (This prevents swapped or mismatched file content per name from passing)
+    for file_id in expected_file_ids:
+        expected_name = id_to_name(file_id)
+        expected_text = _get_expected_file_content(file_id)
+        if expected_name in retrieved_name_to_text:
+            retrieved_text = retrieved_name_to_text[expected_name]
+            assert retrieved_text == expected_text, (
+                f"File {expected_name} has incorrect content. "
+                f"Expected: {expected_text}, Got: {retrieved_text}"
+            )
 
 
 def load_all_docs(connector: BoxConnector) -> list[Document]:

@@ -22,7 +22,7 @@ def _should_include_file_by_time(
     end: SecondsSinceUnixEpoch | None = None,
 ) -> bool:
     """Check if a file should be included based on its modified time."""
-    if not start and not end:
+    if start is None and end is None:
         return True
 
     modified_time = file_dict.get("modified_at")
@@ -173,9 +173,21 @@ def _get_files_in_parent(
                     total_files += 1
                     yield file_dict
 
-            # If we got a full page, there may be more - use last item ID as marker
-            if items.entries and len(items.entries) == limit:
+            # Box API pagination: check if there are more pages
+            # The Box API response should have a next_marker field when there are more pages
+            next_marker = getattr(items, "next_marker", None)
+            if next_marker:
+                # Use the API-provided next_marker token for the next page
+                marker = next_marker
+            elif items.entries and len(items.entries) == limit:
+                # Fallback: if next_marker is not available but we got a full page,
+                # use the last item's ID (legacy behavior, but may cause duplicates)
                 marker = items.entries[-1].id
+                logger.warning(
+                    f"Box API did not return next_marker for parent {parent_id}, "
+                    f"using last item ID as fallback: {marker}. "
+                    f"This may cause pagination issues."
+                )
             else:
                 break
 
@@ -310,12 +322,25 @@ def get_all_files_in_folder(
                         completion_stage=BoxRetrievalStage.FOLDER_FILES,
                     )
 
-            # Box API pagination: if we got a full page (limit items), there may be more
-            # Use the last item's ID as the marker for the next page
-            if items.entries and len(items.entries) == limit:
-                current_marker = items.entries[-1].id
+            # Box API pagination: check if there are more pages
+            # The Box API response should have a next_marker field when there are more pages
+            next_marker = getattr(items, "next_marker", None)
+            if next_marker:
+                # Use the API-provided next_marker token for the next page
+                current_marker = next_marker
                 logger.debug(
-                    f"More pages available for folder {folder_id}, marker: {current_marker}"
+                    f"More pages available for folder {folder_id}, next_marker: {current_marker}"
+                )
+                yield current_marker  # Yield marker for checkpoint resumption
+                break
+            elif items.entries and len(items.entries) == limit:
+                # Fallback: if next_marker is not available but we got a full page,
+                # use the last item's ID (legacy behavior, but may cause duplicates)
+                current_marker = items.entries[-1].id
+                logger.warning(
+                    f"Box API did not return next_marker for folder {folder_id}, "
+                    f"using last item ID as fallback: {current_marker}. "
+                    f"This may cause pagination issues."
                 )
                 yield current_marker  # Yield marker for checkpoint resumption
                 break
@@ -326,7 +351,16 @@ def get_all_files_in_folder(
         logger.info(f"Found {total_files} files in folder {folder_id}")
 
     except Exception as e:
-        logger.error(f"Error getting all files in folder {folder_id}: {e}")
+        # Sanitize error message to avoid leaking sensitive data (URLs, tokens, etc.)
+        error_str = str(e)
+        # Remove potential URLs and tokens from error message
+        import re
+
+        # Remove URLs
+        error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
+        # Remove potential tokens (long alphanumeric strings)
+        error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
+        logger.error(f"Error getting all files in folder {folder_id}: {error_str}")
         yield RetrievedBoxFile(
             box_file={},
             user_id=user_id,

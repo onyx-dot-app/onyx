@@ -65,33 +65,41 @@ export const BoxJsonUpload = ({
         return;
       }
 
-      const response = await fetch(
-        "/api/manage/admin/connector/box/jwt-config",
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: credentialJsonStr,
+      try {
+        const response = await fetch(
+          "/api/manage/admin/connector/box/jwt-config",
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: credentialJsonStr,
+          }
+        );
+        if (response.ok) {
+          setPopup({
+            message: "Successfully uploaded Box JWT config",
+            type: "success",
+          });
+          mutate("/api/manage/admin/connector/box/jwt-config");
+          if (onSuccess) {
+            onSuccess();
+          }
+        } else {
+          const errorMsg = await response.text();
+          setPopup({
+            message: `Failed to upload Box JWT config - ${errorMsg}`,
+            type: "error",
+          });
         }
-      );
-      if (response.ok) {
+      } catch (error) {
         setPopup({
-          message: "Successfully uploaded Box JWT config",
-          type: "success",
-        });
-        mutate("/api/manage/admin/connector/box/jwt-config");
-        if (onSuccess) {
-          onSuccess();
-        }
-      } else {
-        const errorMsg = await response.text();
-        setPopup({
-          message: `Failed to upload Box JWT config - ${errorMsg}`,
+          message: `Failed to upload Box JWT config - ${error}`,
           type: "error",
         });
+      } finally {
+        setIsUploading(false);
       }
-      setIsUploading(false);
     };
 
     reader.readAsText(file);

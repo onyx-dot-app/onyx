@@ -302,7 +302,7 @@ class BoxConnector(
 
             # Resume from checkpoint if needed
             if completion.current_folder_id == folder_id and completion.next_marker:
-                # Resume from marker
+                # Resume from marker - continue processing direct files in folder
                 for file_or_marker in get_all_files_in_folder(
                     client=self.box_client,
                     folder_id=folder_id,
@@ -325,6 +325,27 @@ class BoxConnector(
                     timestamp = _parse_box_datetime_to_timestamp(modified_time)
                     if timestamp is not None:
                         completion.completed_until = timestamp
+
+                # After resuming direct files, also recurse into subfolders
+                # (This ensures we don't skip nested content after pagination resume)
+                logger.info(
+                    f"Resuming recursive crawl of subfolders in folder {folder_id}"
+                )
+                subfolder_files = 0
+                for retrieved_file in crawl_folders_for_files(
+                    client=self.box_client,
+                    parent_id=folder_id,
+                    user_id=self.user_id,
+                    traversed_parent_ids=self._retrieved_folder_ids,
+                    update_traversed_ids_func=self._update_traversed_folder_ids,
+                    start=start,
+                    end=end,
+                ):
+                    subfolder_files += 1
+                    yield retrieved_file
+                logger.info(
+                    f"Found {subfolder_files} files in subfolders of folder {folder_id} (resumed)"
+                )
             else:
                 # Start fresh folder crawl
                 logger.info(f"Starting fresh crawl of folder {folder_id}")

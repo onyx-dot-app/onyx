@@ -4,6 +4,8 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+from box_sdk_gen.box import BoxAPIError
+
 from onyx.connectors.box.connector import BoxConnector
 from tests.daily.connectors.box.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.box.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
@@ -159,8 +161,14 @@ def test_restricted_access(
             f"but retrieved {len(user3_docs)} files. "
             f"Run setup script to ensure test_user_3's access is removed."
         )
-    except Exception as e:
+    except BoxAPIError as e:
         # 404 error indicates no access (expected behavior)
+        status_code = getattr(e, "status_code", None)
+        if status_code != 404:
+            raise
+    except Exception as e:
+        # For non-BoxAPIError exceptions, check if it's a wrapped 404
+        # This handles cases where BoxAPIError might be wrapped
         error_msg = str(e).lower()
         if (
             "404" not in error_msg
@@ -259,13 +267,21 @@ def test_user_specific_access(
             f"test_user_3 should NOT have access to ADMIN_FOLDER_3, "
             f"but retrieved {len(restricted_docs)} files: {[doc.semantic_identifier for doc in restricted_docs]}"
         )
-    except Exception as e:
-        # If an exception is raised (e.g., 404 Not Found), that means test_user_3
+    except BoxAPIError as e:
+        # If a BoxAPIError is raised with 404, that means test_user_3
         # doesn't have access, which is what we want. The test passes.
+        status_code = getattr(e, "status_code", None)
+        if status_code != 404:
+            # Unexpected status code, re-raise it
+            raise
+    except Exception as e:
+        # For non-BoxAPIError exceptions, check if it's a wrapped 404
+        # This handles cases where BoxAPIError might be wrapped
         error_msg = str(e).lower()
-        if "404" in error_msg or "not found" in error_msg or "not_found" in error_msg:
-            # This is expected - user doesn't have access
-            pass
-        else:
+        if (
+            "404" not in error_msg
+            and "not found" not in error_msg
+            and "not_found" not in error_msg
+        ):
             # Unexpected error, re-raise it
             raise

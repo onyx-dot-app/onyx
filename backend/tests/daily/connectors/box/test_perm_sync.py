@@ -153,9 +153,16 @@ def test_box_perm_sync_with_real_data(
             # Non-public files should have at least the expected number of users with access
             # Note: We can't do exact email matching without a user ID to email mapping,
             # but we can verify that files have the expected level of access
-            assert len(user_ids_with_access) > 0, (
+            # Check both user emails and group IDs (files may have group-only permissions)
+            has_user_access = len(user_ids_with_access) > 0
+            has_group_access = len(doc_to_raw_result_mapping[doc_id]) > len(
+                user_ids_with_access
+            )
+            assert has_user_access or has_group_access, (
                 f"File {doc_id} (ID: {file_numeric_id}) should have some access "
-                f"but has none. Raw result: {doc_to_raw_result_mapping[doc_id]}"
+                f"(user emails or group IDs) but has none. "
+                f"User emails: {user_ids_with_access}, "
+                f"Raw result (includes groups): {doc_to_raw_result_mapping[doc_id]}"
             )
 
             # Verify that the number of users with access is at least the expected count
