@@ -18,6 +18,13 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Headers that cannot be overridden by user requests to prevent security issues
+# Host header is particularly critical - it can be used for Host Header Injection attacks
+# to route requests to unintended internal servers
+DENYLISTED_MCP_HEADERS = {
+    "host",  # Prevents Host Header Injection attacks
+}
+
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
 # In the future we may want custom handling for MCP tool responses
 # class MCPToolCallSummary(BaseModel):
@@ -107,14 +114,32 @@ class MCPTool(Tool[None]):
         """Execute the MCP tool by calling the MCP server"""
         try:
             # Build headers with proper precedence:
-            # 1. Start with additional headers from API request (filled in first)
+            # 1. Start with additional headers from API request (filled in first, excluding denylisted)
             # 2. Override with connection config headers (from DB) - these take precedence
             # 3. Override Authorization header with OAuth token if present
             headers: dict[str, str] = {}
 
             # Priority 1: Additional headers from API request (filled in first)
+            # Filter out denylisted headers to prevent security issues (e.g., Host Header Injection)
             if self._additional_headers:
-                headers.update(self._additional_headers)
+                filtered_headers = {
+                    k: v
+                    for k, v in self._additional_headers.items()
+                    if k.lower() not in DENYLISTED_MCP_HEADERS
+                }
+                if filtered_headers:
+                    headers.update(filtered_headers)
+                # Log if any denylisted headers were provided (for security monitoring)
+                denylisted_provided = [
+                    k
+                    for k in self._additional_headers.keys()
+                    if k.lower() in DENYLISTED_MCP_HEADERS
+                ]
+                if denylisted_provided:
+                    logger.warning(
+                        f"MCP tool '{self._name}' received denylisted headers that were filtered: "
+                        f"{denylisted_provided}"
+                    )
 
             # Priority 2: Base headers from connection config (DB) - overrides request
             if self.connection_config:
