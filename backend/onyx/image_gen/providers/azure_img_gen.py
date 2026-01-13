@@ -15,7 +15,7 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
         api_key: str,
         api_base: str,
         api_version: str,
-        deployment_name: str,
+        deployment_name: str | None = None,
     ):
         self._api_key = api_key
         self._api_base = api_base
@@ -32,11 +32,10 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
                 credentials.api_key,
                 credentials.api_base,
                 credentials.api_version,
-                credentials.deployment_name,
             ]
         ):
             raise ImageProviderCredentialsError(
-                "All credentials are required", credentials
+                "Api Key, Api Base and Api Version are required"
             )
 
         return cls(

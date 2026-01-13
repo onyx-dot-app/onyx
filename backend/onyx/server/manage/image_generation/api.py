@@ -190,7 +190,7 @@ def test_image_generation(
         if not source_provider:
             raise HTTPException(
                 status_code=404,
-                details=f"Source LLM provider with id {test_request.source_llm_provider_id} not found",
+                detail=f"Source LLM provider with id {test_request.source_llm_provider_id} not found",
             )
 
         api_key = source_provider.api_key
@@ -198,6 +198,7 @@ def test_image_generation(
 
     try:
         # Build image provider from credentials
+        # If incorrect credentials are provided, this will raise an exception
         image_provider = get_image_generation_provider(
             provider=provider,
             credentials=ImageGenerationProviderCredentials(
@@ -216,7 +217,7 @@ def test_image_generation(
         )
     except ImageProviderCredentialsError:
         raise HTTPException(
-            status_code=400,
+            status_code=401,
             detail="Invalid image generation credentials",
         )
 
@@ -330,7 +331,7 @@ def get_config_credentials(
             detail=f"ImageGenerationConfig with image_provider_id {image_provider_id} not found",
         )
 
-    return ImageGenerationProviderCredentials.from_model(config)
+    return ImageGenerationCredentials.from_model(config)
 
 
 @admin_router.put("/config/{image_provider_id}")
