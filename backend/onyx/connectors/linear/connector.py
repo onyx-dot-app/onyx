@@ -274,6 +274,10 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                 # Cast the sections list to the expected type
                 typed_sections = cast(list[TextSection | ImageSection], sections)
 
+                # Extract team name for hierarchy
+                team_name = (node.get("team") or {}).get("name") or "Unknown Team"
+                identifier = node.get("identifier", node["id"])
+
                 documents.append(
                     Document(
                         id=node["id"],
@@ -282,6 +286,13 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                         semantic_identifier=f"[{node['identifier']}] {node['title']}",
                         title=node["title"],
                         doc_updated_at=time_str_to_utc(node["updatedAt"]),
+                        doc_metadata={
+                            "hierarchy": {
+                                "source_path": [team_name],
+                                "team_name": team_name,
+                                "identifier": identifier,
+                            }
+                        },
                         metadata={
                             k: str(v)
                             for k, v in {
