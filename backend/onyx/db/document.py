@@ -444,6 +444,8 @@ def upsert_documents(
         logger.info("No documents to upsert. Skipping.")
         return
 
+    includes_permissions = any(doc.external_access for doc in seen_documents.values())
+
     insert_stmt = insert(DbDocument).values(
         [
             model_to_dict(
@@ -469,7 +471,7 @@ def upsert_documents(
                             ),
                             "is_public": doc.external_access.is_public,
                         }
-                        if doc.external_access
+                        if includes_permissions
                         else {}
                     ),
                     doc_metadata=doc.doc_metadata,
@@ -479,33 +481,38 @@ def upsert_documents(
         ]
     )
 
+    update_set = {
+        "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
+        "boost": insert_stmt.excluded.boost,
+        "hidden": insert_stmt.excluded.hidden,
+        "semantic_id": insert_stmt.excluded.semantic_id,
+        "link": insert_stmt.excluded.link,
+        "primary_owners": insert_stmt.excluded.primary_owners,
+        "secondary_owners": insert_stmt.excluded.secondary_owners,
+        "doc_metadata": insert_stmt.excluded.doc_metadata,
+    }
+    if includes_permissions:
+        # Use COALESCE to preserve existing permissions when new values are NULL.
+        # This prevents subsequent indexing runs (which don't fetch permissions)
+        # from overwriting permissions set by permission sync jobs.
+        update_set.update(
+            {
+                "external_user_emails": func.coalesce(
+                    insert_stmt.excluded.external_user_emails,
+                    DbDocument.external_user_emails,
+                ),
+                "external_user_group_ids": func.coalesce(
+                    insert_stmt.excluded.external_user_group_ids,
+                    DbDocument.external_user_group_ids,
+                ),
+                "is_public": func.coalesce(
+                    insert_stmt.excluded.is_public,
+                    DbDocument.is_public,
+                ),
+            }
+        )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
-        index_elements=["id"],  # Conflict target
-        set_={
-            "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
-            "boost": insert_stmt.excluded.boost,
-            "hidden": insert_stmt.excluded.hidden,
-            "semantic_id": insert_stmt.excluded.semantic_id,
-            "link": insert_stmt.excluded.link,
-            "primary_owners": insert_stmt.excluded.primary_owners,
-            "secondary_owners": insert_stmt.excluded.secondary_owners,
-            # Use COALESCE to preserve existing permissions when new values are NULL.
-            # This prevents subsequent indexing runs (which don't fetch permissions)
-            # from overwriting permissions set by permission sync jobs.
-            "external_user_emails": func.coalesce(
-                insert_stmt.excluded.external_user_emails,
-                DbDocument.external_user_emails,
-            ),
-            "external_user_group_ids": func.coalesce(
-                insert_stmt.excluded.external_user_group_ids,
-                DbDocument.external_user_group_ids,
-            ),
-            "is_public": func.coalesce(
-                insert_stmt.excluded.is_public,
-                DbDocument.is_public,
-            ),
-            "doc_metadata": insert_stmt.excluded.doc_metadata,
-        },
+        index_elements=["id"], set_=update_set  # Conflict target
     )
     db_session.execute(on_conflict_stmt)
     db_session.commit()
