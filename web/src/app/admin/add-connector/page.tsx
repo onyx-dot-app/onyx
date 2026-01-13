@@ -46,7 +46,6 @@ function SourceTileTooltipWrapper({
 }) {
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
-    // Check for sources marked as federated OR sources with federated option
     if (!sourceMetadata.federated || !federatedConnectors) {
       return null;
     }
