@@ -113,7 +113,6 @@ def upsert_web_search_provider(
     if activate:
         set_active_web_search_provider(provider_id=provider.id, db_session=db_session)
 
-    db_session.commit()
     db_session.refresh(provider)
     return provider
 
@@ -269,7 +268,6 @@ def upsert_web_content_provider(
     if activate:
         set_active_web_content_provider(provider_id=provider.id, db_session=db_session)
 
-    db_session.commit()
     db_session.refresh(provider)
     return provider
 

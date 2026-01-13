@@ -21,7 +21,6 @@ from onyx.configs.constants import MessageType
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
 from onyx.deep_research.dr_mock_tools import get_orchestrator_tools
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_DB_NAME
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TOOL_NAME
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
@@ -634,7 +633,8 @@ def run_deep_research_llm_loop(
                             tool_name=current_tool_call.tool_name,
                             tool_call_id=current_tool_call.tool_call_id,
                             tool_id=get_tool_by_name(
-                                tool_name=RESEARCH_AGENT_DB_NAME, db_session=db_session
+                                tool_name=RESEARCH_AGENT_TOOL_NAME,
+                                db_session=db_session,
                             ).id,
                             reasoning_tokens=llm_step_result.reasoning
                             or most_recent_reasoning,

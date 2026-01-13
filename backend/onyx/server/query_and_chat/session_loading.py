@@ -11,7 +11,7 @@ from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_DB_NAME
+from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_IN_CODE_ID
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
@@ -401,7 +401,7 @@ def translate_assistant_message_to_packets(
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
-                    if tool.in_code_tool_id == RESEARCH_AGENT_DB_NAME:
+                    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
                         research_agent_count += 1
 
                     # Handle different tool types
@@ -457,7 +457,7 @@ def translate_assistant_message_to_packets(
                                 )
                             )
 
-                    elif tool.in_code_tool_id == RESEARCH_AGENT_DB_NAME:
+                    elif tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
                         # Not ideal but not a huge issue if the research task is lost.
                         research_task = cast(
                             str,

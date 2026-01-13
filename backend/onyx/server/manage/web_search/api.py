@@ -4,10 +4,13 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Response
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import InternetContentProvider
+from onyx.db.models import InternetSearchProvider
 from onyx.db.models import User
 from onyx.db.web_search import deactivate_web_content_provider
 from onyx.db.web_search import deactivate_web_search_provider
@@ -93,6 +96,28 @@ def upsert_search_provider_endpoint(
         activate=request.activate,
         db_session=db_session,
     )
+
+    # Sync Exa key of search engine to content provider
+    if (
+        request.provider_type == WebSearchProviderType.EXA
+        and request.api_key_changed
+        and request.api_key
+    ):
+        stmt = (
+            insert(InternetContentProvider)
+            .values(
+                name="Exa",
+                provider_type=WebContentProviderType.EXA.value,
+                api_key=request.api_key,
+                is_active=False,
+            )
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
+        )
+        db_session.execute(stmt)
+        db_session.flush()
 
     db_session.commit()
     return WebSearchProviderView(
@@ -244,6 +269,28 @@ def upsert_content_provider_endpoint(
         activate=request.activate,
         db_session=db_session,
     )
+
+    # Sync Exa key of content provider to search provider
+    if (
+        request.provider_type == WebContentProviderType.EXA
+        and request.api_key_changed
+        and request.api_key
+    ):
+        stmt = (
+            insert(InternetSearchProvider)
+            .values(
+                name="Exa",
+                provider_type=WebSearchProviderType.EXA.value,
+                api_key=request.api_key,
+                is_active=False,
+            )
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
+        )
+        db_session.execute(stmt)
+        db_session.flush()
 
     db_session.commit()
     return WebContentProviderView(
