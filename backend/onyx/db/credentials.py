@@ -482,6 +482,27 @@ def cleanup_google_drive_credentials(db_session: Session) -> None:
     db_session.commit()
 
 
+def cleanup_box_jwt_credentials(db_session: Session) -> None:
+    """Clean up Box JWT credentials that reference the deleted JWT config."""
+    from onyx.connectors.box.box_kv import (
+        BOX_AUTHENTICATION_METHOD_UPLOADED,
+        DB_CREDENTIALS_AUTHENTICATION_METHOD,
+    )
+
+    box_credentials = fetch_credentials_by_source(
+        db_session=db_session, document_source=DocumentSource.BOX
+    )
+    for credential in box_credentials:
+        # Only delete credentials that use uploaded JWT config
+        credential_json = credential.credential_json or {}
+        if (
+            credential_json.get(DB_CREDENTIALS_AUTHENTICATION_METHOD)
+            == BOX_AUTHENTICATION_METHOD_UPLOADED
+        ):
+            db_session.delete(credential)
+    db_session.commit()
+
+
 def delete_service_account_credentials(
     user: User | None, db_session: Session, source: DocumentSource
 ) -> None:

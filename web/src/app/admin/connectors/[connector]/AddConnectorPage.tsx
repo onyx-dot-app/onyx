@@ -35,9 +35,11 @@ import {
 } from "@/lib/connectors/connectors";
 import Modal from "@/refresh-components/Modal";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
+import { BoxMain } from "@/app/admin/connectors/[connector]/pages/box/BoxPage";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,
+  useBoxCredentials,
 } from "@/app/admin/connectors/[connector]/pages/utils/hooks";
 import { Formik } from "formik";
 import NavigationRow from "@/app/admin/connectors/[connector]/NavigationRow";
@@ -195,11 +197,13 @@ export default function AddConnector({
   // Hooks for Google Drive and Gmail credentials
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
   const { liveGmailCredential } = useGmailCredentials(connector);
+  const { liveBoxCredential } = useBoxCredentials(connector);
 
   // Check if credential is activated
   const credentialActivated =
     (connector === "google_drive" && liveGDriveCredential) ||
     (connector === "gmail" && liveGmailCredential) ||
+    (connector === "box" && liveBoxCredential) ||
     currentCredential;
 
   // Check if there are no credentials
@@ -434,7 +438,8 @@ export default function AddConnector({
               const credential =
                 currentCredential ||
                 liveGDriveCredential ||
-                liveGmailCredential;
+                liveGmailCredential ||
+                liveBoxCredential;
               const linkCredentialResponse = await linkCredential(
                 response.id,
                 credential?.id!,
@@ -516,6 +521,8 @@ export default function AddConnector({
 
               {connector == ValidSources.Gmail ? (
                 <GmailMain />
+              ) : connector == ValidSources.Box ? (
+                <BoxMain />
               ) : (
                 <>
                   <ModifyCredential
@@ -638,6 +645,7 @@ export default function AddConnector({
                   currentCredential ||
                   liveGDriveCredential ||
                   liveGmailCredential ||
+                  liveBoxCredential ||
                   null
                 }
               />

@@ -37,6 +37,10 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.connectors.box.box_kv import build_box_jwt_creds
+from onyx.connectors.box.box_kv import delete_box_jwt_config
+from onyx.connectors.box.box_kv import get_box_jwt_config
+from onyx.connectors.box.box_kv import upsert_box_jwt_config
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import (
@@ -90,6 +94,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
 )
+from onyx.db.credentials import cleanup_box_jwt_credentials
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
@@ -118,6 +123,8 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
+from onyx.server.documents.models import BoxJWTConfig
+from onyx.server.documents.models import BoxJWTCredentialRequest
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorFileInfo
@@ -387,6 +394,77 @@ def upsert_gmail_service_account_credential(
 
     # first delete all existing service account credentials
     delete_service_account_credentials(user, db_session, DocumentSource.GMAIL)
+    # `user=None` since this credential is not a personal credential
+    credential = create_credential(
+        credential_data=credential_base, user=user, db_session=db_session
+    )
+    return ObjectCreationIdResponse(id=credential.id)
+
+
+@router.get("/admin/connector/box/jwt-config")
+def check_box_jwt_config_exist(
+    _: User = Depends(current_admin_user),
+) -> dict[str, str]:
+    """Check if Box JWT config exists."""
+    try:
+        jwt_config = get_box_jwt_config()
+        return {
+            "client_id": jwt_config.client_id,
+            "enterprise_id": jwt_config.enterpriseID or "Not set",
+        }
+    except KvKeyNotFoundError:
+        raise HTTPException(status_code=404, detail="Box JWT config not found")
+
+
+@router.put("/admin/connector/box/jwt-config")
+def upsert_box_jwt_config_endpoint(
+    jwt_config: BoxJWTConfig, _: User = Depends(current_admin_user)
+) -> StatusResponse:
+    """Upload Box JWT config JSON."""
+    try:
+        upsert_box_jwt_config(jwt_config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return StatusResponse(success=True, message="Successfully saved Box JWT config")
+
+
+@router.delete("/admin/connector/box/jwt-config")
+def delete_box_jwt_config_endpoint(
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse:
+    """Delete Box JWT config."""
+    try:
+        delete_box_jwt_config()
+        # Clean up Box JWT credentials that reference the deleted JWT config
+        cleanup_box_jwt_credentials(db_session=db_session)
+    except KvKeyNotFoundError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return StatusResponse(success=True, message="Successfully deleted Box JWT config")
+
+
+@router.put("/admin/connector/box/jwt-credential")
+def upsert_box_jwt_credential(
+    jwt_credential_request: BoxJWTCredentialRequest,
+    user: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> ObjectCreationIdResponse:
+    """Special API which allows the creation of a credential for Box JWT.
+    Combines the input with the saved JWT config to create an entry in the
+    `Credential` table."""
+    try:
+        credential_base = build_box_jwt_creds(
+            primary_admin_user_id=jwt_credential_request.box_primary_admin_user_id,
+            name="Box JWT (uploaded)",
+        )
+    except KvKeyNotFoundError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # TODO: Add delete_box_jwt_credentials if needed
+    # first delete all existing JWT credentials
+    # delete_box_jwt_credentials(user, db_session, DocumentSource.BOX)
     # `user=None` since this credential is not a personal credential
     credential = create_credential(
         credential_data=credential_base, user=user, db_session=db_session
