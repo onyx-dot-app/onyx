@@ -17,7 +17,7 @@ def _get_default_image_gen_creds() -> ImageGenerationProviderCredentials:
     )
 
 
-def test_request_provider_that_no_exist():
+def test_request_provider_that_no_exist() -> None:
     provider = "nonexistent"
     credentials = _get_default_image_gen_creds()
 
@@ -25,7 +25,7 @@ def test_request_provider_that_no_exist():
         get_image_generation_provider(provider, credentials)
 
 
-def test_build_openai_provider_from_api_key_and_base():
+def test_build_openai_provider_from_api_key_and_base() -> None:
     credentials = _get_default_image_gen_creds()
 
     credentials.api_key = "test"
@@ -40,7 +40,7 @@ def test_build_openai_provider_from_api_key_and_base():
     assert image_gen_provider._api_base == "test"
 
 
-def test_build_openai_provider_fails_no_api_key():
+def test_build_openai_provider_fails_no_api_key() -> None:
     credentials = _get_default_image_gen_creds()
 
     credentials.api_base = "test"
@@ -51,7 +51,7 @@ def test_build_openai_provider_fails_no_api_key():
         get_image_generation_provider(provider, credentials)
 
 
-def test_build_azure_provider_from_api_key_and_base_and_version():
+def test_build_azure_provider_from_api_key_and_base_and_version() -> None:
     credentials = _get_default_image_gen_creds()
 
     credentials.api_key = "test"
@@ -68,7 +68,7 @@ def test_build_azure_provider_from_api_key_and_base_and_version():
     assert image_gen_provider._api_version == "test"
 
 
-def test_build_azure_provider_fails_missing_credential():
+def test_build_azure_provider_fails_missing_credential() -> None:
     azure_required = [
         "api_key",
         "api_base",
