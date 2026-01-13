@@ -36,8 +36,8 @@ export default function FeedbackModal({
   const validationSchema = Yup.object({
     additional_feedback:
       feedbackType === "dislike"
-        ? Yup.string().required("Feedback is required")
-        : Yup.string(),
+        ? Yup.string().trim().required("Feedback is required")
+        : Yup.string().trim(),
   });
 
   async function handleSubmit(values: FeedbackFormValues) {
