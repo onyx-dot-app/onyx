@@ -32,6 +32,7 @@ import Modal from "./Modal";
 import ShareAgentModal from "@/sections/agents/ShareAgentModal";
 import updateAgentSharedStatus from "@/lib/assistants/shareAgent";
 import { useAgent } from "@/hooks/useAgents";
+import { usePopup } from "@/components/admin/connectors/Popup";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
   children: string;
@@ -66,6 +67,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
+  const { popup, setPopup } = usePopup();
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -88,7 +90,10 @@ export default function AgentCard({ agent }: AgentCardProps) {
       );
 
       if (error) {
-        console.error("Failed to share agent:", error);
+        setPopup({
+          type: "error",
+          message: `Failed to share agent: ${error}`,
+        });
       } else {
         // Revalidate the agent data to reflect the changes
         refreshAgent();
@@ -99,6 +104,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
 
   return (
     <>
+      {popup}
+
       <shareAgentModal.Provider>
         <Modal
           open={shareAgentModal.isOpen}
