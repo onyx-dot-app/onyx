@@ -316,6 +316,7 @@ class DocumentQuery:
             {
                 "multi_match": {
                     "query": query_text,
+                    # TODO(andrei): Ask Yuhong do we want this?
                     "fields": [f"{TITLE_FIELD_NAME}^2", f"{TITLE_FIELD_NAME}.keyword"],
                     "type": "best_fields",
                 }
