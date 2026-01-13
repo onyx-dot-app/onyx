@@ -10,6 +10,7 @@ global:
 
 postgresql:
   enabled: true
+  nameOverride: cloudnative-pg
   cluster:
     instances: 1
     storage:
