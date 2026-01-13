@@ -41,6 +41,7 @@ class MCPTool(Tool[None]):
         connection_config: MCPConnectionConfig | None = None,
         user_email: str = "",
         user_oauth_token: str | None = None,
+        additional_headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -49,6 +50,7 @@ class MCPTool(Tool[None]):
         self.connection_config = connection_config
         self.user_email = user_email
         self._user_oauth_token = user_oauth_token
+        self._additional_headers = additional_headers or {}
 
         self._name = tool_name
         self._tool_definition = tool_definition
@@ -104,14 +106,21 @@ class MCPTool(Tool[None]):
     ) -> ToolResponse:
         """Execute the MCP tool by calling the MCP server"""
         try:
-            # Build headers from connection config; prefer explicit headers
-            headers: dict[str, str] = (
-                self.connection_config.config["headers"]
-                if self.connection_config
-                else {}
-            )
+            # Build headers with proper precedence:
+            # 1. Start with additional headers from API request (filled in first)
+            # 2. Override with connection config headers (from DB) - these take precedence
+            # 3. Override Authorization header with OAuth token if present
+            headers: dict[str, str] = {}
 
-            # For pass-through OAuth, use the user's login OAuth token
+            # Priority 1: Additional headers from API request (filled in first)
+            if self._additional_headers:
+                headers.update(self._additional_headers)
+
+            # Priority 2: Base headers from connection config (DB) - overrides request
+            if self.connection_config:
+                headers.update(self.connection_config.config.get("headers", {}))
+
+            # Priority 3: OAuth token (overrides Authorization header)
             if self._user_oauth_token:
                 headers["Authorization"] = f"Bearer {self._user_oauth_token}"
 

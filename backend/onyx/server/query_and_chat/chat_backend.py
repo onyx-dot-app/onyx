@@ -587,6 +587,7 @@ def handle_send_chat_message(
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
+                mcp_headers=chat_message_req.mcp_headers,
                 external_state_container=state_container,
             )
             result = gather_stream_full(packets, state_container)
@@ -608,6 +609,7 @@ def handle_send_chat_message(
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                         request.headers
                     ),
+                    mcp_headers=chat_message_req.mcp_headers,
                     external_state_container=state_container,
                 ):
                     yield get_json_line(obj.model_dump())
