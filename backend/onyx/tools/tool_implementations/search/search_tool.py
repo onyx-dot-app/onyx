@@ -673,7 +673,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # would trigger a separate Slack search
             # Run if we have slack_context (bot) or user (might have OAuth token)
             if (
-                self.enable_slack_search
+                (self.enable_slack_search or self.slack_context)
                 and (self.slack_context or self.user)
                 and override_kwargs.original_query
             ):
