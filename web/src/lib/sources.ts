@@ -83,8 +83,7 @@ const slackMetadata = {
   // Federated Slack is available as an option but not the default
   federated: true,
   federatedTooltip:
-    "⚠️ WARNING: Due to Slack's rate limit and ToS changes, federated Slack " +
-    "results in significantly greater latency and lower search quality.",
+    "⚠️ WARNING: Federated Slack results in significantly greater latency and lower search quality.",
   baseSourceType: "slack",
 };
 
