@@ -37,7 +37,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 # not using /api to avoid confusion with nginx api path routing
-router = APIRouter(prefix="/onyx-api", tag=PUBLIC_API_TAGS)
+router = APIRouter(prefix="/onyx-api", tags=PUBLIC_API_TAGS)
 
 
 @router.get("/connector-docs/{cc_pair_id}")
