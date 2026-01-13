@@ -27,16 +27,12 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> "AzureImageGenerationProvider":
-        if not all(
-            [
-                credentials.api_key,
-                credentials.api_base,
-                credentials.api_version,
-            ]
-        ):
-            raise ImageProviderCredentialsError(
-                "Api Key, Api Base and Api Version are required"
-            )
+        if not credentials.api_key:
+            raise ImageProviderCredentialsError("Api Key is required")
+        if not credentials.api_base:
+            raise ImageProviderCredentialsError("Api Base is required")
+        if not credentials.api_version:
+            raise ImageProviderCredentialsError("Api Version is required")
 
         return cls(
             api_key=credentials.api_key,
