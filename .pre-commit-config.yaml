@@ -11,7 +11,6 @@ repos:
       - id: uv-sync
         args: ["--locked", "--all-extras"]
       - id: uv-lock
-        files: ^pyproject\.toml$
       - id: uv-export
         name: uv-export default.txt
         args:
