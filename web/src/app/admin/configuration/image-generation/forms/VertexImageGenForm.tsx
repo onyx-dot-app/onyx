@@ -36,9 +36,14 @@ const validationSchema = Yup.object().shape({
 
 function getInitialValuesFromCredentials(
   credentials: ImageGenerationCredentials,
-  imageProvider: ImageProvider
+  _imageProvider: ImageProvider
 ): Partial<VertexImageGenFormValues> {
-  return initialValues;
+  return {
+    custom_config: {
+      vertex_credentials: credentials.custom_config?.vertex_credentials || "",
+      vertex_location: credentials.custom_config?.vertex_location || "",
+    },
+  };
 }
 
 function transformValues(
@@ -60,7 +65,7 @@ function VertexFormFields(
   props: ImageGenFormChildProps<VertexImageGenFormValues>
 ) {
   return (
-    <Form>
+    <>
       <FileUploadFormField
         name="custom_config.vertex_credentials"
         label="Credentials File"
@@ -72,7 +77,7 @@ function VertexFormFields(
         placeholder="global"
         subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
       />
-    </Form>
+    </>
   );
 }
 
