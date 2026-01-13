@@ -69,7 +69,7 @@ jest.mock("@/hooks/useFeedbackController", () => ({
   useFeedbackController: () => ({ handleFeedbackChange: jest.fn() }),
 }));
 
-jest.mock("../../components/modal/FeedbackModal", () => ({
+jest.mock("@/sections/modals/FeedbackModal", () => ({
   __esModule: true,
   default: () => <div />,
 }));
