@@ -71,4 +71,5 @@ export interface ImageGenSubmitPayload {
   apiBase?: string;
   apiVersion?: string;
   deploymentName?: string;
+  customConfig?: Record<string, string>;
 }
