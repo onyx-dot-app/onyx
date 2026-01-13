@@ -5,22 +5,21 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 ## Getting Started
 
 Install node / npm: https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
-Install all dependencies: `npm i`
+Install all dependencies: `npm i`.
 
 Then, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 _Note:_ if you are having problems accessing the ^, try setting the `WEB_DOMAIN` env variable to
 `http://127.0.0.1:3000` and accessing it there.
+
+> [!TIP]
+> Packages are installed automatically when changing branches with [pre-commit](https://github.com/onyx-dot-app/onyx/blob/main/CONTRIBUTING.md#formatting-and-linting) configured.
 
 ### Connecting to a Cloud Backend
 
@@ -48,7 +47,6 @@ may need to delete the cookies for the `localhost` domain.
 **Important notes:**
 
 - The `.env.local` file should be created in the `web/` directory (same level as `package.json`)
-- After creating or modifying `.env.local`, restart your development server for changes to take effect
 - The `DEBUG_AUTH_COOKIE` is only used in development mode (`NODE_ENV=development`)
 - If `INTERNAL_URL` is not set, the frontend will connect to the local backend at `http://127.0.0.1:8080`
 - Keep your `.env.local` file secure and never commit it to version control (it should already be in `.gitignore`)

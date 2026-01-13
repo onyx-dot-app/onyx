@@ -149,16 +149,16 @@ repos:
       - id: npm-install
         name: npm install
         description: "Automatically run 'npm install' after a checkout, pull or rebase"
-        language: node
-        entry: bash -c 'cd web && npm install'
+        language: system
+        entry: bash -c 'cd web && npm install --no-save'
         always_run: true
         pass_filenames: false
         stages: [post-checkout, post-merge, post-rewrite]
       - id: npm-install-check
         name: npm install --package-lock-only
         description: "Check the 'web/package-lock.json' is updated"
-        language: node
-        entry: bash -c 'cd web && npm install'
+        language: system
+        entry: bash -c 'cd web && npm install --package-lock-only'
         pass_filenames: false
         files: ^web/package(-lock)?\.json$
 
