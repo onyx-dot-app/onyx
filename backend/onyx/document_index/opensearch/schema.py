@@ -187,7 +187,7 @@ class DocumentChunk(BaseModel):
     @field_validator("last_updated", mode="before")
     @classmethod
     def parse_epoch_millis_to_datetime(cls, value: Any) -> datetime | None:
-        """Parses milliseconds since the Unix epoch to a datatime object.
+        """Parses milliseconds since the Unix epoch to a datetime object.
 
         If the input is None, returns None.
 
