@@ -1821,11 +1821,11 @@ wheels = [
 
 [[package]]
 name = "filelock"
-version = "3.20.1"
+version = "3.20.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a7/23/ce7a1126827cedeb958fc043d61745754464eb56c5937c35bbf2b8e26f34/filelock-3.20.1.tar.gz", hash = "sha256:b8360948b351b80f420878d8516519a2204b07aefcdcfd24912a5d33127f188c", size = 19476, upload-time = "2025-12-15T23:54:28.027Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/65/ce7f1b70157833bf3cb851b556a37d4547ceafc158aa9b34b36782f23696/filelock-3.20.3.tar.gz", hash = "sha256:18c57ee915c7ec61cff0ecf7f0f869936c7c30191bb0cf406f1341778d0834e1", size = 19485, upload-time = "2026-01-09T17:55:05.421Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/7f/a1a97644e39e7316d850784c642093c99df1290a460df4ede27659056834/filelock-3.20.1-py3-none-any.whl", hash = "sha256:15d9e9a67306188a44baa72f569d2bfd803076269365fdea0934385da4dc361a", size = 16666, upload-time = "2025-12-15T23:54:26.874Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/36/7fb70f04bf00bc646cd5bb45aa9eddb15e19437a28b8fb2b4a5249fac770/filelock-3.20.3-py3-none-any.whl", hash = "sha256:4b0dda527ee31078689fc205ec4f1c1bf7d56cf88b6dc9426c4f230e46c2dce1", size = 16701, upload-time = "2026-01-09T17:55:04.334Z" },
 ]
 
 [[package]]
@@ -4720,7 +4720,7 @@ requires-dist = [
     { name = "fastapi-users", marker = "extra == 'backend'", specifier = "==14.0.1" },
     { name = "fastapi-users-db-sqlalchemy", marker = "extra == 'backend'", specifier = "==5.0.0" },
     { name = "fastmcp", marker = "extra == 'backend'", specifier = "==2.14.2" },
-    { name = "filelock", marker = "extra == 'backend'", specifier = "==3.20.1" },
+    { name = "filelock", marker = "extra == 'backend'", specifier = "==3.20.3" },
     { name = "google-api-python-client", marker = "extra == 'backend'", specifier = "==2.86.0" },
     { name = "google-auth-httplib2", marker = "extra == 'backend'", specifier = "==0.1.0" },
     { name = "google-auth-oauthlib", marker = "extra == 'backend'", specifier = "==1.0.0" },
