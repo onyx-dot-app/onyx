@@ -195,7 +195,7 @@ function LabelLayout({
   const className = cn("flex flex-col w-full", alignment);
   const content = label ? (
     <>
-      <Section flexDirection="row" justifyContent="stretch" gap={0}>
+      <Section flexDirection="row" justifyContent="start" gap={0}>
         <Text as="p" mainContentEmphasis text04>
           {label}
         </Text>
