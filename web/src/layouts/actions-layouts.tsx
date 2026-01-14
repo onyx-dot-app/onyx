@@ -62,14 +62,12 @@ import React, {
   useMemo,
   Dispatch,
   SetStateAction,
-  useCallback,
 } from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import Text from "@/refresh-components/texts/Text";
-import { SvgMcp } from "@opal/icons";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 
@@ -289,7 +287,7 @@ function ActionsContent(props: ActionsContentProps) {
   }
 
   return (
-    <div className="border-x border-b rounded-b-16 overflow-hidden">
+    <div className="border-x border-b rounded-b-16 overflow-hidden w-full">
       <ShadowDiv
         className="flex flex-col gap-2 rounded-b-16 max-h-[20rem] p-2"
         {...props}
@@ -402,34 +400,6 @@ function ActionsTool({
 }
 
 /**
- * Actions No Tools Found Component
- *
- * A simple empty state component that displays when no tools are found.
- * Shows the MCP icon with "No tools found" message.
- *
- * @example
- * ```tsx
- * <ActionsLayouts.Content>
- *   {tools.length === 0 ? (
- *     <ActionsLayouts.NoToolsFound />
- *   ) : (
- *     tools.map(tool => <ActionsLayouts.Tool key={tool.id} {...tool} />)
- *   )}
- * </ActionsLayouts.Content>
- * ```
- */
-function ActionsNoToolsFound() {
-  return (
-    <div className="flex items-center justify-center gap-2 p-4">
-      <SvgMcp className="stroke-text-04" size={18} />
-      <Text as="p" text03>
-        No tools found
-      </Text>
-    </div>
-  );
-}
-
-/**
  * Actions Tool Skeleton Component
  *
  * A loading skeleton that mimics the appearance of ActionsTool.
@@ -486,6 +456,5 @@ export {
   ActionsHeader as Header,
   ActionsContent as Content,
   ActionsTool as Tool,
-  ActionsNoToolsFound as NoToolsFound,
   ActionsToolSkeleton as ToolSkeleton,
 };

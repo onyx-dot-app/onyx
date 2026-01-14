@@ -307,6 +307,12 @@ function MCPServerCard({
     return toolFieldValue === true;
   }).length;
 
+  useOnMount(() => {
+    // The card should be folded when this MCP Server has NO actions associated with it.
+    // actionsLayouts.setIsFolded(enabledTools.length === 0);
+    actionsLayouts.setIsFolded(enabledTools.length === 0);
+  });
+
   return (
     <actionsLayouts.Provider>
       <ActionsLayouts.Root>
@@ -344,39 +350,44 @@ function MCPServerCard({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <Button
-              internal
-              rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
-              onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
-            >
-              {actionsLayouts.isFolded ? "Expand" : "Fold"}
-            </Button>
+            {enabledTools.length > 0 && (
+              <Button
+                internal
+                rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
+                onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
+              >
+                {actionsLayouts.isFolded ? "Expand" : "Fold"}
+              </Button>
+            )}
           </GeneralLayouts.Section>
         </ActionsLayouts.Header>
-        <ActionsLayouts.Content>
-          {isLoading ? (
+        {isLoading ? (
+          <ActionsLayouts.Content>
             <ActionsLayouts.ToolSkeleton />
-          ) : filteredTools.length === 0 ? (
-            <ActionsLayouts.NoToolsFound />
-          ) : (
-            filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                name={`${serverFieldName}.tool_${tool.id}`}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon ?? SvgSliders}
-                disabled={!tool.isAvailable}
-                rightChildren={
-                  <SwitchField
-                    name={`${serverFieldName}.tool_${tool.id}`}
-                    disabled={!isServerEnabled}
-                  />
-                }
-              />
-            ))
-          )}
-        </ActionsLayouts.Content>
+          </ActionsLayouts.Content>
+        ) : (
+          enabledTools.length > 0 &&
+          filteredTools.length > 0 && (
+            <ActionsLayouts.Content>
+              {filteredTools.map((tool) => (
+                <ActionsLayouts.Tool
+                  key={tool.id}
+                  name={`${serverFieldName}.tool_${tool.id}`}
+                  title={tool.name}
+                  description={tool.description}
+                  icon={tool.icon ?? SvgSliders}
+                  disabled={!tool.isAvailable}
+                  rightChildren={
+                    <SwitchField
+                      name={`${serverFieldName}.tool_${tool.id}`}
+                      disabled={!isServerEnabled}
+                    />
+                  }
+                />
+              ))}
+            </ActionsLayouts.Content>
+          )
+        )}
       </ActionsLayouts.Root>
     </actionsLayouts.Provider>
   );
