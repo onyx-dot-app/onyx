@@ -40,15 +40,6 @@ export const BoxMain = () => {
     refreshCredentials,
   } = usePublicCredentials();
 
-  const {
-    data: boxCredentials,
-    isLoading: isBoxCredentialsLoading,
-    error: boxCredentialsError,
-  } = useSWR<Credential<BoxCredentialJson>[]>(
-    buildSimilarCredentialInfoURL(ValidSources.Box),
-    errorHandlingFetcher
-  );
-
   const handleRefresh = () => {
     refreshCredentials();
   };
@@ -56,8 +47,7 @@ export const BoxMain = () => {
   if (
     (!jwtConfigData && isJwtConfigLoading && !isJwtConfigError) ||
     (!connectorIndexingStatuses && isConnectorIndexingStatusesLoading) ||
-    (!credentialsData && isCredentialsLoading) ||
-    (!boxCredentials && isBoxCredentialsLoading)
+    (!credentialsData && isCredentialsLoading)
   ) {
     return (
       <div className="mx-auto">
@@ -72,10 +62,6 @@ export const BoxMain = () => {
 
   if (credentialsError || !credentialsData) {
     return <ErrorCallout errorTitle="Failed to load credentials." />;
-  }
-
-  if (boxCredentialsError) {
-    return <ErrorCallout errorTitle="Failed to load Box credentials." />;
   }
 
   if (connectorIndexingStatusesError || !connectorIndexingStatuses) {

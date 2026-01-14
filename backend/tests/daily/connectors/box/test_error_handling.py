@@ -31,8 +31,12 @@ def test_connector_with_invalid_folder_id(
     ):
         try:
             docs = load_all_docs(connector)
-            # If no error, should return empty list or handle gracefully
+            # If no error, should return empty list for invalid folder ID
             assert isinstance(docs, list)
+            # Assert that invalid folder ID returns empty result
+            assert (
+                len(docs) == 0
+            ), f"Expected empty result for invalid folder ID, but got {len(docs)} documents"
         except Exception as e:
             # If error is raised, it should be a specific Box API error
             error_msg = str(e).lower()
@@ -40,7 +44,7 @@ def test_connector_with_invalid_folder_id(
                 "404" in error_msg
                 or "not found" in error_msg
                 or "not_found" in error_msg
-            )
+            ), f"Unexpected error type: {error_msg}"
 
 
 def test_connector_with_malformed_url(

@@ -483,7 +483,11 @@ def cleanup_google_drive_credentials(db_session: Session) -> None:
 
 
 def cleanup_box_jwt_credentials(db_session: Session) -> None:
-    """Clean up Box JWT credentials that reference the deleted JWT config."""
+    """Clean up Box JWT credentials that reference the deleted JWT config.
+
+    This function properly handles deletion of related connector/document pairs
+    to avoid foreign key constraint violations.
+    """
     from onyx.connectors.box.box_kv import (
         BOX_AUTHENTICATION_METHOD_UPLOADED,
         DB_CREDENTIALS_AUTHENTICATION_METHOD,
@@ -499,8 +503,14 @@ def cleanup_box_jwt_credentials(db_session: Session) -> None:
             credential_json.get(DB_CREDENTIALS_AUTHENTICATION_METHOD)
             == BOX_AUTHENTICATION_METHOD_UPLOADED
         ):
-            db_session.delete(credential)
-    db_session.commit()
+            # Use _delete_credential_internal with force=True to properly clean up
+            # related connector/document pairs and avoid FK constraint violations
+            _delete_credential_internal(
+                credential=credential,
+                credential_id=credential.id,
+                db_session=db_session,
+                force=True,
+            )
 
 
 def delete_service_account_credentials(

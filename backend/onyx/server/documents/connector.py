@@ -461,9 +461,10 @@ def upsert_box_jwt_credential(
     except KvKeyNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # TODO: Add delete_box_jwt_credentials if needed
-    # first delete all existing JWT credentials
-    # delete_box_jwt_credentials(user, db_session, DocumentSource.BOX)
+    # Clean up existing Box JWT credentials before creating a new one
+    # This prevents accumulation of stale/duplicate credentials
+    # Note: cleanup_box_jwt_credentials handles deletion of related connector/document pairs
+    cleanup_box_jwt_credentials(db_session=db_session)
     # `user=None` since this credential is not a personal credential
     credential = create_credential(
         credential_data=credential_base, user=user, db_session=db_session

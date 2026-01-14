@@ -264,18 +264,19 @@ def _download_and_extract_sections(
                 TextSection(link=link, text=text)
             ]
 
-            # Process embedded images in the PDF
-            try:
-                for idx, (img_data, img_name) in enumerate(images):
-                    section, embedded_id = store_image_and_create_section(
-                        image_data=img_data,
-                        file_id=f"{file_id}_img_{idx}",
-                        display_name=img_name or f"{file_name} - image {idx}",
-                        file_origin=FileOrigin.CONNECTOR,
-                    )
-                    pdf_sections.append(section)
-            except Exception as e:
-                logger.error(f"Failed to process PDF images in {file_name}: {e}")
+            # Process embedded images in the PDF only if images are allowed
+            if allow_images:
+                try:
+                    for idx, (img_data, img_name) in enumerate(images):
+                        section, embedded_id = store_image_and_create_section(
+                            image_data=img_data,
+                            file_id=f"{file_id}_img_{idx}",
+                            display_name=img_name or f"{file_name} - image {idx}",
+                            file_origin=FileOrigin.CONNECTOR,
+                        )
+                        pdf_sections.append(section)
+                except Exception as e:
+                    logger.error(f"Failed to process PDF images in {file_name}: {e}")
             return pdf_sections
 
         elif file_ext in [".docx", ".doc"]:

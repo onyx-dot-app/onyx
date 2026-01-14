@@ -93,7 +93,20 @@ def _box_file_to_dict(file: BoxFile | BoxFolder) -> BoxFileType:
             else None
         ),
         "shared_link": (
-            file.shared_link.url
+            {
+                "url": file.shared_link.url,
+                "access": (
+                    file.shared_link.access.value
+                    if hasattr(file.shared_link, "access")
+                    and hasattr(file.shared_link.access, "value")
+                    else None
+                ),
+                "password": (
+                    file.shared_link.password
+                    if hasattr(file.shared_link, "password")
+                    else None
+                ),
+            }
             if hasattr(file, "shared_link") and file.shared_link
             else None
         ),
@@ -240,7 +253,13 @@ def _get_files_in_parent(
         error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
         # Remove potential tokens (long alphanumeric strings)
         error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
-        logger.warning(f"Error getting files in parent {parent_id}: {error_str}")
+        logger.error(
+            f"Error getting files in parent {parent_id}: {error_str}. "
+            f"Re-raising to prevent folder from being marked as traversed."
+        )
+        # Re-raise the exception so the caller can handle it and avoid marking
+        # the folder as traversed after a failed/partial retrieval
+        raise
 
 
 def crawl_folders_for_files(

@@ -88,10 +88,22 @@ def get_external_access_for_raw_box_file(
         )
 
     # Check for shared link (indicates potential public access)
-    # Note: Box shared links can be public or password-protected, but we
-    # treat any shared link as potentially public for access control
-    if file.get("shared_link"):
-        public = True
+    # Only mark as public if the shared link is actually public (access="open")
+    # and not password-protected
+    shared_link = file.get("shared_link")
+    if shared_link:
+        # shared_link can be a string (legacy) or a dict with access/password info
+        if isinstance(shared_link, dict):
+            access = shared_link.get("access")
+            password = shared_link.get("password")
+            # Only mark as public if access is "open" and not password-protected
+            if access == "open" and not password:
+                public = True
+        elif isinstance(shared_link, str):
+            # Legacy: if it's just a URL string, we can't determine access level
+            # Don't assume it's public - only mark as public if we found a public
+            # collaboration above
+            pass
 
     return ExternalAccess(
         external_user_emails=user_emails,
