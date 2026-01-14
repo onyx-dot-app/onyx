@@ -17,6 +17,7 @@ from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider
+from onyx.image_gen.factory import validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.utils import get_max_input_tokens
 from onyx.server.manage.image_generation.models import ImageGenerationConfigCreate
@@ -96,51 +97,43 @@ def _build_llm_provider_request(
             custom_config=custom_config,
         )
 
-    elif api_key is not None and provider is not None:
-        # New credentials mode
-        return LLMProviderUpsertRequest(
-            name=f"Image Gen - {image_provider_id}",
-            provider=provider,
-            api_key=api_key,
-            api_base=api_base,
-            api_version=api_version,
-            default_model_name=model_name,
-            deployment_name=deployment_name,
-            is_public=True,
-            groups=[],
-            model_configurations=[
-                ModelConfigurationUpsertRequest(
-                    name=model_name,
-                    is_visible=True,
-                )
-            ],
-            custom_config=custom_config,
-        )
-    elif custom_config is not None and provider is not None:
-        return LLMProviderUpsertRequest(
-            name=f"Image Gen - {image_provider_id}",
-            provider=provider,
-            api_key=api_key,
-            api_base=api_base,
-            api_version=api_version,
-            custom_config=custom_config,
-            default_model_name=model_name,
-            deployment_name=deployment_name,
-            is_public=True,
-            groups=[],
-            model_configurations=[
-                ModelConfigurationUpsertRequest(
-                    name=model_name,
-                    is_visible=True,
-                )
-            ],
-        )
-
-    else:
+    if not provider:
         raise HTTPException(
             status_code=400,
-            detail="Either source_llm_provider_id or (api_key + provider) must be provided",
+            detail="No provider provided",
         )
+
+    credentials = ImageGenerationProviderCredentials(
+        api_key=api_key,
+        api_base=api_base,
+        api_version=api_version,
+        deployment_name=deployment_name,
+        custom_config=None,
+    )
+
+    if not validate_credentials(provider, credentials):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect credentials for {provider}",
+        )
+
+    return LLMProviderUpsertRequest(
+        name=f"Image Gen - {image_provider_id}",
+        provider=provider,
+        api_key=api_key,
+        api_base=api_base,
+        api_version=api_version,
+        default_model_name=model_name,
+        deployment_name=deployment_name,
+        is_public=True,
+        groups=[],
+        model_configurations=[
+            ModelConfigurationUpsertRequest(
+                name=model_name,
+                is_visible=True,
+            )
+        ],
+    )
 
 
 def _create_image_gen_llm_provider__no_commit(
@@ -223,6 +216,19 @@ def test_image_generation(
         raise HTTPException(
             status_code=400,
             detail="No provider provided",
+        )
+
+    provider_credentials = ImageGenerationProviderCredentials(
+        api_key=api_key,
+        api_base=test_request.api_base,
+        api_version=test_request.api_version,
+        deployment_name=(test_request.deployment_name or test_request.model_name),
+    )
+
+    if not validate_credentials(provider, provider_credentials):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid image generation credentials: {provider}",
         )
 
     try:

@@ -1,7 +1,6 @@
 from typing import Any
 from typing import TYPE_CHECKING
 
-from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.interfaces import ImageGenerationProvider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 
@@ -10,6 +9,8 @@ if TYPE_CHECKING:
 
 
 class AzureImageGenerationProvider(ImageGenerationProvider):
+    NAME = "azure"
+
     def __init__(
         self,
         api_key: str,
@@ -23,16 +24,26 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
         self._deployment_name = deployment_name
 
     @classmethod
-    def build_from_credentials(
+    def validate_credentials(
+        cls,
+        credentials: ImageGenerationProviderCredentials,
+    ) -> bool:
+        return all(
+            [
+                credentials.api_key,
+                credentials.api_base,
+                credentials.api_version,
+            ]
+        )
+
+    @classmethod
+    def _build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> "AzureImageGenerationProvider":
-        if not credentials.api_key:
-            raise ImageProviderCredentialsError("Api Key is required")
-        if not credentials.api_base:
-            raise ImageProviderCredentialsError("Api Base is required")
-        if not credentials.api_version:
-            raise ImageProviderCredentialsError("Api Version is required")
+        assert credentials.api_key
+        assert credentials.api_base
+        assert credentials.api_version
 
         return cls(
             api_key=credentials.api_key,

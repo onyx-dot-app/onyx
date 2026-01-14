@@ -14,6 +14,7 @@ from onyx.db.image_generation import get_default_image_generation_config
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
 from onyx.image_gen.factory import get_image_generation_provider
+from onyx.image_gen.factory import validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
@@ -88,7 +89,17 @@ class ImageGenerationTool(Tool[None]):
                 return False
 
             llm_provider = config.model_configuration.llm_provider
-            return llm_provider is not None and llm_provider.api_key is not None
+            credentials = ImageGenerationProviderCredentials(
+                api_key=llm_provider.api_key,
+                api_base=llm_provider.api_base,
+                api_version=llm_provider.api_version,
+                deployment_name=llm_provider.deployment_name,
+                custom_config=llm_provider.custom_config,
+            )
+            return validate_credentials(
+                provider=llm_provider.provider,
+                credentials=credentials,
+            )
         except Exception:
             logger.exception("Error checking if image generation is available")
             return False

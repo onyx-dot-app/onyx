@@ -4,16 +4,30 @@ from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
 from onyx.image_gen.providers.vertex_img_gen import VertexImageGenerationProvider
 
+PROVIDERS: dict[str, ImageGenerationProvider] = {
+    AzureImageGenerationProvider.NAME: AzureImageGenerationProvider,
+    OpenAIImageGenerationProvider.NAME: OpenAIImageGenerationProvider,
+    VertexImageGenerationProvider.NAME: VertexImageGenerationProvider,
+}
+
 
 def get_image_generation_provider(
     provider: str,
     credentials: ImageGenerationProviderCredentials,
 ) -> ImageGenerationProvider:
-    if provider == "azure":
-        return AzureImageGenerationProvider.build_from_credentials(credentials)
-    elif provider == "openai":
-        return OpenAIImageGenerationProvider.build_from_credentials(credentials)
-    elif provider == "vertex_ai":
-        return VertexImageGenerationProvider.build_from_credentials(credentials)
-    else:
+    provider_cls = _get_image_generation_provider_cls(provider)
+    return provider_cls.build_from_credentials(credentials)
+
+
+def validate_credentials(
+    provider: str,
+    credentials: ImageGenerationProviderCredentials,
+) -> bool:
+    provider_cls = _get_image_generation_provider_cls(provider)
+    return provider_cls.validate_credentials(credentials)
+
+
+def _get_image_generation_provider_cls(provider: str) -> type[ImageGenerationProvider]:
+    if provider not in PROVIDERS:
         raise ValueError(f"Invalid image generation provider: {provider}")
+    return PROVIDERS[provider]
