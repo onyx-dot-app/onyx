@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from typing import Any
 from typing import TYPE_CHECKING
@@ -19,8 +21,6 @@ class VertexCredentials(BaseModel):
 
 
 class VertexImageGenerationProvider(ImageGenerationProvider):
-    NAME = "vertex_ai"
-
     def __init__(
         self,
         vertex_credentials: VertexCredentials,
@@ -44,7 +44,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
     def _build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
-    ) -> "VertexImageGenerationProvider":
+    ) -> VertexImageGenerationProvider:
         vertex_credentials = _parse_to_vertex_credentials(credentials)
 
         return cls(
@@ -59,7 +59,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         n: int,
         quality: str | None = None,
         **kwargs: Any,
-    ) -> "ImageGenerationResponse":
+    ) -> ImageGenerationResponse:
         from litellm import image_generation
 
         return image_generation(
