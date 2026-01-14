@@ -164,9 +164,13 @@ class LitellmLLM(LLM):
     def _safe_model_config(self) -> dict:
         dump = self.config.model_dump()
         dump["api_key"] = mask_string(dump.get("api_key") or "")
-        credentials_file = dump.get("credentials_file")
-        if isinstance(credentials_file, str) and credentials_file:
-            dump["credentials_file"] = mask_string(credentials_file)
+        custom_config = dump.get("custom_config")
+        if isinstance(custom_config, dict):
+            # Mask sensitive values in custom_config
+            masked_config = {}
+            for k, v in custom_config.items():
+                masked_config[k] = mask_string(v) if v else v
+            dump["custom_config"] = masked_config
         return dump
 
     def _record_call(
@@ -402,12 +406,6 @@ class LitellmLLM(LLM):
 
     @property
     def config(self) -> LLMConfig:
-        credentials_file: str | None = (
-            self._custom_config.get(VERTEX_CREDENTIALS_FILE_KWARG, None)
-            if self._custom_config
-            else None
-        )
-
         return LLMConfig(
             model_provider=self._model_provider,
             model_name=self._model_version,
@@ -416,7 +414,7 @@ class LitellmLLM(LLM):
             api_base=self._api_base,
             api_version=self._api_version,
             deployment_name=self._deployment_name,
-            credentials_file=credentials_file,
+            custom_config=self._custom_config,
             max_input_tokens=self._max_input_tokens,
         )
 

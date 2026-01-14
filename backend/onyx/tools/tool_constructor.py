@@ -83,12 +83,6 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         deployment = llm_provider.deployment_name or model_name
         model_name = f"azure/{deployment}"
 
-    credentials_file = (
-        llm_provider.custom_config.get("vertex_credentials", None)
-        if llm_provider.custom_config
-        else None
-    )
-
     return LLMConfig(
         model_provider=llm_provider.provider,
         model_name=model_name,
@@ -98,7 +92,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         api_version=llm_provider.api_version,
         deployment_name=llm_provider.deployment_name,
         max_input_tokens=llm.config.max_input_tokens,
-        credentials_file=credentials_file,
+        custom_config=llm_provider.custom_config,
     )
 
 
