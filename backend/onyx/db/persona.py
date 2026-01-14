@@ -212,8 +212,6 @@ def make_persona_private(
                     ).model_dump(),
                 )
 
-        db_session.commit()
-
     # May cause error if someone switches down to MIT from EE
     if group_ids:
         raise NotImplementedError("Onyx MIT does not support private Personas")
@@ -282,6 +280,7 @@ def create_update_persona(
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
             is_default_persona=create_persona_request.is_default_persona,
             user_file_ids=converted_user_file_ids,
+            commit=False,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -296,6 +295,7 @@ def create_update_persona(
             group_ids=create_persona_request.groups,
             db_session=db_session,
         )
+        db_session.commit()
 
     except ValueError as e:
         logger.exception("Failed to create persona")
@@ -321,8 +321,7 @@ def update_persona_shared_users(
 
     if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
         raise HTTPException(
-            status_code=403,
-            detail="You don't have permission to modify this persona"
+            status_code=403, detail="You don't have permission to modify this persona"
         )
 
     if is_public:
@@ -382,7 +381,8 @@ def update_persona_shared_users(
 
         if is_public is not None:
             persona.is_public = False
-            db_session.commit()
+
+        db_session.commit()
 
 
 def update_persona_public_status(
