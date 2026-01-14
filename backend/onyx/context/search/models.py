@@ -5,27 +5,15 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
 
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.enums import SearchType
-from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk
 from onyx.indexing.models import IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from shared_configs.enums import RerankerProvider
-from shared_configs.model_server_models import Embedding
-
-
-MAX_METRICS_CONTENT = (
-    200  # Just need enough characters to identify where in the doc the chunk is
-)
 
 
 class QueryExpansions(BaseModel):
@@ -38,6 +26,7 @@ class QueryExpansionType(Enum):
     SEMANTIC = "semantic"
 
 
+# TODO clean up this stuff, reranking is no longer used
 class RerankingDetails(BaseModel):
     # If model is None (or num_rerank is 0), then reranking is turned off
     rerank_model_name: str | None
@@ -131,13 +120,6 @@ class IndexFilters(BaseFilters, UserFileFilters):
     tenant_id: str | None = None
 
 
-class ChunkMetric(BaseModel):
-    document_id: str
-    chunk_content_start: str
-    first_link: str | None
-    score: float
-
-
 class ChunkContext(BaseModel):
     # If not specified (None), picked up from Persona settings if there is space
     # if specified (even if 0), it always uses the specified number of chunks above and below
@@ -190,83 +172,6 @@ class ContextExpansionType(str, Enum):
     MAIN_SECTION_ONLY = "main_section_only"
     INCLUDE_ADJACENT_SECTIONS = "include_adjacent_sections"
     FULL_DOCUMENT = "full_document"
-
-
-class SearchRequest(ChunkContext):
-    query: str
-
-    expanded_queries: QueryExpansions | None = None
-    original_query: str | None = None
-
-    search_type: SearchType = SearchType.SEMANTIC
-
-    human_selected_filters: BaseFilters | None = None
-    user_file_filters: UserFileFilters | None = None
-    enable_auto_detect_filters: bool | None = None
-    persona: Persona | None = None
-
-    # if None, no offset / limit
-    offset: int | None = None
-    limit: int | None = None
-
-    multilingual_expansion: list[str] | None = None
-    recency_bias_multiplier: float = 1.0
-    hybrid_alpha: float | None = None
-    rerank_settings: RerankingDetails | None = None
-    evaluation_type: LLMEvaluationType = LLMEvaluationType.UNSPECIFIED
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    precomputed_query_embedding: Embedding | None = None
-    precomputed_is_keyword: bool | None = None
-    precomputed_keywords: list[str] | None = None
-
-
-class SearchQuery(ChunkContext):
-    query: str
-    processed_keywords: list[str]
-    search_type: SearchType
-    evaluation_type: LLMEvaluationType
-    filters: IndexFilters
-
-    # by this point, the chunks_above and chunks_below must be set
-    chunks_above: int
-    chunks_below: int
-
-    rerank_settings: RerankingDetails | None
-    hybrid_alpha: float
-    recency_bias_multiplier: float
-
-    # Only used if LLM evaluation type is not skip, None to use default settings
-    max_llm_filter_sections: int
-
-    num_hits: int = NUM_RETURNED_HITS
-    offset: int = 0
-    model_config = ConfigDict(frozen=True)
-
-    precomputed_query_embedding: Embedding | None = None
-
-    expanded_queries: QueryExpansions | None = None
-    original_query: str | None
-
-
-class RetrievalDetails(ChunkContext):
-    # Use LLM to determine whether to do a retrieval or only rely on existing history
-    # If the Persona is configured to not run search (0 chunks), this is bypassed
-    # If no Prompt is configured, the only search results are shown, this is bypassed
-    run_search: OptionalSearchSetting = OptionalSearchSetting.AUTO
-    # Is this a real-time/streaming call or a question where Onyx can take more time?
-    # Used to determine reranking flow
-    real_time: bool = True
-    # The following have defaults in the Persona settings which can be overridden via
-    # the query, if None, then use Persona settings
-    filters: BaseFilters | None = None
-    enable_auto_detect_filters: bool | None = None
-    # if None, no offset / limit
-    offset: int | None = None
-    limit: int | None = None
-
-    # If this is set, only the highest matching chunk (or merged chunks) is returned
-    dedupe_docs: bool = False
 
 
 class InferenceChunk(BaseChunk):
@@ -534,15 +439,3 @@ class SavedSearchDocWithContent(SavedSearchDoc):
     section in addition to the match_highlights."""
 
     content: str
-
-
-class RetrievalMetricsContainer(BaseModel):
-    search_type: SearchType
-    metrics: list[ChunkMetric]  # This contains the scores for retrieval as well
-
-
-class RerankMetricsContainer(BaseModel):
-    """The score held by this is the un-boosted, averaged score of the ensemble cross-encoders"""
-
-    metrics: list[ChunkMetric]
-    raw_similarity_scores: list[float]

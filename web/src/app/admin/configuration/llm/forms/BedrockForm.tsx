@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
@@ -29,7 +31,6 @@ import { fetchBedrockModels } from "../utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
-import { cn } from "@/lib/utils";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "AWS Bedrock";

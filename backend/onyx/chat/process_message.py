@@ -40,7 +40,6 @@ from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
-from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
@@ -67,6 +66,7 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import OptionalSearchSetting
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -401,7 +401,10 @@ def handle_stream_message_objects(
         if new_msg_req.parent_message_id == AUTO_PLACE_AFTER_LATEST_MESSAGE:
             # Auto-place after the latest message in the chain
             parent_message = chat_history[-1] if chat_history else root_message
-        elif new_msg_req.parent_message_id is None:
+        elif (
+            new_msg_req.parent_message_id is None
+            or new_msg_req.parent_message_id == root_message.id
+        ):
             # None = regeneration from root
             parent_message = root_message
             # Truncate history since we're starting from root

@@ -1,3 +1,5 @@
+"use client";
+
 import React, {
   useRef,
   useState,
@@ -57,12 +59,11 @@ import { Message } from "@/app/chat/interfaces";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
-} from "../../components/modal/FeedbackModal";
+} from "@/sections/modals/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFeedbackController } from "../../hooks/useFeedbackController";
+import useFeedbackController from "@/hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
-import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -126,7 +127,6 @@ const AIMessage = React.memo(function AIMessage({
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
-  const handleTripleClick = useTripleClickSelect(markdownRef);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
@@ -169,21 +169,13 @@ const AIMessage = React.memo(function AIMessage({
       }
 
       // Clicking like (will automatically clear dislike if it was active).
-      // Check if we need modal for positive feedback.
+      // Open modal for positive feedback
       else if (clickedFeedback === "like") {
-        const predefinedOptions =
-          process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
-        if (predefinedOptions && predefinedOptions.trim()) {
-          // Open modal for positive feedback
-          setFeedbackModalProps({
-            feedbackType: "like",
-            messageId,
-          });
-          modal.toggle(true);
-        } else {
-          // No modal needed - just submit like (this replaces any existing feedback)
-          await handleFeedbackChange(messageId, "like");
-        }
+        setFeedbackModalProps({
+          feedbackType: "like",
+          messageId,
+        });
+        modal.toggle(true);
       }
 
       // Clicking dislike (will automatically clear like if it was active).
@@ -538,8 +530,7 @@ const AIMessage = React.memo(function AIMessage({
         <div className="max-w-message-max break-words pl-4 w-full">
           <div
             ref={markdownRef}
-            className="overflow-x-visible max-w-content-max focus:outline-none select-text cursor-text"
-            onMouseDown={handleTripleClick}
+            className="overflow-x-visible max-w-content-max focus:outline-none select-text"
             onCopy={(e) => {
               if (markdownRef.current) {
                 handleCopy(e, markdownRef as RefObject<HTMLDivElement>);

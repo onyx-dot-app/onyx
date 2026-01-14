@@ -80,8 +80,6 @@ services:
       context: ../../web
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
-        - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
         - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
@@ -146,8 +144,8 @@ services:
     restart: unless-stopped
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
     env_file:
-    - path: .env
-      required: false
+      - path: .env
+        required: false
     volumes:
       - db_volume:/var/lib/postgresql/data
     logging:

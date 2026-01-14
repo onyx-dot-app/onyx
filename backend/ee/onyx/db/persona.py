@@ -16,8 +16,8 @@ def make_persona_private(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
-    """NOTE(rkuo): This function batches all updates into a single commit. If we don't
-    dedupe the inputs, the commit will exception."""
+    """NOTE(rkuo): This function batches all updates. If we don't dedupe the inputs,
+    the commit will exception. Caller is responsible for committing."""
 
     db_session.query(Persona__User).filter(
         Persona__User.persona_id == persona_id
@@ -47,5 +47,3 @@ def make_persona_private(
             db_session.add(
                 Persona__UserGroup(persona_id=persona_id, user_group_id=group_id)
             )
-
-    db_session.commit()

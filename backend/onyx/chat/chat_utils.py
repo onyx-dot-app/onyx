@@ -18,12 +18,10 @@ from onyx.background.celery.tasks.kg_processing.kg_indexing import (
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
@@ -48,14 +46,10 @@ from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
 )
-from onyx.llm.override_models import LLMOverride
-from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -102,91 +96,6 @@ def create_chat_session_from_request(
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
     )
-
-
-def prepare_chat_message_request(
-    message_text: str,
-    user: User | None,
-    persona_id: int | None,
-    # Does the question need to have a persona override
-    persona_override_config: PersonaOverrideConfig | None,
-    message_ts_to_respond_to: str | None,
-    retrieval_details: RetrievalDetails | None,
-    rerank_settings: RerankingDetails | None,
-    db_session: Session,
-    skip_gen_ai_answer_generation: bool = False,
-    llm_override: LLMOverride | None = None,
-    allowed_tool_ids: list[int] | None = None,
-    forced_tool_ids: list[int] | None = None,
-    origin: MessageOrigin | None = None,
-) -> CreateChatMessageRequest:
-    # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
-    new_chat_session = create_chat_session(
-        db_session=db_session,
-        description=None,
-        user_id=user.id if user else None,
-        # If using an override, this id will be ignored later on
-        persona_id=persona_id or DEFAULT_PERSONA_ID,
-        onyxbot_flow=True,
-        slack_thread_id=message_ts_to_respond_to,
-    )
-
-    return CreateChatMessageRequest(
-        chat_session_id=new_chat_session.id,
-        parent_message_id=None,  # It's a standalone chat session each time
-        message=message_text,
-        file_descriptors=[],  # Currently SlackBot/answer api do not support files in the context
-        # Can always override the persona for the single query, if it's a normal persona
-        # then it will be treated the same
-        persona_override_config=persona_override_config,
-        search_doc_ids=None,
-        retrieval_options=retrieval_details,
-        rerank_settings=rerank_settings,
-        skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
-        llm_override=llm_override,
-        allowed_tool_ids=allowed_tool_ids,
-        forced_tool_ids=forced_tool_ids,
-        origin=origin or MessageOrigin.UNKNOWN,
-    )
-
-
-def combine_message_thread(
-    messages: list[ThreadMessage],
-    max_tokens: int | None,
-    llm_tokenizer: BaseTokenizer,
-) -> str:
-    """Used to create a single combined message context from threads"""
-    if not messages:
-        return ""
-
-    message_strs: list[str] = []
-    total_token_count = 0
-
-    for message in reversed(messages):
-        if message.role == MessageType.USER:
-            role_str = message.role.value.upper()
-            if message.sender:
-                role_str += " " + message.sender
-            else:
-                # Since other messages might have the user identifying information
-                # better to use Unknown for symmetry
-                role_str += " Unknown"
-        else:
-            role_str = message.role.value.upper()
-
-        msg_str = f"{role_str}:\n{message.message}"
-        message_token_count = len(llm_tokenizer.encode(msg_str))
-
-        if (
-            max_tokens is not None
-            and total_token_count + message_token_count > max_tokens
-        ):
-            break
-
-        message_strs.insert(0, msg_str)
-        total_token_count += message_token_count
-
-    return "\n\n".join(message_strs)
 
 
 def create_chat_history_chain(
@@ -415,7 +324,7 @@ def create_temporary_persona(
         num_chunks=persona_config.num_chunks,
         llm_relevance_filter=persona_config.llm_relevance_filter,
         llm_filter_extraction=persona_config.llm_filter_extraction,
-        recency_bias=persona_config.recency_bias,
+        recency_bias=RecencyBiasSetting.BASE_DECAY,
         llm_model_provider_override=persona_config.llm_model_provider_override,
         llm_model_version_override=persona_config.llm_model_version_override,
     )

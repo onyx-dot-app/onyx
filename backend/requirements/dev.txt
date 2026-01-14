@@ -114,7 +114,7 @@ fastavro==1.12.1
     # via cohere
 fastuuid==0.14.0
     # via litellm
-filelock==3.20.1
+filelock==3.20.3
     # via
     #   huggingface-hub
     #   virtualenv
@@ -175,7 +175,7 @@ greenlet==3.2.4 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or 
     # via sqlalchemy
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.67.1
+grpcio==1.67.1 ; python_full_version < '3.14'
     # via
     #   google-api-core
     #   google-cloud-resource-manager
@@ -183,7 +183,17 @@ grpcio==1.67.1
     #   grpc-google-iam-v1
     #   grpcio-status
     #   litellm
-grpcio-status==1.67.1
+grpcio==1.76.0 ; python_full_version >= '3.14'
+    # via
+    #   google-api-core
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   litellm
+grpcio-status==1.67.1 ; python_full_version < '3.14'
+    # via google-api-core
+grpcio-status==1.76.0 ; python_full_version >= '3.14'
     # via google-api-core
 h11==0.16.0
     # via
@@ -278,14 +288,14 @@ nest-asyncio==1.6.0
     # via ipykernel
 nodeenv==1.9.1
     # via pre-commit
-numpy==1.26.4
+numpy==2.4.1
     # via
     #   contourpy
     #   matplotlib
     #   pandas-stubs
     #   shapely
     #   voyageai
-onyx-devtools==0.2.0
+onyx-devtools==0.2.2
     # via onyx
 openai==2.14.0
     # via
@@ -305,7 +315,7 @@ packaging==24.2
     #   ipykernel
     #   matplotlib
     #   pytest
-pandas-stubs==2.2.3.241009
+pandas-stubs==2.3.3.251201
     # via onyx
 parameterized==0.9.0
     # via cohere
@@ -347,7 +357,16 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==5.29.5
+protobuf==5.29.5 ; python_full_version < '3.14'
+    # via
+    #   google-api-core
+    #   google-cloud-aiplatform
+    #   google-cloud-resource-manager
+    #   googleapis-common-protos
+    #   grpc-google-iam-v1
+    #   grpcio-status
+    #   proto-plus
+protobuf==6.33.4 ; python_full_version >= '3.14'
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -546,6 +565,7 @@ typing-extensions==4.15.0
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
+    #   grpcio
     #   huggingface-hub
     #   ipython
     #   mypy
@@ -569,7 +589,7 @@ urllib3==2.6.3
     #   types-requests
 uvicorn==0.35.0
     # via onyx
-virtualenv==20.35.4
+virtualenv==20.36.1
     # via pre-commit
 voyageai==0.2.3
     # via onyx

@@ -434,6 +434,10 @@ def run_research_agent_call(
                             tool_calls[0], token_counter
                         )
                         msg_history.extend(failure_messages)
+
+                        # If there is a failure like this, we still increment to avoid potential infinite loops
+                        research_cycle_count += 1
+                        llm_cycle_count += 1
                         continue
 
                     for tool_response in tool_responses:

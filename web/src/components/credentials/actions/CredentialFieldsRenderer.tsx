@@ -1,4 +1,5 @@
-import React from "react";
+"use client";
+
 import Tabs from "@/refresh-components/Tabs";
 import { useFormikContext } from "formik";
 import {
@@ -71,7 +72,11 @@ export function CredentialFieldsRenderer({
           </Tabs.List>
 
           {templateWithAuth.authMethods.map((method) => (
-            <Tabs.Content key={method.value} value={method.value}>
+            <Tabs.Content
+              key={method.value}
+              value={method.value}
+              alignItems="stretch"
+            >
               {/* Show description if method has no fields but has a description */}
               {Object.keys(method.fields).length === 0 &&
                 method.description && (

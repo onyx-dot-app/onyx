@@ -16,6 +16,7 @@ from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import StarterMessage
 from onyx.db.models import User
@@ -55,7 +56,6 @@ from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -366,7 +366,9 @@ def delete_label(
 
 
 class PersonaShareRequest(BaseModel):
-    user_ids: list[UUID]
+    user_ids: list[UUID] | None = None
+    group_ids: list[int] | None = None
+    is_public: bool | None = None
 
 
 # We notify each user when a user is shared with them
@@ -379,9 +381,11 @@ def share_persona(
 ) -> None:
     update_persona_shared_users(
         persona_id=persona_id,
-        user_ids=persona_share_request.user_ids,
         user=user,
         db_session=db_session,
+        user_ids=persona_share_request.user_ids,
+        group_ids=persona_share_request.group_ids,
+        is_public=persona_share_request.is_public,
     )
 
 

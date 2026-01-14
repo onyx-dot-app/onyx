@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
@@ -15,7 +16,6 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider

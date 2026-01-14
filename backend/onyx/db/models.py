@@ -83,7 +83,6 @@ from onyx.utils.special_types import JSON_ro
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.kg.models import KGStage
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.encryption import decrypt_bytes_to_string
@@ -91,6 +90,8 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
+from onyx.context.search.enums import RecencyBiasSetting
+
 
 logger = setup_logger()
 
@@ -2616,6 +2617,7 @@ class Tool(Base):
     __tablename__ = "tool"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # The name of the tool that the LLM will see
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     # ID of the tool in the codebase, only applies for in-code tools.

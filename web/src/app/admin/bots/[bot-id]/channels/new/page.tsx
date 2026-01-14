@@ -4,7 +4,7 @@ import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSetSummary, ValidSources } from "@/lib/types";
 import BackButton from "@/refresh-components/buttons/BackButton";
-import { fetchAssistantsSS } from "@/lib/assistants/fetchAssistantsSS";
+import { fetchAssistantsSS } from "@/lib/agentsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { redirect } from "next/navigation";
 import { SourceIcon } from "@/components/SourceIcon";
