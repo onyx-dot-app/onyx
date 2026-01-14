@@ -24,5 +24,7 @@ def client() -> Generator[TestClient, Any, None]:
     app: FastAPI = fetch_versioned_implementation(
         module="onyx.main", attribute="get_application"
     )()
-    client = TestClient(app)
-    yield client
+    # Use TestClient as a context manager to properly trigger lifespan
+    # (which initializes SqlEngine)
+    with TestClient(app) as client:
+        yield client
