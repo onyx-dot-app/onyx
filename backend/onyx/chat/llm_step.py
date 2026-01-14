@@ -591,7 +591,7 @@ def run_llm_step_pkt_generator(
                 and delta.tool_calls is None
             ):
                 logger.warning(
-                    f"Useful contents from LLM packet are empty, skipping packet: {packet}"
+                    f"LLM packet is empty (no contents, reasoning or tool calls). Skipping: {packet}"
                 )
                 continue
 
