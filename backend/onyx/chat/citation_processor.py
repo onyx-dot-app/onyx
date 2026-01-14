@@ -57,7 +57,7 @@ class DynamicCitationProcessor:
         3. Maintains the order in which documents were first cited
 
     When replace_citation_tokens=False:
-        1. Preserves original citation markers in the output text
+        1. Removes citation markers entirely from the output text
         2. Does NOT emit CitationInfo objects
         3. Still tracks all seen citations via get_seen_citations()
 
@@ -112,9 +112,10 @@ class DynamicCitationProcessor:
         Args:
             replace_citation_tokens: If True (default), citations like [1] are replaced
                 with formatted markdown links like [[1]](url) and CitationInfo objects
-                are emitted. If False, citation markers are removed entirely from output
-                and no CitationInfo objects are emitted. Regardless of this setting,
-                all seen citations are tracked and available via get_seen_citations().
+                are emitted. If False, citation markers are removed entirely from the
+                output and no CitationInfo objects are emitted. Regardless of this
+                setting, all seen citations are tracked and available via
+                get_seen_citations().
             stop_stream: Optional stop token pattern to halt processing early.
                 When this pattern is detected in the token stream, processing stops.
                 Defaults to STOP_STREAM_PAT from chat configs.
@@ -304,7 +305,7 @@ class DynamicCitationProcessor:
                     yield intermatch_str
 
                 # Process the citation (returns formatted citation text and CitationInfo objects)
-                # Always tracks seen citations regardless of strip_citations flag
+                # Always tracks seen citations regardless of replace_citation_tokens flag
                 citation_text, citation_info_list = self._process_citation(
                     match, has_leading_space, self.replace_citation_tokens
                 )

@@ -1402,15 +1402,15 @@ def test_adding_project_files_across_messages(
 def test_replace_citation_tokens_false_preserves_original_text(
     mock_search_docs: CitationMapping,
 ) -> None:
-    """Test that replace_citation_tokens=False preserves original citation text."""
+    """Test that replace_citation_tokens=False removes original citation text."""
     processor = DynamicCitationProcessor(replace_citation_tokens=False)
     processor.update_citation_mapping({1: mock_search_docs[1]})
 
     output, citations = process_tokens(processor, ["Text [", "1", "] here."])
 
-    # Original citation format should be preserved
-    assert "[1]" in output
-    assert "Text [1] here." in output
+    # Original citation format should be removed
+    assert "[1]" not in output
+    assert "Text [1] here." not in output
     # Formatted citation should NOT appear
     assert "[[1]](https://example.com/doc1)" not in output
     # No CitationInfo objects should be emitted
@@ -1430,11 +1430,11 @@ def test_replace_citation_tokens_false_no_citation_info_emitted(
         processor, ["Text [", "1", "][", "2", "][", "3", "]"]
     )
 
-    # All original citations should be preserved
-    assert "[1]" in output
-    assert "[2]" in output
-    assert "[3]" in output
-    # No CitationInfo should be emitted
+    # All original citations should be removed
+    assert "[1]" not in output
+    assert "[2]" not in output
+    assert "[3]" not in output
+    # No CitationInfo should be emitted because replace_citation_tokens=False
     assert len(citations) == 0
 
 
@@ -1509,9 +1509,9 @@ def test_replace_citation_tokens_false_with_multiple_citations_in_one_bracket(
         ["Text [", "1", ", ", "2", ", ", "3", "] end."],
     )
 
-    # Original citation format should be preserved
-    assert "[1, 2, 3]" in output
-    assert "Text [1, 2, 3] end." in output
+    # Original citation format should be removed
+    assert "[1, 2, 3]" not in output
+    assert "Text [1, 2, 3] end." not in output
     # No CitationInfo should be emitted
     assert len(citations) == 0
     # But seen citations should be tracked
@@ -1528,9 +1528,9 @@ def test_replace_citation_tokens_false_with_double_brackets(
 
     output, citations = process_tokens(processor, ["Text [[", "1", "]] here."])
 
-    # Original double bracket format should be preserved
-    assert "[[1]]" in output
-    assert "Text [[1]] here." in output
+    # Original double bracket format should be removed
+    assert "[[1]]" not in output
+    assert "Text [[1]] here." not in output
     # No CitationInfo should be emitted
     assert len(citations) == 0
     # Seen citation should be tracked
@@ -1548,8 +1548,8 @@ def test_replace_citation_tokens_false_with_unicode_brackets(
 
     output, citations = process_tokens(processor, ["Text 【", "1", "】 here."])
 
-    # Original unicode bracket format should be preserved
-    assert "【1】" in output
+    # Original unicode bracket format should be removed
+    assert "【1】" not in output
     # No CitationInfo should be emitted
     assert len(citations) == 0
     # Seen citation should be tracked
@@ -1588,7 +1588,7 @@ def test_separate_processors_with_different_replace_settings(
     processor2 = DynamicCitationProcessor(replace_citation_tokens=False)
     processor2.update_citation_mapping({1: mock_search_docs[1]})
     output2, citations2 = process_tokens(processor2, ["Text [", "1", "]"])
-    assert "[1]" in output2
+    assert "[1]" not in output2
     assert "[[1]]" not in output2
     assert len(citations2) == 0
 
