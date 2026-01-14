@@ -12,8 +12,9 @@ import Text from "@/refresh-components/texts/Text";
 export interface SimpleTooltipProps
   extends React.ComponentPropsWithoutRef<typeof TooltipContent> {
   disabled?: boolean;
-  tooltip?: string;
+  tooltip?: React.ReactNode | string;
   children?: React.ReactNode;
+  delayDuration?: number;
 }
 
 export default function SimpleTooltip({
@@ -22,6 +23,7 @@ export default function SimpleTooltip({
   className,
   children,
   side = "right",
+  delayDuration,
   ...rest
 }: SimpleTooltipProps) {
   // Determine hover content based on the logic:
@@ -41,8 +43,18 @@ export default function SimpleTooltip({
 
   const triggerChild = isDomElement ? children : <span>{children}</span>;
 
+  // Check if tooltip is a string to wrap in Text component, otherwise render as-is
+  const tooltipContent =
+    typeof hoverContent === "string" ? (
+      <Text as="p" textLight05>
+        {hoverContent}
+      </Text>
+    ) : (
+      hoverContent
+    );
+
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={delayDuration}>
       <Tooltip>
         <TooltipTrigger
           asChild
@@ -53,9 +65,7 @@ export default function SimpleTooltip({
         </TooltipTrigger>
         {!disabled && (
           <TooltipContent side={side} className={className} {...rest}>
-            <Text as="p" textLight05>
-              {hoverContent}
-            </Text>
+            {tooltipContent}
           </TooltipContent>
         )}
       </Tooltip>

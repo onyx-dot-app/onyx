@@ -25,7 +25,6 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import ThreadMessage
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import POD_NAME
 from onyx.configs.app_configs import POD_NAMESPACE
@@ -83,6 +82,7 @@ from onyx.onyxbot.slack.handlers.handle_message import (
 from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.onyxbot.slack.models import SlackMessageInfo
+from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.onyxbot.slack.utils import check_message_limit
 from onyx.onyxbot.slack.utils import decompose_action_id
 from onyx.onyxbot.slack.utils import get_channel_name_from_id
@@ -880,7 +880,7 @@ def build_request_details(
         )
 
         if thread_ts != message_ts and thread_ts is not None:
-            thread_messages = read_slack_thread(
+            thread_messages: list[ThreadMessage] = read_slack_thread(
                 tenant_id=tenant_id,
                 channel=channel,
                 thread=thread_ts,

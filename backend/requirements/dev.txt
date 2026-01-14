@@ -114,7 +114,7 @@ fastavro==1.12.1
     # via cohere
 fastuuid==0.14.0
     # via litellm
-filelock==3.20.1
+filelock==3.20.3
     # via
     #   huggingface-hub
     #   virtualenv
@@ -315,7 +315,7 @@ packaging==24.2
     #   ipykernel
     #   matplotlib
     #   pytest
-pandas-stubs==2.2.3.241009
+pandas-stubs==2.3.3.251201
     # via onyx
 parameterized==0.9.0
     # via cohere
@@ -589,7 +589,7 @@ urllib3==2.6.3
     #   types-requests
 uvicorn==0.35.0
     # via onyx
-virtualenv==20.35.4
+virtualenv==20.36.1
     # via pre-commit
 voyageai==0.2.3
     # via onyx

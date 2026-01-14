@@ -11,14 +11,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import SessionTransaction
 
-from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import AnswerStream
+from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.process_message import remove_answer_citations
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.users import get_user_by_email
@@ -33,7 +32,10 @@ from onyx.evals.models import ToolAssertion
 from onyx.evals.provider import get_provider
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
+from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import RetrievalDetails
+from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -399,22 +401,19 @@ def _get_answer_with_tools(
                 else None
             )
 
-            request = prepare_chat_message_request(
-                message_text=eval_input["message"],
-                user=user,
-                persona_id=None,
-                persona_override_config=full_configuration.persona_override_config,
-                message_ts_to_respond_to=None,
-                retrieval_details=RetrievalDetails(),
-                rerank_settings=None,
-                db_session=db_session,
-                skip_gen_ai_answer_generation=False,
+            forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
+            request = SendMessageRequest(
+                message=eval_input["message"],
                 llm_override=llm_override,
                 allowed_tool_ids=full_configuration.allowed_tool_ids,
-                forced_tool_ids=forced_tool_ids or None,
+                forced_tool_id=forced_tool_id,
+                chat_session_info=ChatSessionCreationRequest(
+                    persona_id=DEFAULT_PERSONA_ID,
+                    description="Eval session",
+                ),
             )
 
-            packets = stream_chat_message_objects(
+            packets = handle_stream_message_objects(
                 new_msg_req=request,
                 user=user,
                 db_session=db_session,

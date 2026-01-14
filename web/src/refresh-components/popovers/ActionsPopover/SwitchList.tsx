@@ -17,6 +17,8 @@ export interface SwitchListItem {
   leading?: React.ReactNode;
   isEnabled: boolean;
   onToggle: () => void;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }
 
 export interface SwitchListProps {
@@ -84,10 +86,13 @@ export default function SwitchList({
         </LineItem>,
 
         ...filteredItems.map((item) => {
+          const tooltip = item.disabled
+            ? item.disabledTooltip
+            : item.description;
           return (
             <SimpleTooltip
               key={item.id}
-              tooltip={item.description}
+              tooltip={tooltip}
               className="max-w-[30rem]"
             >
               <LineItem
@@ -102,6 +107,7 @@ export default function SwitchList({
                     checked={item.isEnabled}
                     onCheckedChange={item.onToggle}
                     aria-label={`Toggle ${item.label}`}
+                    disabled={item.disabled}
                   />
                 }
               >
