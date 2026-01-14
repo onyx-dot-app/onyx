@@ -75,7 +75,7 @@ export function useAgents() {
  * return <AgentEditor agent={agent} />;
  */
 export function useAgent(agentId: number | null) {
-  const { data, error, mutate } = useSWR<FullPersona>(
+  const { data, error, isLoading, mutate } = useSWR<FullPersona>(
     agentId ? `/api/persona/${agentId}` : null,
     errorHandlingFetcher,
     {
@@ -86,7 +86,7 @@ export function useAgent(agentId: number | null) {
 
   return {
     agent: data ?? null,
-    isLoading: !error && !data && agentId !== null,
+    isLoading,
     error,
     refresh: mutate,
   };
