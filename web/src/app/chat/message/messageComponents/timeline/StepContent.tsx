@@ -2,7 +2,7 @@
 
 import React, { JSX } from "react";
 import { Packet, StopReason } from "@/app/chat/services/streamingModels";
-import { FullChatState, RenderType, RendererResult } from "../interfaces";
+import { FullChatState, RendererResult, RenderType } from "../interfaces";
 import { findRendererForPackets } from "./rendererRegistry";
 
 export interface StepContentProps {
@@ -20,8 +20,6 @@ export interface StepContentProps {
   stopPacketSeen?: boolean;
   /** Reason for stopping */
   stopReason?: StopReason;
-  /** Use short renderer (highlight mode) */
-  useShortRenderer?: boolean;
   /** Custom children render function */
   children?: (result: RendererResult) => JSX.Element;
 }
@@ -40,11 +38,9 @@ export function StepContent({
   animate = false,
   stopPacketSeen = false,
   stopReason,
-  useShortRenderer = false,
   children,
 }: StepContentProps) {
   const Renderer = findRendererForPackets(packets);
-  const renderType = useShortRenderer ? RenderType.HIGHLIGHT : RenderType.FULL;
 
   if (!Renderer) {
     // No matching renderer - render empty
@@ -67,37 +63,12 @@ export function StepContent({
       state={chatState}
       onComplete={onComplete}
       animate={animate}
-      renderType={renderType}
+      renderType={RenderType.FULL}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
     >
       {children || defaultChildren}
     </Renderer>
-  );
-}
-
-/**
- * Simplified StepContent that just renders content without wrapper
- */
-export function StepContentSimple({
-  packets,
-  chatState,
-  isLoading,
-  onComplete = () => {},
-  stopPacketSeen = false,
-  stopReason,
-}: Omit<StepContentProps, "children" | "animate" | "useShortRenderer">) {
-  return (
-    <StepContent
-      packets={packets}
-      chatState={chatState}
-      isLoading={isLoading}
-      onComplete={onComplete}
-      stopPacketSeen={stopPacketSeen}
-      stopReason={stopReason}
-    >
-      {({ content }) => <>{content}</>}
-    </StepContent>
   );
 }
 

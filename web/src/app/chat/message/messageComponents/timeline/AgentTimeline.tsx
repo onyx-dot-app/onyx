@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { StopReason } from "@/app/chat/services/streamingModels";
 import { GroupedPacket } from "../packetProcessor";
 import { FullChatState } from "../interfaces";
@@ -15,6 +15,9 @@ import { IconType } from "./AgentStep";
 import { StepContent } from "./StepContent";
 import { ParallelSteps } from "./ParallelSteps";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import { SvgFold, SvgExpand } from "@opal/icons";
+import Button from "@/refresh-components/buttons/Button";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 export interface AgentTimelineProps {
   /** Grouped packets from usePacketProcessor */
@@ -210,11 +213,19 @@ export function StepConnector({ className }: StepConnectorProps) {
 }
 
 /**
- * StepContainer - Content container with hover effect
+ * StepContainer - Content container with header and optional collapsible
  */
 export interface StepContainerProps {
   /** Main content */
   children: React.ReactNode;
+  /** Header left slot - accepts any component */
+  header?: React.ReactNode;
+  /** Time/duration string to display (e.g., "2.3s") */
+  duration?: string;
+  /** Whether collapsible control is shown */
+  collapsible?: boolean;
+  /** Initial expanded state (default: true) */
+  defaultExpanded?: boolean;
   /** Whether container is hovered */
   isHovered?: boolean;
   /** Additional class names */
@@ -223,18 +234,58 @@ export interface StepContainerProps {
 
 export function StepContainer({
   children,
+  header,
+  duration,
+  collapsible = true,
+  defaultExpanded = true,
   isHovered = false,
   className,
 }: StepContainerProps) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const handleToggle = () => setIsExpanded((prev) => !prev);
+  const showHeader = header || duration || collapsible;
+
   return (
     <div
       className={cn(
-        "flex-1 min-w-0 rounded-lg transition-colors duration-150 pb-3",
+        "flex-1 min-w-0 rounded-12 transition-colors duration-150 bg-background-tint-00 p-1",
         isHovered && "bg-background-tint-01",
         className
       )}
     >
-      {children}
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          {/* Left section */}
+          <div className="flex-1 min-w-0 p-1">{header}</div>
+
+          {/* Right section: Collapsible button with duration */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {collapsible &&
+              (duration ? (
+                <Button
+                  tertiary
+                  onClick={handleToggle}
+                  rightIcon={isExpanded ? SvgFold : SvgExpand}
+                  aria-expanded={isExpanded}
+                  aria-label={isExpanded ? "Collapse" : "Expand"}
+                >
+                  {duration}
+                </Button>
+              ) : (
+                <IconButton
+                  tertiary
+                  onClick={handleToggle}
+                  icon={isExpanded ? SvgFold : SvgExpand}
+                  aria-expanded={isExpanded}
+                  aria-label={isExpanded ? "Collapse" : "Expand"}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Collapsible content */}
+      {collapsible ? isExpanded && children : children}
     </div>
   );
 }

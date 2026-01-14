@@ -15,11 +15,7 @@ export {
   type StepConnectorProps,
   type StepContainerProps,
 } from "./AgentTimeline";
-export {
-  StepContent,
-  StepContentSimple,
-  type StepContentProps,
-} from "./StepContent";
+export { StepContent, type StepContentProps } from "./StepContent";
 export { ParallelSteps, type ParallelStepsProps } from "./ParallelSteps";
 
 // New composable components (use instead of AgentTimeline for full layout control)

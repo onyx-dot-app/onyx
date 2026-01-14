@@ -39,7 +39,7 @@ export function TimelineContent({
   if (turnGroups.length === 0) return null;
 
   return (
-    <div className={cn("mb-4", className)}>
+    <StepContainer>
       {turnGroups.map((turnGroup) => {
         const firstStep = getFirstStep(turnGroup);
         if (!firstStep) return null;
@@ -47,33 +47,31 @@ export function TimelineContent({
         if (turnGroup.isParallel) {
           // Multiple steps in same turn - render as tabs
           return (
-            <StepContainer key={`content-${turnGroup.turnIndex}`}>
-              <ParallelSteps
-                turnGroup={turnGroup}
-                chatState={chatState}
-                stopPacketSeen={stopPacketSeen}
-                onStepComplete={onStepComplete}
-              />
-            </StepContainer>
+            <ParallelSteps
+              key={`content-${turnGroup.turnIndex}`}
+              turnGroup={turnGroup}
+              chatState={chatState}
+              stopPacketSeen={stopPacketSeen}
+              onStepComplete={onStepComplete}
+            />
           );
         }
 
         // Single steps in turn - render each
         return turnGroup.steps.map((step) => (
-          <StepContainer key={step.key}>
-            <StepContent
-              packets={step.packets}
-              chatState={chatState}
-              isLoading={step.iconType === "loading"}
-              stopPacketSeen={stopPacketSeen}
-              stopReason={stopReason}
-              onComplete={() => onStepComplete?.(step)}
-            >
-              {({ content }) => <>{content}</>}
-            </StepContent>
-          </StepContainer>
+          <StepContent
+            key={step.key}
+            packets={step.packets}
+            chatState={chatState}
+            isLoading={step.iconType === "loading"}
+            stopPacketSeen={stopPacketSeen}
+            stopReason={stopReason}
+            onComplete={() => onStepComplete?.(step)}
+          >
+            {({ content }) => <>{content}</>}
+          </StepContent>
         ));
       })}
-    </div>
+    </StepContainer>
   );
 }
