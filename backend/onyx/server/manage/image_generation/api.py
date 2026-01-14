@@ -98,7 +98,7 @@ def _build_llm_provider_request(
     if not provider:
         raise HTTPException(
             status_code=400,
-            detail="No provider provided",
+            detail="No provider or source llm provided",
         )
 
     credentials = ImageGenerationProviderCredentials(
@@ -212,7 +212,7 @@ def test_image_generation(
     if provider is None:
         raise HTTPException(
             status_code=400,
-            detail="No provider provided",
+            detail="No provider or source llm provided",
         )
 
     provider_credentials = ImageGenerationProviderCredentials(
