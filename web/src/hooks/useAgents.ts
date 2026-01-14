@@ -235,25 +235,30 @@ export function useUpdateAgentSharedStatus() {
         );
       }
 
-      const response = await fetch(`/api/persona/${agentId}/share`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          user_ids: userIds,
-          // Only include group_ids for enterprise versions
-          group_ids: isEnterprise ? groupIds : undefined,
-          is_public: isPublic,
-        }),
-      });
+      try {
+        const response = await fetch(`/api/persona/${agentId}/share`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_ids: userIds,
+            // Only include group_ids for enterprise versions
+            group_ids: isEnterprise ? groupIds : undefined,
+            is_public: isPublic,
+          }),
+        });
 
-      if (response.ok) {
-        return null;
+        if (response.ok) {
+          return null;
+        }
+
+        const errorMessage = (await response.json()).detail || "Unknown error";
+        return errorMessage;
+      } catch (error) {
+        console.error("updateAgentSharedStatus: Network error", error);
+        return "Network error. Please check your connection and try again.";
       }
-
-      const errorMessage = (await response.json()).detail || "Unknown error";
-      return errorMessage;
     },
     [isEnterprise]
   );
