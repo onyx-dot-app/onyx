@@ -119,7 +119,12 @@ def get_tenant_usage_limit_overrides(
         logger.debug(
             f"Last fetch time: {_last_fetch_time}, time since last fetch: {time_since}"
         )
-        _tenant_usage_limit_overrides = load_usage_limit_overrides()
+
+        # use the new result if it exists, otherwise use the old result
+        # (prevents us from updating to a failed fetch result)
+        _tenant_usage_limit_overrides = (
+            load_usage_limit_overrides() or _tenant_usage_limit_overrides
+        )
 
     # If we have failed to fetch from the control plane, don't usage limit everyone.
     if _tenant_usage_limit_overrides is None:
