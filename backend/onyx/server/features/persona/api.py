@@ -366,9 +366,9 @@ def delete_label(
 
 
 class PersonaShareRequest(BaseModel):
-    user_ids: list[UUID]
-    group_ids: list[UUID]
-    is_public: bool
+    user_ids: list[UUID] | None = None
+    group_ids: list[int] | None = None
+    is_public: bool | None = None
 
 
 # We notify each user when a user is shared with them
@@ -381,11 +381,11 @@ def share_persona(
 ) -> None:
     update_persona_shared_users(
         persona_id=persona_id,
+        user=user,
+        db_session=db_session,
         user_ids=persona_share_request.user_ids,
         group_ids=persona_share_request.group_ids,
         is_public=persona_share_request.is_public,
-        user=user,
-        db_session=db_session,
     )
 
 

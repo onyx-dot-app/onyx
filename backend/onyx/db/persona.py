@@ -306,11 +306,11 @@ def create_update_persona(
 
 def update_persona_shared_users(
     persona_id: int,
-    user_ids: list[UUID],
-    group_ids: list[UUID],
-    is_public: bool,
     user: User | None,
     db_session: Session,
+    user_ids: list[UUID] | None = None,
+    group_ids: list[int] | None = None,
+    is_public: bool | None = None,
 ) -> None:
     """Simplified version of `create_update_persona` which only touches the
     accessibility rather than any of the logic (e.g. prompt, connected data sources,
@@ -319,21 +319,64 @@ def update_persona_shared_users(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
-    if persona.is_public:
-        raise HTTPException(status_code=400, detail="Cannot share public persona")
+    if is_public:
+        # Note
+        # Setting `user_id` and `group_id` mappings into the `persona__user` and `persona_user_group` tables,
+        # respectively, when the persona is already public, is technically redundant.
+        #
+        # `is_public` is a *stronger* condition than individually sharing personas. However, we still allow it,
+        # because this is similar to how other shareable platforms do this (e.g., Google Docs).
 
-    versioned_make_persona_private = fetch_versioned_implementation(
-        "onyx.db.persona", "make_persona_private"
-    )
+        # 1. Set persona.is_public to true
+        persona.is_public = True
 
-    # Privatize Persona
-    versioned_make_persona_private(
-        persona_id=persona_id,
-        creator_user_id=user.id if user else None,
-        user_ids=user_ids,
-        group_ids=None,
-        db_session=db_session,
-    )
+        # 2. Insert (persona.id <-> user-id) mappings into the `persona__user` table
+        if user_ids:
+            # First, delete existing user mappings
+            db_session.query(Persona__User).filter(
+                Persona__User.persona_id == persona_id
+            ).delete(synchronize_session="fetch")
+
+            # Then, insert new user mappings
+            for user_uuid in user_ids:
+                db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
+                if user_uuid != (user.id if user else None):
+                    create_notification(
+                        user_id=user_uuid,
+                        notif_type=NotificationType.PERSONA_SHARED,
+                        title="A new agent was shared with you!",
+                        db_session=db_session,
+                        additional_data=PersonaSharedNotificationData(
+                            persona_id=persona_id,
+                        ).model_dump(),
+                    )
+
+        # 3. Insert (persona.id <-> group-id) mappings into the `persona__user_group` table
+        if group_ids:
+            # First, delete existing group mappings
+            db_session.query(Persona__UserGroup).filter(
+                Persona__UserGroup.persona_id == persona_id
+            ).delete(synchronize_session="fetch")
+
+            # Then, insert new group mappings
+            for group_id in group_ids:
+                db_session.add(
+                    Persona__UserGroup(persona_id=persona_id, user_group_id=group_id)
+                )
+
+        db_session.commit()
+    else:
+        # Privatize Persona
+        versioned_make_persona_private = fetch_versioned_implementation(
+            "onyx.db.persona", "make_persona_private"
+        )
+        versioned_make_persona_private(
+            persona_id=persona_id,
+            creator_user_id=user.id if user else None,
+            user_ids=user_ids,
+            group_ids=group_ids,
+            db_session=db_session,
+        )
 
 
 def update_persona_public_status(
