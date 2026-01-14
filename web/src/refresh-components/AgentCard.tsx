@@ -67,7 +67,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
-  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
+  const { refresh: refreshAgent } = useAgent(agent.id);
   const { popup, setPopup } = usePopup();
   const updateAgentSharedStatus = useUpdateAgentSharedStatus();
 
@@ -82,10 +82,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
   // Handle sharing agent
   const handleShare = useCallback(
     async (userIds: string[], groupIds: number[], isPublic: boolean) => {
-      if (!fullAgent) return;
-
       const error = await updateAgentSharedStatus(
-        fullAgent.id,
+        agent.id,
         userIds,
         groupIds,
         isPublic
@@ -101,7 +99,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         refreshAgent();
       }
     },
-    [fullAgent, refreshAgent, updateAgentSharedStatus]
+    [agent.id, refreshAgent, updateAgentSharedStatus]
   );
 
   return (
