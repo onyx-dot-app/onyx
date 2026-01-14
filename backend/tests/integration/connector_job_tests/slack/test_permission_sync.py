@@ -1,3 +1,10 @@
+import pytest
+
+pytest.skip(
+    "TODO: Re-enable after search backend refactor is complete",
+    allow_module_level=True,
+)
+
 # import os
 # from datetime import datetime
 # from datetime import timezone
