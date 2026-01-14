@@ -1,9 +1,13 @@
 import pytest
 
-pytest.skip(
-    "TODO: Re-enable after search backend refactor is complete",
-    allow_module_level=True,
+pytestmark = pytest.mark.skip(
+    reason="TODO: Re-enable after search backend refactor is complete"
 )
+
+
+def test_placeholder() -> None:
+    """Placeholder test to prevent exit code 5 when all tests are skipped."""
+
 
 # TODO reintroduce in future, currently Slack does not index anyway
 # @pytest.mark.xfail(reason="flaky - see DAN-986 for details", strict=False)
