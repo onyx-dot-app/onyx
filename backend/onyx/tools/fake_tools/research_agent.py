@@ -4,6 +4,7 @@ from typing import cast
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
@@ -205,10 +206,13 @@ def run_research_agent_call(
     with function_span("research_agent") as span:
         span.span_data.input = str(research_agent_call.tool_args)
         try:
-            # Used to track the citations, but in this case they're not processed into links.
-            # They are later stripped from the output since the user cannot use these and the numbers
-            # change between the research and the final report.
-            citation_processor = DynamicCitationProcessor(replace_citation_tokens=False)
+            # Used to track citations while keeping original citation markers in intermediate reports.
+            # KEEP_MARKERS preserves citation markers like [1], [2] in the text unchanged
+            # while tracking which documents were cited via get_seen_citations().
+            # This allows collapse_citations() to later renumber them in the final report.
+            citation_processor = DynamicCitationProcessor(
+                citation_mode=CitationMode.KEEP_MARKERS
+            )
 
             research_cycle_count = 0
             llm_cycle_count = 0
@@ -602,6 +606,9 @@ def run_research_agent_calls(
             updated_answers.append(None)
             continue
 
+        # Use collapse_citations to renumber citations in the text and merge mappings.
+        # Since we use KEEP_MARKERS mode, the intermediate reports have original citation
+        # markers like [1], [2] which need to be renumbered for the combined report.
         updated_answer, updated_citation_mapping = collapse_citations(
             answer_text=result.intermediate_report,
             existing_citation_mapping=updated_citation_mapping,

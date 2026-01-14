@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
@@ -315,10 +316,12 @@ def run_llm_loop(
         initialize_litellm()
 
         # Initialize citation processor for handling citations dynamically
-        # When include_citations is False, replace_citation_tokens=False removes citation
-        # markers (e.g., [1], [2]) from text and skips emitting CitationInfo packets
+        # When include_citations is True, use HYPERLINK mode to format citations as [[1]](url)
+        # When include_citations is False, use REMOVE mode to strip citations from output
         citation_processor = DynamicCitationProcessor(
-            replace_citation_tokens=include_citations
+            citation_mode=(
+                CitationMode.HYPERLINK if include_citations else CitationMode.REMOVE
+            )
         )
 
         # Add project file citation mappings if project files are present
