@@ -781,18 +781,18 @@ export default function ActionsPopover({
 
     if (toolId === searchToolId) {
       if (wasDisabled) {
-        // Enabling - restore previous sources or enable all
+        // Enabling - restore previous sources or enable all (no persistence)
         const previous = previouslyEnabledSourcesRef.current;
         if (previous.length > 0) {
-          enableSources(previous);
+          setSelectedSources(previous);
         } else {
-          enableAllSources();
+          setSelectedSources(configuredSources);
         }
         previouslyEnabledSourcesRef.current = [];
       } else {
-        // Disabling - store current sources then disable all
+        // Disabling - store current sources then disable all (no persistence)
         previouslyEnabledSourcesRef.current = [...selectedSources];
-        disableAllSources();
+        setSelectedSources([]);
       }
     }
   };
