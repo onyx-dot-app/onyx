@@ -1,11 +1,9 @@
-import React, { useRef, RefObject, useMemo } from "react";
+import React, { useRef, RefObject } from "react";
 import { Packet, StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/chat/interfaces";
-import { useCurrentChatState } from "@/app/chat/stores/useChatSessionStore";
 import { handleCopy } from "@/app/chat/message/copyingUtils";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
-import { isDisplayPacket, isToolPacket } from "@/app/chat/services/packetUtils";
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
 import { usePacketProcessor } from "@/app/chat/message/messageComponents/usePacketProcessor";
@@ -15,7 +13,6 @@ import { Message } from "@/app/chat/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
 import {
-  useAgentTimeline,
   TimelineIcons,
   TimelineContent,
   StepConnector,
@@ -90,18 +87,20 @@ const AgentMessage = React.memo(function AgentMessage({
   const handleTripleClick = useTripleClickSelect(markdownRef);
 
   // Use the packet processor hook for all streaming packet processing
+  // Returns pre-categorized toolTurnGroups and displayGroups ready for rendering
   const {
     citations,
     citationMap,
     documentMap,
-    groupedPackets,
+    toolGroups,
+    toolTurnGroups,
+    displayGroups,
+    hasSteps,
     finalAnswerComing,
     stopPacketSeen,
     stopReason,
-    expectedBranchesPerTurn,
     displayComplete,
     setDisplayComplete,
-    setFinalAnswerComingOverride,
   } = usePacketProcessor(rawPackets, nodeId);
 
   // Keep a ref to finalAnswerComing for use in callbacks (to read latest value)
@@ -129,30 +128,6 @@ const AgentMessage = React.memo(function AgentMessage({
     otherMessagesCanSwitchTo,
     onMessageSelection,
   });
-  console.log("groupedPackets", groupedPackets);
-
-  // Filter tool groups for timeline rendering
-  const toolGroups = useMemo(
-    () =>
-      groupedPackets.filter(
-        (group) => group.packets[0] && isToolPacket(group.packets[0], false)
-      ),
-    [groupedPackets]
-  );
-
-  // Transform tool groups for timeline rendering
-  const { turnGroups, hasSteps } = useAgentTimeline(toolGroups);
-
-  // Non-tools include messages AND image generation
-  const displayGroups = useMemo(
-    () =>
-      finalAnswerComing || toolGroups.length === 0
-        ? groupedPackets.filter(
-            (group) => group.packets[0] && isDisplayPacket(group.packets[0])
-          )
-        : [],
-    [groupedPackets, finalAnswerComing, toolGroups.length]
-  );
 
   return (
     <div
@@ -168,25 +143,27 @@ const AgentMessage = React.memo(function AgentMessage({
           {hasSteps && (
             <>
               <StepConnector className="min-h-3" />
-              <TimelineIcons turnGroups={turnGroups} />
+              <TimelineIcons turnGroups={toolTurnGroups} />
             </>
           )}
         </div>
 
         {/* Right column: Tool steps content */}
         <div className="break-words pl-4 w-full">
-          {groupedPackets.length === 0 ? (
+          {toolGroups.length === 0 && displayGroups.length === 0 ? (
             // Show blinking dot when no content yet, or stopped message if user cancelled
             stopReason === StopReason.USER_CANCELLED ? (
               <Text as="p" secondaryBody text04>
                 User has stopped generation
               </Text>
             ) : (
-              <BlinkingDot addMargin />
+              <Text as="p" mainUiAction text05 className="animate-pulse">
+                Thinking...
+              </Text>
             )
           ) : (
             <TimelineContent
-              turnGroups={turnGroups}
+              turnGroups={toolTurnGroups}
               chatState={effectiveChatState}
               stopPacketSeen={stopPacketSeen}
               stopReason={stopReason}
@@ -206,7 +183,7 @@ const AgentMessage = React.memo(function AgentMessage({
           }
         }}
       >
-        {groupedPackets.length !== 0 && (
+        {(toolGroups.length > 0 || displayGroups.length > 0) && (
           <div ref={finalAnswerRef}>
             {displayGroups.map((displayGroup, index) => (
               <RendererComponent

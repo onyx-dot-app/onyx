@@ -23,6 +23,11 @@ export {
 export { ParallelSteps, type ParallelStepsProps } from "./ParallelSteps";
 
 // New composable components (use instead of AgentTimeline for full layout control)
+/**
+ * @deprecated Use usePacketProcessor instead, which now returns toolTurnGroups directly.
+ * This hook is kept for backwards compatibility but its logic has been integrated
+ * into usePacketProcessor for better performance (single-pass categorization).
+ */
 export {
   useAgentTimeline,
   type UseAgentTimelineResult,

@@ -1,19 +1,47 @@
-import { useRef, useState } from "react";
-import { Packet } from "@/app/chat/services/streamingModels";
+import { useRef, useState, useMemo, useCallback } from "react";
+import {
+  Packet,
+  StreamingCitation,
+  StopReason,
+} from "@/app/chat/services/streamingModels";
+import { CitationMap } from "@/app/chat/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import {
   ProcessorState,
-  ProcessorResult,
+  GroupedPacket,
   createInitialState,
   processPackets,
   getResult,
 } from "./packetProcessor";
+import {
+  transformPacketGroups,
+  groupStepsByTurn,
+  TurnGroup,
+} from "./timeline/transformers";
 
-export interface UsePacketProcessorResult extends ProcessorResult {
+export interface UsePacketProcessorResult {
+  // Citations & Documents
+  citations: StreamingCitation[];
+  citationMap: CitationMap;
+  documentMap: Map<string, OnyxDocument>;
+
+  // Pre-categorized and transformed groups
+  toolGroups: GroupedPacket[];
+  toolTurnGroups: TurnGroup[];
+  displayGroups: GroupedPacket[];
+  hasSteps: boolean;
+
+  // Streaming status
+  finalAnswerComing: boolean;
+  stopPacketSeen: boolean;
+  stopReason: StopReason | undefined;
+  expectedBranchesPerTurn: Map<number, number>;
+
+  // UI state
   displayComplete: boolean;
   setDisplayComplete: (value: boolean) => void;
-  // UI override for finalAnswerComing - used when all tools have been displayed
-  // and we want to show the message content regardless of packet state
-  setFinalAnswerComingOverride: (value: boolean) => void;
+  /** Call when UI has finished displaying all tools to show message content */
+  markAllToolsDisplayed: () => void;
 }
 
 /**
@@ -23,7 +51,8 @@ export interface UsePacketProcessorResult extends ProcessorResult {
  * - Incremental processing (only processes new packets)
  * - Citation extraction and deduplication
  * - Document accumulation
- * - Packet grouping by turn_index and tab_index
+ * - Packet grouping by turn_index and tab_index with pre-categorization
+ * - Timeline transformation for tool groups
  * - Streaming status tracking (finalAnswerComing, stopPacketSeen, stopReason)
  * - Synthetic SECTION_END injection for graceful tool completion
  *
@@ -34,10 +63,11 @@ export interface UsePacketProcessorResult extends ProcessorResult {
  * Re-renders are triggered by:
  * - Parent updating rawPackets prop (most common)
  * - Child calling setDisplayComplete (for animation completion)
+ * - UI calling markAllToolsDisplayed (to show message content)
  *
  * @param rawPackets - Array of packets from the streaming response
  * @param nodeId - Unique identifier for the message node (used for reset detection)
- * @returns ProcessorResult with derived values plus displayComplete state
+ * @returns Processed data ready for rendering in AgentMessage
  */
 export function usePacketProcessor(
   rawPackets: Packet[],
@@ -49,16 +79,15 @@ export function usePacketProcessor(
   // which needs to trigger a re-render to show feedback buttons
   const [displayComplete, setDisplayComplete] = useState(false);
 
-  // UI override for finalAnswerComing - when all tools have been displayed,
-  // we want to show the message content regardless of packet-derived state
-  const [finalAnswerComingOverride, setFinalAnswerComingOverride] =
-    useState(false);
+  // Track when UI has marked all tools as displayed
+  // This replaces the previous setFinalAnswerComingOverride with a cleaner API
+  const [allToolsDisplayedByUI, setAllToolsDisplayedByUI] = useState(false);
 
   // Reset on nodeId change
   if (stateRef.current.nodeId !== nodeId) {
     stateRef.current = createInitialState(nodeId);
     setDisplayComplete(false);
-    setFinalAnswerComingOverride(false);
+    setAllToolsDisplayedByUI(false);
   }
 
   // Track previous state to detect transitions
@@ -79,22 +108,52 @@ export function usePacketProcessor(
   // but we also need to reset React state that lives outside the processor
   if (prevLastProcessed > rawPackets.length) {
     setDisplayComplete(false);
-    setFinalAnswerComingOverride(false);
+    setAllToolsDisplayedByUI(false);
   }
 
-  // Get derived result
+  // Get derived result from processor
   const result = getResult(stateRef.current);
 
   // Combine packet-derived finalAnswerComing with UI override
-  // UI override is set when all tools have been displayed
-  const finalAnswerComing =
-    result.finalAnswerComing || finalAnswerComingOverride;
+  const finalAnswerComing = result.finalAnswerComing || allToolsDisplayedByUI;
+
+  // Compute displayGroups: show when finalAnswerComing is true OR no tools exist
+  const displayGroups = useMemo(() => {
+    if (finalAnswerComing || result.toolGroups.length === 0) {
+      return result.potentialDisplayGroups;
+    }
+    return [];
+  }, [
+    finalAnswerComing,
+    result.toolGroups.length,
+    result.potentialDisplayGroups,
+  ]);
+
+  // Transform toolGroups to timeline format (uses iconRegistry for JSX icons)
+  const toolTurnGroups = useMemo(() => {
+    const allSteps = transformPacketGroups(result.toolGroups);
+    return groupStepsByTurn(allSteps);
+  }, [result.toolGroups]);
+
+  // Stable callback for marking all tools displayed
+  const markAllToolsDisplayed = useCallback(() => {
+    setAllToolsDisplayedByUI(true);
+  }, []);
 
   return {
-    ...result,
+    citations: result.citations,
+    citationMap: result.citationMap,
+    documentMap: result.documentMap,
+    toolGroups: result.toolGroups,
+    toolTurnGroups,
+    displayGroups,
+    hasSteps: toolTurnGroups.length > 0,
     finalAnswerComing,
+    stopPacketSeen: result.stopPacketSeen,
+    stopReason: result.stopReason,
+    expectedBranchesPerTurn: result.expectedBranchesPerTurn,
     displayComplete,
     setDisplayComplete,
-    setFinalAnswerComingOverride,
+    markAllToolsDisplayed,
   };
 }

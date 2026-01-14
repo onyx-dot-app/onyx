@@ -11,7 +11,11 @@ import {
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { isActualToolCallPacket } from "@/app/chat/services/packetUtils";
+import {
+  isActualToolCallPacket,
+  isToolPacket,
+  isDisplayPacket,
+} from "@/app/chat/services/packetUtils";
 import { parseToolKey } from "@/app/chat/message/messageComponents/toolDisplayHelpers";
 
 // Re-export parseToolKey for consumers that import from this module
@@ -39,6 +43,10 @@ export interface ProcessorState {
   groupKeysWithSectionEnd: Set<string>;
   expectedBranches: Map<number, number>;
 
+  // Pre-categorized groups (populated during packet processing)
+  toolGroupKeys: Set<string>;
+  displayGroupKeys: Set<string>;
+
   // Streaming status
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
@@ -55,7 +63,9 @@ export interface ProcessorResult {
   citations: StreamingCitation[];
   citationMap: CitationMap;
   documentMap: Map<string, OnyxDocument>;
-  groupedPackets: GroupedPacket[];
+  // Pre-categorized groups
+  toolGroups: GroupedPacket[];
+  potentialDisplayGroups: GroupedPacket[];
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
@@ -78,6 +88,8 @@ export function createInitialState(nodeId: number): ProcessorState {
     seenGroupKeys: new Set(),
     groupKeysWithSectionEnd: new Set(),
     expectedBranches: new Map(),
+    toolGroupKeys: new Set(),
+    displayGroupKeys: new Set(),
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
@@ -308,8 +320,22 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 
+  // Check if this is the first packet in the group (before adding)
+  const existingGroup = state.groupedPacketsMap.get(groupKey);
+  const isFirstPacket = !existingGroup;
+
   // Add packet to group
   addPacketToGroup(state, packet, groupKey);
+
+  // Categorize on first packet of each group
+  if (isFirstPacket) {
+    if (isToolPacket(packet, false)) {
+      state.toolGroupKeys.add(groupKey);
+    }
+    if (isDisplayPacket(packet)) {
+      state.displayGroupKeys.add(groupKey);
+    }
+  }
 
   // Handle specific packet types
   handleCitationPacket(state, packet);
@@ -344,31 +370,45 @@ export function processPackets(
 // Result Derivation
 // ============================================================================
 
-export function getResult(state: ProcessorState): ProcessorResult {
-  // Build sorted, filtered grouped packets array
-  // Clone packet arrays to ensure referential changes so downstream memo hooks update
-  const groupedPackets = Array.from(state.groupedPacketsMap.entries())
-    .map(([key, packets]) => {
+/**
+ * Build GroupedPacket array from a set of group keys.
+ * Filters to only include groups with meaningful content and sorts by turn/tab index.
+ */
+function buildGroupsFromKeys(
+  state: ProcessorState,
+  keys: Set<string>
+): GroupedPacket[] {
+  return Array.from(keys)
+    .map((key) => {
       const { turn_index, tab_index } = parseToolKey(key);
-      return {
-        turn_index,
-        tab_index,
-        packets: [...packets],
-      };
+      const packets = state.groupedPacketsMap.get(key);
+      return packets ? { turn_index, tab_index, packets: [...packets] } : null;
     })
-    .filter(({ packets }) => hasContentPackets(packets))
+    .filter(
+      (g): g is GroupedPacket => g !== null && hasContentPackets(g.packets)
+    )
     .sort((a, b) => {
       if (a.turn_index !== b.turn_index) {
         return a.turn_index - b.turn_index;
       }
       return a.tab_index - b.tab_index;
     });
+}
+
+export function getResult(state: ProcessorState): ProcessorResult {
+  // Build pre-categorized groups from tracked keys
+  const toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
+  const potentialDisplayGroups = buildGroupsFromKeys(
+    state,
+    state.displayGroupKeys
+  );
 
   return {
     citations: state.citations,
     citationMap: state.citationMap,
     documentMap: state.documentMap,
-    groupedPackets,
+    toolGroups,
+    potentialDisplayGroups,
     finalAnswerComing: state.finalAnswerComing,
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
