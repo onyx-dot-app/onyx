@@ -307,12 +307,6 @@ function MCPServerCard({
     return toolFieldValue === true;
   }).length;
 
-  useOnMount(() => {
-    // The card should be folded when this MCP Server has NO actions associated with it.
-    // actionsLayouts.setIsFolded(enabledTools.length === 0);
-    actionsLayouts.setIsFolded(enabledTools.length === 0);
-  });
-
   return (
     <actionsLayouts.Provider>
       <ActionsLayouts.Root>
