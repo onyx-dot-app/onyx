@@ -35,7 +35,7 @@ from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
-from onyx.db.persona import update_persona_shared_users
+from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
 from onyx.file_store.file_store import get_default_file_store
@@ -379,7 +379,7 @@ def share_persona(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_persona_shared_users(
+    update_persona_shared(
         persona_id=persona_id,
         user=user,
         db_session=db_session,

@@ -10,7 +10,11 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";
-import { usePinnedAgents } from "@/hooks/useAgents";
+import {
+  usePinnedAgents,
+  useAgent,
+  useUpdateAgentSharedStatus,
+} from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -29,8 +33,6 @@ import {
 } from "@opal/icons";
 import { useCreateModal } from "./contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
-import { updateAgentSharedStatus } from "@/lib/agents";
-import { useAgent } from "@/hooks/useAgents";
 import { usePopup } from "@/components/admin/connectors/Popup";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
@@ -65,8 +67,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
-  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
+  const { refresh: refreshAgent } = useAgent(agent.id);
   const { popup, setPopup } = usePopup();
+  const updateAgentSharedStatus = useUpdateAgentSharedStatus();
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -79,10 +82,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
   // Handle sharing agent
   const handleShare = useCallback(
     async (userIds: string[], groupIds: number[], isPublic: boolean) => {
-      if (!fullAgent) return;
-
       const error = await updateAgentSharedStatus(
-        fullAgent.id,
+        agent.id,
         userIds,
         groupIds,
         isPublic
@@ -98,7 +99,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         refreshAgent();
       }
     },
-    [fullAgent, refreshAgent]
+    [agent.id, refreshAgent, updateAgentSharedStatus]
   );
 
   return (
