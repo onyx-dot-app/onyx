@@ -1290,7 +1290,7 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section gap={0.5}>
                           <SimpleTooltip
                             tooltip={imageGenerationDisabledTooltip}
-                            side="top"
+                            side="left"
                           >
                             <Card disabled={!isImageGenerationAvailable}>
                               <InputLayouts.Horizontal
