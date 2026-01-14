@@ -4,6 +4,7 @@ import time
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.notion.connector import NotionConnector
 
 
@@ -39,6 +40,8 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     table_entry_doc = None
     table_entry_child_doc = None
     for doc in doc_batch:
+        if isinstance(doc, HierarchyNode):
+            continue
         if doc.semantic_identifier == "Root":
             root_doc = doc
         elif doc.semantic_identifier == "Child1":

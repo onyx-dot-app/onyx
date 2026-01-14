@@ -21,6 +21,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.salesforce.doc_conversion import convert_sf_object_to_doc
@@ -443,7 +444,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
 
-        docs_to_yield: list[Document] = []
+        docs_to_yield: list[Document | HierarchyNode] = []
 
         changed_ids_to_type: dict[str, str] = {}
         parents_changed = 0
@@ -655,7 +656,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             )
 
             # Step 3 - extract and index docs
-            docs_to_yield: list[Document] = []
+            docs_to_yield: list[Document | HierarchyNode] = []
             docs_to_yield_bytes = 0
 
             last_log_time = 0.0
@@ -1125,7 +1126,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        doc_metadata_list: list[SlimDocument] = []
+        doc_metadata_list: list[SlimDocument | HierarchyNode] = []
         for parent_object_type in self.parent_object_list:
             query = f"SELECT Id FROM {parent_object_type}"
             query_result = self.sf_client.safe_query_all(query)
@@ -1211,6 +1212,8 @@ if __name__ == "__main__":
         doc_count += len(doc_batch)
         print(f"doc_count: {doc_count}")
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             section_count += len(doc.sections)
             for section in doc.sections:
                 if isinstance(section, TextSection) and section.text is not None:

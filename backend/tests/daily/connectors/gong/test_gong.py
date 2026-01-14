@@ -7,6 +7,7 @@ import pytest
 
 from onyx.connectors.gong.connector import GongConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 
 
 @pytest.fixture
@@ -38,7 +39,8 @@ def test_gong_basic(mock_get_api_key: MagicMock, gong_connector: GongConnector) 
 
     docs: list[Document] = []
     for doc in doc_batch:
-        docs.append(doc)
+        if not isinstance(doc, HierarchyNode):
+            docs.append(doc)
 
     assert docs[0].semantic_identifier == "test with chris"
     assert docs[1].semantic_identifier == "Testing Gong"

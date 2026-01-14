@@ -15,6 +15,7 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -190,6 +191,9 @@ def gdrive_doc_sync(
     for slim_doc_batch in slim_doc_generator:
         logger.info(f"Drive perm sync: Processing {len(slim_doc_batch)} documents")
         for slim_doc in slim_doc_batch:
+            if isinstance(slim_doc, HierarchyNode):
+                # TODO: handle hierarchynodes during sync
+                continue
             if callback:
                 if callback.should_stop():
                     raise RuntimeError("gdrive_doc_sync: Stop signal detected")

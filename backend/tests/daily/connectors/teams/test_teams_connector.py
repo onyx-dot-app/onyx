@@ -6,6 +6,7 @@ import pytest
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.teams.connector import TeamsConnector
 from onyx.utils.variable_functionality import global_version
 from tests.daily.connectors.teams.models import TeamsThread
@@ -165,6 +166,8 @@ def test_slim_docs_retrieval_from_teams_connector(
     ]
 
     for slim_doc in slim_docs:
+        if isinstance(slim_doc, HierarchyNode):
+            continue
         assert (
             slim_doc.external_access
         ), f"ExternalAccess should always be available, instead got {slim_doc=}"

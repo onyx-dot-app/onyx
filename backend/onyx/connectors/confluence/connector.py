@@ -46,6 +46,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -382,7 +383,7 @@ class ConfluenceConnector(
         page: dict[str, Any],
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> tuple[list[Document], list[ConnectorFailure]]:
+    ) -> tuple[list[Document | HierarchyNode], list[ConnectorFailure]]:
         """
         Inline attachments are added directly to the document as text or image sections by
         this function. The returned documents/connectorfailures are for non-inline attachments
@@ -392,7 +393,7 @@ class ConfluenceConnector(
             _get_page_id(page), start, end
         )
         attachment_failures: list[ConnectorFailure] = []
-        attachment_docs: list[Document] = []
+        attachment_docs: list[Document | HierarchyNode] = []
         page_url = ""
 
         try:
@@ -700,7 +701,7 @@ class ConfluenceConnector(
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:
-        doc_metadata_list: list[SlimDocument] = []
+        doc_metadata_list: list[SlimDocument | HierarchyNode] = []
         restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
         space_level_access_info: dict[str, ExternalAccess] = {}

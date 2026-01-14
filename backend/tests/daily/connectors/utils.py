@@ -30,7 +30,9 @@ def _load_all_docs(
     documents: list[Document] = []
     while checkpoint.has_more:
         doc_batch_generator = CheckpointOutputWrapper[CT]()(load(checkpoint))
-        for document, failure, next_checkpoint in doc_batch_generator:
+        for document, hierarchy_node, failure, next_checkpoint in doc_batch_generator:
+            if hierarchy_node is not None:
+                continue
             if failure is not None:
                 raise RuntimeError(f"Failed to load documents: {failure}")
             if document is not None and isinstance(document, Document):
@@ -97,7 +99,9 @@ def load_everything_from_checkpoint_connector(
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
             load_from_checkpoint_generator(start, end, checkpoint)
         )
-        for document, failure, next_checkpoint in doc_batch_generator:
+        for document, hierarchy_node, failure, next_checkpoint in doc_batch_generator:
+            if hierarchy_node is not None:
+                continue
             if failure is not None:
                 outputs.append(failure)
             if document is not None and isinstance(document, Document):

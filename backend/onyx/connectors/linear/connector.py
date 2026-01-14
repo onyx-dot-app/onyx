@@ -25,6 +25,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
@@ -251,7 +252,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
             logger.debug(f"Raw response from Linear: {response_json}")
             edges = response_json["data"]["issues"]["edges"]
 
-            documents: list[Document] = []
+            documents: list[Document | HierarchyNode] = []
             for edge in edges:
                 node = edge["node"]
                 # Create sections for description and comments

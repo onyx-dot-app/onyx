@@ -30,6 +30,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.batching import batch_generator
@@ -492,7 +493,7 @@ class NotionConnector(LoadConnector, PollConnector):
     def _read_pages(
         self,
         pages: list[NotionPage],
-    ) -> Generator[Document, None, None]:
+    ) -> Generator[Document | HierarchyNode, None, None]:
         """Reads pages for rich text content and generates Documents
 
         Note that a page which is turned into a "wiki" becomes a database but both top level pages and top level databases
@@ -624,7 +625,7 @@ class NotionConnector(LoadConnector, PollConnector):
                 filtered_pages += [NotionPage(**page)]
         return filtered_pages
 
-    def _recursive_load(self) -> Generator[list[Document], None, None]:
+    def _recursive_load(self) -> GenerateDocumentsOutput:
         if self.root_page_id is None or not self.recursive_index_enabled:
             raise RuntimeError(
                 "Recursive page lookup is not enabled, but we are trying to "

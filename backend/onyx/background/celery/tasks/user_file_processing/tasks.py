@@ -27,6 +27,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
@@ -232,7 +233,7 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
 
             try:
                 for batch in connector.load_from_state():
-                    documents.extend(batch)
+                    documents.extend([doc for doc in batch if not isinstance(doc, HierarchyNode)])  # type: ignore
 
                 adapter = UserFileIndexingAdapter(
                     tenant_id=tenant_id,

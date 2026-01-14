@@ -7,6 +7,7 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFun
 from onyx.access.models import DocExternalAccess
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -54,6 +55,9 @@ def gmail_doc_sync(
 
     for slim_doc_batch in slim_doc_generator:
         for slim_doc in slim_doc_batch:
+            if isinstance(slim_doc, HierarchyNode):
+                # TODO: handle hierarchynodes during sync
+                continue
             if callback:
                 if callback.should_stop():
                     raise RuntimeError("gmail_doc_sync: Stop signal detected")
