@@ -43,6 +43,10 @@ export async function pinAgents(pinnedAgentIds: number[]) {
 }
 
 // Share agent
+// NOTE: It's safe for MIT versions to pass an empty groupIds array ([]).
+// The MIT backend checks `if group_ids:` which is falsy for empty lists in Python,
+// so no error is thrown. This allows a unified frontend API while the backend
+// correctly rejects only non-empty group_ids on MIT (group sharing is EE-only).
 export default async function updateAgentSharedStatus(
   agentId: number,
   userIds: string[],

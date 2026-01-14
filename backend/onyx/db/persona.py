@@ -222,9 +222,13 @@ def update_persona_access(
                     ).model_dump(),
                 )
 
-    # May cause error if someone switches down to MIT from EE
+    # NOTE: Empty group_ids ([]) is safe for both MIT and EE versions.
+    # In Python, empty lists are falsy, so `if group_ids:` only triggers when
+    # the list has actual elements. This allows MIT frontends to send group_ids=[]
+    # without causing errors, while still catching attempts to use group sharing
+    # (which is an EE-only feature).
     if group_ids:
-        raise NotImplementedError("Onyx MIT does not support private Personas")
+        raise NotImplementedError("Onyx MIT does not support group-based sharing")
 
 
 def create_update_persona(
