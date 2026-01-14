@@ -11,7 +11,7 @@ class ImageGenerationProviderName(str, Enum):
     OPENAI = "openai"
 
 
-PROVIDERS = {
+PROVIDERS: dict[ImageGenerationProviderName, type[ImageGenerationProvider]] = {
     ImageGenerationProviderName.AZURE: AzureImageGenerationProvider,
     ImageGenerationProviderName.OPENAI: OpenAIImageGenerationProvider,
 }
