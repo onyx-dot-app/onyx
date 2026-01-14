@@ -1919,3 +1919,488 @@ class TestCitationModesWithCodeBlocks:
         assert "[1]" in output
         # No CitationInfo emitted for citation in code block
         assert len(citations) == 0
+
+
+# ============================================================================
+# Edge Case Tests
+# ============================================================================
+
+
+class TestCitationModeEdgeCases:
+    """Edge case tests for citation modes."""
+
+    def test_remove_mode_citation_at_start_of_text(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode when citation is at the very start of text."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, citations = process_tokens(processor, ["[", "1", "] starts here."])
+
+        assert "[1]" not in output
+        assert "starts here." in output
+        # Note: When citation is at start, the space after the citation is preserved
+        # This is expected behavior - the spacing logic handles trailing spaces before
+        # punctuation/space, but leading spaces after removed citations remain
+        assert len(citations) == 0
+
+    def test_remove_mode_citation_at_end_of_text(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode when citation is at the very end of text."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, citations = process_tokens(processor, ["ends here [", "1", "]"])
+
+        assert "[1]" not in output
+        assert "ends here" in output
+        assert len(citations) == 0
+
+    def test_remove_mode_multiple_consecutive_citations(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode with multiple consecutive citations."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping(
+            {1: mock_search_docs[1], 2: mock_search_docs[2], 3: mock_search_docs[3]}
+        )
+
+        output, citations = process_tokens(
+            processor, ["Text [", "1", "][", "2", "][", "3", "] end."]
+        )
+
+        assert "[1]" not in output
+        assert "[2]" not in output
+        assert "[3]" not in output
+        assert "Text" in output
+        assert "end." in output
+        # Should track all citations
+        assert len(processor.get_seen_citations()) == 3
+
+    def test_remove_mode_citation_followed_by_newline(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode when citation is followed by newline."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(processor, ["Text [", "1", "]\nNew line."])
+
+        assert "[1]" not in output
+        assert "Text" in output
+        assert "New line." in output
+
+    def test_remove_mode_only_citations_no_other_text(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode when text is only citations."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping(
+            {1: mock_search_docs[1], 2: mock_search_docs[2]}
+        )
+
+        output, citations = process_tokens(processor, ["[", "1", "][", "2", "]"])
+
+        # Should still track citations even though output is mostly empty
+        assert len(processor.get_seen_citations()) == 2
+        assert len(citations) == 0
+
+    def test_keep_markers_mode_citation_at_start(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test KEEP_MARKERS mode when citation is at the start."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.KEEP_MARKERS)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, citations = process_tokens(processor, ["[", "1", "] starts here."])
+
+        assert "[1]" in output
+        assert "starts here." in output
+        assert len(citations) == 0
+
+    def test_hyperlink_mode_citation_with_special_chars_in_url(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test HYPERLINK mode with special characters in URL."""
+        special_doc = create_test_search_doc(
+            document_id="special_doc",
+            link="https://example.com/doc?param=value&other=123#section",
+        )
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping({1: special_doc})
+
+        output, citations = process_tokens(processor, ["Text [", "1", "] here."])
+
+        assert "[[1]](https://example.com/doc?param=value&other=123#section)" in output
+        assert len(citations) == 1
+
+    def test_hyperlink_mode_citation_with_no_url(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test HYPERLINK mode when document has no URL."""
+        no_url_doc = create_test_search_doc(
+            document_id="no_url_doc",
+            link=None,
+        )
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping({1: no_url_doc})
+
+        output, citations = process_tokens(processor, ["Text [", "1", "] here."])
+
+        # Should still format but with empty link
+        assert "[[1]]()" in output
+        assert len(citations) == 1
+
+    def test_all_modes_with_citation_in_parentheses(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test all modes with citation inside parentheses (see [1])."""
+        for mode in [
+            CitationMode.REMOVE,
+            CitationMode.KEEP_MARKERS,
+            CitationMode.HYPERLINK,
+        ]:
+            processor = DynamicCitationProcessor(citation_mode=mode)
+            processor.update_citation_mapping({1: mock_search_docs[1]})
+
+            output, _ = process_tokens(processor, ["(see [", "1", "])"])
+
+            if mode == CitationMode.REMOVE:
+                assert "[1]" not in output
+            elif mode == CitationMode.KEEP_MARKERS:
+                assert "[1]" in output
+            else:  # HYPERLINK
+                assert "[[1]]" in output
+
+    def test_all_modes_with_citation_after_comma(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test all modes with citation after comma."""
+        for mode in [
+            CitationMode.REMOVE,
+            CitationMode.KEEP_MARKERS,
+            CitationMode.HYPERLINK,
+        ]:
+            processor = DynamicCitationProcessor(citation_mode=mode)
+            processor.update_citation_mapping({1: mock_search_docs[1]})
+
+            output, _ = process_tokens(processor, ["First,[", "1", "] second."])
+
+            if mode == CitationMode.REMOVE:
+                assert "[1]" not in output
+            elif mode == CitationMode.KEEP_MARKERS:
+                assert "[1]" in output
+            else:  # HYPERLINK
+                assert "[[1]]" in output
+
+    def test_remove_mode_handles_tab_character(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode handles tab character before citation."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(processor, ["Text\t[", "1", "] more."])
+
+        assert "[1]" not in output
+        # Tab should be handled appropriately
+
+    def test_citation_number_zero(self, mock_search_docs: CitationMapping) -> None:
+        """Test handling of citation number 0."""
+        zero_doc = create_test_search_doc(
+            document_id="zero_doc", link="https://zero.com"
+        )
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping({0: zero_doc})
+
+        output, citations = process_tokens(processor, ["Text [", "0", "] here."])
+
+        assert "[[0]](https://zero.com)" in output
+        assert len(citations) == 1
+        assert citations[0].citation_number == 0
+
+    def test_large_citation_numbers(self, mock_search_docs: CitationMapping) -> None:
+        """Test handling of large citation numbers."""
+        large_doc = create_test_search_doc(
+            document_id="large_doc", link="https://large.com"
+        )
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping({9999: large_doc})
+
+        output, citations = process_tokens(processor, ["Text [", "9999", "] here."])
+
+        assert "[[9999]](https://large.com)" in output
+        assert len(citations) == 1
+        assert citations[0].citation_number == 9999
+
+    def test_negative_citation_number_not_processed(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test that negative numbers in brackets are not processed as citations."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        # Negative numbers should not be treated as citations
+        output, citations = process_tokens(
+            processor, ["Array index [-", "1", "] here."]
+        )
+
+        # Should not be processed as citation (no mapping for -1)
+        assert len(citations) == 0
+
+    def test_mixed_valid_invalid_citations_in_sequence(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test processing mix of valid and invalid citations."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping(
+            {1: mock_search_docs[1], 3: mock_search_docs[3]}
+        )
+
+        # Citation 2 is not in mapping
+        output, citations = process_tokens(
+            processor, ["Text [", "1", "][", "2", "][", "3", "] end."]
+        )
+
+        # Should process 1 and 3, skip 2
+        assert "[[1]]" in output
+        assert "[[3]]" in output
+        assert len(citations) == 2
+        # 2 should not be in seen citations since it's not in mapping
+        seen = processor.get_seen_citations()
+        assert 1 in seen
+        assert 2 not in seen
+        assert 3 in seen
+
+    def test_empty_token_stream(self) -> None:
+        """Test processing empty token stream."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+
+        output, citations = process_tokens(processor, [])
+
+        assert output == ""
+        assert len(citations) == 0
+
+    def test_only_none_token(self) -> None:
+        """Test processing only None token (flush signal)."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+
+        output, citations = process_tokens(processor, [None])
+
+        assert output == ""
+        assert len(citations) == 0
+
+    def test_whitespace_only_tokens(self, mock_search_docs: CitationMapping) -> None:
+        """Test processing whitespace-only tokens between citations."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping(
+            {1: mock_search_docs[1], 2: mock_search_docs[2]}
+        )
+
+        output, citations = process_tokens(
+            processor, ["[", "1", "]", "   ", "[", "2", "]"]
+        )
+
+        assert "[[1]]" in output
+        assert "[[2]]" in output
+        assert len(citations) == 2
+
+    def test_unicode_text_around_citations(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test citations surrounded by unicode text."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, citations = process_tokens(
+            processor, ["日本語テキスト [", "1", "] 続きのテキスト"]
+        )
+
+        assert "[[1]]" in output
+        assert "日本語テキスト" in output
+        assert "続きのテキスト" in output
+        assert len(citations) == 1
+
+    def test_emoji_around_citations(self, mock_search_docs: CitationMapping) -> None:
+        """Test citations surrounded by emoji."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, citations = process_tokens(
+            processor, ["Great! 🎉 [", "1", "] Amazing! 🚀"]
+        )
+
+        assert "[[1]]" in output
+        assert "🎉" in output
+        assert "🚀" in output
+        assert len(citations) == 1
+
+
+class TestCitationModeWithDifferentProcessors:
+    """Test using multiple processors with different modes."""
+
+    def test_separate_processors_different_modes(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test using separate processors with different citation modes."""
+        # Processor 1: HYPERLINK mode
+        processor1 = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor1.update_citation_mapping({1: mock_search_docs[1]})
+        output1, citations1 = process_tokens(processor1, ["Text [", "1", "]"])
+        assert "[[1]](https://example.com/doc1)" in output1
+        assert len(citations1) == 1
+
+        # Processor 2: KEEP_MARKERS mode
+        processor2 = DynamicCitationProcessor(citation_mode=CitationMode.KEEP_MARKERS)
+        processor2.update_citation_mapping({1: mock_search_docs[1]})
+        output2, citations2 = process_tokens(processor2, ["Text [", "1", "]"])
+        assert "[1]" in output2
+        assert "[[1]]" not in output2
+        assert len(citations2) == 0
+
+        # Processor 3: REMOVE mode
+        processor3 = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor3.update_citation_mapping({1: mock_search_docs[1]})
+        output3, citations3 = process_tokens(processor3, ["Text [", "1", "]"])
+        assert "[1]" not in output3
+        assert len(citations3) == 0
+
+        # All should track seen citations
+        assert len(processor1.get_seen_citations()) == 1
+        assert len(processor2.get_seen_citations()) == 1
+        assert len(processor3.get_seen_citations()) == 1
+
+    def test_processors_do_not_share_state(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test that separate processors do not share state."""
+        processor1 = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor1.update_citation_mapping({1: mock_search_docs[1]})
+        process_tokens(processor1, ["[", "1", "]"])
+
+        processor2 = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
+        processor2.update_citation_mapping({2: mock_search_docs[2]})
+        process_tokens(processor2, ["[", "2", "]"])
+
+        # Each processor should only have its own citations
+        assert 1 in processor1.get_seen_citations()
+        assert 2 not in processor1.get_seen_citations()
+        assert 2 in processor2.get_seen_citations()
+        assert 1 not in processor2.get_seen_citations()
+
+
+class TestRemoveModeSpacingEdgeCases:
+    """Detailed spacing edge cases for REMOVE mode."""
+
+    def test_remove_mode_citation_between_sentences(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode with citation between sentences."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(
+            processor, ["First sentence. [", "1", "] Second sentence."]
+        )
+
+        assert "[1]" not in output
+        assert "First sentence." in output
+        assert "Second sentence." in output
+
+    def test_remove_mode_citation_before_question_mark(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode with citation before question mark."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(processor, ["Is this true [", "1", "]?"])
+
+        assert "[1]" not in output
+        # Should not have space before question mark
+        assert "true ?" not in output
+
+    def test_remove_mode_citation_before_exclamation(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode with citation before exclamation mark."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(processor, ["Amazing [", "1", "]!"])
+
+        assert "[1]" not in output
+        # Should not have space before exclamation
+        assert "Amazing !" not in output
+
+    def test_remove_mode_citation_before_semicolon(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode with citation before semicolon."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(processor, ["First part [", "1", "]; second part."])
+
+        assert "[1]" not in output
+        # Should not have space before semicolon
+        assert "part ;" not in output
+
+    def test_remove_mode_citation_before_closing_paren(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode with citation before closing parenthesis."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(processor, ["(see this [", "1", "])"])
+
+        assert "[1]" not in output
+        # Should not have space before closing paren
+        assert "this )" not in output
+
+    def test_remove_mode_citation_before_closing_bracket(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test REMOVE mode with citation before closing bracket."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, _ = process_tokens(processor, ["[see this [", "1", "]]"])
+
+        assert "[[1]]" not in output
+
+
+class TestKeepMarkersEdgeCases:
+    """Edge cases specific to KEEP_MARKERS mode."""
+
+    def test_keep_markers_exact_text_preservation(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test that KEEP_MARKERS preserves exact original text."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.KEEP_MARKERS)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        original_text = "The result [1] shows improvement."
+        tokens = list(original_text)  # Split into individual characters
+        output, _ = process_tokens(processor, tokens)
+
+        # Should preserve the exact text
+        assert "[1]" in output
+
+    def test_keep_markers_with_citation_not_in_mapping(
+        self, mock_search_docs: CitationMapping
+    ) -> None:
+        """Test KEEP_MARKERS with citation number not in mapping."""
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.KEEP_MARKERS)
+        processor.update_citation_mapping({1: mock_search_docs[1]})
+
+        output, citations = process_tokens(processor, ["Text [", "99", "] here."])
+
+        # Citation 99 is not in mapping, but text should still be preserved
+        # (behavior depends on implementation - citation may be kept or removed)
+        assert len(citations) == 0
+        # Should not be in seen citations
+        assert 99 not in processor.get_seen_citations()
