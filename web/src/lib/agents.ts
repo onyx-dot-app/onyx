@@ -42,37 +42,6 @@ export async function pinAgents(pinnedAgentIds: number[]) {
   }
 }
 
-// Share agent
-// NOTE: It's safe for MIT versions to pass an empty groupIds array ([]).
-// The MIT backend checks `if group_ids:` which is falsy for empty lists in Python,
-// so no error is thrown. This allows a unified frontend API while the backend
-// correctly rejects only non-empty group_ids on MIT (group sharing is EE-only).
-export default async function updateAgentSharedStatus(
-  agentId: number,
-  userIds: string[],
-  groupIds: number[],
-  isPublic?: boolean
-): Promise<null | string> {
-  const response = await fetch(`/api/persona/${agentId}/share`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      user_ids: userIds,
-      group_ids: groupIds,
-      is_public: isPublic,
-    }),
-  });
-
-  if (response.ok) {
-    return null;
-  }
-
-  const errorMessage = (await response.json()).detail || "Unknown error";
-  return errorMessage;
-}
-
 // Filter assistants based on connector status, image compatibility and visibility
 export function filterAssistants(
   assistants: MinimalPersonaSnapshot[]

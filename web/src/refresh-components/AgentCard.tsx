@@ -10,7 +10,11 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";
-import { usePinnedAgents } from "@/hooks/useAgents";
+import {
+  usePinnedAgents,
+  useAgent,
+  useUpdateAgentSharedStatus,
+} from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -29,8 +33,6 @@ import {
 } from "@opal/icons";
 import { useCreateModal } from "./contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
-import updateAgentSharedStatus from "@/lib/agents";
-import { useAgent } from "@/hooks/useAgents";
 import { usePopup } from "@/components/admin/connectors/Popup";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
@@ -67,6 +69,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const shareAgentModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   const { popup, setPopup } = usePopup();
+  const updateAgentSharedStatus = useUpdateAgentSharedStatus();
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -98,7 +101,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         refreshAgent();
       }
     },
-    [fullAgent, refreshAgent]
+    [fullAgent, refreshAgent, updateAgentSharedStatus]
   );
 
   return (
