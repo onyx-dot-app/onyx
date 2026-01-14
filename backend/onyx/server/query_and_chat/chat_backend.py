@@ -22,6 +22,7 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
 from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_utils import convert_chat_history_basic
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.chat_utils import extract_headers
@@ -71,9 +72,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
-from onyx.secondary_llm_flows.chat_session_naming import (
-    get_renamed_conversation_name,
-)
+from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
@@ -99,6 +98,7 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
@@ -363,6 +363,10 @@ def rename_chat_session(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
+    # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
+    # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.
+    max_tokens_for_naming = 3000
+
     name = rename_req.name
     chat_session_id = rename_req.chat_session_id
     user_id = user.id if user is not None else None
@@ -376,18 +380,11 @@ def rename_chat_session(
         )
         return RenameChatSessionResponse(new_name=name)
 
-    full_history = create_chat_history_chain(
-        chat_session_id=chat_session_id, db_session=db_session
-    )
-
     llm = get_default_llm(
         additional_headers=extract_headers(
             request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
     )
-
-    # Check LLM cost limits before using the LLM (only for Onyx-managed keys)
-    from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 
     check_llm_cost_limit_for_provider(
         db_session=db_session,
@@ -395,7 +392,20 @@ def rename_chat_session(
         llm_provider_api_key=llm.config.api_key,
     )
 
-    new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
+    full_history = create_chat_history_chain(
+        chat_session_id=chat_session_id, db_session=db_session
+    )
+
+    token_counter = get_llm_token_counter(llm)
+
+    simple_chat_history = convert_chat_history_basic(
+        chat_history=full_history,
+        token_counter=token_counter,
+        max_individual_message_tokens=max_tokens_for_naming,
+        max_total_tokens=max_tokens_for_naming,
+    )
+
+    new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
     update_chat_session(
         db_session=db_session,
