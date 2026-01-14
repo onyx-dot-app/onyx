@@ -75,7 +75,7 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     providers: [
       {
         image_provider_id: "gemini-2.5-flash-image",
-        model_name: "",
+        model_name: "gemini-2.5-flash-image",
         provider_name: "vertex_ai",
         title: "Gemini 2.5 Flash Image",
         description:
@@ -83,7 +83,7 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
       },
       {
         image_provider_id: "gemini-3-pro-image-preview",
-        model_name: "",
+        model_name: "gemini-3-pro-image-preview",
         provider_name: "vertex_ai",
         title: "Gemini 3 Pro Image Preview",
         description:

@@ -1,7 +1,6 @@
 "use client";
 
 import * as Yup from "yup";
-import { Form } from "formik";
 import {
   ImageGenFormBaseProps,
   ImageGenFormChildProps,
@@ -11,6 +10,9 @@ import { FileUploadFormField, TextFormField } from "@/components/Field";
 import { ImageGenFormWrapper } from "./ImageGenFormWrapper";
 import { ImageProvider } from "../constants";
 import { ImageGenerationCredentials } from "@/lib/configuration/imageConfigurationService";
+
+const VERTEXAI_PROVIDER_NAME = "vertex_ai";
+const VERTEXAI_DEFAULT_LOCATION = "global";
 
 // Vertex form values
 interface VertexImageGenFormValues {
@@ -23,14 +25,14 @@ interface VertexImageGenFormValues {
 const initialValues: VertexImageGenFormValues = {
   custom_config: {
     vertex_credentials: "",
-    vertex_location: "",
+    vertex_location: VERTEXAI_DEFAULT_LOCATION,
   },
 };
 
 const validationSchema = Yup.object().shape({
   custom_config: Yup.object().shape({
     vertex_credentials: Yup.string().required("Credentials file is required"),
-    vertex_location: Yup.string(),
+    vertex_location: Yup.string().required("Location is required"),
   }),
 });
 
@@ -41,7 +43,8 @@ function getInitialValuesFromCredentials(
   return {
     custom_config: {
       vertex_credentials: credentials.custom_config?.vertex_credentials || "",
-      vertex_location: credentials.custom_config?.vertex_location || "",
+      vertex_location:
+        credentials.custom_config?.vertex_location || VERTEXAI_DEFAULT_LOCATION,
     },
   };
 }
@@ -53,7 +56,7 @@ function transformValues(
   return {
     modelName: imageProvider.model_name,
     imageProviderId: imageProvider.image_provider_id,
-    provider: "vertex_ai",
+    provider: VERTEXAI_PROVIDER_NAME,
     customConfig: {
       vertex_credentials: values.custom_config.vertex_credentials,
       vertex_location: values.custom_config.vertex_location,
