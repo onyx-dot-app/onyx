@@ -319,6 +319,9 @@ def update_persona_shared_users(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
+    if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
+        raise ValueError("You don't have permission to modify this persona")
+
     if is_public:
         # Note
         # Setting `user_id` and `group_id` mappings into the `persona__user` and `persona_user_group` tables,
@@ -331,13 +334,11 @@ def update_persona_shared_users(
         persona.is_public = True
 
         # 2. Insert (persona.id <-> user-id) mappings into the `persona__user` table
+        # (We delete the old mappings first before inserting the new ones).
         if user_ids is not None:
-            # First, delete existing user mappings
             db_session.query(Persona__User).filter(
                 Persona__User.persona_id == persona_id
             ).delete(synchronize_session="fetch")
-
-            # Then, insert new user mappings
             for user_uuid in user_ids:
                 db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
                 if user_uuid != (user.id if user else None):
@@ -352,13 +353,11 @@ def update_persona_shared_users(
                     )
 
         # 3. Insert (persona.id <-> group-id) mappings into the `persona__user_group` table
+        # (We delete the old mappings first before inserting the new ones).
         if group_ids is not None:
-            # First, delete existing group mappings
             db_session.query(Persona__UserGroup).filter(
                 Persona__UserGroup.persona_id == persona_id
             ).delete(synchronize_session="fetch")
-
-            # Then, insert new group mappings
             for group_id in group_ids:
                 db_session.add(
                     Persona__UserGroup(persona_id=persona_id, user_group_id=group_id)
@@ -377,6 +376,10 @@ def update_persona_shared_users(
             group_ids=group_ids,
             db_session=db_session,
         )
+
+        if is_public is not None:
+            persona.is_public = False
+            db_session.commit()
 
 
 def update_persona_public_status(
