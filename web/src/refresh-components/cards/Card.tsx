@@ -36,7 +36,6 @@
  * ```
  */
 
-import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 
@@ -52,30 +51,24 @@ export interface CardProps extends GeneralLayouts.SectionProps {
   // card variants
   translucent?: boolean;
   disabled?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ translucent, disabled, padding = 1, ...props }, ref) => {
-    const variant = translucent
-      ? "translucent"
-      : disabled
-        ? "disabled"
-        : "main";
+export default function Card({
+  translucent,
+  disabled,
+  padding = 1,
+  ref,
+  ...props
+}: CardProps) {
+  const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
 
-    return (
-      <div
-        ref={ref}
-        className={cn("rounded-16 w-full h-full", classNames[variant])}
-      >
-        <GeneralLayouts.Section
-          alignItems="start"
-          padding={padding}
-          {...props}
-        />
-      </div>
-    );
-  }
-);
-Card.displayName = "Card";
-
-export default Card;
+  return (
+    <div
+      ref={ref}
+      className={cn("rounded-16 w-full h-full", classNames[variant])}
+    >
+      <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
+    </div>
+  );
+}
