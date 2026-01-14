@@ -55,15 +55,15 @@ def gmail_doc_sync(
 
     for slim_doc_batch in slim_doc_generator:
         for slim_doc in slim_doc_batch:
-            if isinstance(slim_doc, HierarchyNode):
-                # TODO: handle hierarchynodes during sync
-                continue
             if callback:
                 if callback.should_stop():
                     raise RuntimeError("gmail_doc_sync: Stop signal detected")
 
                 callback.progress("gmail_doc_sync", 1)
 
+            if isinstance(slim_doc, HierarchyNode):
+                # TODO: handle hierarchynodes during sync
+                continue
             if slim_doc.external_access is None:
                 logger.warning(f"No permissions found for document {slim_doc.id}")
                 continue
