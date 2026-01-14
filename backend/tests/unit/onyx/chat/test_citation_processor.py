@@ -2384,7 +2384,7 @@ class TestKeepMarkersEdgeCases:
         processor.update_citation_mapping({1: mock_search_docs[1]})
 
         original_text = "The result [1] shows improvement."
-        tokens = list(original_text)  # Split into individual characters
+        tokens = list[str | None](original_text)  # Split into individual characters
         output, _ = process_tokens(processor, tokens)
 
         # Should preserve the exact text
