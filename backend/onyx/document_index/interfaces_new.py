@@ -292,7 +292,7 @@ class Updatable(abc.ABC):
 
         The document and fields to update are specified in the update requests.
         Each update request in the list applies its changes to a list of
-        document ids. None values mean that the field does not need an update.
+        document IDs. None values mean that the field does not need an update.
 
         Args:
             update_requests: A list of update requests, each containing a list
