@@ -77,12 +77,9 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     llm_provider = default_config.model_configuration.llm_provider
 
-    # For Azure, format model name as azure/<deployment_name> for LiteLLM
-    model_name = default_config.model_configuration.name
-
     return LLMConfig(
         model_provider=llm_provider.provider,
-        model_name=model_name,
+        model_name=default_config.model_configuration.name,
         temperature=GEN_AI_TEMPERATURE,
         api_key=llm_provider.api_key,
         api_base=llm_provider.api_base,
