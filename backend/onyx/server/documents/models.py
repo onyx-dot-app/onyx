@@ -573,6 +573,39 @@ class BoxJWTConfig(BaseModel):
 
     model_config = {"extra": "allow"}  # Allow extra fields in case Box adds more
 
+    def model_post_init(self, __context: Any) -> None:
+        """Validate required nested keys after model initialization."""
+        # Validate boxAppSettings structure
+        if not isinstance(self.boxAppSettings, dict):
+            raise ValueError(
+                f"boxAppSettings must be a dict, got {type(self.boxAppSettings).__name__}"
+            )
+
+        # Validate required top-level fields in boxAppSettings
+        if "clientID" not in self.boxAppSettings:
+            raise ValueError("boxAppSettings missing required 'clientID' field")
+        if "clientSecret" not in self.boxAppSettings:
+            raise ValueError("boxAppSettings missing required 'clientSecret' field")
+        if "appAuth" not in self.boxAppSettings:
+            raise ValueError("boxAppSettings missing required 'appAuth' field")
+
+        # Validate appAuth structure
+        app_auth = self.boxAppSettings["appAuth"]
+        if not isinstance(app_auth, dict):
+            raise ValueError(
+                f"boxAppSettings.appAuth must be a dict, got {type(app_auth).__name__}"
+            )
+
+        # Validate required fields in appAuth
+        if "privateKey" not in app_auth:
+            raise ValueError(
+                "boxAppSettings.appAuth missing required 'privateKey' field"
+            )
+        if "publicKeyID" not in app_auth:
+            raise ValueError(
+                "boxAppSettings.appAuth missing required 'publicKeyID' field"
+            )
+
 
 class BoxJWTCredentialRequest(BaseModel):
     box_primary_admin_user_id: str | None = None  # user ID to impersonate

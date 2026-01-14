@@ -59,11 +59,15 @@ def parse_box_jwt_config(env_str: str) -> dict[str, Any]:
 
     # Ensure private key has actual newlines (not \n sequences)
     if "appAuth" in config["boxAppSettings"]:
-        private_key = config["boxAppSettings"]["appAuth"].get("privateKey", "")
+        app_auth = config["boxAppSettings"]["appAuth"]
+        # Type check: appAuth must be a dict
+        if not isinstance(app_auth, dict):
+            raise TypeError(
+                f"Expected appAuth to be a dict, got {type(app_auth).__name__}"
+            )
+        private_key = app_auth.get("privateKey", "")
         if private_key and "\\n" in private_key:
             # Convert \n sequences to actual newlines
-            config["boxAppSettings"]["appAuth"]["privateKey"] = private_key.replace(
-                "\\n", "\n"
-            )
+            app_auth["privateKey"] = private_key.replace("\\n", "\n")
 
     return config

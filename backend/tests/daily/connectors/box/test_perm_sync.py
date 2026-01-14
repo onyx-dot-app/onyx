@@ -72,9 +72,19 @@ def test_box_perm_sync_with_real_data(
         url_to_id_mapping = {url: int(id) for id, url in box_id_mapping.items()}
 
     # Use the connector directly without mocking Box API calls
+    # Create a connector factory that respects the test scoping
+    def connector_factory(**kwargs):
+        # Use the connector_specific_config from mock_cc_pair to respect test scoping
+        config = mock_cc_pair.connector.connector_specific_config
+        return box_jwt_connector_factory(
+            user_key="admin",
+            include_all_files=config.get("include_all_files", True),
+            folder_ids=config.get("folder_ids", None),
+        )
+
     with patch(
         "ee.onyx.external_permissions.box.doc_sync.BoxConnector",
-        return_value=_build_connector(box_jwt_connector_factory),
+        side_effect=connector_factory,
     ):
         # Call the function under test
         mock_fetch_all_docs_fn = MagicMock(return_value=[])
@@ -186,9 +196,13 @@ def test_box_perm_sync_with_real_data(
     if checked_files > 0:
         print(f"Checked permissions for {checked_files} files from box_id_mapping.json")
     else:
-        print(
-            "No files checked. box_id_mapping.json may not exist. "
-            "Run test_map_test_ids.py to generate it."
+        # Fail the test if no files were checked - this indicates either:
+        # 1. box_id_mapping.json is missing, or
+        # 2. No doc_ids from the sync matched the mapping (potential sync issue)
+        raise AssertionError(
+            "No files checked. This test requires box_id_mapping.json to exist and "
+            "doc_ids from box_doc_sync to match entries in the mapping. "
+            "Run test_map_test_ids.py to generate box_id_mapping.json."
         )
 
 

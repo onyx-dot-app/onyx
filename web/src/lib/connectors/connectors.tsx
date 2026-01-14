@@ -1771,19 +1771,21 @@ export function createConnectorValidationSchema(
     // Box-specific validation: require either include_all_files or folder_ids
     ...(connector === "box"
       ? {
-          folder_ids: Yup.array().when("include_all_files", {
-            is: false,
-            then: (schema) =>
-              schema
-                .min(
-                  1,
-                  "At least one folder ID is required when 'Include All Files' is unchecked"
-                )
-                .required(
-                  "Folder IDs are required when 'Include All Files' is unchecked"
-                ),
-            otherwise: (schema) => schema,
-          }),
+          folder_ids: Yup.array()
+            .of(Yup.string())
+            .when("include_all_files", {
+              is: false,
+              then: (schema) =>
+                schema
+                  .min(
+                    1,
+                    "At least one folder ID is required when 'Include All Files' is unchecked"
+                  )
+                  .required(
+                    "Folder IDs are required when 'Include All Files' is unchecked"
+                  ),
+              otherwise: (schema) => schema,
+            }),
         }
       : {}),
     // These are advanced settings

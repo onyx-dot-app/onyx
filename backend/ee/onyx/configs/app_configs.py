@@ -100,6 +100,15 @@ SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 )
 
 
+#####
+# Box
+#####
+# In seconds, default is 30 minutes
+BOX_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("BOX_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+
+
 ####
 # Celery Job Frequency
 ####

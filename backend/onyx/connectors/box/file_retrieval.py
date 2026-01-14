@@ -133,18 +133,20 @@ def _get_folders_in_parent(
                     yield _box_file_to_dict(item)
 
             # Box API pagination: check if there are more pages
+            # Box markers are opaque tokens and must come from next_marker.
+            # Using item IDs as markers can cause duplicates, skipped items, or infinite loops.
             next_marker = getattr(items, "next_marker", None)
             if next_marker:
                 marker = next_marker
             elif items.entries and len(items.entries) == limit:
-                # Fallback: if next_marker is not available but we got a full page,
-                # use the last item's ID (legacy behavior, but may cause duplicates)
-                marker = items.entries[-1].id
-                logger.warning(
-                    f"Box API did not return next_marker for parent {parent_id}, "
-                    f"using last item ID as fallback: {marker}. "
-                    f"This may cause pagination issues."
+                # Box API should always provide next_marker when there are more pages.
+                # If it doesn't, we cannot safely continue pagination.
+                logger.error(
+                    f"Box API did not return next_marker for parent {parent_id} despite full page. "
+                    f"Stopping pagination to avoid duplicates or infinite loops. "
+                    f"This may indicate a Box API issue or incomplete data retrieval."
                 )
+                break
             else:
                 break
 
@@ -209,23 +211,21 @@ def _get_files_in_parent(
 
             # Box API pagination: check if there are more pages
             # The Box API response should have a next_marker field when there are more pages
+            # Box markers are opaque tokens and must come from next_marker.
+            # Using item IDs as markers can cause duplicates, skipped items, or infinite loops.
             next_marker = getattr(items, "next_marker", None)
             if next_marker:
                 # Use the API-provided next_marker token for the next page
                 marker = next_marker
             elif items.entries and len(items.entries) == limit:
-                # Fallback: if next_marker is not available but we got a full page,
-                # use the last item's ID (legacy behavior, but may cause duplicates or infinite loops)
-                # WARNING: This fallback is unreliable - if items are added/removed between pages,
-                # using item ID as marker can cause duplicates, skipped items, or infinite loops.
-                # The Box API should always provide next_marker when there are more pages.
-                marker = items.entries[-1].id
+                # Box API should always provide next_marker when there are more pages.
+                # If it doesn't, we cannot safely continue pagination.
                 logger.error(
                     f"Box API did not return next_marker for parent {parent_id} despite full page. "
-                    f"Using last item ID as fallback: {marker}. "
-                    f"This may cause pagination issues (duplicates, skipped items, or infinite loops). "
-                    f"Please report this as a Box API issue."
+                    f"Stopping pagination to avoid duplicates or infinite loops. "
+                    f"This may indicate a Box API issue or incomplete data retrieval."
                 )
+                break
             else:
                 break
 
@@ -259,6 +259,7 @@ def crawl_folders_for_files(
     logger.debug(f"Crawling folder {parent_id}")
     if parent_id not in traversed_parent_ids:
         try:
+            files_yielded = 0
             for file_dict in _get_files_in_parent(
                 client=client,
                 parent_id=parent_id,
@@ -272,9 +273,14 @@ def crawl_folders_for_files(
                     parent_id=parent_id,
                     completion_stage=BoxRetrievalStage.FOLDER_FILES,
                 )
-            # Mark folder as traversed after successfully processing all files
+                files_yielded += 1
+            # Mark folder as traversed only after successfully processing all files
             # (even if no files were found, to avoid re-processing empty folders)
+            # Only mark as traversed if we completed without exceptions
             update_traversed_ids_func(parent_id)
+            logger.debug(
+                f"Successfully traversed folder {parent_id}, found {files_yielded} files"
+            )
         except Exception as e:
             # Sanitize error message to avoid leaking sensitive data (URLs, tokens, etc.)
             import re
@@ -284,7 +290,12 @@ def crawl_folders_for_files(
             error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
             # Remove potential tokens (long alphanumeric strings)
             error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
-            logger.error(f"Error getting files in parent {parent_id}: {error_str}")
+            logger.error(
+                f"Error getting files in parent {parent_id}: {error_str}. "
+                f"Folder will not be marked as traversed and may be retried in future crawls."
+            )
+            # Do NOT mark folder as traversed when file listing aborts on error
+            # This allows the folder to be retried in future crawls
             yield RetrievedBoxFile(
                 box_file={},
                 user_id=user_id,
@@ -378,6 +389,8 @@ def get_all_files_in_folder(
 
             # Box API pagination: check if there are more pages
             # The Box API response should have a next_marker field when there are more pages
+            # Box markers are opaque tokens and must come from next_marker.
+            # Using item IDs as markers can cause duplicates, skipped items, or infinite loops.
             next_marker = getattr(items, "next_marker", None)
             if next_marker:
                 # Use the API-provided next_marker token for the next page
@@ -388,19 +401,14 @@ def get_all_files_in_folder(
                 yield current_marker  # Yield marker for checkpoint resumption
                 break
             elif items.entries and len(items.entries) == limit:
-                # Fallback: if next_marker is not available but we got a full page,
-                # use the last item's ID (legacy behavior, but may cause duplicates or infinite loops)
-                # WARNING: This fallback is unreliable - if items are added/removed between pages,
-                # using item ID as marker can cause duplicates, skipped items, or infinite loops.
-                # The Box API should always provide next_marker when there are more pages.
-                current_marker = items.entries[-1].id
+                # Box API should always provide next_marker when there are more pages.
+                # If it doesn't, we cannot safely continue pagination.
                 logger.error(
                     f"Box API did not return next_marker for folder {folder_id} despite full page. "
-                    f"Using last item ID as fallback: {current_marker}. "
-                    f"This may cause pagination issues (duplicates, skipped items, or infinite loops). "
-                    f"Please report this as a Box API issue."
+                    f"Stopping pagination to avoid duplicates or infinite loops. "
+                    f"This may indicate a Box API issue or incomplete data retrieval."
                 )
-                yield current_marker  # Yield marker for checkpoint resumption
+                # Don't yield a marker - we can't safely continue
                 break
             else:
                 # No more pages

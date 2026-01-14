@@ -106,7 +106,22 @@ def onyx_document_id_from_box_file(file: BoxFileType) -> str:
         raise KeyError("Box file missing 'id' field.")
 
     # Construct Box web link
-    link = file.get("shared_link")
+    # shared_link may be a string URL or an object with a 'url' attribute/key
+    shared_link = file.get("shared_link")
+    link = None
+    if shared_link:
+        if isinstance(shared_link, str):
+            link = shared_link
+        elif isinstance(shared_link, dict):
+            # Extract URL from object
+            link = shared_link.get("url")
+        elif hasattr(shared_link, "url"):
+            # Handle object with url attribute
+            link = shared_link.url
+        else:
+            # Fallback: treat as string
+            link = str(shared_link)
+
     if not link:
         link = f"{BOX_WEBLINK_BASE}{file_id}"
 
@@ -128,7 +143,8 @@ def download_box_file(client: BoxClient, file_id: str, size_threshold: int) -> b
         # Box SDK v10 downloads files using download_file method
         # This returns a stream that we need to read
         download_stream = client.downloads.download_file(file_id=file_id)
-        content_bytes = b""
+        # Use list to collect chunks for O(n) performance instead of O(n²) with +=
+        chunks: list[bytes] = []
         total_size = 0
         chunk_size = BOX_DOWNLOAD_CHUNK_SIZE
 
@@ -138,11 +154,12 @@ def download_box_file(client: BoxClient, file_id: str, size_threshold: int) -> b
             if not chunk:
                 break
             if isinstance(chunk, bytes):
-                content_bytes += chunk
+                chunks.append(chunk)
                 total_size += len(chunk)
             else:
                 # Handle string chunks (shouldn't happen but be safe)
-                content_bytes += chunk.encode("utf-8")
+                chunk_bytes = chunk.encode("utf-8")
+                chunks.append(chunk_bytes)
                 total_size += len(chunk)
 
             if total_size > size_threshold:
@@ -151,7 +168,8 @@ def download_box_file(client: BoxClient, file_id: str, size_threshold: int) -> b
                 )
                 return bytes()
 
-        return content_bytes
+        # Join all chunks at once for O(n) performance
+        return b"".join(chunks)
     except Exception as e:
         return _handle_box_download_error(file_id, e)
     finally:
@@ -175,7 +193,21 @@ def _download_and_extract_sections(
     file_id = file.get("id", "")
     file_name = file.get("name", "")
     file_type = file.get("type", "")
-    link = file.get("shared_link") or f"{BOX_WEBLINK_BASE}{file_id}"
+    # Handle shared_link as string or object
+    shared_link = file.get("shared_link")
+    if shared_link:
+        if isinstance(shared_link, str):
+            link = shared_link
+        elif isinstance(shared_link, dict):
+            link = shared_link.get("url")
+        elif hasattr(shared_link, "url"):
+            link = shared_link.url
+        else:
+            link = str(shared_link) if shared_link else None
+    else:
+        link = None
+    if not link:
+        link = f"{BOX_WEBLINK_BASE}{file_id}"
 
     # Skip folders
     if file_type == BOX_FOLDER_TYPE:
