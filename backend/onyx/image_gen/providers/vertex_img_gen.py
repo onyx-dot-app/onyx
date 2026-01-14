@@ -25,7 +25,9 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         self,
         vertex_credentials: VertexCredentials,
     ):
-        self._vertex_credentials = vertex_credentials
+        self._vertex_credentials = vertex_credentials.vertex_credentials
+        self._vertex_location = vertex_credentials.vertex_location
+        self._vertex_project = vertex_credentials.project_id
 
     @classmethod
     def validate_credentials(
@@ -60,23 +62,17 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
     ) -> "ImageGenerationResponse":
         from litellm import image_generation
 
-        try:
-            x = image_generation(
-                prompt=prompt,
-                model=model,
-                size=size,
-                n=n,
-                quality=quality,
-                vertex_location=self._vertex_location,
-                vertex_credentials=self._vertex_credentials,
-                vertex_project=self._vertex_project,
-                **kwargs,
-            )
-        except Exception as e:
-            print(str(e))
-            raise ImageProviderCredentialsError(f"Error generating image: {e}")
-
-        return x
+        return image_generation(
+            prompt=prompt,
+            model=model,
+            size=size,
+            n=n,
+            quality=quality,
+            vertex_location=self._vertex_location,
+            vertex_credentials=self._vertex_credentials,
+            vertex_project=self._vertex_project,
+            **kwargs,
+        )
 
 
 def _parse_to_vertex_credentials(
