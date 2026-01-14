@@ -61,6 +61,7 @@ class CustomToolConfig(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int | None = None
     additional_headers: dict[str, str] | None = None
+    mcp_headers: dict[str, str] | None = None
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
@@ -77,15 +78,9 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     llm_provider = default_config.model_configuration.llm_provider
 
-    # For Azure, format model name as azure/<deployment_name> for LiteLLM
-    model_name = default_config.model_configuration.name
-    if llm_provider.provider == "azure":
-        deployment = llm_provider.deployment_name or model_name
-        model_name = f"azure/{deployment}"
-
     return LLMConfig(
         model_provider=llm_provider.provider,
-        model_name=model_name,
+        model_name=default_config.model_configuration.name,
         temperature=GEN_AI_TEMPERATURE,
         api_key=llm_provider.api_key,
         api_base=llm_provider.api_base,
@@ -349,6 +344,11 @@ def construct_tools(
             # Find the specific tool that this database entry represents
             expected_tool_name = db_tool_model.display_name
 
+            # Extract additional MCP headers from config
+            additional_mcp_headers = None
+            if custom_tool_config and custom_tool_config.mcp_headers:
+                additional_mcp_headers = custom_tool_config.mcp_headers
+
             mcp_tool_cache[db_tool_model.mcp_server_id] = {}
             # Find the matching tool definition
             for saved_tool in saved_tools:
@@ -363,6 +363,7 @@ def construct_tools(
                     connection_config=connection_config,
                     user_email=user_email,
                     user_oauth_token=mcp_user_oauth_token,
+                    additional_headers=additional_mcp_headers,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 

@@ -9,12 +9,7 @@ import FileInput from "./ConnectorInput/FileInput";
 import { ConfigurableSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/fully_wrapped_tabs";
+import Tabs from "@/refresh-components/Tabs";
 import { useFormikContext } from "formik";
 
 // Define a general type for form values
@@ -60,7 +55,6 @@ const TabsField: FC<TabsFieldProps> = ({
       ) : (
         <Tabs
           defaultValue={tabField.defaultTab || tabField.tabs[0]?.value}
-          className="w-full"
           onValueChange={(newTab) => {
             // Clear values from other tabs but preserve defaults
             tabField.tabs.forEach((tab) => {
@@ -75,15 +69,15 @@ const TabsField: FC<TabsFieldProps> = ({
             });
           }}
         >
-          <TabsList>
+          <Tabs.List>
             {tabField.tabs.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
+              <Tabs.Trigger key={tab.value} value={tab.value}>
                 {tab.label}
-              </TabsTrigger>
+              </Tabs.Trigger>
             ))}
-          </TabsList>
+          </Tabs.List>
           {tabField.tabs.map((tab) => (
-            <TabsContent key={tab.value} value={tab.value} className="">
+            <Tabs.Content key={tab.value} value={tab.value}>
               {tab.fields.map((subField, index, array) => {
                 // Check visibility condition first
                 if (
@@ -112,7 +106,7 @@ const TabsField: FC<TabsFieldProps> = ({
                   </div>
                 );
               })}
-            </TabsContent>
+            </Tabs.Content>
           ))}
         </Tabs>
       )}

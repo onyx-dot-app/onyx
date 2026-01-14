@@ -468,7 +468,7 @@ def test_create_config_missing_credentials(
     )
 
     assert response.status_code == 400
-    assert "credentials" in response.json()["detail"]
+    assert "No provider or source llm provided" in response.json()["detail"]
 
 
 def test_create_config_source_provider_not_found(

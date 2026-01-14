@@ -2,7 +2,6 @@ import base64
 import json
 import os
 from datetime import datetime
-from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -12,9 +11,6 @@ from fastapi import status
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
-
-# Tag for endpoints that should be included in the public API documentation
-PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 
 
 class BasicAuthenticationError(HTTPException):

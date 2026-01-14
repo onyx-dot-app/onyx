@@ -132,7 +132,6 @@ export function useChatSessionController({
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
       filterManager.setSelectedDocumentSets([]);
-      filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
 

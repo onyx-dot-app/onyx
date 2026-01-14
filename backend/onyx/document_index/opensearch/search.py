@@ -24,7 +24,7 @@ from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
 
 MIN_MAX_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_min_max"
-MIN_MAX_NORMALIZATION_PIPELINE_CONFIG = {
+MIN_MAX_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
     "description": "Normalization for keyword and vector scores using min-max",
     "phase_results_processors": [
         {
@@ -49,7 +49,7 @@ MIN_MAX_NORMALIZATION_PIPELINE_CONFIG = {
 }
 
 ZSCORE_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_zscore"
-ZSCORE_NORMALIZATION_PIPELINE_CONFIG = {
+ZSCORE_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
     "description": "Normalization for keyword and vector scores using z-score",
     "phase_results_processors": [
         {
@@ -140,7 +140,7 @@ class DocumentQuery:
             {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}}
         ]
 
-        if tenant_state.tenant_id is not None:
+        if tenant_state.multitenant:
             # TODO(andrei): Fix tenant stuff.
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
@@ -199,7 +199,7 @@ class DocumentQuery:
             {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}}
         ]
 
-        if tenant_state.tenant_id is not None:
+        if tenant_state.multitenant:
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
             )
@@ -341,7 +341,7 @@ class DocumentQuery:
             {"term": {PUBLIC_FIELD_NAME: {"value": True}}},
             {"term": {HIDDEN_FIELD_NAME: {"value": False}}},
         ]
-        if tenant_state.tenant_id is not None:
+        if tenant_state.multitenant:
             hybrid_search_filters.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
             )

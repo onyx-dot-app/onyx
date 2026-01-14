@@ -59,7 +59,9 @@ import Button from "@/refresh-components/buttons/Button";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
-import { SvgKey } from "@opal/icons";
+import { SvgKey, SvgAlertCircle } from "@opal/icons";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import Link from "next/link";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -220,6 +222,9 @@ export default function AddConnector({
   };
 
   const displayName = getSourceDisplayName(connector) || connector;
+  const sourceMetadata = getSourceMetadata(connector);
+  const hasFederatedOption = sourceMetadata.federated === true;
+
   if (!credentials || !editableCredentials) {
     return <></>;
   }
@@ -504,7 +509,36 @@ export default function AddConnector({
           <AdminPageTitle
             includeDivider={false}
             icon={<SourceIcon iconSize={32} sourceType={connector} />}
-            title={displayName}
+            title={
+              hasFederatedOption ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {displayName}
+                  <SimpleTooltip
+                    tooltip={
+                      <div className="flex flex-col gap-2">
+                        <Text as="p" textLight05>
+                          A federated search option is available for this
+                          connector. It will result in greater latency and
+                          reduced search quality.
+                        </Text>
+                        <Link
+                          href={`/admin/connectors/${connector}?mode=federated`}
+                          className="text-action-link-04 hover:underline text-sm"
+                        >
+                          Use federated version instead →
+                        </Link>
+                      </div>
+                    }
+                    side="bottom"
+                    delayDuration={0}
+                  >
+                    <SvgAlertCircle size={20} />
+                  </SimpleTooltip>
+                </span>
+              ) : (
+                displayName
+              )
+            }
             farRightElement={undefined}
           />
 

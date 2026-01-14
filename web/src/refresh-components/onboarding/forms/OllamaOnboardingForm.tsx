@@ -1,4 +1,6 @@
-import React, { useMemo, useState, useEffect } from "react";
+"use client";
+
+import { useMemo, useState, useEffect } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -7,12 +9,7 @@ import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/refresh-components/tabs/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -123,18 +120,15 @@ function OllamaFormFields({
     <Tabs
       value={activeTab}
       onValueChange={(value) => setActiveTab(value as OllamaTab)}
-      className="w-full"
     >
-      <TabsList className="w-full">
-        <TabsTrigger value={OllamaTab.SelfHosted} className="flex-1">
+      <Tabs.List>
+        <Tabs.Trigger value={OllamaTab.SelfHosted}>
           Self-hosted Ollama
-        </TabsTrigger>
-        <TabsTrigger value={OllamaTab.Cloud} className="flex-1">
-          Ollama Cloud
-        </TabsTrigger>
-      </TabsList>
+        </Tabs.Trigger>
+        <Tabs.Trigger value={OllamaTab.Cloud}>Ollama Cloud</Tabs.Trigger>
+      </Tabs.List>
 
-      <TabsContent value={OllamaTab.SelfHosted} className="w-full">
+      <Tabs.Content value={OllamaTab.SelfHosted}>
         <div className="flex flex-col gap-4 w-full">
           <FormikField<string>
             name={FIELD_API_BASE}
@@ -235,9 +229,9 @@ function OllamaFormFields({
             )}
           />
         </div>
-      </TabsContent>
+      </Tabs.Content>
 
-      <TabsContent value={OllamaTab.Cloud} className="w-full">
+      <Tabs.Content value={OllamaTab.Cloud}>
         <div className="flex flex-col gap-4 w-full">
           <FormikField<string>
             name={FIELD_OLLAMA_API_KEY}
@@ -356,7 +350,7 @@ function OllamaFormFields({
             )}
           />
         </div>
-      </TabsContent>
+      </Tabs.Content>
     </Tabs>
   );
 }

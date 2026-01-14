@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 from typing import Any
 from typing import TYPE_CHECKING
@@ -32,7 +34,7 @@ class ImageGenerationProvider(abc.ABC):
     def build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
-    ) -> "ImageGenerationProvider":
+    ) -> ImageGenerationProvider:
         if not cls.validate_credentials(credentials):
             raise ImageProviderCredentialsError(
                 f"Invalid image generation credentials: {credentials}"
@@ -44,7 +46,7 @@ class ImageGenerationProvider(abc.ABC):
     def _build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
-    ) -> "ImageGenerationProvider":
+    ) -> ImageGenerationProvider:
         """
         Given credentials, builds an instance of the provider.
         Should NOT be called directly - use build_from_credentials instead.
@@ -62,6 +64,6 @@ class ImageGenerationProvider(abc.ABC):
         n: int,
         quality: str | None = None,
         **kwargs: Any,
-    ) -> "ImageGenerationResponse":
+    ) -> ImageGenerationResponse:
         """Generates an image based on a prompt."""
         raise NotImplementedError("generate_image not implemented")

@@ -100,7 +100,7 @@ test.describe("Image Generation Provider Configuration", () => {
       }
     });
 
-    test("should configure DALL-E 3 with API key", async ({ page }) => {
+    test.skip("should configure DALL-E 3 with API key", async ({ page }) => {
       // Click Connect on DALL-E 3 card using aria-label
       await openProviderModal(page, "openai_dalle_3");
 

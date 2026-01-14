@@ -10,7 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -437,22 +437,26 @@ export default function AgentsNavigationPage() {
       >
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
-            <InputTypeIn
-              ref={searchInputRef}
-              placeholder="Search agents..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              leftSearchIcon
-            />
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "all" | "your")}
-            >
-              <TabsList>
-                <TabsTrigger value="all">All Agents</TabsTrigger>
-                <TabsTrigger value="your">Your Agents</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex-[2]">
+              <InputTypeIn
+                ref={searchInputRef}
+                placeholder="Search agents..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                leftSearchIcon
+              />
+            </div>
+            <div className="flex-1">
+              <Tabs
+                value={activeTab}
+                onValueChange={(value) => setActiveTab(value as "all" | "your")}
+              >
+                <Tabs.List>
+                  <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
+                  <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
+                </Tabs.List>
+              </Tabs>
+            </div>
           </div>
           <div className="flex flex-row gap-2">
             <Popover

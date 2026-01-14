@@ -100,7 +100,7 @@ def _build_llm_provider_request(
     if not provider:
         raise HTTPException(
             status_code=400,
-            detail="No provider provided",
+            detail="No provider or source llm provided",
         )
 
     credentials = ImageGenerationProviderCredentials(
@@ -216,21 +216,7 @@ def test_image_generation(
     if provider is None:
         raise HTTPException(
             status_code=400,
-            detail="No provider provided",
-        )
-
-    provider_credentials = ImageGenerationProviderCredentials(
-        api_key=api_key,
-        api_base=test_request.api_base,
-        api_version=test_request.api_version,
-        deployment_name=(test_request.deployment_name or test_request.model_name),
-        custom_config=test_request.custom_config,
-    )
-
-    if not validate_credentials(provider, provider_credentials):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid image generation credentials: {provider}",
+            detail="No provider or source llm provided",
         )
 
     try:
@@ -253,8 +239,7 @@ def test_image_generation(
             status_code=404,
             detail=f"Invalid image generation provider: {provider}",
         )
-    except ImageProviderCredentialsError as e:
-        logger.warning(f"Invalid image generation credentials error: {e}")
+    except ImageProviderCredentialsError:
         raise HTTPException(
             status_code=401,
             detail="Invalid image generation credentials",

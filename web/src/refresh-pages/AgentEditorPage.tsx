@@ -344,39 +344,44 @@ function MCPServerCard({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <Button
-              internal
-              rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
-              onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
-            >
-              {actionsLayouts.isFolded ? "Expand" : "Fold"}
-            </Button>
+            {enabledTools.length > 0 && (
+              <Button
+                internal
+                rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
+                onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
+              >
+                {actionsLayouts.isFolded ? "Expand" : "Fold"}
+              </Button>
+            )}
           </GeneralLayouts.Section>
         </ActionsLayouts.Header>
-        <ActionsLayouts.Content>
-          {isLoading ? (
+        {isLoading ? (
+          <ActionsLayouts.Content>
             <ActionsLayouts.ToolSkeleton />
-          ) : filteredTools.length === 0 ? (
-            <ActionsLayouts.NoToolsFound />
-          ) : (
-            filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                name={`${serverFieldName}.tool_${tool.id}`}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon ?? SvgSliders}
-                disabled={!tool.isAvailable}
-                rightChildren={
-                  <SwitchField
-                    name={`${serverFieldName}.tool_${tool.id}`}
-                    disabled={!isServerEnabled}
-                  />
-                }
-              />
-            ))
-          )}
-        </ActionsLayouts.Content>
+          </ActionsLayouts.Content>
+        ) : (
+          enabledTools.length > 0 &&
+          filteredTools.length > 0 && (
+            <ActionsLayouts.Content>
+              {filteredTools.map((tool) => (
+                <ActionsLayouts.Tool
+                  key={tool.id}
+                  name={`${serverFieldName}.tool_${tool.id}`}
+                  title={tool.name}
+                  description={tool.description}
+                  icon={tool.icon ?? SvgSliders}
+                  disabled={!tool.isAvailable}
+                  rightChildren={
+                    <SwitchField
+                      name={`${serverFieldName}.tool_${tool.id}`}
+                      disabled={!isServerEnabled}
+                    />
+                  }
+                />
+              ))}
+            </ActionsLayouts.Content>
+          )
+        )}
       </ActionsLayouts.Root>
     </actionsLayouts.Provider>
   );
@@ -566,30 +571,33 @@ export default function AgentEditorPage({
     replace_base_system_prompt:
       existingAgent?.replace_base_system_prompt ?? false,
     reminders: existingAgent?.task_prompt ?? "",
+    // For new assistants, default to false for optional tools to avoid
+    // "Tool not available" errors when the tool isn't configured.
+    // For existing assistants, preserve the current tool configuration.
     image_generation:
-      (!!imageGenTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
-        )) ??
-      true,
+      !!imageGenTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+      ) ??
+        false),
     web_search:
-      (!!webSearchTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
-        )) ??
-      true,
+      !!webSearchTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
+      ) ??
+        false),
     open_url:
-      (!!openURLTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
-        )) ??
-      true,
+      !!openURLTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
+      ) ??
+        false),
     code_interpreter:
-      (!!codeInterpreterTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
-        )) ??
-      true,
+      !!codeInterpreterTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
+      ) ??
+        false),
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
@@ -1141,7 +1149,10 @@ export default function AgentEditorPage({
                             {values.enable_knowledge &&
                               values.knowledge_source === "team_knowledge" &&
                               ((documentSets?.length ?? 0) > 0 ? (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section
+                                  gap={0.5}
+                                  alignItems="start"
+                                >
                                   {documentSets!.map((documentSet) => (
                                     <DocumentSetSelectable
                                       key={documentSet.id}
@@ -1279,7 +1290,7 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section gap={0.5}>
                           <SimpleTooltip
                             tooltip={imageGenerationDisabledTooltip}
-                            side="top"
+                            side="left"
                           >
                             <Card disabled={!isImageGenerationAvailable}>
                               <InputLayouts.Horizontal

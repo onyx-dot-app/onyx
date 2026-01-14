@@ -20,9 +20,6 @@ from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
 from ee.onyx.server.oauth.api import router as ee_oauth_router
-from ee.onyx.server.query_and_chat.chat_backend import (
-    router as chat_router,
-)
 from ee.onyx.server.query_and_chat.query_backend import (
     basic_router as ee_query_router,
 )
@@ -124,7 +121,6 @@ def get_application() -> FastAPI:
     # EE only backend APIs
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, ee_query_router)
-    include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)
     include_router_with_global_prefix_prepended(application, ee_document_cc_pair_router)
