@@ -697,7 +697,7 @@ def save_user_credentials(
             # TODO: fix and/or type correctly w/base model
             config_data = MCPConnectionData(
                 headers=auth_template.config.get("headers", {}),
-                header_substitutions=auth_template.config.get(HEADER_SUBSTITUTIONS, {}),
+                header_substitutions=request.credentials,
             )
             for oauth_field_key in MCPOAuthKeys:
                 field_key: Literal["client_info", "tokens", "metadata"] = (
