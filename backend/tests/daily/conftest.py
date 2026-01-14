@@ -3,6 +3,7 @@ from collections.abc import Generator
 from typing import Any
 
 import pytest
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -10,6 +11,8 @@ from onyx.main import fetch_versioned_implementation
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+load_dotenv()
 
 
 @pytest.fixture(scope="function")
