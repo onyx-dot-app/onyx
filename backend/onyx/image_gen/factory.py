@@ -3,7 +3,7 @@ from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
 
-PROVIDERS = {
+PROVIDERS: dict[str, ImageGenerationProvider] = {
     AzureImageGenerationProvider.NAME: AzureImageGenerationProvider,
     OpenAIImageGenerationProvider.NAME: OpenAIImageGenerationProvider,
 }

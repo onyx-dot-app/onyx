@@ -95,6 +95,12 @@ def _build_llm_provider_request(
             ],
         )
 
+    if not provider:
+        raise HTTPException(
+            status_code=400,
+            detail="No provider provided",
+        )
+
     credentials = ImageGenerationProviderCredentials(
         api_key=api_key,
         api_base=api_base,
@@ -106,7 +112,7 @@ def _build_llm_provider_request(
     if not validate_credentials(provider, credentials):
         raise HTTPException(
             status_code=400,
-            detail=f"Image provider cannot be built for {provider}",
+            detail=f"Incorrect credentials for {provider}",
         )
 
     return LLMProviderUpsertRequest(

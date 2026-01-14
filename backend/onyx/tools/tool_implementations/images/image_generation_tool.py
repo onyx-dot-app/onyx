@@ -96,7 +96,7 @@ class ImageGenerationTool(Tool[None]):
                 deployment_name=llm_provider.deployment_name,
                 custom_config=llm_provider.custom_config,
             )
-            return llm_provider and validate_credentials(
+            return validate_credentials(
                 provider=llm_provider.provider,
                 credentials=credentials,
             )

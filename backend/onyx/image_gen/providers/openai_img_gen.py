@@ -24,7 +24,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> bool:
-        return credentials.api_key
+        return credentials.api_key is not None
 
     @classmethod
     def _build_from_credentials(
