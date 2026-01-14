@@ -108,7 +108,7 @@ def _build_llm_provider_request(
         api_base=api_base,
         api_version=api_version,
         deployment_name=deployment_name,
-        custom_config=None,
+        custom_config=custom_config,
     )
 
     if not validate_credentials(provider, credentials):
@@ -223,6 +223,7 @@ def test_image_generation(
         api_base=test_request.api_base,
         api_version=test_request.api_version,
         deployment_name=(test_request.deployment_name or test_request.model_name),
+        custom_config=test_request.custom_config,
     )
 
     if not validate_credentials(provider, provider_credentials):
