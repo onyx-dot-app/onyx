@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
@@ -211,7 +212,8 @@ def _update_tool_call_with_delta(
 
     if index not in tool_calls_in_progress:
         tool_calls_in_progress[index] = {
-            "id": None,
+            # Fallback ID in case the provider never sends one via deltas.
+            "id": f"fallback_{uuid.uuid4().hex}",
             "name": None,
             "arguments": "",
         }
@@ -581,6 +583,18 @@ def run_llm_step_pkt_generator(
                 }
                 # Note: LLM cost tracking is now handled in multi_llm.py
             delta = packet.choice.delta
+
+            # Weird behavior from some model providers, just log and ignore for now
+            if (
+                delta.content is None
+                and delta.reasoning_content is None
+                and delta.tool_calls is None
+            ):
+                logger.warning(
+                    f"LLM packet is empty (no contents, reasoning or tool calls). Skipping: {packet}"
+                )
+                continue
+
             if not first_action_recorded and _delta_has_action(delta):
                 span_generation.span_data.time_to_first_action_seconds = (
                     time.monotonic() - stream_start_time

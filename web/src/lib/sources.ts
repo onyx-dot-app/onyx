@@ -80,10 +80,10 @@ const slackMetadata = {
   isPopular: true,
   docs: `${DOCS_ADMINS_PATH}/connectors/official/slack`,
   oauthSupported: true,
+  // Federated Slack is available as an option but not the default
   federated: true,
   federatedTooltip:
-    "⚠️ WARNING: Due to Slack's rate limit and ToS changes, Slack is now federated. " +
-    "This will result in significantly greater latency and lower search quality.",
+    "⚠️ WARNING: Federated Slack results in significantly greater latency and lower search quality.",
   baseSourceType: "slack",
 };
 

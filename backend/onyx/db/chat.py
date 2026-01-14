@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from typing import Tuple
 from uuid import UUID
 
@@ -181,7 +182,11 @@ def get_chat_sessions_by_user(
             .correlate(ChatSession)
         )
 
-        stmt = stmt.where(non_system_message_exists_subq)
+        # Leeway for newly created chats that don't have messages yet
+        time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        recently_created = ChatSession.time_created >= time
+
+        stmt = stmt.where(or_(non_system_message_exists_subq, recently_created))
 
     result = db_session.execute(stmt)
     chat_sessions = result.scalars().all()

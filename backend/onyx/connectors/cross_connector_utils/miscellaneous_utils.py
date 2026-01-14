@@ -97,10 +97,17 @@ def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
 def get_experts_stores_representations(
     experts: list[BasicExpertInfo] | None,
 ) -> list[str] | None:
+    """Gets string representations of experts supplied.
+
+    If an expert cannot be represented as a string, it is omitted from the
+    result.
+    """
     if not experts:
         return None
 
-    reps = [basic_expert_info_representation(owner) for owner in experts]
+    reps: list[str | None] = [
+        basic_expert_info_representation(owner) for owner in experts
+    ]
     return [owner for owner in reps if owner is not None]
 
 

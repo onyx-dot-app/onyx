@@ -377,6 +377,17 @@ class Notification(Base):
         postgresql.JSONB(), nullable=True
     )
 
+    # Unique constraint ix_notification_user_type_data on (user_id, notif_type, additional_data)
+    # ensures notification deduplication for batch inserts. Defined in migration 8405ca81cc83.
+    __table_args__ = (
+        Index(
+            "ix_notification_user_sort",
+            "user_id",
+            "dismissed",
+            desc("first_shown"),
+        ),
+    )
+
 
 """
 Association Tables
@@ -2605,6 +2616,7 @@ class Tool(Base):
     __tablename__ = "tool"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # The name of the tool that the LLM will see
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     # ID of the tool in the codebase, only applies for in-code tools.

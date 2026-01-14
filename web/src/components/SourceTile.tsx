@@ -1,5 +1,4 @@
 import { SourceIcon } from "@/components/SourceIcon";
-import { AlertIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import type { Route } from "next";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -17,7 +16,6 @@ export default function SourceTile({
   sourceMetadata,
   preSelect,
   navigationUrl,
-  hasExistingSlackCredentials,
 }: SourceTileProps) {
   return (
     <Link
@@ -40,11 +38,6 @@ export default function SourceTile({
             `}
       href={navigationUrl as Route}
     >
-      {sourceMetadata.federated && !hasExistingSlackCredentials && (
-        <div className="absolute -top-2 -left-2 z-10 bg-background-tint-01 rounded-full p-1 shadow-md border border-status-warning-05">
-          <AlertIcon size={18} className="text-status-warning-05" />
-        </div>
-      )}
       <SourceIcon sourceType={sourceMetadata.internalName} iconSize={24} />
       <Text as="p" className="pt-2">
         {sourceMetadata.displayName}

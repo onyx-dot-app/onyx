@@ -32,6 +32,7 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import QueryHistoryType
 from onyx.configs.constants import SessionType
@@ -48,7 +49,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
 

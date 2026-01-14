@@ -93,7 +93,7 @@ if __name__ == "__main__":
 #### Docs Changes
 
 Create the new connector page (with guiding images!) with how to get the connector credentials and how to set up the
-connector in Onyx. Then create a Pull Request in https://github.com/onyx-dot-app/onyx-docs.
+connector in Onyx. Then create a Pull Request in [https://github.com/onyx-dot-app/documentation](https://github.com/onyx-dot-app/documentation).
 
 ### Before opening PR
 

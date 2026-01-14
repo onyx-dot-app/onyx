@@ -204,6 +204,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     hasAnyProvider: llmManager.hasAnyProvider,
     isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
+    userId: user?.id,
   });
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
@@ -672,6 +673,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   currentProjectId === null && (
                     <OnboardingFlow
                       handleHideOnboarding={hideOnboarding}
+                      handleFinishOnboarding={finishOnboarding}
                       state={onboardingState}
                       actions={onboardingActions}
                       llmDescriptors={llmDescriptors}

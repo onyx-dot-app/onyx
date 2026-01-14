@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
+import { Section } from "@/layouts/general-layouts";
 
 interface OrientationLayoutProps extends LabelLayoutProps {
   name?: string;
@@ -194,7 +195,7 @@ function LabelLayout({
   const className = cn("flex flex-col w-full", alignment);
   const content = label ? (
     <>
-      <div className="flex flex-row gap-1.5">
+      <Section flexDirection="row" justifyContent="start" gap={0}>
         <Text as="p" mainContentEmphasis text04>
           {label}
         </Text>
@@ -203,7 +204,7 @@ function LabelLayout({
             {" (Optional)"}
           </Text>
         )}
-      </div>
+      </Section>
       {description && (
         <Text as="p" secondaryBody text03>
           {description}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
@@ -23,12 +23,7 @@ import {
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
 import Separator from "@/refresh-components/Separator";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/refresh-components/tabs/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
@@ -558,27 +553,26 @@ export default function MCPAuthenticationModal({
                               : MCPAuthenticationPerformer.ADMIN
                           );
                         }}
-                        className="w-full"
                       >
-                        <TabsList className="w-full">
-                          <TabsTrigger value="per-user" className="flex-1">
+                        <Tabs.List>
+                          <Tabs.Trigger value="per-user">
                             Individual Key (Per User)
-                          </TabsTrigger>
-                          <TabsTrigger value="admin" className="flex-1">
+                          </Tabs.Trigger>
+                          <Tabs.Trigger value="admin">
                             Shared Key (Admin)
-                          </TabsTrigger>
-                        </TabsList>
+                          </Tabs.Trigger>
+                        </Tabs.List>
 
                         {/* Per-user Tab Content */}
-                        <TabsContent value="per-user" className="w-full">
+                        <Tabs.Content value="per-user">
                           <PerUserAuthConfig
                             values={values}
                             setFieldValue={setFieldValue}
                           />
-                        </TabsContent>
+                        </Tabs.Content>
 
                         {/* Admin Tab Content */}
-                        <TabsContent value="admin" className="w-full">
+                        <Tabs.Content value="admin">
                           <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
                             <FormField
                               name="api_token"
@@ -612,7 +606,7 @@ export default function MCPAuthenticationModal({
                               />
                             </FormField>
                           </div>
-                        </TabsContent>
+                        </Tabs.Content>
                       </Tabs>
                     </div>
                   )}
