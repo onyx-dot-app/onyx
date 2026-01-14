@@ -187,11 +187,13 @@ export default Object.assign(PopoverRoot, {
 const sizeClasses = {
   sm: "w-[10rem]",
   md: "w-[15.5rem]",
+  full: "!w-full",
 };
 export interface PopoverMenuProps {
   // size variants
   sm?: boolean;
   md?: boolean;
+  full?: boolean;
 
   children?: React.ReactNode[];
   footer?: React.ReactNode;
@@ -202,6 +204,7 @@ export interface PopoverMenuProps {
 export function PopoverMenu({
   sm,
   md,
+  full,
 
   children,
   footer,
@@ -216,16 +219,13 @@ export function PopoverMenu({
     if (child !== null) return true;
     return index !== 0 && index !== definedChildren.length - 1;
   });
-  const size = sm ? "sm" : md ? "md" : "sm";
+  const size = full ? "full" : sm ? "sm" : md ? "md" : "full";
 
   return (
     <Section alignItems="stretch">
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
-        className={cn(
-          "flex flex-col gap-1 max-h-[20rem] !w-full",
-          sizeClasses[size]
-        )}
+        className={cn("flex flex-col gap-1 max-h-[20rem]", sizeClasses[size])}
       >
         {filteredChildren.map((child, index) => (
           <div key={index}>

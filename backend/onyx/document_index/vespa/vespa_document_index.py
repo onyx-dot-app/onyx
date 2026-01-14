@@ -10,11 +10,11 @@ from retry import retry
 from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
 from onyx.configs.app_configs import RERANK_COUNT
 from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.configs.chat_configs import HYBRID_ALPHA
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import get_document_chunk_ids

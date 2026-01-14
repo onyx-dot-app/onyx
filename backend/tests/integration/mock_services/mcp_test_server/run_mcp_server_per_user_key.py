@@ -41,6 +41,12 @@ API_KEY_RECORDS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# These are inferrable from the file anyways, no need to obfuscate.
+# use them to test your auth with this server
+#
+# mcp_live-kid_alice_001-S3cr3tAlice
+# mcp_live-kid_bob_001-S3cr3tBob
+
 
 # ---- verifier ---------------------------------------------------------------
 class ApiKeyVerifier(TokenVerifier):

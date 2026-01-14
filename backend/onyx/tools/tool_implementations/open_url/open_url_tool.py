@@ -180,12 +180,17 @@ def _resolve_urls_to_document_ids(
         normalized = normalize_url(url)
 
         if normalized:
-            # Get URL variants (with/without trailing slash) for database lookup
-            variants = _url_lookup_variants(normalized)
-            if variants:
-                normalized_map[url] = variants
+            # Some connectors (e.g. Notion) normalize to a non-URL canonical document
+            # identifier (e.g. a UUID) rather than a URL. In those cases, we should
+            # treat the normalized value as a document_id directly.
+            if normalized.startswith(("http://", "https://")):
+                # Get URL variants (with/without trailing slash) for database lookup
+                variants = _url_lookup_variants(normalized)
+                # Defensive fallback: if variant generation fails, still try the
+                # normalized URL itself.
+                normalized_map[url] = variants or {normalized}
             else:
-                unresolved.append(url)
+                normalized_map[url] = {normalized}
         else:
             # No normalizer found - could be a non-URL document ID (e.g., FILE_CONNECTOR__...)
             if url and not url.startswith(("http://", "https://")):

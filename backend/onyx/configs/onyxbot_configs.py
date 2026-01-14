@@ -4,8 +4,6 @@ import os
 # Onyx Slack Bot Configs
 #####
 ONYX_BOT_NUM_RETRIES = int(os.environ.get("ONYX_BOT_NUM_RETRIES", "5"))
-# How much of the available input context can be used for thread context
-MAX_THREAD_CONTEXT_PERCENTAGE = 512 * 2 / 3072
 # Number of docs to display in "Reference Documents"
 ONYX_BOT_NUM_DOCS_TO_DISPLAY = int(os.environ.get("ONYX_BOT_NUM_DOCS_TO_DISPLAY", "5"))
 # If the LLM fails to answer, Onyx can still show the "Reference Documents"

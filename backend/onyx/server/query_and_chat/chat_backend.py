@@ -56,7 +56,6 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.feedback import create_chat_message_feedback
-from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.feedback import remove_chat_message_feedback
 from onyx.db.models import Persona
 from onyx.db.models import User
@@ -92,7 +91,6 @@ from onyx.server.query_and_chat.models import LLMOverride
 from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
-from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
@@ -673,25 +671,6 @@ def remove_chat_feedback(
     remove_chat_message_feedback(
         chat_message_id=chat_message_id,
         user_id=user_id,
-        db_session=db_session,
-    )
-
-
-@router.post("/document-search-feedback")
-def create_search_feedback(
-    feedback: SearchFeedbackRequest,
-    _: User | None = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    """This endpoint isn't protected - it does not check if the user has access to the document
-    Users could try changing boosts of arbitrary docs but this does not leak any data.
-    """
-    create_doc_retrieval_feedback(
-        message_id=feedback.message_id,
-        document_id=feedback.document_id,
-        document_rank=feedback.document_rank,
-        clicked=feedback.click,
-        feedback=feedback.search_feedback,
         db_session=db_session,
     )
 
