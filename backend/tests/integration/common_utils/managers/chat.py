@@ -8,7 +8,6 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
-from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -16,6 +15,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import RetrievalDetails
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -173,7 +173,6 @@ class ChatSessionManager:
         user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
-        retrieval_options: RetrievalDetails | None = None,
         query_override: str | None = None,
         regenerate: bool | None = None,
         llm_override: LLMOverride | None = None,
@@ -208,7 +207,7 @@ class ChatSessionManager:
             message=message,
             file_descriptors=file_descriptors or [],
             search_doc_ids=search_doc_ids or [],
-            retrieval_options=retrieval_options,
+            retrieval_options=RetrievalDetails(),  # This will be deprecated soon anyway
             rerank_settings=None,
             query_override=query_override,
             regenerate=regenerate,

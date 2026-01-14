@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from collections.abc import Iterator
-from datetime import datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -8,10 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
-from onyx.context.search.enums import QueryFlow
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -22,25 +18,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
-
-
-# First chunk of info for streaming QA
-class QADocsResponse(BaseModel):
-    top_documents: list[SearchDoc]
-    rephrased_query: str | None = None
-    predicted_flow: QueryFlow | None
-    predicted_search: SearchType | None
-    applied_source_filters: list[DocumentSource] | None
-    applied_time_cutoff: datetime | None
-    recency_bias_multiplier: float
-
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
-        initial_dict["applied_time_cutoff"] = (
-            self.applied_time_cutoff.isoformat() if self.applied_time_cutoff else None
-        )
-
-        return initial_dict
 
 
 class StreamStopReason(Enum):
@@ -70,20 +47,9 @@ class UserKnowledgeFilePacket(BaseModel):
     user_files: list[FileDescriptor]
 
 
-class LLMRelevanceFilterResponse(BaseModel):
-    llm_selected_doc_indices: list[int]
-
-
 class RelevanceAnalysis(BaseModel):
     relevant: bool
     content: str | None = None
-
-
-class SectionRelevancePiece(RelevanceAnalysis):
-    """LLM analysis mapped to an Inference Section"""
-
-    document_id: str
-    chunk_id: int  # ID of the center chunk for a given inference section
 
 
 class DocumentRelevance(BaseModel):
@@ -114,12 +80,6 @@ class StreamingError(BaseModel):
 
 class OnyxAnswer(BaseModel):
     answer: str | None
-
-
-class ThreadMessage(BaseModel):
-    message: str
-    sender: str | None = None
-    role: MessageType = MessageType.USER
 
 
 class FileChatDisplay(BaseModel):
@@ -158,7 +118,6 @@ class PersonaOverrideConfig(BaseModel):
     num_chunks: float | None = None
     llm_relevance_filter: bool = False
     llm_filter_extraction: bool = False
-    recency_bias: RecencyBiasSetting = RecencyBiasSetting.AUTO
     llm_model_provider_override: str | None = None
     llm_model_version_override: str | None = None
 
