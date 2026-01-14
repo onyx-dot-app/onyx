@@ -3,7 +3,6 @@ import { Packet, StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { handleCopy } from "@/app/chat/message/copyingUtils";
-import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
 import { usePacketProcessor } from "@/app/chat/message/messageComponents/usePacketProcessor";
@@ -86,8 +85,8 @@ const AgentMessage = React.memo(function AgentMessage({
   const finalAnswerRef = useRef<HTMLDivElement>(null);
   const handleTripleClick = useTripleClickSelect(markdownRef);
 
-  // Use the packet processor hook for all streaming packet processing
-  // Returns pre-categorized toolTurnGroups and displayGroups ready for rendering
+  // Process streaming packets: returns data and callbacks
+  // Hook handles all state internally, exposes clean API
   const {
     citations,
     citationMap,
@@ -96,16 +95,11 @@ const AgentMessage = React.memo(function AgentMessage({
     toolTurnGroups,
     displayGroups,
     hasSteps,
-    finalAnswerComing,
     stopPacketSeen,
     stopReason,
-    displayComplete,
-    setDisplayComplete,
+    isComplete,
+    onRenderComplete,
   } = usePacketProcessor(rawPackets, nodeId);
-
-  // Keep a ref to finalAnswerComing for use in callbacks (to read latest value)
-  const finalAnswerComingRef = useRef(finalAnswerComing);
-  finalAnswerComingRef.current = finalAnswerComing;
 
   // Create a chatState that uses streaming citations for immediate rendering
   // This merges the prop citations with streaming citations, preferring streaming ones
@@ -132,7 +126,7 @@ const AgentMessage = React.memo(function AgentMessage({
   return (
     <div
       className="pb-5 md:pt-5 flex flex-col gap-3"
-      data-testid={displayComplete ? "onyx-ai-message" : undefined}
+      data-testid={isComplete ? "onyx-ai-message" : undefined}
     >
       {/* Row 1: Two-column layout for tool steps */}
 
@@ -191,15 +185,10 @@ const AgentMessage = React.memo(function AgentMessage({
                 packets={displayGroup.packets}
                 chatState={effectiveChatState}
                 onComplete={() => {
-                  // if we've reverted to final answer not coming, don't set display complete
-                  // this happens when using claude and a tool calling packet comes after
-                  // some message packets
                   // Only mark complete on the last display group
-                  if (
-                    finalAnswerComingRef.current &&
-                    index === displayGroups.length - 1
-                  ) {
-                    setDisplayComplete(true);
+                  // Hook handles the finalAnswerComing check internally
+                  if (index === displayGroups.length - 1) {
+                    onRenderComplete();
                   }
                 }}
                 animate={false}
@@ -220,8 +209,8 @@ const AgentMessage = React.memo(function AgentMessage({
         )}
       </div>
 
-      {/* Feedback buttons - only show when streaming is complete */}
-      {stopPacketSeen && displayComplete && (
+      {/* Feedback buttons - only show when streaming and rendering complete */}
+      {isComplete && (
         <MessageToolbar
           nodeId={nodeId}
           messageId={messageId}

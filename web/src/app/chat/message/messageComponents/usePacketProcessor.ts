@@ -20,140 +20,132 @@ import {
 } from "./timeline/transformers";
 
 export interface UsePacketProcessorResult {
-  // Citations & Documents
+  // Data
+  toolGroups: GroupedPacket[];
+  displayGroups: GroupedPacket[];
+  toolTurnGroups: TurnGroup[];
   citations: StreamingCitation[];
   citationMap: CitationMap;
   documentMap: Map<string, OnyxDocument>;
 
-  // Pre-categorized and transformed groups
-  toolGroups: GroupedPacket[];
-  toolTurnGroups: TurnGroup[];
-  displayGroups: GroupedPacket[];
-  hasSteps: boolean;
-
-  // Streaming status
-  finalAnswerComing: boolean;
+  // Status (derived from packets)
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
+  hasSteps: boolean;
   expectedBranchesPerTurn: Map<number, number>;
 
-  // UI state
-  displayComplete: boolean;
-  setDisplayComplete: (value: boolean) => void;
-  /** Call when UI has finished displaying all tools to show message content */
+  // Completion: stopPacketSeen && renderComplete
+  isComplete: boolean;
+
+  // Callbacks
+  onRenderComplete: () => void;
   markAllToolsDisplayed: () => void;
 }
 
 /**
- * Custom hook for processing streaming packets in AgentMessage.
+ * Hook for processing streaming packets in AgentMessage.
  *
- * This hook encapsulates all packet processing logic:
- * - Incremental processing (only processes new packets)
- * - Citation extraction and deduplication
- * - Document accumulation
- * - Packet grouping by turn_index and tab_index with pre-categorization
- * - Timeline transformation for tool groups
- * - Streaming status tracking (finalAnswerComing, stopPacketSeen, stopReason)
- * - Synthetic SECTION_END injection for graceful tool completion
+ * Architecture:
+ * - Processor state in ref: incremental processing, synchronous, no double render
+ * - Only true UI state: renderComplete (set by callback), forceShowAnswer (override)
+ * - Everything else derived from packets
  *
- * The hook uses a ref to store the processor state, which allows for:
- * - Synchronous access during render
- * - Persistence across renders without triggering re-renders
- *
- * Re-renders are triggered by:
- * - Parent updating rawPackets prop (most common)
- * - Child calling setDisplayComplete (for animation completion)
- * - UI calling markAllToolsDisplayed (to show message content)
- *
- * @param rawPackets - Array of packets from the streaming response
- * @param nodeId - Unique identifier for the message node (used for reset detection)
- * @returns Processed data ready for rendering in AgentMessage
+ * Key insight: finalAnswerComing and stopPacketSeen are DERIVED from packets,
+ * not independent state. Only renderComplete needs useState.
  */
 export function usePacketProcessor(
   rawPackets: Packet[],
   nodeId: number
 ): UsePacketProcessorResult {
+  // Processor in ref: incremental, synchronous, no double render
   const stateRef = useRef<ProcessorState>(createInitialState(nodeId));
 
-  // displayComplete needs state because it's set from child callback (onComplete)
-  // which needs to trigger a re-render to show feedback buttons
-  const [displayComplete, setDisplayComplete] = useState(false);
+  // Only TRUE UI state: "has renderer finished?"
+  const [renderComplete, setRenderComplete] = useState(false);
 
-  // Track when UI has marked all tools as displayed
-  // This replaces the previous setFinalAnswerComingOverride with a cleaner API
-  const [allToolsDisplayedByUI, setAllToolsDisplayedByUI] = useState(false);
+  // Optional override to force showing answer
+  const [forceShowAnswer, setForceShowAnswer] = useState(false);
 
   // Reset on nodeId change
   if (stateRef.current.nodeId !== nodeId) {
     stateRef.current = createInitialState(nodeId);
-    setDisplayComplete(false);
-    setAllToolsDisplayedByUI(false);
+    setRenderComplete(false);
+    setForceShowAnswer(false);
   }
 
-  // Track previous state to detect transitions
+  // Track for transition detection
   const prevLastProcessed = stateRef.current.lastProcessedIndex;
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
 
-  // Process packets (incremental - only processes new packets)
+  // Detect stream reset (packets shrunk)
+  if (prevLastProcessed > rawPackets.length) {
+    stateRef.current = createInitialState(nodeId);
+    setRenderComplete(false);
+    setForceShowAnswer(false);
+  }
+
+  // Process packets synchronously (incremental)
   stateRef.current = processPackets(stateRef.current, rawPackets);
 
-  // Detect tool-after-message scenario: if finalAnswerComing went from true to false,
-  // it means a tool packet arrived after message packets. Reset displayComplete to
-  // prevent showing feedback buttons while tools are still executing.
+  // Reset renderComplete on tool-after-message transition
   if (prevFinalAnswerComing && !stateRef.current.finalAnswerComing) {
-    setDisplayComplete(false);
+    setRenderComplete(false);
   }
 
-  // Detect stream reset (packets array shrunk) - processPackets resets state internally,
-  // but we also need to reset React state that lives outside the processor
-  if (prevLastProcessed > rawPackets.length) {
-    setDisplayComplete(false);
-    setAllToolsDisplayedByUI(false);
-  }
-
-  // Get derived result from processor
+  // Get derived result
   const result = getResult(stateRef.current);
 
-  // Combine packet-derived finalAnswerComing with UI override
-  const finalAnswerComing = result.finalAnswerComing || allToolsDisplayedByUI;
-
-  // Compute displayGroups: show when finalAnswerComing is true OR no tools exist
+  // Derive displayGroups (not state!)
+  const effectiveFinalAnswerComing =
+    result.finalAnswerComing || forceShowAnswer;
   const displayGroups = useMemo(() => {
-    if (finalAnswerComing || result.toolGroups.length === 0) {
+    if (effectiveFinalAnswerComing || result.toolGroups.length === 0) {
       return result.potentialDisplayGroups;
     }
     return [];
   }, [
-    finalAnswerComing,
+    effectiveFinalAnswerComing,
     result.toolGroups.length,
     result.potentialDisplayGroups,
   ]);
 
-  // Transform toolGroups to timeline format (uses iconRegistry for JSX icons)
+  // Transform toolGroups to timeline format
   const toolTurnGroups = useMemo(() => {
     const allSteps = transformPacketGroups(result.toolGroups);
     return groupStepsByTurn(allSteps);
   }, [result.toolGroups]);
 
-  // Stable callback for marking all tools displayed
+  // Callback reads from ref: always current value, no ref needed in component
+  const onRenderComplete = useCallback(() => {
+    if (stateRef.current.finalAnswerComing) {
+      setRenderComplete(true);
+    }
+  }, []);
+
   const markAllToolsDisplayed = useCallback(() => {
-    setAllToolsDisplayedByUI(true);
+    setForceShowAnswer(true);
   }, []);
 
   return {
+    // Data
+    toolGroups: result.toolGroups,
+    displayGroups,
+    toolTurnGroups,
     citations: result.citations,
     citationMap: result.citationMap,
     documentMap: result.documentMap,
-    toolGroups: result.toolGroups,
-    toolTurnGroups,
-    displayGroups,
-    hasSteps: toolTurnGroups.length > 0,
-    finalAnswerComing,
+
+    // Status (derived from packets)
     stopPacketSeen: result.stopPacketSeen,
     stopReason: result.stopReason,
+    hasSteps: toolTurnGroups.length > 0,
     expectedBranchesPerTurn: result.expectedBranchesPerTurn,
-    displayComplete,
-    setDisplayComplete,
+
+    // Completion: stopPacketSeen && renderComplete
+    isComplete: result.stopPacketSeen && renderComplete,
+
+    // Callbacks
+    onRenderComplete,
     markAllToolsDisplayed,
   };
 }
