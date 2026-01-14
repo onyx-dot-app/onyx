@@ -112,7 +112,7 @@ class DynamicCitationProcessor:
         Args:
             replace_citation_tokens: If True (default), citations like [1] are replaced
                 with formatted markdown links like [[1]](url) and CitationInfo objects
-                are emitted. If False, original citation text is preserved in output
+                are emitted. If False, citation markers are removed entirely from output
                 and no CitationInfo objects are emitted. Regardless of this setting,
                 all seen citations are tracked and available via get_seen_citations().
             stop_stream: Optional stop token pattern to halt processing early.
@@ -319,8 +319,9 @@ class DynamicCitationProcessor:
                     if citation_text:
                         yield citation_text
                 else:
-                    # When not stripping, yield the original citation text unchanged
-                    yield match.group()
+                    # When not replacing citation tokens, remove them entirely (don't yield anything)
+                    # This strips citation markers like [1], [2] from the output text
+                    pass
 
                 self.non_citation_count = 0
 
@@ -357,7 +358,7 @@ class DynamicCitationProcessor:
         6. Handles deduplication of recently cited documents
 
         When replace_tokens=False:
-        4. Returns empty string and empty list (caller yields original match text)
+        4. Returns empty string and empty list (caller removes citation from output)
 
         Args:
             match: Regex match object containing the citation pattern

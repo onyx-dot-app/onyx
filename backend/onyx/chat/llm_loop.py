@@ -297,6 +297,7 @@ def run_llm_loop(
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
+    include_citations: bool = True,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -314,7 +315,11 @@ def run_llm_loop(
         initialize_litellm()
 
         # Initialize citation processor for handling citations dynamically
-        citation_processor = DynamicCitationProcessor()
+        # When include_citations is False, replace_citation_tokens=False removes citation
+        # markers (e.g., [1], [2]) from text and skips emitting CitationInfo packets
+        citation_processor = DynamicCitationProcessor(
+            replace_citation_tokens=include_citations
+        )
 
         # Add project file citation mappings if project files are present
         project_citation_mapping: CitationMapping = {}

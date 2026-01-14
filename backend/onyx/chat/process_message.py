@@ -629,6 +629,7 @@ def handle_stream_message_objects(
                 forced_tool_id=forced_tool_id,
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
+                include_citations=new_msg_req.include_citations,
             )
 
     except ValueError as e:
@@ -790,6 +791,7 @@ def stream_chat_message_objects(
         parent_message_id=new_msg_req.parent_message_id,
         chat_session_id=new_msg_req.chat_session_id,
         origin=new_msg_req.origin,
+        include_citations=new_msg_req.include_citations,
     )
     return handle_stream_message_objects(
         new_msg_req=translated_new_msg_req,

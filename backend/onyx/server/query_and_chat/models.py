@@ -114,6 +114,11 @@ class SendMessageRequest(BaseModel):
     # When False, returns ChatFullResponse with complete data
     stream: bool = True
 
+    # When False, disables citation generation:
+    # - Citation markers like [1], [2] are removed from response text
+    # - No CitationInfo packets are emitted during streaming
+    include_citations: bool = True
+
     @model_validator(mode="after")
     def check_chat_session_id_or_info(self) -> "SendMessageRequest":
         # If neither is provided, default to creating a new chat session using the
@@ -216,6 +221,10 @@ class CreateChatMessageRequest(ChunkContext):
     forced_tool_ids: list[int] | None = None
 
     deep_research: bool = False
+
+    # When True (default), enables citation generation with markers and CitationInfo packets
+    # When False, disables citations: removes markers like [1], [2] and skips CitationInfo packets
+    include_citations: bool = True
 
     # Origin of the message for telemetry tracking
     origin: MessageOrigin = MessageOrigin.UNKNOWN
