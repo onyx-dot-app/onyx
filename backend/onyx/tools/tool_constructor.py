@@ -79,9 +79,6 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     # For Azure, format model name as azure/<deployment_name> for LiteLLM
     model_name = default_config.model_configuration.name
-    if llm_provider.provider == "azure":
-        deployment = llm_provider.deployment_name or model_name
-        model_name = f"azure/{deployment}"
 
     return LLMConfig(
         model_provider=llm_provider.provider,
