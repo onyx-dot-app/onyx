@@ -26,6 +26,8 @@ def test_bedrock_llm_configuration(client: TestClient) -> None:
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         },
+        "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
+        "api_key_changed": True,
     }
 
     # Send the test request
@@ -50,6 +52,8 @@ def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
             "AWS_ACCESS_KEY_ID": "invalid_access_key_id",
             "AWS_SECRET_ACCESS_KEY": "invalid_secret_access_key",
         },
+        "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
+        "api_key_changed": True,
     }
 
     # Send the test request
