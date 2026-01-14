@@ -1,38 +1,36 @@
-from onyx.chat.chat_utils import combine_message_chain
-from onyx.configs.chat_configs import LANGUAGE_CHAT_NAMING_HINT
-from onyx.db.models import ChatMessage
-from onyx.db.search_settings import get_multilingual_expansion
+from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.models import ChatMessageSimple
+from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import llm_response_to_string
-from onyx.prompts.chat_prompts import CHAT_NAMING
+from onyx.prompts.chat_prompts import CHAT_NAMING_REMINDER
+from onyx.prompts.chat_prompts import CHAT_NAMING_SYSTEM_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def get_renamed_conversation_name(
-    full_history: list[ChatMessage],
+def generate_chat_session_name(
+    chat_history: list[ChatMessageSimple],
     llm: LLM,
 ) -> str:
-    max_context_for_naming = 1000
-    history_str = combine_message_chain(
-        messages=full_history, token_limit=max_context_for_naming
+    system_prompt = ChatMessageSimple(
+        message=CHAT_NAMING_SYSTEM_PROMPT,
+        token_count=100,
+        message_type=MessageType.SYSTEM,
     )
 
-    language_hint = (
-        f"\n{LANGUAGE_CHAT_NAMING_HINT.strip()}"
-        if bool(get_multilingual_expansion())
-        else ""
+    reminder_prompt = ChatMessageSimple(
+        message=CHAT_NAMING_REMINDER,
+        token_count=100,
+        message_type=MessageType.USER,
     )
 
-    prompt = CHAT_NAMING.format(
-        language_hint_or_empty=language_hint, chat_history=history_str
+    complete_message_history = [system_prompt] + chat_history + [reminder_prompt]
+
+    llm_facing_history = translate_history_to_llm_format(
+        complete_message_history, llm.config
     )
+    new_name_raw = llm_response_to_string(llm.invoke(llm_facing_history))
 
-    new_name_raw = llm_response_to_string(llm.invoke(prompt))
-
-    new_name = new_name_raw.strip().strip('"')
-
-    logger.debug(f"New Session Name: {new_name}")
-
-    return new_name
+    return new_name_raw.strip().strip('"')

@@ -493,10 +493,75 @@ class TestOpenSearchClient:
         keep_ids = test_client.search_for_document_ids(body=keep_query)
         assert len(keep_ids) == 1
 
-    def test_update_document(self, test_client: OpenSearchClient) -> None:
-        """Tests that update_document raises a NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            test_client.update_document()
+    def test_update_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests updating a document's properties."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Create a document to update.
+        doc = _create_test_document_chunk(
+            document_id="test-doc-update",
+            chunk_index=0,
+            content="Original content",
+            tenant_state=tenant_state,
+            public=True,
+            hidden=False,
+        )
+        test_client.index_document(document=doc)
+
+        # Under test.
+        doc_chunk_id = get_opensearch_doc_chunk_id(
+            document_id=doc.document_id,
+            chunk_index=doc.chunk_index,
+            max_chunk_size=doc.max_chunk_size,
+        )
+        properties_to_update = {
+            "hidden": True,
+            "global_boost": 5,
+        }
+        test_client.update_document(
+            document_chunk_id=doc_chunk_id,
+            properties_to_update=properties_to_update,
+        )
+
+        # Postcondition.
+        # Retrieve the document and verify updates were applied.
+        updated_doc = test_client.get_document(document_chunk_id=doc_chunk_id)
+        assert updated_doc.hidden is True
+        assert updated_doc.global_boost == 5
+        # Other properties should remain unchanged.
+        assert updated_doc.document_id == doc.document_id
+        assert updated_doc.content == doc.content
+        assert updated_doc.public == doc.public
+
+    def test_update_nonexistent_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests updating a nonexistent document raises an error."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Try to update a document that doesn't exist.
+        with pytest.raises(Exception, match="404"):
+            test_client.update_document(
+                document_chunk_id="test_source__nonexistent__512__0",
+                properties_to_update={"hidden": True},
+            )
 
     def test_search_basic(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
