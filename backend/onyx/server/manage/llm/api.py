@@ -196,7 +196,7 @@ def put_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     is_creation: bool = Query(
         False,
-        description="True if updating an existing provider, False if creating a new one",
+        description="True if creating a new one, False if updating an existing provider",
     ),
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
