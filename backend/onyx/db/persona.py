@@ -331,7 +331,7 @@ def update_persona_shared_users(
         persona.is_public = True
 
         # 2. Insert (persona.id <-> user-id) mappings into the `persona__user` table
-        if user_ids:
+        if user_ids is not None:
             # First, delete existing user mappings
             db_session.query(Persona__User).filter(
                 Persona__User.persona_id == persona_id
@@ -352,7 +352,7 @@ def update_persona_shared_users(
                     )
 
         # 3. Insert (persona.id <-> group-id) mappings into the `persona__user_group` table
-        if group_ids:
+        if group_ids is not None:
             # First, delete existing group mappings
             db_session.query(Persona__UserGroup).filter(
                 Persona__UserGroup.persona_id == persona_id
