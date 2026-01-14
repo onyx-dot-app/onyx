@@ -488,4 +488,4 @@ def test_create_config_source_provider_not_found(
     )
 
     assert response.status_code == 404
-    assert "No provider or source llm provided" in response.json()["detail"]
+    assert "not found" in response.json()["detail"]
