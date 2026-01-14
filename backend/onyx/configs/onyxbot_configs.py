@@ -45,10 +45,6 @@ ONYX_BOT_MAX_WAIT_TIME = int(os.environ.get("ONYX_BOT_MAX_WAIT_TIME") or 180)
 # Time (in minutes) after which a Slack message is sent to the user to remind him to give feedback.
 # Set to 0 to disable it (default)
 ONYX_BOT_FEEDBACK_REMINDER = int(os.environ.get("ONYX_BOT_FEEDBACK_REMINDER") or 0)
-# Set to True to rephrase the Slack users messages
-ONYX_BOT_REPHRASE_MESSAGE = (
-    os.environ.get("ONYX_BOT_REPHRASE_MESSAGE", "").lower() == "true"
-)
 
 # ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD is the number of
 # responses OnyxBot can send in a given time period.
