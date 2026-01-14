@@ -159,7 +159,23 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the web search tool with multiple queries in parallel"""
-        queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+        raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+
+        # Normalize queries:
+        # - strip leading/trailing whitespace
+        # - drop empty/whitespace-only queries (e.g. "\n", "\r\n", "   ")
+        queries = [q.strip() for q in raw_queries if q.strip()]
+        if not queries:
+            raise ToolCallException(
+                message=(
+                    "No valid web search queries provided; all queries were empty or "
+                    "whitespace-only after trimming."
+                ),
+                llm_facing_message=(
+                    "No valid web search queries were provided (they were empty or "
+                    "whitespace-only). Please provide a real search query."
+                ),
+            )
 
         # Emit queries
         self.emitter.emit(

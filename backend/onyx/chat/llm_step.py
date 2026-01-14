@@ -854,14 +854,14 @@ def run_llm_step_pkt_generator(
         logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
         logger.debug(f"Accumulated answer: {accumulated_answer}")
 
-    if tool_calls:
-        tool_calls_str = "\n".join(
-            f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
-            for tc in tool_calls
-        )
-        logger.debug(f"Tool calls:\n{tool_calls_str}")
-    else:
-        logger.debug("Tool calls: []")
+        if tool_calls:
+            tool_calls_str = "\n".join(
+                f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
+                for tc in tool_calls
+            )
+            logger.debug(f"Tool calls:\n{tool_calls_str}")
+        else:
+            logger.debug("Tool calls: []")
 
     return (
         LlmStepResult(
