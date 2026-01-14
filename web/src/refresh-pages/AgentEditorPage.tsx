@@ -1144,7 +1144,10 @@ export default function AgentEditorPage({
                             {values.enable_knowledge &&
                               values.knowledge_source === "team_knowledge" &&
                               ((documentSets?.length ?? 0) > 0 ? (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section
+                                  gap={0.5}
+                                  alignItems="start"
+                                >
                                   {documentSets!.map((documentSet) => (
                                     <DocumentSetSelectable
                                       key={documentSet.id}
