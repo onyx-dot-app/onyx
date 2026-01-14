@@ -438,7 +438,17 @@ export default function ActionsPopover({
         serverId: server.id,
         serverName: server.name,
         authTemplate: server.auth_template,
-        onSuccess: undefined,
+        onSuccess: () => {
+          // Update the authentication state after successful credential submission
+          setMcpServerData((prev) => ({
+            ...prev,
+            [server.id]: {
+              ...prev[server.id],
+              isAuthenticated: true,
+              isLoading: false,
+            },
+          }));
+        },
         isAuthenticated: server.user_authenticated,
         existingCredentials: server.user_credentials,
       });
