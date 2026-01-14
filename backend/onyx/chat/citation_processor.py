@@ -29,12 +29,12 @@ class CitationMode(Enum):
 
     REMOVE: Citations are completely removed from output text.
             No CitationInfo objects are emitted.
-            Use case: Research agent intermediate reports where citations
-            will be re-added in the final report.
+            Use case: When you need to remove citations from the output if they are not shared with the user
+            (e.g. in discord bot, public slack bot).
 
     KEEP_MARKERS: Original citation markers like [1], [2] are preserved unchanged.
                   No CitationInfo objects are emitted.
-                  Use case: When you need to track citations and later process
+                  Use case: When you need to track citations in research agent and later process
                   them with collapse_citations() to renumber.
 
     HYPERLINK: Citations are replaced with markdown links like [[1]](url).
