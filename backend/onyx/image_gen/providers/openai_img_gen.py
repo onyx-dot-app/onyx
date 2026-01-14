@@ -1,7 +1,6 @@
 from typing import Any
 from typing import TYPE_CHECKING
 
-from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.interfaces import ImageGenerationProvider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 
@@ -10,6 +9,8 @@ if TYPE_CHECKING:
 
 
 class OpenAIImageGenerationProvider(ImageGenerationProvider):
+    NAME = "openai"
+
     def __init__(
         self,
         api_key: str,
@@ -19,12 +20,18 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         self._api_base = api_base
 
     @classmethod
-    def build_from_credentials(
+    def validate_credentials(
+        cls,
+        credentials: ImageGenerationProviderCredentials,
+    ) -> bool:
+        return credentials.api_key
+
+    @classmethod
+    def _build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> "OpenAIImageGenerationProvider":
-        if not credentials.api_key:
-            raise ImageProviderCredentialsError("API key is required")
+        assert credentials.api_key
 
         return cls(
             api_key=credentials.api_key,
