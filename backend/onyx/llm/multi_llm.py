@@ -169,14 +169,7 @@ class LitellmLLM(LLM):
             # Mask sensitive values in custom_config
             masked_config = {}
             for k, v in custom_config.items():
-                if (
-                    "credentials" in k.lower()
-                    or "secret" in k.lower()
-                    or "key" in k.lower()
-                ):
-                    masked_config[k] = mask_string(v) if v else v
-                else:
-                    masked_config[k] = v
+                masked_config[k] = mask_string(v) if v else v
             dump["custom_config"] = masked_config
         return dump
 
