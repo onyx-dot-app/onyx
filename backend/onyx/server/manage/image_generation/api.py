@@ -215,19 +215,6 @@ def test_image_generation(
             detail="No provider or source llm provided",
         )
 
-    provider_credentials = ImageGenerationProviderCredentials(
-        api_key=api_key,
-        api_base=test_request.api_base,
-        api_version=test_request.api_version,
-        deployment_name=(test_request.deployment_name or test_request.model_name),
-    )
-
-    if not validate_credentials(provider, provider_credentials):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid image generation credentials: {provider}",
-        )
-
     try:
         # Build image provider from credentials
         # If incorrect credentials are provided, this will raise an exception

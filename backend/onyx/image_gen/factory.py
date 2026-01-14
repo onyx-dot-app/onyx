@@ -1,16 +1,24 @@
+from enum import Enum
+
 from onyx.image_gen.interfaces import ImageGenerationProvider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
 
-PROVIDERS: dict[str, type[ImageGenerationProvider]] = {
-    AzureImageGenerationProvider.NAME: AzureImageGenerationProvider,
-    OpenAIImageGenerationProvider.NAME: OpenAIImageGenerationProvider,
+
+class ImageGenerationProviderName(str, Enum):
+    AZURE = "azure"
+    OPENAI = "openai"
+
+
+PROVIDERS = {
+    ImageGenerationProviderName.AZURE: AzureImageGenerationProvider,
+    ImageGenerationProviderName.OPENAI: OpenAIImageGenerationProvider,
 }
 
 
 def get_image_generation_provider(
-    provider: str,
+    provider: str | ImageGenerationProviderName,
     credentials: ImageGenerationProviderCredentials,
 ) -> ImageGenerationProvider:
     provider_cls = _get_image_generation_provider_cls(provider)
@@ -18,14 +26,18 @@ def get_image_generation_provider(
 
 
 def validate_credentials(
-    provider: str,
+    provider: str | ImageGenerationProviderName,
     credentials: ImageGenerationProviderCredentials,
 ) -> bool:
     provider_cls = _get_image_generation_provider_cls(provider)
     return provider_cls.validate_credentials(credentials)
 
 
-def _get_image_generation_provider_cls(provider: str) -> type[ImageGenerationProvider]:
-    if provider not in PROVIDERS:
+def _get_image_generation_provider_cls(
+    provider: str | ImageGenerationProviderName,
+) -> type[ImageGenerationProvider]:
+    try:
+        provider_name = ImageGenerationProviderName(provider)
+    except ValueError:
         raise ValueError(f"Invalid image generation provider: {provider}")
-    return PROVIDERS[provider]
+    return PROVIDERS[provider_name]

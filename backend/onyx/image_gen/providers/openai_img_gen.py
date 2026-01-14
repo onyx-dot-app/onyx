@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -9,8 +11,6 @@ if TYPE_CHECKING:
 
 
 class OpenAIImageGenerationProvider(ImageGenerationProvider):
-    NAME = "openai"
-
     def __init__(
         self,
         api_key: str,
@@ -30,7 +30,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
     def _build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
-    ) -> "OpenAIImageGenerationProvider":
+    ) -> OpenAIImageGenerationProvider:
         assert credentials.api_key
 
         return cls(
@@ -46,7 +46,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         n: int,
         quality: str | None = None,
         **kwargs: Any,
-    ) -> "ImageGenerationResponse":
+    ) -> ImageGenerationResponse:
         from litellm import image_generation
 
         return image_generation(

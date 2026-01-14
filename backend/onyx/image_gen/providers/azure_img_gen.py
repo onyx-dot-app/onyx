@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -9,8 +11,6 @@ if TYPE_CHECKING:
 
 
 class AzureImageGenerationProvider(ImageGenerationProvider):
-    NAME = "azure"
-
     def __init__(
         self,
         api_key: str,
@@ -40,7 +40,7 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
     def _build_from_credentials(
         cls,
         credentials: ImageGenerationProviderCredentials,
-    ) -> "AzureImageGenerationProvider":
+    ) -> AzureImageGenerationProvider:
         assert credentials.api_key
         assert credentials.api_base
         assert credentials.api_version
@@ -60,7 +60,7 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
         n: int,
         quality: str | None = None,
         **kwargs: Any,
-    ) -> "ImageGenerationResponse":
+    ) -> ImageGenerationResponse:
         from litellm import image_generation
 
         deployment = self._deployment_name or model
