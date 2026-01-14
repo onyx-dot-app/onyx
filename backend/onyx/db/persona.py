@@ -307,6 +307,8 @@ def create_update_persona(
 def update_persona_shared_users(
     persona_id: int,
     user_ids: list[UUID],
+    group_ids: list[UUID],
+    is_public: bool,
     user: User | None,
     db_session: Session,
 ) -> None:

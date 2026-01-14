@@ -5,15 +5,15 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import {
-  SvgCheck,
   SvgLink,
   SvgOrganization,
   SvgShare,
   SvgUsers,
+  SvgX,
 } from "@opal/icons";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import * as InputLayouts from "@/layouts/input-layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -24,9 +24,12 @@ import useUsers from "@/hooks/useUsers";
 import useGroups from "@/hooks/useGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/components/user/UserProvider";
-import useFilter from "@/hooks/useFilter";
 import { Formik } from "formik";
 import { useAgent } from "@/hooks/useAgents";
+import IconButton from "@/refresh-components/buttons/IconButton";
+
+const YOUR_ORGANIZATION_TAB = "Your Organization";
+const USERS_AND_GROUPS_TAB = "Users & Groups";
 
 export interface ShareAgentModalProps {
   agent?: MinimalPersonaSnapshot;
@@ -43,25 +46,22 @@ export default function ShareAgentModal({
   const shareAgentModal = useModal();
 
   // Fetch full agent data
-  const { agent: fullAgent, isLoading } = useAgent(agent?.id ?? null);
+  const { agent: fullAgent } = useAgent(agent?.id ?? null);
 
-  // Filter out current user from the list
-  const usersWithoutCurrent = useMemo(
-    () =>
-      (usersData?.accepted ?? []).filter((user) => user.id !== currentUser?.id),
-    [usersData?.accepted, currentUser?.id]
-  );
+  // Create options for InputComboBox from all accepted users and groups
+  const comboBoxOptions = useMemo(() => {
+    const userOptions = (usersData?.accepted ?? []).map((user) => ({
+      value: `user-${user.id}`,
+      label: user.email,
+    }));
 
-  // Use separate useFilter for users and groups
-  const {
-    query,
-    setQuery: setUserSearchQuery,
-    filtered: filteredUsers,
-  } = useFilter(usersWithoutCurrent, (user) => user.email);
-  const { setQuery: setGroupSearchQuery, filtered: filteredGroups } = useFilter(
-    groupsData ?? [],
-    (group) => group.name
-  );
+    const groupOptions = (groupsData ?? []).map((group) => ({
+      value: `group-${group.id}`,
+      label: group.name,
+    }));
+
+    return [...userOptions, ...groupOptions];
+  }, [usersData?.accepted, groupsData]);
 
   const initialValues = {
     selectedUserIds: fullAgent?.users?.map((u) => u.id) ?? [],
@@ -74,21 +74,6 @@ export default function ShareAgentModal({
 
     const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
     navigator.clipboard.writeText(url);
-  }
-
-  if (isLoading || !fullAgent) {
-    return (
-      <Modal.Content tall>
-        <Modal.Header
-          icon={SvgShare}
-          title="Share Agent"
-          onClose={() => shareAgentModal.toggle(false)}
-        />
-        <Modal.Body padding={0.5}>
-          <Text>Loading...</Text>
-        </Modal.Body>
-      </Modal.Content>
-    );
   }
 
   return (
@@ -111,6 +96,24 @@ export default function ShareAgentModal({
             shareAgentModal.toggle(false);
           }
 
+          const ownerId = fullAgent?.owner?.id;
+          const owner = ownerId
+            ? (usersData?.accepted ?? []).find((user) => user.id === ownerId)
+            : currentUser ?? undefined;
+          const otherUsers = owner
+            ? (usersData?.accepted ?? []).filter(
+                (user) =>
+                  user.id !== owner.id &&
+                  values.selectedUserIds.includes(user.id)
+              )
+            : usersData?.accepted ?? [];
+          const displayedUsers = [...(owner ? [owner] : []), ...otherUsers];
+
+          // Compute displayed groups based on current form values
+          const displayedGroups = (groupsData ?? []).filter((group) =>
+            values.selectedGroupIds.includes(group.id)
+          );
+
           return (
             <Modal.Content tall>
               <Modal.Header
@@ -121,89 +124,128 @@ export default function ShareAgentModal({
 
               <Modal.Body padding={0.5}>
                 <Card borderless padding={0.5}>
-                  <Tabs defaultValue="Users & Groups">
+                  <Tabs
+                    defaultValue={
+                      values.isPublic
+                        ? YOUR_ORGANIZATION_TAB
+                        : USERS_AND_GROUPS_TAB
+                    }
+                  >
                     <Tabs.List>
-                      <Tabs.Trigger icon={SvgUsers} value="Users & Groups">
-                        Users &amp; Groups
+                      <Tabs.Trigger
+                        icon={SvgUsers}
+                        value={USERS_AND_GROUPS_TAB}
+                      >
+                        {USERS_AND_GROUPS_TAB}
                       </Tabs.Trigger>
                       <Tabs.Trigger
                         icon={SvgOrganization}
-                        value="Your Organization"
+                        value={YOUR_ORGANIZATION_TAB}
                       >
-                        Your Organization
+                        {YOUR_ORGANIZATION_TAB}
                       </Tabs.Trigger>
                     </Tabs.List>
 
                     <Tabs.Content value="Users & Groups">
                       <Section gap={0.5} alignItems="start">
-                        <InputTypeIn
-                          placeholder="Add users, groups, and accounts"
-                          value={query}
-                          onChange={(e) => {
-                            const newQuery = e.target.value;
-                            setUserSearchQuery(newQuery);
-                            setGroupSearchQuery(newQuery);
+                        <InputComboBox
+                          placeholder="Add users and groups"
+                          value=""
+                          onChange={() => {}}
+                          onValueChange={(selectedValue) => {
+                            if (selectedValue.startsWith("user-")) {
+                              const userId = selectedValue.replace("user-", "");
+                              if (!values.selectedUserIds.includes(userId)) {
+                                setFieldValue("selectedUserIds", [
+                                  ...values.selectedUserIds,
+                                  userId,
+                                ]);
+                              }
+                            } else if (selectedValue.startsWith("group-")) {
+                              const groupId = parseInt(
+                                selectedValue.replace("group-", "")
+                              );
+                              if (!values.selectedGroupIds.includes(groupId)) {
+                                setFieldValue("selectedGroupIds", [
+                                  ...values.selectedGroupIds,
+                                  groupId,
+                                ]);
+                              }
+                            }
                           }}
+                          options={comboBoxOptions}
+                          strict
                         />
-                        {(filteredUsers.length > 0 ||
-                          filteredGroups.length > 0) && (
-                          <Section gap={0.25} alignItems="stretch">
-                            {filteredUsers.map((user) => {
-                              const isSelected =
-                                values.selectedUserIds.includes(user.id);
-                              const isOwner = agent?.owner?.id === user.id;
+                        {(displayedUsers.length > 0 ||
+                          displayedGroups.length > 0) && (
+                          <Section gap={0} alignItems="stretch">
+                            {/* Shared Users */}
+                            {displayedUsers.map((user) => {
+                              const isOwner = fullAgent?.owner?.id === user.id;
+                              const isCurrentUser = currentUser?.id === user.id;
+
                               return (
                                 <LineItem
                                   key={`user-${user.id}`}
-                                  icon={isSelected ? SvgCheck : SvgUser}
-                                  selected={isSelected}
-                                  onClick={() => {
-                                    const newUserIds = isSelected
-                                      ? values.selectedUserIds.filter(
-                                          (id) => id !== user.id
-                                        )
-                                      : [...values.selectedUserIds, user.id];
-                                    setFieldValue(
-                                      "selectedUserIds",
-                                      newUserIds
-                                    );
-                                  }}
+                                  icon={SvgUser}
+                                  description={
+                                    isCurrentUser ? "You" : undefined
+                                  }
                                   rightChildren={
-                                    isOwner ? (
-                                      <Text as="p" mainUiMuted text03>
+                                    isOwner || (isCurrentUser && !agent) ? (
+                                      // Owner will always have the agent "shared" with it.
+                                      // Therefore, we never render any `IconButton SvgX` to remove it.
+                                      //
+                                      // Note:
+                                      // This user, during creation, is assumed to be the "owner". That is why that `(isCurrentUser && !agent)` condition exists.
+                                      <Text secondaryBody text03>
                                         Owner
                                       </Text>
-                                    ) : undefined
+                                    ) : (
+                                      // For all other cases (including for "self-unsharing"), we render an `IconButton SvgX` to remove a person from the list.
+                                      <IconButton
+                                        internal
+                                        icon={SvgX}
+                                        onClick={() => {
+                                          setFieldValue(
+                                            "selectedUserIds",
+                                            values.selectedUserIds.filter(
+                                              (id) => id !== user.id
+                                            )
+                                          );
+                                        }}
+                                      />
+                                    )
                                   }
                                 >
                                   {user.email}
                                 </LineItem>
                               );
                             })}
-                            {filteredGroups.map((group) => {
-                              const isSelected =
-                                values.selectedGroupIds.includes(group.id);
-                              return (
-                                <LineItem
-                                  key={`group-${group.id}`}
-                                  icon={isSelected ? SvgCheck : SvgUsers}
-                                  selected={isSelected}
-                                  onClick={() => {
-                                    const newGroupIds = isSelected
-                                      ? values.selectedGroupIds.filter(
+
+                            {/* Shared Groups */}
+                            {displayedGroups.map((group) => (
+                              <LineItem
+                                key={`group-${group.id}`}
+                                icon={SvgUsers}
+                                rightChildren={
+                                  <IconButton
+                                    internal
+                                    icon={SvgX}
+                                    onClick={() => {
+                                      setFieldValue(
+                                        "selectedGroupIds",
+                                        values.selectedGroupIds.filter(
                                           (id) => id !== group.id
                                         )
-                                      : [...values.selectedGroupIds, group.id];
-                                    setFieldValue(
-                                      "selectedGroupIds",
-                                      newGroupIds
-                                    );
-                                  }}
-                                >
-                                  {group.name}
-                                </LineItem>
-                              );
-                            })}
+                                      );
+                                    }}
+                                  />
+                                }
+                              >
+                                {group.name}
+                              </LineItem>
+                            ))}
                           </Section>
                         )}
                       </Section>
