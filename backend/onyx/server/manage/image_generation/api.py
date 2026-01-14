@@ -133,6 +133,7 @@ def _build_llm_provider_request(
                 is_visible=True,
             )
         ],
+        custom_config=custom_config,
     )
 
 
