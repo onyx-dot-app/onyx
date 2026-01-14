@@ -320,7 +320,10 @@ def update_persona_shared_users(
     )
 
     if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
-        raise ValueError("You don't have permission to modify this persona")
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to modify this persona"
+        )
 
     if is_public:
         # Note
