@@ -319,7 +319,7 @@ class OpenSearchClient:
                 property should exist in the schema.
 
         Raises:
-            Exception: There was an error deleting the document.
+            Exception: There was an error updating the document.
         """
         update_body: dict[str, Any] = {"doc": properties_to_update}
         result = self._client.update(
@@ -339,6 +339,11 @@ class OpenSearchClient:
         match result_string:
             # Sanity check.
             case "updated":
+                return
+            case "noop":
+                logger.warning(
+                    f'OpenSearch reported a no-op when trying to update document with ID "{document_chunk_id}".'
+                )
                 return
             case _:
                 raise RuntimeError(
