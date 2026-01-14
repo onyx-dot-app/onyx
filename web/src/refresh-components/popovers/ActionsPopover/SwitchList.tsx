@@ -9,7 +9,6 @@ import type { IconProps } from "@opal/types";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";
-import { cn } from "@/lib/utils";
 
 export interface SwitchListItem {
   id: string;
@@ -111,7 +110,6 @@ export default function SwitchList({
                     disabled={item.disabled}
                   />
                 }
-                className={cn(item.disabled && "opacity-50")}
               >
                 {item.label}
               </LineItem>
