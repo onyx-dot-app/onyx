@@ -51,20 +51,23 @@ export interface CardProps extends GeneralLayouts.SectionProps {
   // card variants
   translucent?: boolean;
   disabled?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Card({
   translucent,
   disabled,
-
   padding = 1,
-
+  ref,
   ...props
 }: CardProps) {
   const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
 
   return (
-    <div className={cn("rounded-16 w-full h-full", classNames[variant])}>
+    <div
+      ref={ref}
+      className={cn("rounded-16 w-full h-full", classNames[variant])}
+    >
       <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
     </div>
   );
