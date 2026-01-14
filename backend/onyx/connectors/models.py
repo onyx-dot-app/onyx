@@ -11,6 +11,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.configs.constants import RETURN_SEPARATOR
+from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import IndexModelStatus
 from onyx.utils.text_processing import make_url_compatible
 
@@ -186,6 +187,10 @@ class DocumentBase(BaseModel):
     # only filled in EE for connectors w/ permission sync enabled
     external_access: ExternalAccess | None = None
     doc_metadata: dict[str, Any] | None = None
+
+    # Parent hierarchy node raw ID - the folder/space/page containing this document
+    # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
+    parent_hierarchy_raw_node_id: str | None = None
 
     def get_title_for_document_index(
         self,
@@ -366,6 +371,36 @@ class IndexingDocument(Document):
 class SlimDocument(BaseModel):
     id: str
     external_access: ExternalAccess | None = None
+
+
+class HierarchyNode(BaseModel):
+    """
+    Hierarchy node yielded by connectors.
+
+    This is the Pydantic model used by connectors, distinct from the
+    SQLAlchemy HierarchyNode model in db/models.py. The connector runner
+    layer converts this to the DB model when persisting to Postgres.
+    """
+
+    # Raw identifier from the source system
+    # e.g., "1h7uWUR2BYZjtMfEXFt43tauj-Gp36DTPtwnsNuA665I" for Google Drive
+    raw_node_id: str
+
+    # Raw ID of parent node, or None for SOURCE-level children (direct children of the source root)
+    raw_parent_id: str | None = None
+
+    # Human-readable name for display
+    display_name: str
+
+    # Link to view this node in the source system
+    link: str | None = None
+
+    # What kind of structural node this is (folder, space, page, etc.)
+    node_type: HierarchyNodeType
+
+    # Optional: if this hierarchy node represents a document (e.g., Confluence page),
+    # this is the document ID. Set by the connector when the node IS a document.
+    document_id: str | None = None
 
 
 class IndexAttemptMetadata(BaseModel):

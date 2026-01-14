@@ -45,6 +45,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
@@ -543,9 +544,12 @@ def connector_document_extraction(
             logger.info(
                 f"Running '{db_connector.source.value}' connector with checkpoint: {checkpoint}"
             )
-            for document_batch, failure, next_checkpoint in connector_runner.run(
-                checkpoint
-            ):
+            for (
+                document_batch,
+                hierarchy_node_batch,
+                failure,
+                next_checkpoint,
+            ) in connector_runner.run(checkpoint):
                 # Check if connector is disabled mid run and stop if so unless it's the secondary
                 # index being built. We want to populate it even for paused connectors
                 # Often paused connectors are sources that aren't updated frequently but the
@@ -579,6 +583,20 @@ def connector_document_extraction(
                 # Save checkpoint if provided
                 if next_checkpoint:
                     checkpoint = next_checkpoint
+
+                # Process hierarchy nodes batch - upsert directly to Postgres
+                if hierarchy_node_batch:
+                    with get_session_with_current_tenant() as db_session:
+                        upsert_hierarchy_nodes_batch(
+                            db_session=db_session,
+                            nodes=hierarchy_node_batch,
+                            source=db_connector.source,
+                            commit=True,
+                        )
+                    logger.debug(
+                        f"Persisted {len(hierarchy_node_batch)} hierarchy nodes "
+                        f"for attempt={index_attempt_id}"
+                    )
 
                 # below is all document processing task, so if no batch we can just continue
                 if not document_batch:
