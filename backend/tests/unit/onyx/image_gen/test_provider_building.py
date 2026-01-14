@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
@@ -5,6 +7,7 @@ from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
+from onyx.image_gen.providers.vertex_img_gen import VertexImageGenerationProvider
 
 
 def _get_default_image_gen_creds() -> ImageGenerationProviderCredentials:
@@ -86,3 +89,26 @@ def test_build_azure_provider_fails_missing_credential() -> None:
 
         with pytest.raises(ImageProviderCredentialsError):
             get_image_generation_provider("azure", credentials)
+
+
+def test_build_vertex_provider_from_credentials() -> None:
+    credentials = _get_default_image_gen_creds()
+
+    vertex_credentials = {
+        "project_id": "demo_project_1",
+        "private_key_id": "test",
+    }
+
+    vertex_json = json.dumps(vertex_credentials)
+    credentials.custom_config = {
+        "vertex_credentials": vertex_json,
+        "vertex_location": "global",
+    }
+    provider = "vertex_ai"
+
+    image_gen_provider = get_image_generation_provider(provider, credentials)
+
+    assert isinstance(image_gen_provider, VertexImageGenerationProvider)
+    assert image_gen_provider._vertex_credentials == vertex_json
+    assert image_gen_provider._vertex_location == "global"
+    assert image_gen_provider._vertex_project == "demo_project_1"
