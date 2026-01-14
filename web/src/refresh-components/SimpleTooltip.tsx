@@ -8,7 +8,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import Text from "@/refresh-components/texts/Text";
-import { Section } from "@/layouts/general-layouts";
 
 export interface SimpleTooltipProps
   extends React.ComponentPropsWithoutRef<typeof TooltipContent> {
@@ -42,7 +41,7 @@ export default function SimpleTooltip({
   const isDomElement =
     React.isValidElement(children) && typeof children.type === "string";
 
-  const triggerChild = isDomElement ? children : <Section>{children}</Section>;
+  const triggerChild = isDomElement ? children : <span>{children}</span>;
 
   // Check if tooltip is a string to wrap in Text component, otherwise render as-is
   const tooltipContent =
