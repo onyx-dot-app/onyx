@@ -98,7 +98,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d --wait \
-            indexing_model_server
+            relational_db indexing_model_server
 
       - name: Run Tests
         run: |
