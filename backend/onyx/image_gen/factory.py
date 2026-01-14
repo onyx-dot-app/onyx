@@ -18,26 +18,24 @@ PROVIDERS: dict[ImageGenerationProviderName, type[ImageGenerationProvider]] = {
 
 
 def get_image_generation_provider(
-    provider: str | ImageGenerationProviderName,
+    provider: str,
     credentials: ImageGenerationProviderCredentials,
 ) -> ImageGenerationProvider:
-    provider_cls = _get_image_generation_provider_cls(provider)
+    provider_cls = _get_provider_cls(provider)
     return provider_cls.build_from_credentials(credentials)
 
 
 def validate_credentials(
-    provider: str | ImageGenerationProviderName,
+    provider: str,
     credentials: ImageGenerationProviderCredentials,
 ) -> bool:
-    provider_cls = _get_image_generation_provider_cls(provider)
+    provider_cls = _get_provider_cls(provider)
     return provider_cls.validate_credentials(credentials)
 
 
-def _get_image_generation_provider_cls(
-    provider: str | ImageGenerationProviderName,
-) -> type[ImageGenerationProvider]:
+def _get_provider_cls(provider: str) -> type[ImageGenerationProvider]:
     try:
-        provider_name = ImageGenerationProviderName(provider)
+        provider_enum = ImageGenerationProviderName(provider)
     except ValueError:
         raise ValueError(f"Invalid image generation provider: {provider}")
-    return PROVIDERS[provider_name]
+    return PROVIDERS[provider_enum]
