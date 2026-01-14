@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { FunctionComponent, useMemo, useState } from "react";
 import { StopReason } from "@/app/chat/services/streamingModels";
 import { GroupedPacket } from "../packetProcessor";
 import { FullChatState } from "../interfaces";
@@ -18,6 +18,7 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { IconProps } from "@opal/types";
 
 export interface AgentTimelineProps {
   /** Grouped packets from usePacketProcessor */
@@ -34,6 +35,12 @@ export interface AgentTimelineProps {
   hasDisplayContent?: boolean;
   /** Content to render after timeline (final message + toolbar) - slot pattern */
   children?: React.ReactNode;
+  /** Header to render above the timeline */
+  header?: React.ReactNode;
+  /** Whether the timeline is collapsible */
+  collapsible?: boolean;
+  /** Title of the button to toggle the timeline */
+  buttonTitle?: string;
   /** Additional class names */
   className?: string;
   /** Test ID for e2e testing */
@@ -67,87 +74,51 @@ export function AgentTimeline({
   stopReason,
   finalAnswerComing = false,
   hasDisplayContent = false,
+  header,
+  collapsible,
+  buttonTitle,
   children,
   className,
   "data-testid": testId,
 }: AgentTimelineProps) {
-  // Transform packets into step data
-  const allSteps = useMemo(
-    () => transformPacketGroups(packetGroups),
-    [packetGroups]
-  );
-
-  // Group steps by turn for parallel detection
-  const turnGroups = useMemo(() => groupStepsByTurn(allSteps), [allSteps]);
-  const hasSteps = turnGroups.length > 0;
+  const [isExpanded, setIsExpanded] = useState(true);
+  const handleToggle = () => setIsExpanded((prev) => !prev);
 
   return (
-    <div className={cn("flex items-start", className)} data-testid={testId}>
-      {/* Left column: Avatar + Step icons */}
-      <div className="flex flex-col items-center flex-shrink-0">
+    <div className={cn("flex", className)}>
+      {/* Left column: Icon */}
+      <div className="flex flex-col items-center flex-shrink-0 size-9">
         <AgentAvatar agent={chatState.assistant} size={24} />
-        {/* Connector from avatar to first step */}
-        {hasSteps && <StepConnector className="min-h-3" />}
-        {/* Step icons */}
-        {turnGroups.map((turnGroup, turnIndex) => {
-          const firstStep = getFirstStep(turnGroup);
-          if (!firstStep) return null;
-          const showConnector = shouldShowConnector(
-            turnIndex,
-            turnGroups.length,
-            hasDisplayContent && finalAnswerComing
-          );
-          return (
-            <React.Fragment key={`icon-${turnGroup.turnIndex}`}>
-              <StepIcon icon={firstStep.icon} iconType={firstStep.iconType} />
-              {showConnector && <StepConnector />}
-            </React.Fragment>
-          );
-        })}
       </div>
 
-      {/* Right column: Content */}
-      <div className="max-w-message-max break-words pl-4 w-full">
-        {/* Tool steps */}
-        {hasSteps && (
-          <div className="mb-4">
-            {turnGroups.map((turnGroup) => {
-              const firstStep = getFirstStep(turnGroup);
-              if (!firstStep) return null;
+      {/* Right column: Content box (with bg + rounded) */}
+      <div className="flex-1 overflow-hidden bg-background-tint-00 rounded-12">
+        {/* Header row */}
+        <div className="flex items-center justify-between p-2">
+          {/* Header text */}
+          {header && <div className="text-text-03">{header}</div>}
 
-              if (turnGroup.isParallel) {
-                // Multiple steps in same turn - render as tabs
-                return (
-                  <StepContainer key={`content-${turnGroup.turnIndex}`}>
-                    <ParallelSteps
-                      turnGroup={turnGroup}
-                      chatState={chatState}
-                      stopPacketSeen={stopPacketSeen}
-                    />
-                  </StepContainer>
-                );
-              }
+          {/* Button */}
+          {collapsible &&
+            (buttonTitle ? (
+              <Button
+                tertiary
+                onClick={handleToggle}
+                rightIcon={isExpanded ? SvgFold : SvgExpand}
+              >
+                {buttonTitle}
+              </Button>
+            ) : (
+              <IconButton
+                tertiary
+                onClick={handleToggle}
+                icon={isExpanded ? SvgFold : SvgExpand}
+              />
+            ))}
+        </div>
 
-              // Single steps in turn - render each
-              return turnGroup.steps.map((step) => (
-                <StepContainer key={step.key}>
-                  <StepContent
-                    packets={step.packets}
-                    chatState={chatState}
-                    isLoading={step.iconType === "loading"}
-                    stopPacketSeen={stopPacketSeen}
-                    stopReason={stopReason}
-                  >
-                    {({ content }) => <>{content}</>}
-                  </StepContent>
-                </StepContainer>
-              ));
-            })}
-          </div>
-        )}
-
-        {/* Slot for final message content + MessageToolbar */}
-        {children}
+        {/* Children (collapsible) */}
+        {isExpanded && <div className="px-2 pb-2">{children}</div>}
       </div>
     </div>
   );
@@ -214,78 +185,87 @@ export function StepConnector({ className }: StepConnectorProps) {
 
 /**
  * StepContainer - Content container with header and optional collapsible
+ *
+ * Layout:
+ * - ROW 1: Icon + Header + Button (same row, space-between)
+ * - ROW 2: Connector column + Children column (two columns)
  */
 export interface StepContainerProps {
   /** Main content */
   children: React.ReactNode;
+  /** Step icon component */
+  stepIcon?: FunctionComponent<IconProps>;
   /** Header left slot - accepts any component */
   header?: React.ReactNode;
   /** Time/duration string to display (e.g., "2.3s") */
-  duration?: string;
+  buttonTitle?: string;
   /** Whether collapsible control is shown */
   collapsible?: boolean;
   /** Initial expanded state (default: true) */
   defaultExpanded?: boolean;
-  /** Whether container is hovered */
-  isHovered?: boolean;
   /** Additional class names */
   className?: string;
 }
 
 export function StepContainer({
   children,
+  stepIcon: StepIconComponent,
   header,
-  duration,
+  buttonTitle,
   collapsible = true,
   defaultExpanded = true,
-  isHovered = false,
   className,
 }: StepContainerProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const handleToggle = () => setIsExpanded((prev) => !prev);
-  const showHeader = header || duration || collapsible;
+
+  const showHeader = header || buttonTitle || StepIconComponent || collapsible;
 
   return (
-    <div
-      className={cn(
-        "flex-1 min-w-0 rounded-12 transition-colors duration-150 bg-background-tint-00 p-1",
-        isHovered && "bg-background-tint-01",
-        className
-      )}
-    >
-      {showHeader && (
-        <div className="flex items-center justify-between">
-          {/* Left section */}
-          <div className="flex-1 min-w-0 p-1">{header}</div>
+    <div className={cn("flex", className)}>
+      {/* Left column: Icon + Connector (no styling) */}
+      <div className="flex flex-col items-center flex-shrink-0 w-9">
+        {/* Icon */}
+        {StepIconComponent && (
+          <div className="flex items-center justify-center h-9">
+            <StepIconComponent size={24} />
+          </div>
+        )}
+        {/* Connector */}
+        {isExpanded && <div className="w-px flex-1 bg-border-01" />}
+      </div>
 
-          {/* Right section: Collapsible button with duration */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+      {/* Right column: Content box (with bg + rounded) */}
+      <div className={cn("flex-1 overflow-hidden", "bg-background-tint-00")}>
+        {/* Header row */}
+        {showHeader && (
+          <div className="flex items-center justify-between p-2">
+            {/* Header text */}
+            {header && <div className="text-text-03">{header}</div>}
+
+            {/* Button */}
             {collapsible &&
-              (duration ? (
+              (buttonTitle ? (
                 <Button
                   tertiary
                   onClick={handleToggle}
                   rightIcon={isExpanded ? SvgFold : SvgExpand}
-                  aria-expanded={isExpanded}
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
                 >
-                  {duration}
+                  {buttonTitle}
                 </Button>
               ) : (
                 <IconButton
                   tertiary
                   onClick={handleToggle}
                   icon={isExpanded ? SvgFold : SvgExpand}
-                  aria-expanded={isExpanded}
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
                 />
               ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Collapsible content */}
-      {collapsible ? isExpanded && children : children}
+        {/* Children (collapsible) */}
+        {isExpanded && <div className="px-2 pb-2">{children}</div>}
+      </div>
     </div>
   );
 }
