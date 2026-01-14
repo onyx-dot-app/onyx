@@ -265,3 +265,11 @@ class DATestIndexAttempt:
             ),
             time_updated=datetime.fromisoformat(index_attempt.time_updated),
         )
+
+
+class DATestTool(BaseModel):
+    id: int
+    name: str
+    description: str
+    display_name: str
+    in_code_tool_id: str | None

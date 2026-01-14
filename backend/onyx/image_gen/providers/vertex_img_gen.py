@@ -95,6 +95,9 @@ def _parse_to_vertex_credentials(
     vertex_json = json.loads(vertex_credentials)
     vertex_project = vertex_json.get("project_id")
 
+    if not vertex_project:
+        raise ImageProviderCredentialsError("Project ID is required")
+
     return VertexCredentials(
         vertex_credentials=vertex_credentials,
         vertex_location=vertex_location,
