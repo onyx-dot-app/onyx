@@ -168,7 +168,7 @@ export default function MessageToolbar({
         <FeedbackModal {...feedbackModalProps!} />
       </modal.Provider>
 
-      <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
+      <div className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100">
         <TooltipGroup>
           <div className="flex items-center gap-x-0.5">
             {includeMessageSwitcher && (

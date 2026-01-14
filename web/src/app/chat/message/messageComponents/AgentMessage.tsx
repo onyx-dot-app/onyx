@@ -129,6 +129,7 @@ const AgentMessage = React.memo(function AgentMessage({
     otherMessagesCanSwitchTo,
     onMessageSelection,
   });
+  console.log("groupedPackets", groupedPackets);
 
   // Filter tool groups for timeline rendering
   const toolGroups = useMemo(
@@ -155,35 +156,49 @@ const AgentMessage = React.memo(function AgentMessage({
 
   return (
     <div
-      className="pb-5 md:pt-5"
+      className="pb-5 md:pt-5 flex flex-col gap-3"
       data-testid={displayComplete ? "onyx-ai-message" : undefined}
     >
       {/* Row 1: Two-column layout for tool steps */}
-      {hasSteps && (
-        <div className="flex items-start">
-          {/* Left column: Avatar + Step icons */}
-          <div className="flex flex-col items-center flex-shrink-0">
-            <AgentAvatar agent={chatState.assistant} size={24} />
-            <StepConnector className="min-h-3" />
-            <TimelineIcons turnGroups={turnGroups} />
-          </div>
 
-          {/* Right column: Tool steps content */}
-          <div className="max-w-message-max break-words pl-4 w-full">
+      <div className="flex items-start px-1">
+        {/* Left column: Avatar + Step icons */}
+        <div className="flex flex-col items-center flex-shrink-0">
+          <AgentAvatar agent={chatState.assistant} size={24} />
+          {hasSteps && (
+            <>
+              <StepConnector className="min-h-3" />
+              <TimelineIcons turnGroups={turnGroups} />
+            </>
+          )}
+        </div>
+
+        {/* Right column: Tool steps content */}
+        <div className="break-words pl-4 w-full">
+          {groupedPackets.length === 0 ? (
+            // Show blinking dot when no content yet, or stopped message if user cancelled
+            stopReason === StopReason.USER_CANCELLED ? (
+              <Text as="p" secondaryBody text04>
+                User has stopped generation
+              </Text>
+            ) : (
+              <BlinkingDot addMargin />
+            )
+          ) : (
             <TimelineContent
               turnGroups={turnGroups}
               chatState={effectiveChatState}
               stopPacketSeen={stopPacketSeen}
               stopReason={stopReason}
             />
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Row 2: Display content + MessageToolbar */}
       <div
         ref={markdownRef}
-        className="overflow-x-visible max-w-content-max focus:outline-none select-text cursor-text"
+        className="overflow-x-visible focus:outline-none select-text cursor-text px-3"
         onMouseDown={handleTripleClick}
         onCopy={(e) => {
           if (markdownRef.current) {
@@ -191,16 +206,7 @@ const AgentMessage = React.memo(function AgentMessage({
           }
         }}
       >
-        {groupedPackets.length === 0 ? (
-          // Show blinking dot when no content yet, or stopped message if user cancelled
-          stopReason === StopReason.USER_CANCELLED ? (
-            <Text as="p" secondaryBody text04>
-              User has stopped generation
-            </Text>
-          ) : (
-            <BlinkingDot addMargin />
-          )
-        ) : (
+        {groupedPackets.length !== 0 && (
           <div ref={finalAnswerRef}>
             {displayGroups.map((displayGroup, index) => (
               <RendererComponent
