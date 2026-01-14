@@ -31,14 +31,14 @@ def update_persona_access(
         if persona:
             persona.is_public = is_public
 
-    db_session.query(Persona__User).filter(
-        Persona__User.persona_id == persona_id
-    ).delete(synchronize_session="fetch")
-    db_session.query(Persona__UserGroup).filter(
-        Persona__UserGroup.persona_id == persona_id
-    ).delete(synchronize_session="fetch")
+    # NOTE: For user-ids and group-ids, `None` means "leave unchanged", `[]` means "clear all shares",
+    # and a non-empty list means "replace with these shares".
 
-    if user_ids:
+    if user_ids is not None:
+        db_session.query(Persona__User).filter(
+            Persona__User.persona_id == persona_id
+        ).delete(synchronize_session="fetch")
+
         user_ids_set = set(user_ids)
         for user_id in user_ids_set:
             db_session.add(Persona__User(persona_id=persona_id, user_id=user_id))
@@ -53,7 +53,11 @@ def update_persona_access(
                     ).model_dump(),
                 )
 
-    if group_ids:
+    if group_ids is not None:
+        db_session.query(Persona__UserGroup).filter(
+            Persona__UserGroup.persona_id == persona_id
+        ).delete(synchronize_session="fetch")
+
         group_ids_set = set(group_ids)
         for group_id in group_ids_set:
             db_session.add(

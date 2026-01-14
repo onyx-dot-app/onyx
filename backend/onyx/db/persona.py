@@ -204,6 +204,8 @@ def update_persona_access(
         if persona:
             persona.is_public = is_public
 
+    # NOTE: For user-ids and group-ids, `None` means "leave unchanged", `[]` means "clear all shares",
+    # and a non-empty list means "replace with these shares".
     if user_ids is not None:
         db_session.query(Persona__User).filter(
             Persona__User.persona_id == persona_id
@@ -222,13 +224,15 @@ def update_persona_access(
                     ).model_dump(),
                 )
 
-    # NOTE: Empty group_ids ([]) is safe for both MIT and EE versions.
-    # In Python, empty lists are falsy, so `if group_ids:` only triggers when
-    # the list has actual elements. This allows MIT frontends to send group_ids=[]
-    # without causing errors, while still catching attempts to use group sharing
-    # (which is an EE-only feature).
-    if group_ids:
-        raise NotImplementedError("Onyx MIT does not support group-based sharing")
+    # MIT doesn't support group-based sharing, so we allow clearing (no-op since
+    # there shouldn't be any) but raise an error if trying to add actual groups.
+    if group_ids is not None:
+        db_session.query(Persona__UserGroup).filter(
+            Persona__UserGroup.persona_id == persona_id
+        ).delete(synchronize_session="fetch")
+
+        if group_ids:
+            raise NotImplementedError("Onyx MIT does not support group-based sharing")
 
 
 def create_update_persona(
@@ -317,7 +321,7 @@ def create_update_persona(
     return FullPersonaSnapshot.from_model(persona)
 
 
-def update_persona_shared_users(
+def update_persona_shared(
     persona_id: int,
     user: User | None,
     db_session: Session,
