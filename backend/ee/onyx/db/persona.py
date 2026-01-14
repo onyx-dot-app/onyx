@@ -3,21 +3,33 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
+from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 
 
-def make_persona_private(
+def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
-    user_ids: list[UUID] | None,
-    group_ids: list[int] | None,
     db_session: Session,
+    is_public: bool | None = None,
+    user_ids: list[UUID] | None = None,
+    group_ids: list[int] | None = None,
 ) -> None:
-    """NOTE(rkuo): This function batches all updates. If we don't dedupe the inputs,
-    the commit will exception. Caller is responsible for committing."""
+    """Updates the access settings for a persona including public status, user shares,
+    and group shares.
+
+    NOTE: This function batches all updates. If we don't dedupe the inputs,
+    the commit will exception.
+
+    NOTE: Callers are responsible for committing."""
+
+    if is_public is not None:
+        persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+        if persona:
+            persona.is_public = is_public
 
     db_session.query(Persona__User).filter(
         Persona__User.persona_id == persona_id
