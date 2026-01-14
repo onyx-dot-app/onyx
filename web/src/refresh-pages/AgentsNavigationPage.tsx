@@ -36,9 +36,15 @@ interface AgentsSectionProps {
   title: string;
   description?: string;
   agents: MinimalPersonaSnapshot[];
+  onDeleteAgent?: () => void;
 }
 
-function AgentsSection({ title, description, agents }: AgentsSectionProps) {
+function AgentsSection({
+  title,
+  description,
+  agents,
+  onDeleteAgent,
+}: AgentsSectionProps) {
   if (agents.length === 0) return null;
 
   return (
@@ -55,7 +61,7 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent) => (
-            <AgentCard key={agent.id} agent={agent} />
+            <AgentCard key={agent.id} agent={agent} onDelete={onDeleteAgent} />
           ))}
       </div>
     </div>
@@ -63,7 +69,7 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
 }
 
 export default function AgentsNavigationPage() {
-  const { agents } = useAgents();
+  const { agents, refresh } = useAgents();
   const [creatorFilterOpen, setCreatorFilterOpen] = useState(false);
   const [actionsFilterOpen, setActionsFilterOpen] = useState(false);
   const { user } = useUser();
@@ -658,8 +664,13 @@ export default function AgentsNavigationPage() {
               title="Featured Agents"
               description="Curated by your team"
               agents={featuredAgents}
+              onDeleteAgent={refresh}
             />
-            <AgentsSection title="All Agents" agents={allAgents} />
+            <AgentsSection
+              title="All Agents"
+              agents={allAgents}
+              onDeleteAgent={refresh}
+            />
             <CounterSeparator
               count={agentCount}
               text={agentCount === 1 ? "Agent" : "Agents"}

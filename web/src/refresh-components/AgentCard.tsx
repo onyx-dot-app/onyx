@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Button from "@/refresh-components/buttons/Button";
@@ -24,8 +24,11 @@ import {
   SvgEdit,
   SvgPin,
   SvgPinned,
+  SvgTrash,
   SvgUser,
 } from "@opal/icons";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { deletePersona } from "@/app/admin/assistants/lib";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
   children: string;
@@ -44,9 +47,10 @@ function IconLabel({ icon: Icon, children }: IconLabelProps) {
 
 export interface AgentCardProps {
   agent: MinimalPersonaSnapshot;
+  onDelete?: () => void;
 }
 
-export default function AgentCard({ agent }: AgentCardProps) {
+export default function AgentCard({ agent, onDelete }: AgentCardProps) {
   const route = useAppRouter();
   const router = useRouter();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
@@ -57,7 +61,16 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const { user } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
-  const [hovered, setHovered] = React.useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  const handleDeleteAgent = useCallback(async () => {
+    const response = await deletePersona(agent.id);
+    if (response.ok) {
+      setDeleteModalOpen(false);
+      onDelete?.();
+    }
+  }, [agent.id, onDelete]);
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -111,6 +124,15 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   className="hidden group-hover/AgentCard:flex"
                 />
               )}
+              {isOwnedByUser && (
+                <IconButton
+                  icon={SvgTrash}
+                  tertiary
+                  onClick={noProp(() => setDeleteModalOpen(true))}
+                  tooltip="Delete Agent"
+                  className="hidden group-hover/AgentCard:flex"
+                />
+              )}
               <IconButton
                 icon={pinned ? SvgPinned : SvgPin}
                 tertiary
@@ -157,6 +179,29 @@ export default function AgentCard({ agent }: AgentCardProps) {
           </div>
         </div>
       </div>
+
+      {deleteModalOpen && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title={`Delete ${agent.name}`}
+          onClose={() => setDeleteModalOpen(false)}
+          submit={
+            <Button danger onClick={handleDeleteAgent}>
+              Delete
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <Text as="p">
+              Anyone using this agent will no longer be able to access it.
+              Deletion cannot be undone.
+            </Text>
+            <Text as="p">
+              Are you sure you want to delete this agent and all chats using it?
+            </Text>
+          </div>
+        </ConfirmationModalLayout>
+      )}
     </Card>
   );
 }
