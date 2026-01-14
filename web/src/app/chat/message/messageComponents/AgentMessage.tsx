@@ -1,10 +1,4 @@
-import React, {
-  useRef,
-  useState,
-  useCallback,
-  RefObject,
-  useMemo,
-} from "react";
+import React, { useRef, RefObject, useMemo } from "react";
 import { Packet, StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/chat/interfaces";
@@ -18,15 +12,15 @@ import { usePacketProcessor } from "@/app/chat/message/messageComponents/usePack
 import MessageToolbar from "@/app/chat/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/chat/interfaces";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import FeedbackModal, {
-  FeedbackModalProps,
-} from "@/app/chat/components/modal/FeedbackModal";
-import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFeedbackController } from "@/app/chat/hooks/useFeedbackController";
 import Text from "@/refresh-components/texts/Text";
 import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
-import { AgentTimeline } from "@/app/chat/message/messageComponents/timeline";
+import {
+  useAgentTimeline,
+  TimelineIcons,
+  TimelineContent,
+  StepConnector,
+} from "@/app/chat/message/messageComponents/timeline";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -94,77 +88,6 @@ const AgentMessage = React.memo(function AgentMessage({
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
   const handleTripleClick = useTripleClickSelect(markdownRef);
-  const { popup, setPopup } = usePopup();
-  const { handleFeedbackChange } = useFeedbackController({ setPopup });
-
-  // Get the global chat state to know if we're currently streaming
-  const globalChatState = useCurrentChatState();
-
-  const modal = useCreateModal();
-  const [feedbackModalProps, setFeedbackModalProps] =
-    useState<FeedbackModalProps | null>(null);
-
-  // Helper to check if feedback button should be in transient state
-  const isFeedbackTransient = useCallback(
-    (feedbackType: "like" | "dislike") => {
-      const hasCurrentFeedback = currentFeedback === feedbackType;
-      if (!modal.isOpen) return hasCurrentFeedback;
-
-      const isModalForThisFeedback =
-        feedbackModalProps?.feedbackType === feedbackType;
-      const isModalForThisMessage = feedbackModalProps?.messageId === messageId;
-
-      return (
-        hasCurrentFeedback || (isModalForThisFeedback && isModalForThisMessage)
-      );
-    },
-    [currentFeedback, modal, feedbackModalProps, messageId]
-  );
-
-  // Handler for feedback button clicks with toggle logic
-  const handleFeedbackClick = useCallback(
-    async (clickedFeedback: "like" | "dislike") => {
-      if (!messageId) {
-        console.error("Cannot provide feedback - message has no messageId");
-        return;
-      }
-
-      // Toggle logic
-      if (currentFeedback === clickedFeedback) {
-        // Clicking same button - remove feedback
-        await handleFeedbackChange(messageId, null);
-      }
-
-      // Clicking like (will automatically clear dislike if it was active).
-      // Check if we need modal for positive feedback.
-      else if (clickedFeedback === "like") {
-        const predefinedOptions =
-          process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
-        if (predefinedOptions && predefinedOptions.trim()) {
-          // Open modal for positive feedback
-          setFeedbackModalProps({
-            feedbackType: "like",
-            messageId,
-          });
-          modal.toggle(true);
-        } else {
-          // No modal needed - just submit like (this replaces any existing feedback)
-          await handleFeedbackChange(messageId, "like");
-        }
-      }
-
-      // Clicking dislike (will automatically clear like if it was active).
-      // Always open modal for dislike.
-      else {
-        setFeedbackModalProps({
-          feedbackType: "dislike",
-          messageId,
-        });
-        modal.toggle(true);
-      }
-    },
-    [messageId, currentFeedback, handleFeedbackChange, modal]
-  );
 
   // Use the packet processor hook for all streaming packet processing
   const {
@@ -216,6 +139,9 @@ const AgentMessage = React.memo(function AgentMessage({
     [groupedPackets]
   );
 
+  // Transform tool groups for timeline rendering
+  const { turnGroups, hasSteps } = useAgentTimeline(toolGroups);
+
   // Non-tools include messages AND image generation
   const displayGroups = useMemo(
     () =>
@@ -228,106 +154,112 @@ const AgentMessage = React.memo(function AgentMessage({
   );
 
   return (
-    <>
-      {popup}
+    <div
+      className="pb-5 md:pt-5"
+      data-testid={displayComplete ? "onyx-ai-message" : undefined}
+    >
+      {/* Row 1: Two-column layout for tool steps */}
+      {hasSteps && (
+        <div className="flex items-start">
+          {/* Left column: Avatar + Step icons */}
+          <div className="flex flex-col items-center flex-shrink-0">
+            <AgentAvatar agent={chatState.assistant} size={24} />
+            <StepConnector className="min-h-3" />
+            <TimelineIcons turnGroups={turnGroups} />
+          </div>
 
-      <modal.Provider>
-        <FeedbackModal {...feedbackModalProps!} />
-      </modal.Provider>
-
-      <AgentTimeline
-        packetGroups={toolGroups}
-        chatState={effectiveChatState}
-        stopPacketSeen={stopPacketSeen}
-        stopReason={stopReason}
-        finalAnswerComing={finalAnswerComing}
-        hasDisplayContent={displayGroups.length > 0}
-        className="pb-5 md:pt-5"
-        data-testid={displayComplete ? "onyx-ai-message" : undefined}
-      >
-        {/* Content slot: copy handlers, final message, toolbar */}
-        <div
-          ref={markdownRef}
-          className="overflow-x-visible max-w-content-max focus:outline-none select-text cursor-text"
-          onMouseDown={handleTripleClick}
-          onCopy={(e) => {
-            if (markdownRef.current) {
-              handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
-            }
-          }}
-        >
-          {groupedPackets.length === 0 ? (
-            // Show blinking dot when no content yet, or stopped message if user cancelled
-            stopReason === StopReason.USER_CANCELLED ? (
-              <Text as="p" secondaryBody text04>
-                User has stopped generation
-              </Text>
-            ) : (
-              <BlinkingDot addMargin />
-            )
-          ) : (
-            <div ref={finalAnswerRef}>
-              {displayGroups.map((displayGroup, index) => (
-                <RendererComponent
-                  key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-                  packets={displayGroup.packets}
-                  chatState={effectiveChatState}
-                  onComplete={() => {
-                    // if we've reverted to final answer not coming, don't set display complete
-                    // this happens when using claude and a tool calling packet comes after
-                    // some message packets
-                    // Only mark complete on the last display group
-                    if (
-                      finalAnswerComingRef.current &&
-                      index === displayGroups.length - 1
-                    ) {
-                      setDisplayComplete(true);
-                    }
-                  }}
-                  animate={false}
-                  stopPacketSeen={stopPacketSeen}
-                  stopReason={stopReason}
-                >
-                  {({ content }) => <div>{content}</div>}
-                </RendererComponent>
-              ))}
-              {/* Show stopped message when user cancelled and no display content */}
-              {displayGroups.length === 0 &&
-                stopReason === StopReason.USER_CANCELLED && (
-                  <Text as="p" secondaryBody text04>
-                    User has stopped generation
-                  </Text>
-                )}
-            </div>
-          )}
+          {/* Right column: Tool steps content */}
+          <div className="max-w-message-max break-words pl-4 w-full">
+            <TimelineContent
+              turnGroups={turnGroups}
+              chatState={effectiveChatState}
+              stopPacketSeen={stopPacketSeen}
+              stopReason={stopReason}
+            />
+          </div>
         </div>
+      )}
 
-        {/* Feedback buttons - only show when streaming is complete */}
-        {stopPacketSeen && displayComplete && (
-          <MessageToolbar
-            nodeId={nodeId}
-            messageId={messageId}
-            includeMessageSwitcher={includeMessageSwitcher}
-            currentMessageInd={currentMessageInd}
-            otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
-            getPreviousMessage={getPreviousMessage}
-            getNextMessage={getNextMessage}
-            onMessageSelection={onMessageSelection}
-            rawPackets={rawPackets}
-            finalAnswerRef={finalAnswerRef}
-            currentFeedback={currentFeedback}
-            onFeedbackClick={handleFeedbackClick}
-            isFeedbackTransient={isFeedbackTransient}
-            onRegenerate={onRegenerate}
-            parentMessage={parentMessage}
-            llmManager={llmManager}
-            currentModelName={chatState.overriddenModel}
-            citations={citations}
-            documentMap={documentMap}
-          />
+      {/* Row 2: Display content + MessageToolbar */}
+      <div
+        ref={markdownRef}
+        className="overflow-x-visible max-w-content-max focus:outline-none select-text cursor-text"
+        onMouseDown={handleTripleClick}
+        onCopy={(e) => {
+          if (markdownRef.current) {
+            handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
+          }
+        }}
+      >
+        {groupedPackets.length === 0 ? (
+          // Show blinking dot when no content yet, or stopped message if user cancelled
+          stopReason === StopReason.USER_CANCELLED ? (
+            <Text as="p" secondaryBody text04>
+              User has stopped generation
+            </Text>
+          ) : (
+            <BlinkingDot addMargin />
+          )
+        ) : (
+          <div ref={finalAnswerRef}>
+            {displayGroups.map((displayGroup, index) => (
+              <RendererComponent
+                key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+                packets={displayGroup.packets}
+                chatState={effectiveChatState}
+                onComplete={() => {
+                  // if we've reverted to final answer not coming, don't set display complete
+                  // this happens when using claude and a tool calling packet comes after
+                  // some message packets
+                  // Only mark complete on the last display group
+                  if (
+                    finalAnswerComingRef.current &&
+                    index === displayGroups.length - 1
+                  ) {
+                    setDisplayComplete(true);
+                  }
+                }}
+                animate={false}
+                stopPacketSeen={stopPacketSeen}
+                stopReason={stopReason}
+              >
+                {({ content }) => <div>{content}</div>}
+              </RendererComponent>
+            ))}
+            {/* Show stopped message when user cancelled and no display content */}
+            {displayGroups.length === 0 &&
+              stopReason === StopReason.USER_CANCELLED && (
+                <Text as="p" secondaryBody text04>
+                  User has stopped generation
+                </Text>
+              )}
+          </div>
         )}
-      </AgentTimeline>
-    </>
+      </div>
+
+      {/* Feedback buttons - only show when streaming is complete */}
+      {stopPacketSeen && displayComplete && (
+        <MessageToolbar
+          nodeId={nodeId}
+          messageId={messageId}
+          includeMessageSwitcher={includeMessageSwitcher}
+          currentMessageInd={currentMessageInd}
+          otherMessagesCanSwitchTo={otherMessagesCanSwitchTo}
+          getPreviousMessage={getPreviousMessage}
+          getNextMessage={getNextMessage}
+          onMessageSelection={onMessageSelection}
+          rawPackets={rawPackets}
+          finalAnswerRef={finalAnswerRef}
+          currentFeedback={currentFeedback}
+          onRegenerate={onRegenerate}
+          parentMessage={parentMessage}
+          llmManager={llmManager}
+          currentModelName={chatState.overriddenModel}
+          citations={citations}
+          documentMap={documentMap}
+        />
+      )}
+    </div>
   );
 }, arePropsEqual);
 

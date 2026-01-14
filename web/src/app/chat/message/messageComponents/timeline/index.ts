@@ -22,6 +22,14 @@ export {
 } from "./StepContent";
 export { ParallelSteps, type ParallelStepsProps } from "./ParallelSteps";
 
+// New composable components (use instead of AgentTimeline for full layout control)
+export {
+  useAgentTimeline,
+  type UseAgentTimelineResult,
+} from "./useAgentTimeline";
+export { TimelineIcons, type TimelineIconsProps } from "./TimelineIcons";
+export { TimelineContent, type TimelineContentProps } from "./TimelineContent";
+
 // Registries
 export {
   getIconForPackets,
