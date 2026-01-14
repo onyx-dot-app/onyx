@@ -47,7 +47,7 @@ class ImageGenerationProvider(abc.ABC):
     ) -> "ImageGenerationProvider":
         """
         Given credentials, builds an instance of the provider.
-        Should NOT be called directly - use the factory instead.
+        Should NOT be called directly - use build_from_credentials instead.
 
         AssertionError if credentials are invalid.
         """
