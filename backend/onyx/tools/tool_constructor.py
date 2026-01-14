@@ -60,6 +60,7 @@ class CustomToolConfig(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int | None = None
     additional_headers: dict[str, str] | None = None
+    mcp_headers: dict[str, str] | None = None
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
@@ -91,6 +92,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         api_version=llm_provider.api_version,
         deployment_name=llm_provider.deployment_name,
         max_input_tokens=llm.config.max_input_tokens,
+        custom_config=llm_provider.custom_config,
     )
 
 
@@ -339,6 +341,11 @@ def construct_tools(
             # Find the specific tool that this database entry represents
             expected_tool_name = db_tool_model.display_name
 
+            # Extract additional MCP headers from config
+            additional_mcp_headers = None
+            if custom_tool_config and custom_tool_config.mcp_headers:
+                additional_mcp_headers = custom_tool_config.mcp_headers
+
             mcp_tool_cache[db_tool_model.mcp_server_id] = {}
             # Find the matching tool definition
             for saved_tool in saved_tools:
@@ -353,6 +360,7 @@ def construct_tools(
                     connection_config=connection_config,
                     user_email=user_email,
                     user_oauth_token=mcp_user_oauth_token,
+                    additional_headers=additional_mcp_headers,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 

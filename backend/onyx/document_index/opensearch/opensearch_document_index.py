@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import httpx
 
@@ -33,8 +34,14 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
+from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
+from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
+from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
+from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
+from onyx.document_index.opensearch.schema import PROJECT_IDS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
     MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
@@ -117,6 +124,9 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata=json.dumps(chunk.source_document.metadata),
         last_updated=chunk.source_document.doc_updated_at,
         public=chunk.access.is_public,
+        # TODO(andrei): When going over ACL look very carefully at
+        # access_control_list. Notice DocumentAccess::to_acl prepends every
+        # string with a type.
         access_control_list=list(chunk.access.to_acl()),
         global_boost=chunk.boost,
         semantic_identifier=chunk.source_document.semantic_identifier,
@@ -138,23 +148,6 @@ def _convert_onyx_chunk_to_opensearch_document(
         # instance variable. One source of truth -> less chance of a very bad
         # bug in prod.
         tenant_id=TenantState(tenant_id=chunk.tenant_id, multitenant=MULTI_TENANT),
-    )
-
-
-def _enrich_chunk_info() -> None:  # pyright: ignore[reportUnusedFunction]
-    # TODO(andrei): Implement this. Until then, we do not enrich chunk content
-    # with title, etc.
-    raise NotImplementedError(
-        "[ANDREI]: Enrich chunk info is not implemented for OpenSearch."
-    )
-
-
-def _clean_chunk_info() -> None:  # pyright: ignore[reportUnusedFunction]
-    # Analogous to _cleanup_chunks in vespa_document_index.py.
-    # TODO(andrei): Implement this. Until then, we do not enrich chunk content
-    # with title, etc.
-    raise NotImplementedError(
-        "[ANDREI]: Clean chunk info is not implemented for OpenSearch."
     )
 
 
@@ -183,6 +176,10 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             index_name=index_name,
             secondary_index_name=secondary_index_name,
         )
+        if multitenant:
+            raise ValueError(
+                "Bug: OpenSearch is not yet ready for multitenant environments but something tried to use it."
+            )
         self._real_index = OpenSearchDocumentIndex(
             index_name=index_name,
             # TODO(andrei): Sus. Do not plug this into production until all
@@ -490,15 +487,80 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self,
         update_requests: list[MetadataUpdateRequest],
     ) -> None:
-        logger.info("[ANDREI]: Updating documents...")
-        # TODO(andrei): This needs to be implemented. I explicitly do not raise
-        # here despite this not being implemented because indexing calls this
-        # method so it is very hard to test other methods of this class if this
-        # raises.
+        """Updates some set of chunks.
+
+        NOTE: Requires document chunk count be known; will raise if it is not.
+        NOTE: Each update request must have some field to update; if not it is
+        assumed there is a bug in the caller and this will raise.
+
+        TODO(andrei): Consider exploring a batch API for OpenSearch for this
+        operation.
+
+        Args:
+            update_requests: A list of update requests, each containing a list
+                of document IDs and the fields to update. The field updates
+                apply to all of the specified documents in each update request.
+
+        Raises:
+            RuntimeError: Failed to update some or all of the chunks for the
+                specified documents.
+        """
+        for update_request in update_requests:
+            properties_to_update: dict[str, Any] = dict()
+            # TODO(andrei): Nit but consider if we can use DocumentChunk
+            # here so we don't have to think about passing in the
+            # appropriate types into this dict.
+            if update_request.access is not None:
+                properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = list(
+                    update_request.access.to_acl()
+                )
+            if update_request.document_sets is not None:
+                properties_to_update[DOCUMENT_SETS_FIELD_NAME] = list(
+                    update_request.document_sets
+                )
+            if update_request.boost is not None:
+                properties_to_update[GLOBAL_BOOST_FIELD_NAME] = int(
+                    update_request.boost
+                )
+            if update_request.hidden is not None:
+                properties_to_update[HIDDEN_FIELD_NAME] = update_request.hidden
+            if update_request.project_ids is not None:
+                properties_to_update[PROJECT_IDS_FIELD_NAME] = list(
+                    update_request.project_ids
+                )
+
+            for doc_id in update_request.document_ids:
+                if not properties_to_update:
+                    raise ValueError(
+                        f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
+                    )
+
+                doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
+                if doc_chunk_count < 0:
+                    raise ValueError(
+                        f"Tried to update document {doc_id} but its chunk count is not known. Older versions of the "
+                        "application used to permit this but is not a supported state for a document when using OpenSearch."
+                    )
+                if doc_chunk_count == 0:
+                    raise ValueError(
+                        f"Bug: Tried to update document {doc_id} but its chunk count was 0."
+                    )
+
+                for chunk_index in range(doc_chunk_count):
+                    document_chunk_id = get_opensearch_doc_chunk_id(
+                        document_id=doc_id, chunk_index=chunk_index
+                    )
+                    self._os_client.update_document(
+                        document_chunk_id=document_chunk_id,
+                        properties_to_update=properties_to_update,
+                    )
 
     def id_based_retrieval(
         self,
         chunk_requests: list[DocumentSectionRequest],
+        # TODO(andrei): When going over ACL look very carefully at
+        # access_control_list. Notice DocumentAccess::to_acl prepends every
+        # string with a type.
         filters: IndexFilters,
         # TODO(andrei): Remove this from the new interface at some point; we
         # should not be exposing this.
@@ -538,6 +600,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         query_embedding: Embedding,
         final_keywords: list[str] | None,
         query_type: QueryType,
+        # TODO(andrei): When going over ACL look very carefully at
+        # access_control_list. Notice DocumentAccess::to_acl prepends every
+        # string with a type.
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,
@@ -565,6 +630,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
     def random_retrieval(
         self,
+        # TODO(andrei): When going over ACL look very carefully at
+        # access_control_list. Notice DocumentAccess::to_acl prepends every
+        # string with a type.
         filters: IndexFilters,
         num_to_retrieve: int = 100,
         dirty: bool | None = None,

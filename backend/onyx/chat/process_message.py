@@ -281,6 +281,7 @@ def handle_stream_message_objects(
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
     # Additional context that should be included in the chat history, for example:
     # Slack threads where the conversation cannot be represented by a chain of User/Assistant
@@ -509,6 +510,7 @@ def handle_stream_message_objects(
                 chat_session_id=chat_session.id,
                 message_id=user_message.id if user_message else None,
                 additional_headers=custom_tool_additional_headers,
+                mcp_headers=mcp_headers,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=project_search_config.search_usage,

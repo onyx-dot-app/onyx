@@ -6,7 +6,7 @@ import {
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
 } from "@/app/chat/components/tools/constants";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import SwitchList, {
   SwitchListItem,
@@ -159,6 +159,8 @@ export default function ActionsPopover({
   );
 
   const {
+    sourcesInitialized,
+    enableSources,
     enableAllSources: baseEnableAllSources,
     disableAllSources: baseDisableAllSources,
     toggleSource: baseToggleSource,
@@ -168,6 +170,9 @@ export default function ActionsPopover({
     selectedSources,
     setSelectedSources,
   });
+
+  // Store previously enabled sources when search tool is disabled
+  const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
 
   const isDefaultAgent = selectedAssistant.id === 0;
 
@@ -422,6 +427,10 @@ export default function ActionsPopover({
 
     return true;
   });
+
+  const searchToolId =
+    displayTools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)?.id ??
+    null;
 
   // Fetch MCP servers for the assistant on mount
   useEffect(() => {
@@ -711,6 +720,83 @@ export default function ActionsPopover({
 
   const configuredSources = getConfiguredSources(availableSources);
 
+  const numSourcesEnabled = configuredSources.filter((source) =>
+    isSourceEnabled(source.uniqueKey)
+  ).length;
+  const searchToolDisabled =
+    searchToolId !== null && disabledToolIds.includes(searchToolId);
+
+  // Sync search tool state with sources on mount/when states change
+  useEffect(() => {
+    if (searchToolId === null || !sourcesInitialized) return;
+
+    const hasEnabledSources = numSourcesEnabled > 0;
+    if (hasEnabledSources && searchToolDisabled) {
+      // Sources are enabled but search tool is disabled - enable it
+      toggleToolForCurrentAssistant(searchToolId);
+    } else if (!hasEnabledSources && !searchToolDisabled) {
+      // No sources enabled but search tool is enabled - disable it
+      toggleToolForCurrentAssistant(searchToolId);
+    }
+  }, [
+    searchToolId,
+    numSourcesEnabled,
+    searchToolDisabled,
+    sourcesInitialized,
+    toggleToolForCurrentAssistant,
+  ]);
+
+  // Set search tool to a specific enabled/disabled state (only toggles if needed)
+  const setSearchToolEnabled = (enabled: boolean) => {
+    if (searchToolId === null) return;
+
+    if (enabled && searchToolDisabled) {
+      toggleToolForCurrentAssistant(searchToolId);
+    } else if (!enabled && !searchToolDisabled) {
+      toggleToolForCurrentAssistant(searchToolId);
+    }
+  };
+
+  const handleSourceToggle = (sourceUniqueKey: string) => {
+    const willEnable = !isSourceEnabled(sourceUniqueKey);
+    const newEnabledCount = numSourcesEnabled + (willEnable ? 1 : -1);
+
+    toggleSource(sourceUniqueKey);
+    setSearchToolEnabled(newEnabledCount > 0);
+  };
+
+  const handleDisableAllSources = () => {
+    disableAllSources();
+    setSearchToolEnabled(false);
+  };
+
+  const handleEnableAllSources = () => {
+    enableAllSources();
+    setSearchToolEnabled(true);
+  };
+
+  const handleToggleTool = (toolId: number) => {
+    const wasDisabled = disabledToolIds.includes(toolId);
+    toggleToolForCurrentAssistant(toolId);
+
+    if (toolId === searchToolId) {
+      if (wasDisabled) {
+        // Enabling - restore previous sources or enable all (no persistence)
+        const previous = previouslyEnabledSourcesRef.current;
+        if (previous.length > 0) {
+          setSelectedSources(previous);
+        } else {
+          setSelectedSources(configuredSources);
+        }
+        previouslyEnabledSourcesRef.current = [];
+      } else {
+        // Disabling - store current sources then disable all (no persistence)
+        previouslyEnabledSourcesRef.current = [...selectedSources];
+        setSelectedSources([]);
+      }
+    }
+  };
+
   // Only show sources the agent has access to
   const accessibleConfiguredSources = configuredSources.filter(
     (source) =>
@@ -724,7 +810,7 @@ export default function ActionsPopover({
       label: source.displayName,
       leading: <SourceIcon sourceType={source.internalName} iconSize={16} />,
       isEnabled: isSourceEnabled(source.uniqueKey),
-      onToggle: () => toggleSource(source.uniqueKey),
+      onToggle: () => handleSourceToggle(source.uniqueKey),
     })
   );
 
@@ -779,7 +865,7 @@ export default function ActionsPopover({
                 showAdminConfigure={!!adminConfigureInfo}
                 adminConfigureHref={adminConfigureInfo?.href}
                 adminConfigureTooltip={adminConfigureInfo?.tooltip}
-                onToggle={() => toggleToolForCurrentAssistant(tool.id)}
+                onToggle={() => handleToggleTool(tool.id)}
                 onForceToggle={() =>
                   handleForceToggleWithTracking(
                     tool.id,
@@ -855,8 +941,8 @@ export default function ActionsPopover({
       items={sourceToggleItems}
       searchPlaceholder="Search Filters"
       allDisabled={allSourcesDisabled}
-      onDisableAll={disableAllSources}
-      onEnableAll={enableAllSources}
+      onDisableAll={handleDisableAllSources}
+      onEnableAll={handleEnableAllSources}
       disableAllLabel="Disable All Sources"
       enableAllLabel="Enable All Sources"
       onBack={() => setSecondaryView(null)}

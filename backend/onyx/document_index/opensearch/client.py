@@ -230,9 +230,9 @@ class OpenSearchClient:
             )
         result_string: str = result.get("result", "")
         match result_string:
+            # Sanity check.
             case "created":
                 return
-            # Sanity check.
             case "updated":
                 raise RuntimeError(
                     f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
@@ -307,9 +307,49 @@ class OpenSearchClient:
 
         return num_deleted
 
-    def update_document(self) -> None:
-        # TODO(andrei): Implement this.
-        raise NotImplementedError("Not implemented.")
+    def update_document(
+        self, document_chunk_id: str, properties_to_update: dict[str, Any]
+    ) -> None:
+        """Updates a document's properties.
+
+        Args:
+            document_chunk_id: The OpenSearch ID of the document chunk to
+                update.
+            properties_to_update: The properties of the document to update. Each
+                property should exist in the schema.
+
+        Raises:
+            Exception: There was an error updating the document.
+        """
+        update_body: dict[str, Any] = {"doc": properties_to_update}
+        result = self._client.update(
+            index=self._index_name,
+            id=document_chunk_id,
+            body=update_body,
+            _source=False,
+        )
+        result_id = result.get("_id", "")
+        # Sanity check.
+        if result_id != document_chunk_id:
+            raise RuntimeError(
+                f'Upon trying to update a document, OpenSearch responded with ID "{result_id}" '
+                f'instead of "{document_chunk_id}" which is the ID it was given.'
+            )
+        result_string: str = result.get("result", "")
+        match result_string:
+            # Sanity check.
+            case "updated":
+                return
+            case "noop":
+                logger.warning(
+                    f'OpenSearch reported a no-op when trying to update document with ID "{document_chunk_id}".'
+                )
+                return
+            case _:
+                raise RuntimeError(
+                    f'The OpenSearch client returned result "{result_string}" for updating document chunk "{document_chunk_id}". '
+                    "This is unexpected."
+                )
 
     def get_document(self, document_chunk_id: str) -> DocumentChunk:
         """Gets a document.
