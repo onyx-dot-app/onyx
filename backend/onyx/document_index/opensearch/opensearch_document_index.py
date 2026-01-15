@@ -42,6 +42,7 @@ from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
+from onyx.document_index.opensearch.hierarchy_bitmap import encode_hierarchy_bitmap
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
