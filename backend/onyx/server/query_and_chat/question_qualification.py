@@ -2,6 +2,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+from typing import Optional
 
 import yaml
 from pydantic import BaseModel
@@ -74,7 +75,7 @@ Example response: {{"block_confidence": 0.85, "matched_index": 2}}"""
 
 
 class QuestionQualificationService:
-    _instance: "QuestionQualificationService" | None = None
+    _instance: Optional["QuestionQualificationService"] = None
     _initialized = False
 
     def __new__(cls) -> "QuestionQualificationService":
