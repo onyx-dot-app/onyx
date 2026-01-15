@@ -22,6 +22,9 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
+# URL for the build webapp proxy endpoint
+BUILD_WEBAPP_URL = os.environ.get("BUILD_WEBAPP_URL", "")
+
 # Whether to send user metadata (user_id/email and session_id) to the LLM provider.
 # Disabled by default.
 SEND_USER_METADATA_TO_LLM_PROVIDER = (

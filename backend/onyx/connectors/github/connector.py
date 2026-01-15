@@ -240,8 +240,21 @@ def _get_userinfo(user: NamedUser) -> dict[str, str]:
 def _convert_pr_to_document(
     pull_request: PullRequest, repo_external_access: ExternalAccess | None
 ) -> Document:
-    repo_name = pull_request.base.repo.full_name if pull_request.base else ""
-    doc_metadata = DocMetadata(repo=repo_name)
+    repo_full_name = pull_request.base.repo.full_name if pull_request.base else ""
+    # Split full_name (e.g., "owner/repo") into owner and repo
+    parts = repo_full_name.split("/", 1)
+    owner_name = parts[0] if parts else ""
+    repo_name = parts[1] if len(parts) > 1 else repo_full_name
+
+    doc_metadata = {
+        "repo": repo_full_name,
+        "hierarchy": {
+            "source_path": [owner_name, repo_name, "pull_requests"],
+            "owner": owner_name,
+            "repo": repo_name,
+            "object_type": "pull_request",
+        },
+    }
     return Document(
         id=pull_request.html_url,
         sections=[
@@ -259,7 +272,7 @@ def _convert_pr_to_document(
             else None
         ),
         # this metadata is used in perm sync
-        doc_metadata=doc_metadata.model_dump(),
+        doc_metadata=doc_metadata,
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
@@ -316,8 +329,21 @@ def _fetch_issue_comments(issue: Issue) -> str:
 def _convert_issue_to_document(
     issue: Issue, repo_external_access: ExternalAccess | None
 ) -> Document:
-    repo_name = issue.repository.full_name if issue.repository else ""
-    doc_metadata = DocMetadata(repo=repo_name)
+    repo_full_name = issue.repository.full_name if issue.repository else ""
+    # Split full_name (e.g., "owner/repo") into owner and repo
+    parts = repo_full_name.split("/", 1)
+    owner_name = parts[0] if parts else ""
+    repo_name = parts[1] if len(parts) > 1 else repo_full_name
+
+    doc_metadata = {
+        "repo": repo_full_name,
+        "hierarchy": {
+            "source_path": [owner_name, repo_name, "issues"],
+            "owner": owner_name,
+            "repo": repo_name,
+            "object_type": "issue",
+        },
+    }
     return Document(
         id=issue.html_url,
         sections=[TextSection(link=issue.html_url, text=issue.body or "")],
@@ -327,7 +353,7 @@ def _convert_issue_to_document(
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
         # this metadata is used in perm sync
-        doc_metadata=doc_metadata.model_dump(),
+        doc_metadata=doc_metadata,
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
