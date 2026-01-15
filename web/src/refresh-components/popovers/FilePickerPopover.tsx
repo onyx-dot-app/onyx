@@ -120,7 +120,7 @@ function FilePickerPopoverContents({
   const quickAccessFiles = recentFiles.slice(0, MAX_FILES_TO_SHOW);
 
   return (
-    <PopoverMenu medium>
+    <PopoverMenu md>
       {[
         // Action button to upload more files
         <LineItem
