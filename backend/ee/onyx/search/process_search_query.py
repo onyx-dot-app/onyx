@@ -9,6 +9,7 @@ from ee.onyx.server.query_and_chat.streaming_models import SearchDocsPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
 from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import SearchDoc
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
@@ -83,7 +84,7 @@ def gather_search_stream(
     Aggregate all streaming packets into SearchFullResponse.
     """
     all_executed_queries: list[str] = []
-    search_docs: list = []
+    search_docs: list[SearchDoc] = []
     error: str | None = None
 
     for packet in packets:

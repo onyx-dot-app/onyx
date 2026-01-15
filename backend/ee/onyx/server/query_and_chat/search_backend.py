@@ -2,6 +2,7 @@ from collections.abc import Generator
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -91,6 +92,8 @@ def handle_send_search_message(
                 search_docs=[],
                 error=str(e),
             )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.exception("Error processing search query")
             return SearchFullResponse(
@@ -107,6 +110,8 @@ def handle_send_search_message(
                     yield get_json_line(packet.model_dump())
         except NotImplementedError as e:
             yield get_json_line(SearchErrorPacket(error=str(e)).model_dump())
+        except HTTPException:
+            raise
         except Exception as e:
             logger.exception("Error in search streaming")
             yield get_json_line(SearchErrorPacket(error=str(e)).model_dump())
