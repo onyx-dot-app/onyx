@@ -5,6 +5,7 @@ using real schemas, pipelines, and search queries from the codebase.
 """
 
 import json
+import re
 import uuid
 from collections.abc import Generator
 from datetime import datetime
@@ -15,6 +16,7 @@ import pytest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
+from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
@@ -635,6 +637,10 @@ class TestOpenSearchClient:
             # or 0).
             assert chunk.score
 
+        # Make sure there is some kind of match highlight for the first hit. We
+        # don't expect highlights for any other hit.
+        assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
+
     def test_search_with_pipeline(
         self,
         test_client: OpenSearchClient,
@@ -703,6 +709,8 @@ class TestOpenSearchClient:
             # Make sure score reporting seems reasonable (it should not be None
             # or 0).
             assert chunk.score
+            # Make sure there is some kind of match highlight.
+            assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_empty_index(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
@@ -819,6 +827,8 @@ class TestOpenSearchClient:
         # Make sure score reporting seems reasonable (it should not be None
         # or 0).
         assert results[0].score
+        # Make sure there is some kind of match highlight.
+        assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,
@@ -928,6 +938,16 @@ class TestOpenSearchClient:
 
         # Most relevant document should be first due to normalization pipeline.
         assert results[0].document_chunk.document_id == "highly-relevant-1"
+
+        # Make sure there is some kind of match highlight for the most relevant
+        # result.
+        match_highlights = results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
+        assert len(match_highlights) == 1
+        # We expect the terms "Artificial" and "intelligence" to be matched.
+        highlight_split = re.findall(r"<hi>(.*?)</hi>", match_highlights[0])
+        assert len(highlight_split) == 2
+        assert highlight_split[0] == "Artificial"
+        assert highlight_split[1] == "intelligence"
 
         # Returned documents should be ordered by descending score.
         previous_score = float("inf")
