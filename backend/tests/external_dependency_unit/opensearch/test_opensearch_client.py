@@ -638,7 +638,7 @@ class TestOpenSearchClient:
             assert chunk.score
 
         # Make sure there is some kind of match highlight for the first hit. We
-        # don't expect hightlights for any other hit.
+        # don't expect highlights for any other hit.
         assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_with_pipeline(
