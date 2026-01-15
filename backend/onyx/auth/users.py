@@ -553,8 +553,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         "placeholder_user_id": str(placeholder_uuid),
                     },
                 )
-                if result.rowcount > 0:  # type: ignore[union-attr]
-                    logger.info(f"Migrated {result.rowcount} rows in {table}")
+                if result.rowcount > 0:  # type: ignore[attr-defined]
+                    logger.info(f"Migrated {result.rowcount} rows in {table}")  # type: ignore[attr-defined]
             except Exception as e:
                 logger.warning(f"Could not migrate {table}: {e}")
 
