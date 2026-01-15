@@ -45,6 +45,7 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
 from onyx.utils.search_nlp_models_utils import pass_aws_key
+from onyx.utils.text_processing import remove_invalid_unicode_chars
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
@@ -983,6 +984,10 @@ class EmbeddingModel:
                 )
                 for text in texts
             ]
+
+        # Remove invalid Unicode characters (e.g., unpaired surrogates from malformed documents)
+        # that would cause UTF-8 encoding errors when sent to embedding providers
+        texts = [remove_invalid_unicode_chars(text) or "<>" for text in texts]
 
         batch_size = (
             api_embedding_batch_size

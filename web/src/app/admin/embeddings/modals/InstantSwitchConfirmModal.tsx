@@ -29,7 +29,7 @@ export default function InstantSwitchConfirmModal({
             <strong>This is not reversible.</strong>
           </Text>
         </Modal.Body>
-        <Modal.Footer className="p-4 gap-2">
+        <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
           <Button secondary onClick={onClose}>
             Cancel

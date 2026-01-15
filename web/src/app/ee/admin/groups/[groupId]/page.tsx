@@ -4,8 +4,9 @@ import { use } from "react";
 import { GroupDisplay } from "./GroupDisplay";
 import { useSpecificUserGroup } from "./hook";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { useConnectorStatus, useUsers } from "@/lib/hooks";
+import { useConnectorStatus } from "@/lib/hooks";
 import { useRouter } from "next/navigation";
+import useUsers from "@/hooks/useUsers";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SvgUsers } from "@opal/icons";
@@ -51,7 +52,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   }
 
   return (
-    <div className="container">
+    <>
       <BackButton />
 
       <AdminPageTitle title={userGroup.name || "Unknown"} icon={SvgUsers} />
@@ -66,7 +67,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
       ) : (
         <div>Unable to fetch User Group :(</div>
       )}
-    </div>
+    </>
   );
 };
 

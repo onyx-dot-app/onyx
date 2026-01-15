@@ -56,6 +56,7 @@
     "@sentry/nextjs": "^10.22.0",
     "@sentry/tracing": "^7.120.3",
     "@stripe/stripe-js": "^4.6.0",
+    "@tailwindcss/container-queries": "^0.1.1",
     "@tanstack/react-table": "^8.21.3",
     "autoprefixer": "^10.4.22",
     "class-variance-authority": "^0.7.0",

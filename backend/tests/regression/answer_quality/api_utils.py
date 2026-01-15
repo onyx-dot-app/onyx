@@ -1,16 +1,10 @@
 import requests
 from retry import retry
 
-from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
 from onyx.connectors.models import InputType
-from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.enums import IndexingStatus
 from onyx.server.documents.models import ConnectorBase
-from onyx.server.query_and_chat.models import OneShotQARequest
 from tests.regression.answer_quality.cli_utils import get_api_server_host_port
 
 GENERAL_HEADERS = {"Content-Type": "application/json"}
@@ -21,51 +15,6 @@ def _api_url_builder(env_name: str, api_path: str) -> str:
         return f"http://localhost:{get_api_server_host_port(env_name)}" + api_path
     else:
         return "http://localhost:8080" + api_path
-
-
-@retry(tries=5, delay=5)
-def get_answer_from_query(
-    query: str, only_retrieve_docs: bool, env_name: str
-) -> tuple[list[str], str]:
-    filters = IndexFilters(
-        source_type=None,
-        document_set=None,
-        time_cutoff=None,
-        tags=None,
-        access_control_list=None,
-    )
-
-    messages = [ThreadMessage(message=query, sender=None, role=MessageType.USER)]
-
-    new_message_request = OneShotQARequest(
-        messages=messages,
-        persona_id=0,
-        retrieval_options=RetrievalDetails(
-            run_search=OptionalSearchSetting.ALWAYS,
-            real_time=True,
-            filters=filters,
-            enable_auto_detect_filters=False,
-        ),
-        skip_gen_ai_answer_generation=only_retrieve_docs,
-    )
-
-    url = _api_url_builder(env_name, "/query/answer-with-citation/")
-    headers = {
-        "Content-Type": "application/json",
-    }
-
-    body = new_message_request.model_dump()
-    body["user"] = None
-    try:
-        response_json = requests.post(url, headers=headers, json=body).json()
-        context_data_list = response_json.get("contexts", {}).get("contexts", [])
-        answer = response_json.get("answer", "") or ""
-    except Exception as e:
-        print("Failed to answer the questions:")
-        print(f"\t {str(e)}")
-        raise e
-
-    return context_data_list, answer
 
 
 @retry(tries=10, delay=10)

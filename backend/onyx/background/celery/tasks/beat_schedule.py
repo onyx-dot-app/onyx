@@ -58,16 +58,6 @@ beat_task_templates: list[dict] = [
         },
     },
     {
-        "name": "user-file-docid-migration",
-        "task": OnyxCeleryTask.USER_FILE_DOCID_MIGRATION,
-        "schedule": timedelta(minutes=10),
-        "options": {
-            "priority": OnyxCeleryPriority.HIGH,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.USER_FILES_INDEXING,
-        },
-    },
-    {
         "name": "check-for-kg-processing",
         "task": OnyxCeleryTask.CHECK_KG_PROCESSING,
         "schedule": timedelta(seconds=60),
@@ -184,7 +174,7 @@ if AUTO_LLM_CONFIG_URL:
             "schedule": timedelta(seconds=AUTO_LLM_UPDATE_INTERVAL_SECONDS),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
-                "expires": AUTO_LLM_UPDATE_INTERVAL_SECONDS,
+                "expires": BEAT_EXPIRES_DEFAULT,
             },
         }
     )

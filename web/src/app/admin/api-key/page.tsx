@@ -221,10 +221,10 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="API Keys" icon={SvgKey} />
 
       <Main />
-    </div>
+    </>
   );
 }

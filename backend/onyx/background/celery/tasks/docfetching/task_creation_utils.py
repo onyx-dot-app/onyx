@@ -72,15 +72,6 @@ def try_creating_docfetching_task(
             # Another indexing attempt is already running
             return None
 
-        # Determine which queue to use based on whether this is a user file
-        # TODO: at the moment the indexing pipeline is
-        # shared between user files and connectors
-        queue = (
-            OnyxCeleryQueues.USER_FILES_INDEXING
-            if cc_pair.is_user_file
-            else OnyxCeleryQueues.CONNECTOR_DOC_FETCHING
-        )
-
         # Use higher priority for first-time indexing to ensure new connectors
         # get processed before re-indexing of existing connectors
         has_successful_attempt = cc_pair.last_successful_index_time is not None
@@ -99,7 +90,7 @@ def try_creating_docfetching_task(
                 search_settings_id=search_settings.id,
                 tenant_id=tenant_id,
             ),
-            queue=queue,
+            queue=OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
             task_id=custom_task_id,
             priority=priority,
         )

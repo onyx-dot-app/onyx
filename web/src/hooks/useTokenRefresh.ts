@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useRef } from "react";
 import { User } from "@/lib/types";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";

@@ -19,6 +19,11 @@ export type WebProviderSetupModalProps = {
   description: string;
   apiKeyValue: string;
   onApiKeyChange: (value: string) => void;
+  /**
+   * When true, the API key is a stored/masked value from the backend
+   * that cannot actually be revealed. The reveal toggle will be disabled.
+   */
+  isStoredApiKey?: boolean;
   optionalField?: {
     label: string;
     value: string;
@@ -45,6 +50,7 @@ export const WebProviderSetupModal = memo(
     description,
     apiKeyValue,
     onApiKeyChange,
+    isStoredApiKey = false,
     optionalField,
     helperMessage,
     helperClass,
@@ -126,8 +132,9 @@ export const WebProviderSetupModal = memo(
                     placeholder="Enter API key"
                     value={apiKeyValue}
                     autoFocus={apiKeyAutoFocus}
+                    isNonRevealable={isStoredApiKey}
                     onFocus={(e) => {
-                      if (apiKeyValue === "••••••••••••••••") {
+                      if (isStoredApiKey) {
                         e.target.select();
                       }
                     }}
@@ -239,7 +246,7 @@ export const WebProviderSetupModal = memo(
               </FormField>
             )}
           </Modal.Body>
-          <Modal.Footer className="gap-2">
+          <Modal.Footer>
             <Button type="button" main secondary onClick={onClose}>
               Cancel
             </Button>

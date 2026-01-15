@@ -16,9 +16,13 @@ from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
+from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
+from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_utils import convert_chat_history_basic
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.chat_utils import extract_headers
@@ -33,6 +37,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import add_chats_to_session_from_slack_thread
 from onyx.db.chat import create_chat_session
@@ -52,7 +57,6 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.feedback import create_chat_message_feedback
-from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.feedback import remove_chat_message_feedback
 from onyx.db.models import Persona
 from onyx.db.models import User
@@ -68,9 +72,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
-from onyx.secondary_llm_flows.chat_session_naming import (
-    get_renamed_conversation_name,
-)
+from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
@@ -85,9 +87,9 @@ from onyx.server.query_and_chat.models import ChatSessionSummary
 from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.models import LLMOverride
+from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
-from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
@@ -96,10 +98,10 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -289,6 +291,18 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
+    try:
+        is_processing = is_chat_session_processing(session_id, get_redis_client())
+        # Edit the last message to indicate loading (Overriding default message value)
+        if is_processing and chat_message_details:
+            last_msg = chat_message_details[-1]
+            if last_msg.message_type == MessageType.ASSISTANT:
+                last_msg.message = "Message is loading... Please refresh the page soon."
+    except Exception:
+        logger.exception(
+            "An error occurred while checking if the chat session is processing"
+        )
+
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
     replay_packet_lists: list[list[Packet]] = []
@@ -349,6 +363,10 @@ def rename_chat_session(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
+    # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
+    # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.
+    max_tokens_for_naming = 3000
+
     name = rename_req.name
     chat_session_id = rename_req.chat_session_id
     user_id = user.id if user is not None else None
@@ -362,18 +380,11 @@ def rename_chat_session(
         )
         return RenameChatSessionResponse(new_name=name)
 
-    full_history = create_chat_history_chain(
-        chat_session_id=chat_session_id, db_session=db_session
-    )
-
     llm = get_default_llm(
         additional_headers=extract_headers(
             request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
     )
-
-    # Check LLM cost limits before using the LLM (only for Onyx-managed keys)
-    from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 
     check_llm_cost_limit_for_provider(
         db_session=db_session,
@@ -381,7 +392,20 @@ def rename_chat_session(
         llm_provider_api_key=llm.config.api_key,
     )
 
-    new_name = get_renamed_conversation_name(full_history=full_history, llm=llm)
+    full_history = create_chat_history_chain(
+        chat_session_id=chat_session_id, db_session=db_session
+    )
+
+    token_counter = get_llm_token_counter(llm)
+
+    simple_chat_history = convert_chat_history_basic(
+        chat_history=full_history,
+        token_counter=token_counter,
+        max_individual_message_tokens=max_tokens_for_naming,
+        max_total_tokens=max_tokens_for_naming,
+    )
+
+    new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
     update_chat_session(
         db_session=db_session,
@@ -537,6 +561,11 @@ def handle_send_chat_message(
         event=MilestoneRecordType.RAN_QUERY,
     )
 
+    # Override origin to API when authenticated via API key or PAT
+    # to prevent clients from polluting telemetry data
+    if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
+        chat_message_req.origin = MessageOrigin.API
+
     # Non-streaming path: consume all packets and return complete response
     if not chat_message_req.stream:
         with get_session_with_current_tenant() as db_session:
@@ -566,6 +595,7 @@ def handle_send_chat_message(
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                     request.headers
                 ),
+                mcp_headers=chat_message_req.mcp_headers,
                 external_state_container=state_container,
             )
             result = gather_stream_full(packets, state_container)
@@ -587,6 +617,7 @@ def handle_send_chat_message(
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
                         request.headers
                     ),
+                    mcp_headers=chat_message_req.mcp_headers,
                     external_state_container=state_container,
                 ):
                     yield get_json_line(obj.model_dump())
@@ -652,25 +683,6 @@ def remove_chat_feedback(
     remove_chat_message_feedback(
         chat_message_id=chat_message_id,
         user_id=user_id,
-        db_session=db_session,
-    )
-
-
-@router.post("/document-search-feedback")
-def create_search_feedback(
-    feedback: SearchFeedbackRequest,
-    _: User | None = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    """This endpoint isn't protected - it does not check if the user has access to the document
-    Users could try changing boosts of arbitrary docs but this does not leak any data.
-    """
-    create_doc_retrieval_feedback(
-        message_id=feedback.message_id,
-        document_id=feedback.document_id,
-        document_rank=feedback.document_rank,
-        clicked=feedback.click,
-        feedback=feedback.search_feedback,
         db_session=db_session,
     )
 

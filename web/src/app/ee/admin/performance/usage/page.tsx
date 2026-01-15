@@ -17,7 +17,7 @@ export default function AnalyticsPage() {
   const { personas } = useAdminPersonas();
 
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="Usage Statistics" icon={SvgActivity} />
       <AdminDateRangeSelector
         value={timeRange}
@@ -32,6 +32,6 @@ export default function AnalyticsPage() {
       />
       <Separator />
       <UsageReports />
-    </div>
+    </>
   );
 }

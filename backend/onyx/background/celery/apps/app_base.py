@@ -517,6 +517,7 @@ def wait_for_vespa_or_shutdown(sender: Any, **kwargs: Any) -> None:
     Raises WorkerShutdown if the timeout is reached."""
 
     if ENABLE_OPENSEARCH_FOR_ONYX:
+        # TODO(andrei): Do some similar liveness checking for OpenSearch.
         return
 
     if not wait_for_vespa_with_timeout():

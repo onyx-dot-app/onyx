@@ -1,6 +1,6 @@
 import { JSX } from "react";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { Packet } from "../../services/streamingModels";
+import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ProjectFile } from "../../projects/projectsService";
 import { LlmDescriptor } from "@/lib/hooks";
@@ -47,5 +47,6 @@ export type MessageRenderer<
   renderType: RenderType;
   animate: boolean;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   children: (result: RendererResult) => JSX.Element;
 }>;

@@ -19,10 +19,10 @@ import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
-import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
+import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
+import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
-import { useUserPersonalization } from "@/lib/hooks/useUserPersonalization";
+import useUserPersonalization from "@/hooks/useUserPersonalization";
 import Text from "@/refresh-components/texts/Text";
 import PATManagement from "@/components/user/PATManagement";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -85,7 +85,7 @@ export default function UserSettings() {
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
-    loading: isFederatedLoading,
+    isLoading: isFederatedLoading,
   } = useFederatedOAuthStatus();
 
   const { ccPairs, isLoading: isCCPairsLoading } = useCCPairs();
@@ -102,9 +102,7 @@ export default function UserSettings() {
   // Use currentDefaultModel for display, falling back to defaultModel
   const displayModel = currentDefaultModel ?? defaultModel;
 
-  const hasConnectors =
-    (ccPairs && ccPairs.length > 0) ||
-    (federatedConnectors && federatedConnectors.length > 0);
+  const hasConnectors = ccPairs.length > 0 || federatedConnectors.length > 0;
 
   const isLoadingConnectors = isCCPairsLoading || isFederatedLoading;
 
@@ -368,7 +366,7 @@ export default function UserSettings() {
             title="Settings"
             onClose={() => modal.toggle(false)}
           />
-          <Modal.Body className="flex flex-col gap-4 px-4 pb-4">
+          <Modal.Body twoTone={false}>
             {sections.length > 1 && (
               <nav>
                 <ul className="flex flex-row gap-1">

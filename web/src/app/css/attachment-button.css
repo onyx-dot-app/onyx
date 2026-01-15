@@ -1,0 +1,102 @@
+/* AttachmentButton styles */
+
+.attachment-button {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  padding: 0.25rem;
+  background-color: var(--background-tint-00);
+  border-radius: var(--border-radius-12);
+  gap: 0.5rem;
+}
+
+.attachment-button:hover {
+  background-color: var(--background-tint-02);
+}
+
+.attachment-button[data-state="selected"] {
+  background-color: var(--action-link-01);
+}
+
+.attachment-button__content {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.attachment-button__icon-wrapper {
+  height: 100%;
+  aspect-ratio: 1;
+  background-color: var(--background-tint-01);
+  border-radius: var(--border-radius-08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.attachment-button__icon {
+  height: 1rem;
+  width: 1rem;
+  stroke: var(--text-02);
+}
+
+.attachment-button[data-state="processing"] .attachment-button__icon {
+  stroke: var(--text-01);
+}
+
+.attachment-button__text-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.attachment-button__title-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.attachment-button__title-wrapper {
+  max-width: 70%;
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+
+.attachment-button__view-button {
+  flex-shrink: 0;
+  visibility: hidden;
+}
+
+.attachment-button:hover .attachment-button__view-button {
+  visibility: visible;
+}
+
+.attachment-button__actions {
+  display: flex;
+  flex-direction: row;
+  align-self: stretch;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  flex-shrink: 0;
+}
+
+.attachment-button__action-button {
+  visibility: hidden;
+}
+
+.attachment-button:hover .attachment-button__action-button {
+  visibility: visible;
+}

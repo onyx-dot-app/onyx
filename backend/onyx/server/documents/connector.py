@@ -37,6 +37,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import (
@@ -144,7 +145,6 @@ from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
@@ -1791,7 +1791,6 @@ def trigger_indexing_for_cc_pair(
     from_beginning: bool,
     tenant_id: str,
     db_session: Session,
-    is_user_file: bool = False,
 ) -> int:
     try:
         possible_credential_ids = get_connector_credential_ids(connector_id, db_session)
@@ -1855,8 +1854,9 @@ def trigger_indexing_for_cc_pair(
                 f"indexing_trigger={indexing_mode}"
             )
 
+    priority = OnyxCeleryPriority.HIGH
+
     # run the beat task to pick up the triggers immediately
-    priority = OnyxCeleryPriority.HIGHEST if is_user_file else OnyxCeleryPriority.HIGH
     logger.info(f"Sending indexing check task with priority {priority}")
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,

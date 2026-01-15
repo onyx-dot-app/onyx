@@ -43,17 +43,24 @@ export interface Settings {
 
 export enum NotificationType {
   PERSONA_SHARED = "persona_shared",
-  REINDEX_NEEDED = "reindex_needed",
+  REINDEX = "reindex",
   TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending",
+  ASSISTANT_FILES_READY = "assistant_files_ready",
+  RELEASE_NOTES = "release_notes",
 }
 
 export interface Notification {
   id: number;
   notif_type: string;
-  time_created: string;
+  title: string;
+  description: string | null;
   dismissed: boolean;
+  first_shown: string;
+  last_shown: string;
   additional_data?: {
     persona_id?: number;
+    link?: string;
+    version?: string; // For release notes notifications
     [key: string]: any;
   };
 }

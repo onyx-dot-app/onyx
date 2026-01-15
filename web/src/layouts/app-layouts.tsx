@@ -49,7 +49,7 @@ import { deleteChatSession } from "@/app/chat/services/lib";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { PopoverMenu } from "@/components/ui/popover";
+import { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
@@ -444,7 +444,10 @@ export interface AppRootProps {
 
 function AppRoot({ children }: AppRootProps) {
   return (
-    <div className="flex flex-col h-full w-full">
+    /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
+      breakout of their immediate containers using cqw units.
+    */
+    <div className="@container flex flex-col h-full w-full">
       <AppHeader />
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
       <AppFooter />

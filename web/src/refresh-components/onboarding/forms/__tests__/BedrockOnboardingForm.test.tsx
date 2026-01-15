@@ -257,14 +257,11 @@ describe("BedrockOnboardingForm", () => {
         "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
       );
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
-      if (fetchButton) {
-        await user.click(fetchButton);
-      }
+      // Click fetch models button - find by aria-label
+      const fetchButton = screen.getByRole("button", {
+        name: /fetch available models/i,
+      });
+      await user.click(fetchButton);
 
       // Wait for models to be fetched
       await waitFor(() => {
@@ -377,14 +374,11 @@ describe("BedrockOnboardingForm", () => {
       );
       await user.type(secretKeyInput, "invalid-secret");
 
-      // Click fetch models button - find it by looking for icon button with data-state
-      const buttons = screen.getAllByRole("button");
-      const fetchButton = buttons.find(
-        (btn) => btn.getAttribute("data-state") === "closed"
-      );
-      if (fetchButton) {
-        await user.click(fetchButton);
-      }
+      // Click fetch models button - find by aria-label
+      const fetchButton = screen.getByRole("button", {
+        name: /fetch available models/i,
+      });
+      await user.click(fetchButton);
 
       // Wait for models to be fetched
       await waitFor(() => {

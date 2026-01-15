@@ -1,3 +1,5 @@
+"use client";
+
 import React, {
   useRef,
   useState,
@@ -57,10 +59,11 @@ import { Message } from "@/app/chat/interfaces";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
-} from "../../components/modal/FeedbackModal";
+} from "@/sections/modals/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFeedbackController } from "../../hooks/useFeedbackController";
+import useFeedbackController from "@/hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+import Text from "@/refresh-components/texts/Text";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -166,21 +169,13 @@ const AIMessage = React.memo(function AIMessage({
       }
 
       // Clicking like (will automatically clear dislike if it was active).
-      // Check if we need modal for positive feedback.
+      // Open modal for positive feedback
       else if (clickedFeedback === "like") {
-        const predefinedOptions =
-          process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
-        if (predefinedOptions && predefinedOptions.trim()) {
-          // Open modal for positive feedback
-          setFeedbackModalProps({
-            feedbackType: "like",
-            messageId,
-          });
-          modal.toggle(true);
-        } else {
-          // No modal needed - just submit like (this replaces any existing feedback)
-          await handleFeedbackChange(messageId, "like");
-        }
+        setFeedbackModalProps({
+          feedbackType: "like",
+          messageId,
+        });
+        modal.toggle(true);
       }
 
       // Clicking dislike (will automatically clear like if it was active).
@@ -543,8 +538,14 @@ const AIMessage = React.memo(function AIMessage({
             }}
           >
             {groupedPackets.length === 0 ? (
-              // Show blinking dot when no content yet but message is generating
-              <BlinkingDot addMargin />
+              // Show blinking dot when no content yet, or stopped message if user cancelled
+              stopReason === StopReason.USER_CANCELLED ? (
+                <Text as="p" secondaryBody text04>
+                  User has stopped generation
+                </Text>
+              ) : (
+                <BlinkingDot addMargin />
+              )
             ) : (
               (() => {
                 // Simple split: tools vs non-tools
@@ -600,10 +601,18 @@ const AIMessage = React.memo(function AIMessage({
                           }}
                           animate={false}
                           stopPacketSeen={stopPacketSeen}
+                          stopReason={stopReason}
                         >
                           {({ content }) => <div>{content}</div>}
                         </RendererComponent>
                       ))}
+                      {/* Show stopped message when user cancelled and no display content */}
+                      {displayGroups.length === 0 &&
+                        stopReason === StopReason.USER_CANCELLED && (
+                          <Text as="p" secondaryBody text04>
+                            User has stopped generation
+                          </Text>
+                        )}
                     </div>
                   </>
                 );

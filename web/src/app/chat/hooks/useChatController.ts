@@ -58,6 +58,8 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
+import { usePostHog } from "posthog-js/react";
+import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/hooks/useAgents";
 import {
@@ -126,12 +128,13 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatSessions();
+  const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { assistantPreferences } = useAssistantPreferences();
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
+  const posthog = usePostHog();
 
   // Use selectors to access only the specific fields we need
   const currentSessionId = useChatSessionStore(
@@ -235,12 +238,17 @@ export function useChatController({
     );
 
     // Navigate immediately if still on chat page
-    if (pathname === "/chat" && !navigatingAway.current) {
+    // For NRF pages (/chat/nrf, /chat/nrf/side-panel), don't navigate immediately
+    // Let the streaming complete inline, then the user can continue chatting there
+    const isOnChatPage = pathname === "/chat";
+
+    if (isOnChatPage && !navigatingAway.current) {
       router.push(newUrl as Route, { scroll: false });
     }
 
-    // Refresh sidebar so chat appears (will show as "New Chat" initially)
-    // Will be updated again after naming completes
+    // Refresh sidebar - the chat was already optimistically added via addPendingChatSession
+    // so it will show as "New Chat". This refresh ensures we get the latest server state
+    // and will be called again after naming completes.
     refreshChatSessions();
     fetchProjects();
   };
@@ -457,7 +465,10 @@ export function useChatController({
       }
 
       let currChatSessionId: string;
-      const isNewSession = existingChatSessionId === null;
+      // Check both the prop and the store's currentSessionId to determine if this is a new session
+      // For pages like NRF where existingChatSessionId is always null, we need to check if
+      // we already have a session from a previous message
+      const isNewSession = existingChatSessionId === null && !currentSessionId;
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
@@ -472,8 +483,18 @@ export function useChatController({
           searchParamBasedChatSessionName,
           projectId ? parseInt(projectId) : null
         );
+
+        // Optimistically add the new chat session to the sidebar cache
+        // This ensures "New Chat" appears immediately, even before any messages are saved
+        addPendingChatSession({
+          chatSessionId: currChatSessionId,
+          personaId: liveAssistant?.id || 0,
+          projectId: projectId ? parseInt(projectId) : null,
+        });
       } else {
-        currChatSessionId = existingChatSessionId as string;
+        // Use the existing session ID from props or from the store
+        currChatSessionId =
+          existingChatSessionId || (currentSessionId as string);
       }
       frozenSessionId = currChatSessionId;
       // update the selected model for the chat session if one is specified so that
@@ -648,6 +669,11 @@ export function useChatController({
             ? forcedToolIds[0]
             : null;
 
+        // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
+        const { isExtension, context: extensionContext } =
+          getExtensionContext();
+        const messageOrigin = isExtension ? "chrome_extension" : "webapp";
+
         const stack = new CurrentMessageFIFO();
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
@@ -685,6 +711,7 @@ export function useChatController({
                   .map((tool) => tool.id)
               : undefined,
           forcedToolId: effectiveForcedToolId,
+          origin: messageOrigin,
         });
 
         const delay = (ms: number) => {
@@ -711,6 +738,16 @@ export function useChatController({
             if ((packet as MessageResponseIDInfo).user_message_id) {
               newUserMessageId = (packet as MessageResponseIDInfo)
                 .user_message_id;
+
+              // Track extension queries in PostHog (reuses isExtension/extensionContext from above)
+              if (isExtension && posthog) {
+                posthog.capture("extension_chat_query", {
+                  extension_context: extensionContext,
+                  assistant_id: liveAssistant?.id,
+                  has_files: currentMessageFiles.length > 0,
+                  deep_research: deepResearch,
+                });
+              }
             }
 
             if (

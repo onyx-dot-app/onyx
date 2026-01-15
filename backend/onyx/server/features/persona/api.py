@@ -16,11 +16,9 @@ from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NotificationType
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import StarterMessage
 from onyx.db.models import User
-from onyx.db.notification import create_notification
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
@@ -36,29 +34,23 @@ from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
-from onyx.db.persona import update_persona_shared_users
+from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
-from onyx.secondary_llm_flows.starter_message_creation import (
-    generate_starter_messages,
-)
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
 from onyx.server.features.persona.constants import AGENTS_RESOURCE
 from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
-from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -369,7 +361,9 @@ def delete_label(
 
 
 class PersonaShareRequest(BaseModel):
-    user_ids: list[UUID]
+    user_ids: list[UUID] | None = None
+    group_ids: list[int] | None = None
+    is_public: bool | None = None
 
 
 # We notify each user when a user is shared with them
@@ -380,24 +374,14 @@ def share_persona(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_persona_shared_users(
+    update_persona_shared(
         persona_id=persona_id,
-        user_ids=persona_share_request.user_ids,
         user=user,
         db_session=db_session,
+        user_ids=persona_share_request.user_ids,
+        group_ids=persona_share_request.group_ids,
+        is_public=persona_share_request.is_public,
     )
-
-    for user_id in persona_share_request.user_ids:
-        # Don't notify the user that they have access to their own persona
-        if user_id != user.id:
-            create_notification(
-                user_id=user_id,
-                notif_type=NotificationType.PERSONA_SHARED,
-                db_session=db_session,
-                additional_data=PersonaSharedNotificationData(
-                    persona_id=persona_id,
-                ).model_dump(),
-            )
 
 
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
@@ -506,29 +490,3 @@ def get_persona(
             db_session.commit()
 
     return FullPersonaSnapshot.from_model(persona)
-
-
-@basic_router.post("/assistant-prompt-refresh")
-def build_assistant_prompts(
-    generate_persona_prompt_request: GenerateStarterMessageRequest,
-    db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
-) -> list[StarterMessage]:
-    try:
-        logger.info(
-            f"Generating {generate_persona_prompt_request.generation_count} starter messages"
-            f" for user: {user.id if user else 'Anonymous'}",
-        )
-        starter_messages = generate_starter_messages(
-            name=generate_persona_prompt_request.name,
-            description=generate_persona_prompt_request.description,
-            instructions=generate_persona_prompt_request.instructions,
-            document_set_ids=generate_persona_prompt_request.document_set_ids,
-            generation_count=generate_persona_prompt_request.generation_count,
-            db_session=db_session,
-            user=user,
-        )
-        return starter_messages
-    except Exception as e:
-        logger.exception("Failed to generate starter messages")
-        raise HTTPException(status_code=500, detail=str(e))

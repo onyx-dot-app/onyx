@@ -10,23 +10,20 @@ import { useUser } from "@/components/user/UserProvider";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import UserSettings from "@/sections/sidebar/Settings/UserSettings";
+import NotificationsPopover from "@/sections/sidebar/Settings/NotificationsPopover";
+
 import {
   SvgBell,
   SvgExternalLink,
   SvgLogOut,
   SvgUser,
-  SvgX,
+  SvgNotificationBubble,
 } from "@opal/icons";
 
 function getDisplayName(email?: string, personalName?: string): string {
@@ -44,23 +41,28 @@ function getDisplayName(email?: string, personalName?: string): string {
 }
 
 interface SettingsPopoverProps {
-  onUserSettingsClick: () => void;
-  onNotificationsClick: () => void;
+  onClose: () => void;
+  onOpenUserSettings: () => void;
+  onOpenNotifications: () => void;
 }
 
 function SettingsPopover({
-  onUserSettingsClick,
-  onNotificationsClick,
+  onClose,
+  onOpenUserSettings,
+  onOpenNotifications,
 }: SettingsPopoverProps) {
   const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
   );
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  const undismissedCount =
+    notifications?.filter((n) => !n.dismissed).length ?? 0;
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
@@ -87,33 +89,36 @@ function SettingsPopover({
     <>
       <PopoverMenu>
         {[
-          // TODO (@raunakab):
-          // Not sure what this does; leave it out for now.
-          // ...dropdownItems.map((item, index) => (
-          //   <NavigationTab key={index} href={item.link}>
-          //     {item.title}
-          //   </NavigationTab>
-          // )),
           <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItem icon={SvgUser} onClick={onUserSettingsClick}>
+            <LineItem
+              icon={SvgUser}
+              onClick={() => {
+                onClose();
+                onOpenUserSettings();
+              }}
+            >
               User Settings
             </LineItem>
           </div>,
           <LineItem
             key="notifications"
             icon={SvgBell}
-            onClick={onNotificationsClick}
+            onClick={onOpenNotifications}
           >
-            {`Notifications ${
-              notifications && notifications.length > 0
-                ? `(${notifications.length})`
-                : ""
+            {`Notifications${
+              undismissedCount > 0 ? ` (${undismissedCount})` : ""
             }`}
           </LineItem>,
           <LineItem
             key="help-faq"
             icon={SvgExternalLink}
-            onClick={() => window.open("https://docs.onyx.app", "_blank")}
+            onClick={() =>
+              window.open(
+                "https://docs.onyx.app",
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }
           >
             Help & FAQ
           </LineItem>,
@@ -134,47 +139,6 @@ function SettingsPopover({
   );
 }
 
-interface NotificationsPopoverProps {
-  onClose: () => void;
-}
-
-function NotificationsPopover({ onClose }: NotificationsPopoverProps) {
-  const { data: notifications } = useSWR<Notification[]>(
-    "/api/notifications",
-    errorHandlingFetcher
-  );
-
-  return (
-    <div className="w-[20rem] h-[30rem] flex flex-col">
-      <div className="flex flex-row justify-between items-center p-4">
-        <Text as="p" headingH2>
-          Notifications
-        </Text>
-        <SvgX
-          className="stroke-text-05 w-[1.2rem] h-[1.2rem] hover:stroke-text-04 cursor-pointer"
-          onClick={onClose}
-        />
-      </div>
-
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-2 items-center">
-        {!notifications || notifications.length === 0 ? (
-          <div className="w-full h-full flex flex-col justify-center items-center">
-            <Text as="p">No notifications</Text>
-          </div>
-        ) : (
-          <div className="w-full flex flex-col gap-2">
-            {notifications?.map((notification, index) => (
-              <Text as="p" key={index}>
-                {notification.notif_type}
-              </Text>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export interface SettingsProps {
   folded?: boolean;
 }
@@ -186,7 +150,17 @@ export default function Settings({ folded }: SettingsProps) {
   const { user } = useUser();
   const userSettingsModal = useCreateModal();
 
+  // Fetch notifications for display
+  // The GET endpoint also triggers a refresh if release notes are stale
+  const { data: notifications } = useSWR<Notification[]>(
+    "/api/notifications",
+    errorHandlingFetcher
+  );
+
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
+  const undismissedCount =
+    notifications?.filter((n) => !n.dismissed).length ?? 0;
+  const hasNotifications = undismissedCount > 0;
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -208,7 +182,7 @@ export default function Settings({ folded }: SettingsProps) {
       </userSettingsModal.Provider>
 
       <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <div id="onyx-user-dropdown">
             <SidebarTab
               leftIcon={({ className }) => (
@@ -224,27 +198,35 @@ export default function Settings({ folded }: SettingsProps) {
                   </Text>
                 </InputAvatar>
               )}
+              rightChildren={
+                hasNotifications && (
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    <SvgNotificationBubble size={6} />
+                  </div>
+                )
+              }
               transient={!!popupState}
               folded={folded}
             >
               {displayName}
             </SidebarTab>
           </div>
-        </PopoverTrigger>
-        <PopoverContent align="end" side="right">
+        </Popover.Trigger>
+        <Popover.Content align="end" side="right" md>
           {popupState === "Settings" && (
             <SettingsPopover
-              onUserSettingsClick={() => {
-                setPopupState(undefined);
-                userSettingsModal.toggle(true);
-              }}
-              onNotificationsClick={() => setPopupState("Notifications")}
+              onClose={() => setPopupState(undefined)}
+              onOpenUserSettings={() => userSettingsModal.toggle(true)}
+              onOpenNotifications={() => setPopupState("Notifications")}
             />
           )}
           {popupState === "Notifications" && (
-            <NotificationsPopover onClose={() => setPopupState("Settings")} />
+            <NotificationsPopover
+              onClose={() => setPopupState("Settings")}
+              onNavigate={() => setPopupState(undefined)}
+            />
           )}
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
     </>
   );
