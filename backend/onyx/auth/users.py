@@ -578,8 +578,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         except Exception as e:
             logger.warning(f"Could not delete placeholder user: {e}")
 
-        # Flush changes to DB (outer transaction will commit)
-        await db_session.flush()
+        # Commit all the changes
+        await db_session.commit()
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
