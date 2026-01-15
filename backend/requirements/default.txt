@@ -31,6 +31,7 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.11.0
     # via
+    #   claude-agent-sdk
     #   google-genai
     #   httpx
     #   mcp
@@ -136,6 +137,8 @@ charset-normalizer==3.4.4
 chevron==0.14.0
     # via braintrust
 chonkie==1.0.10
+    # via onyx
+claude-agent-sdk==0.1.19
     # via onyx
 click==8.3.1
     # via
@@ -569,6 +572,7 @@ matrix-client==0.3.2
     # via zulip
 mcp==1.25.0
     # via
+    #   claude-agent-sdk
     #   fastmcp
     #   onyx
 mdurl==0.1.2
