@@ -68,7 +68,7 @@ ods db <subcommand>
 
 - `dump` - Create a database dump
 - `restore` - Restore from a dump
-- `migrate` - Run database migrations
+- `upgrade`/`downgrade` - Run database migrations
 - `drop` - Drop a database
 
 Run `ods db --help` for detailed usage.
