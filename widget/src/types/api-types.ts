@@ -8,6 +8,7 @@ export interface Packet {
 }
 
 export type PacketType =
+  | MessageResponseIDInfo
   | MessageStart
   | MessageDelta
   | CitationInfo
@@ -30,6 +31,12 @@ export type PacketType =
   | Stop
   | OverallStop
   | ErrorPacket;
+
+export interface MessageResponseIDInfo {
+  type?: "message_response_id_info"; // Optional for backend compatibility
+  user_message_id: number | null;
+  reserved_assistant_message_id: number;
+}
 
 export interface MessageStart {
   type: "message_start";

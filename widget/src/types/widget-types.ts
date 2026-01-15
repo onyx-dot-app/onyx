@@ -29,7 +29,7 @@ export interface ChatState {
 }
 
 export interface ChatMessage {
-  id: string;
+  id: string | number; // string for temporary local IDs, number for backend IDs
   role: "user" | "assistant";
   content: string;
   timestamp: number;

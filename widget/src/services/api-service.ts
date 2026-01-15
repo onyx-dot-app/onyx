@@ -111,8 +111,22 @@ export class ApiService {
         for (const line of lines) {
           if (line.trim()) {
             try {
-              const packet = JSON.parse(line) as Packet;
-              yield packet;
+              const rawData = JSON.parse(line);
+
+              // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
+              if (
+                "user_message_id" in rawData &&
+                "reserved_assistant_message_id" in rawData
+              ) {
+                // Wrap it in a Packet structure for consistent handling
+                const packet: Packet = {
+                  obj: rawData as any,
+                };
+                yield packet;
+              } else {
+                // Regular packet with placement and obj
+                yield rawData as Packet;
+              }
             } catch (e) {
               console.error("Failed to parse packet:", line, e);
             }
@@ -123,8 +137,20 @@ export class ApiService {
       // Process any remaining data in buffer
       if (buffer.trim()) {
         try {
-          const packet = JSON.parse(buffer) as Packet;
-          yield packet;
+          const rawData = JSON.parse(buffer);
+
+          // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
+          if (
+            "user_message_id" in rawData &&
+            "reserved_assistant_message_id" in rawData
+          ) {
+            const packet: Packet = {
+              obj: rawData as any,
+            };
+            yield packet;
+          } else {
+            yield rawData as Packet;
+          }
         } catch (e) {
           console.error("Failed to parse final packet:", buffer, e);
         }

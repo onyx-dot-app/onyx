@@ -11,6 +11,11 @@ export interface ParsedMessage {
   citations?: any[];
 }
 
+export interface MessageIDs {
+  userMessageId: number | null;
+  assistantMessageId: number;
+}
+
 /**
  * Process a single packet from the SSE stream
  * Returns the current message being built and any state updates
@@ -18,7 +23,12 @@ export interface ParsedMessage {
 export function processPacket(
   packet: Packet,
   currentMessage: ChatMessage | null,
-): { message: ChatMessage | null; citations?: any[]; status?: string } {
+): {
+  message: ChatMessage | null;
+  citations?: any[];
+  status?: string;
+  messageIds?: MessageIDs;
+} {
   // Safety check - skip if packet.obj is undefined
   if (!packet || !packet.obj) {
     console.warn("Received malformed packet:", packet);
@@ -26,6 +36,23 @@ export function processPacket(
   }
 
   const obj = packet.obj;
+
+  // Handle MessageResponseIDInfo (doesn't have a type field)
+  if ("reserved_assistant_message_id" in obj && "user_message_id" in obj) {
+    return {
+      message: currentMessage,
+      messageIds: {
+        userMessageId: obj.user_message_id,
+        assistantMessageId: obj.reserved_assistant_message_id,
+      },
+    };
+  }
+
+  // Type guard - ensure obj has a type field
+  if (!("type" in obj)) {
+    console.warn("Packet missing type field:", obj);
+    return { message: currentMessage };
+  }
 
   switch (obj.type) {
     case "message_start":
@@ -206,12 +233,12 @@ export function convertMessage(msg: Message): ChatMessage {
  * Check if a packet is the final packet in a stream
  */
 export function isStreamComplete(packet: Packet): boolean {
-  return packet.obj.type === "overall_stop";
+  return "type" in packet.obj && packet.obj.type === "overall_stop";
 }
 
 /**
  * Check if a packet is an error
  */
 export function isStreamError(packet: Packet): boolean {
-  return packet.obj.type === "error";
+  return "type" in packet.obj && packet.obj.type === "error";
 }

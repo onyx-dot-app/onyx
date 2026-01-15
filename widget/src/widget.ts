@@ -239,6 +239,7 @@ export class OnyxChatWidget extends LitElement {
       // Stream response
       this.abortController = new AbortController();
       let currentMessage: ChatMessage | null = null;
+      let assistantMessageId: number | null = null;
 
       for await (const packet of this.apiService.streamMessage({
         message,
@@ -248,6 +249,30 @@ export class OnyxChatWidget extends LitElement {
       })) {
         const result = processPacket(packet, currentMessage);
 
+        // Capture message IDs from backend and update local messages
+        if (result.messageIds) {
+          // Update user message ID if we got one
+          if (result.messageIds.userMessageId !== null) {
+            const userMsgIndex = this.messages.findIndex(
+              (m) => m.id === userMessage.id,
+            );
+            if (userMsgIndex >= 0) {
+              // Create new array to trigger reactivity
+              const updatedMessage = {
+                ...this.messages[userMsgIndex],
+                id: result.messageIds.userMessageId,
+              };
+              this.messages = [
+                ...this.messages.slice(0, userMsgIndex),
+                updatedMessage,
+                ...this.messages.slice(userMsgIndex + 1),
+              ];
+            }
+          }
+          // Store assistant message ID to apply when message is created
+          assistantMessageId = result.messageIds.assistantMessageId;
+        }
+
         // Update status if provided
         if (result.status !== undefined) {
           this.streamingStatus = result.status;
@@ -255,6 +280,14 @@ export class OnyxChatWidget extends LitElement {
 
         if (result.message) {
           currentMessage = result.message;
+
+          // Apply the backend message ID if we have it and message doesn't have a numeric ID yet
+          if (
+            assistantMessageId !== null &&
+            typeof currentMessage.id !== "number"
+          ) {
+            currentMessage.id = assistantMessageId;
+          }
 
           // Update or add message
           const existingIndex = this.messages.findIndex(
