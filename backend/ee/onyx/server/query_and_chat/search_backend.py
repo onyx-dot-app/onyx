@@ -5,6 +5,7 @@ from fastapi import Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.search import fetch_search_queries_for_user
 from ee.onyx.search.process_search_query import gather_search_stream
 from ee.onyx.search.process_search_query import stream_search_query
 from ee.onyx.secondary_llm_flows.search_flow_classification import (
@@ -13,6 +14,8 @@ from ee.onyx.secondary_llm_flows.search_flow_classification import (
 from ee.onyx.server.query_and_chat.models import SearchFlowClassificationRequest
 from ee.onyx.server.query_and_chat.models import SearchFlowClassificationResponse
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
+from ee.onyx.server.query_and_chat.models import SearchHistoryResponse
+from ee.onyx.server.query_and_chat.models import SearchQueryResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from onyx.auth.users import current_user
@@ -109,3 +112,44 @@ def handle_send_search_message(
             yield get_json_line(SearchErrorPacket(error=str(e)).model_dump())
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
+@router.get("/search-history")
+def get_search_history(
+    limit: int = 100,
+    filter_days: int | None = None,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> SearchHistoryResponse:
+    """
+    Fetch past search queries for the authenticated user.
+
+    Args:
+        limit: Maximum number of queries to return (default 10)
+        filter_days: Only return queries from the last N days (optional)
+
+    Returns:
+        SearchHistoryResponse with list of search queries, ordered by most recent first.
+    """
+    # TODO remove this
+    if user is None:
+        # Return empty list for unauthenticated users
+        return SearchHistoryResponse(search_queries=[])
+
+    search_queries = fetch_search_queries_for_user(
+        db_session=db_session,
+        user_id=user.id,
+        filter_days=filter_days,
+        limit=limit,
+    )
+
+    return SearchHistoryResponse(
+        search_queries=[
+            SearchQueryResponse(
+                query=sq.query,
+                query_expansions=sq.query_expansions,
+                created_at=sq.created_at,
+            )
+            for sq in search_queries
+        ]
+    )

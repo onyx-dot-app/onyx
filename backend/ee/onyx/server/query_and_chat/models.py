@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -40,3 +42,13 @@ class SearchFullResponse(BaseModel):
     llm_selected_doc_ids: list[str] | None = None
     # Error message if the search failed partway through
     error: str | None = None
+
+
+class SearchQueryResponse(BaseModel):
+    query: str
+    query_expansions: list[str] | None
+    created_at: datetime
+
+
+class SearchHistoryResponse(BaseModel):
+    search_queries: list[SearchQueryResponse]
