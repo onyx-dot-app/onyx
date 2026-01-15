@@ -1,17 +1,27 @@
+from collections.abc import Generator
+
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ee.onyx.search.process_search_query import gather_search_stream
+from ee.onyx.search.process_search_query import stream_search_query
 from ee.onyx.secondary_llm_flows.search_flow_classification import (
     classify_is_search_flow,
 )
 from ee.onyx.server.query_and_chat.models import SearchFlowClassificationRequest
 from ee.onyx.server.query_and_chat.models import SearchFlowClassificationResponse
+from ee.onyx.server.query_and_chat.models import SearchFullResponse
+from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
+from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -51,3 +61,51 @@ def search_flow_classification(
         is_search_flow = False
 
     return SearchFlowClassificationResponse(is_search_flow=is_search_flow)
+
+
+@router.post("/send-search-message", response_model=None)
+def handle_send_search_message(
+    request: SendSearchQueryRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse | SearchFullResponse:
+    """
+    Execute a search query with optional streaming.
+
+    When stream=True: Returns StreamingResponse with SSE
+    When stream=False: Returns SearchFullResponse
+    """
+    logger.debug(f"Received search query: {request.search_query}")
+
+    # Non-streaming path
+    if not request.stream:
+        try:
+            packets = stream_search_query(request, user, db_session)
+            return gather_search_stream(packets)
+        except NotImplementedError as e:
+            return SearchFullResponse(
+                all_executed_queries=[],
+                search_docs=[],
+                error=str(e),
+            )
+        except Exception as e:
+            logger.exception("Error processing search query")
+            return SearchFullResponse(
+                all_executed_queries=[],
+                search_docs=[],
+                error=str(e),
+            )
+
+    # Streaming path
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            with get_session_with_current_tenant() as streaming_db_session:
+                for packet in stream_search_query(request, user, streaming_db_session):
+                    yield get_json_line(packet.model_dump())
+        except NotImplementedError as e:
+            yield get_json_line(SearchErrorPacket(error=str(e)).model_dump())
+        except Exception as e:
+            logger.exception("Error in search streaming")
+            yield get_json_line(SearchErrorPacket(error=str(e)).model_dump())
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
