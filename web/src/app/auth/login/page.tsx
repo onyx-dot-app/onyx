@@ -21,9 +21,9 @@ export default async function Page(props: PageProps) {
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
   const autoRedirectToSignupDisabled =
     searchParams?.autoRedirectToSignup === "false";
-  const nextUrl = Array.isArray(searchParams?.next)
-    ? searchParams?.next[0]
-    : searchParams?.next || null;
+  const nextUrl: string | null = Array.isArray(searchParams?.next)
+    ? searchParams?.next[0] ?? null
+    : searchParams?.next ?? null;
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -79,13 +79,13 @@ export default async function Page(props: PageProps) {
   let authUrl: string | null = null;
   if (authTypeMetadata) {
     try {
-      authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl!);
+      authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl);
       // For BASIC auth with OAuth enabled, fetch the OAuth URL
       if (
         authTypeMetadata.authType === AuthType.BASIC &&
         authTypeMetadata.oauthEnabled
       ) {
-        authUrl = await getAuthUrlSS(AuthType.GOOGLE_OAUTH, nextUrl!);
+        authUrl = await getAuthUrlSS(AuthType.GOOGLE_OAUTH, nextUrl);
       }
     } catch (e) {
       console.log(`Some fetch failed for the login page - ${e}`);
@@ -117,7 +117,7 @@ export default async function Page(props: PageProps) {
         <LoginPage
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}
-          nextUrl={nextUrl!}
+          nextUrl={nextUrl}
           hidePageRedirect={true}
         />
       </AuthFlowContainer>
