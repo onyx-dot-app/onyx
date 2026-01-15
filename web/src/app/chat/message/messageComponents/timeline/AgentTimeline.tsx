@@ -42,26 +42,6 @@ export interface AgentTimelineProps {
   "data-testid"?: string;
 }
 
-/**
- * AgentTimeline - Self-contained timeline component
- *
- * Renders the complete two-column layout:
- * - Left column: Avatar + step icons with connectors
- * - Right column: Step content containers + children slot
- *
- * Usage:
- * ```tsx
- * <AgentTimeline
- *   packetGroups={toolGroups}
- *   chatState={effectiveChatState}
- *   stopPacketSeen={stopPacketSeen}
- *   finalAnswerComing={finalAnswerComing}
- *   hasDisplayContent={displayGroups.length > 0}
- * >
- *   {/* Final message content + MessageToolbar *\/}
- * </AgentTimeline>
- * ```
- */
 export function AgentTimeline({
   packetGroups,
   chatState,
@@ -154,13 +134,6 @@ export function AgentTimeline({
   );
 }
 
-/**
- * StepContainer - Content container with header and optional collapsible
- *
- * Layout:
- * - ROW 1: Icon + Header + Button (same row, space-between)
- * - ROW 2: Connector column + Children column (two columns)
- */
 export interface StepContainerProps {
   /** Main content */
   children: React.ReactNode;
@@ -198,7 +171,7 @@ export function StepContainer({
 
   return (
     <div className={cn("flex w-full", className)}>
-      <div className="flex justify-center w-9 border-t">
+      <div className="flex flex-col justify-center items-center w-9 pt-1">
         {StepIconComponent && (
           <StepIconComponent className="size-4 stroke-text-02" />
         )}
