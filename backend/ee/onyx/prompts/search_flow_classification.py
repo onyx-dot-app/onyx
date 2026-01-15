@@ -1,13 +1,16 @@
 # ruff: noqa: E501, W605 start
 SEARCH_CLASS = "search"
 CHAT_CLASS = "chat"
+
+# Will note that with many larger LLMs the latency on running this prompt via third party APIs is as high as 2 seconds which is too slow for many
+# use cases.
 SEARCH_CHAT_PROMPT = f"""
 Determine if the following query is better suited for a search UI or a chat UI. Respond with "{SEARCH_CLASS}" or "{CHAT_CLASS}" literally and nothing else. \
 Do not provide any additional text or reasoning to your response. CRITICAL, IT MUST ONLY BE 1 SINGLE WORD - EITHER "{SEARCH_CLASS}" or "{CHAT_CLASS}".
 
 # Classification Guidelines:
 ## {SEARCH_CLASS}
-- If the query consistents entirely of keywords or query doesn't require any answer from the AI
+- If the query consists entirely of keywords or query doesn't require any answer from the AI
 - If the query is a short statement that seems like a search query rather than a question
 - If the query feels nonsensical or is a short phrase that possibly describes a document or information that could be found in a internal document
 

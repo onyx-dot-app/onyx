@@ -2334,8 +2334,12 @@ class SearchDoc(Base):
 
 
 class SearchQuery(Base):
+    # This table contains search queries for the Search UI. There are no followups and less is stored because the reply
+    # functionality is simply to rerun the search query again as things may have changed and this is more common for search.
     __tablename__ = "search_query"
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("user.id"))
     query: Mapped[str] = mapped_column(String)
     query_expansions: Mapped[list[str] | None] = mapped_column(

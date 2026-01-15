@@ -36,24 +36,24 @@ def create_search_query(
 def fetch_search_queries_for_user(
     db_session: Session,
     user_id: UUID,
-    filter_number: int | None = None,
+    filter_days: int | None = None,
     limit: int | None = None,
 ) -> list[SearchQuery]:
     """Fetch `SearchQuery` rows for a user.
 
     Args:
         user_id: User UUID.
-        filter_number: Optional time filter. If provided, only rows created within
-            the last `filter_number` days are returned.
+        filter_days: Optional time filter. If provided, only rows created within
+            the last `filter_days` days are returned.
         limit: Optional max number of rows to return.
     """
-    if filter_number is not None and filter_number < 0:
-        raise ValueError("filter_number must be >= 0")
+    if filter_days is not None and filter_days <= 0:
+        raise ValueError("filter_days must be > 0")
 
     stmt = select(SearchQuery).where(SearchQuery.user_id == user_id)
 
-    if filter_number is not None and filter_number > 0:
-        cutoff = get_db_current_time(db_session) - timedelta(days=filter_number)
+    if filter_days is not None and filter_days > 0:
+        cutoff = get_db_current_time(db_session) - timedelta(days=filter_days)
         stmt = stmt.where(SearchQuery.created_at >= cutoff)
 
     stmt = stmt.order_by(SearchQuery.created_at.desc())

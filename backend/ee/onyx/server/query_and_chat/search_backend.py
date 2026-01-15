@@ -30,7 +30,7 @@ def search_flow_classification(
     query = request.user_query
     # This is a heuristic that if the user is typing a lot of text, it's unlikely they're looking for some specific document
     # Most likely something needs to be done with the text included so we'll just classify it as a chat flow
-    if len(query) > 300:
+    if len(query) > 200:
         return SearchFlowClassificationResponse(is_search_flow=False)
 
     llm = get_default_llm()

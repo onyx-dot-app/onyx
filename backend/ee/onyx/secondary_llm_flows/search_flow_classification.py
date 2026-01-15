@@ -7,10 +7,12 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
 
+@log_function_time(print_only=True)
 def classify_is_search_flow(
     query: str,
     llm: LLM,
