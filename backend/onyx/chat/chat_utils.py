@@ -159,31 +159,6 @@ def create_chat_history_chain(
     return mainline_messages
 
 
-def combine_message_chain(
-    messages: list[ChatMessage],
-    token_limit: int,
-    msg_limit: int | None = None,
-) -> str:
-    """Used for secondary LLM flows that require the chat history,"""
-    message_strs: list[str] = []
-    total_token_count = 0
-
-    if msg_limit is not None:
-        messages = messages[-msg_limit:]
-
-    for message in cast(list[ChatMessage], reversed(messages)):
-        message_token_count = message.token_count
-
-        if total_token_count + message_token_count > token_limit:
-            break
-
-        role = message.message_type.value.upper()
-        message_strs.insert(0, f"{role}:\n{message.message}")
-        total_token_count += message_token_count
-
-    return "\n\n".join(message_strs)
-
-
 def reorganize_citations(
     answer: str, citations: list[CitationInfo]
 ) -> tuple[str, list[CitationInfo]]:
@@ -492,6 +467,71 @@ def load_all_chat_files(
         ),
     )
     return files
+
+
+def convert_chat_history_basic(
+    chat_history: list[ChatMessage],
+    token_counter: Callable[[str], int],
+    max_individual_message_tokens: int | None = None,
+    max_total_tokens: int | None = None,
+) -> list[ChatMessageSimple]:
+    """Convert ChatMessage history to ChatMessageSimple format with no tool calls or files included.
+
+    Args:
+        chat_history: List of ChatMessage objects to convert
+        token_counter: Function to count tokens in a message string
+        max_individual_message_tokens: If set, messages exceeding this number of tokens are dropped.
+            If None, no messages are dropped based on individual token count.
+        max_total_tokens: If set, maximum number of tokens allowed for the entire history.
+            If None, the history is not trimmed based on total token count.
+
+    Returns:
+        List of ChatMessageSimple objects
+    """
+    # Defensive: treat a non-positive total budget as "no history".
+    if max_total_tokens is not None and max_total_tokens <= 0:
+        return []
+
+    # Convert only the core USER/ASSISTANT messages; omit files and tool calls.
+    converted: list[ChatMessageSimple] = []
+    for chat_message in chat_history:
+        if chat_message.message_type not in (MessageType.USER, MessageType.ASSISTANT):
+            continue
+
+        message = chat_message.message or ""
+        token_count = getattr(chat_message, "token_count", None)
+        if token_count is None:
+            token_count = token_counter(message)
+
+        # Drop any single message that would dominate the context window.
+        if (
+            max_individual_message_tokens is not None
+            and token_count > max_individual_message_tokens
+        ):
+            continue
+
+        converted.append(
+            ChatMessageSimple(
+                message=message,
+                token_count=token_count,
+                message_type=chat_message.message_type,
+                image_files=None,
+            )
+        )
+
+    if max_total_tokens is None:
+        return converted
+
+    # Enforce a max total budget by keeping a contiguous suffix of the conversation.
+    trimmed_reversed: list[ChatMessageSimple] = []
+    total_tokens = 0
+    for msg in reversed(converted):
+        if total_tokens + msg.token_count > max_total_tokens:
+            break
+        trimmed_reversed.append(msg)
+        total_tokens += msg.token_count
+
+    return list(reversed(trimmed_reversed))
 
 
 def convert_chat_history(

@@ -1220,7 +1220,6 @@ def slack_retrieval(
                 source_type=DocumentSource.SLACK,
                 title=chunk.title_prefix,
                 boost=0,
-                recency_bias=docid_to_message[document_id].recency_bias,
                 score=convert_slack_score(docid_to_message[document_id].slack_score),
                 hidden=False,
                 is_relevant=None,

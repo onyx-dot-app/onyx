@@ -56,7 +56,7 @@ export default function SwitchList({
   }, [items, searchTerm]);
 
   return (
-    <PopoverMenu medium footer={footer}>
+    <PopoverMenu md footer={footer}>
       {[
         <div className="flex items-center gap-1" key="search">
           <IconButton

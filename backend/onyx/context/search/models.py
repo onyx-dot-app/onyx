@@ -180,7 +180,6 @@ class InferenceChunk(BaseChunk):
     semantic_identifier: str
     title: str | None  # Separate from Semantic Identifier though often same
     boost: int
-    recency_bias: float
     score: float | None
     hidden: bool
     is_relevant: bool | None = None

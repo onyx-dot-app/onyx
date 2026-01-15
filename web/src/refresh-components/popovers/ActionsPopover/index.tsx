@@ -825,7 +825,7 @@ export default function ActionsPopover({
   const totalSourceCount = accessibleConfiguredSources.length;
 
   const primaryView = (
-    <PopoverMenu medium>
+    <PopoverMenu md>
       {[
         <InputTypeIn
           key="search"

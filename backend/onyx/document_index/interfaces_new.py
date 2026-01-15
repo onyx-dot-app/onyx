@@ -167,9 +167,9 @@ class IndexRetrievalFilters(BaseModel):
 
 class SchemaVerifiable(abc.ABC):
     """
-    Class must implement document index schema verification. For example, verify that all of the
-    necessary attributes for indexing, querying, filtering, and fields to return from search are
-    all valid in the schema.
+    Class must implement document index schema verification. For example, verify
+    that all of the necessary attributes for indexing, querying, filtering, and
+    fields to return from search are all valid in the schema.
     """
 
     @abc.abstractmethod
@@ -179,13 +179,18 @@ class SchemaVerifiable(abc.ABC):
         embedding_precision: EmbeddingPrecision,
     ) -> None:
         """
-        Verify that the document index exists and is consistent with the expectations in the code. For certain search
-        engines, the schema needs to be created before indexing can happen. This call should create the schema if it
-        does not exist.
+        Verifies that the document index exists and is consistent with the
+        expectations in the code.
 
-        Parameters:
-        - embedding_dim: Vector dimensionality for the vector similarity part of the search
-        - embedding_precision: Precision of the vector similarity part of the search
+        For certain search engines, the schema needs to be created before
+        indexing can happen. This call should create the schema if it does not
+        exist.
+
+        Args:
+            embedding_dim: Vector dimensionality for the vector similarity part
+                of the search.
+            embedding_precision: Precision of the values of the vectors for the
+                similarity part of the search.
         """
         raise NotImplementedError
 
@@ -238,8 +243,8 @@ class Deletable(abc.ABC):
     @abc.abstractmethod
     def delete(
         self,
-        # TODO(andrei): Fine for now but this can probably be a batch operation that
-        # takes in a list of IDs.
+        # TODO(andrei): Fine for now but this can probably be a batch operation
+        # that takes in a list of IDs.
         document_id: str,
         chunk_count: int | None = None,
         # TODO(andrei): Shouldn't this also have some acl filtering at minimum?
@@ -283,10 +288,7 @@ class Updatable(abc.ABC):
         self,
         update_requests: list[MetadataUpdateRequest],
     ) -> None:
-        """
-        Updates some set of chunks. The document and fields to update are specified in the update
-        requests. Each update request in the list applies its changes to a list of document ids.
-        None values mean that the field does not need an update.
+        """Updates some set of chunks.
 
         The document and fields to update are specified in the update requests.
         Each update request in the list applies its changes to a list of
