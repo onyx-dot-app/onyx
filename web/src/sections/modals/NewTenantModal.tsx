@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog } from "@headlessui/react";
+import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { ArrowRight, X } from "lucide-react";
+import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/user";
-import { useUser } from "../user/UserProvider";
+import { useUser } from "@/components/user/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { SvgX } from "@opal/icons";
+import Text from "@/refresh-components/texts/Text";
+import { ErrorTextLayout } from "@/layouts/input-layouts";
 
 // App domain should not be hardcoded
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
@@ -131,58 +132,32 @@ export default function NewTenantModal({
     }
   }
 
-  if (!isOpen) return null;
+  const title = isInvite
+    ? `You have been invited to join ${
+        tenantInfo.number_of_users
+      } other teammate${
+        tenantInfo.number_of_users === 1 ? "" : "s"
+      } of ${APP_DOMAIN}.`
+    : `Your request to join ${tenantInfo.number_of_users} other users of ${APP_DOMAIN} has been approved.`;
+
+  const description = isInvite
+    ? `By accepting this invitation, you will join the existing ${APP_DOMAIN} team and lose access to your current team. Note: you will lose access to your current assistants, prompts, chats, and connected sources.`
+    : `To finish joining your team, please reauthenticate with ${user?.email}.`;
 
   return (
-    <Dialog open={isOpen} onClose={handleClose} className="relative z-[1000]">
-      {/* Modal backdrop */}
-      <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
+    <Modal open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <Modal.Content small preventAccidentalClose={false}>
+        <Modal.Header icon={SvgUsers} title={title} onClose={handleClose} />
 
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-neutral-800 p-6 shadow-xl border border-neutral-200 dark:border-neutral-700">
-          <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
-            {isInvite ? (
-              <>
-                You have been invited to join {tenantInfo.number_of_users} other
-                teammate{tenantInfo.number_of_users === 1 ? "" : "s"} of{" "}
-                {APP_DOMAIN}.
-              </>
-            ) : (
-              <>
-                Your request to join {tenantInfo.number_of_users} other users of{" "}
-                {APP_DOMAIN} has been approved.
-              </>
-            )}
-          </Dialog.Title>
+        <Modal.Body>
+          <Text>{description}</Text>
+          {error && <ErrorTextLayout>{error}</ErrorTextLayout>}
+        </Modal.Body>
 
-          <div className="space-y-4">
-            {error && (
-              <p className="text-red-500 dark:text-red-400 text-sm">{error}</p>
-            )}
-
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              {isInvite ? (
-                <>
-                  By accepting this invitation, you will join the existing{" "}
-                  {APP_DOMAIN} team and lose access to your current team.
-                  <br />
-                  Note: you will lose access to your current assistants,
-                  prompts, chats, and connected sources.
-                </>
-              ) : (
-                <>
-                  To finish joining your team, please reauthenticate with{" "}
-                  <em>{user?.email}</em>.
-                </>
-              )}
-            </p>
-
-            <div
-              className={`flex ${
-                isInvite ? "justify-between" : "justify-center"
-              } w-full pt-2 gap-4`}
-            >
-              {isInvite && (
+        <Modal.Footer>
+          <BasicModalFooter
+            cancel={
+              isInvite ? (
                 <Button
                   onClick={handleRejectInvite}
                   secondary
@@ -191,25 +166,26 @@ export default function NewTenantModal({
                 >
                   Decline
                 </Button>
-              )}
-
-              <Button onClick={handleJoinTenant} disabled={isLoading}>
-                {isLoading ? (
-                  <span className="flex items-center">
-                    <span className="animate-spin mr-2">⟳</span>
-                    {isInvite ? "Accepting..." : "Joining..."}
-                  </span>
-                ) : (
-                  <>
-                    {isInvite ? "Accept Invitation" : "Reauthenticate"}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                )}
+              ) : undefined
+            }
+            submit={
+              <Button
+                onClick={handleJoinTenant}
+                disabled={isLoading}
+                rightIcon={SvgArrowRight}
+              >
+                {isLoading
+                  ? isInvite
+                    ? "Accepting..."
+                    : "Joining..."
+                  : isInvite
+                    ? "Accept Invitation"
+                    : "Reauthenticate"}
               </Button>
-            </div>
-          </div>
-        </Dialog.Panel>
-      </div>
-    </Dialog>
+            }
+          />
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }

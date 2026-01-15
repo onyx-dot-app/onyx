@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState } from "react";
 import NewTeamModal from "@/components/modals/NewTeamModal";
-import NewTenantModal from "@/components/modals/NewTenantModal";
+import NewTenantModal from "@/sections/modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
