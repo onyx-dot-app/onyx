@@ -12,10 +12,40 @@ from fastapi.testclient import TestClient
 from onyx.db.engine.sql_engine import get_session
 from onyx.main import fetch_versioned_implementation
 from onyx.utils.logger import setup_logger
+from tests.utils import Environment
+from tests.utils import get_aws_secrets
+from tests.utils import SecretName
 
 logger = setup_logger()
 
 load_dotenv()
+
+
+@pytest.fixture(scope="session")
+def test_secrets() -> dict[SecretName, str]:
+    """
+    Fetch all test secrets from AWS Secrets Manager once at session start.
+
+    This fixture is session-scoped, so secrets are fetched in a single API call
+    when the test session begins. Individual test fixtures should depend on this
+    fixture to access secrets.
+
+    Example:
+        @pytest.fixture
+        def openai_client(test_secrets: dict[SecretName, str]) -> OpenAI:
+            return OpenAI(api_key=test_secrets[SecretName.OPENAI_API_KEY])
+    """
+    return get_aws_secrets(
+        [
+            SecretName.OPENAI_API_KEY,
+            SecretName.COHERE_API_KEY,
+            SecretName.AZURE_API_KEY,
+            SecretName.AZURE_API_URL,
+            SecretName.LITELLM_API_KEY,
+            SecretName.LITELLM_API_URL,
+        ],
+        environment=Environment.TEST,
+    )
 
 
 @asynccontextmanager
