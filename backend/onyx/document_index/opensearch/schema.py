@@ -283,6 +283,12 @@ class DocumentSchema:
             full-text searches.
           - "store": True fields are stored and can be returned on their own,
             independent of the parent document.
+          - "index": True fields can be queried on.
+          - "doc_values": True fields can be sorted and aggregated efficiently.
+            Not supported for "text" type fields.
+          - "store": True fields are stored separately from the source document
+            and can thus be returned from a query separately from _source.
+            Generally this is not necessary.
 
         Args:
             vector_dimension: The dimension of vector embeddings. Must be a
@@ -309,10 +315,18 @@ class DocumentSchema:
                         # TODO(andrei): Ask Yuhong do we want this?
                         "keyword": {"type": "keyword", "ignore_above": 256}
                     },
+                    # This makes highlighting text during queries more efficient
+                    # at the cost of disk space. See
+                    # https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#methods-of-obtaining-offsets
+                    "index_options": "offsets",
                 },
                 CONTENT_FIELD_NAME: {
                     "type": "text",
                     "store": True,
+                    # This makes highlighting text during queries more efficient
+                    # at the cost of disk space. See
+                    # https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#methods-of-obtaining-offsets
+                    "index_options": "offsets",
                 },
                 TITLE_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
@@ -362,11 +376,13 @@ class DocumentSchema:
                 GLOBAL_BOOST_FIELD_NAME: {"type": "integer"},
                 # This field is only used for displaying a useful name for the
                 # doc in the UI and is not used for searching. Disabling these
-                # features to increase perf.
+                # features to increase perf. This field is therefore essentially
+                # just metadata.
                 SEMANTIC_IDENTIFIER_FIELD_NAME: {
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above; used to display an image along with the doc.
@@ -374,6 +390,7 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above; used to link to the source doc.
@@ -381,6 +398,7 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above; used to quickly summarize the doc in the UI.
@@ -388,6 +406,7 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above.
@@ -397,6 +416,7 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above.
@@ -406,6 +426,7 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Product-specific fields.

@@ -36,6 +36,7 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
+from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
@@ -69,10 +70,11 @@ logger = setup_logger(__name__)
 def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
     chunk: DocumentChunk,
     score: float | None,
+    highlights: dict[str, list[str]],
 ) -> InferenceChunkUncleaned:
     """
-    Generates an inference chunk from an OpenSearch document chunk and its
-    score.
+    Generates an inference chunk from an OpenSearch document chunk, its score,
+    and its match highlights.
 
     Args:
         chunk: The document chunk returned by OpenSearch.
@@ -80,6 +82,9 @@ def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
             relevant for searches like hybrid search. It is acceptable for this
             value to be None for results from other queries like ID-based
             retrieval as a match score makes no sense in those contexts.
+        highlights: Maps schema property name to a list of highlighted snippets
+            with match terms wrapped in tags (e.g. "something <hi>keyword</hi>
+            other thing").
 
     Returns:
         An Onyx inference chunk representation.
@@ -100,10 +105,10 @@ def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
         score=score,
         hidden=chunk.hidden,
         metadata=json.loads(chunk.metadata),
-        # TODO(andrei): The vector DB needs to supply this. I vaguely know
-        # OpenSearch can from the documentation I've seen till now, look at this
-        # in a followup.
-        match_highlights=[],
+        # Extract highlighted snippets from the content field, if available. In
+        # the future we may want to match on other fields too, currently we only
+        # use the content field.
+        match_highlights=highlights.get(CONTENT_FIELD_NAME, []),
         # TODO(andrei) Consider storing a chunk content index instead of a full
         # string when working on chunk content augmentation.
         doc_summary=chunk.doc_summary,
@@ -596,7 +601,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
                 _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
-                    search_hit.document_chunk, None
+                    search_hit.document_chunk, None, {}
                 )
                 for search_hit in search_hits
             ]
@@ -632,7 +637,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
             _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
-                search_hit.document_chunk, search_hit.score
+                search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
         ]

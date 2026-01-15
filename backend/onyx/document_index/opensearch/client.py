@@ -45,6 +45,9 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     # relevant for "fuzzy searches"; this will be None for direct queries where
     # score is not relevant like direct retrieval on ID.
     score: float | None = None
+    # Maps schema property name to a list of highlighted snippets with match
+    # terms wrapped in tags (e.g. "something <hi>keyword</hi> other thing").
+    match_highlights: dict[str, list[str]] = {}
 
 
 class OpenSearchClient:
@@ -482,9 +485,11 @@ class OpenSearchClient:
                     f"Document chunk with ID \"{hit.get('_id', '')}\" has no data."
                 )
             document_chunk_score = hit.get("_score", None)
+            match_highlights: dict[str, list[str]] = hit.get("highlight", {})
             search_hit = SearchHit[DocumentChunk](
                 document_chunk=DocumentChunk.model_validate(document_chunk_source),
                 score=document_chunk_score,
+                match_highlights=match_highlights,
             )
             search_hits.append(search_hit)
         return search_hits
