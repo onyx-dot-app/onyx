@@ -43,7 +43,7 @@ class FeatureFlagProvider(abc.ABC):
         """
         return self.feature_enabled(
             flag_key,
-            # For local dev with AUTH_TYPE=disabled, we don't have a user, so we use a random UUID
+            # For anonymous/unauthenticated users, use a fixed UUID as fallback
             user.id if user else UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83"),
             user_properties={
                 "tenant_id": tenant_id,

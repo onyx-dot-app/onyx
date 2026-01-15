@@ -13,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
@@ -46,8 +45,7 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None and auth is disabled, assume the user is an admin
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user and user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()

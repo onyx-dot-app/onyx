@@ -72,8 +72,8 @@ def create_federated_connector(
 
     if user is None:
         raise HTTPException(
-            status_code=400,
-            detail="Federated retrieval not supported with AUTH_TYPE=disabled.",
+            status_code=401,
+            detail="Authentication required for federated retrieval.",
         )
 
     logger.info(

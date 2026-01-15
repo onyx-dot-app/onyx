@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimit__UserGroup
@@ -21,8 +20,7 @@ from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None and auth is disabled, assume the user is an admin
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user and user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()

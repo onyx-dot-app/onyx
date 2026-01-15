@@ -14,7 +14,6 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
@@ -50,8 +49,7 @@ class ConnectorType(str, Enum):
 def _add_user_filters(
     stmt: Select[tuple[*R]], user: User | None, get_editable: bool = True
 ) -> Select[tuple[*R]]:
-    # If user is None and auth is disabled, assume the user is an admin
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user and user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()

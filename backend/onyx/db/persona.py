@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -63,8 +62,7 @@ class PersonaLoadType(Enum):
 def _add_user_filters(
     stmt: Select[tuple[Persona]], user: User | None, get_editable: bool = True
 ) -> Select[tuple[Persona]]:
-    # If user is None and auth is disabled, assume the user is an admin
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user and user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()

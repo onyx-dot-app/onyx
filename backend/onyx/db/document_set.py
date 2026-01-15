@@ -13,7 +13,6 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
@@ -40,8 +39,7 @@ logger = setup_logger()
 def _add_user_filters(
     stmt: Select, user: User | None, get_editable: bool = True
 ) -> Select:
-    # If user is None and auth is disabled, assume the user is an admin
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user and user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()

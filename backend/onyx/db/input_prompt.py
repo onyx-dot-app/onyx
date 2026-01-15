@@ -8,8 +8,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.constants import AuthType
 from onyx.db.models import InputPrompt
 from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
@@ -198,7 +196,6 @@ def fetch_input_prompts_by_user(
     """
     Returns all prompts belonging to the user or public prompts,
     excluding those the user has specifically disabled.
-    Also, if `user_id` is None and AUTH_TYPE is DISABLED, then all prompts are returned.
     """
 
     query = select(InputPrompt)
@@ -228,15 +225,12 @@ def fetch_input_prompts_by_user(
             query = query.where(InputPrompt.user_id == user_id)
 
     else:
-        # user_id is None
-        if AUTH_TYPE == AuthType.DISABLED:
-            # If auth is disabled, return all prompts
-            query = query.where(True)  # type: ignore
-        elif include_public:
-            # Anonymous usage
+        # user_id is None - anonymous usage
+        if include_public:
             query = query.where(InputPrompt.is_public)
-
-        # Default to returning all prompts
+        else:
+            # No user and not requesting public prompts - return nothing
+            return []
 
     if active is not None:
         query = query.where(InputPrompt.active == active)

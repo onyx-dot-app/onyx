@@ -35,6 +35,9 @@ ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
 NO_AUTH_USER_ID = "__no_auth_user__"
 NO_AUTH_USER_EMAIL = "anonymous@onyx.app"
+# Placeholder user for migrating no-auth data to first registered user
+NO_AUTH_PLACEHOLDER_USER_UUID = "00000000-0000-0000-0000-000000000001"
+NO_AUTH_PLACEHOLDER_USER_EMAIL = "no-auth-placeholder@onyx.app"
 
 # For chunking/processing chunks
 RETURN_SEPARATOR = "\n\r\n"
@@ -256,13 +259,12 @@ class DocumentIndexType(str, Enum):
 
 
 class AuthType(str, Enum):
-    DISABLED = "disabled"
     BASIC = "basic"
     GOOGLE_OAUTH = "google_oauth"
     OIDC = "oidc"
     SAML = "saml"
 
-    # google auth and basic
+    # google auth and basic (default)
     CLOUD = "cloud"
 
 

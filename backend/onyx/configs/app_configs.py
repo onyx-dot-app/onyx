@@ -71,8 +71,7 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 #####
 # Auth Configs
 #####
-AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
-DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
+AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.BASIC.value).lower())
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
@@ -145,6 +144,10 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+
+# Whether Google OAuth is enabled (requires both client ID and secret)
+OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
+
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 

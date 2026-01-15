@@ -9,7 +9,6 @@ from sqlalchemy.sql.expression import and_
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
@@ -49,16 +48,7 @@ def _add_user_filters(
     """Attaches filters to the statement to ensure that the user can only
     access the appropriate credentials"""
     if user is None:
-        if not DISABLE_AUTH:
-            raise ValueError("Anonymous users are not allowed to access credentials")
-        # If user is None and auth is disabled, assume the user is an admin
-        return stmt.where(
-            or_(
-                Credential.user_id.is_(None),
-                Credential.admin_public == True,  # noqa: E712
-                Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
-            )
-        )
+        raise ValueError("Anonymous users are not allowed to access credentials")
 
     if user.role == UserRole.ADMIN:
         # Admins can access all credentials that are public or owned by them
