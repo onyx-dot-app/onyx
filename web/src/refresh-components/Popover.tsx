@@ -97,7 +97,7 @@ const PopoverClose = PopoverPrimitive.Close;
 const widthClasses = {
   fit: "w-fit",
   md: "w-[12rem]",
-  lg: "w-[280px]",
+  lg: "w-[18rem]",
 };
 interface PopoverContentProps
   extends WithoutStyles<
@@ -186,7 +186,7 @@ export default Object.assign(PopoverRoot, {
  */
 const sizeClasses = {
   sm: "w-[10rem]",
-  md: "w-[15.5rem]",
+  md: "w-[16rem]",
   full: "!w-full",
 };
 export interface PopoverMenuProps {

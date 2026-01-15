@@ -12,9 +12,6 @@ NUM_POSTPROCESSED_RESULTS = 20
 # May be less depending on model
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
-# Maximum percentage of the context window to fill with selected sections
-SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE = 0.8
-
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
 # Capped in Vespa at 0.5
 DOC_TIME_DECAY = float(
@@ -30,8 +27,6 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 DISABLE_LLM_QUERY_REPHRASE = (
     os.environ.get("DISABLE_LLM_QUERY_REPHRASE", "").lower() == "true"
 )
-# 1 edit per 20 characters, currently unused due to fuzzy match being too slow
-QUOTE_ALLOWED_ERROR_PERCENT = 0.05
 QA_TIMEOUT = int(os.environ.get("QA_TIMEOUT") or "60")  # 60 seconds
 # Weighting factor between Vector and Keyword Search, 1 for completely vector search
 HYBRID_ALPHA = max(0, min(1, float(os.environ.get("HYBRID_ALPHA") or 0.5)))
@@ -58,10 +53,6 @@ LANGUAGE_CHAT_NAMING_HINT = (
     os.environ.get("LANGUAGE_CHAT_NAMING_HINT")
     or "The name of the conversation must be in the same language as the user query."
 )
-
-# Number of prompts each persona should have
-NUM_PERSONA_PROMPTS = 4
-NUM_PERSONA_PROMPT_GENERATION_CHUNKS = 5
 
 # Agentic search takes significantly more tokens and therefore has much higher cost.
 # This configuration allows users to get a search-only experience with instant results
@@ -96,5 +87,3 @@ USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (
     os.environ.get("USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH", "false").lower()
     == "true"
 )
-
-USE_DIV_CON_AGENT = os.environ.get("USE_DIV_CON_AGENT", "false").lower() == "true"

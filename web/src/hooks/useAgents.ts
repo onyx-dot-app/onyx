@@ -12,7 +12,6 @@ import { useUser } from "@/components/user/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import useChatSessions from "./useChatSessions";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 /**
  * Fetches all agents (personas) available to the current user.
@@ -197,69 +196,4 @@ export function useCurrentAgent(): MinimalPersonaSnapshot | null {
   }, [agents, agentIdRaw, currentChatSession?.persona_id]);
 
   return currentAgent;
-}
-
-/**
- * Hook for updating agent sharing settings.
- *
- * Internally determines if enterprise features are enabled. For MIT versions,
- * group_ids is automatically omitted from the request since group-based sharing
- * is an EE-only feature.
- *
- * @returns A function to update agent sharing that takes:
- *   - agentId: The ID of the agent to update
- *   - userIds: Array of user IDs to share with
- *   - groupIds: Array of group IDs to share with (ignored on MIT)
- *   - isPublic: Whether the agent should be public
- *
- * @example
- * const updateAgentSharedStatus = useUpdateAgentSharedStatus();
- * const error = await updateAgentSharedStatus(agentId, userIds, groupIds, isPublic);
- * if (error) console.error(error);
- */
-export function useUpdateAgentSharedStatus() {
-  const isEnterprise = usePaidEnterpriseFeaturesEnabled();
-
-  return useCallback(
-    async (
-      agentId: number,
-      userIds: string[],
-      groupIds: number[],
-      isPublic?: boolean
-    ): Promise<null | string> => {
-      // MIT versions should not send group_ids - warn if caller provided non-empty groups
-      if (!isEnterprise && groupIds.length > 0) {
-        console.error(
-          "updateAgentSharedStatus: groupIds provided but enterprise features are disabled. " +
-            "Group sharing is an EE-only feature. Discarding groupIds."
-        );
-      }
-
-      try {
-        const response = await fetch(`/api/persona/${agentId}/share`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            user_ids: userIds,
-            // Only include group_ids for enterprise versions
-            group_ids: isEnterprise ? groupIds : undefined,
-            is_public: isPublic,
-          }),
-        });
-
-        if (response.ok) {
-          return null;
-        }
-
-        const errorMessage = (await response.json()).detail || "Unknown error";
-        return errorMessage;
-      } catch (error) {
-        console.error("updateAgentSharedStatus: Network error", error);
-        return "Network error. Please check your connection and try again.";
-      }
-    },
-    [isEnterprise]
-  );
 }

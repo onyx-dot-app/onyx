@@ -10,16 +10,12 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";
-import {
-  usePinnedAgents,
-  useAgent,
-  useUpdateAgentSharedStatus,
-} from "@/hooks/useAgents";
+import { usePinnedAgents, useAgent } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { checkUserOwnsAssistant } from "@/lib/agents";
+import { checkUserOwnsAssistant, updateAgentSharedStatus } from "@/lib/agents";
 import { useUser } from "@/components/user/UserProvider";
 import {
   SvgActions,
@@ -69,7 +65,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const shareAgentModal = useCreateModal();
   const { refresh: refreshAgent } = useAgent(agent.id);
   const { popup, setPopup } = usePopup();
-  const updateAgentSharedStatus = useUpdateAgentSharedStatus();
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -86,7 +81,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
         agent.id,
         userIds,
         groupIds,
-        isPublic
+        isPublic,
+        isPaidEnterpriseFeaturesEnabled
       );
 
       if (error) {
@@ -99,7 +95,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         refreshAgent();
       }
     },
-    [agent.id, refreshAgent, updateAgentSharedStatus]
+    [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent, setPopup]
   );
 
   return (
