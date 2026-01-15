@@ -127,17 +127,40 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		log.Fatalf("Failed to fetch fork branch: %v", err)
 	}
 
-	// Create the CI branch from FETCH_HEAD
-	// Delete branch if it already exists locally (to ensure we're in sync with fork)
-	if branchExists(ciBranch) {
-		log.Infof("Deleting existing local branch: %s", ciBranch)
-		if err := runGitCommand("branch", "-D", ciBranch); err != nil {
-			log.Fatalf("Failed to delete existing branch: %v", err)
+	// Create or update the CI branch from FETCH_HEAD
+	if originalBranch == ciBranch {
+		// Already on the CI branch - stash any uncommitted changes before resetting
+		stashed := false
+		if hasUncommittedChanges() {
+			log.Info("Stashing uncommitted changes...")
+			if err := runGitCommand("stash", "--include-untracked"); err != nil {
+				log.Fatalf("Failed to stash changes: %v", err)
+			}
+			stashed = true
 		}
-	}
-	log.Infof("Creating CI branch: %s", ciBranch)
-	if err := runGitCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
-		log.Fatalf("Failed to create CI branch: %v", err)
+		log.Infof("Already on %s, resetting to fork's HEAD", ciBranch)
+		if err := runGitCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
+			log.Fatalf("Failed to reset branch to fork's HEAD: %v", err)
+		}
+		if stashed {
+			log.Info("Restoring stashed changes...")
+			if err := runGitCommand("stash", "pop"); err != nil {
+				log.Warnf("Failed to restore stashed changes (may have conflicts): %v", err)
+				log.Info("Your changes are still in the stash. Run 'git stash pop' to restore them manually.")
+			}
+		}
+	} else {
+		// Delete branch if it already exists locally (to ensure we're in sync with fork)
+		if branchExists(ciBranch) {
+			log.Infof("Deleting existing local branch: %s", ciBranch)
+			if err := runGitCommand("branch", "-D", ciBranch); err != nil {
+				log.Fatalf("Failed to delete existing branch: %v", err)
+			}
+		}
+		log.Infof("Creating CI branch: %s", ciBranch)
+		if err := runGitCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
+			log.Fatalf("Failed to create CI branch: %v", err)
+		}
 	}
 
 	if opts.DryRun {
@@ -226,4 +249,12 @@ func createCIPR(headBranch, baseBranch, title, body string) (string, error) {
 func branchExists(branchName string) bool {
 	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", fmt.Sprintf("refs/heads/%s", branchName))
 	return cmd.Run() == nil
+}
+
+// hasUncommittedChanges checks if there are uncommitted changes in the working directory
+func hasUncommittedChanges() bool {
+	// git diff --quiet returns exit code 1 if there are changes
+	staged := exec.Command("git", "diff", "--quiet", "--cached")
+	unstaged := exec.Command("git", "diff", "--quiet")
+	return staged.Run() != nil || unstaged.Run() != nil
 }
