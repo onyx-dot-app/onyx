@@ -55,6 +55,8 @@ Example usage:
 }
 
 func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
+	checkGitHubCLI()
+
 	commitSHAs := args
 	if len(commitSHAs) == 1 {
 		log.Debugf("Cherry-picking commit: %s", commitSHAs[0])
@@ -283,6 +285,14 @@ func getCommitMessage(commitSHA string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// checkGitHubCLI checks if the GitHub CLI is installed and exits with a helpful message if not
+func checkGitHubCLI() {
+	cmd := exec.Command("gh", "--version")
+	if err := cmd.Run(); err != nil {
+		log.Fatal("GitHub CLI (gh) is not installed. Please install it from https://cli.github.com/")
+	}
 }
 
 // createPR creates a pull request using the GitHub CLI

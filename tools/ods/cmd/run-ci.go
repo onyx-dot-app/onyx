@@ -76,6 +76,8 @@ func (p *PRInfo) ForkRepo() string {
 }
 
 func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
+	checkGitHubCLI()
+
 	prNumber := args[0]
 	log.Debugf("Running CI for PR: %s", prNumber)
 
@@ -115,7 +117,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	// Create the CI branch
 	ciBranch := fmt.Sprintf("run-ci/%s", prNumber)
 	prTitle := fmt.Sprintf("chore: [Running GitHub actions for #%s]", prNumber)
-	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\nOriginal PR: https://github.com/onyx-dot-app/onyx/pull/%s\n\n**This PR should be closed (not merged) after CI completes.**", prNumber, prNumber)
+	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**", prNumber)
 
 	// Fetch the fork's branch
 	if forkRepo == "" {
