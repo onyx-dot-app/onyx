@@ -1,0 +1,22 @@
+{{- if .Values.redis.enabled -}}
+apiVersion: redis.redis.opstreelabs.in/v1beta1
+kind: Redis
+metadata:
+  name: {{ .Release.Name }}-redis
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  kubernetesConfig:
+    image: {{ .Values.redis.redisStandalone.image }}:{{ .Values.redis.redisStandalone.tag }}
+    imagePullPolicy: {{ .Values.redis.redisStandalone.imagePullPolicy }}
+    resources:
+      {{- toYaml .Values.redis.redisStandalone.resources | nindent 6 }}
+  storage:
+    volumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+{{- end }}
