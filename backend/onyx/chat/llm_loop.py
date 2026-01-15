@@ -23,6 +23,7 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import Persona
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -106,6 +107,7 @@ def construct_message_history(
     project_files: ExtractedProjectFiles | None,
     available_tokens: int,
     last_n_user_messages: int | None = None,
+    model_provider: str | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
@@ -241,11 +243,25 @@ def construct_message_history(
     # 4. Add last user message (with project images attached)
     result.append(last_user_message)
 
-    # 5. Add messages after last user message (tool calls, responses, etc.)
+    # Mistral API requires 'assistant' immediately after 'tool' - no other roles allowed
+    # For Mistral: place reminder BEFORE messages_after_last_user to satisfy strict role ordering
+    # This ensures: user (original) → user (reminder) → assistant (tool_calls) → tool → assistant
+    # For other providers: place reminder AFTER messages_after_last_user (standard behavior)
+    is_mistral = model_provider == LlmProviderNames.MISTRAL if model_provider else False
+
+    if is_mistral and reminder_message:
+        # 5. Add reminder message before tool calls/responses for Mistral
+        result.append(reminder_message)
+        logger.debug(
+            f"[REMINDER] Mistral detected (model_provider={model_provider}) - "
+            "placing reminder BEFORE messages_after_last_user"
+        )
+
+    # 6. Add messages after last user message (tool calls, responses, etc.)
     result.extend(messages_after_last_user)
 
-    # 6. Add reminder message at the very end
-    if reminder_message:
+    # 7. Add reminder message at the very end for non-Mistral providers
+    if not is_mistral and reminder_message:
         result.append(reminder_message)
 
     return result
@@ -458,6 +474,7 @@ def run_llm_loop(
                 reminder_message=reminder_msg,
                 project_files=project_files,
                 available_tokens=available_tokens,
+                model_provider=llm.config.model_provider,
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
