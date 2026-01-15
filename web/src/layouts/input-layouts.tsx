@@ -281,7 +281,7 @@ function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
     <div className="px-1">
       <Section flexDirection="row" gap={0.25}>
         <Icon size={12} className={strokeClass} />
-        <Text as="span" secondaryBody className={colorClass} role="alert">
+        <Text secondaryBody className={colorClass} role="alert">
           {children}
         </Text>
       </Section>
