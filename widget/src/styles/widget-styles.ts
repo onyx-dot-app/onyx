@@ -76,7 +76,7 @@ export const widgetStyles = css`
   .container.inline {
     position: static;
     width: 100%;
-    height: 500px;
+    height: 100%;
     border-radius: var(--onyx-radius-08);
     animation: none;
     opacity: 1;
