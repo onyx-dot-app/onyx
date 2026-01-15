@@ -74,15 +74,15 @@ Example response: {{"block_confidence": 0.85, "matched_index": 2}}"""
 
 
 class QuestionQualificationService:
-    _instance = None
+    _instance: "QuestionQualificationService" | None = None
     _initialized = False
 
-    def __new__(cls):
+    def __new__(cls) -> "QuestionQualificationService":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized:
             return
 
@@ -96,7 +96,7 @@ class QuestionQualificationService:
         )
 
         # Store questions
-        self.questions = []
+        self.questions: list[str] = []
 
         # Track if config has been loaded
         self._config_loaded = False

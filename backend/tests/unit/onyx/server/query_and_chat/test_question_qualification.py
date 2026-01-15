@@ -8,6 +8,7 @@ Tests cover:
 """
 
 import sys
+from collections.abc import Generator
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -20,7 +21,7 @@ from fastapi import HTTPException
 
 
 @pytest.fixture(autouse=True)
-def mock_heavy_dependencies():
+def mock_heavy_dependencies() -> Generator[None, None, None]:
     """Mock heavy dependencies before any imports."""
     # Store original modules
     original_modules = {}
@@ -44,12 +45,6 @@ def mock_heavy_dependencies():
     mock_llm.config.model_name = "test-model"
     mock_llm.config.model_provider = "test-provider"
 
-    # Mock get_default_llms to return (llm, fast_llm)
-    sys.modules["onyx.llm.factory"].get_default_llms = MagicMock(
-        return_value=(mock_llm, mock_llm)
-    )
-    sys.modules["onyx.llm.interfaces"].LLM = MagicMock
-
     yield
 
     # Restore original modules
@@ -64,7 +59,7 @@ def mock_heavy_dependencies():
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton(mock_heavy_dependencies):
+def reset_singleton(mock_heavy_dependencies: None) -> Generator[None, None, None]:
     """Reset singleton state before each test."""
     # Need to import after mocking
     yield
@@ -79,7 +74,7 @@ def reset_singleton(mock_heavy_dependencies):
 class TestQuestionQualificationService:
     """Test QuestionQualificationService behavior."""
 
-    def test_singleton_pattern(self):
+    def test_singleton_pattern(self) -> None:
         """Test that service is a singleton."""
         # Import after mocking
         from onyx.server.query_and_chat.question_qualification import (
@@ -98,7 +93,7 @@ class TestQuestionQualificationService:
         "onyx.server.query_and_chat.question_qualification.ENABLE_QUESTION_QUALIFICATION",
         False,
     )
-    def test_no_config_loading_when_disabled(self):
+    def test_no_config_loading_when_disabled(self) -> None:
         """Test that config is not loaded when ENABLE_QUESTION_QUALIFICATION is False."""
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
@@ -118,7 +113,7 @@ class TestQuestionQualificationService:
         "onyx.server.query_and_chat.question_qualification.ENABLE_QUESTION_QUALIFICATION",
         False,
     )
-    def test_qualify_question_returns_not_blocked_when_disabled(self):
+    def test_qualify_question_returns_not_blocked_when_disabled(self) -> None:
         """Test that qualify_question returns not blocked when feature is disabled."""
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
@@ -143,7 +138,7 @@ class TestQuestionQualificationService:
     @patch(
         "onyx.server.query_and_chat.question_qualification.QuestionQualificationService._load_config"
     )
-    def test_config_loading_when_enabled(self, mock_load_config):
+    def test_config_loading_when_enabled(self, mock_load_config: MagicMock) -> None:
         """Test that config loads when enabled."""
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
@@ -159,7 +154,7 @@ class TestQuestionQualificationService:
         # When enabled, _load_config should be called during init
         assert service is not None
 
-    def test_get_stats(self):
+    def test_get_stats(self) -> None:
         """Test get_stats method."""
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationService,
@@ -181,7 +176,7 @@ class TestQuestionQualificationService:
 class TestHTTPExceptionPropagation:
     """Test HTTPException propagation in query_backend."""
 
-    def test_http_exception_re_raised_in_get_answer_with_citation(self):
+    def test_http_exception_re_raised_in_get_answer_with_citation(self) -> None:
         """Test that HTTPException is re-raised in get_answer_with_citation.
 
         This test verifies the pattern used in the fix - HTTPException should be
@@ -192,7 +187,7 @@ class TestHTTPExceptionPropagation:
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Blocked query"
 
-    def test_http_exception_re_raised_in_stream_answer_with_citation(self):
+    def test_http_exception_re_raised_in_stream_answer_with_citation(self) -> None:
         """Test that HTTPException is re-raised in stream_answer_with_citation.
 
         This test verifies the pattern used in the fix - HTTPException should be
@@ -203,7 +198,7 @@ class TestHTTPExceptionPropagation:
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Blocked query"
 
-    def test_http_exception_vs_generic_exception(self):
+    def test_http_exception_vs_generic_exception(self) -> None:
         """Test that HTTPException is distinct from generic Exception."""
         # Verify HTTPException is a subclass of Exception
         assert issubclass(HTTPException, Exception)
@@ -222,7 +217,7 @@ class TestHTTPExceptionPropagation:
 class TestQuestionQualificationResult:
     """Test QuestionQualificationResult data class."""
 
-    def test_result_attributes(self):
+    def test_result_attributes(self) -> None:
         """Test that result has expected attributes."""
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationResult,
@@ -244,7 +239,7 @@ class TestQuestionQualificationResult:
         assert result.matched_question_index == 0
         assert result.reasoning == "test"
 
-    def test_result_defaults(self):
+    def test_result_defaults(self) -> None:
         """Test default values for result."""
         from onyx.server.query_and_chat.question_qualification import (
             QuestionQualificationResult,

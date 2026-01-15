@@ -876,7 +876,7 @@ def gather_stream(
         raise ValueError("Message ID is required")
 
     # If there's an error (e.g., question blocked), return response with error
-    if error_msg:
+    if error_msg or message_id is None:
         # For blocked questions, we may not have a message_id or answer
         # Use a default message_id of 0 if not set (shouldn't happen, but safe fallback)
         return ChatBasicResponse(
