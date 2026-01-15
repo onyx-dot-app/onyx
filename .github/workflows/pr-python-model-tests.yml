@@ -98,7 +98,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d --wait \
-            relational_db indexing_model_server
+            indexing_model_server
 
       - name: Upgrade DB to head
         run: ods db upgrade head
