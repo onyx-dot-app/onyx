@@ -65,6 +65,9 @@ from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
 from onyx.server.features.build.api import nextjs_assets_router
 from onyx.server.features.build.api import router as build_router
+from onyx.server.features.build.session_api import (
+    session_router as build_session_router,
+)
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
 )
@@ -380,6 +383,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, cc_pair_router)
     include_router_with_global_prefix_prepended(application, projects_router)
     include_router_with_global_prefix_prepended(application, build_router)
+    include_router_with_global_prefix_prepended(application, build_session_router)
     include_router_with_global_prefix_prepended(application, nextjs_assets_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
