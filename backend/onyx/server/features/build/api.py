@@ -9,8 +9,8 @@ from fastapi import Response
 from fastapi.responses import StreamingResponse
 
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import BUILD_WEBAPP_URL
 from onyx.db.models import User
-from onyx.server.features.build.configs import BUILD_WEBAPP_URL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -41,16 +41,12 @@ def _stream_response(response: httpx.Response) -> Iterator[bytes]:
 
 def _rewrite_asset_paths(content: bytes) -> bytes:
     """Rewrite Next.js asset paths to go through the proxy."""
-    import re
-
     text = content.decode("utf-8")
     # Rewrite /_next/ paths to go through our proxy
     text = text.replace("/_next/", f"{WEBAPP_BASE_PATH}/_next/")
-    # Rewrite root-level JSON data file fetch paths (e.g., /data.json, /pr_data.json)
-    # Only matches paths like "/filename.json" (no subdirectories)
-    text = re.sub(r'"(/[a-zA-Z0-9_-]+\.json)"', f'"{WEBAPP_BASE_PATH}\\1"', text)
-    text = re.sub(r"'(/[a-zA-Z0-9_-]+\.json)'", f"'{WEBAPP_BASE_PATH}\\1'", text)
-    # Rewrite favicon
+    # Rewrite data.json fetch paths
+    text = text.replace('"/data.json"', f'"{WEBAPP_BASE_PATH}/data.json"')
+    text = text.replace("'/data.json'", f"'{WEBAPP_BASE_PATH}/data.json'")
     text = text.replace('"/favicon.ico', f'"{WEBAPP_BASE_PATH}/favicon.ico')
     return text.encode("utf-8")
 
