@@ -96,11 +96,13 @@ def upgrade() -> None:
     for table in tables_to_check:
         try:
             # Exclude public credential (id=0) which must remain user_id=NULL
-            condition = (
-                "user_id IS NULL AND id != 0"
-                if table == "credential"
-                else "user_id IS NULL"
-            )
+            # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
+            if table == "credential":
+                condition = "user_id IS NULL AND id != 0"
+            elif table == "tool":
+                condition = "user_id IS NULL AND in_code_tool_id IS NULL"
+            else:
+                condition = "user_id IS NULL"
             result = connection.execute(
                 sa.text(
                     f"""
