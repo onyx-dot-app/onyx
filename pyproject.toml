@@ -26,6 +26,7 @@ dependencies = [
     "discord-py==2.4.0",
     "claude-agent-sdk>=0.1.19",
     "discord-py==2.4.0",
+    "claude-agent-sdk>=0.1.19",
 ]
 
 [project.optional-dependencies]
