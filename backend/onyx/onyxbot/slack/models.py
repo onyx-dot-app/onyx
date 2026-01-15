@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from onyx.chat.models import ThreadMessage
+from onyx.configs.constants import MessageType
 
 
 class ChannelType(str, Enum):
@@ -23,6 +23,12 @@ class SlackContext(BaseModel):
     channel_id: str
     user_id: str
     message_ts: str | None = None  # Used as request ID for log correlation
+
+
+class ThreadMessage(BaseModel):
+    message: str
+    sender: str | None = None
+    role: MessageType = MessageType.USER
 
 
 class SlackMessageInfo(BaseModel):

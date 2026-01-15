@@ -1,5 +1,3 @@
-from onyx.prompts.constants import GENERAL_SEP_PAT
-
 # ruff: noqa: E501, W605 start
 
 DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
@@ -93,17 +91,18 @@ This tool call completed but the results are no longer accessible.
 # date and time but the replacement pattern is not present in the prompt.
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
-CHAT_NAMING = f"""
-Given the following conversation, provide a SHORT name for the conversation.{{language_hint_or_empty}}
-IMPORTANT: TRY NOT TO USE MORE THAN 5 WORDS, MAKE IT AS CONCISE AS POSSIBLE.
-Focus the name on the important keywords to convey the topic of the conversation.
 
-Chat History:
-{GENERAL_SEP_PAT}
-{{chat_history}}
-{GENERAL_SEP_PAT}
+CHAT_NAMING_SYSTEM_PROMPT = """
+Given the conversation history, provide a SHORT name for the conversation. Focus the name on the important keywords to convey the topic of the conversation. \
+Make sure the name is in the same language as the user's language.
 
-Based on the above, what is a short name to convey the topic of the conversation?
+IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 
+
+CHAT_NAMING_REMINDER = """
+Provide a short name for the conversation. Refer to other messages in the conversation (not including this one) to determine the language of the name.
+
+IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
+""".strip()
 # ruff: noqa: E501, W605 end

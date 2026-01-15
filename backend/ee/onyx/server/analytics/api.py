@@ -19,9 +19,9 @@ from ee.onyx.db.analytics import fetch_query_analytics
 from ee.onyx.db.analytics import user_can_view_assistant_stats
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.server.utils import PUBLIC_API_TAGS
 
 router = APIRouter(prefix="/analytics", tags=PUBLIC_API_TAGS)
 

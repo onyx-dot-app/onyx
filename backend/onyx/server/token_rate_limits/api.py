@@ -3,6 +3,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.token_limit import delete_token_rate_limit
@@ -12,7 +13,6 @@ from onyx.db.token_limit import update_token_rate_limit
 from onyx.server.query_and_chat.token_limit import any_rate_limit_exists
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
-from onyx.server.utils import PUBLIC_API_TAGS
 
 router = APIRouter(prefix="/admin/token-rate-limits", tags=PUBLIC_API_TAGS)
 

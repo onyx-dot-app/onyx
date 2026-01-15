@@ -23,6 +23,9 @@ PUBLIC_DOC_PAT = "PUBLIC"
 ID_SEPARATOR = ":;:"
 DEFAULT_BOOST = 0
 
+# Tag for endpoints that should be included in the public API documentation
+PUBLIC_API_TAGS: list[str | Enum] = ["public"]
+
 # Cookies
 FASTAPI_USERS_AUTH_COOKIE_NAME = (
     "fastapiusersauth"  # Currently a constant, but logic allows for configuration

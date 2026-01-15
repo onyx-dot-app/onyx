@@ -41,7 +41,6 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
-from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
@@ -70,6 +69,7 @@ from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import OptionalSearchSetting
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -300,6 +300,7 @@ def handle_stream_message_objects(
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
     # Additional context that should be included in the chat history, for example:
     # Slack threads where the conversation cannot be represented by a chain of User/Assistant
@@ -531,6 +532,7 @@ def handle_stream_message_objects(
                 chat_session_id=chat_session.id,
                 message_id=user_message.id if user_message else None,
                 additional_headers=custom_tool_additional_headers,
+                mcp_headers=mcp_headers,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=project_search_config.search_usage,
