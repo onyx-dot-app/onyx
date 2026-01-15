@@ -5,7 +5,7 @@ import { WidgetConfig } from "@/types/widget-types";
  * Priority: attributes > environment variables > defaults
  */
 export function resolveConfig(attributes: Partial<WidgetConfig>): WidgetConfig {
-  return {
+  const config = {
     backendUrl:
       attributes.backendUrl || import.meta.env.VITE_WIDGET_BACKEND_URL || "",
     apiKey: attributes.apiKey || import.meta.env.VITE_WIDGET_API_KEY || "",
@@ -16,5 +16,12 @@ export function resolveConfig(attributes: Partial<WidgetConfig>): WidgetConfig {
     agentName: attributes.agentName || "Assistant",
     logo: attributes.logo,
     mode: attributes.mode || "launcher",
+  };
+
+  if (!config.backendUrl || !config.apiKey) {
+    throw new Error("backendUrl and apiKey are required for the widget to function");
+  }
+
+  return config;
   };
 }
