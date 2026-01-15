@@ -6,7 +6,7 @@ import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { SearchChipList } from "./SearchChipList";
-import { useSearchTiming } from "./useSearchTiming";
+import { useToolTiming } from "./useToolTiming";
 import {
   constructCurrentSearchState,
   INITIAL_QUERIES_TO_SHOW,
@@ -35,7 +35,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   const hasStarted = isSearching || isComplete;
 
   // Use timing hook for minimum display durations
-  useSearchTiming({
+  useToolTiming({
     hasStarted,
     isComplete,
     animate,
@@ -66,7 +66,6 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     content: (
       <div className="flex flex-col">
         {/* Queries section */}
-        <div className="text-sm text-text-500 mb-1">{queriesHeader}</div>
         <SearchChipList
           items={queries}
           initialCount={INITIAL_QUERIES_TO_SHOW}

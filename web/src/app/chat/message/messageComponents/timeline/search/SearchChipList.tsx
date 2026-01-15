@@ -1,7 +1,6 @@
-import React, { JSX } from "react";
+import React, { JSX, useState, useEffect, useRef } from "react";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
 import { truncateString } from "@/lib/utils";
-import { useExpandableList } from "./useExpandableList";
 import { MAX_TITLE_LENGTH } from "./searchStateUtils";
 
 const ANIMATION_DELAY_MS = 30;
@@ -27,9 +26,13 @@ export interface SearchChipListProps<T> {
   className?: string;
 }
 
+type DisplayEntry<T> =
+  | { type: "chip"; item: T; index: number }
+  | { type: "button"; batchId: number };
+
 /**
  * Renders a list of chips with staggered animations and "show more" expansion.
- * Used for displaying search queries and document results.
+ * Button is a first-class item in the list, animating naturally with new items.
  */
 export function SearchChipList<T>({
   items,
@@ -42,44 +45,129 @@ export function SearchChipList<T>({
   emptyState,
   className = "",
 }: SearchChipListProps<T>): JSX.Element {
-  const { visibleItems, hasMore, remainingCount, showMore } = useExpandableList(
-    {
-      items,
-      initialCount,
-      expansionCount,
+  // List state includes both chips AND the "more" button
+  const [displayList, setDisplayList] = useState<DisplayEntry<T>[]>([]);
+  const [batchId, setBatchId] = useState(0);
+
+  // Track which keys have already animated
+  const animatedKeysRef = useRef<Set<string>>(new Set());
+
+  // Get unique key for each entry
+  const getEntryKey = (entry: DisplayEntry<T>): string => {
+    if (entry.type === "button") {
+      return `more-button-${entry.batchId}`;
     }
-  );
+    return String(getKey(entry.item, entry.index));
+  };
+
+  // Initialize list with initial items + button (if more items exist)
+  useEffect(() => {
+    const initial: DisplayEntry<T>[] = items
+      .slice(0, initialCount)
+      .map((item, i) => ({
+        type: "chip" as const,
+        item,
+        index: i,
+      }));
+
+    if (items.length > initialCount) {
+      initial.push({ type: "button", batchId: 0 });
+    }
+
+    setDisplayList(initial);
+    setBatchId(0);
+    animatedKeysRef.current.clear();
+  }, [items, initialCount]);
+
+  // Calculate remaining count for button text
+  const chipCount = displayList.filter((e) => e.type === "chip").length;
+  const remainingCount = items.length - chipCount;
+
+  // Handle "show more" click
+  const handleShowMore = () => {
+    const nextBatchId = batchId + 1;
+
+    setDisplayList((prev) => {
+      // 1. Remove button from list
+      const withoutButton = prev.filter((e) => e.type !== "button");
+
+      // 2. Add new items
+      const currentCount = withoutButton.length;
+      const newCount = Math.min(currentCount + expansionCount, items.length);
+      const newItems: DisplayEntry<T>[] = items
+        .slice(currentCount, newCount)
+        .map((item, i) => ({
+          type: "chip" as const,
+          item,
+          index: currentCount + i,
+        }));
+
+      const updated = [...withoutButton, ...newItems];
+
+      // 3. Add button back if more items exist
+      if (newCount < items.length) {
+        updated.push({ type: "button", batchId: nextBatchId });
+      }
+
+      return updated;
+    });
+
+    setBatchId(nextBatchId);
+  };
+
+  // After render, mark current items as animated (for next render)
+  useEffect(() => {
+    // Use timeout to mark after this render cycle completes
+    const timer = setTimeout(() => {
+      displayList.forEach((entry) => {
+        animatedKeysRef.current.add(getEntryKey(entry));
+      });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [displayList]);
+
+  // Render with batch-based animation delays
+  let newItemCounter = 0;
 
   return (
     <div className={`flex flex-wrap gap-x-2 gap-y-2 ml-1 ${className}`}>
-      {visibleItems.map((item, index) => (
-        <div
-          key={getKey(item, index)}
-          className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
-          style={{
-            animationDelay: `${index * ANIMATION_DELAY_MS}ms`,
-            animationFillMode: "backwards",
-          }}
-        >
-          <SourceChip2
-            icon={getIcon(item, index)}
-            title={truncateString(getTitle(item), MAX_TITLE_LENGTH)}
-            onClick={onClick ? () => onClick(item) : undefined}
-          />
-        </div>
-      ))}
+      {displayList.map((entry) => {
+        const key = getEntryKey(entry);
+        const isNew = !animatedKeysRef.current.has(key);
+        const delay = isNew ? newItemCounter++ * ANIMATION_DELAY_MS : 0;
 
-      {hasMore && (
-        <div
-          className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
-          style={{
-            animationDelay: `${visibleItems.length * ANIMATION_DELAY_MS}ms`,
-            animationFillMode: "backwards",
-          }}
-        >
-          <SourceChip2 title={`${remainingCount} more...`} onClick={showMore} />
-        </div>
-      )}
+        return (
+          <div
+            key={key}
+            className={`text-xs ${
+              isNew
+                ? "animate-in fade-in slide-in-from-left-2 duration-150"
+                : ""
+            }`}
+            style={
+              isNew
+                ? {
+                    animationDelay: `${delay}ms`,
+                    animationFillMode: "backwards",
+                  }
+                : undefined
+            }
+          >
+            {entry.type === "chip" ? (
+              <SourceChip2
+                icon={getIcon(entry.item, entry.index)}
+                title={truncateString(getTitle(entry.item), MAX_TITLE_LENGTH)}
+                onClick={onClick ? () => onClick(entry.item) : undefined}
+              />
+            ) : (
+              <SourceChip2
+                title={`${remainingCount} more...`}
+                onClick={handleShowMore}
+              />
+            )}
+          </div>
+        );
+      })}
 
       {items.length === 0 && emptyState}
     </div>

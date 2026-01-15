@@ -22,10 +22,13 @@ export {
 
 // Hooks (for potential reuse)
 export {
-  useSearchTiming,
-  type UseSearchTimingOptions,
-  type UseSearchTimingResult,
-} from "./useSearchTiming";
+  useToolTiming,
+  useSearchTiming, // backward compatibility alias
+  type UseToolTimingOptions,
+  type UseToolTimingResult,
+  type UseSearchTimingOptions, // backward compatibility alias
+  type UseSearchTimingResult, // backward compatibility alias
+} from "./useToolTiming";
 export {
   useExpandableList,
   type UseExpandableListOptions,
