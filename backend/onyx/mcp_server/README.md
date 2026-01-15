@@ -151,8 +151,4 @@ Expected response:
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
 
 **API Server Connection:**
-- `API_SERVER_BASE_URL`: Full API base URL (e.g., `https://cloud.onyx.app/api`). If set, overrides protocol/host/port below.
-- `ONYX_URL`: Alternative to `API_SERVER_BASE_URL` (same purpose, either can be used)
-- `API_SERVER_PROTOCOL`: Protocol for internal API calls (default: "http")
-- `API_SERVER_HOST`: Host for internal API calls (default: "127.0.0.1")
-- `API_SERVER_PORT`: Port for internal API calls (default: 8080)
+- `API_SERVER_URL_OVERRIDE`: Full API base URL (e.g., `https://cloud.onyx.app/api`). Use this if you wanted to self-host the MCP server, but not the full Onyx application.

@@ -5,9 +5,9 @@ from typing import Optional
 from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.auth.auth import TokenVerifier
 
-from onyx.mcp_server.utils import get_api_server_url
 from onyx.mcp_server.utils import get_http_client
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import get_api_server_url
 
 logger = setup_logger()
 
@@ -19,7 +19,7 @@ class OnyxTokenVerifier(TokenVerifier):
         """Call API /me to verify the token, return minimal AccessToken on success."""
         try:
             response = await get_http_client().get(
-                f"{get_api_server_url()}/me",
+                f"{get_api_server_url(use_env_ovverride_if_set=True)}/me",
                 headers={"Authorization": f"Bearer {token}"},
             )
         except Exception as exc:

@@ -225,6 +225,39 @@ else:
 # Usage limit window in seconds (default: 1 week = 604800 seconds)
 USAGE_LIMIT_WINDOW_SECONDS = int(os.environ.get("USAGE_LIMIT_WINDOW_SECONDS", "604800"))
 
+
+#####
+# App Configs
+#####
+APP_HOST = "0.0.0.0"
+APP_PORT = 8080
+# API_PREFIX is used to prepend a base path for all API routes
+# generally used if using a reverse proxy which doesn't support stripping the `/api`
+# prefix from requests directed towards the API server. In these cases, set this to `/api`
+APP_API_PREFIX = os.environ.get("API_PREFIX", "")
+API_SERVER_URL_OVERRIDE = os.environ.get("API_SERVER_URL_OVERRIDE")
+
+
+def get_api_server_url(use_env_ovverride_if_set: bool = False) -> str:
+    """Construct the API server base URL for internal or external requests.
+
+    This function is used by services that need to communicate with the
+    Onyx API server (e.g., MCP server, Discord bot).
+
+    use_env_ovverride_if_set can be used to deploy a service against a separate Onyx API server,
+    such as self-hosting the Onyx MCP server with the Onyx Cloud API backend.
+
+    Returns:
+        The base URL for the API server (e.g., "http://127.0.0.1:8080")
+    """
+    override = API_SERVER_URL_OVERRIDE if use_env_ovverride_if_set else None
+    if override:
+        return override.rstrip("/")
+
+    base = f"http://{APP_HOST}:{APP_PORT}"
+    return f"{base}/{APP_API_PREFIX}" if APP_API_PREFIX else base
+
+
 # Per-week LLM usage cost limits in cents (e.g., 1000 = $10.00)
 # Trial users get lower limits than paid users
 USAGE_LIMIT_LLM_COST_CENTS_TRIAL = int(

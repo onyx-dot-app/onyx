@@ -10,8 +10,8 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.auth.users import current_user_with_expired_token
-from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.configs import APP_API_PREFIX
 
 
 PUBLIC_ENDPOINT_SPECS = [

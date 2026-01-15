@@ -33,9 +33,6 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
-from onyx.configs.app_configs import APP_API_PREFIX
-from onyx.configs.app_configs import APP_HOST
-from onyx.configs.app_configs import APP_PORT
 from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
@@ -141,6 +138,9 @@ from onyx.utils.telemetry import RecordType
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from shared_configs.configs import APP_API_PREFIX
+from shared_configs.configs import APP_HOST
+from shared_configs.configs import APP_PORT
 from shared_configs.configs import CORS_ALLOWED_ORIGIN
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
