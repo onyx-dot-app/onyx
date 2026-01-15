@@ -226,12 +226,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("persona_id", "hierarchy_node_id"),
     )
 
-    # Add indexes for efficient lookups
-    op.create_index(
-        "ix_persona__hierarchy_node_persona_id",
-        "persona__hierarchy_node",
-        ["persona_id"],
-    )
+    # Add index for efficient lookups
     op.create_index(
         "ix_persona__hierarchy_node_hierarchy_node_id",
         "persona__hierarchy_node",
@@ -242,10 +237,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index(
         "ix_persona__hierarchy_node_hierarchy_node_id",
-        table_name="persona__hierarchy_node",
-    )
-    op.drop_index(
-        "ix_persona__hierarchy_node_persona_id",
         table_name="persona__hierarchy_node",
     )
     op.drop_table("persona__hierarchy_node")
