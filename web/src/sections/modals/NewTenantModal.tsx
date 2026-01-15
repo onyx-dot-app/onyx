@@ -29,14 +29,8 @@ export default function NewTenantModal({
   const router = useRouter();
   const { setPopup } = usePopup();
   const { user } = useUser();
-  const [isOpen, setIsOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function handleClose() {
-    setIsOpen(false);
-    onClose?.();
-  }
 
   async function handleJoinTenant() {
     setIsLoading(true);
@@ -73,7 +67,7 @@ export default function NewTenantModal({
       // Common logout and redirect for both flows
       await logout();
       router.push(`/auth/join?email=${encodeURIComponent(user?.email || "")}`);
-      handleClose();
+      onClose?.();
     } catch (error) {
       const message =
         error instanceof Error
@@ -115,7 +109,7 @@ export default function NewTenantModal({
         message: "You have declined the invitation.",
         type: "info",
       });
-      handleClose();
+      onClose?.();
     } catch (error) {
       const message =
         error instanceof Error
@@ -145,9 +139,9 @@ export default function NewTenantModal({
     : `To finish joining your team, please reauthenticate with ${user?.email}.`;
 
   return (
-    <Modal open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+    <Modal open>
       <Modal.Content small preventAccidentalClose={false}>
-        <Modal.Header icon={SvgUsers} title={title} onClose={handleClose} />
+        <Modal.Header icon={SvgUsers} title={title} onClose={onClose} />
 
         <Modal.Body>
           <Text>{description}</Text>
