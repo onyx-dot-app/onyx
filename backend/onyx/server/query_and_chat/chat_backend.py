@@ -533,7 +533,6 @@ def handle_new_chat_message(
 @router.post(
     "/send-chat-message",
     response_model=None,
-    response_class=StreamingResponse,  # default; actual runtime can still return JSON too
     tags=PUBLIC_API_TAGS,
     responses={
         200: {
