@@ -707,18 +707,6 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
-# Persistent Document Storage Configuration
-# When enabled, indexed documents are written to local filesystem with hierarchical structure
-PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
-    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
-)
-
-# Base directory path for persistent document storage (local filesystem)
-# Example: /var/onyx/indexed-docs or /app/indexed-docs
-PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
-    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/indexed-docs"
-)
-
 # The intent was to have this be configurable per query, but I don't think any
 # codepath was actually configuring this, so for the migrated Vespa interface
 # we'll just use the default value, but also have it be configurable by env var.
@@ -1030,3 +1018,14 @@ INSTANCE_TYPE = (
 ## Discord Bot Configuration
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 DISCORD_BOT_INVOKE_CHAR = os.environ.get("DISCORD_BOT_INVOKE_CHAR", "!")
+# Persistent Document Storage Configuration
+# When enabled, indexed documents are written to local filesystem with hierarchical structure
+PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
+    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
+)
+
+# Base directory path for persistent document storage (local filesystem)
+# Example: /var/onyx/indexed-docs or /app/indexed-docs
+PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
+    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/indexed-docs"
+)
