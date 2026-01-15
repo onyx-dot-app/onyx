@@ -66,10 +66,9 @@ export function processPacket(
 
     case "search_tool_start":
       // Tool is starting - check if it's internet search
-      const isInternetSearch = (obj as any).is_internet_search;
       return {
         message: currentMessage,
-        status: isInternetSearch
+        status: obj.is_internet_search
           ? "Searching the web..."
           : "Searching internally...",
       };
