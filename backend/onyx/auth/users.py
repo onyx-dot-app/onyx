@@ -58,6 +58,7 @@ from pydantic import BaseModel
 from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy import text
+from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -540,18 +541,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Transfer ownership from placeholder user to the new user
         for table in tables_to_migrate:
             try:
-                result = await db_session.execute(
-                    text(
-                        f"""
-                        UPDATE "{table}"
-                        SET user_id = :new_user_id
-                        WHERE user_id = :placeholder_user_id
-                        """
+                result = cast(
+                    CursorResult[Any],
+                    await db_session.execute(
+                        text(
+                            f"""
+                            UPDATE "{table}"
+                            SET user_id = :new_user_id
+                            WHERE user_id = :placeholder_user_id
+                            """
+                        ),
+                        {
+                            "new_user_id": str(user.id),
+                            "placeholder_user_id": str(placeholder_uuid),
+                        },
                     ),
-                    {
-                        "new_user_id": str(user.id),
-                        "placeholder_user_id": str(placeholder_uuid),
-                    },
                 )
                 if result.rowcount > 0:
                     logger.info(f"Migrated {result.rowcount} rows in {table}")
