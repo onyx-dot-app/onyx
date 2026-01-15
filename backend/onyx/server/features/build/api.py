@@ -41,12 +41,16 @@ def _stream_response(response: httpx.Response) -> Iterator[bytes]:
 
 def _rewrite_asset_paths(content: bytes) -> bytes:
     """Rewrite Next.js asset paths to go through the proxy."""
+    import re
+
     text = content.decode("utf-8")
     # Rewrite /_next/ paths to go through our proxy
     text = text.replace("/_next/", f"{WEBAPP_BASE_PATH}/_next/")
-    # Rewrite data.json fetch paths
-    text = text.replace('"/data.json"', f'"{WEBAPP_BASE_PATH}/data.json"')
-    text = text.replace("'/data.json'", f"'{WEBAPP_BASE_PATH}/data.json'")
+    # Rewrite root-level JSON data file fetch paths (e.g., /data.json, /pr_data.json)
+    # Only matches paths like "/filename.json" (no subdirectories)
+    text = re.sub(r'"(/[a-zA-Z0-9_-]+\.json)"', f'"{WEBAPP_BASE_PATH}\\1"', text)
+    text = re.sub(r"'(/[a-zA-Z0-9_-]+\.json)'", f"'{WEBAPP_BASE_PATH}\\1'", text)
+    # Rewrite favicon
     text = text.replace('"/favicon.ico', f'"{WEBAPP_BASE_PATH}/favicon.ico')
     return text.encode("utf-8")
 
