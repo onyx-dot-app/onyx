@@ -941,10 +941,10 @@ class TestOpenSearchClient:
 
         # Make sure there is some kind of match highlight for the most relevant
         # result.
-        match_hightlights = results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
-        assert len(match_hightlights) == 1
+        match_highlights = results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
+        assert len(match_highlights) == 1
         # We expect the terms "Artificial" and "intelligence" to be matched.
-        highlight_split = re.findall(r"<hi>(.*?)</hi>", match_hightlights[0])
+        highlight_split = re.findall(r"<hi>(.*?)</hi>", match_highlights[0])
         assert len(highlight_split) == 2
         assert highlight_split[0] == "Artificial"
         assert highlight_split[1] == "intelligence"
