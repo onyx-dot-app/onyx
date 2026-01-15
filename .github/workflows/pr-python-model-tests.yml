@@ -100,9 +100,6 @@ jobs:
             up -d --wait \
             indexing_model_server
 
-      - name: Upgrade DB to head
-        run: ods db upgrade head
-
       - name: Run Tests
         run: |
           py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/llm
