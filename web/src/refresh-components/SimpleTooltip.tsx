@@ -1,3 +1,36 @@
+/**
+ * SimpleTooltip - A wrapper component for easily adding tooltips to elements.
+ *
+ * IMPORTANT: Children must be ref-compatible (either a DOM element or a component
+ * that uses forwardRef). This is required because TooltipTrigger uses `asChild`
+ * which needs to attach a ref to the child element for positioning.
+ *
+ * Valid children:
+ * - DOM elements: <div>, <button>, <span>, etc.
+ * - forwardRef components: Components wrapped with React.forwardRef()
+ *
+ * Invalid children (will cause errors or warnings):
+ * - Fragments: <>{content}</>
+ * - Regular function components that don't forward refs
+ * - Multiple children
+ *
+ * @example
+ * // Valid - DOM element
+ * <SimpleTooltip tooltip="Hello">
+ *   <button>Hover me</button>
+ * </SimpleTooltip>
+ *
+ * // Valid - forwardRef component
+ * <SimpleTooltip tooltip="Card tooltip">
+ *   <Card>Content</Card>
+ * </SimpleTooltip>
+ *
+ * // Invalid - will cause React warning
+ * <SimpleTooltip tooltip="Won't work">
+ *   <NonForwardRefComponent />
+ * </SimpleTooltip>
+ */
+
 "use client";
 
 import React from "react";
@@ -8,7 +41,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import Text from "@/refresh-components/texts/Text";
-import { Section } from "@/layouts/general-layouts";
 
 export interface SimpleTooltipProps
   extends React.ComponentPropsWithoutRef<typeof TooltipContent> {
@@ -35,14 +67,7 @@ export default function SimpleTooltip({
     tooltip ?? (typeof children === "string" ? children : undefined);
 
   // If no hover content, just render children without tooltip
-  if (!hoverContent) return <>{children}</>;
-
-  // TooltipTrigger `asChild` expects a ref-aware DOM element; wrap anything
-  // else in a span so non-forwardRef components and fragments don't crash.
-  const isDomElement =
-    React.isValidElement(children) && typeof children.type === "string";
-
-  const triggerChild = isDomElement ? children : <Section>{children}</Section>;
+  if (!hoverContent) return children;
 
   // Check if tooltip is a string to wrap in Text component, otherwise render as-is
   const tooltipContent =
@@ -57,13 +82,7 @@ export default function SimpleTooltip({
   return (
     <TooltipProvider delayDuration={delayDuration}>
       <Tooltip>
-        <TooltipTrigger
-          asChild
-          // Doesn't work for some reason.
-          // disabled={disabled}
-        >
-          {triggerChild}
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
         {!disabled && (
           <TooltipContent side={side} className={className} {...rest}>
             {tooltipContent}

@@ -9,9 +9,13 @@ from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
+from onyx.configs.app_configs import IMAGE_MODEL_PROVIDER
 from onyx.db.image_generation import get_default_image_generation_config
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
+from onyx.image_gen.factory import get_image_generation_provider
+from onyx.image_gen.factory import validate_credentials
+from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
@@ -28,7 +32,6 @@ from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
-
 logger = setup_logger()
 
 # Heartbeat interval in seconds to prevent timeouts
@@ -43,22 +46,20 @@ class ImageGenerationTool(Tool[None]):
 
     def __init__(
         self,
-        api_key: str,
-        api_base: str | None,
-        api_version: str | None,
+        image_generation_credentials: ImageGenerationProviderCredentials,
         tool_id: int,
         emitter: Emitter,
         model: str = IMAGE_MODEL_NAME,
+        provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
     ) -> None:
         super().__init__(emitter=emitter)
-
-        self.api_key = api_key
-        self.api_base = api_base
-        self.api_version = api_version
-
         self.model = model
         self.num_imgs = num_imgs
+
+        self.img_provider = get_image_generation_provider(
+            provider, image_generation_credentials
+        )
 
         self._id = tool_id
 
@@ -88,7 +89,17 @@ class ImageGenerationTool(Tool[None]):
                 return False
 
             llm_provider = config.model_configuration.llm_provider
-            return llm_provider is not None and llm_provider.api_key is not None
+            credentials = ImageGenerationProviderCredentials(
+                api_key=llm_provider.api_key,
+                api_base=llm_provider.api_base,
+                api_version=llm_provider.api_version,
+                deployment_name=llm_provider.deployment_name,
+                custom_config=llm_provider.custom_config,
+            )
+            return validate_credentials(
+                provider=llm_provider.provider,
+                credentials=credentials,
+            )
         except Exception:
             logger.exception("Error checking if image generation is available")
             return False
@@ -131,8 +142,6 @@ class ImageGenerationTool(Tool[None]):
     def _generate_image(
         self, prompt: str, shape: ImageShape
     ) -> tuple[ImageGenerationResponse, Any]:
-        from litellm import image_generation
-
         if shape == ImageShape.LANDSCAPE:
             if "gpt-image-1" in self.model:
                 size = "1536x1024"
@@ -147,16 +156,13 @@ class ImageGenerationTool(Tool[None]):
             size = "1024x1024"
         logger.debug(f"Generating image with model: {self.model}, size: {size}")
         try:
-            response = image_generation(
+            response = self.img_provider.generate_image(
                 prompt=prompt,
                 model=self.model,
-                api_key=self.api_key,
-                api_base=self.api_base or None,
-                api_version=self.api_version or None,
-                # response_format parameter is not supported for gpt-image-1
-                response_format=None if "gpt-image-1" in self.model else "b64_json",
                 size=size,
                 n=1,
+                # response_format parameter is not supported for gpt-image-1
+                response_format=None if "gpt-image-1" in self.model else "b64_json",
             )
 
             if not response.data or len(response.data) == 0:

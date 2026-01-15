@@ -20,6 +20,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
@@ -77,15 +78,9 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     llm_provider = default_config.model_configuration.llm_provider
 
-    # For Azure, format model name as azure/<deployment_name> for LiteLLM
-    model_name = default_config.model_configuration.name
-    if llm_provider.provider == "azure":
-        deployment = llm_provider.deployment_name or model_name
-        model_name = f"azure/{deployment}"
-
     return LLMConfig(
         model_provider=llm_provider.provider,
-        model_name=model_name,
+        model_name=default_config.model_configuration.name,
         temperature=GEN_AI_TEMPERATURE,
         api_key=llm_provider.api_key,
         api_base=llm_provider.api_base,
@@ -195,9 +190,16 @@ def construct_tools(
 
                 tool_dict[db_tool_model.id] = [
                     ImageGenerationTool(
-                        api_key=cast(str, img_generation_llm_config.api_key),
-                        api_base=img_generation_llm_config.api_base,
-                        api_version=img_generation_llm_config.api_version,
+                        image_generation_credentials=ImageGenerationProviderCredentials(
+                            api_key=cast(str, img_generation_llm_config.api_key),
+                            api_base=img_generation_llm_config.api_base,
+                            api_version=img_generation_llm_config.api_version,
+                            deployment_name=(
+                                img_generation_llm_config.deployment_name
+                                or img_generation_llm_config.model_name
+                            ),
+                        ),
+                        provider=img_generation_llm_config.model_provider,
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                         emitter=emitter,
