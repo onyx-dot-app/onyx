@@ -1,15 +1,18 @@
 "use client";
 
 import * as Yup from "yup";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import { FormField } from "@/refresh-components/form/FormField";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { ImageGenFormWrapper } from "./ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
   ImageGenFormChildProps,
   ImageGenSubmitPayload,
 } from "./types";
-import { FileUploadFormField, TextFormField } from "@/components/Field";
-import { ImageGenFormWrapper } from "./ImageGenFormWrapper";
 import { ImageProvider } from "../constants";
 import { ImageGenerationCredentials } from "@/lib/configuration/imageConfigurationService";
+import { FileUploadFormField } from "@/components/Field";
 
 const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DEFAULT_LOCATION = "global";
@@ -67,6 +70,8 @@ function transformValues(
 function VertexFormFields(
   props: ImageGenFormChildProps<VertexImageGenFormValues>
 ) {
+  const { disabled } = props;
+
   return (
     <>
       <FileUploadFormField
@@ -74,11 +79,28 @@ function VertexFormFields(
         label="Credentials File"
         subtext="Upload your Google Cloud service account JSON credentials file."
       />
-      <TextFormField
+      <FormikField<string>
         name="custom_config.vertex_location"
-        label="Location"
-        placeholder="global"
-        subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
+        render={(field, helper, meta, state) => (
+          <FormField name="custom_config.vertex_location" state={state}>
+            <FormField.Label>Location</FormField.Label>
+            <FormField.Control>
+              <InputTypeIn
+                value={field.value}
+                onChange={(e) => helper.setValue(e.target.value)}
+                onBlur={field.onBlur}
+                placeholder="global"
+                disabled={disabled}
+                error={state === "error"}
+              />
+            </FormField.Control>
+            <FormField.Description>
+              The Google Cloud region for your Vertex AI models (e.g., global,
+              us-east1, us-central1, europe-west1).
+            </FormField.Description>
+            <FormField.Message messages={{ error: meta.error }} />
+          </FormField>
+        )}
       />
     </>
   );
