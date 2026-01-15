@@ -335,7 +335,8 @@ def handle_stream_message_objects(
         )
 
         # Question Qualification Check - Block sensitive questions early
-        if message_text and not use_existing_user_message:
+        # Only check new messages (SendMessageRequest always has a new message)
+        if message_text:
             try:
                 qualification_service = QuestionQualificationService()
                 qualification_result = qualification_service.qualify_question(

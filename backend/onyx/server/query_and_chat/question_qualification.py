@@ -1,24 +1,20 @@
+import json
 import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
-from langchain_core.messages import BaseMessage
-from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_QUESTION_QUALIFICATION
-from onyx.llm.factory import get_default_llms
+from onyx.configs.app_configs import QUESTION_QUALIFICATION_MODEL
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.llm import fetch_default_provider
+from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
-
-
-def _message_to_string(message: BaseMessage) -> str:
-    """Extract string content from a LangChain message."""
-    if not isinstance(message.content, str):
-        raise RuntimeError("LLM message not in expected format.")
-    return message.content
 
 
 logger = logging.getLogger(__name__)
@@ -59,10 +55,7 @@ class QuestionQualificationResult:
         self.reasoning = reasoning
 
 
-# LangChain Pydantic output parser
-output_parser = PydanticOutputParser(pydantic_object=QuestionQualificationResponse)
-
-# Minimal task-focused prompt with parser format instructions
+# Minimal task-focused prompt for question qualification
 QUESTION_QUALIFICATION_PROMPT = """Analyze if the user question asks about any blocked topic.
 
 BLOCKED QUESTIONS:
@@ -72,10 +65,12 @@ USER QUESTION: {user_question}
 
 Determine semantic similarity between the user question and blocked questions. Consider variations in wording and phrasing.
 
-Return a confidence score between 0.0 and 1.0 indicating how confident you are that the question should be blocked.
-0.0 means the question should not be blocked, 1.0 means it should definitely be blocked.
+Return a JSON object with exactly these fields:
+- "block_confidence": a number between 0.0 and 1.0 indicating how confident you are
+  that the question should be blocked (0.0 = not block, 1.0 = definitely block)
+- "matched_index": the index number of the matched blocked question, or -1 if no match
 
-{format_instructions}"""
+Example response: {{"block_confidence": 0.85, "matched_index": 2}}"""
 
 
 class QuestionQualificationService:
@@ -164,14 +159,40 @@ class QuestionQualificationService:
     def _get_llm_for_qualification(self) -> LLM | None:
         """Get LLM for question qualification.
 
-        Uses fast LLM for cost/speed efficiency since this runs on every question.
-        get_default_llms() internally falls back to default model if fast model
-        is not configured. Returns None if LLM initialization fails entirely.
+        This method returns an LLM for running question qualification checks. The LLM used
+        is independent of the user's chat session model - question qualification always uses
+        a system-configured model to ensure consistent behavior.
+
+        Configuration priority:
+        1. QUESTION_QUALIFICATION_MODEL env var - if set, uses this model name with the
+           DEFAULT provider's credentials. The model must be available from that provider.
+           Recommended for fast/cheap models (e.g., gpt-4o-mini, claude-3-haiku).
+        2. Falls back to the default provider's default model if env var is not set.
+
+        Returns None if LLM initialization fails entirely.
         """
         try:
-            # Returns (default_llm, fast_llm) - fast_llm uses default if not configured
-            _, fast_llm = get_default_llms()
-            return fast_llm
+            # If a specific fast model is configured, use it with the default provider.
+            # NOTE: The model name MUST be available from the default provider since we use
+            # that provider's API credentials. This is independent of user's chat model.
+            if QUESTION_QUALIFICATION_MODEL:
+                with get_session_with_current_tenant() as db_session:
+                    llm_provider = fetch_default_provider(db_session)
+                if not llm_provider:
+                    logger.warning(
+                        "No default LLM provider found, cannot use QUESTION_QUALIFICATION_MODEL"
+                    )
+                    return None
+                logger.debug(
+                    f"Using configured fast model for question qualification: "
+                    f"{QUESTION_QUALIFICATION_MODEL} via provider '{llm_provider.name}'"
+                )
+                return llm_from_provider(
+                    model_name=QUESTION_QUALIFICATION_MODEL,
+                    llm_provider=llm_provider,
+                )
+            # Fall back to default LLM (default provider's default model)
+            return get_default_llm()
         except Exception as e:
             logger.warning(f"Failed to get LLM for question qualification: {e}")
             return None
@@ -232,26 +253,26 @@ class QuestionQualificationService:
             }
 
             # Create minimal task-focused prompt
-            # Include format instructions as fallback for models that don't support structured outputs
             prompt = QUESTION_QUALIFICATION_PROMPT.format(
                 blocked_questions=blocked_questions_text,
                 user_question=question,
-                format_instructions=output_parser.get_format_instructions(),
             )
 
-            # Get response using structured outputs (with parser as fallback)
-            response = llm.invoke_langchain(
+            # Get response using structured outputs
+            response = llm.invoke(
                 prompt,
                 structured_response_format=structured_response_format,
-                max_tokens=200,  # Increased for structured JSON output with schema
+                max_tokens=200,
             )
 
-            # Parse using LangChain output parser
+            # Parse the JSON response
             try:
-                parsed_response = output_parser.parse(_message_to_string(response))
+                response_text = response.choice.message.content or ""
+                # Try to extract JSON from the response
+                parsed_data = json.loads(response_text)
 
-                block_confidence = parsed_response.block_confidence
-                matched_index = parsed_response.matched_index
+                block_confidence = float(parsed_data.get("block_confidence", 0.0))
+                matched_index = int(parsed_data.get("matched_index", -1))
 
                 # Get matched question if available
                 matched_question = ""
@@ -284,13 +305,12 @@ class QuestionQualificationService:
                     standard_response=standard_response,
                     matched_question=matched_question,
                     matched_question_index=matched_index,
-                    reasoning="",  # No reasoning in structured output
+                    reasoning="",
                 )
 
-            except Exception as e:
-                response_text = _message_to_string(response)
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
                 logger.error(
-                    f"Error parsing LangChain output: {e}, response: {response_text}"
+                    f"Error parsing JSON response: {e}, response: {response.choice.message.content}"
                 )
                 # Fallback to safe default
                 return QuestionQualificationResult(

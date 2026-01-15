@@ -40,6 +40,16 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 ENABLE_QUESTION_QUALIFICATION = (
     os.environ.get("ENABLE_QUESTION_QUALIFICATION", "false").lower() == "true"
 )
+# Optional: specify a fast/cheap model for question qualification to avoid using expensive thinking models.
+# IMPORTANT: This model name MUST be available from the DEFAULT LLM provider configured in admin settings.
+# The question qualification system always uses the default provider's API credentials, so the model
+# specified here must be accessible through that provider. For example:
+#   - If your default provider is OpenAI, use models like "gpt-4o-mini", "gpt-3.5-turbo", "gemini-flash-lite-latest"
+#   - If your default provider is Anthropic, use models like "claude-3-haiku-20240307"
+#   - If your default provider is Azure OpenAI, use your deployed model name
+# This runs independently of the user's selected chat model - it's a system-level check.
+# If not set, falls back to the default provider's default model.
+QUESTION_QUALIFICATION_MODEL = os.environ.get("QUESTION_QUALIFICATION_MODEL", "")
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
