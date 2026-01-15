@@ -34,6 +34,7 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
@@ -65,9 +66,24 @@ from shared_configs.model_server_models import Embedding
 logger = setup_logger(__name__)
 
 
-def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
+def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
     chunk: DocumentChunk,
+    score: float | None,
 ) -> InferenceChunkUncleaned:
+    """
+    Generates an inference chunk from an OpenSearch document chunk and its
+    score.
+
+    Args:
+        chunk: The document chunk returned by OpenSearch.
+        score: The document chunk match score as calculated by OpenSearch. Only
+            relevant for searches like hybrid search. It is acceptable for this
+            value to be None for results from other queries like ID-based
+            retrieval as a match score makes no sense in those contexts.
+
+    Returns:
+        InferenceChunkUncleaned: _description_
+    """
     return InferenceChunkUncleaned(
         chunk_id=chunk.chunk_index,
         blurb=chunk.blurb,
@@ -81,13 +97,7 @@ def _convert_opensearch_chunk_to_inference_chunk_uncleaned(
         semantic_identifier=chunk.semantic_identifier,
         title=chunk.title,
         boost=chunk.global_boost,
-        # TODO(andrei): Do in a followup. We should be able to get this from
-        # OpenSearch.
-        recency_bias=1.0,
-        # TODO(andrei): This is how good the match is, we need this, key insight
-        # is we can order chunks by this. Should not be hard to plumb this from
-        # a search result, do that in a followup.
-        score=None,
+        score=score,
         hidden=chunk.hidden,
         metadata=json.loads(chunk.metadata),
         # TODO(andrei): The vector DB needs to supply this. I vaguely know
@@ -572,7 +582,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         """
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
-            document_chunks: list[DocumentChunk] = []
+            search_hits: list[SearchHit[DocumentChunk]] = []
             query_body = DocumentQuery.get_from_document_id_query(
                 document_id=chunk_request.document_id,
                 tenant_state=self._tenant_state,
@@ -580,13 +590,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 min_chunk_index=chunk_request.min_chunk_ind,
                 max_chunk_index=chunk_request.max_chunk_ind,
             )
-            document_chunks = self._os_client.search(
+            search_hits = self._os_client.search(
                 body=query_body,
                 search_pipeline_id=None,
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-                _convert_opensearch_chunk_to_inference_chunk_uncleaned(document_chunk)
-                for document_chunk in document_chunks
+                _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                    search_hit.document_chunk, None
+                )
+                for search_hit in search_hits
             ]
             inference_chunks: list[InferenceChunk] = cleanup_content_for_chunks(
                 inference_chunks_uncleaned
@@ -614,13 +626,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_hits=num_to_retrieve,
             tenant_state=self._tenant_state,
         )
-        document_chunks: list[DocumentChunk] = self._os_client.search(
+        search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
             body=query_body,
             search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
         )
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_opensearch_chunk_to_inference_chunk_uncleaned(document_chunk)
-            for document_chunk in document_chunks
+            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                search_hit.document_chunk, search_hit.score
+            )
+            for search_hit in search_hits
         ]
         inference_chunks: list[InferenceChunk] = cleanup_content_for_chunks(
             inference_chunks_uncleaned

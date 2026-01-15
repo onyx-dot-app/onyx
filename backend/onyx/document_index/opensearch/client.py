@@ -1,8 +1,11 @@
 import logging
 from typing import Any
+from typing import Generic
+from typing import TypeVar
 
 from opensearchpy import OpenSearch
 from opensearchpy.exceptions import TransportError
+from pydantic import BaseModel
 
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
@@ -17,8 +20,31 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
 # opensearch. By default it emits INFO-level logs for every request.
+# TODO(andrei): I don't think this is working as intended, I still see spam in
+# logs. The module name is probably wrong or opensearchpy initializes a logger
+# dynamically along with an instance of a client class. Look at the constructor
+# for OpenSearch.
 opensearch_logger = logging.getLogger("opensearchpy")
 opensearch_logger.setLevel(logging.WARNING)
+
+
+SchemaDocumentModel = TypeVar("SchemaDocumentModel")
+
+
+class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
+    """Represents a hit from OpenSearch in response to a query.
+
+    Templated on the specific document model as defined by a schema.
+    """
+
+    model_config = {"frozen": True}
+
+    # The document chunk source retrieved from OpenSearch.
+    document_chunk: SchemaDocumentModel
+    # The match score for the document chunk as calculated by OpenSearch. Only
+    # relevant for "fuzzy searches"; this will be None for direct queries where
+    # score is not relevant like direct retrieval on ID.
+    score: float | None = None
 
 
 class OpenSearchClient:
@@ -418,12 +444,13 @@ class OpenSearchClient:
 
     def search(
         self, body: dict[str, Any], search_pipeline_id: str | None
-    ) -> list[DocumentChunk]:
+    ) -> list[SearchHit[DocumentChunk]]:
         """Searches the index.
 
         TODO(andrei): Ideally we could check that every field in the body is
         present in the index, to avoid a class of runtime bugs that could easily
-        be caught during development.
+        be caught during development. Or change the function signature to accept
+        a predefined pydantic model of allowed fields.
 
         Args:
             body: The body of the search request. See the OpenSearch
@@ -447,15 +474,20 @@ class OpenSearchClient:
 
         hits = self._get_hits_from_search_result(result)
 
-        result_chunks: list[DocumentChunk] = []
+        search_hits: list[SearchHit[DocumentChunk]] = []
         for hit in hits:
             document_chunk_source: dict[str, Any] | None = hit.get("_source")
             if not document_chunk_source:
                 raise RuntimeError(
                     f"Document chunk with ID \"{hit.get('_id', '')}\" has no data."
                 )
-            result_chunks.append(DocumentChunk.model_validate(document_chunk_source))
-        return result_chunks
+            document_chunk_score = hit.get("_score", None)
+            search_hit = SearchHit[DocumentChunk](
+                document_chunk=DocumentChunk.model_validate(document_chunk_source),
+                score=document_chunk_score,
+            )
+            search_hits.append(search_hit)
+        return search_hits
 
     def search_for_document_ids(self, body: dict[str, Any]) -> list[str]:
         """Searches the index and returns only document chunk IDs.
