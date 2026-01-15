@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.models import Document
 from onyx.db.models import HierarchyNode
 from onyx.utils.logger import setup_logger
 
@@ -209,3 +210,50 @@ def get_root_hierarchy_nodes_for_source(
         return []
 
     return get_hierarchy_node_children(db_session, source_node.id)
+
+
+def get_all_hierarchy_nodes_for_source(
+    db_session: Session,
+    source: DocumentSource,
+) -> list[HierarchyNode]:
+    """
+    Get ALL hierarchy nodes for a given source.
+
+    This is used to populate the Redis cache. Returns all nodes including
+    the SOURCE-type root node.
+
+    Args:
+        db_session: SQLAlchemy session
+        source: The document source to get nodes for
+
+    Returns:
+        List of all HierarchyNode objects for the source
+    """
+    stmt = select(HierarchyNode).where(HierarchyNode.source == source)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def get_document_parent_hierarchy_node_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, int | None]:
+    """
+    Get the parent_hierarchy_node_id for multiple documents in a single query.
+
+    Args:
+        db_session: SQLAlchemy session
+        document_ids: List of document IDs to look up
+
+    Returns:
+        Dict mapping document_id -> parent_hierarchy_node_id (or None if not set)
+    """
+
+    if not document_ids:
+        return {}
+
+    stmt = select(Document.id, Document.parent_hierarchy_node_id).where(
+        Document.id.in_(document_ids)
+    )
+    results = db_session.execute(stmt).all()
+
+    return {doc_id: parent_id for doc_id, parent_id in results}
