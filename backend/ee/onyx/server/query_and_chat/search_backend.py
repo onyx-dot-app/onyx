@@ -146,7 +146,7 @@ def get_search_history(
             detail="filter_days must be greater than 0",
         )
 
-    # TODO remove this
+    # TODO(yuhong) remove this
     if user is None:
         # Return empty list for unauthenticated users
         return SearchHistoryResponse(search_queries=[])
