@@ -20,10 +20,8 @@ logger = setup_logger()
 router = APIRouter(prefix="/search")
 
 
-router.post("/search-flow-classification")
-
-
-def get_standard_answer(
+@router.post("/search-flow-classification")
+def search_flow_classification(
     request: SearchFlowClassificationRequest,
     # This is added just to ensure this endpoint isn't spammed by non-authorized users since there's an LLM call underneath it
     _: User | None = Depends(current_user),
@@ -53,12 +51,3 @@ def get_standard_answer(
         is_search_flow = False
 
     return SearchFlowClassificationResponse(is_search_flow=is_search_flow)
-
-
-# router.post("/send-search-query")
-# def send_search_query(
-#     request: SendSearchQueryRequest,
-#     _: User | None = Depends(current_user),
-#     db_session: Session = Depends(get_session),
-# ) -> SendSearchQueryResponse:
-#     pass
