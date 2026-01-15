@@ -339,7 +339,7 @@ const RerankingDetailsForm = forwardRef<
                           better performance.
                         </p>
                       </Modal.Body>
-                      <Modal.Footer className="p-4 flex justify-end">
+                      <Modal.Footer>
                         <Button
                           onClick={() => setShowGpuWarningModalModel(null)}
                         >
@@ -433,7 +433,7 @@ const RerankingDetailsForm = forwardRef<
                           />
                         </div>
                       </Modal.Body>
-                      <Modal.Footer className="p-4 flex w-full justify-end">
+                      <Modal.Footer>
                         <Button
                           onClick={() => {
                             setShowLiteLLMConfigurationModal(false);
@@ -513,7 +513,7 @@ const RerankingDetailsForm = forwardRef<
                           />
                         </div>
                       </Modal.Body>
-                      <Modal.Footer className="p-4 flex w-full justify-end">
+                      <Modal.Footer>
                         <Button onClick={() => setIsApiKeyModalOpen(false)}>
                           Update
                         </Button>

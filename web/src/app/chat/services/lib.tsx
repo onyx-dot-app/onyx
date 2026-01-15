@@ -101,79 +101,59 @@ export type PacketType =
   | UserKnowledgeFilePacket
   | Packet;
 
+// Origin of the message for telemetry tracking.
+// Keep in sync with backend: backend/onyx/server/query_and_chat/models.py::MessageOrigin
+export type MessageOrigin =
+  | "webapp"
+  | "chrome_extension"
+  | "api"
+  | "slackbot"
+  | "unknown";
+
 export interface SendMessageParams {
-  regenerate: boolean;
   message: string;
   fileDescriptors?: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
   filters: Filters | null;
-  selectedDocumentIds: number[] | null;
-  queryOverride?: string;
-  forceSearch?: boolean;
+  signal?: AbortSignal;
+  deepResearch?: boolean;
+  enabledToolIds?: number[];
+  // Single forced tool ID (new API uses singular, not array)
+  forcedToolId?: number | null;
+  // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
   temperature?: number;
-  systemPromptOverride?: string;
-  useExistingUserMessage?: boolean;
-  alternateAssistantId?: number;
-  signal?: AbortSignal;
-  currentMessageFiles?: FileDescriptor[];
-  useAgentSearch?: boolean;
-  enabledToolIds?: number[];
-  forcedToolIds?: number[];
+  // Origin of the message for telemetry tracking
+  origin?: MessageOrigin;
 }
 
 export async function* sendMessage({
-  regenerate,
   message,
   fileDescriptors,
-  currentMessageFiles,
   parentMessageId,
   chatSessionId,
   filters,
-  selectedDocumentIds,
-  queryOverride,
-  forceSearch,
+  signal,
+  deepResearch,
+  enabledToolIds,
+  forcedToolId,
   modelProvider,
   modelVersion,
   temperature,
-  systemPromptOverride,
-  useExistingUserMessage,
-  alternateAssistantId,
-  signal,
-  useAgentSearch,
-  enabledToolIds,
-  forcedToolIds,
+  origin,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
-  const documentsAreSelected =
-    selectedDocumentIds && selectedDocumentIds.length > 0;
+  // Build payload for new send-chat-message API
   const payload = {
-    alternate_assistant_id: alternateAssistantId,
+    message: message,
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
-    message: message,
-    // just use the default prompt for the assistant.
-    // should remove this in the future, as we don't support multiple prompts for a
-    // single assistant anyways
-    prompt_id: null,
-    search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     file_descriptors: fileDescriptors,
-    current_message_files: currentMessageFiles,
-    regenerate,
-    retrieval_options: !documentsAreSelected
-      ? {
-          run_search: queryOverride || forceSearch ? "always" : "auto",
-          real_time: true,
-          filters: filters,
-        }
-      : null,
-    query_override: queryOverride,
-    prompt_override: systemPromptOverride
-      ? {
-          system_prompt: systemPromptOverride,
-        }
-      : null,
+    internal_search_filters: filters,
+    deep_research: deepResearch ?? false,
+    allowed_tool_ids: enabledToolIds,
+    forced_tool_id: forcedToolId ?? null,
     llm_override:
       temperature || modelVersion
         ? {
@@ -182,15 +162,13 @@ export async function* sendMessage({
             model_version: modelVersion,
           }
         : null,
-    use_existing_user_message: useExistingUserMessage,
-    use_agentic_search: useAgentSearch ?? false,
-    allowed_tool_ids: enabledToolIds,
-    forced_tool_ids: forcedToolIds,
+    // Default to "unknown" for consistency with backend; callers should set explicitly
+    origin: origin ?? "unknown",
   };
 
   const body = JSON.stringify(payload);
 
-  const response = await fetch(`/api/chat/send-message`, {
+  const response = await fetch(`/api/chat/send-chat-message`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

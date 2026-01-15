@@ -50,7 +50,7 @@ export async function loginAs(
   };
 
   console.log(`[loginAs] Navigating to /auth/login as ${userType}`);
-  await page.goto("http://localhost:3000/auth/login");
+  await page.goto("/auth/login");
 
   await fillCredentials("loginAs primary form");
 
@@ -64,7 +64,7 @@ export async function loginAs(
   });
 
   try {
-    await page.waitForURL("http://localhost:3000/chat", { timeout: 10000 });
+    await page.waitForURL("/chat", { timeout: 10000 });
     console.log(
       `[loginAs] Redirected to /chat for ${userType}. URL: ${page.url()}`
     );
@@ -73,7 +73,7 @@ export async function loginAs(
 
     // If redirect to /chat doesn't happen, go to /auth/login
     console.log(`[loginAs] Navigating to /auth/signup as fallback`);
-    await page.goto("http://localhost:3000/auth/signup");
+    await page.goto("/auth/signup");
     await logPageState(
       page,
       `[loginAs] Landed on /auth/signup fallback (${userType})`,
@@ -86,7 +86,7 @@ export async function loginAs(
     await page.click('button[type="submit"]');
 
     try {
-      await page.waitForURL("http://localhost:3000/chat", { timeout: 10000 });
+      await page.waitForURL("/chat", { timeout: 10000 });
       console.log(
         `[loginAs] Fallback redirected to /chat for ${userType}. URL: ${page.url()}`
       );
@@ -146,7 +146,7 @@ export async function loginAsRandomUser(page: Page) {
 
   const { email, password } = generateRandomCredentials();
 
-  await page.goto("http://localhost:3000/auth/signup");
+  await page.goto("/auth/signup");
 
   const emailInput = page.getByTestId("email");
   const passwordInput = page.getByTestId("password");
@@ -162,7 +162,7 @@ export async function loginAsRandomUser(page: Page) {
     // Refresh the page to ensure everything is loaded properly
     // await page.reload();
 
-    await page.waitForURL("http://localhost:3000/chat?new_team=true");
+    await page.waitForURL("/chat?new_team=true");
     // Wait for the page to be fully loaded after refresh
     await page.waitForLoadState("networkidle");
   } catch {
@@ -174,7 +174,7 @@ export async function loginAsRandomUser(page: Page) {
 }
 
 export async function inviteAdmin2AsAdmin1(page: Page) {
-  await page.goto("http://localhost:3000/admin/users");
+  await page.goto("/admin/users");
   // Wait for 400ms to ensure the page has loaded completely
   await page.waitForTimeout(400);
 
@@ -189,10 +189,10 @@ export async function inviteAdmin2AsAdmin1(page: Page) {
   try {
     // Wait for the dropdown trigger to be visible and click it
     await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@test.com")
+      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
       .waitFor({ state: "visible", timeout: 5000 });
     await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@test.com")
+      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
       .click();
 
     // Wait for the admin option to be visible
@@ -208,7 +208,7 @@ export async function inviteAdmin2AsAdmin1(page: Page) {
 
     // Verify that the change was successful (you may need to adjust this based on your UI)
     const newRole = await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@test.com")
+      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
       .textContent();
     if (newRole?.toLowerCase().includes("admin")) {
       console.log("Successfully invited admin2 as admin");
@@ -231,12 +231,12 @@ export async function loginWithCredentials(
     return;
   }
 
-  await page.goto("http://localhost:3000/auth/login");
+  await page.goto("/auth/login");
   const emailInput = page.getByTestId("email");
   const passwordInput = page.getByTestId("password");
   await emailInput.waitFor({ state: "visible", timeout: 30000 });
   await emailInput.fill(email);
   await passwordInput.fill(password);
   await page.click('button[type="submit"]');
-  await page.waitForURL(/http:\/\/localhost:3000\/chat.*/, { timeout: 15000 });
+  await page.waitForURL(/\/chat.*/, { timeout: 15000 });
 }

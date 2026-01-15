@@ -99,7 +99,7 @@ def _build_project_file_citation_mapping(
 
 
 def construct_message_history(
-    system_prompt: ChatMessageSimple,
+    system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
     simple_chat_history: list[ChatMessageSimple],
     reminder_message: ChatMessageSimple | None,
@@ -114,7 +114,7 @@ def construct_message_history(
             )
 
     history_token_budget = available_tokens
-    history_token_budget -= system_prompt.token_count
+    history_token_budget -= system_prompt.token_count if system_prompt else 0
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
@@ -125,9 +125,12 @@ def construct_message_history(
     if history_token_budget < 0:
         raise ValueError("Not enough tokens available to construct message history")
 
+    if system_prompt:
+        system_prompt.should_cache = True
+
     # If no history, build minimal context
     if not simple_chat_history:
-        result = [system_prompt]
+        result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
         if project_files and project_files.project_file_texts:
@@ -199,6 +202,7 @@ def construct_message_history(
 
     for msg in reversed(history_before_last_user):
         if current_token_count + msg.token_count <= remaining_budget:
+            msg.should_cache = True
             truncated_history_before.insert(0, msg)
             current_token_count += msg.token_count
         else:
@@ -218,7 +222,7 @@ def construct_message_history(
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [project_files],
     # [last_user_message], [messages_after_last_user], [reminder]
-    result = [system_prompt]
+    result = [system_prompt] if system_prompt else []
 
     # 1. Add truncated history before last user message
     result.extend(truncated_history_before)
@@ -292,8 +296,16 @@ def run_llm_loop(
     db_session: Session,
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
+    chat_session_id: str | None = None,
 ) -> None:
-    with trace("run_llm_loop", metadata={"tenant_id": get_current_tenant_id()}):
+    with trace(
+        "run_llm_loop",
+        group_id=chat_session_id,
+        metadata={
+            "tenant_id": get_current_tenant_id(),
+            "chat_session_id": chat_session_id,
+        },
+    ):
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
             initialize_litellm,
@@ -334,8 +346,13 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
+        default_base_system_prompt: str = get_default_base_system_prompt(db_session)
+        system_prompt = None
+        custom_agent_prompt_msg = None
+
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
+            out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
             if forced_tool_id:
                 # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
                 final_tools = [tool for tool in tools if tool.id == forced_tool_id]
@@ -343,7 +360,7 @@ def run_llm_loop(
                     raise ValueError(f"Tool {forced_tool_id} not found in tools")
                 tool_choice = ToolChoiceOptions.REQUIRED
                 forced_tool_id = None
-            elif llm_cycle_count == MAX_LLM_CYCLES - 1 or ran_image_gen:
+            elif out_of_cycles or ran_image_gen:
                 # Last cycle, no tools allowed, just answer!
                 tool_choice = ToolChoiceOptions.NONE
                 final_tools = []
@@ -362,35 +379,47 @@ def run_llm_loop(
                 )
                 custom_agent_prompt_msg = None
             else:
-                # System message and custom agent message are both included.
-                open_ai_formatting_enabled = model_needs_formatting_reenabled(
-                    llm.config.model_name
-                )
-
-                system_prompt_str = build_system_prompt(
-                    base_system_prompt=get_default_base_system_prompt(db_session),
-                    datetime_aware=persona.datetime_aware if persona else True,
-                    memories=memories,
-                    tools=tools,
-                    should_cite_documents=should_cite_documents
-                    or always_cite_documents,
-                    open_ai_formatting_enabled=open_ai_formatting_enabled,
-                )
-                system_prompt = ChatMessageSimple(
-                    message=system_prompt_str,
-                    token_count=token_counter(system_prompt_str),
-                    message_type=MessageType.SYSTEM,
-                )
-
-                custom_agent_prompt_msg = (
-                    ChatMessageSimple(
-                        message=custom_agent_prompt,
-                        token_count=token_counter(custom_agent_prompt),
-                        message_type=MessageType.USER,
+                # If it's an empty string, we assume the user does not want to include it as an empty System message
+                if default_base_system_prompt:
+                    open_ai_formatting_enabled = model_needs_formatting_reenabled(
+                        llm.config.model_name
                     )
-                    if custom_agent_prompt
-                    else None
-                )
+
+                    system_prompt_str = build_system_prompt(
+                        base_system_prompt=default_base_system_prompt,
+                        datetime_aware=persona.datetime_aware if persona else True,
+                        memories=memories,
+                        tools=tools,
+                        should_cite_documents=should_cite_documents
+                        or always_cite_documents,
+                        open_ai_formatting_enabled=open_ai_formatting_enabled,
+                    )
+                    system_prompt = ChatMessageSimple(
+                        message=system_prompt_str,
+                        token_count=token_counter(system_prompt_str),
+                        message_type=MessageType.SYSTEM,
+                    )
+                    custom_agent_prompt_msg = (
+                        ChatMessageSimple(
+                            message=custom_agent_prompt,
+                            token_count=token_counter(custom_agent_prompt),
+                            message_type=MessageType.USER,
+                        )
+                        if custom_agent_prompt
+                        else None
+                    )
+                else:
+                    # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
+                    system_prompt = (
+                        ChatMessageSimple(
+                            message=custom_agent_prompt,
+                            token_count=token_counter(custom_agent_prompt),
+                            message_type=MessageType.SYSTEM,
+                        )
+                        if custom_agent_prompt
+                        else None
+                    )
+                    custom_agent_prompt_msg = None
 
             reminder_message_text: str | None
             if ran_image_gen:
@@ -398,7 +427,7 @@ def run_llm_loop(
                 # This is to prevent it generating things like:
                 # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
                 reminder_message_text = IMAGE_GEN_REMINDER
-            elif just_ran_web_search:
+            elif just_ran_web_search and not out_of_cycles:
                 reminder_message_text = OPEN_URL_REMINDER
             else:
                 # This is the default case, the LLM at this point may answer so it is important
@@ -409,6 +438,7 @@ def run_llm_loop(
                     ),
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
+                    is_last_cycle=out_of_cycles,
                 )
 
             reminder_msg = (
@@ -475,7 +505,7 @@ def run_llm_loop(
             # in-flight citations
             # It can be cleaned up but not super trivial or worthwhile right now
             just_ran_web_search = False
-            tool_responses, citation_mapping = run_tool_calls(
+            parallel_tool_call_results = run_tool_calls(
                 tool_calls=tool_calls,
                 tools=final_tools,
                 message_history=truncated_message_history,
@@ -483,8 +513,11 @@ def run_llm_loop(
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
                 next_citation_num=citation_processor.get_next_citation_number(),
+                max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
             )
+            tool_responses = parallel_tool_call_results.tool_responses
+            citation_mapping = parallel_tool_call_results.updated_citation_mapping
 
             # Failure case, give something reasonable to the LLM to try again
             if tool_calls and not tool_responses:

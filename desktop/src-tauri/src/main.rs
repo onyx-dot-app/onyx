@@ -14,12 +14,12 @@ use tauri::menu::{
     CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID,
 };
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+#[cfg(target_os = "macos")]
+use tauri::WebviewWindow;
 use tauri::Wry;
 use tauri::{
     webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindowBuilder,
 };
-#[cfg(target_os = "macos")]
-use tauri::WebviewWindow;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 #[cfg(target_os = "macos")]
 use tokio::time::sleep;
@@ -67,7 +67,7 @@ impl Default for AppConfig {
 
 /// Get the config directory path
 fn get_config_dir() -> Option<PathBuf> {
-    ProjectDirs::from("app", "onyx", "desktop").map(|dirs| dirs.config_dir().to_path_buf())
+    ProjectDirs::from("app", "onyx", "onyx-desktop").map(|dirs| dirs.config_dir().to_path_buf())
 }
 
 /// Get the full config file path
@@ -89,7 +89,6 @@ fn load_config() -> AppConfig {
         match fs::read_to_string(&config_path) {
             Ok(contents) => match serde_json::from_str(&contents) {
                 Ok(config) => {
-                    println!("Loaded config from {:?}", config_path);
                     return config;
                 }
                 Err(e) => {
@@ -428,16 +427,30 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let app_handle = app.clone();
 
+    // Avoid hijacking the system-wide Cmd+R on macOS.
+    #[cfg(target_os = "macos")]
+    let shortcuts = [
+        new_chat,
+        back,
+        forward,
+        new_window_shortcut,
+        show_app,
+        open_settings,
+    ];
+
+    #[cfg(not(target_os = "macos"))]
+    let shortcuts = [
+        new_chat,
+        reload,
+        back,
+        forward,
+        new_window_shortcut,
+        show_app,
+        open_settings,
+    ];
+
     app.global_shortcut().on_shortcuts(
-        [
-            new_chat,
-            reload,
-            back,
-            forward,
-            new_window_shortcut,
-            show_app,
-            open_settings,
-        ],
+        shortcuts,
         move |_app, shortcut, _event| {
             if shortcut == &new_chat {
                 trigger_new_chat(&app_handle);

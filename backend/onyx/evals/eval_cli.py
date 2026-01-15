@@ -5,6 +5,7 @@ CLI for running evaluations with local configurations.
 
 import argparse
 import json
+import logging
 import os
 from typing import Any
 
@@ -18,6 +19,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
+from onyx.evals.provider import get_provider
 from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
 
 
@@ -31,11 +33,36 @@ def setup_session_factory() -> None:
 
 def load_data_local(
     local_data_path: str,
-) -> list[dict[str, dict[str, str]]]:
+) -> list[dict[str, Any]]:
     if not os.path.isfile(local_data_path):
         raise ValueError(f"Local data file does not exist: {local_data_path}")
     with open(local_data_path, "r") as f:
         return json.load(f)
+
+
+def configure_logging_for_evals(verbose: bool) -> None:
+    """Set logging level to WARNING to reduce noise during evals."""
+    if verbose:
+        return
+
+    # Set environment variable for any future logger creation
+    os.environ["LOG_LEVEL"] = "WARNING"
+
+    # Force WARNING level for root logger and its handlers
+    root = logging.getLogger()
+    root.setLevel(logging.WARNING)
+    for handler in root.handlers:
+        handler.setLevel(logging.WARNING)
+
+    # Force WARNING level for all existing loggers and their handlers
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.WARNING)
+        for handler in logger.handlers:
+            handler.setLevel(logging.WARNING)
+
+    # Set a basic config to ensure new loggers also use WARNING
+    logging.basicConfig(level=logging.WARNING, force=True)
 
 
 def run_local(
@@ -43,33 +70,52 @@ def run_local(
     remote_dataset_name: str | None,
     search_permissions_email: str | None = None,
     no_send_logs: bool = False,
+    local_only: bool = False,
+    verbose: bool = False,
 ) -> EvalationAck:
     """
     Run evaluation with local configurations.
+
+    Tool forcing and assertions are configured per-test in the data file using:
+    - force_tools: List of tool type names to force
+    - expected_tools: List of tool type names expected to be called
+    - require_all_tools: If true, all expected tools must be called
 
     Args:
         local_data_path: Path to local JSON file
         remote_dataset_name: Name of remote Braintrust dataset
         search_permissions_email: Optional email address to impersonate for the evaluation
+        no_send_logs: Whether to skip sending logs to Braintrust
+        local_only: If True, use LocalEvalProvider (CLI output only, no Braintrust)
 
     Returns:
         EvalationAck: The evaluation result
     """
     setup_session_factory()
-    setup_braintrust_if_creds_available()
+    configure_logging_for_evals(
+        verbose=verbose,
+    )
+    # Only setup Braintrust if not running in local-only mode
+    if not local_only:
+        setup_braintrust_if_creds_available()
 
     if search_permissions_email is None:
         raise ValueError("search_permissions_email is required for local evaluation")
 
     configuration = EvalConfigurationOptions(
         search_permissions_email=search_permissions_email,
-        dataset_name=remote_dataset_name or "blank",
+        dataset_name=remote_dataset_name or "local",
         no_send_logs=no_send_logs,
     )
 
+    # Get the appropriate provider
+    provider = get_provider(local_only=local_only)
+
     if remote_dataset_name:
         score = run_eval(
-            configuration=configuration, remote_dataset_name=remote_dataset_name
+            configuration=configuration,
+            remote_dataset_name=remote_dataset_name,
+            provider=provider,
         )
     else:
         if local_data_path is None:
@@ -77,7 +123,7 @@ def run_local(
                 "local_data_path or remote_dataset_name is required for local evaluation"
             )
         data = load_data_local(local_data_path)
-        score = run_eval(configuration=configuration, data=data)
+        score = run_eval(configuration=configuration, data=data, provider=provider)
 
     return score
 
@@ -92,11 +138,14 @@ def run_remote(
     """
     Trigger an eval pipeline execution on a remote server.
 
+    Tool forcing and assertions are configured per-test in the dataset.
+
     Args:
         base_url: Base URL of the remote server (e.g., "https://test.onyx.app")
         api_key: API key for authentication
+        remote_dataset_name: Name of remote Braintrust dataset
+        search_permissions_email: Email address to use for the evaluation.
         payload: Optional payload to send with the request
-        search_permissions_email: Email address to use for the evaluation. Search will have the permissions of this user.
 
     Returns:
         Response from the remote server
@@ -181,11 +230,23 @@ def main() -> None:
         default=False,
     )
 
+    parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help="Run evals locally without Braintrust, output results to CLI only",
+        default=False,
+    )
+
     args = parser.parse_args()
 
     if args.local_data_path:
         print(f"Loading data from local file: {args.local_data_path}")
     elif args.remote_dataset_name:
+        if args.local_only:
+            raise ValueError(
+                "--local-only cannot be used with --remote-dataset-name. "
+                "Use --local-data-path with a local JSON file instead."
+            )
         print(f"Loading data from remote dataset: {args.remote_dataset_name}")
         dataset = braintrust.init_dataset(
             project=args.braintrust_project, name=args.remote_dataset_name
@@ -215,7 +276,10 @@ def main() -> None:
             print(f"Error triggering remote evaluation: {e}")
             return
     else:
-        print(f"Using Braintrust project: {args.braintrust_project}")
+        if args.local_only:
+            print("Running in local-only mode (no Braintrust)")
+        else:
+            print(f"Using Braintrust project: {args.braintrust_project}")
 
         if args.search_permissions_email:
             print(f"Using search permissions email: {args.search_permissions_email}")
@@ -225,6 +289,8 @@ def main() -> None:
             remote_dataset_name=args.remote_dataset_name,
             search_permissions_email=args.search_permissions_email,
             no_send_logs=args.no_send_logs,
+            local_only=args.local_only,
+            verbose=args.verbose,
         )
 
 

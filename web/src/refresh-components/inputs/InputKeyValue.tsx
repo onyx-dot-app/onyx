@@ -446,10 +446,10 @@ const KeyValueInput = ({
     >
       <div id={`${fieldId}-header`} className="flex gap-1 items-center w-full">
         <div className="flex gap-2 flex-1">
-          <Text text04 mainUiAction className={headerKeyClassName}>
+          <Text as="p" text04 mainUiAction className={headerKeyClassName}>
             {keyTitle}
           </Text>
-          <Text text04 mainUiAction className={headerValueClassName}>
+          <Text as="p" text04 mainUiAction className={headerValueClassName}>
             {valueTitle}
           </Text>
         </div>
@@ -481,7 +481,7 @@ const KeyValueInput = ({
           ))}
         </div>
       ) : (
-        <Text text03 secondaryBody className="ml-0.5">
+        <Text as="p" text03 secondaryBody className="ml-0.5">
           No items added yet.
         </Text>
       )}

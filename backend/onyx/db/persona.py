@@ -187,13 +187,25 @@ def _get_persona_by_name(
     return result
 
 
-def make_persona_private(
+def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
-    user_ids: list[UUID] | None,
-    group_ids: list[int] | None,
     db_session: Session,
+    is_public: bool | None = None,
+    user_ids: list[UUID] | None = None,
+    group_ids: list[int] | None = None,
 ) -> None:
+    """Updates the access settings for a persona including public status and user shares.
+
+    NOTE: Callers are responsible for committing."""
+
+    if is_public is not None:
+        persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+        if persona:
+            persona.is_public = is_public
+
+    # NOTE: For user-ids and group-ids, `None` means "leave unchanged", `[]` means "clear all shares",
+    # and a non-empty list means "replace with these shares".
     if user_ids is not None:
         db_session.query(Persona__User).filter(
             Persona__User.persona_id == persona_id
@@ -205,17 +217,22 @@ def make_persona_private(
                 create_notification(
                     user_id=user_uuid,
                     notif_type=NotificationType.PERSONA_SHARED,
+                    title="A new agent was shared with you!",
                     db_session=db_session,
                     additional_data=PersonaSharedNotificationData(
                         persona_id=persona_id,
                     ).model_dump(),
                 )
 
-        db_session.commit()
+    # MIT doesn't support group-based sharing, so we allow clearing (no-op since
+    # there shouldn't be any) but raise an error if trying to add actual groups.
+    if group_ids is not None:
+        db_session.query(Persona__UserGroup).filter(
+            Persona__UserGroup.persona_id == persona_id
+        ).delete(synchronize_session="fetch")
 
-    # May cause error if someone switches down to MIT from EE
-    if group_ids:
-        raise NotImplementedError("Onyx MIT does not support private Personas")
+        if group_ids:
+            raise NotImplementedError("Onyx MIT does not support group-based sharing")
 
 
 def create_update_persona(
@@ -269,6 +286,7 @@ def create_update_persona(
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
             datetime_aware=create_persona_request.datetime_aware,
+            replace_base_system_prompt=create_persona_request.replace_base_system_prompt,
             uploaded_image_id=create_persona_request.uploaded_image_id,
             icon_name=create_persona_request.icon_name,
             display_priority=create_persona_request.display_priority,
@@ -280,20 +298,21 @@ def create_update_persona(
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
             is_default_persona=create_persona_request.is_default_persona,
             user_file_ids=converted_user_file_ids,
+            commit=False,
         )
 
-        versioned_make_persona_private = fetch_versioned_implementation(
-            "onyx.db.persona", "make_persona_private"
+        versioned_update_persona_access = fetch_versioned_implementation(
+            "onyx.db.persona", "update_persona_access"
         )
 
-        # Privatize Persona
-        versioned_make_persona_private(
+        versioned_update_persona_access(
             persona_id=persona.id,
             creator_user_id=user.id if user else None,
+            db_session=db_session,
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
-            db_session=db_session,
         )
+        db_session.commit()
 
     except ValueError as e:
         logger.exception("Failed to create persona")
@@ -302,11 +321,13 @@ def create_update_persona(
     return FullPersonaSnapshot.from_model(persona)
 
 
-def update_persona_shared_users(
+def update_persona_shared(
     persona_id: int,
-    user_ids: list[UUID],
     user: User | None,
     db_session: Session,
+    user_ids: list[UUID] | None = None,
+    group_ids: list[int] | None = None,
+    is_public: bool | None = None,
 ) -> None:
     """Simplified version of `create_update_persona` which only touches the
     accessibility rather than any of the logic (e.g. prompt, connected data sources,
@@ -315,21 +336,24 @@ def update_persona_shared_users(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
-    if persona.is_public:
-        raise HTTPException(status_code=400, detail="Cannot share public persona")
+    if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to modify this persona"
+        )
 
-    versioned_make_persona_private = fetch_versioned_implementation(
-        "onyx.db.persona", "make_persona_private"
+    versioned_update_persona_access = fetch_versioned_implementation(
+        "onyx.db.persona", "update_persona_access"
     )
-
-    # Privatize Persona
-    versioned_make_persona_private(
+    versioned_update_persona_access(
         persona_id=persona_id,
         creator_user_id=user.id if user else None,
-        user_ids=user_ids,
-        group_ids=None,
         db_session=db_session,
+        is_public=is_public,
+        user_ids=user_ids,
+        group_ids=group_ids,
     )
+
+    db_session.commit()
 
 
 def update_persona_public_status(
@@ -797,6 +821,7 @@ def upsert_persona(
     user_file_ids: list[UUID] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
+    replace_base_system_prompt: bool = False,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -905,6 +930,7 @@ def upsert_persona(
             existing_persona.task_prompt = task_prompt
         if datetime_aware is not None:
             existing_persona.datetime_aware = datetime_aware
+        existing_persona.replace_base_system_prompt = replace_base_system_prompt
 
         # Do not delete any associations manually added unless
         # a new updated list is provided
@@ -945,6 +971,7 @@ def upsert_persona(
             system_prompt=system_prompt or "",
             task_prompt=task_prompt or "",
             datetime_aware=(datetime_aware if datetime_aware is not None else True),
+            replace_base_system_prompt=replace_base_system_prompt,
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
@@ -1183,13 +1210,15 @@ def update_default_assistant_configuration(
     db_session: Session,
     tool_ids: list[int] | None = None,
     system_prompt: str | None = None,
+    update_system_prompt: bool = False,
 ) -> Persona:
     """Update only tools and system_prompt for the default assistant.
 
     Args:
         db_session: Database session
         tool_ids: List of tool IDs to enable (if None, tools are not updated)
-        system_prompt: New system prompt (if None, system prompt is not updated)
+        system_prompt: New system prompt value (None means use default)
+        update_system_prompt: If True, update the system_prompt field (allows setting to None)
 
     Returns:
         Updated Persona object
@@ -1202,8 +1231,8 @@ def update_default_assistant_configuration(
     if not persona:
         raise ValueError("Default assistant not found")
 
-    # Update system prompt if provided
-    if system_prompt is not None:
+    # Update system prompt if explicitly requested
+    if update_system_prompt:
         persona.system_prompt = system_prompt
 
     # Update tools if provided

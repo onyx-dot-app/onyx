@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
 import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
@@ -14,10 +14,19 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
-import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import { SvgEye, SvgFileText, SvgImage, SvgXCircle } from "@opal/icons";
+import {
+  SvgEye,
+  SvgFiles,
+  SvgFileText,
+  SvgImage,
+  SvgTrash,
+  SvgXCircle,
+} from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
+import useFilter from "@/hooks/useFilter";
+import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 
 function getIcon(
   file: ProjectFile,
@@ -59,7 +68,7 @@ function FileAttachment({
     String(file.status) === UserFileStatus.UPLOADING ||
     String(file.status) === UserFileStatus.DELETING;
 
-  const LeftIcon = getIcon(file, isProcessing);
+  const Icon = getIcon(file, isProcessing);
   const description = getDescription(file);
   const rightText = file.last_accessed_at
     ? formatRelativeTime(file.last_accessed_at)
@@ -68,13 +77,14 @@ function FileAttachment({
   return (
     <AttachmentButton
       onClick={onClick}
-      leftIcon={LeftIcon}
+      icon={Icon}
       description={description}
       rightText={rightText}
       selected={isSelected}
       processing={isProcessing}
       onView={onView}
-      onDelete={onDelete}
+      actionIcon={SvgTrash}
+      onAction={onDelete}
     >
       {file.name}
     </AttachmentButton>
@@ -85,7 +95,6 @@ export interface UserFilesModalProps {
   // Modal content
   title: string;
   description: string;
-  icon: React.FunctionComponent<IconProps>;
   recentFiles: ProjectFile[];
   handleUploadChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   selectedFileIds?: string[];
@@ -100,7 +109,6 @@ export interface UserFilesModalProps {
 export default function UserFilesModal({
   title,
   description,
-  icon,
   recentFiles,
   handleUploadChange,
   selectedFileIds,
@@ -111,7 +119,6 @@ export default function UserFilesModal({
   onUnpickRecent,
 }: UserFilesModalProps) {
   const { isOpen, toggle } = useModal();
-  const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(selectedFileIds || [])
   );
@@ -121,16 +128,13 @@ export default function UserFilesModal({
   const triggerUploadPicker = () => fileInputRef.current?.click();
 
   useEffect(() => {
-    if (selectedFileIds) {
-      setSelectedIds(new Set(selectedFileIds));
-    } else {
-      setSelectedIds(new Set());
-    }
+    if (selectedFileIds) setSelectedIds(new Set(selectedFileIds));
+    else setSelectedIds(new Set());
   }, [selectedFileIds]);
 
   const selectedCount = selectedIds.size;
 
-  const handleDeselectAll = () => {
+  function handleDeselectAll() {
     selectedIds.forEach((id) => {
       const file = recentFiles.find((f) => f.id === id);
       if (file) {
@@ -138,24 +142,17 @@ export default function UserFilesModal({
       }
     });
     setSelectedIds(new Set());
-  };
+  }
 
-  const filtered = useMemo(() => {
-    let files = recentFiles;
+  const files = useMemo(
+    () =>
+      showOnlySelected
+        ? recentFiles.filter((projectFile) => selectedIds.has(projectFile.id))
+        : recentFiles,
+    [showOnlySelected, recentFiles, selectedIds]
+  );
 
-    // Filter by search term
-    const s = search.trim().toLowerCase();
-    if (s) {
-      files = files.filter((f) => f.name.toLowerCase().includes(s));
-    }
-
-    // Filter by selected status
-    if (showOnlySelected) {
-      files = files.filter((f) => selectedIds.has(f.id));
-    }
-
-    return files;
-  }, [recentFiles, search, showOnlySelected, selectedIds]);
+  const { query, setQuery, filtered } = useFilter(files, (file) => file.name);
 
   return (
     <>
@@ -179,14 +176,14 @@ export default function UserFilesModal({
           }}
           preventAccidentalClose={false}
         >
-          <Modal.Header icon={icon} title={title} description={description}>
+          <Modal.Header icon={SvgFiles} title={title} description={description}>
             {/* Search bar section */}
-            <div className="flex flex-row items-center gap-2">
+            <Section flexDirection="row" gap={0.5}>
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search files..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
                 leftSearchIcon
                 autoComplete="off"
                 tabIndex={0}
@@ -203,17 +200,19 @@ export default function UserFilesModal({
                   Add Files
                 </CreateButton>
               )}
-            </div>
+            </Section>
           </Modal.Header>
 
-          <Modal.Body className="flex flex-col flex-1 overflow-hidden bg-background-tint-01">
+          <Modal.Body
+            padding={filtered.length === 0 ? 0.5 : 0}
+            gap={0.5}
+            alignItems="center"
+          >
             {/* File display section */}
             {filtered.length === 0 ? (
-              <div className="p-4 flex w-full h-full items-center justify-center">
-                <Text text03>No files found</Text>
-              </div>
+              <Text text03>No files found</Text>
             ) : (
-              <ScrollIndicatorDiv className="p-2 gap-2" variant="shadow">
+              <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (
@@ -251,7 +250,7 @@ export default function UserFilesModal({
                 })}
 
                 {/* File count divider - only show when not searching or filtering */}
-                {!search.trim() && !showOnlySelected && (
+                {!query.trim() && !showOnlySelected && (
                   <CounterSeparator
                     count={recentFiles.length}
                     text={recentFiles.length === 1 ? "File" : "Files"}
@@ -261,11 +260,11 @@ export default function UserFilesModal({
             )}
           </Modal.Body>
 
-          <Modal.Footer className="flex items-center justify-between p-4">
+          <Modal.Footer>
             {/* Left side: file count and controls */}
             {onPickRecent && (
-              <div className="flex items-center gap-2">
-                <Text text03>
+              <Section flexDirection="row" justifyContent="start" gap={0.5}>
+                <Text as="p" text03>
                   {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
                   selected
                 </Text>
@@ -273,7 +272,7 @@ export default function UserFilesModal({
                   icon={SvgEye}
                   internal
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
-                  className={showOnlySelected ? "bg-background-tint-02" : ""}
+                  transient={showOnlySelected}
                 />
                 <IconButton
                   icon={SvgXCircle}
@@ -281,11 +280,11 @@ export default function UserFilesModal({
                   onClick={handleDeselectAll}
                   disabled={selectedCount === 0}
                 />
-              </div>
+              </Section>
             )}
 
             {/* Right side: Done button */}
-            <Button secondary onClick={() => toggle(false)} className="ml-auto">
+            <Button secondary onClick={() => toggle(false)}>
               Done
             </Button>
           </Modal.Footer>

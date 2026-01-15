@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import InvitedUserTable from "@/components/admin/users/InvitedUserTable";
 import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
@@ -40,10 +40,10 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
 
   return (
     <div className="flex items-center gap-1 px-1 py-0.5 rounded-06">
-      <Text mainUiMuted text03>
+      <Text as="p" mainUiMuted text03>
         {label}
       </Text>
-      <Text headingH3 text05>
+      <Text as="p" headingH3 text05>
         {displayValue}
       </Text>
     </div>
@@ -145,18 +145,11 @@ const UsersTables = ({
     );
   }
 
-  return (
-    <Tabs defaultValue="current">
-      <TabsList>
-        <TabsTrigger value="current">Current Users</TabsTrigger>
-        <TabsTrigger value="invited">Invited Users</TabsTrigger>
-        {NEXT_PUBLIC_CLOUD_ENABLED && (
-          <TabsTrigger value="pending">Pending Users</TabsTrigger>
-        )}
-      </TabsList>
-
-      <TabsContent value="current">
-        <Card>
+  const tabs = SimpleTabs.generateTabs({
+    current: {
+      name: "Current Users",
+      content: (
+        <Card className="w-full">
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Current Users</CardTitle>
@@ -192,9 +185,12 @@ const UsersTables = ({
             />
           </CardContent>
         </Card>
-      </TabsContent>
-      <TabsContent value="invited">
-        <Card>
+      ),
+    },
+    invited: {
+      name: "Invited Users",
+      content: (
+        <Card className="w-full">
           <CardHeader>
             <div className="flex justify-between items-center gap-1">
               <CardTitle>Invited Users</CardTitle>
@@ -216,9 +212,12 @@ const UsersTables = ({
             />
           </CardContent>
         </Card>
-      </TabsContent>
-      {NEXT_PUBLIC_CLOUD_ENABLED && (
-        <TabsContent value="pending">
+      ),
+    },
+    ...(NEXT_PUBLIC_CLOUD_ENABLED && {
+      pending: {
+        name: "Pending Users",
+        content: (
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center gap-1">
@@ -241,10 +240,12 @@ const UsersTables = ({
               />
             </CardContent>
           </Card>
-        </TabsContent>
-      )}
-    </Tabs>
-  );
+        ),
+      },
+    }),
+  });
+
+  return <SimpleTabs tabs={tabs} defaultValue="current" />;
 };
 
 const SearchableTables = () => {
@@ -358,7 +359,7 @@ const AddUserButton = ({
             />
             <Modal.Body>
               <div className="flex flex-col gap-2">
-                <Text>
+                <Text as="p">
                   Add the email addresses to import, separated by whitespaces.
                   Invited users will be able to login to this domain with their
                   email address.
@@ -375,10 +376,10 @@ const AddUserButton = ({
 
 const Page = () => {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="Manage Users" icon={SvgUser} />
       <SearchableTables />
-    </div>
+    </>
   );
 };
 

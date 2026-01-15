@@ -38,6 +38,8 @@ env:
   # LLMs
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  VERTEX_CREDENTIALS: ${{ secrets.VERTEX_CREDENTIALS }}
+  VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION }}
 
   # Code Interpreter
   # TODO: debug why this is failing and enable
@@ -170,7 +172,7 @@ jobs:
 
       - name: Upload Docker logs
         if: failure()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v5
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: docker-logs-${{ matrix.test-dir }}
           path: docker-logs/

@@ -196,6 +196,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.highspot.connector",
         class_name="HighspotConnector",
     ),
+    DocumentSource.DRUPAL_WIKI: ConnectorMapping(
+        module_path="onyx.connectors.drupal_wiki.connector",
+        class_name="DrupalWikiConnector",
+    ),
     DocumentSource.IMAP: ConnectorMapping(
         module_path="onyx.connectors.imap.connector",
         class_name="ImapConnector",

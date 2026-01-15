@@ -3,8 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState, useReducer } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { GlobeIcon, InfoIcon } from "@/components/icons/icons";
+import { InfoIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import Separator from "@/refresh-components/Separator";
 import useSWR from "swr";
@@ -13,6 +12,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { cn } from "@/lib/utils";
 import {
   SvgArrowExchange,
   SvgArrowRightCircle,
@@ -73,18 +73,20 @@ interface WebContentProviderView {
   has_api_key: boolean;
 }
 
-const HoverIconButton = ({
+interface HoverIconButtonProps extends React.ComponentProps<typeof Button> {
+  isHovered: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  children: React.ReactNode;
+}
+
+function HoverIconButton({
   isHovered,
   onMouseEnter,
   onMouseLeave,
   children,
   ...buttonProps
-}: {
-  isHovered: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  children: React.ReactNode;
-} & React.ComponentProps<typeof Button>) => {
+}: HoverIconButtonProps) {
   return (
     <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <Button {...buttonProps} rightIcon={isHovered ? SvgX : SvgCheckSquare}>
@@ -92,7 +94,7 @@ const HoverIconButton = ({
       </Button>
     </div>
   );
-};
+}
 
 export default function Page() {
   const [searchModal, dispatchSearchModal] = useReducer(
@@ -134,6 +136,17 @@ export default function Page() {
 
   const isLoading = isLoadingSearchProviders || isLoadingContentProviders;
 
+  // Exa shares API key between search and content providers
+  const exaSearchProvider = searchProviders.find(
+    (p) => p.provider_type === "exa"
+  );
+  const exaContentProvider = contentProviders.find(
+    (p) => p.provider_type === "exa"
+  );
+  const hasSharedExaKey =
+    (exaSearchProvider?.has_api_key || exaContentProvider?.has_api_key) ??
+    false;
+
   // Modal form state is owned by reducers
 
   const openSearchModal = (
@@ -143,11 +156,18 @@ export default function Page() {
     const requiresApiKey = searchProviderRequiresApiKey(providerType);
     const hasStoredKey = provider?.has_api_key ?? false;
 
+    // For Exa search provider, check if we can use the shared Exa key
+    const isExa = providerType === "exa";
+    const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
+
     dispatchSearchModal({
       type: "OPEN",
       providerType,
+      existingProviderId: provider?.id ?? null,
       initialApiKeyValue:
-        requiresApiKey && hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
+        requiresApiKey && (hasStoredKey || canUseSharedExaKey)
+          ? MASKED_API_KEY_PLACEHOLDER
+          : "",
       initialConfigValue: getSingleConfigFieldValueForForm(
         providerType,
         provider
@@ -162,10 +182,16 @@ export default function Page() {
     const hasStoredKey = provider?.has_api_key ?? false;
     const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v1/scrape";
 
+    // For Exa content provider, check if we can use the shared Exa key
+    const isExa = providerType === "exa";
+    const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
+
     dispatchContentModal({
       type: "OPEN",
       providerType,
-      initialApiKeyValue: hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
+      existingProviderId: provider?.id ?? null,
+      initialApiKeyValue:
+        hasStoredKey || canUseSharedExaKey ? MASKED_API_KEY_PLACEHOLDER : "",
       initialConfigValue:
         providerType === "firecrawl"
           ? getSingleContentConfigFieldValueForForm(
@@ -281,7 +307,10 @@ export default function Page() {
 
     return (
       <div
-        className={`flex items-center justify-center ${containerSizeClass} px-0.5 py-0 shrink-0 overflow-clip`}
+        className={cn(
+          "flex items-center justify-center px-0.5 py-0 shrink-0 overflow-clip",
+          containerSizeClass
+        )}
       >
         {logoSrc ? (
           <Image src={logoSrc} alt={alt} width={size} height={size} />
@@ -332,6 +361,17 @@ export default function Page() {
         } satisfies WebContentProviderView;
       }
 
+      if (providerType === "exa") {
+        return {
+          id: -3,
+          name: "Exa",
+          provider_type: "exa",
+          is_active: false,
+          config: null,
+          has_api_key: hasSharedExaKey,
+        } satisfies WebContentProviderView;
+      }
+
       return null;
     }).filter(Boolean) as WebContentProviderView[];
 
@@ -340,7 +380,7 @@ export default function Page() {
     );
 
     return [...ordered, ...additional];
-  }, [contentProviders]);
+  }, [contentProviders, hasSharedExaKey]);
 
   const currentContentProviderType =
     getCurrentContentProviderType(contentProviders);
@@ -362,7 +402,7 @@ export default function Page() {
         : undefined);
 
     return (
-      <div className="container">
+      <>
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -371,18 +411,18 @@ export default function Page() {
         <Callout type="danger" title="Failed to load web search settings">
           {message}
           {detail && (
-            <Text className="mt-2 text-text-03" mainContentBody text03>
+            <Text as="p" className="mt-2 text-text-03" mainContentBody text03>
               {detail}
             </Text>
           )}
         </Callout>
-      </div>
+      </>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="container">
+      <>
         <AdminPageTitle
           title="Web Search"
           icon={SvgGlobe}
@@ -391,7 +431,7 @@ export default function Page() {
         <div className="mt-8">
           <ThreeDotsLoader />
         </div>
-      </div>
+      </>
     );
   }
 
@@ -405,9 +445,12 @@ export default function Page() {
       searchProviderValues.config
     );
 
-    const existingProvider = searchProviders.find(
-      (provider) => provider.provider_type === selectedProviderType
-    );
+    // Use the stored provider ID from the modal state instead of looking it up again.
+    // This ensures we update the correct provider even if the data has changed.
+    const existingProviderId = searchModal.existingProviderId;
+    const existingProvider = existingProviderId
+      ? searchProviders.find((p) => p.id === existingProviderId)
+      : null;
 
     const providerRequiresApiKey =
       searchProviderRequiresApiKey(selectedProviderType);
@@ -458,7 +501,12 @@ export default function Page() {
       onClose: () => {
         dispatchSearchModal({ type: "CLOSE" });
       },
-      mutate: mutateSearchProviders,
+      mutate: async () => {
+        await mutateSearchProviders();
+        if (selectedProviderType === "exa") {
+          await mutateContentProviders();
+        }
+      },
     });
   };
 
@@ -668,6 +716,23 @@ export default function Page() {
         selectedContentProviderType
       : "";
 
+    if (selectedContentProviderType === "exa") {
+      return (
+        <>
+          Paste your{" "}
+          <a
+            href="https://dashboard.exa.ai/api-keys"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            API key
+          </a>{" "}
+          from Exa to enable crawling.
+        </>
+      );
+    }
+
     return selectedContentProviderType === "firecrawl" ? (
       <>
         Paste your <span className="underline">API key</span> from Firecrawl to
@@ -698,9 +763,12 @@ export default function Page() {
       contentProviderValues.config
     );
 
-    const existingProvider = contentProviders.find(
-      (provider) => provider.provider_type === selectedContentProviderType
-    );
+    // Use the stored provider ID from the modal state instead of looking it up again.
+    // This ensures we update the correct provider even if the data has changed.
+    const existingProviderId = contentModal.existingProviderId;
+    const existingProvider = existingProviderId
+      ? contentProviders.find((p) => p.id === existingProviderId)
+      : null;
 
     // Check if config changed from stored values
     const storedBaseUrl = getSingleContentConfigFieldValueForForm(
@@ -717,6 +785,10 @@ export default function Page() {
     dispatchContentModal({ type: "SET_PHASE", phase: "saving" });
     dispatchContentModal({ type: "CLEAR_MESSAGE" });
 
+    const apiKeyChangedForContentProvider =
+      contentModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
+      contentProviderValues.apiKey.length > 0;
+
     await connectProviderFlow({
       category: "content",
       providerType: selectedContentProviderType,
@@ -727,9 +799,7 @@ export default function Page() {
         CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ??
         selectedContentProviderType,
       providerRequiresApiKey: true,
-      apiKeyChangedForProvider:
-        contentModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
-        contentProviderValues.apiKey.length > 0,
+      apiKeyChangedForProvider: apiKeyChangedForContentProvider,
       apiKey: contentProviderValues.apiKey,
       config,
       configChanged,
@@ -746,36 +816,35 @@ export default function Page() {
       onClose: () => {
         dispatchContentModal({ type: "CLOSE" });
       },
-      mutate: mutateContentProviders,
+      mutate: async () => {
+        await mutateContentProviders();
+        if (selectedContentProviderType === "exa") {
+          await mutateSearchProviders();
+        }
+      },
     });
   };
 
   return (
     <>
-      <div className="container">
-        <div className="w-full">
-          <div className="mb-4">
-            <HealthCheckBanner />
-          </div>
-          <div className="w-full flex flex-col gap-0.5 px-4">
-            <Text headingH2 text04 className="flex gap-x-2 items-center">
-              <GlobeIcon size={32} className="my-auto" /> Web Search
-            </Text>
-            <Text secondaryBody text03 className="px-0.5">
-              Search settings for external search across the internet.
-            </Text>
-          </div>
+      <>
+        <AdminPageTitle icon={SvgGlobe} title="Web Search" />
+        <div className="pt-4 pb-4">
+          <Text as="p" className="text-text-dark">
+            Search settings for external search across the internet.
+          </Text>
         </div>
 
-        <div className="mt-1 flex w-full max-w-[960px] flex-col gap-8 px-4 py-6">
-          <Separator className="py-0" />
+        <Separator />
 
-          <div className="flex flex-col gap-3 self-stretch">
+        <div className="flex w-full flex-col gap-8 pb-6">
+          <div className="flex w-full max-w-[960px] flex-col gap-3">
             <div className="flex flex-col gap-0.5">
-              <Text mainContentEmphasis text05>
+              <Text as="p" mainContentEmphasis text05>
                 Search Engine
               </Text>
               <Text
+                as="p"
                 className="flex items-start gap-[2px] self-stretch text-text-03"
                 secondaryBody
                 text03
@@ -810,7 +879,7 @@ export default function Page() {
                       <InfoIcon size={16} />
                     </div>
                   </div>
-                  <Text className="flex-1 px-0.5" mainUiBody text04>
+                  <Text as="p" className="flex-1 px-0.5" mainUiBody text04>
                     {hasConfiguredSearchProvider
                       ? "Select a search engine to enable web search."
                       : "Connect a search engine to set up web search."}
@@ -819,7 +888,7 @@ export default function Page() {
               </div>
             )}
 
-            <div className="flex flex-col gap-2 self-stretch">
+            <div className="flex flex-col gap-2">
               {combinedSearchProviders.map(
                 ({ key, providerType, label, subtitle, logoSrc, provider }) => {
                   const isConfigured = isSearchProviderConfigured(
@@ -889,15 +958,14 @@ export default function Page() {
                     <div
                       key={`${key}-${providerType}`}
                       onClick={isCardClickable ? handleCardClick : undefined}
-                      className={`flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00 dark:bg-background-neutral-00 ${
+                      className={cn(
+                        "flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00",
                         isHighlighted
                           ? "border-action-link-05"
-                          : "border-border-01"
-                      } ${
-                        isCardClickable
-                          ? "cursor-pointer hover:bg-background-tint-01 transition-colors"
-                          : ""
-                      }`}
+                          : "border-border-01",
+                        isCardClickable &&
+                          "cursor-pointer hover:bg-background-tint-01 transition-colors"
+                      )}
                     >
                       <div className="flex flex-1 items-start gap-1 px-2 py-1">
                         {renderLogo({
@@ -907,10 +975,10 @@ export default function Page() {
                           isHighlighted,
                         })}
                         <div className="flex flex-col gap-0.5">
-                          <Text mainUiAction text05>
+                          <Text as="p" mainUiAction text05>
                             {label}
                           </Text>
-                          <Text secondaryBody text03>
+                          <Text as="p" secondaryBody text03>
                             {subtitle}
                           </Text>
                         </div>
@@ -929,7 +997,6 @@ export default function Page() {
                                 provider
                               );
                             }}
-                            className="h-6 w-6 opacity-70 hover:opacity-100"
                             aria-label={`Edit ${label}`}
                           />
                         )}
@@ -978,12 +1045,13 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 self-stretch">
+          <div className="flex w-full max-w-[960px] flex-col gap-3">
             <div className="flex flex-col gap-0.5">
-              <Text mainContentEmphasis text05>
+              <Text as="p" mainContentEmphasis text05>
                 Web Crawler
               </Text>
               <Text
+                as="p"
                 className="flex items-start gap-[2px] self-stretch text-text-03"
                 secondaryBody
                 text03
@@ -998,7 +1066,7 @@ export default function Page() {
               </Callout>
             )}
 
-            <div className="flex flex-col gap-2 self-stretch">
+            <div className="flex flex-col gap-2">
               {combinedContentProviders.map((provider) => {
                 const label =
                   provider.name ||
@@ -1046,7 +1114,8 @@ export default function Page() {
 
                   const canActivate =
                     providerId > 0 ||
-                    provider.provider_type === "onyx_web_crawler";
+                    provider.provider_type === "onyx_web_crawler" ||
+                    isConfigured;
 
                   return {
                     label: "Set as Default",
@@ -1082,15 +1151,14 @@ export default function Page() {
                         ? handleContentCardClick
                         : undefined
                     }
-                    className={`flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00 dark:bg-background-neutral-00 ${
+                    className={cn(
+                      "flex items-start justify-between gap-3 rounded-16 border p-1 bg-background-neutral-00",
                       isCurrentCrawler
                         ? "border-action-link-05"
-                        : "border-border-01"
-                    } ${
-                      isContentCardClickable
-                        ? "cursor-pointer hover:bg-background-tint-01 transition-colors"
-                        : ""
-                    }`}
+                        : "border-border-01",
+                      isContentCardClickable &&
+                        "cursor-pointer hover:bg-background-tint-01 transition-colors"
+                    )}
                   >
                     <div className="flex flex-1 items-start gap-1 px-2 py-1">
                       {renderLogo({
@@ -1106,10 +1174,10 @@ export default function Page() {
                         isHighlighted: isCurrentCrawler,
                       })}
                       <div className="flex flex-col gap-0.5">
-                        <Text mainUiAction text05>
+                        <Text as="p" mainUiAction text05>
                           {label}
                         </Text>
-                        <Text secondaryBody text03>
+                        <Text as="p" secondaryBody text03>
                           {subtitle}
                         </Text>
                       </div>
@@ -1128,7 +1196,6 @@ export default function Page() {
                                 provider
                               );
                             }}
-                            className="h-6 w-6 opacity-70 hover:opacity-100"
                             aria-label={`Edit ${label}`}
                           />
                         )}
@@ -1178,7 +1245,7 @@ export default function Page() {
             </div>
           </div>
         </div>
-      </div>
+      </>
 
       <WebProviderSetupModal
         isOpen={selectedProviderType !== null}
@@ -1205,6 +1272,7 @@ export default function Page() {
         onApiKeyChange={(value) =>
           dispatchSearchModal({ type: "SET_API_KEY", value })
         }
+        isStoredApiKey={searchModal.apiKeyValue === MASKED_API_KEY_PLACEHOLDER}
         optionalField={
           selectedProviderType === "google_pse"
             ? {
@@ -1313,11 +1381,7 @@ export default function Page() {
           } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
-              <SvgOnyxLogo
-                width={24}
-                height={24}
-                className="text-[#111111] dark:text-[#f5f5f5]"
-              />
+              <SvgOnyxLogo width={24} height={24} className="text-text-05" />
             ) : undefined,
           size: 24,
           containerSize: 28,
@@ -1334,6 +1398,7 @@ export default function Page() {
         onApiKeyChange={(value) =>
           dispatchContentModal({ type: "SET_API_KEY", value })
         }
+        isStoredApiKey={contentModal.apiKeyValue === MASKED_API_KEY_PLACEHOLDER}
         optionalField={
           selectedContentProviderType === "firecrawl"
             ? {

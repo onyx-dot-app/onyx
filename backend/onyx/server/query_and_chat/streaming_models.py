@@ -60,6 +60,7 @@ class SectionEnd(BaseObj):
 
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
+    stop_reason: str | None = None
 
 
 class TopLevelBranching(BaseObj):

@@ -4,6 +4,7 @@ import {
   Packet,
   PacketType,
   ReasoningPacket,
+  StopReason,
 } from "../../services/streamingModels";
 import {
   FullChatState,
@@ -12,12 +13,14 @@ import {
   RendererResult,
 } from "./interfaces";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
-import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "./renderers/PythonToolRenderer";
 import { ReasoningRenderer } from "./renderers/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
 import { FetchToolRenderer } from "./renderers/FetchToolRenderer";
+import { DeepResearchPlanRenderer } from "./renderers/DeepResearchPlanRenderer";
+import { ResearchAgentRenderer } from "./renderers/ResearchAgentRenderer";
+import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
 
 // Different types of chat packets using discriminated unions
 export interface GroupedPackets {
@@ -56,16 +59,48 @@ function isReasoningPacket(packet: Packet): packet is ReasoningPacket {
   return (
     packet.obj.type === PacketType.REASONING_START ||
     packet.obj.type === PacketType.REASONING_DELTA ||
-    packet.obj.type === PacketType.SECTION_END
+    packet.obj.type === PacketType.SECTION_END ||
+    packet.obj.type === PacketType.ERROR
+  );
+}
+
+function isDeepResearchPlanPacket(packet: Packet) {
+  return (
+    packet.obj.type === PacketType.DEEP_RESEARCH_PLAN_START ||
+    packet.obj.type === PacketType.DEEP_RESEARCH_PLAN_DELTA
+  );
+}
+
+function isResearchAgentPacket(packet: Packet) {
+  // Check for any packet type that indicates a research agent group
+  return (
+    packet.obj.type === PacketType.RESEARCH_AGENT_START ||
+    packet.obj.type === PacketType.INTERMEDIATE_REPORT_START ||
+    packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA ||
+    packet.obj.type === PacketType.INTERMEDIATE_REPORT_CITED_DOCS
   );
 }
 
 export function findRenderer(
   groupedPackets: GroupedPackets
 ): MessageRenderer<any, any> | null {
+  // Check for chat messages first
   if (groupedPackets.packets.some((packet) => isChatPacket(packet))) {
     return MessageTextRenderer;
   }
+
+  // Check for deep research packets EARLY - these have priority over other tools
+  // because deep research groups may contain multiple packet types (plan + reasoning + fetch)
+  if (
+    groupedPackets.packets.some((packet) => isDeepResearchPlanPacket(packet))
+  ) {
+    return DeepResearchPlanRenderer;
+  }
+  if (groupedPackets.packets.some((packet) => isResearchAgentPacket(packet))) {
+    return ResearchAgentRenderer;
+  }
+
+  // Standard tool checks
   if (groupedPackets.packets.some((packet) => isSearchToolPacket(packet))) {
     return SearchToolRenderer;
   }
@@ -94,6 +129,7 @@ export function RendererComponent({
   onComplete,
   animate,
   stopPacketSeen,
+  stopReason,
   useShortRenderer = false,
   children,
 }: {
@@ -102,6 +138,7 @@ export function RendererComponent({
   onComplete: () => void;
   animate: boolean;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   useShortRenderer?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
@@ -120,6 +157,7 @@ export function RendererComponent({
       animate={animate}
       renderType={renderType}
       stopPacketSeen={stopPacketSeen}
+      stopReason={stopReason}
     >
       {children}
     </RendererFn>

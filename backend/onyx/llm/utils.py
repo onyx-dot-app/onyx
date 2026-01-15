@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
 from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
@@ -18,7 +19,9 @@ from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
@@ -35,6 +38,7 @@ logger = setup_logger()
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
+MAX_LITELLM_USER_ID_LENGTH = 64
 _TWELVE_LABS_PEGASUS_MODEL_NAMES = [
     "us.twelvelabs.pegasus-1-2-v1:0",
     "us.twelvelabs.pegasus-1-2-v1",
@@ -52,6 +56,53 @@ CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     }
     for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
 }
+
+
+def truncate_litellm_user_id(user_id: str) -> str:
+    """Truncate the LiteLLM `user` field maximum length."""
+    if len(user_id) <= MAX_LITELLM_USER_ID_LENGTH:
+        return user_id
+    logger.warning(
+        "User's ID exceeds %d chars (len=%d); truncating for Litellm logging compatibility.",
+        MAX_LITELLM_USER_ID_LENGTH,
+        len(user_id),
+    )
+    return user_id[:MAX_LITELLM_USER_ID_LENGTH]
+
+
+def build_litellm_passthrough_kwargs(
+    model_kwargs: dict[str, Any],
+    user_identity: LLMUserIdentity | None,
+) -> dict[str, Any]:
+    """Build kwargs passed through directly to LiteLLM.
+
+    Returns `model_kwargs` unchanged unless we need to add user/session metadata,
+    in which case a copy is returned to avoid cross-request mutation.
+    """
+
+    if not (SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity):
+        return model_kwargs
+
+    passthrough_kwargs = dict(model_kwargs)
+
+    if user_identity.user_id:
+        passthrough_kwargs["user"] = truncate_litellm_user_id(user_identity.user_id)
+
+    if user_identity.session_id:
+        existing_metadata = passthrough_kwargs.get("metadata")
+        metadata: dict[str, Any] | None
+        if existing_metadata is None:
+            metadata = {}
+        elif isinstance(existing_metadata, dict):
+            metadata = dict(existing_metadata)
+        else:
+            metadata = None
+
+        if metadata is not None:
+            metadata["session_id"] = user_identity.session_id
+            passthrough_kwargs["metadata"] = metadata
+
+    return passthrough_kwargs
 
 
 def _unwrap_nested_exception(error: Exception) -> Exception:
@@ -712,31 +763,35 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
 
     LiteLLM uses the "openai" provider for any OpenAI-compatible server (e.g. vLLM, LiteLLM proxy),
     but this function checks if the model is actually from OpenAI's model registry.
+
+    This function is used primarily to determine if we should use the responses API.
+    OpenAI models from OpenAI and Azure should use responses.
     """
 
-    # NOTE: not using the OPENAI_PROVIDER_NAME constant here due to circular import issues
-    if model_provider != "openai" and model_provider != "litellm_proxy":
+    if model_provider not in {
+        LlmProviderNames.OPENAI,
+        LlmProviderNames.LITELLM_PROXY,
+        LlmProviderNames.AZURE,
+    }:
         return False
 
     model_map = get_model_map()
 
     def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
-        return (
-            model_name in model_map
-            and model_map[model_name].get("litellm_provider") == "openai"
-        )
+        if model_name not in model_map:
+            return False
+        return model_map[model_name].get("litellm_provider") == LlmProviderNames.OPENAI
 
     try:
-
         # Check if any model exists in litellm's registry with openai prefix
         # If it's registered as "openai/model-name", it's a real OpenAI model
-        if f"openai/{model_name}" in model_map:
+        if f"{LlmProviderNames.OPENAI}/{model_name}" in model_map:
             return True
 
         if _check_if_model_name_is_openai_provider(model_name):
             return True
 
-        if model_name.startswith("azure/"):
+        if model_name.startswith(f"{LlmProviderNames.AZURE}/"):
             model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
             if _check_if_model_name_is_openai_provider(model_name_with_azure_removed):
                 return True

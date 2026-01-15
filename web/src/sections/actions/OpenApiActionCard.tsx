@@ -212,11 +212,11 @@ export default function OpenApiActionCard({
           }
         >
           <div className="flex flex-col gap-4">
-            <Text text03>
+            <Text as="p" text03>
               This will permanently delete the OpenAPI action <b>{tool.name}</b>{" "}
               and its configuration.
             </Text>
-            <Text text03>
+            <Text as="p" text03>
               Are you sure you want to delete this OpenAPI action?
             </Text>
           </div>

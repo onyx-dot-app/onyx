@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { FiGlobe, FiLink } from "react-icons/fi";
+import { SvgXCircle } from "@opal/icons";
 import {
   PacketType,
   FetchToolPacket,
@@ -40,7 +41,9 @@ const constructCurrentFetchState = (
     (packet) => packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS
   )?.obj as FetchToolDocuments | undefined;
   const sectionEnd = packets.find(
-    (packet) => packet.obj.type === PacketType.SECTION_END
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
   );
 
   const urls = urlsPacket?.urls || [];
@@ -279,6 +282,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                   </div>
                 )}
               </>
+            ) : // Show X icon if cancelled, otherwise show blinking dot for loading state
+            stopPacketSeen ? (
+              <SvgXCircle size={14} className="text-text-400" />
             ) : (
               <BlinkingDot />
             )}

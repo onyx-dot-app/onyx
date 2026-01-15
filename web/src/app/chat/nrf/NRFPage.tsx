@@ -1,103 +1,179 @@
 "use client";
-import React, { useState, useEffect, useRef, useContext } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { v4 as uuidv4 } from "uuid";
 import Button from "@/refresh-components/buttons/Button";
-import SimplifiedChatInputBar from "@/app/chat/components/input/SimplifiedChatInputBar";
-import { Menu } from "lucide-react";
-import { Shortcut } from "./interfaces";
-import {
-  MaxShortcutsReachedModal,
-  NewShortCutModal,
-} from "@/components/extension/Shortcuts";
+import ChatInputBar, {
+  ChatInputBarHandle,
+} from "@/app/chat/components/input/ChatInputBar";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
+import Text from "@/refresh-components/texts/Text";
 import { useNightTime } from "@/lib/dateUtils";
-import { useFilters } from "@/lib/hooks";
-import { uploadFilesForChat } from "../services/lib";
-import { ChatFileType, FileDescriptor } from "../interfaces";
-import { useCCPairs } from "@/lib/hooks/useCCPairs";
-import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useTags } from "@/lib/hooks/useTags";
-import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
-import { SettingsPanel } from "../../components/nrf/SettingsPanel";
-import { ShortcutsDisplay } from "../../components/nrf/ShortcutsDisplay";
-import LoginPage from "../../auth/login/LoginPage";
+import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
+import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
-import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
-import { CHROME_MESSAGE } from "@/lib/extension/constants";
-import ApiKeyModal from "@/components/llm/ApiKeyModal";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { SvgUser } from "@opal/icons";
+import { useAgents } from "@/hooks/useAgents";
+import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useDeepResearchToggle } from "@/app/chat/hooks/useDeepResearchToggle";
+import { useChatController } from "@/app/chat/hooks/useChatController";
+import { useChatSessionController } from "@/app/chat/hooks/useChatSessionController";
+import { useAssistantController } from "@/app/chat/hooks/useAssistantController";
+import {
+  useCurrentChatState,
+  useCurrentMessageHistory,
+} from "@/app/chat/stores/useChatSessionStore";
+import ChatUI from "@/sections/ChatUI";
+import useChatSessions from "@/hooks/useChatSessions";
+import { cn } from "@/lib/utils";
+import Logo from "@/refresh-components/Logo";
+import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+import {
+  SvgUser,
+  SvgMenu,
+  SvgExternalLink,
+  SvgAlertTriangle,
+} from "@opal/icons";
+import { ThemePreference } from "@/lib/types";
 
-export default function NRFPage({
-  requestCookies,
-}: {
-  requestCookies: ReadonlyRequestCookies;
-}) {
+interface NRFPageProps {
+  isSidePanel?: boolean;
+}
+
+// Reserve half of the context window for the model's response output
+const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
+
+export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const {
     theme,
     defaultLightBackgroundUrl,
     defaultDarkBackgroundUrl,
-    shortcuts: shortCuts,
-    setShortcuts: setShortCuts,
     setUseOnyxAsNewTab,
-    showShortcuts,
   } = useNRFPreferences();
 
+  const searchParams = useSearchParams();
   const filterManager = useFilters();
   const { isNight } = useNightTime();
   const { user, authTypeMetadata } = useUser();
-  const { ccPairs } = useCCPairs();
-  const { documentSets } = useDocumentSets();
-  const { tags } = useTags();
-  const { llmProviders } = useLLMProviders();
-  const settings = useContext(SettingsContext);
+  const { setFolded } = useAppSidebarContext();
 
   const { popup, setPopup } = usePopup();
+
+  // Hide sidebar when in side panel mode
+  useEffect(() => {
+    if (isSidePanel) {
+      setFolded(true);
+    }
+  }, [isSidePanel, setFolded]);
+
+  // Chat sessions
+  const { refreshChatSessions } = useChatSessions();
+  const existingChatSessionId = null; // NRF always starts new chats
+
+  // Get agents for assistant selection
+  const { agents: availableAssistants } = useAgents();
+
+  // Projects context for file handling
+  const {
+    currentMessageFiles,
+    setCurrentMessageFiles,
+    lastFailedFiles,
+    clearLastFailedFiles,
+  } = useProjectsContext();
+
+  // Show popup if any files failed
+  useEffect(() => {
+    if (lastFailedFiles && lastFailedFiles.length > 0) {
+      const names = lastFailedFiles.map((f) => f.name).join(", ");
+      setPopup({
+        type: "error",
+        message:
+          lastFailedFiles.length === 1
+            ? `File failed and was removed: ${names}`
+            : `Files failed and were removed: ${names}`,
+      });
+      clearLastFailedFiles();
+    }
+  }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
+
+  // Assistant controller
+  const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
+    useAssistantController({
+      selectedChatSession: undefined,
+      onAssistantSelect: () => {},
+    });
+
+  // LLM manager for model selection.
+  // - currentChatSession: undefined because NRF always starts new chats
+  // - liveAssistant: uses the selected assistant, or undefined to fall back
+  //   to system-wide default LLM provider.
+  //
+  // If no LLM provider is configured (e.g., fresh signup), the input bar is
+  // disabled and a "Set up an LLM" button is shown (see bottom of component).
+  const llmManager = useLlmManager(undefined, liveAssistant ?? undefined);
+
+  // Deep research toggle
+  const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
+    chatSessionId: existingChatSessionId,
+    assistantId: selectedAssistant?.id,
+  });
 
   // State
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
-  const [editingShortcut, setEditingShortcut] = useState<Shortcut | null>(null);
+
+  // Initialize message from URL input parameter (for Chrome extension)
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    const urlParams = new URLSearchParams(window.location.search);
+    const userPrompt = urlParams.get("user-prompt");
+    if (userPrompt) {
+      setMessage(userPrompt);
+    }
+  }, []);
+
   const [backgroundUrl, setBackgroundUrl] = useState<string>(
-    theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl
+    theme === ThemePreference.LIGHT
+      ? defaultLightBackgroundUrl
+      : defaultDarkBackgroundUrl
   );
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
-  const [showShortCutModal, setShowShortCutModal] = useState(false);
-  const [showMaxShortcutsModal, setShowMaxShortcutsModal] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(!user);
 
   // Refs
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLDivElement>(null);
+  const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
+  const submitOnLoadPerformed = useRef<boolean>(false);
+
+  // Access chat state from store
+  const currentChatState = useCurrentChatState();
+  const messageHistory = useCurrentMessageHistory();
+
+  // Determine if we should show centered welcome or messages
+  const hasMessages = messageHistory.length > 0;
+
+  // Resolved assistant to use throughout the component
+  const resolvedAssistant = liveAssistant ?? undefined;
 
   useEffect(() => {
     setBackgroundUrl(
-      theme === "light" ? defaultLightBackgroundUrl : defaultDarkBackgroundUrl
+      theme === ThemePreference.LIGHT
+        ? defaultLightBackgroundUrl
+        : defaultDarkBackgroundUrl
     );
   }, [theme, defaultLightBackgroundUrl, defaultDarkBackgroundUrl]);
 
   useSendMessageToParent();
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, []);
 
   const toggleSettings = () => {
     setSettingsOpen((prev) => !prev);
@@ -113,219 +189,302 @@ export default function NRFPage({
     }
   };
 
-  const availableSources = (ccPairs ?? []).map((ccPair) => ccPair.source);
-
-  const [currentMessageFiles, setCurrentMessageFiles] = useState<
-    FileDescriptor[]
-  >([]);
-
-  const handleImageUpload = async (acceptedFiles: File[]) => {
-    const tempFileDescriptors = acceptedFiles.map((file) => ({
-      id: uuidv4(),
-      type: file.type.startsWith("image/")
-        ? ChatFileType.IMAGE
-        : ChatFileType.DOCUMENT,
-      isUploading: true,
-    }));
-
-    // only show loading spinner for reasonably large files
-    const totalSize = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
-    if (totalSize > 50 * 1024) {
-      setCurrentMessageFiles((prev) => [...prev, ...tempFileDescriptors]);
-    }
-
-    const removeTempFiles = (prev: FileDescriptor[]) => {
-      return prev.filter(
-        (file) => !tempFileDescriptors.some((newFile) => newFile.id === file.id)
-      );
-    };
-
-    await uploadFilesForChat(acceptedFiles).then(([files, error]) => {
-      if (error) {
-        setCurrentMessageFiles((prev) => removeTempFiles(prev));
-        setPopup({
-          type: "error",
-          message: error,
-        });
-      } else {
-        setCurrentMessageFiles((prev) => [...removeTempFiles(prev), ...files]);
-      }
-    });
-  };
-
   const confirmTurnOff = () => {
     setUseOnyxAsNewTab(false);
     setShowTurnOffModal(false);
     sendSetDefaultNewTabMessage(false);
   };
 
-  // Auth related - authTypeMetadata is provided by UserProvider
+  // Reset input bar after sending
+  const resetInputBar = useCallback(() => {
+    setMessage("");
+    setCurrentMessageFiles([]);
+    chatInputBarRef.current?.reset();
+  }, [setMessage, setCurrentMessageFiles]);
 
-  const onSubmit = async ({
-    messageOverride,
-  }: {
-    messageOverride?: string;
-  } = {}) => {
-    const userMessage = messageOverride || message;
+  // Chat controller for submitting messages
+  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
+    useChatController({
+      filterManager,
+      llmManager,
+      availableAssistants: availableAssistants || [],
+      liveAssistant,
+      existingChatSessionId,
+      selectedDocuments: [],
+      searchParams: searchParams!,
+      setPopup,
+      resetInputBar,
+      setSelectedAssistantFromId,
+    });
 
-    let filterString = filterManager?.getFilterString();
+  // Chat session controller for loading sessions
+  const { currentSessionFileTokenCount } = useChatSessionController({
+    existingChatSessionId,
+    searchParams: searchParams!,
+    filterManager,
+    firstMessage: undefined,
+    setSelectedAssistantFromId,
+    setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
+    setCurrentMessageFiles,
+    chatSessionIdRef: { current: null },
+    loadedIdSessionRef: { current: null },
+    chatInputBarRef,
+    isInitialLoad: { current: false },
+    submitOnLoadPerformed,
+    refreshChatSessions,
+    onSubmit,
+  });
 
-    if (currentMessageFiles.length > 0) {
-      filterString +=
-        "&files=" + encodeURIComponent(JSON.stringify(currentMessageFiles));
+  // Handle file upload
+  const handleFileUpload = useCallback(
+    async (acceptedFiles: File[]) => {
+      handleMessageSpecificFileUpload(acceptedFiles);
+    },
+    [handleMessageSpecificFileUpload]
+  );
+
+  // Handle submit from ChatInputBar
+  const handleChatInputSubmit = useCallback(
+    (submittedMessage: string) => {
+      if (!submittedMessage.trim()) return;
+      onSubmit({
+        message: submittedMessage,
+        currentMessageFiles: currentMessageFiles,
+        deepResearch: deepResearchEnabled,
+      });
+    },
+    [onSubmit, currentMessageFiles, deepResearchEnabled]
+  );
+
+  // Handle resubmit last message on error
+  const handleResubmitLastMessage = useCallback(() => {
+    const lastUserMsg = messageHistory
+      .slice()
+      .reverse()
+      .find((m) => m.type === "user");
+    if (!lastUserMsg) {
+      setPopup({
+        message: "No previously-submitted user message found.",
+        type: "error",
+      });
+      return;
     }
 
-    const newHref =
-      `${settings?.webDomain}/chat?send-on-load=true&user-prompt=` +
-      encodeURIComponent(userMessage) +
-      filterString;
+    onSubmit({
+      message: lastUserMsg.message,
+      currentMessageFiles: currentMessageFiles,
+      deepResearch: deepResearchEnabled,
+      messageIdToResend: lastUserMsg.messageId,
+    });
+  }, [
+    messageHistory,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+    setPopup,
+  ]);
 
-    if (typeof window !== "undefined" && window.parent) {
-      window.parent.postMessage(
-        { type: CHROME_MESSAGE.LOAD_NEW_PAGE, href: newHref },
-        "*"
-      );
-    } else {
-      window.location.href = newHref;
-    }
+  const handleOpenInOnyx = () => {
+    window.open(`${window.location.origin}/chat`, "_blank");
   };
 
   return (
     <div
-      className="relative w-full h-full flex flex-col min-h-screen bg-cover bg-center bg-no-repeat overflow-hidden transition-[background-image] duration-300 ease-in-out"
-      style={{
-        backgroundImage: `url(${backgroundUrl})`,
-      }}
+      className={cn(
+        "nrf-page",
+        isSidePanel ? "nrf-page--side-panel" : "nrf-page--with-background"
+      )}
+      style={
+        isSidePanel ? undefined : { backgroundImage: `url(${backgroundUrl})` }
+      }
     >
-      <div className="absolute top-0 right-0 p-4 z-10">
-        <button
-          aria-label="Open settings"
-          onClick={toggleSettings}
-          className="bg-white bg-opacity-70 rounded-full p-2.5 cursor-pointer hover:bg-opacity-80 transition-colors duration-200"
-        >
-          <Menu size={12} className="text-text-900" />
-        </button>
-      </div>
+      {popup}
 
-      <Dropzone onDrop={handleImageUpload} noClick>
-        {({ getRootProps }) => (
-          <div
-            {...getRootProps()}
-            className="absolute top-20 left-0 w-full h-full flex flex-col"
+      {/* Side panel header */}
+      {isSidePanel && (
+        <header className="nrf-side-panel-header">
+          <div className="nrf-logo-container">
+            <Logo />
+          </div>
+          <Button
+            tertiary
+            rightIcon={SvgExternalLink}
+            onClick={handleOpenInOnyx}
           >
-            <div className="pointer-events-auto absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center w-[90%] lg:max-w-3xl">
-              <h1
-                className={`pl-2 text-xl text-left w-full mb-4 ${
-                  theme === "light" ? "text-text-800" : "text-white"
-                }`}
+            Open in Onyx
+          </Button>
+        </header>
+      )}
+
+      {/* Settings button */}
+      {!isSidePanel && (
+        <div className="nrf-settings-button-container">
+          <IconButton
+            icon={SvgMenu}
+            onClick={toggleSettings}
+            tertiary
+            tooltip="Open settings"
+            className="nrf-settings-button"
+          />
+        </div>
+      )}
+
+      <Dropzone onDrop={handleFileUpload} noClick>
+        {({ getRootProps }) => (
+          <div {...getRootProps()} className="nrf-dropzone">
+            {/* Chat area with messages - centered container with background */}
+            {hasMessages ? (
+              <div
+                className={cn(
+                  "nrf-chat-area",
+                  isSidePanel && "nrf-chat-area--side-panel"
+                )}
               >
-                {isNight
-                  ? "End your day with Onyx"
-                  : "Start your day with Onyx"}
-              </h1>
+                {/* Centered chat container with semi-transparent background */}
+                <div
+                  className={cn(
+                    "nrf-chat-container",
+                    isSidePanel && "nrf-chat-container--side-panel"
+                  )}
+                >
+                  {/* Scrollable messages area */}
+                  <div className="nrf-messages-scroll">
+                    <div className="nrf-messages-content">
+                      <ChatUI
+                        liveAssistant={resolvedAssistant}
+                        llmManager={llmManager}
+                        currentMessageFiles={currentMessageFiles}
+                        setPresentingDocument={() => {}}
+                        onSubmit={onSubmit}
+                        onMessageSelection={() => {}}
+                        stopGenerating={stopGenerating}
+                        handleResubmitLastMessage={handleResubmitLastMessage}
+                        deepResearchEnabled={deepResearchEnabled}
+                      />
+                    </div>
+                  </div>
 
-              <SimplifiedChatInputBar
-                onSubmit={onSubmit}
-                handleFileUpload={handleImageUpload}
-                message={message}
-                setMessage={setMessage}
-                files={currentMessageFiles}
-                setFiles={setCurrentMessageFiles}
-                filterManager={filterManager}
-                textAreaRef={textAreaRef}
-                existingSources={availableSources}
-                availableDocumentSets={documentSets}
-                availableTags={tags}
-              />
+                  {/* Input area - inside the container */}
+                  <div
+                    ref={inputRef}
+                    className={cn(
+                      "nrf-input-area",
+                      isSidePanel && "nrf-input-area--side-panel"
+                    )}
+                  >
+                    <ChatInputBar
+                      ref={chatInputBarRef}
+                      deepResearchEnabled={deepResearchEnabled}
+                      toggleDeepResearch={toggleDeepResearch}
+                      toggleDocumentSidebar={() => {}}
+                      filterManager={filterManager}
+                      llmManager={llmManager}
+                      removeDocs={() => {}}
+                      retrievalEnabled={false}
+                      selectedDocuments={[]}
+                      initialMessage={message}
+                      stopGenerating={stopGenerating}
+                      onSubmit={handleChatInputSubmit}
+                      chatState={currentChatState}
+                      currentSessionFileTokenCount={
+                        currentSessionFileTokenCount
+                      }
+                      availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
+                      selectedAssistant={resolvedAssistant}
+                      handleFileUpload={handleFileUpload}
+                      disabled={
+                        !llmManager.isLoadingProviders &&
+                        !llmManager.hasAnyProvider
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Welcome/Input area - centered when no messages */
+              <div
+                ref={inputRef}
+                className={cn(
+                  "nrf-welcome",
+                  isSidePanel && "nrf-welcome--side-panel"
+                )}
+              >
+                <Text
+                  headingH3
+                  className={cn(
+                    "nrf-welcome-heading",
+                    isSidePanel || theme === "light"
+                      ? "text-text-04"
+                      : "text-text-light-05"
+                  )}
+                >
+                  {isNight
+                    ? "End your day with Onyx"
+                    : "Start your day with Onyx"}
+                </Text>
 
-              <ShortcutsDisplay
-                shortCuts={shortCuts}
-                showShortcuts={showShortcuts}
-                setEditingShortcut={setEditingShortcut}
-                setShowShortCutModal={setShowShortCutModal}
-                openShortCutModal={() => {
-                  if (shortCuts.length >= 6) {
-                    setShowMaxShortcutsModal(true);
-                  } else {
-                    setEditingShortcut(null);
-                    setShowShortCutModal(true);
+                <ChatInputBar
+                  ref={chatInputBarRef}
+                  deepResearchEnabled={deepResearchEnabled}
+                  toggleDeepResearch={toggleDeepResearch}
+                  toggleDocumentSidebar={() => {}}
+                  filterManager={filterManager}
+                  llmManager={llmManager}
+                  removeDocs={() => {}}
+                  retrievalEnabled={false}
+                  selectedDocuments={[]}
+                  initialMessage={message}
+                  stopGenerating={stopGenerating}
+                  onSubmit={handleChatInputSubmit}
+                  chatState={currentChatState}
+                  currentSessionFileTokenCount={currentSessionFileTokenCount}
+                  availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
+                  selectedAssistant={liveAssistant ?? undefined}
+                  handleFileUpload={handleFileUpload}
+                  disabled={
+                    !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                   }
-                }}
-              />
-            </div>
+                />
+              </div>
+            )}
           </div>
         )}
       </Dropzone>
-      {showMaxShortcutsModal && (
-        <MaxShortcutsReachedModal
-          onClose={() => setShowMaxShortcutsModal(false)}
-        />
-      )}
-      {showShortCutModal && (
-        <NewShortCutModal
-          setPopup={setPopup}
-          onDelete={(shortcut: Shortcut) => {
-            setShortCuts(
-              shortCuts.filter((s: Shortcut) => s.name !== shortcut.name)
-            );
-            setShowShortCutModal(false);
-          }}
-          isOpen={showShortCutModal}
-          onClose={() => {
-            setEditingShortcut(null);
-            setShowShortCutModal(false);
-          }}
-          onAdd={(shortCut: Shortcut) => {
-            if (editingShortcut) {
-              setShortCuts(
-                shortCuts
-                  .filter((s) => s.name !== editingShortcut.name)
-                  .concat(shortCut)
-              );
-            } else {
-              setShortCuts([...shortCuts, shortCut]);
-            }
-            setShowShortCutModal(false);
-          }}
-          editingShortcut={editingShortcut}
-        />
-      )}
-      <SettingsPanel
-        settingsOpen={settingsOpen}
-        toggleSettings={toggleSettings}
-        handleUseOnyxToggle={handleUseOnyxToggle}
-      />
 
-      <Dialog open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
-        <DialogContent className="w-fit max-w-[95%]">
-          <DialogHeader>
-            <DialogTitle>Turn off Onyx new tab page?</DialogTitle>
-            <DialogDescription>
-              You&apos;ll see your browser&apos;s default new tab page instead.
-              <br />
-              You can turn it back on anytime in your Onyx settings.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2 justify-center">
-            <Button secondary onClick={() => setShowTurnOffModal(false)}>
-              Cancel
-            </Button>
-            <Button danger onClick={confirmTurnOff}>
-              Turn off
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {!user &&
-      authTypeMetadata.authType !== AuthType.DISABLED &&
-      showLoginModal ? (
-        <Modal open onOpenChange={() => setShowLoginModal(false)}>
+      {/* Modals - only show when not in side panel mode */}
+      {!isSidePanel && (
+        <>
+          <SettingsPanel
+            settingsOpen={settingsOpen}
+            toggleSettings={toggleSettings}
+            handleUseOnyxToggle={handleUseOnyxToggle}
+          />
+
+          <Modal open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
+            <Modal.Content mini>
+              <Modal.Header
+                icon={SvgAlertTriangle}
+                title="Turn off Onyx new tab page?"
+                description="You'll see your browser's default new tab page instead. You can turn it back on anytime in your Onyx settings."
+                onClose={() => setShowTurnOffModal(false)}
+              />
+              <Modal.Footer>
+                <Button secondary onClick={() => setShowTurnOffModal(false)}>
+                  Cancel
+                </Button>
+                <Button danger onClick={confirmTurnOff}>
+                  Turn off
+                </Button>
+              </Modal.Footer>
+            </Modal.Content>
+          </Modal>
+        </>
+      )}
+
+      {!user && authTypeMetadata.authType !== AuthType.DISABLED && (
+        <Modal open onOpenChange={() => {}}>
           <Modal.Content small>
-            <Modal.Header
-              icon={SvgUser}
-              title="Welcome to Onyx"
-              onClose={() => setShowLoginModal(false)}
-            />
+            <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
               {authTypeMetadata.authType === AuthType.BASIC ? (
                 <LoginPage
@@ -353,10 +512,18 @@ export default function NRFPage({
             </Modal.Body>
           </Modal.Content>
         </Modal>
-      ) : (
-        (!llmProviders || llmProviders.length === 0) && (
-          <ApiKeyModal setPopup={setPopup} />
-        )
+      )}
+
+      {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
+        <Button
+          className="w-full"
+          secondary
+          onClick={() => {
+            window.location.href = "/admin/configuration/llm";
+          }}
+        >
+          Set up an LLM.
+        </Button>
       )}
     </div>
   );

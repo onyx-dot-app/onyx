@@ -8,12 +8,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { useAppRouter } from "@/hooks/appNavigation";
 import {
   Project,
@@ -26,7 +21,6 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { PopoverAnchor } from "@radix-ui/react-popover";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
@@ -51,8 +45,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
-
-// (no local constants; use shared constants/imports)
+import { useAgents, usePinnedAgents } from "@/hooks/useAgents";
 
 export interface PopoverSearchInputProps {
   setShowMoveOptions: (show: boolean) => void;
@@ -103,7 +96,7 @@ export function PopoverSearchInput({
   );
 }
 
-interface ChatButtonProps {
+export interface ChatButtonProps {
   chatSession: ChatSession;
   project?: Project;
   draggable?: boolean;
@@ -139,6 +132,8 @@ const ChatButton = memo(
       createProject,
     } = useProjectsContext();
     const { popup, setPopup } = usePopup();
+    const { agents } = useAgents();
+    const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
@@ -269,7 +264,7 @@ const ChatButton = memo(
                     handleCreateProjectAndMove(searchTerm.trim())
                   )}
                 >
-                  <Text text03 mainUiMuted className="-mr-1">
+                  <Text as="p" text03 mainUiMuted className="-mr-1">
                     Create
                   </Text>
                   <Truncated text03 mainUiAction>
@@ -293,6 +288,17 @@ const ChatButton = memo(
       searchTerm,
       createProject,
     ]);
+
+    // Pin the chat's agent when clicking on the conversation
+    async function handleClick() {
+      const agent = agents.find((a) => a.id === chatSession.persona_id);
+      if (agent) {
+        const isAlreadyPinned = pinnedAgents.some((a) => a.id === agent.id);
+        if (!isAlreadyPinned) {
+          await togglePinnedAgent(agent, true);
+        }
+      }
+    }
 
     async function handleRename(newName: string) {
       setDisplayName(newName);
@@ -405,7 +411,7 @@ const ChatButton = memo(
 
     const rightMenu = (
       <>
-        <PopoverTrigger asChild onClick={noProp()}>
+        <Popover.Trigger asChild onClick={noProp()}>
           <div>
             <IconButton
               icon={SvgMoreHorizontal}
@@ -417,10 +423,10 @@ const ChatButton = memo(
               internal
             />
           </div>
-        </PopoverTrigger>
-        <PopoverContent side="right" align="start">
+        </Popover.Trigger>
+        <Popover.Content side="right" align="start" md>
           <PopoverMenu>{popoverItems}</PopoverMenu>
-        </PopoverContent>
+        </Popover.Content>
       </>
     );
 
@@ -434,10 +440,11 @@ const ChatButton = memo(
           }
         }}
       >
-        <PopoverAnchor>
+        <Popover.Anchor>
           <SidebarTab
             href={`/chat?chatId=${chatSession.id}`}
-            active={active}
+            onClick={handleClick}
+            transient={active}
             rightChildren={rightMenu}
             focused={renaming}
           >
@@ -451,7 +458,7 @@ const ChatButton = memo(
               displayName
             )}
           </SidebarTab>
-        </PopoverAnchor>
+        </Popover.Anchor>
       </Popover>
     );
 

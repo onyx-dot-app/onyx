@@ -1,31 +1,36 @@
 import concurrent.futures
 import logging
+import random
 from uuid import UUID
 
 import httpx
 from pydantic import BaseModel
 from retry import retry
 
-from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
 from onyx.configs.app_configs import RERANK_COUNT
 from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.configs.chat_configs import HYBRID_ALPHA
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
-from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.db.enums import EmbeddingPrecision
+from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
+from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
+from onyx.document_index.vespa.chunk_retrieval import (
+    parallel_visit_api_retrieval,
+)
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
@@ -54,25 +59,11 @@ from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
 
 
-logger = setup_logger()
+logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
 # default it emits INFO-level logs for every request.
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
-
-
-class TenantState(BaseModel):
-    """
-    Captures the tenant-related state for an instance of VespaDocumentIndex.
-
-    TODO(andrei): If we find that we need this for Opensearch too, just move
-    this to interfaces_new.py.
-    """
-
-    model_config = {"frozen": True}
-
-    tenant_id: str
-    multitenant: bool
 
 
 def _enrich_basic_chunk_info(
@@ -124,6 +115,10 @@ def _enrich_basic_chunk_info(
             http_client=http_client,
         )
 
+    assert (
+        last_indexed_chunk is not None and last_indexed_chunk >= 0
+    ), f"Bug: Last indexed chunk index is None or less than 0 for document: {document_id}."
+
     enriched_doc_info = EnrichedDocumentIndexingInfo(
         doc_id=document_id,
         chunk_start_index=new_chunk_count,
@@ -131,79 +126,6 @@ def _enrich_basic_chunk_info(
         old_version=is_old_version,
     )
     return enriched_doc_info
-
-
-def _cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk]:
-    """Removes indexing-time content additions from chunks retrieved from Vespa.
-
-    During indexing, chunks are augmented with additional text to improve search
-    quality:
-    - Title prepended to content (for better keyword/semantic matching)
-    - Metadata suffix appended to content
-    - Contextual RAG: doc_summary (beginning) and chunk_context (end)
-
-    This function strips these additions before returning chunks to users,
-    restoring the original document content. Cleaning is applied in sequence:
-    1. Title removal:
-        - Full match: Strips exact title from beginning
-        - Partial match: If content starts with title[:BLURB_SIZE], splits on
-          RETURN_SEPARATOR to remove title section
-    2. Metadata suffix removal:
-        - Strips metadata_suffix from end, plus trailing RETURN_SEPARATOR
-    3. Contextual RAG removal:
-        - Strips doc_summary from beginning (if present)
-        - Strips chunk_context from end (if present)
-
-    Args:
-        chunks: Chunks as retrieved from Vespa with indexing augmentations
-            intact.
-
-    Returns:
-        Clean InferenceChunk objects with augmentations removed, containing only
-            the original document content that should be shown to users.
-    """
-
-    def _remove_title(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.title or not chunk.content:
-            return chunk.content
-
-        if chunk.content.startswith(chunk.title):
-            return chunk.content[len(chunk.title) :].lstrip()
-
-        # BLURB SIZE is by token instead of char but each token is at least 1 char
-        # If this prefix matches the content, it's assumed the title was prepended
-        if chunk.content.startswith(chunk.title[:BLURB_SIZE]):
-            return (
-                chunk.content.split(RETURN_SEPARATOR, 1)[-1]
-                if RETURN_SEPARATOR in chunk.content
-                else chunk.content
-            )
-        return chunk.content
-
-    def _remove_metadata_suffix(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.metadata_suffix:
-            return chunk.content
-        return chunk.content.removesuffix(chunk.metadata_suffix).rstrip(
-            RETURN_SEPARATOR
-        )
-
-    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
-        # remove document summary
-        if chunk.doc_summary and chunk.content.startswith(chunk.doc_summary):
-            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
-        # remove chunk context
-        if chunk.chunk_context and chunk.content.endswith(chunk.chunk_context):
-            chunk.content = chunk.content[
-                : len(chunk.content) - len(chunk.chunk_context)
-            ].rstrip()
-        return chunk.content
-
-    for chunk in chunks:
-        chunk.content = _remove_title(chunk)
-        chunk.content = _remove_metadata_suffix(chunk)
-        chunk.content = _remove_contextual_rag(chunk)
-
-    return [chunk.to_inference_chunk() for chunk in chunks]
 
 
 @retry(
@@ -226,7 +148,8 @@ def _update_single_chunk(
     Args:
         doc_chunk_id: The ID of the chunk to update.
         index_name: The index the chunk belongs to.
-        doc_id: The ID of the document the chunk belongs to.
+        doc_id: The ID of the document the chunk belongs to. Used only for
+            logging.
         http_client: The HTTP client to use to make the request.
         update_request: Metadata update request object received in the bulk
             update method containing fields to update.
@@ -371,10 +294,6 @@ class VespaDocumentIndex(DocumentIndex):
                 get_vespa_http_client
             )
         self._multitenant = tenant_state.multitenant
-        if self._multitenant:
-            assert (
-                self._tenant_id
-            ), "Bug: Must supply a tenant id if in multitenant mode."
 
     def verify_and_create_index_if_necessary(
         self, embedding_dim: int, embedding_precision: EmbeddingPrecision
@@ -439,6 +358,7 @@ class VespaDocumentIndex(DocumentIndex):
                     new_chunk_count=doc_id_to_new_chunk_cnt[doc_id],
                 )
                 for doc_id in doc_id_to_chunk_cnt_diff.keys()
+                # TODO(andrei), WARNING: Don't we need to sanitize these doc IDs?
             ]
 
             for enriched_doc_info in enriched_doc_infos:
@@ -460,7 +380,7 @@ class VespaDocumentIndex(DocumentIndex):
             # the source of truth.
             chunks_to_delete = get_document_chunk_ids(
                 enriched_document_info_list=enriched_doc_infos,
-                tenant_id=self._tenant_id,  # TODO: Figure out this typing bro wtf.
+                tenant_id=self._tenant_id,
                 large_chunks_enabled=self._large_chunks_enabled,
             )
 
@@ -495,22 +415,65 @@ class VespaDocumentIndex(DocumentIndex):
             for cleaned_doc_id in all_cleaned_doc_ids
         ]
 
-    def delete(self, db_doc_id: str, chunk_count: int | None) -> int:
-        raise NotImplementedError
+    def delete(self, document_id: str, chunk_count: int | None = None) -> int:
+        total_chunks_deleted = 0
 
-    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
+        sanitized_doc_id = replace_invalid_doc_id_characters(document_id)
+
+        with (
+            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
+            self._httpx_client_context as http_client,
+        ):
+            enriched_doc_info = _enrich_basic_chunk_info(
+                index_name=self._index_name,
+                http_client=http_client,
+                document_id=sanitized_doc_id,
+                previous_chunk_count=chunk_count,
+                new_chunk_count=0,
+            )
+            chunks_to_delete = get_document_chunk_ids(
+                enriched_document_info_list=[enriched_doc_info],
+                tenant_id=self._tenant_id,
+                large_chunks_enabled=self._large_chunks_enabled,
+            )
+
+            for doc_chunk_ids_batch in batch_generator(chunks_to_delete, BATCH_SIZE):
+                total_chunks_deleted += len(doc_chunk_ids_batch)
+                delete_vespa_chunks(
+                    doc_chunk_ids=doc_chunk_ids_batch,
+                    index_name=self._index_name,
+                    http_client=http_client,
+                    executor=executor,
+                )
+
+        return total_chunks_deleted
+
+    def update(
+        self,
+        update_requests: list[MetadataUpdateRequest],
+    ) -> None:
+        # WARNING: This method can be called by vespa_metadata_sync_task, which
+        # is kicked off by check_for_vespa_sync_task, notably before a document
+        # has finished indexing. In this way, chunk_count below could be unknown
+        # even for chunks not on the "old" chunk ID system; i.e. there could be
+        # a race condition. Passing in None to _enrich_basic_chunk_info should
+        # handle this, but a higher level TODO might be to not run update at all
+        # on connectors that are still indexing, and therefore do not yet have a
+        # chunk count because update_docs_chunk_count__no_commit has not been
+        # run yet.
         with self._httpx_client_context as httpx_client:
             # Each invocation of this method can contain multiple update requests.
             for update_request in update_requests:
                 # Each update request can correspond to multiple documents.
                 for doc_id in update_request.document_ids:
+                    # NOTE: -1 represents an unknown chunk count.
                     chunk_count = update_request.doc_id_to_chunk_cnt[doc_id]
                     sanitized_doc_id = replace_invalid_doc_id_characters(doc_id)
                     enriched_doc_info = _enrich_basic_chunk_info(
                         index_name=self._index_name,
                         http_client=httpx_client,
                         document_id=sanitized_doc_id,
-                        previous_chunk_count=chunk_count,
+                        previous_chunk_count=chunk_count if chunk_count >= 0 else None,
                         new_chunk_count=0,  # WARNING: This semantically makes no sense and is misusing this function.
                     )
 
@@ -524,15 +487,54 @@ class VespaDocumentIndex(DocumentIndex):
                         _update_single_chunk(
                             doc_chunk_id,
                             self._index_name,
+                            # NOTE: Used only for logging, raw ID is ok here.
                             doc_id,
                             httpx_client,
                             update_request,
                         )
 
+                    logger.info(
+                        f"Updated {len(doc_chunk_ids)} chunks for document {doc_id}."
+                    )
+
     def id_based_retrieval(
-        self, chunk_requests: list[DocumentSectionRequest]
+        self,
+        chunk_requests: list[DocumentSectionRequest],
+        filters: IndexFilters,
+        batch_retrieval: bool = False,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError
+        sanitized_chunk_requests = [
+            VespaChunkRequest(
+                document_id=replace_invalid_doc_id_characters(
+                    chunk_request.document_id
+                ),
+                min_chunk_ind=chunk_request.min_chunk_ind,
+                max_chunk_ind=chunk_request.max_chunk_ind,
+            )
+            for chunk_request in chunk_requests
+        ]
+
+        if batch_retrieval:
+            return cleanup_content_for_chunks(
+                batch_search_api_retrieval(
+                    index_name=self._index_name,
+                    chunk_requests=sanitized_chunk_requests,
+                    filters=filters,
+                    # No one was passing in this parameter in the legacy
+                    # interface, it always defaulted to False.
+                    get_large_chunks=False,
+                )
+            )
+        return cleanup_content_for_chunks(
+            parallel_visit_api_retrieval(
+                index_name=self._index_name,
+                chunk_requests=sanitized_chunk_requests,
+                filters=filters,
+                # No one was passing in this parameter in the legacy interface,
+                # it always defaulted to False.
+                get_large_chunks=False,
+            )
+        )
 
     def hybrid_retrieval(
         self,
@@ -593,12 +595,26 @@ class VespaDocumentIndex(DocumentIndex):
             "timeout": VESPA_TIMEOUT,
         }
 
-        return _cleanup_chunks(query_vespa(params))
+        return cleanup_content_for_chunks(query_vespa(params))
 
     def random_retrieval(
         self,
-        filters: IndexFilters | None = None,
+        filters: IndexFilters,
         num_to_retrieve: int = 100,
         dirty: bool | None = None,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError
+        vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
+
+        yql = YQL_BASE.format(index_name=self._index_name) + vespa_where_clauses
+
+        random_seed = random.randint(0, 1_000_000)
+
+        params: dict[str, str | int | float] = {
+            "yql": yql,
+            "hits": num_to_retrieve,
+            "timeout": VESPA_TIMEOUT,
+            "ranking.profile": "random_",
+            "ranking.properties.random.seed": random_seed,
+        }
+
+        return cleanup_content_for_chunks(query_vespa(params))

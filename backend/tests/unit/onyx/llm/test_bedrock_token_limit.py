@@ -60,12 +60,6 @@ class TestGetBedrockTokenLimit:
             )
             assert result == 200000
 
-    def test_hardcoded_mapping_claude_3(self) -> None:
-        """Test hardcoded mapping for Claude 3 models."""
-        with patch("onyx.llm.utils.get_model_map", return_value={}):
-            result = get_bedrock_token_limit("anthropic.claude-3-opus-20240229-v1:0")
-            assert result == 200000
-
     def test_hardcoded_mapping_llama3_3(self) -> None:
         """Test hardcoded mapping for Llama 3.3 models (128K context)."""
         with patch("onyx.llm.utils.get_model_map", return_value={}):

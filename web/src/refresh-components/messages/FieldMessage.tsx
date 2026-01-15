@@ -61,7 +61,13 @@ const FieldMessageContent: React.FC<FieldMessageContentProps> = ({
   ...props
 }) => {
   return (
-    <Text text03 secondaryBody className={cn("ml-0.5", className)} {...props}>
+    <Text
+      as="p"
+      text03
+      secondaryBody
+      className={cn("ml-0.5", className)}
+      {...props}
+    >
       {children}
     </Text>
   );

@@ -1,53 +1,69 @@
+"use client";
+
 import Switch from "@/refresh-components/inputs/Switch";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { useNRFPreferences } from "../../../components/context/NRFPreferencesContext";
+import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import {
   darkExtensionImages,
   lightExtensionImages,
 } from "@/lib/extension/constants";
+import Text from "@/refresh-components/texts/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
+import { cn } from "@/lib/utils";
+import { ThemePreference } from "@/lib/types";
 
-const SidebarSwitch = ({
-  checked,
-  onCheckedChange,
-  label,
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+interface SettingRowProps {
   label: string;
-}) => (
-  <div className="flex justify-between items-center py-2">
-    <span className="text-sm text-text-300">{label}</span>
-    <Switch checked={checked} onCheckedChange={onCheckedChange} />
+  description?: string;
+  children: React.ReactNode;
+}
+
+const SettingRow = ({ label, description, children }: SettingRowProps) => (
+  <div className="nrf-settings-row">
+    <div className="nrf-settings-row-label">
+      <Text mainUiBody text04>
+        {label}
+      </Text>
+      {description && (
+        <Text secondaryBody text03>
+          {description}
+        </Text>
+      )}
+    </div>
+    {children}
   </div>
 );
 
-const RadioOption = ({
-  value,
-  label,
-  description,
-  groupValue,
-  onChange,
-}: {
-  value: string;
-  label: string;
-  description: string;
-  groupValue: string;
-  onChange: (value: string) => void;
-}) => (
-  <div className="flex items-start space-x-2 mb-2">
-    <RadioGroupItem
-      value={value}
-      id={value}
-      className="mt-1 border border-background-600 data-[state=checked]:border-white data-[state=checked]:bg-white"
+interface BackgroundThumbnailProps {
+  url: string;
+  isSelected: boolean;
+  onClick: () => void;
+}
+
+const BackgroundThumbnail = ({
+  url,
+  isSelected,
+  onClick,
+}: BackgroundThumbnailProps) => (
+  <button onClick={onClick} className="nrf-background-thumbnail group">
+    <div
+      className="nrf-background-thumbnail-image"
+      style={{ backgroundImage: `url(${url})` }}
     />
-    <Label htmlFor={value} className="flex flex-col">
-      <span className="text-sm text-text-300">{label}</span>
-      {description && (
-        <span className="text-xs text-text-500">{description}</span>
+    <div
+      className={cn(
+        "nrf-background-thumbnail-ring",
+        isSelected
+          ? "nrf-background-thumbnail-ring--selected"
+          : "nrf-background-thumbnail-ring--unselected"
       )}
-    </Label>
-  </div>
+    />
+    {isSelected && (
+      <div className="nrf-background-thumbnail-check">
+        <SvgCheck className="w-3 h-3 stroke-text-inverted-05" />
+      </div>
+    )}
+  </button>
 );
 
 export const SettingsPanel = ({
@@ -67,107 +83,124 @@ export const SettingsPanel = ({
     defaultDarkBackgroundUrl,
     setDefaultDarkBackgroundUrl,
     useOnyxAsNewTab,
-    showShortcuts,
-    setShowShortcuts,
   } = useNRFPreferences();
 
-  const toggleTheme = (newTheme: string) => {
+  const toggleTheme = (newTheme: ThemePreference) => {
     setTheme(newTheme);
   };
 
   const updateBackgroundUrl = (url: string) => {
-    if (theme === "light") {
+    if (theme === ThemePreference.LIGHT) {
       setDefaultLightBackgroundUrl(url);
     } else {
       setDefaultDarkBackgroundUrl(url);
     }
   };
 
+  const currentBackgroundUrl =
+    theme === ThemePreference.LIGHT
+      ? defaultLightBackgroundUrl
+      : defaultDarkBackgroundUrl;
+  const backgroundImages =
+    theme === ThemePreference.LIGHT
+      ? lightExtensionImages
+      : darkExtensionImages;
+
   return (
-    <div
-      className="fixed top-0 right-0 w-[360px] h-full bg-background-800 text-text-300 overflow-y-auto z-20 transition-transform duration-300 ease-in-out transform"
-      style={{
-        transform: settingsOpen ? "translateX(0)" : "translateX(100%)",
-        boxShadow: "-2px 0 10px rgba(0,0,0,0.3)",
-      }}
-    >
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-white">
-            Home page settings
-          </h2>
-          <button
-            aria-label="Close"
-            onClick={toggleSettings}
-            className="text-text-400 hover:text-white"
-          >
-            ✕
-          </button>
+    <>
+      {/* Backdrop overlay */}
+      <div
+        className={cn(
+          "nrf-settings-overlay",
+          settingsOpen
+            ? "nrf-settings-overlay--open"
+            : "nrf-settings-overlay--closed"
+        )}
+        onClick={toggleSettings}
+      />
+
+      {/* Settings panel */}
+      <div
+        className={cn(
+          "nrf-settings-panel",
+          settingsOpen
+            ? "nrf-settings-panel--open"
+            : "nrf-settings-panel--closed"
+        )}
+      >
+        {/* Header */}
+        <div className="nrf-settings-header">
+          <div className="nrf-settings-header-content">
+            <div className="nrf-settings-title-group">
+              <div className="nrf-settings-icon-container">
+                <SvgSettings className="w-5 h-5 stroke-text-03" />
+              </div>
+              <Text headingH3 text04>
+                Settings
+              </Text>
+            </div>
+            <div className="nrf-settings-actions">
+              {/* Theme Toggle */}
+              <IconButton
+                icon={theme === ThemePreference.LIGHT ? SvgSun : SvgMoon}
+                onClick={() =>
+                  toggleTheme(
+                    theme === ThemePreference.LIGHT
+                      ? ThemePreference.DARK
+                      : ThemePreference.LIGHT
+                  )
+                }
+                tertiary
+                tooltip={`Switch to ${
+                  theme === ThemePreference.LIGHT
+                    ? ThemePreference.DARK
+                    : ThemePreference.LIGHT
+                } theme`}
+              />
+              <IconButton
+                icon={SvgX}
+                onClick={toggleSettings}
+                tertiary
+                tooltip="Close settings"
+              />
+            </div>
+          </div>
         </div>
 
-        <h3 className="text-sm font-semibold mb-2">General</h3>
-        <SidebarSwitch
-          checked={useOnyxAsNewTab}
-          onCheckedChange={handleUseOnyxToggle}
-          label="Use Onyx as new tab page"
-        />
-
-        <SidebarSwitch
-          checked={showShortcuts}
-          onCheckedChange={setShowShortcuts}
-          label="Show bookmarks"
-        />
-
-        <h3 className="text-sm font-semibold mt-6 mb-2">Theme</h3>
-        <RadioGroup
-          value={theme}
-          onValueChange={toggleTheme}
-          className="space-y-2"
-        >
-          <RadioOption
-            value="light"
-            label="Light theme"
-            description="Light theme"
-            groupValue={theme}
-            onChange={toggleTheme}
-          />
-          <RadioOption
-            value="dark"
-            label="Dark theme"
-            description="Dark theme"
-            groupValue={theme}
-            onChange={toggleTheme}
-          />
-        </RadioGroup>
-
-        <h3 className="text-sm font-semibold mt-6 mb-2">Background</h3>
-        <div className="grid grid-cols-4 gap-2">
-          {(theme === "dark" ? darkExtensionImages : lightExtensionImages).map(
-            (bg: string, index: number) => (
-              <div
-                key={bg}
-                onClick={() => updateBackgroundUrl(bg)}
-                className={`relative ${
-                  index === 0 ? "col-span-2 row-span-2" : ""
-                } cursor-pointer rounded-sm overflow-hidden`}
-                style={{
-                  paddingBottom: index === 0 ? "100%" : "50%",
-                }}
-              >
-                <div
-                  className="absolute inset-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url(${bg})` }}
+        <div className="nrf-settings-content">
+          {/* General Section */}
+          <section className="nrf-settings-section">
+            <Text secondaryAction text03 className="nrf-settings-section-title">
+              General
+            </Text>
+            <div className="nrf-settings-section-content">
+              <SettingRow label="Use Onyx as new tab page">
+                <Switch
+                  checked={useOnyxAsNewTab}
+                  onCheckedChange={handleUseOnyxToggle}
                 />
-                {(theme === "light"
-                  ? defaultLightBackgroundUrl
-                  : defaultDarkBackgroundUrl) === bg && (
-                  <div className="absolute inset-0 border-2 border-blue-400 rounded" />
-                )}
-              </div>
-            )
-          )}
+              </SettingRow>
+            </div>
+          </section>
+
+          {/* Background Section */}
+          <section className="nrf-settings-section">
+            <Text secondaryAction text03 className="nrf-settings-section-title">
+              Background
+            </Text>
+            <div className="nrf-background-grid">
+              {backgroundImages.map((bg: string) => (
+                <BackgroundThumbnail
+                  key={bg}
+                  url={bg}
+                  isSelected={currentBackgroundUrl === bg}
+                  onClick={() => updateBackgroundUrl(bg)}
+                />
+              ))}
+            </div>
+          </section>
         </div>
       </div>
-    </div>
+    </>
   );
 };

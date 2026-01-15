@@ -27,17 +27,17 @@ export default function ModelSelectionConfirmationModal({
           onClose={onCancel}
         />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             You have selected: <strong>{selectedModel.model_name}</strong>. Are
             you sure you want to update to this new embedding model?
           </Text>
-          <Text>
+          <Text as="p">
             We will re-index all your documents in the background so you will be
             able to continue to use Onyx as normal with the old model in the
             meantime. Depending on how many documents you have indexed, this may
             take a while.
           </Text>
-          <Text>
+          <Text as="p">
             <i>NOTE:</i> this re-indexing process will consume more resources
             than normal. If you are self-hosting, we recommend that you allocate
             at least 16GB of RAM to Onyx during this process.
@@ -55,7 +55,7 @@ export default function ModelSelectionConfirmationModal({
             </Callout>
           )}
         </Modal.Body>
-        <Modal.Footer className="p-4 gap-2 justify-end">
+        <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
           <Button secondary onClick={onCancel}>
             Cancel

@@ -87,15 +87,14 @@ export default function UserGroupCreationForm({
                   label="Name:"
                   placeholder="A name for the User Group"
                   disabled={isUpdate}
-                  autoCompleteDisabled={true}
                 />
 
                 <Separator />
 
-                <Text className="font-medium">
+                <Text as="p" className="font-medium">
                   Select which private connectors this group has access to:
                 </Text>
-                <Text text02>
+                <Text as="p" text02>
                   All documents indexed by the selected connectors will be
                   visible to users in this group.
                 </Text>
@@ -110,10 +109,10 @@ export default function UserGroupCreationForm({
 
                 <Separator />
 
-                <Text className="font-medium">
+                <Text as="p" className="font-medium">
                   Select which Users should be a part of this Group.
                 </Text>
-                <Text text02>
+                <Text as="p" text02>
                   All selected users will be able to search through all
                   documents indexed by the selected connectors.
                 </Text>

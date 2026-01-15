@@ -44,6 +44,7 @@ import {
   AirtableIcon,
   GitbookIcon,
   HighspotIcon,
+  DrupalWikiIcon,
   EmailIcon,
   TestRailIcon,
 } from "@/components/icons/icons";
@@ -79,10 +80,10 @@ const slackMetadata = {
   isPopular: true,
   docs: `${DOCS_ADMINS_PATH}/connectors/official/slack`,
   oauthSupported: true,
+  // Federated Slack is available as an option but not the default
   federated: true,
   federatedTooltip:
-    "⚠️ WARNING: Due to Slack's rate limit and ToS changes, Slack is now federated. " +
-    "This will result in significantly greater latency and lower search quality.",
+    "⚠️ WARNING: Federated Slack results in significantly greater latency and lower search quality.",
   baseSourceType: "slack",
 };
 
@@ -299,6 +300,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Gmail",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`,
+  },
+  drupal_wiki: {
+    icon: DrupalWikiIcon,
+    displayName: "Drupal Wiki",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/drupal_wiki`,
   },
   imap: {
     icon: EmailIcon,

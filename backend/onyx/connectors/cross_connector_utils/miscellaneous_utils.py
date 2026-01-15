@@ -71,6 +71,13 @@ def time_str_to_utc(datetime_str: str) -> datetime:
     raise ValueError(f"Unable to parse datetime string: {datetime_str}")
 
 
+# TODO: use this function in other connectors
+def datetime_from_utc_timestamp(timestamp: int) -> datetime:
+    """Convert a Unix timestamp to a datetime object in UTC"""
+
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
+
 def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
     if info.first_name and info.last_name:
         return f"{info.first_name} {info.middle_initial} {info.last_name}"
@@ -90,10 +97,17 @@ def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
 def get_experts_stores_representations(
     experts: list[BasicExpertInfo] | None,
 ) -> list[str] | None:
+    """Gets string representations of experts supplied.
+
+    If an expert cannot be represented as a string, it is omitted from the
+    result.
+    """
     if not experts:
         return None
 
-    reps = [basic_expert_info_representation(owner) for owner in experts]
+    reps: list[str | None] = [
+        basic_expert_info_representation(owner) for owner in experts
+    ]
     return [owner for owner in reps if owner is not None]
 
 

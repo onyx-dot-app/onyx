@@ -130,7 +130,7 @@ export const FederatedConnectorSelector = ({
     <div className="flex flex-col w-full space-y-2 mb-4">
       {label && <Label className="text-base font-medium">{label}</Label>}
 
-      <Text mainUiMuted text03>
+      <Text as="p" mainUiMuted text03>
         Documents from selected federated connectors will be searched in
         real-time during queries.
       </Text>

@@ -20,7 +20,7 @@ def project_key() -> str:
 
 @pytest.fixture
 def user_email() -> str:
-    return "test@test.com"
+    return "test@example.com"
 
 
 @pytest.fixture

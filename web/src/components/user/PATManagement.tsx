@@ -155,7 +155,9 @@ export default function PATManagement() {
       <div className="space-y-6">
         {/* Create New Token Form */}
         <div className="space-y-4">
-          <Text headingH3Muted>Create New Token</Text>
+          <Text as="p" headingH3Muted>
+            Create New Token
+          </Text>
           <div className="space-y-3">
             <InputTypeIn
               placeholder="Token name (e.g., 'MCP Client')"
@@ -185,7 +187,7 @@ export default function PATManagement() {
                 </InputSelect.Content>
               </InputSelect>
 
-              <Text text02 secondaryBody>
+              <Text as="p" text02 secondaryBody>
                 Expires at end of day (23:59 UTC).
               </Text>
             </div>
@@ -201,10 +203,12 @@ export default function PATManagement() {
 
         {/* Token List */}
         <div className="space-y-4">
-          <Text headingH3Muted>Your Tokens</Text>
+          <Text as="p" headingH3Muted>
+            Your Tokens
+          </Text>
           {pats.length === 0 ? (
             <div className="text-center py-8 px-4 border-2 border-dashed border-border-01 rounded-lg">
-              <Text text03 secondaryBody>
+              <Text as="p" text03 secondaryBody>
                 {isLoading
                   ? "Loading tokens..."
                   : "No tokens created yet. Create your first token above."}
@@ -226,12 +230,12 @@ export default function PATManagement() {
                     }`}
                   >
                     <div className="flex-1 min-w-0">
-                      <Text text05 mainUiAction className="truncate">
+                      <Text as="p" text05 mainUiAction className="truncate">
                         {pat.name}
                       </Text>
                       {isNewlyCreated ? (
                         <>
-                          <Text text05 secondaryBody className="mb-2">
+                          <Text as="p" text05 secondaryBody className="mb-2">
                             Copy this token now. You won&apos;t be able to see
                             it again.
                           </Text>
@@ -250,11 +254,11 @@ export default function PATManagement() {
                           </Button>
                         </>
                       ) : (
-                        <Text text03 secondaryMono>
+                        <Text as="p" text03 secondaryMono>
                           {pat.token_display}
                         </Text>
                       )}
-                      <Text text03 secondaryBody className="mt-1">
+                      <Text as="p" text03 secondaryBody className="mt-1">
                         <span
                           title={humanReadableFormatWithTime(pat.created_at)}
                         >

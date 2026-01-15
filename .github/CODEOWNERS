@@ -1,3 +1,10 @@
 * @onyx-dot-app/onyx-core-team
 # Helm charts Owners
 /helm/ @justin-tahara
+
+# Web standards updates
+/web/STANDARDS.md @raunakab @Weves
+
+# Agent context files
+/CLAUDE.md.template @Weves
+/AGENTS.md.template @Weves

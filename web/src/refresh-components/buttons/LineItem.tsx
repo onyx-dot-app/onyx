@@ -7,6 +7,7 @@ import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Link from "next/link";
 import type { Route } from "next";
+import { Section } from "@/layouts/general-layouts";
 
 const buttonClassNames = {
   main: {
@@ -78,7 +79,7 @@ export interface LineItemProps extends React.HTMLAttributes<HTMLButtonElement> {
  * </LineItem>
  *
  * // With right content
- * <LineItem icon={SvgKey} rightChildren={<Text text03>⌘K</Text>}>
+ * <LineItem icon={SvgKey} rightChildren={<Text as="p" text03>⌘K</Text>}>
  *   Keyboard Shortcuts
  * </LineItem>
  *
@@ -127,7 +128,8 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
       <button
         ref={ref}
         className={cn(
-          "flex flex-col w-full justify-center items-start p-2 rounded-08 group/LineItem",
+          "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
+          !!description ? "items-start" : "items-center",
           buttonClassNames[variant][emphasisKey],
           className
         )}
@@ -135,36 +137,36 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
         data-selected={selected}
         {...props}
       >
-        <div className="flex flex-row items-center justify-start w-full gap-2">
-          {Icon && (
-            <div className="h-[1rem] min-w-[1rem]">
-              <Icon
-                className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])}
-              />
-            </div>
-          )}
-          <Truncated
-            mainUiMuted
-            className={cn("text-left w-full", textClassNames[variant])}
-          >
-            {children}
-          </Truncated>
-          {rightChildren}
-        </div>
-        {description && (
-          <div className="flex flex-row">
-            {Icon && (
-              <>
-                <div className="w-[1rem]" />
-                <div className="w-2" />
-              </>
+        {Icon && (
+          <div
+            className={cn(
+              "flex flex-col justify-center items-center h-[1rem] min-w-[1rem]",
+              !!description && "mt-0.5"
             )}
-
-            <Text secondaryBody text03>
-              {description}
-            </Text>
+          >
+            <Icon
+              className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])}
+            />
           </div>
         )}
+        <Section flexDirection="column" alignItems="start" gap={0}>
+          <Section flexDirection="row" gap={0.5}>
+            <Truncated
+              mainUiMuted
+              className={cn("text-left w-full", textClassNames[variant])}
+            >
+              {children}
+            </Truncated>
+            {rightChildren && (
+              <Section alignItems="end">{rightChildren}</Section>
+            )}
+          </Section>
+          {description && (
+            <Text as="p" secondaryBody text03>
+              {description}
+            </Text>
+          )}
+        </Section>
       </button>
     );
 

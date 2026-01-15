@@ -12,7 +12,6 @@ from onyx.db.models import CloudEmbeddingProvider
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
-from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )
@@ -214,14 +213,6 @@ def update_current_search_settings(
     if not current_settings:
         logger.warning("No current search settings found to update")
         return
-
-    # Whenever we update the current search settings, we should ensure that the local reranking model is warmed up.
-    if (
-        search_settings.rerank_provider_type is None
-        and search_settings.rerank_model_name is not None
-        and current_settings.rerank_model_name != search_settings.rerank_model_name
-    ):
-        warm_up_cross_encoder(search_settings.rerank_model_name)
 
     update_search_settings(current_settings, search_settings, preserved_fields)
     db_session.commit()

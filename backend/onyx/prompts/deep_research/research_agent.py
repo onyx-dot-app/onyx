@@ -30,7 +30,7 @@ After a set of searches + reads, use the {THINK_TOOL_NAME} to analyze the result
 or why there is enough information to answer the research task comprehensively.
 
 ## {GENERATE_REPORT_TOOL_NAME}
-Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool. \
+Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` tool. \
 You should only call this tool after you have fully researched the topic. \
 Consider other potential areas of research and weigh that against the materials already gathered before calling this tool.
 """.strip()
@@ -42,12 +42,16 @@ Your job is now to organize the findings to return a comprehensive report that p
 The report will be seen by another agent instead of a user so keep it free of formatting or commentary and instead focus on the facts only. \
 Do not give it a title, do not break it down into sections, and do not provide any of your own conclusions/analysis.
 
+You may see a list of tool calls in the history but you do not have access to tools anymore. You should only use the information in the history to create the report.
+
 CRITICAL - This report should be as long as necessary to return ALL of the information that the researcher has gathered. It should be several pages long so as to capture as much detail as possible from the research. \
 It cannot be stressed enough that this report must be EXTREMELY THOROUGH and COMPREHENSIVE. Only this report is going to be returned, so it's CRUCIAL that you don't lose any details from the raw messages.
 
 Remove any obviously irrelevant or duplicative information.
 
 If a statement seems not trustworthy or is contradictory to other statements, it is important to flag it.
+
+Write the report in the same language as the provided task.
 
 Cite all sources INLINE using the format [1], [2], [3], etc. based on the `document` field of the source. \
 Cite inline as opposed to leaving all citations until the very end of the response.
@@ -59,7 +63,8 @@ Please write me a comprehensive report on the research topic given the context a
 {research_topic}
 
 Remember to include AS MUCH INFORMATION AS POSSIBLE and as faithful to the original sources as possible. \
-Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution.
+Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution. \
+Respond in the same language as the topic provided above.
 
 Cite every fact INLINE using the format [1], [2], [3], etc. based on the `document` field of the source.
 
@@ -73,7 +78,7 @@ You are a highly capable, thoughtful, and precise research agent that conducts r
 You iteratively call the tools available to you including {{available_tools}} until you have completed your research at which point you call the {GENERATE_REPORT_TOOL_NAME} tool. Between calls, think about the results of the previous tool call and plan the next steps. \
 Reason thoroughly about what could be missing, identify knowledge gaps, and what queries might address them. Or consider why there is enough information to answer the research task comprehensively.
 
-Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool.
+Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` tool.
 
 NEVER output normal response tokens, you must only call tools.
 
@@ -85,11 +90,11 @@ You have a limited number of cycles of searches to complete your research but yo
 {{optional_web_search_tool_description}}\
 {{optional_open_url_tool_description}}
 ## {GENERATE_REPORT_TOOL_NAME}
-Once you have completed your research, call the {GENERATE_REPORT_TOOL_NAME} tool. You should only call this tool after you have fully researched the topic.
+Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` tool. You should only call this tool after you have fully researched the topic.
 """.strip()
 
 
-OPEN_URL_REMINDER_REASEARCH_AGENT = """
+OPEN_URL_REMINDER_RESEARCH_AGENT = """
 Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
 Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs.
 

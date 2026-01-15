@@ -16,6 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
@@ -134,7 +135,7 @@ def validate_existing_genai_api_key(
     kv_store.store(KV_GEN_AI_KEY_CHECK_TIME, curr_time.timestamp())
 
 
-@router.post("/admin/deletion-attempt")
+@router.post("/admin/deletion-attempt", tags=PUBLIC_API_TAGS)
 def create_deletion_attempt_for_connector_id(
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier,
     user: User = Depends(current_curator_or_admin_user),

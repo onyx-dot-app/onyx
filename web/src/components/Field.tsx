@@ -29,7 +29,7 @@ import Checkbox from "@/refresh-components/inputs/Checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import { DatePicker } from "./ui/datePicker";
+import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
 import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
@@ -139,7 +139,7 @@ export function ExplanationText({
       {text}
     </a>
   ) : (
-    <Text text03 secondaryBody>
+    <Text as="p" text03 secondaryBody>
       {text}
     </Text>
   );
@@ -181,7 +181,11 @@ export const FieldLabel = ({
       } gap-x-2 items-start`}
     >
       <div className="flex gap-x-2 items-center">
-        {!removeLabel && <Label small={false}>{label}</Label>}
+        {!removeLabel && (
+          <Label small={false} htmlFor={name}>
+            {label}
+          </Label>
+        )}
         {optional ? <span>(optional) </span> : ""}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
@@ -211,7 +215,7 @@ export function TextFormField({
   includeRevert,
   isTextArea = false,
   disabled = false,
-  autoCompleteDisabled = true,
+  autoCompleteEnabled = false,
   error,
   defaultHeight,
   isCode = false,
@@ -240,7 +244,7 @@ export function TextFormField({
   type?: string;
   isTextArea?: boolean;
   disabled?: boolean;
-  autoCompleteDisabled?: boolean;
+  autoCompleteEnabled?: boolean;
   error?: string;
   defaultHeight?: string;
   isCode?: boolean;
@@ -361,7 +365,7 @@ export function TextFormField({
           `}
           disabled={disabled}
           placeholder={placeholder}
-          autoComplete={autoCompleteDisabled ? "off" : undefined}
+          autoComplete={autoCompleteEnabled ? undefined : "off"}
         />
         {!isTextArea && isPasswordField && showPasswordToggle && (
           <button
@@ -1037,7 +1041,7 @@ export function DatePickerField({
   return (
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
-      <DatePicker
+      <InputDatePicker
         selectedDate={field.value}
         setSelectedDate={helper.setValue}
         startYear={startYear}

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import DefaultModalLayout from "@/refresh-components/layouts/DefaultModalLayout";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import InputTextarea from "@/refresh-components/inputs/InputTextArea";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines } from "@opal/icons";
+import Modal from "@/refresh-components/Modal";
 
 export default function AddInstructionModal() {
   const modal = useModal();
@@ -30,25 +30,28 @@ export default function AddInstructionModal() {
   }
 
   return (
-    <DefaultModalLayout
-      icon={SvgAddLines}
-      title="Set Project Instructions"
-      description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
-      mini
-    >
-      <div className="bg-background-tint-01 p-4">
-        <InputTextarea
-          value={instructionText}
-          onChange={(event) => setInstructionText(event.target.value)}
-          placeholder="Think step by step and show reasoning for complex problems. Use specific examples."
+    <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
+      <Modal.Content mini>
+        <Modal.Header
+          icon={SvgAddLines}
+          title="Set Project Instructions"
+          description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
+          onClose={() => modal.toggle(false)}
         />
-      </div>
-      <div className="flex flex-row justify-end gap-2 p-4">
-        <Button secondary onClick={() => modal.toggle(false)}>
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit}>Save Instructions</Button>
-      </div>
-    </DefaultModalLayout>
+        <Modal.Body>
+          <InputTextarea
+            value={instructionText}
+            onChange={(event) => setInstructionText(event.target.value)}
+            placeholder="Think step by step and show reasoning for complex problems. Use specific examples."
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button secondary onClick={() => modal.toggle(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit}>Save Instructions</Button>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }

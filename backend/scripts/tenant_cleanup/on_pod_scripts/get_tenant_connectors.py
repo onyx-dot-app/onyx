@@ -50,10 +50,8 @@ def get_tenant_connectors(tenant_id: str) -> dict:
         )
 
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            # Get all connector credential pairs, excluding user files
-            stmt = select(ConnectorCredentialPair).where(
-                ConnectorCredentialPair.is_user_file.is_(False)
-            )
+            # Get all connector credential pairs
+            stmt = select(ConnectorCredentialPair)
             cc_pairs = db_session.execute(stmt).scalars().all()
 
             connectors = [

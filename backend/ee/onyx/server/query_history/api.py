@@ -32,6 +32,7 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import QueryHistoryType
 from onyx.configs.constants import SessionType
@@ -294,7 +295,7 @@ def list_all_query_history_exports(
         )
 
 
-@router.post("/admin/query-history/start-export")
+@router.post("/admin/query-history/start-export", tags=PUBLIC_API_TAGS)
 def start_query_history_export(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -340,7 +341,7 @@ def start_query_history_export(
     return {"request_id": task_id}
 
 
-@router.get("/admin/query-history/export-status")
+@router.get("/admin/query-history/export-status", tags=PUBLIC_API_TAGS)
 def get_query_history_export_status(
     request_id: str,
     _: User | None = Depends(current_admin_user),
@@ -374,7 +375,7 @@ def get_query_history_export_status(
     return {"status": TaskStatus.SUCCESS}
 
 
-@router.get("/admin/query-history/download")
+@router.get("/admin/query-history/download", tags=PUBLIC_API_TAGS)
 def download_query_history_csv(
     request_id: str,
     _: User | None = Depends(current_admin_user),

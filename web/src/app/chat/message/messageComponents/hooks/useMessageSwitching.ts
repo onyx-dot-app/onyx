@@ -17,9 +17,14 @@ export function useMessageSwitching({
   onMessageSelection,
 }: UseMessageSwitchingProps): UseMessageSwitchingReturn {
   // Calculate message switching state
-  const currentMessageInd = nodeId
+  const indexInSiblings = nodeId
     ? otherMessagesCanSwitchTo?.indexOf(nodeId)
     : undefined;
+  // indexOf returns -1 if not found, treat that as undefined
+  const currentMessageInd =
+    indexInSiblings !== undefined && indexInSiblings !== -1
+      ? indexInSiblings
+      : undefined;
 
   const includeMessageSwitcher =
     currentMessageInd !== undefined &&

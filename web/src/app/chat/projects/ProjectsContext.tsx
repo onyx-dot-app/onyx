@@ -386,24 +386,14 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
             );
             projectToUploadFilesMapRef.current.set(projectId, []);
           }
-          const unsupported = uploaded.unsupported_files || [];
-          const nonAccepted = uploaded.non_accepted_files || [];
-          if (unsupported.length > 0 || nonAccepted.length > 0) {
-            const detailsParts: string[] = [];
-            if (unsupported.length > 0) {
-              detailsParts.push(
-                `Unsupported file types: ${unsupported.join(", ")}`
-              );
-            }
-            if (nonAccepted.length > 0) {
-              const noun = nonAccepted.length === 1 ? "File" : "Files";
-              const verb = nonAccepted.length === 1 ? "exceeds" : "exceed";
-              detailsParts.push(
-                `${noun} ${verb} the 100k token limit: ${nonAccepted.join(
-                  ", "
-                )}`
-              );
-            }
+          const rejected_files = uploaded.rejected_files || [];
+
+          if (rejected_files.length > 0) {
+            const uniqueReasons = new Set(
+              rejected_files.map((rejected_file) => rejected_file.reason)
+            );
+            const detailsParts = Array.from(uniqueReasons);
+
             setPopup?.({
               type: "warning",
               message: `Some files were not uploaded. ${detailsParts.join(
@@ -411,10 +401,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
               )}`,
             });
 
-            const failedNameSet = new Set<string>([
-              ...unsupported,
-              ...nonAccepted,
-            ]);
+            const failedNameSet = new Set<string>(
+              rejected_files.map((file) => file.file_name)
+            );
             const failedTempIds = Array.from(
               new Set(
                 optimisticFiles

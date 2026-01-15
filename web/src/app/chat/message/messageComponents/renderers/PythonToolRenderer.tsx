@@ -45,7 +45,9 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     .filter((packet) => packet.obj.type === PacketType.PYTHON_TOOL_DELTA)
     .map((packet) => packet.obj as PythonToolDelta);
   const pythonEnd = packets.find(
-    (packet) => packet.obj.type === PacketType.SECTION_END
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
   const code = pythonStart?.code || "";

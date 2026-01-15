@@ -150,6 +150,7 @@ def generation_span(
     model: str | None = None,
     model_config: Mapping[str, Any] | None = None,
     usage: dict[str, Any] | None = None,
+    time_to_first_action_seconds: float | None = None,
     span_id: str | None = None,
     parent: Trace | Span[Any] | None = None,
     disabled: bool = False,
@@ -168,6 +169,7 @@ def generation_span(
         model: The model identifier used for the generation.
         model_config: The model configuration (hyperparameters) used.
         usage: A dictionary of usage information (input tokens, output tokens, etc.).
+        time_to_first_action_seconds: Time elapsed before the first model action is observed.
         span_id: The ID of the span. Optional. If not provided, we will generate an ID. We
             recommend using `util.gen_span_id()` to generate a span ID, to guarantee that IDs are
             correctly formatted.
@@ -185,6 +187,7 @@ def generation_span(
             model=model,
             model_config=model_config,
             usage=usage,
+            time_to_first_action_seconds=time_to_first_action_seconds,
         ),
         span_id=span_id,
         parent=parent,

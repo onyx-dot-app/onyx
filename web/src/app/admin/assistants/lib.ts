@@ -30,12 +30,14 @@ interface PersonaUpsertRequest {
   display_priority: number | null;
   label_ids: number[] | null;
   user_file_ids: string[] | null;
+  replace_base_system_prompt: boolean;
 }
 
 export interface PersonaUpsertParameters {
   name: string;
   description: string;
   system_prompt: string;
+  replace_base_system_prompt: boolean;
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
@@ -50,34 +52,38 @@ export interface PersonaUpsertParameters {
   tool_ids: number[];
   remove_image?: boolean;
   search_start_date: Date | null;
-  uploaded_image: File | null;
+  uploaded_image_id: string | null;
+  icon_name: string | null;
   is_default_persona: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
 }
 
-function buildPersonaUpsertRequest(
-  creationRequest: PersonaUpsertParameters,
-  uploaded_image_id: string | null,
-  icon_name: string | null
-): PersonaUpsertRequest {
-  const {
-    name,
-    description,
-    system_prompt,
-    task_prompt,
-    document_set_ids,
-    num_chunks,
-    is_public,
-    groups,
-    datetime_aware,
-    users,
-    tool_ids,
-    remove_image,
-    search_start_date,
-    user_file_ids,
-  } = creationRequest;
-
+function buildPersonaUpsertRequest({
+  name,
+  description,
+  system_prompt,
+  task_prompt,
+  document_set_ids,
+  num_chunks,
+  is_public,
+  groups,
+  datetime_aware,
+  users,
+  tool_ids,
+  remove_image,
+  search_start_date,
+  user_file_ids,
+  icon_name,
+  uploaded_image_id,
+  is_default_persona,
+  llm_relevance_filter,
+  llm_model_provider_override,
+  llm_model_version_override,
+  starter_messages,
+  label_ids,
+  replace_base_system_prompt,
+}: PersonaUpsertParameters): PersonaUpsertRequest {
   return {
     name,
     description,
@@ -94,18 +100,17 @@ function buildPersonaUpsertRequest(
     remove_image,
     search_start_date,
     datetime_aware,
-    is_default_persona: creationRequest.is_default_persona ?? false,
+    is_default_persona: is_default_persona ?? false,
     recency_bias: "base_decay",
     llm_filter_extraction: false,
-    llm_relevance_filter: creationRequest.llm_relevance_filter ?? null,
-    llm_model_provider_override:
-      creationRequest.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      creationRequest.llm_model_version_override ?? null,
-    starter_messages: creationRequest.starter_messages ?? null,
+    llm_relevance_filter: llm_relevance_filter ?? null,
+    llm_model_provider_override: llm_model_provider_override ?? null,
+    llm_model_version_override: llm_model_version_override ?? null,
+    starter_messages: starter_messages ?? null,
     display_priority: null,
-    label_ids: creationRequest.label_ids ?? null,
+    label_ids: label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
+    replace_base_system_prompt,
   };
 }
 
@@ -130,21 +135,12 @@ export async function uploadFile(file: File): Promise<string | null> {
 export async function createPersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = null;
-  if (personaUpsertParams.uploaded_image) {
-    fileId = await uploadFile(personaUpsertParams.uploaded_image);
-    if (!fileId) {
-      return null;
-    }
-  }
   const createPersonaResponse = await fetch("/api/persona", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
-    ),
+    body: JSON.stringify(buildPersonaUpsertRequest(personaUpsertParams)),
     credentials: "include",
   });
 
@@ -155,22 +151,12 @@ export async function updatePersona(
   id: number,
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = null;
-  if (personaUpsertParams.uploaded_image) {
-    fileId = await uploadFile(personaUpsertParams.uploaded_image);
-    if (!fileId) {
-      return null;
-    }
-  }
-
   const updatePersonaResponse = await fetch(`/api/persona/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId, null)
-    ),
+    body: JSON.stringify(buildPersonaUpsertRequest(personaUpsertParams)),
     credentials: "include",
   });
 

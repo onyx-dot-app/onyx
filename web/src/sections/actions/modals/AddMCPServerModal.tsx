@@ -4,10 +4,10 @@ import { useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import Modal from "@/refresh-components/Modal";
-import { FormField } from "@/refresh-components/form/FormField";
+import * as InputLayouts from "@/layouts/input-layouts";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import Button from "@/refresh-components/buttons/Button";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
 import {
   MCPServerCreateRequest,
@@ -20,6 +20,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
+import Text from "@/refresh-components/texts/Text";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
@@ -44,7 +46,6 @@ const validationSchema = Yup.object().shape({
 export default function AddMCPServerModal({
   skipOverlay = false,
   activeServer,
-  setActiveServer,
   disconnectModal,
   manageServerModal,
   onServerCreated,
@@ -141,168 +142,111 @@ export default function AddMCPServerModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ values, errors, touched, handleChange, handleBlur, dirty }) => (
-            <Form className="gap-0">
+          {({ isValid, dirty }) => (
+            <Form>
               <Modal.Header
                 icon={SvgServer}
-                title={isEditMode ? "Manage MCP server" : "Add MCP server"}
+                title={isEditMode ? "Manage MCP Server" : "Add MCP Server"}
                 description={
                   isEditMode
                     ? "Update your MCP server configuration and manage authentication."
                     : "Connect MCP (Model Context Protocol) server to add custom actions."
                 }
-                className="p-4 w-full"
                 onClose={() => handleModalClose(false)}
               />
 
-              <Modal.Body className="flex flex-col bg-background-tint-01 p-4 gap-4">
-                <FormField
-                  id="name"
-                  name="name"
-                  state={
-                    errors.name && touched.name
-                      ? "error"
-                      : touched.name
-                        ? "success"
-                        : "idle"
-                  }
-                >
-                  <FormField.Label>Server Name</FormField.Label>
-                  <FormField.Control asChild>
-                    <InputTypeIn
-                      id="name"
-                      name="name"
-                      placeholder="Name your MCP server"
-                      value={values.name}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      autoFocus
-                    />
-                  </FormField.Control>
-                  <FormField.Message
-                    messages={{
-                      error: errors.name,
-                    }}
+              <Modal.Body>
+                <InputLayouts.Vertical name="name" label="Server Name">
+                  <InputTypeInField
+                    name="name"
+                    placeholder="Name your MCP server"
+                    autoFocus
                   />
-                </FormField>
+                </InputLayouts.Vertical>
 
-                <FormField
-                  id="description"
+                <InputLayouts.Vertical
                   name="description"
-                  state={
-                    errors.description && touched.description
-                      ? "error"
-                      : touched.description
-                        ? "success"
-                        : "idle"
-                  }
+                  label="Description"
+                  optional
                 >
-                  <FormField.Label optional>Description</FormField.Label>
-                  <FormField.Control asChild>
-                    <InputTextArea
-                      id="description"
-                      name="description"
-                      placeholder="More details about the MCP server"
-                      value={values.description}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      rows={3}
-                      className="resize-none"
-                    />
-                  </FormField.Control>
-                  <FormField.Message
-                    messages={{
-                      error: errors.description,
-                    }}
+                  <InputTextAreaField
+                    name="description"
+                    placeholder="More details about the MCP server"
+                    rows={3}
                   />
-                </FormField>
+                </InputLayouts.Vertical>
 
-                <Separator className="py-0" />
+                <Separator noPadding />
 
-                <FormField
-                  id="server_url"
+                <InputLayouts.Vertical
                   name="server_url"
-                  state={
-                    errors.server_url && touched.server_url
-                      ? "error"
-                      : touched.server_url
-                        ? "success"
-                        : "idle"
-                  }
+                  label="MCP Server URL"
+                  subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
                 >
-                  <FormField.Label>MCP Server URL</FormField.Label>
-                  <FormField.Control asChild>
-                    <InputTypeIn
-                      id="server_url"
-                      name="server_url"
-                      placeholder="https://your-mcp-server.com/mcp"
-                      value={values.server_url}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                    />
-                  </FormField.Control>
-                  <FormField.Description>
-                    Only connect to servers you trust. You are responsible for
-                    actions taken with this connection and keeping your tools
-                    updated.
-                  </FormField.Description>
-                  <FormField.Message
-                    messages={{
-                      error: errors.server_url,
-                    }}
+                  <InputTypeInField
+                    name="server_url"
+                    placeholder="https://your-mcp-server.com/mcp"
                   />
-                </FormField>
+                </InputLayouts.Vertical>
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
                   server?.is_authenticated &&
                   server?.status === MCPServerStatus.CONNECTED && (
-                    <FormField state="idle">
-                      <div className="flex items-start justify-between w-full">
-                        <div className="flex-1 flex flex-col gap-0 items-start">
-                          <FormField.Label
-                            leftIcon={
-                              <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-                            }
-                          >
-                            Authenticated & Connected
-                          </FormField.Label>
-                          <FormField.Description className="pl-5">
-                            {server.auth_type === "OAUTH"
-                              ? `OAuth connected to ${server.owner}`
-                              : server.auth_type === "API_TOKEN"
-                                ? "API token configured"
-                                : "Connected"}
-                          </FormField.Description>
-                        </div>
-                        <FormField.Control asChild>
-                          <div className="flex gap-2 items-center justify-end">
-                            <IconButton
-                              icon={SvgUnplug}
-                              tertiary
-                              type="button"
-                              tooltip="Disconnect Server"
-                              onClick={handleDisconnectClick}
-                            />
-                            <Button
-                              secondary
-                              type="button"
-                              onClick={() => {
-                                // Close this modal and open the auth modal for this server
-                                toggle(false);
-                                handleAuthenticate(server.id);
-                              }}
-                            >
-                              Edit Configs
-                            </Button>
-                          </div>
-                        </FormField.Control>
-                      </div>
-                    </FormField>
+                    <Section
+                      flexDirection="row"
+                      justifyContent="between"
+                      alignItems="start"
+                      gap={1}
+                    >
+                      <Section gap={0.25} alignItems="start">
+                        <Section
+                          flexDirection="row"
+                          gap={0.5}
+                          alignItems="center"
+                          fit
+                        >
+                          <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+                          <Text>Authenticated &amp; Connected</Text>
+                        </Section>
+                        <Text secondaryBody text03>
+                          {server.auth_type === "OAUTH"
+                            ? `OAuth connected to ${server.owner}`
+                            : server.auth_type === "API_TOKEN"
+                              ? "API token configured"
+                              : "Connected"}
+                        </Text>
+                      </Section>
+                      <Section
+                        flexDirection="row"
+                        gap={0.5}
+                        alignItems="center"
+                        fit
+                      >
+                        <IconButton
+                          icon={SvgUnplug}
+                          tertiary
+                          type="button"
+                          tooltip="Disconnect Server"
+                          onClick={handleDisconnectClick}
+                        />
+                        <Button
+                          secondary
+                          type="button"
+                          onClick={() => {
+                            // Close this modal and open the auth modal for this server
+                            toggle(false);
+                            handleAuthenticate(server.id);
+                          }}
+                        >
+                          Edit Configs
+                        </Button>
+                      </Section>
+                    </Section>
                   )}
               </Modal.Body>
 
-              <Modal.Footer className="gap-2">
+              <Modal.Footer>
                 <Button
                   secondary
                   type="button"
@@ -311,7 +255,11 @@ export default function AddMCPServerModal({
                 >
                   Cancel
                 </Button>
-                <Button primary type="submit" disabled={isSubmitting || !dirty}>
+                <Button
+                  primary
+                  type="submit"
+                  disabled={isSubmitting || !isValid || !dirty}
+                >
                   {isSubmitting
                     ? isEditMode
                       ? "Saving..."

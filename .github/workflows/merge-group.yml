@@ -1,0 +1,31 @@
+name: Merge Group-Specific
+
+on:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  # This job immediately succeeds to satisfy branch protection rules on merge_group events.
+  # There is a similarly named "required" job in pr-integration-tests.yml which runs the actual
+  # integration tests. That job runs on both pull_request and merge_group events, and this job
+  # exists solely to provide a fast-passing check with the same name for branch protection.
+  # The actual tests remain enforced on presubmit (pull_request events).
+  required:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Success
+        run: echo "Success"
+  # This job immediately succeeds to satisfy branch protection rules on merge_group events.
+  # There is a similarly named "playwright-required" job in pr-playwright-tests.yml which runs
+  # the actual playwright tests. That job runs on both pull_request and merge_group events, and
+  # this job exists solely to provide a fast-passing check with the same name for branch protection.
+  # The actual tests remain enforced on presubmit (pull_request events).
+  playwright-required:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Success
+        run: echo "Success"

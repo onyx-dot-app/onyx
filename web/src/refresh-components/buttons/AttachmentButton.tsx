@@ -1,4 +1,67 @@
-"use client";
+/**
+ * AttachmentButton - A button component for displaying file attachments or similar items
+ *
+ * Displays an attachment item with an icon, title, description, metadata text,
+ * and optional action buttons. Commonly used for file lists, attachment pickers,
+ * and similar UI patterns where items can be viewed or acted upon.
+ *
+ * Features:
+ * - Three visual states: default, selected (shows checkbox), processing
+ * - Left icon that changes to checkbox when selected
+ * - Truncated title and description text
+ * - Right-aligned metadata text (e.g., file size, date)
+ * - Optional view button (external link icon) that appears on hover
+ * - Optional action button (custom icon) that appears on hover
+ * - Full-width button with hover states
+ * - Prevents event bubbling for nested action buttons
+ *
+ * @example
+ * ```tsx
+ * import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
+ * import { SvgFileText, SvgTrash } from "@opal/icons";
+ *
+ * // Basic attachment
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   description="document.pdf"
+ *   rightText="2.4 MB"
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ *
+ * // Selected state with view button
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   selected
+ *   description="document.pdf"
+ *   rightText="2.4 MB"
+ *   onView={() => window.open('/view/doc')}
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ *
+ * // With action button (delete)
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   description="document.pdf"
+ *   rightText="2.4 MB"
+ *   actionIcon={SvgTrash}
+ *   onAction={() => handleDelete()}
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ *
+ * // Processing state
+ * <AttachmentButton
+ *   icon={SvgFileText}
+ *   processing
+ *   description="Uploading..."
+ *   rightText="45%"
+ * >
+ *   Project Proposal
+ * </AttachmentButton>
+ * ```
+ */
 
 import React from "react";
 import { cn, noProp } from "@/lib/utils";
@@ -7,76 +70,60 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
-import { SvgExternalLink, SvgTrash } from "@opal/icons";
+import { SvgExternalLink } from "@opal/icons";
+import { WithoutStyles } from "@/types";
 
-const bgClassNames = {
-  defaulted: ["bg-background-tint-00 "],
-  selected: ["bg-action-link-01"],
-  processing: ["bg-background-tint-00"],
-} as const;
-
-const iconClassNames = {
-  defaulted: ["stroke-text-02"],
-  selected: [],
-  processing: ["stroke-text-01"],
-} as const;
-
-interface AttachmentProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface AttachmentProps
+  extends WithoutStyles<React.ButtonHTMLAttributes<HTMLButtonElement>> {
   selected?: boolean;
   processing?: boolean;
 
-  leftIcon: React.FunctionComponent<IconProps>;
+  icon: React.FunctionComponent<IconProps>;
   children: string;
-  description: string;
-  rightText: string;
+  description?: string;
+  rightText?: string;
   onView?: () => void;
-  onDelete?: () => void;
+
+  // Action button: An optional secondary action button that appears on hover.
+  // Commonly used for actions like delete, download, or remove.
+  // Both `actionIcon` and `onAction` must be provided for the button to appear.
+  actionIcon?: React.FunctionComponent<IconProps>;
+  onAction?: () => void;
 }
 
 export default function AttachmentButton({
   selected,
   processing,
-
-  leftIcon: LeftIcon,
+  icon: Icon,
   children,
   description,
   rightText,
   onView,
-  onDelete,
-  className,
-  ...rest
+  actionIcon,
+  onAction,
+  ...props
 }: AttachmentProps) {
-  const variant = selected
-    ? "selected"
-    : processing
-      ? "processing"
-      : "defaulted";
+  const state = selected ? "selected" : processing ? "processing" : "default";
 
   return (
     <button
       type="button"
-      className={cn(
-        "flex flex-row w-full p-1 bg-background-tint-00 hover:bg-background-tint-02 rounded-12 gap-2 group/Attachment",
-        bgClassNames[variant],
-        className
-      )}
-      {...rest}
+      className="attachment-button"
+      data-state={state}
+      {...props}
     >
-      <div className="flex-1 flex flex-row gap-2 min-w-0">
-        <div className="h-full aspect-square bg-background-tint-01 rounded-08 flex flex-col items-center justify-center shrink-0">
+      <div className="attachment-button__content">
+        <div className="attachment-button__icon-wrapper">
           {selected ? (
             <Checkbox checked />
           ) : (
-            <LeftIcon
-              className={cn(iconClassNames[variant], "h-[1rem] w-[1rem]")}
-            />
+            <Icon className="attachment-button__icon" />
           )}
         </div>
-        <div className="flex flex-col items-start justify-center min-w-0 flex-1">
-          <div className="flex flex-row items-center gap-2 w-full min-w-0">
-            <div className="max-w-[70%] min-w-0 shrink overflow-hidden">
-              <Truncated mainUiMuted text04 nowrap className="truncate !w-full">
+        <div className="attachment-button__text-container">
+          <div className="attachment-button__title-row">
+            <div className="attachment-button__title-wrapper">
+              <Truncated mainUiMuted text04 nowrap>
                 {children}
               </Truncated>
             </div>
@@ -85,27 +132,28 @@ export default function AttachmentButton({
                 icon={SvgExternalLink}
                 onClick={noProp(onView)}
                 internal
-                className="invisible group-hover/Attachment:visible shrink-0"
+                className="attachment-button__view-button"
               />
             )}
           </div>
-          <Truncated secondaryBody text03 className="w-full">
-            {description}
-          </Truncated>
+          {description && (
+            <Truncated secondaryBody text03 className="w-full">
+              {description}
+            </Truncated>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-row self-stretch justify-end items-center gap-2 p-1 shrink-0">
-        <Text secondaryBody text03>
-          {rightText}
-        </Text>
-        {onDelete && (
-          <IconButton
-            icon={SvgTrash}
-            internal
-            className="invisible group-hover/Attachment:visible"
-            onClick={noProp(onDelete)}
-          />
+      <div className="attachment-button__actions">
+        {rightText && (
+          <Text as="p" secondaryBody text03>
+            {rightText}
+          </Text>
+        )}
+        {actionIcon && onAction && (
+          <div className="attachment-button__action-button">
+            <IconButton icon={actionIcon} onClick={noProp(onAction)} internal />
+          </div>
         )}
       </div>
     </button>

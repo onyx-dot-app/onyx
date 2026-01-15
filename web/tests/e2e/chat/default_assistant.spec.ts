@@ -17,13 +17,54 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 // Tool-related test selectors now imported from shared utils
 
 test.describe("Default Assistant Tests", () => {
+  let imageGenConfigId: string | null = null;
+
+  test.beforeAll(async ({ browser }) => {
+    // Create image generation config as admin so ImageGenerationTool becomes available
+    // This is needed because the Create Agent form enables Image Generation by default
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const adminPage = await adminContext.newPage();
+    await adminPage.goto("http://localhost:3000/chat");
+    await adminPage.waitForLoadState("networkidle");
+
+    const apiClient = new OnyxApiClient(adminPage);
+    try {
+      imageGenConfigId = await apiClient.createImageGenerationConfig(
+        `test-default-assistant-${Date.now()}`
+      );
+    } catch (error) {
+      console.warn(`Failed to create image generation config: ${error}`);
+    }
+
+    await adminContext.close();
+  });
+
+  test.afterAll(async ({ browser }) => {
+    // Cleanup the image generation config
+    if (imageGenConfigId) {
+      const adminContext = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const adminPage = await adminContext.newPage();
+      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.waitForLoadState("networkidle");
+
+      const apiClient = new OnyxApiClient(adminPage);
+      await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+
+      await adminContext.close();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();
     await loginAsRandomUser(page);
 
     // Navigate to the chat page
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
   });
 
@@ -68,9 +109,13 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Custom Test Assistant");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page.locator('input[name="name"]').fill("Custom Test Assistant");
+      await page
+        .locator('textarea[name="description"]')
+        .fill("Test Description");
+      await page
+        .locator('textarea[name="instructions"]')
+        .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for assistant to be created and selected
@@ -105,9 +150,13 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Custom Assistant");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page.locator('input[name="name"]').fill("Custom Assistant");
+      await page
+        .locator('textarea[name="description"]')
+        .fill("Test Description");
+      await page
+        .locator('textarea[name="instructions"]')
+        .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
       // Wait for assistant to be created and selected
@@ -149,9 +198,15 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Test Assistant with Starters");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page
+        .locator('input[name="name"]')
+        .fill("Test Assistant with Starters");
+      await page
+        .locator('textarea[name="description"]')
+        .fill("Test Description");
+      await page
+        .locator('textarea[name="instructions"]')
+        .fill("Test Instructions");
 
       // Add starter messages (if the UI supports it)
       // For now, we'll create without starter messages and check the behavior
@@ -219,9 +274,13 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
       await page.waitForTimeout(2000);
-      await page.getByTestId("name").fill("Switch Test Assistant");
-      await page.getByTestId("description").fill("Test Description");
-      await page.getByTestId("system_prompt").fill("Test Instructions");
+      await page.locator('input[name="name"]').fill("Switch Test Assistant");
+      await page
+        .locator('textarea[name="description"]')
+        .fill("Test Description");
+      await page
+        .locator('textarea[name="instructions"]')
+        .fill("Test Instructions");
       await page.getByRole("button", { name: "Create" }).click();
 
       // Verify switched to custom assistant
@@ -236,6 +295,47 @@ test.describe("Default Assistant Tests", () => {
   });
 
   test.describe("Action Management Toggle", () => {
+    let imageGenConfigId: string | null = null;
+
+    test.beforeAll(async ({ browser }) => {
+      // Create image generation config as admin so ImageGenerationTool becomes available
+      // Use saved admin auth state instead of logging in again
+      const adminContext = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const adminPage = await adminContext.newPage();
+      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.waitForLoadState("networkidle");
+
+      const apiClient = new OnyxApiClient(adminPage);
+      try {
+        imageGenConfigId = await apiClient.createImageGenerationConfig(
+          `test-action-toggle-${Date.now()}`
+        );
+      } catch (error) {
+        console.warn(`Failed to create image generation config: ${error}`);
+      }
+
+      await adminContext.close();
+    });
+
+    test.afterAll(async ({ browser }) => {
+      // Cleanup the image generation config
+      if (imageGenConfigId) {
+        const adminContext = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        const adminPage = await adminContext.newPage();
+        await adminPage.goto("http://localhost:3000/chat");
+        await adminPage.waitForLoadState("networkidle");
+
+        const apiClient = new OnyxApiClient(adminPage);
+        await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+
+        await adminContext.close();
+      }
+    });
+
     test("should display action management toggle", async ({ page }) => {
       // Look for action management toggle button
       const actionToggle = await page.waitForSelector(TOOL_IDS.actionToggle, {
@@ -247,15 +347,15 @@ test.describe("Default Assistant Tests", () => {
     test("should show web-search + image-generation tools options when clicked", async ({
       page,
     }) => {
-      // This test requires admin permissions to create tool providers
+      // This test requires admin permissions to create web search provider
+      // Note: Image generation config is already created by beforeAll
       await page.context().clearCookies();
       await loginAs(page, "admin");
-      await page.goto("http://localhost:3000/chat");
+      await page.goto("/chat");
       await page.waitForLoadState("networkidle");
 
       const apiClient = new OnyxApiClient(page);
       let webSearchProviderId: number | null = null;
-      let imageGenProviderId: number | null = null;
 
       try {
         // Set up a web search provider so the tool is available
@@ -263,13 +363,9 @@ test.describe("Default Assistant Tests", () => {
           "exa",
           `Test Web Search Provider ${Date.now()}`
         );
-        // Set up an image generation provider so the tool is available
-        imageGenProviderId = await apiClient.createImageGenProvider(
-          `Test Image Gen Provider ${Date.now()}`
-        );
       } catch (error) {
         console.warn(
-          `Failed to create tool providers for test: ${error}. Test may fail.`
+          `Failed to create web search provider for test: ${error}. Test may fail.`
         );
       }
 
@@ -313,7 +409,7 @@ test.describe("Default Assistant Tests", () => {
       console.log(`[test] Enabled tools via API: ${uniqueToolIds}`);
 
       // Go back to chat
-      await page.goto("http://localhost:3000/chat");
+      await page.goto("/chat");
       await page.waitForLoadState("networkidle");
       // Wait for tools to be picked up
       await page.waitForTimeout(2000);
@@ -324,24 +420,13 @@ test.describe("Default Assistant Tests", () => {
       expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
       expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
 
-      // Clean up web search provider
+      // Clean up web search provider only (image gen config is managed by beforeAll/afterAll)
       if (webSearchProviderId !== null) {
         try {
           await apiClient.deleteWebSearchProvider(webSearchProviderId);
         } catch (error) {
           console.warn(
             `Failed to delete web search provider ${webSearchProviderId}: ${error}`
-          );
-        }
-      }
-
-      // Clean up image generation provider
-      if (imageGenProviderId !== null) {
-        try {
-          await apiClient.deleteProvider(imageGenProviderId);
-        } catch (error) {
-          console.warn(
-            `Failed to delete image gen provider ${imageGenProviderId}: ${error}`
           );
         }
       }
@@ -446,13 +531,54 @@ test.describe("Default Assistant Tests", () => {
 });
 
 test.describe("End-to-End Default Assistant Flow", () => {
+  let imageGenConfigId: string | null = null;
+
+  test.beforeAll(async ({ browser }) => {
+    // Create image generation config as admin so ImageGenerationTool becomes available
+    // Use saved admin auth state instead of logging in again
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const adminPage = await adminContext.newPage();
+    await adminPage.goto("http://localhost:3000/chat");
+    await adminPage.waitForLoadState("networkidle");
+
+    const apiClient = new OnyxApiClient(adminPage);
+    try {
+      imageGenConfigId = await apiClient.createImageGenerationConfig(
+        `test-e2e-journey-${Date.now()}`
+      );
+    } catch (error) {
+      console.warn(`Failed to create image generation config: ${error}`);
+    }
+
+    await adminContext.close();
+  });
+
+  test.afterAll(async ({ browser }) => {
+    // Cleanup the image generation config
+    if (imageGenConfigId) {
+      const adminContext = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const adminPage = await adminContext.newPage();
+      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.waitForLoadState("networkidle");
+
+      const apiClient = new OnyxApiClient(adminPage);
+      await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+
+      await adminContext.close();
+    }
+  });
+
   test("complete user journey with default assistant", async ({ page }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();
     await loginAsRandomUser(page);
 
     // Navigate to the chat page
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
 
     // Verify greeting message appears

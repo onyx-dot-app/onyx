@@ -55,6 +55,7 @@ def create_project_files(
         project_as_filter=False,
         total_token_count=num_files * tokens_per_file,
         project_file_metadata=project_file_metadata,
+        project_uncapped_token_count=num_files * tokens_per_file,
     )
 
 

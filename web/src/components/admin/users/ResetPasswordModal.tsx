@@ -70,14 +70,14 @@ export default function ResetPasswordModal({
         <Modal.Body>
           {newPassword ? (
             <div>
-              <Text>New Password:</Text>
+              <Text as="p">New Password:</Text>
               <div className="flex items-center bg-background-tint-03 p-2 rounded gap-2">
-                <Text data-testid="new-password" className="flex-grow">
+                <Text as="p" data-testid="new-password" className="flex-grow">
                   {newPassword}
                 </Text>
                 <CopyIconButton getCopyText={() => newPassword} />
               </div>
-              <Text text02>
+              <Text as="p" text02>
                 Please securely communicate this password to the user.
               </Text>
             </div>
@@ -88,7 +88,7 @@ export default function ResetPasswordModal({
               leftIcon={SvgRefreshCw}
             >
               {isLoading ? (
-                <Text>
+                <Text as="p">
                   <LoadingAnimation text="Resetting" />
                 </Text>
               ) : (

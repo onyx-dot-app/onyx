@@ -30,7 +30,7 @@ export default function DeleteCredentialsModal({
           onClose={onCancel}
         />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             You&apos;re about to delete your{" "}
             {getFormattedProviderName(modelProvider.provider_type)} credentials.
             Are you sure?

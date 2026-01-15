@@ -106,10 +106,15 @@ export default function MCPLineItem({
             enabledTools.length > 0 &&
             tools.length !== enabledTools.length && (
               <div className="flex flex-row items-center gap-1">
-                <Text secondaryBody nowrap className="text-action-link-05">
+                <Text
+                  as="p"
+                  secondaryBody
+                  nowrap
+                  className="text-action-link-05"
+                >
                   {enabledTools.length}
                 </Text>
-                <Text secondaryBody nowrap>
+                <Text as="p" secondaryBody nowrap>
                   {` of ${tools.length}`}
                 </Text>
               </div>

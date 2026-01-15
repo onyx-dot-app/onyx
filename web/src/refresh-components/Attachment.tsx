@@ -13,8 +13,10 @@ export default function Attachments({ fileName, open }: AttachmentsProps) {
         <SvgFileText className="w-[1.25rem] h-[1.25rem] stroke-text-02" />
       </div>
       <div className="flex flex-col px-2">
-        <Text secondaryAction>{fileName}</Text>
-        <Text secondaryBody text03>
+        <Text as="p" secondaryAction>
+          {fileName}
+        </Text>
+        <Text as="p" secondaryBody text03>
           Document
         </Text>
       </div>

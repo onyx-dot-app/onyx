@@ -10,7 +10,6 @@ import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { usePostHog } from "posthog-js/react";
 import { stopChatSession } from "../chat_search/utils";
 import {
   getLastSuccessfulMessageId,
@@ -23,6 +22,7 @@ import {
 } from "../services/messageTree";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
+import { SEARCH_TOOL_ID } from "../components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
@@ -34,7 +34,6 @@ import {
   Message,
   MessageResponseIDInfo,
   RegenerationState,
-  ResearchType,
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
@@ -59,7 +58,10 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
+import { usePostHog } from "posthog-js/react";
+import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
+import { usePinnedAgents } from "@/hooks/useAgents";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -81,7 +83,7 @@ export interface OnSubmitProps {
   currentMessageFiles: ProjectFile[];
   // from the chat bar???
 
-  useAgentSearch: boolean;
+  deepResearch: boolean;
 
   // optional params
   messageIdToResend?: number;
@@ -126,10 +128,11 @@ export function useChatController({
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions } = useChatSessions();
+  const { refreshChatSessions, addPendingChatSession } = useChatSessions();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { assistantPreferences } = useAssistantPreferences();
   const { forcedToolIds } = useForcedTools();
-  const { fetchProjects, uploadFiles, setCurrentMessageFiles, beginUpload } =
+  const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const posthog = usePostHog();
 
@@ -156,7 +159,6 @@ export function useChatController({
   const updateSessionMessageTree = useChatSessionStore(
     (state) => state.updateSessionMessageTree
   );
-  const abortSession = useChatSessionStore((state) => state.abortSession);
   const updateSubmittedMessage = useChatSessionStore(
     (state) => state.updateSubmittedMessage
   );
@@ -236,12 +238,17 @@ export function useChatController({
     );
 
     // Navigate immediately if still on chat page
-    if (pathname === "/chat" && !navigatingAway.current) {
+    // For NRF pages (/chat/nrf, /chat/nrf/side-panel), don't navigate immediately
+    // Let the streaming complete inline, then the user can continue chatting there
+    const isOnChatPage = pathname === "/chat";
+
+    if (isOnChatPage && !navigatingAway.current) {
       router.push(newUrl as Route, { scroll: false });
     }
 
-    // Refresh sidebar so chat appears (will show as "New Chat" initially)
-    // Will be updated again after naming completes
+    // Refresh sidebar - the chat was already optimistically added via addPendingChatSession
+    // so it will show as "New Chat". This refresh ensures we get the latest server state
+    // and will be called again after naming completes.
     refreshChatSessions();
     fetchProjects();
   };
@@ -310,72 +317,39 @@ export function useChatController({
     const currentSession = getCurrentSessionId();
     const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
 
-    // Check if the current message uses agent search (any non-null research type)
-    const isDeepResearch = lastMessage?.researchType === ResearchType.Deep;
-    const isSimpleAgentFrameworkDisabled =
-      posthog.isFeatureEnabled("disable-simple-agent-framework") ?? false;
-
-    // Always call the backend stop endpoint unless feature flag is enabled to disable it
-    if (!isSimpleAgentFrameworkDisabled) {
-      try {
-        await stopChatSession(currentSession);
-      } catch (error) {
-        console.error("Failed to stop chat session:", error);
-        // Continue with UI cleanup even if backend call fails
-      }
+    // Call the backend stop endpoint to set the Redis fence
+    // This signals the backend to stop processing as soon as possible
+    // The backend will emit a STOP packet when it detects the fence
+    try {
+      await stopChatSession(currentSession);
+    } catch (error) {
+      console.error("Failed to stop chat session:", error);
+      // Continue with UI cleanup even if backend call fails
     }
 
-    // Only do the subsequent cleanup if the message was agent search or feature flag is enabled to disable it
-    if (isDeepResearch || isSimpleAgentFrameworkDisabled) {
-      abortSession(currentSession);
-
-      if (
-        lastMessage &&
-        lastMessage.type === "assistant" &&
-        lastMessage.toolCall &&
-        lastMessage.toolCall.tool_result === undefined
-      ) {
-        const newMessageTree = new Map(currentMessageTree);
-        const updatedMessage = { ...lastMessage, toolCall: null };
-        newMessageTree.set(lastMessage.nodeId, updatedMessage);
-        updateSessionMessageTree(currentSession, newMessageTree);
-      }
-
-      // Ensure UI reflects a STOP event by appending a STOP packet to the
-      // currently streaming assistant message if one exists and doesn't already
-      // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
-      if (lastMessage && lastMessage.type === "assistant") {
-        const packets = lastMessage.packets || [];
-        const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
-        if (!hasStop) {
-          const maxTurnIndex =
-            packets.length > 0
-              ? Math.max(...packets.map((p) => p.placement.turn_index))
-              : 0;
-          const stopPacket: Packet = {
-            placement: { turn_index: maxTurnIndex + 1 },
-            obj: { type: PacketType.STOP },
-          } as Packet;
-
-          const newMessageTree = new Map(currentMessageTree);
-          const updatedMessage = {
-            ...lastMessage,
-            packets: [...packets, stopPacket],
-          } as Message;
-          newMessageTree.set(lastMessage.nodeId, updatedMessage);
-          updateSessionMessageTree(currentSession, newMessageTree);
-        }
-      }
+    // Clean up incomplete tool calls for immediate UI feedback
+    if (
+      lastMessage &&
+      lastMessage.type === "assistant" &&
+      lastMessage.toolCall &&
+      lastMessage.toolCall.tool_result === undefined
+    ) {
+      const newMessageTree = new Map(currentMessageTree);
+      const updatedMessage = { ...lastMessage, toolCall: null };
+      newMessageTree.set(lastMessage.nodeId, updatedMessage);
+      updateSessionMessageTree(currentSession, newMessageTree);
     }
 
+    // Update chat state to input immediately for good UX
+    // The stream will close naturally when the backend sends the STOP packet
     updateChatStateAction(currentSession, "input");
-  }, [currentMessageHistory, currentMessageTree, posthog]);
+  }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
     async ({
       message,
       currentMessageFiles,
-      useAgentSearch,
+      deepResearch,
       messageIdToResend,
       queryOverride,
       forceSearch,
@@ -478,19 +452,49 @@ export function useChatController({
         return;
       }
 
+      // Auto-pin the agent to sidebar when sending a message if not already pinned
+      if (liveAssistant) {
+        const isAlreadyPinned = pinnedAgents.some(
+          (agent) => agent.id === liveAssistant.id
+        );
+        if (!isAlreadyPinned) {
+          togglePinnedAgent(liveAssistant, true).catch((err) => {
+            console.error("Failed to auto-pin agent:", err);
+          });
+        }
+      }
+
       let currChatSessionId: string;
-      const isNewSession = existingChatSessionId === null;
+      // Check both the prop and the store's currentSessionId to determine if this is a new session
+      // For pages like NRF where existingChatSessionId is always null, we need to check if
+      // we already have a session from a previous message
+      const isNewSession = existingChatSessionId === null && !currentSessionId;
 
       const searchParamBasedChatSessionName =
         searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
+      // Auto-name only once, after the first assistant response, and only when the chat isn't
+      // already explicitly named (e.g. `?title=...`).
+      const hadAnyUserMessagesBeforeSubmit = currentHistory.some(
+        (m) => m.type === "user"
+      );
       if (isNewSession) {
         currChatSessionId = await createChatSession(
           liveAssistant?.id || 0,
           searchParamBasedChatSessionName,
           projectId ? parseInt(projectId) : null
         );
+
+        // Optimistically add the new chat session to the sidebar cache
+        // This ensures "New Chat" appears immediately, even before any messages are saved
+        addPendingChatSession({
+          chatSessionId: currChatSessionId,
+          personaId: liveAssistant?.id || 0,
+          projectId: projectId ? parseInt(projectId) : null,
+        });
       } else {
-        currChatSessionId = existingChatSessionId as string;
+        // Use the existing session ID from props or from the store
+        currChatSessionId =
+          existingChatSessionId || (currentSessionId as string);
       }
       frozenSessionId = currChatSessionId;
       // update the selected model for the chat session if one is specified so that
@@ -517,6 +521,11 @@ export function useChatController({
       if (isNewSession) {
         handleNewSessionNavigation(currChatSessionId);
       }
+
+      const shouldAutoNameChatSessionAfterResponse =
+        !searchParamBasedChatSessionName &&
+        !hadAnyUserMessagesBeforeSubmit &&
+        !sessions.get(currChatSessionId)?.description;
 
       // set the ability to cancel the request
       const controller = new AbortController();
@@ -646,11 +655,29 @@ export function useChatController({
           ? assistantPreferences?.[liveAssistant?.id]?.disabled_tool_ids
           : undefined;
 
+        // Find the search tool's numeric ID for forceSearch
+        const searchToolNumericId = liveAssistant?.tools.find(
+          (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+        )?.id;
+
+        // Determine the forced tool ID:
+        // 1. If forceSearch is true, use the search tool's numeric ID
+        // 2. Otherwise, use the first forced tool ID from the forcedToolIds array
+        const effectiveForcedToolId = forceSearch
+          ? searchToolNumericId ?? null
+          : forcedToolIds.length > 0
+            ? forcedToolIds[0]
+            : null;
+
+        // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
+        const { isExtension, context: extensionContext } =
+          getExtensionContext();
+        const messageOrigin = isExtension ? "chrome_extension" : "webapp";
+
         const stack = new CurrentMessageFIFO();
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
-          alternateAssistantId: liveAssistant?.id,
           fileDescriptors: projectFilesToFileDescriptors(currentMessageFiles),
           parentMessageId: (() => {
             const parentId =
@@ -668,21 +695,6 @@ export function useChatController({
             filterManager.timeRange,
             filterManager.selectedTags
           ),
-          selectedDocumentIds: selectedDocuments
-            .filter(
-              (document) =>
-                document.db_doc_id !== undefined && document.db_doc_id !== null
-            )
-            .map((document) => document.db_doc_id as number),
-          queryOverride,
-          forceSearch,
-          currentMessageFiles: currentMessageFiles.map((file) => ({
-            id: file.file_id,
-            type: file.chat_file_type,
-            name: file.name,
-            user_file_id: file.id,
-          })),
-          regenerate: regenerationRequest !== undefined,
           modelProvider:
             modelOverride?.name || llmManager.currentLlm.name || undefined,
           modelVersion:
@@ -691,17 +703,15 @@ export function useChatController({
             searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
             undefined,
           temperature: llmManager.temperature || undefined,
-          systemPromptOverride:
-            searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
-          useExistingUserMessage: isSeededChat,
-          useAgentSearch,
+          deepResearch,
           enabledToolIds:
             disabledToolIds && liveAssistant
               ? liveAssistant.tools
                   .filter((tool) => !disabledToolIds?.includes(tool.id))
                   .map((tool) => tool.id)
               : undefined,
-          forcedToolIds: forcedToolIds,
+          forcedToolId: effectiveForcedToolId,
+          origin: messageOrigin,
         });
 
         const delay = (ms: number) => {
@@ -728,6 +738,16 @@ export function useChatController({
             if ((packet as MessageResponseIDInfo).user_message_id) {
               newUserMessageId = (packet as MessageResponseIDInfo)
                 .user_message_id;
+
+              // Track extension queries in PostHog (reuses isExtension/extensionContext from above)
+              if (isExtension && posthog) {
+                posthog.capture("extension_chat_query", {
+                  extension_context: extensionContext,
+                  assistant_id: liveAssistant?.id,
+                  has_files: currentMessageFiles.length > 0,
+                  deep_research: deepResearch,
+                });
+              }
             }
 
             if (
@@ -888,8 +908,8 @@ export function useChatController({
       resetRegenerationState(frozenSessionId);
       updateChatStateAction(frozenSessionId, "input");
 
-      // Name the chat now that we have AI response (navigation already happened before streaming)
-      if (isNewSession && !searchParamBasedChatSessionName) {
+      // Name the chat now that we have the first AI response (navigation already happened before streaming)
+      if (shouldAutoNameChatSessionAfterResponse) {
         handleNewSessionNaming(currChatSessionId);
       }
     },
@@ -918,6 +938,9 @@ export function useChatController({
       // Keep tool preference-derived values fresh
       assistantPreferences,
       fetchProjects,
+      // For auto-pinning agents
+      pinnedAgents,
+      togglePinnedAgent,
     ]
   );
 

@@ -37,7 +37,7 @@ interface InlineFileManagementProps {
   onRefresh: () => void;
 }
 
-export function InlineFileManagement({
+export default function InlineFileManagement({
   connectorId,
   onRefresh,
 }: InlineFileManagementProps) {
@@ -162,7 +162,9 @@ export function InlineFileManagement({
 
   if (error) {
     return (
-      <Text className="text-error">Error loading files: {error.message}</Text>
+      <Text as="p" className="text-error">
+        Error loading files: {error.message}
+      </Text>
     );
   }
 
@@ -175,7 +177,7 @@ export function InlineFileManagement({
     <>
       {/* Header with Edit/Save buttons */}
       <div className="flex justify-between items-center mb-4">
-        <Text mainUiBody>
+        <Text as="p" mainUiBody>
           Files ({totalFiles} file{totalFiles !== 1 ? "s" : ""})
         </Text>
         <div className="flex gap-2">
@@ -215,7 +217,7 @@ export function InlineFileManagement({
 
       {/* File List */}
       {files.length === 0 && filesToAdd.length === 0 ? (
-        <Text mainUiMuted className="text-center py-8">
+        <Text as="p" mainUiMuted className="text-center py-8">
           No files in this connector
         </Text>
       ) : (
@@ -312,7 +314,9 @@ export function InlineFileManagement({
                     )}
                     <TableCell className="font-medium">
                       {file.name}
-                      <Text figureSmallValue>New</Text>
+                      <Text as="p" figureSmallValue>
+                        New
+                      </Text>
                     </TableCell>
                     <TableCell>{formatBytes(file.size)}</TableCell>
                     <TableCell>-</TableCell>
@@ -356,16 +360,18 @@ export function InlineFileManagement({
             description="When you save these changes, the following will happen:"
           />
 
-          <Modal.Body className="px-6 space-y-3">
+          <Modal.Body>
             {selectedFilesToRemove.size > 0 && (
               <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-md">
                 <Text
+                  as="p"
                   mainUiBody
                   className="font-semibold text-red-800 dark:text-red-200"
                 >
                   🗑️ {selectedFilesToRemove.size} file(s) will be removed
                 </Text>
                 <Text
+                  as="p"
                   secondaryBody
                   className="text-red-700 dark:text-red-300 mt-1"
                 >
@@ -378,12 +384,14 @@ export function InlineFileManagement({
             {filesToAdd.length > 0 && (
               <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-md">
                 <Text
+                  as="p"
                   mainUiBody
                   className="font-semibold text-green-800 dark:text-green-200"
                 >
                   {filesToAdd.length} file(s) will be added
                 </Text>
                 <Text
+                  as="p"
                   secondaryBody
                   className="text-green-700 dark:text-green-300 mt-1"
                 >
@@ -394,7 +402,7 @@ export function InlineFileManagement({
             )}
           </Modal.Body>
 
-          <Modal.Footer className="p-6 pt-4">
+          <Modal.Footer>
             <Button
               onClick={() => setShowSaveConfirm(false)}
               secondary
@@ -402,7 +410,7 @@ export function InlineFileManagement({
             >
               Cancel
             </Button>
-            <Button onClick={handleConfirmSave} primary disabled={isSaving}>
+            <Button onClick={handleConfirmSave} disabled={isSaving}>
               {isSaving ? "Saving..." : "Confirm & Save"}
             </Button>
           </Modal.Footer>

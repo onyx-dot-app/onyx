@@ -8,15 +8,6 @@ from shared_configs.enums import RerankerProvider
 Embedding = list[float]
 
 
-class ConnectorClassificationRequest(BaseModel):
-    available_connectors: list[str]
-    query: str
-
-
-class ConnectorClassificationResponse(BaseModel):
-    connectors: list[str]
-
-
 class EmbedRequest(BaseModel):
     texts: list[str]
     # Can be none for cloud embedding model requests, error handling logic exists for other cases
@@ -72,16 +63,3 @@ class IntentRequest(BaseModel):
 class IntentResponse(BaseModel):
     is_keyword: bool
     keywords: list[str]
-
-
-class InformationContentClassificationRequests(BaseModel):
-    queries: list[str]
-
-
-class ContentClassificationPrediction(BaseModel):
-    predicted_label: int
-    content_boost_factor: float
-
-
-class InformationContentClassificationResponses(BaseModel):
-    information_content_classifications: list[ContentClassificationPrediction]

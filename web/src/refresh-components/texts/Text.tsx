@@ -56,8 +56,7 @@ const colors = {
   },
 };
 
-export interface TextProps
-  extends Omit<HTMLAttributes<HTMLParagraphElement>, "as"> {
+export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   nowrap?: boolean;
 
   // Fonts
@@ -93,7 +92,7 @@ export interface TextProps
   textDark05?: boolean;
 
   // Tag type override
-  as?: "p" | "span" | "div";
+  as?: "p" | "span" | "li";
 }
 
 export default function Text({
@@ -189,7 +188,7 @@ export default function Text({
                     ? "textDark05"
                     : "text05";
 
-  const Tag = as ?? "p";
+  const Tag = as ?? "span";
 
   return (
     <Tag
@@ -198,6 +197,11 @@ export default function Text({
         fonts[font],
         inverted ? colors.inverted[color] : colors[color],
         nowrap && "whitespace-nowrap",
+        // NOTE: We want a small, horizontal padding applied to text components to visually
+        // complement the white-space implicit with line-height. We apply to the before and after
+        // pseudo-elements such that padding applied to the tag directly is additive making the
+        // likelihood of 2px offsets with other text elements much lower.
+        "before:content-[''] before:inline-block before:pl-[2px] after:content-[''] after:inline-block after:pr-[2px]",
         className
       )}
     >

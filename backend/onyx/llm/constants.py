@@ -4,23 +4,63 @@ LLM Constants
 Centralized constants for LLM providers, vendors, and display names.
 """
 
+from enum import Enum
+
+
+# Provider names
+class LlmProviderNames(str, Enum):
+    """
+    Canonical string identifiers for LLM providers.
+    """
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    BEDROCK = "bedrock"
+    BEDROCK_CONVERSE = "bedrock_converse"
+    VERTEX_AI = "vertex_ai"
+    OPENROUTER = "openrouter"
+    AZURE = "azure"
+    OLLAMA_CHAT = "ollama_chat"
+    MISTRAL = "mistral"
+    LITELLM_PROXY = "litellm_proxy"
+
+    def __str__(self) -> str:
+        """Needed so things like:
+
+        f"{LlmProviderNames.OPENAI}/" gives back "openai/" instead of "LlmProviderNames.OPENAI/"
+        """
+        return self.value
+
+
+WELL_KNOWN_PROVIDER_NAMES = [
+    LlmProviderNames.OPENAI,
+    LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.VERTEX_AI,
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.OPENROUTER,
+    LlmProviderNames.AZURE,
+    LlmProviderNames.OLLAMA_CHAT,
+]
+
+
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    "openai": "OpenAI",
-    "anthropic": "Anthropic",
-    "google": "Google",
-    "bedrock": "Bedrock",
-    "bedrock_converse": "Bedrock",
-    "vertex_ai": "Vertex AI",
-    "openrouter": "OpenRouter",
-    "azure": "Azure",
+    LlmProviderNames.OPENAI: "OpenAI",
+    LlmProviderNames.ANTHROPIC: "Anthropic",
+    LlmProviderNames.GOOGLE: "Google",
+    LlmProviderNames.BEDROCK: "Bedrock",
+    LlmProviderNames.BEDROCK_CONVERSE: "Bedrock",
+    LlmProviderNames.VERTEX_AI: "Vertex AI",
+    LlmProviderNames.OPENROUTER: "OpenRouter",
+    LlmProviderNames.AZURE: "Azure",
     "ollama": "Ollama",
-    "ollama_chat": "Ollama",
+    LlmProviderNames.OLLAMA_CHAT: "Ollama",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
     "xai": "xAI",
-    "mistral": "Mistral",
+    LlmProviderNames.MISTRAL: "Mistral",
     "mistralai": "Mistral",  # Alias used by some providers
     "cohere": "Cohere",
     "perplexity": "Perplexity",
@@ -59,12 +99,12 @@ VENDOR_BRAND_NAMES: dict[str, str] = {
 
 # Aggregator providers that host models from multiple vendors
 AGGREGATOR_PROVIDERS: set[str] = {
-    "bedrock",
-    "bedrock_converse",
-    "openrouter",
-    "ollama_chat",
-    "vertex_ai",
-    "azure",
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.BEDROCK_CONVERSE,
+    LlmProviderNames.OPENROUTER,
+    LlmProviderNames.OLLAMA_CHAT,
+    LlmProviderNames.VERTEX_AI,
+    LlmProviderNames.AZURE,
 }
 
 # Model family name mappings for display name generation
@@ -181,6 +221,60 @@ BEDROCK_MODEL_TOKEN_LIMITS: dict[str, int] = {
     "jamba-1-5": 256000,
     "jamba-instruct": 70000,
     "jamba": 256000,  # Default to newer version
+}
+
+
+# Models that should keep their hyphenated format in display names
+# These are model families where the hyphen is part of the brand name
+HYPHENATED_MODEL_NAMES: set[str] = {
+    "gpt-oss",
+}
+
+
+# General model prefix to vendor mapping (used as fallback when enrichment data is missing)
+# This covers common model families across all providers
+MODEL_PREFIX_TO_VENDOR: dict[str, str] = {
+    # Google
+    "gemini": "google",
+    "gemma": "google",
+    "palm": "google",
+    # Anthropic
+    "claude": "anthropic",
+    # OpenAI
+    "gpt": "openai",
+    "o1": "openai",
+    "o3": "openai",
+    "o4": "openai",
+    "chatgpt": "openai",
+    # Meta
+    "llama": "meta",
+    "codellama": "meta",
+    # Mistral
+    "mistral": "mistral",
+    "mixtral": "mistral",
+    "codestral": "mistral",
+    "ministral": "mistral",
+    "pixtral": "mistral",
+    "magistral": "mistral",
+    # Cohere
+    "command": "cohere",
+    "aya": "cohere",
+    # Amazon
+    "nova": "amazon",
+    "titan": "amazon",
+    # AI21
+    "jamba": "ai21",
+    # DeepSeek
+    "deepseek": "deepseek",
+    # Alibaba/Qwen
+    "qwen": "alibaba",
+    "qwq": "alibaba",
+    # Microsoft
+    "phi": "microsoft",
+    # NVIDIA
+    "nemotron": "nvidia",
+    # xAI
+    "grok": "xai",
 }
 
 

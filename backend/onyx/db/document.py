@@ -225,6 +225,38 @@ def get_documents_by_ids(
     return list(documents)
 
 
+def filter_existing_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> set[str]:
+    """Filter a list of document IDs to only those that exist in the database.
+
+    Args:
+        db_session: Database session
+        document_ids: List of document IDs to check for existence
+
+    Returns:
+        Set of document IDs from the input list that exist in the database
+    """
+    if not document_ids:
+        return set()
+    stmt = select(DbDocument.id).where(DbDocument.id.in_(document_ids))
+    return set(db_session.execute(stmt).scalars().all())
+
+
+def fetch_document_ids_by_links(
+    db_session: Session,
+    links: list[str],
+) -> dict[str, str]:
+    """Fetch document IDs for documents whose link matches any of the provided values."""
+    if not links:
+        return {}
+
+    stmt = select(DbDocument.link, DbDocument.id).where(DbDocument.link.in_(links))
+    rows = db_session.execute(stmt).all()
+    return {link: doc_id for link, doc_id in rows if link}
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,
@@ -412,6 +444,8 @@ def upsert_documents(
         logger.info("No documents to upsert. Skipping.")
         return
 
+    includes_permissions = any(doc.external_access for doc in seen_documents.values())
+
     insert_stmt = insert(DbDocument).values(
         [
             model_to_dict(
@@ -447,21 +481,38 @@ def upsert_documents(
         ]
     )
 
+    update_set = {
+        "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
+        "boost": insert_stmt.excluded.boost,
+        "hidden": insert_stmt.excluded.hidden,
+        "semantic_id": insert_stmt.excluded.semantic_id,
+        "link": insert_stmt.excluded.link,
+        "primary_owners": insert_stmt.excluded.primary_owners,
+        "secondary_owners": insert_stmt.excluded.secondary_owners,
+        "doc_metadata": insert_stmt.excluded.doc_metadata,
+    }
+    if includes_permissions:
+        # Use COALESCE to preserve existing permissions when new values are NULL.
+        # This prevents subsequent indexing runs (which don't fetch permissions)
+        # from overwriting permissions set by permission sync jobs.
+        update_set.update(
+            {
+                "external_user_emails": func.coalesce(
+                    insert_stmt.excluded.external_user_emails,
+                    DbDocument.external_user_emails,
+                ),
+                "external_user_group_ids": func.coalesce(
+                    insert_stmt.excluded.external_user_group_ids,
+                    DbDocument.external_user_group_ids,
+                ),
+                "is_public": func.coalesce(
+                    insert_stmt.excluded.is_public,
+                    DbDocument.is_public,
+                ),
+            }
+        )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
-        index_elements=["id"],  # Conflict target
-        set_={
-            "from_ingestion_api": insert_stmt.excluded.from_ingestion_api,
-            "boost": insert_stmt.excluded.boost,
-            "hidden": insert_stmt.excluded.hidden,
-            "semantic_id": insert_stmt.excluded.semantic_id,
-            "link": insert_stmt.excluded.link,
-            "primary_owners": insert_stmt.excluded.primary_owners,
-            "secondary_owners": insert_stmt.excluded.secondary_owners,
-            "external_user_emails": insert_stmt.excluded.external_user_emails,
-            "external_user_group_ids": insert_stmt.excluded.external_user_group_ids,
-            "is_public": insert_stmt.excluded.is_public,
-            "doc_metadata": insert_stmt.excluded.doc_metadata,
-        },
+        index_elements=["id"], set_=update_set  # Conflict target
     )
     db_session.execute(on_conflict_stmt)
     db_session.commit()

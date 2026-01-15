@@ -6,11 +6,11 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import FadeDiv from "@/components/FadeDiv";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
-import ToolsEnabledCount from "@/sections/actions/ToolsEnabledCount";
+import EnabledCount from "@/refresh-components/EnabledCount";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 
-interface ToolsListProps {
+export interface ToolsListProps {
   // Loading state
   isFetching?: boolean;
 
@@ -71,7 +71,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
         ) : isEmpty ? (
           // Empty state
           <div className="flex items-center justify-center w-full py-8">
-            <Text text03 mainUiBody>
+            <Text as="p" text03 mainUiBody>
               {searchQuery ? emptySearchMessage : emptyMessage}
             </Text>
           </div>
@@ -90,9 +90,10 @@ const ToolsList: React.FC<ToolsListProps> = ({
             {/* Right action area */}
             <div className="flex items-center gap-1 ml-auto">
               {enabledCount > 0 && (
-                <ToolsEnabledCount
+                <EnabledCount
                   enabledCount={enabledCount}
                   totalCount={totalCount}
+                  name="tool"
                 />
               )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (
@@ -100,7 +101,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                   icon={SvgEye}
                   internal
                   onClick={onToggleShowOnlyEnabled}
-                  className={showOnlyEnabled ? "bg-background-tint-02" : ""}
+                  transient={showOnlyEnabled}
                   tooltip={
                     showOnlyEnabled ? "Show all tools" : "Show only enabled"
                   }
@@ -132,6 +133,6 @@ const ToolsList: React.FC<ToolsListProps> = ({
     </>
   );
 };
-
 ToolsList.displayName = "ToolsList";
+
 export default ToolsList;

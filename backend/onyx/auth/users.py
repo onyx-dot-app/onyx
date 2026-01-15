@@ -60,6 +60,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.disposable_email_validator import is_disposable_email
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
@@ -248,13 +249,23 @@ def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
 
 
 def verify_email_domain(email: str) -> None:
+    if email.count("@") != 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is not valid",
+        )
+
+    domain = email.split("@")[-1].lower()
+
+    # Check if email uses a disposable/temporary domain
+    if is_disposable_email(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Disposable email addresses are not allowed. Please use a permanent email address.",
+        )
+
+    # Check domain whitelist if configured
     if VALID_EMAIL_DOMAINS:
-        if email.count("@") != 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email is not valid",
-            )
-        domain = email.split("@")[-1].lower()
         if domain not in VALID_EMAIL_DOMAINS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -292,10 +303,56 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         safe: bool = False,
         request: Optional[Request] = None,
     ) -> User:
+        # Verify captcha if enabled (for cloud signup protection)
+        from onyx.auth.captcha import CaptchaVerificationError
+        from onyx.auth.captcha import is_captcha_enabled
+        from onyx.auth.captcha import verify_captcha_token
+
+        if is_captcha_enabled() and request is not None:
+            # Get captcha token from request body or headers
+            captcha_token = None
+            if hasattr(user_create, "captcha_token"):
+                captcha_token = getattr(user_create, "captcha_token", None)
+
+            # Also check headers as a fallback
+            if not captcha_token:
+                captcha_token = request.headers.get("X-Captcha-Token")
+
+            try:
+                await verify_captcha_token(
+                    captcha_token or "", expected_action="signup"
+                )
+            except CaptchaVerificationError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"reason": str(e)},
+                )
+
         # We verify the password here to make sure it's valid before we proceed
         await self.validate_password(
             user_create.password, cast(schemas.UC, user_create)
         )
+
+        # Check for disposable emails BEFORE provisioning tenant
+        # This prevents creating tenants for throwaway email addresses
+        try:
+            verify_email_domain(user_create.email)
+        except HTTPException as e:
+            # Log blocked disposable email attempts
+            if (
+                e.status_code == status.HTTP_400_BAD_REQUEST
+                and "Disposable email" in str(e.detail)
+            ):
+                domain = (
+                    user_create.email.split("@")[-1]
+                    if "@" in user_create.email
+                    else "unknown"
+                )
+                logger.warning(
+                    f"Blocked disposable email registration attempt: {domain}",
+                    extra={"email_domain": domain},
+                )
+            raise
 
         user_count: int | None = None
         referral_source = (
@@ -318,8 +375,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                verify_email_is_invited(user_create.email)
-                verify_email_domain(user_create.email)
+                # Check invite list based on deployment mode
+                if MULTI_TENANT:
+                    # Multi-tenant: Only require invite for existing tenants
+                    # New tenant creation (first user) doesn't require an invite
+                    user_count = await get_user_count()
+                    if user_count > 0:
+                        # Tenant already has users - require invite for new users
+                        verify_email_is_invited(user_create.email)
+                else:
+                    # Single-tenant: Check invite list (skips if SAML/OIDC or no list configured)
+                    verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
                     tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                         db_session, User, OAuthAccount

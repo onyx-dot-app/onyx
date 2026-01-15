@@ -78,16 +78,12 @@ export default function OnyxApiKeyForm({
           >
             {({ isSubmitting }) => (
               <Form className="w-full overflow-visible">
-                <Text>
+                <Text as="p">
                   Choose a memorable name for your API key. This is optional and
                   can be added or changed later!
                 </Text>
 
-                <TextFormField
-                  name="name"
-                  label="Name (optional):"
-                  autoCompleteDisabled={true}
-                />
+                <TextFormField name="name" label="Name (optional):" />
 
                 <SelectorFormField
                   // defaultValue is managed by Formik

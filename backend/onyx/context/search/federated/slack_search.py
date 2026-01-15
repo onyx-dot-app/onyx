@@ -31,7 +31,6 @@ from onyx.context.search.federated.slack_search_utils import is_recency_query
 from onyx.context.search.federated.slack_search_utils import should_include_message
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.document import DocumentSource
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import (
@@ -425,7 +424,6 @@ class SlackQueryResult(BaseModel):
 
 def query_slack(
     query_string: str,
-    original_query: SearchQuery,
     access_token: str,
     limit: int | None = None,
     allowed_private_channel: str | None = None,
@@ -456,7 +454,7 @@ def query_slack(
     logger.info(f"Final query to slack: {final_query}")
 
     # Detect if query asks for most recent results
-    sort_by_time = is_recency_query(original_query.query)
+    sort_by_time = is_recency_query(query_string)
 
     slack_client = WebClient(token=access_token)
     try:
@@ -536,8 +534,7 @@ def query_slack(
         )
         document_id = f"{channel_id}_{message_id}"
 
-        # compute recency bias (parallels vespa calculation) and metadata
-        decay_factor = DOC_TIME_DECAY * original_query.recency_bias_multiplier
+        decay_factor = DOC_TIME_DECAY
         doc_time = datetime.fromtimestamp(float(message_id))
         doc_age_years = (datetime.now() - doc_time).total_seconds() / (
             365 * 24 * 60 * 60
@@ -1002,7 +999,6 @@ def slack_retrieval(
             query_slack,
             (
                 query_string,
-                query,
                 access_token,
                 query_limit,
                 allowed_private_channel,
@@ -1016,9 +1012,15 @@ def slack_retrieval(
         for query_string in query_strings
     ]
 
-    # If include_dm is True, add additional searches without channel filters
-    # This allows searching DMs/group DMs while still searching the specified channels
-    if entities and entities.get("include_dm"):
+    # If include_dm is True AND we're not already searching all channels,
+    # add additional searches without channel filters.
+    # This allows searching DMs/group DMs while still searching the specified channels.
+    # Skip this if search_all_channels is already True (would be duplicate queries).
+    if (
+        entities
+        and entities.get("include_dm")
+        and not entities.get("search_all_channels")
+    ):
         # Create a minimal entities dict that won't add channel filters
         # This ensures we search ALL conversations (DMs, group DMs, private channels)
         # BUT we still want to exclude channels specified in exclude_channels
@@ -1039,7 +1041,6 @@ def slack_retrieval(
                     query_slack,
                     (
                         query_string,
-                        query,
                         access_token,
                         query_limit,
                         allowed_private_channel,
@@ -1219,7 +1220,6 @@ def slack_retrieval(
                 source_type=DocumentSource.SLACK,
                 title=chunk.title_prefix,
                 boost=0,
-                recency_bias=docid_to_message[document_id].recency_bias,
                 score=convert_slack_score(docid_to_message[document_id].slack_score),
                 hidden=False,
                 is_relevant=None,

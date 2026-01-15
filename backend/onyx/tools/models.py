@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from typing import Any
 from typing import Literal
 from uuid import UUID
@@ -22,6 +23,23 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
+
+
+class ToolCallException(Exception):
+    """Exception raised for errors during tool calls."""
+
+    def __init__(self, message: str, llm_facing_message: str):
+        # This is the full error message which is used for tracing
+        super().__init__(message)
+        # LLM made tool calls are acceptable and not flow terminating, this is the message
+        # which will populate the tool response.
+        self.llm_facing_message = llm_facing_message
+
+
+class SearchToolUsage(str, Enum):
+    DISABLED = "disabled"
+    ENABLED = "enabled"
+    AUTO = "auto"
 
 
 class CustomToolUserFileSnapshot(BaseModel):
@@ -68,6 +86,11 @@ class ToolResponse(BaseModel):
     llm_facing_response: str
     # The original tool call that triggered this response - set by tool_runner
     tool_call: ToolCallKickoff | None = None
+
+
+class ParallelToolCallResponse(BaseModel):
+    tool_responses: list[ToolResponse]
+    updated_citation_mapping: dict[int, str]
 
 
 class ToolRunnerResponse(BaseModel):

@@ -875,6 +875,79 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  drupal_wiki: {
+    description: "Configure Drupal Wiki connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base URL of the Drupal Wiki instance:",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+        description:
+          "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )",
+      },
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "What should we index from Drupal Wiki?",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything_description",
+                description:
+                  "This connector will index all spaces the provided credentials have access to!",
+              },
+            ],
+          },
+          {
+            value: "specific",
+            label: "Specific Spaces/Pages",
+            fields: [
+              {
+                type: "list",
+                query: "Enter space IDs to include:",
+                label: "Space IDs",
+                name: "spaces",
+                description:
+                  "Specify one or more space IDs to index. Only numeric values are allowed.",
+                optional: true,
+                transform: (values: string[]) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+              {
+                type: "list",
+                query: "Enter page IDs to include:",
+                label: "Page IDs",
+                name: "pages",
+                description:
+                  "Specify one or more page IDs to index. Only numeric values are allowed.",
+                optional: true,
+                transform: (values: string[]) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "checkbox",
+        query: "Include attachments?",
+        label: "Include Attachments",
+        name: "include_attachments",
+        description:
+          "Enable processing of page attachments including images and documents",
+        default: false,
+      },
+    ],
+    advanced_values: [],
+  },
   axero: {
     description: "Configure Axero connector",
     values: [
@@ -1800,6 +1873,13 @@ export interface DiscourseConfig {
 
 export interface AxeroConfig {
   spaces?: string[];
+}
+
+export interface DrupalWikiConfig {
+  base_url: string;
+  spaces?: string[];
+  pages?: string[];
+  include_attachments?: boolean;
 }
 
 export interface TeamsConfig {

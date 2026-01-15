@@ -1,0 +1,62 @@
+name: Database Tests
+concurrency:
+  group: Database-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  database-tests:
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-database-tests"
+    timeout-minutes: 45
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+
+      - name: Generate OpenAPI schema and Python client
+        shell: bash
+        run: |
+          ods openapi all
+
+      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
+      # https://docs.docker.com/docker-hub/usage/
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Start Docker containers
+        working-directory: ./deployment/docker_compose
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
+            relational_db
+
+      - name: Run Database Tests
+        working-directory: ./backend
+        run: pytest -m alembic tests/integration/tests/migrations/

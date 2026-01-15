@@ -24,13 +24,13 @@ export default function SelectModelModal({
           onClose={onCancel}
         />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             You&apos;re selecting a new embedding model,{" "}
             <strong>{model.model_name}</strong>. If you update to this model,
             you will need to undergo a complete re-indexing. Are you sure?
           </Text>
         </Modal.Body>
-        <Modal.Footer className="p-4 gap-2 justify-end">
+        <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
           <Button secondary onClick={onCancel}>
             Cancel

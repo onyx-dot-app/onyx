@@ -270,9 +270,10 @@ def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
         logger.exception("Failed to extract all docx images")
 
 
-def docx_to_text_and_images(
+def read_docx_file(
     file: IO[Any],
     file_name: str = "",
+    extract_images: bool = False,
     image_callback: Callable[[bytes, str], None] | None = None,
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
@@ -313,14 +314,16 @@ def docx_to_text_and_images(
         return text_content_raw or "", []
 
     file.seek(0)
-    if image_callback is None:
-        return doc.markdown, list(extract_docx_images(to_bytesio(file)))
-    # If a callback is provided, iterate and stream images without accumulating
-    try:
-        for img_file_bytes, img_file_name in extract_docx_images(to_bytesio(file)):
-            image_callback(img_file_bytes, img_file_name)
-    except Exception:
-        logger.exception("Failed to stream docx images")
+
+    if extract_images:
+        if image_callback is None:
+            return doc.markdown, list(extract_docx_images(to_bytesio(file)))
+        # If a callback is provided, iterate and stream images without accumulating
+        try:
+            for img_file_bytes, img_file_name in extract_docx_images(to_bytesio(file)):
+                image_callback(img_file_bytes, img_file_name)
+        except Exception:
+            logger.exception("Failed to stream docx images")
     return doc.markdown, []
 
 
@@ -478,7 +481,7 @@ def extract_file_text(
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
-        ".docx": lambda f: docx_to_text_and_images(f, file_name)[0],  # no images
+        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
         ".pptx": lambda f: pptx_to_text(f, file_name),
         ".xlsx": lambda f: xlsx_to_text(f, file_name),
         ".eml": eml_to_text,
@@ -609,8 +612,8 @@ def _extract_text_and_images(
         extension = get_file_ext(file_name)
         # docx example for embedded images
         if extension == ".docx":
-            text_content, images = docx_to_text_and_images(
-                file, file_name, image_callback=image_callback
+            text_content, images = read_docx_file(
+                file, file_name, extract_images=True, image_callback=image_callback
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}

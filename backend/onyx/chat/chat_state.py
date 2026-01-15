@@ -1,4 +1,5 @@
 import threading
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from queue import Empty
@@ -38,6 +39,7 @@ class ChatStateContainer:
         self.citation_to_doc: CitationMapping = {}
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
+        # Note: LLM cost tracking is now handled in multi_llm.py
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -92,6 +94,7 @@ class ChatStateContainer:
 
 def run_chat_loop_with_state_containers(
     func: Callable[..., None],
+    completion_callback: Callable[[ChatStateContainer], None],
     is_connected: Callable[[], bool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -144,6 +147,9 @@ def run_chat_loop_with_state_containers(
     thread = run_in_background(run_with_exception_capture)
 
     pkt: Packet | None = None
+    last_turn_index = 0  # Track the highest turn_index seen for stop packet
+    last_cancel_check = time.monotonic()
+    cancel_check_interval = 0.3  # Check for cancellation every 300ms
     try:
         while True:
             # Poll queue with 300ms timeout for natural stop signal checking
@@ -152,20 +158,51 @@ def run_chat_loop_with_state_containers(
                 pkt = emitter.bus.get(timeout=0.3)
             except Empty:
                 if not is_connected():
-                    # Stop signal detected, kill the thread
+                    # Stop signal detected
+                    yield Packet(
+                        placement=Placement(turn_index=last_turn_index + 1),
+                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                    )
                     break
+                last_cancel_check = time.monotonic()
                 continue
 
             if pkt is not None:
-                if pkt.obj == OverallStop(type="stop"):
+                # Track the highest turn_index for the stop packet
+                if pkt.placement and pkt.placement.turn_index > last_turn_index:
+                    last_turn_index = pkt.placement.turn_index
+
+                if isinstance(pkt.obj, OverallStop):
                     yield pkt
                     break
                 elif isinstance(pkt.obj, PacketException):
                     raise pkt.obj.exception
                 else:
                     yield pkt
+
+                # Check for cancellation periodically even when packets are flowing
+                # This ensures stop signal is checked during active streaming
+                current_time = time.monotonic()
+                if current_time - last_cancel_check >= cancel_check_interval:
+                    if not is_connected():
+                        # Stop signal detected during streaming
+                        yield Packet(
+                            placement=Placement(turn_index=last_turn_index + 1),
+                            obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+                        )
+                        break
+                    last_cancel_check = current_time
     finally:
         # Wait for thread to complete on normal exit to propagate exceptions and ensure cleanup.
         # Skip waiting if user disconnected to exit quickly.
         if is_connected():
             wait_on_background(thread)
+        try:
+            completion_callback(state_container)
+        except Exception as e:
+            emitter.emit(
+                Packet(
+                    placement=Placement(turn_index=last_turn_index + 1),
+                    obj=PacketException(type="error", exception=e),
+                )
+            )

@@ -320,7 +320,6 @@ export default function OpenAPIAuthenticationModal({
           title={title}
           description={description}
           onClose={onClose}
-          className="p-4"
         />
 
         <Formik
@@ -342,10 +341,14 @@ export default function OpenAPIAuthenticationModal({
             dirty,
           }) => (
             <Form className="flex flex-col h-full">
-              <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
+              <Modal.Body>
                 {oauthConfigError && (
                   <div className="mb-3">
-                    <Text mainUiBody className="text-action-text-danger-05">
+                    <Text
+                      as="p"
+                      mainUiBody
+                      className="text-action-text-danger-05"
+                    >
                       {oauthConfigError}
                     </Text>
                   </div>
@@ -353,7 +356,7 @@ export default function OpenAPIAuthenticationModal({
 
                 {shouldDisableForm ? (
                   <div className="flex min-h-[220px] items-center justify-center rounded-12 border border-border-01 bg-background-tint-00">
-                    <Text secondaryBody text03>
+                    <Text as="p" secondaryBody text03>
                       Loading existing configuration...
                     </Text>
                   </div>
@@ -567,12 +570,13 @@ export default function OpenAPIAuthenticationModal({
                         </FormField>
 
                         <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
-                          <Text text03 secondaryBody>
+                          <Text as="p" text03 secondaryBody>
                             OAuth passthrough is only available if you enable
                             OIDC or OAuth authentication.
                           </Text>
                           <div className="flex flex-col gap-2 w-full">
                             <Text
+                              as="p"
                               text03
                               secondaryBody
                               className="flex flex-wrap gap-1"
@@ -585,6 +589,7 @@ export default function OpenAPIAuthenticationModal({
                             </Text>
                             <div className="flex items-center gap-2 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-2">
                               <Text
+                                as="p"
                                 text04
                                 className="font-mono text-[12px] leading-[16px] truncate flex-1"
                               >
@@ -603,10 +608,10 @@ export default function OpenAPIAuthenticationModal({
                     {values.authMethod === "custom-header" && (
                       <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
                         <div className="flex flex-col gap-2">
-                          <Text mainUiAction text04>
+                          <Text as="p" mainUiAction text04>
                             Authentication Headers
                           </Text>
-                          <Text secondaryBody text03>
+                          <Text as="p" secondaryBody text03>
                             Specify custom headers for all requests sent to this
                             action&apos;s API endpoint.
                           </Text>
@@ -656,7 +661,7 @@ export default function OpenAPIAuthenticationModal({
                 )}
               </Modal.Body>
 
-              <Modal.Footer className="gap-2">
+              <Modal.Footer>
                 <Button main tertiary type="button" onClick={handleSkip}>
                   Cancel
                 </Button>

@@ -197,12 +197,12 @@ export default function ModifyCredential({
               onClose={() => setConfirmDeletionCredential(null)}
             />
             <Modal.Body>
-              <Text>
+              <Text as="p">
                 Are you sure you want to delete this credential? You cannot
                 delete credentials that are linked to live connectors.
               </Text>
             </Modal.Body>
-            <Modal.Footer className="p-4 gap-2 justify-end">
+            <Modal.Footer>
               <Button
                 onClick={async () => {
                   onDeleteCredential(confirmDeletionCredential);
@@ -223,7 +223,7 @@ export default function ModifyCredential({
       )}
 
       <div className="mb-0">
-        <Text className="mb-4">
+        <Text as="p" className="mb-4">
           Select a credential as needed! Ensure that you have selected a
           credential with the proper permissions for this connector!
         </Text>

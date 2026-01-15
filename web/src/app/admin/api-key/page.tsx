@@ -63,7 +63,7 @@ function Main() {
 
   const introSection = (
     <div className="flex flex-col items-start gap-4">
-      <Text>
+      <Text as="p">
         API Keys allow you to access Onyx APIs programmatically. Click the
         button below to generate a new API Key.
       </Text>
@@ -113,7 +113,9 @@ function Main() {
             description="Make sure you copy your new API key. You won’t be able to see this key again."
           />
           <Modal.Body>
-            <Text className="break-all flex-1">{fullApiKey}</Text>
+            <Text as="p" className="break-all flex-1">
+              {fullApiKey}
+            </Text>
             <CopyIconButton getCopyText={() => fullApiKey!} />
           </Modal.Body>
         </Modal.Content>
@@ -219,10 +221,10 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle title="API Keys" icon={SvgKey} />
 
       <Main />
-    </div>
+    </>
   );
 }
