@@ -9,11 +9,12 @@ import { logout } from "@/lib/user";
 import { useUser } from "../user/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
+import { SvgX } from "@opal/icons";
 
 // App domain should not be hardcoded
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
 
-interface NewTenantModalProps {
+export interface NewTenantModalProps {
   tenantInfo: NewTenantInfo;
   isInvite?: boolean;
   onClose?: () => void;
@@ -31,12 +32,12 @@ export default function NewTenantModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleClose = () => {
+  function handleClose() {
     setIsOpen(false);
     onClose?.();
-  };
+  }
 
-  const handleJoinTenant = async () => {
+  async function handleJoinTenant() {
     setIsLoading(true);
     setError(null);
 
@@ -86,9 +87,9 @@ export default function NewTenantModal({
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  const handleRejectInvite = async () => {
+  async function handleRejectInvite() {
     if (!isInvite) return;
 
     setIsLoading(true);
@@ -128,7 +129,7 @@ export default function NewTenantModal({
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
   if (!isOpen) return null;
 
@@ -185,25 +186,14 @@ export default function NewTenantModal({
                 <Button
                   onClick={handleRejectInvite}
                   secondary
-                  className="flex items-center flex-1"
                   disabled={isLoading}
+                  leftIcon={SvgX}
                 >
-                  {isLoading ? (
-                    <span className="animate-spin mr-2">⟳</span>
-                  ) : (
-                    <X className="mr-2 h-4 w-4" />
-                  )}
                   Decline
                 </Button>
               )}
 
-              <Button
-                onClick={handleJoinTenant}
-                className={`flex items-center justify-center ${
-                  isInvite ? "flex-1" : "w-full"
-                }`}
-                disabled={isLoading}
-              >
+              <Button onClick={handleJoinTenant} disabled={isLoading}>
                 {isLoading ? (
                   <span className="flex items-center">
                     <span className="animate-spin mr-2">⟳</span>
