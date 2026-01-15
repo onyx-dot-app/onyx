@@ -4,9 +4,13 @@ import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGmailOAuth } from "@/lib/gmail";
-import { GMAIL_AUTH_IS_ADMIN_COOKIE_NAME } from "@/lib/constants";
+import {
+  DOCS_ADMINS_PATH,
+  GMAIL_AUTH_IS_ADMIN_COOKIE_NAME,
+} from "@/lib/constants";
 import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
@@ -298,7 +302,7 @@ export const GmailJsonUploadSection = ({
         <a
           className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm"
           target="_blank"
-          href="https://docs.onyx.app/admin/connectors/official/gmail/overview"
+          href={`${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`}
           rel="noreferrer"
         >
           <FiLink className="h-3 w-3" />
@@ -630,7 +634,7 @@ export const GmailAuthSection = ({
               });
 
               if (authUrl) {
-                router.push(authUrl);
+                router.push(authUrl as Route);
               } else {
                 setPopup({
                   message: errorMsg,

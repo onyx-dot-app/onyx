@@ -229,9 +229,9 @@ class TestSlackEntitiesValidation:
         assert entities.search_all_channels is True
         assert entities.channels is None
         assert entities.exclude_channels is None
-        assert entities.include_dm is False
-        assert entities.include_group_dm is False
-        assert entities.include_private_channels is False
+        assert entities.include_dm is True
+        assert entities.include_group_dm is True
+        assert entities.include_private_channels is True
         assert entities.default_search_days == 30
 
     def test_search_all_channels_true(self) -> None:
@@ -322,17 +322,17 @@ class TestSlackEntitiesValidation:
 
     def test_direct_message_filtering(self) -> None:
         """Test DM filtering options"""
-        # Test 1:1 DMs
-        entities_dm = SlackEntities(include_dm=True)
-        assert entities_dm.include_dm is True
-        assert entities_dm.include_group_dm is False
+        # Test disabling 1:1 DMs
+        entities_no_dm = SlackEntities(include_dm=False)
+        assert entities_no_dm.include_dm is False
+        assert entities_no_dm.include_group_dm is True  # Default is True
 
-        # Test group DMs
-        entities_group_dm = SlackEntities(include_group_dm=True)
-        assert entities_group_dm.include_dm is False
-        assert entities_group_dm.include_group_dm is True
+        # Test disabling group DMs
+        entities_no_group_dm = SlackEntities(include_group_dm=False)
+        assert entities_no_group_dm.include_dm is True  # Default is True
+        assert entities_no_group_dm.include_group_dm is False
 
-        # Test both
+        # Test both enabled (defaults)
         entities_both = SlackEntities(include_dm=True, include_group_dm=True)
         assert entities_both.include_dm is True
         assert entities_both.include_group_dm is True

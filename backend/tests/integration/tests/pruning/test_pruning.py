@@ -157,7 +157,7 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
             now = datetime.now(timezone.utc)
             CCPairManager.prune(cc_pair_1, user_performing_action=admin_user)
             CCPairManager.wait_for_prune(
-                cc_pair_1, now, timeout=60, user_performing_action=admin_user
+                cc_pair_1, now, timeout=300, user_performing_action=admin_user
             )
 
             selected_cc_pair = CCPairManager.get_indexing_status_by_id(

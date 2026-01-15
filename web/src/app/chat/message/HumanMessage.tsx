@@ -1,97 +1,21 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { ChatFileType, FileDescriptor } from "@/app/chat/interfaces";
-import Attachment from "@/refresh-components/Attachment";
-import { InMessageImage } from "@/app/chat/components/files/images/InMessageImage";
-import CsvContent from "@/components/tools/CSVContent";
+import { FileDescriptor } from "@/app/chat/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import SvgEdit from "@/icons/edit";
 import Button from "@/refresh-components/buttons/Button";
-import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
-
-interface FileDisplayProps {
-  files: FileDescriptor[];
-  alignBubble?: boolean;
-}
+import { SvgEdit } from "@opal/icons";
+import FileDisplay from "./FileDisplay";
 
 interface MessageEditingProps {
   content: string;
   onSubmitEdit: (editedContent: string) => void;
   onCancelEdit: () => void;
-}
-
-function FileDisplay({ files, alignBubble }: FileDisplayProps) {
-  const [close, setClose] = useState(true);
-  const textFiles = files.filter(
-    (file) =>
-      file.type === ChatFileType.PLAIN_TEXT ||
-      file.type === ChatFileType.DOCUMENT
-  );
-  const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const csvFiles = files.filter((file) => file.type === ChatFileType.CSV);
-
-  return (
-    <>
-      {textFiles.length > 0 && (
-        <div
-          id="onyx-file"
-          className={cn("mt-2 auto", alignBubble && "ml-auto")}
-        >
-          <div className="flex flex-col gap-2">
-            {textFiles.map((file) => (
-              <Attachment key={file.id} fileName={file.name || file.id} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {imageFiles.length > 0 && (
-        <div
-          id="onyx-image"
-          className={cn("mt-2 auto", alignBubble && "ml-auto")}
-        >
-          <div className="flex flex-col gap-2">
-            {imageFiles.map((file) => (
-              <InMessageImage key={file.id} fileId={file.id} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {csvFiles.length > 0 && (
-        <div className={cn("mt-2 auto", alignBubble && "ml-auto")}>
-          <div className="flex flex-col gap-2">
-            {csvFiles.map((file) => {
-              return (
-                <div key={file.id} className="w-fit">
-                  {close ? (
-                    <>
-                      <ExpandableContentWrapper
-                        fileDescriptor={file}
-                        close={() => setClose(false)}
-                        ContentComponent={CsvContent}
-                      />
-                    </>
-                  ) : (
-                    <Attachment
-                      open={() => setClose(true)}
-                      fileName={file.name || file.id}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </>
-  );
 }
 
 function MessageEditing({
@@ -164,29 +88,46 @@ interface HumanMessageProps {
   // Content and display
   content: string;
   files?: FileDescriptor[];
-  shared?: boolean;
 
-  // Message navigation
+  // Message navigation - nodeId for tree position, messageId for editing
+  nodeId: number;
   messageId?: number | null;
   otherMessagesCanSwitchTo?: number[];
-  onMessageSelection?: (messageId: number) => void;
+  onMessageSelection?: (nodeId: number) => void;
 
-  // Editing functionality
-  onEdit?: (editedContent: string) => void;
+  // Editing functionality - takes (editedContent, messageId) to allow stable callback reference
+  onEdit?: (editedContent: string, messageId: number) => void;
 
   // Streaming and generation
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
 }
 
-export default function HumanMessage({
+// Memoization comparison - compare by value for primitives, by reference for objects/arrays
+function arePropsEqual(
+  prev: HumanMessageProps,
+  next: HumanMessageProps
+): boolean {
+  return (
+    prev.content === next.content &&
+    prev.nodeId === next.nodeId &&
+    prev.messageId === next.messageId &&
+    prev.files === next.files &&
+    prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
+    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
+    prev.onEdit === next.onEdit
+    // Skip: stopGenerating, onMessageSelection (inline function props)
+  );
+}
+
+const HumanMessage = React.memo(function HumanMessage({
   content: initialContent,
   files,
+  nodeId,
   messageId,
   otherMessagesCanSwitchTo,
   onEdit,
   onMessageSelection,
-  shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
@@ -196,12 +137,15 @@ export default function HumanMessage({
   // Fix this later.
   const [content, setContent] = useState(initialContent);
 
-  const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  const currentMessageInd = messageId
-    ? otherMessagesCanSwitchTo?.indexOf(messageId)
-    : undefined;
+  // Use nodeId for switching (finding position in siblings)
+  const indexInSiblings = otherMessagesCanSwitchTo?.indexOf(nodeId);
+  // indexOf returns -1 if not found, treat that as undefined
+  const currentMessageInd =
+    indexInSiblings !== undefined && indexInSiblings !== -1
+      ? indexInSiblings
+      : undefined;
 
   const getPreviousMessage = () => {
     if (
@@ -228,132 +172,115 @@ export default function HumanMessage({
   return (
     <div
       id="onyx-human-message"
-      className="pt-5 pb-1 w-full lg:px-5 flex -mr-6 relative"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      className="group flex flex-col justify-end pt-5 pb-1 w-full -mr-6 relative"
     >
-      <div
-        className={cn(
-          "text-user-text mx-auto max-w-[790px]",
-          shared ? "w-full" : "w-[90%]"
-        )}
-      >
-        <div className="xl:ml-8">
-          <div className="flex flex-col desktop:mr-4">
-            <FileDisplay alignBubble files={files || []} />
-
-            <div className="flex justify-end mt-1">
-              <div className="w-full ml-8 flex w-full w-[800px] break-words">
-                {isEditing ? (
-                  <MessageEditing
-                    content={content}
-                    onSubmitEdit={(editedContent) => {
-                      onEdit?.(editedContent);
-                      setContent(editedContent);
-                      setIsEditing(false);
-                    }}
-                    onCancelEdit={() => setIsEditing(false)}
-                  />
-                ) : typeof content === "string" ? (
-                  <>
-                    <div className="ml-auto flex items-center mr-1 h-fit mb-auto">
-                      {onEdit &&
-                      isHovered &&
-                      !isEditing &&
-                      (!files || files.length === 0) ? (
-                        <div className="flex flex-row items-center justify-center gap-1">
-                          <CopyIconButton
-                            getCopyText={() => content}
-                            tertiary
-                            data-testid="HumanMessage/copy-button"
-                          />
-                          <IconButton
-                            icon={SvgEdit}
-                            tertiary
-                            tooltip="Edit"
-                            onClick={() => {
-                              setIsEditing(true);
-                              setIsHovered(false);
-                            }}
-                            data-testid="HumanMessage/edit-button"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-7" />
-                      )}
-                    </div>
-
-                    <div
-                      className={cn(
-                        "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3",
-                        !(
-                          onEdit &&
-                          isHovered &&
-                          !isEditing &&
-                          (!files || files.length === 0)
-                        ) && "ml-auto"
-                      )}
-                    >
-                      <Text mainContentBody>{content}</Text>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {onEdit &&
-                    isHovered &&
-                    !isEditing &&
-                    (!files || files.length === 0) ? (
-                      <div className="my-auto">
-                        <IconButton
-                          icon={SvgEdit}
-                          onClick={() => {
-                            setIsEditing(true);
-                            setIsHovered(false);
-                          }}
-                          tertiary
-                          tooltip="Edit"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-[27px]" />
-                    )}
-                    <div className="ml-auto rounded-lg p-1">{content}</div>
-                  </>
-                )}
+      <FileDisplay alignBubble files={files || []} />
+      <div className="flex flex-wrap justify-end break-words">
+        {isEditing ? (
+          <MessageEditing
+            content={content}
+            onSubmitEdit={(editedContent) => {
+              // Don't update UI for edits that can't be persisted
+              if (messageId === undefined || messageId === null) {
+                setIsEditing(false);
+                return;
+              }
+              onEdit?.(editedContent, messageId);
+              setContent(editedContent);
+              setIsEditing(false);
+            }}
+            onCancelEdit={() => setIsEditing(false)}
+          />
+        ) : typeof content === "string" ? (
+          <>
+            <div className="md:max-w-[25rem] flex basis-[100%] md:basis-auto justify-end md:order-1">
+              <div
+                className={
+                  "max-w-[25rem] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                }
+                onCopy={(e) => {
+                  const selection = window.getSelection();
+                  if (selection) {
+                    e.preventDefault();
+                    const text = selection
+                      .toString()
+                      .replace(/\n{2,}/g, "\n")
+                      .trim();
+                    e.clipboardData.setData("text/plain", text);
+                  }
+                }}
+              >
+                <Text as="p" mainContentBody>
+                  {content}
+                </Text>
               </div>
             </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-x-0.5 mt-1">
-            {currentMessageInd !== undefined &&
-              onMessageSelection &&
-              otherMessagesCanSwitchTo &&
-              otherMessagesCanSwitchTo.length > 1 && (
-                <div className="ml-auto mr-3">
-                  <MessageSwitcher
-                    disableForStreaming={disableSwitchingForStreaming}
-                    currentPage={currentMessageInd + 1}
-                    totalPages={otherMessagesCanSwitchTo.length}
-                    handlePrevious={() => {
-                      stopGenerating();
-                      const prevMessage = getPreviousMessage();
-                      if (prevMessage !== undefined) {
-                        onMessageSelection(prevMessage);
-                      }
-                    }}
-                    handleNext={() => {
-                      stopGenerating();
-                      const nextMessage = getNextMessage();
-                      if (nextMessage !== undefined) {
-                        onMessageSelection(nextMessage);
-                      }
-                    }}
-                  />
-                </div>
+            {onEdit && !isEditing && (!files || files.length === 0) && (
+              <div className="flex flex-row gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <CopyIconButton
+                  getCopyText={() => content}
+                  tertiary
+                  data-testid="HumanMessage/copy-button"
+                />
+                <IconButton
+                  icon={SvgEdit}
+                  tertiary
+                  tooltip="Edit"
+                  onClick={() => setIsEditing(true)}
+                  data-testid="HumanMessage/edit-button"
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div
+              className={cn(
+                "my-auto",
+                onEdit && !isEditing && (!files || files.length === 0)
+                  ? "opacity-0 group-hover:opacity-100 transition-opacity"
+                  : "invisible"
               )}
-          </div>
+            >
+              <IconButton
+                icon={SvgEdit}
+                onClick={() => setIsEditing(true)}
+                tertiary
+                tooltip="Edit"
+              />
+            </div>
+            <div className="ml-auto rounded-lg p-1">{content}</div>
+          </>
+        )}
+        <div className="md:min-w-[100%] flex justify-end order-1 mt-1">
+          {currentMessageInd !== undefined &&
+            onMessageSelection &&
+            otherMessagesCanSwitchTo &&
+            otherMessagesCanSwitchTo.length > 1 && (
+              <MessageSwitcher
+                disableForStreaming={disableSwitchingForStreaming}
+                currentPage={currentMessageInd + 1}
+                totalPages={otherMessagesCanSwitchTo.length}
+                handlePrevious={() => {
+                  stopGenerating();
+                  const prevMessage = getPreviousMessage();
+                  if (prevMessage !== undefined) {
+                    onMessageSelection(prevMessage);
+                  }
+                }}
+                handleNext={() => {
+                  stopGenerating();
+                  const nextMessage = getNextMessage();
+                  if (nextMessage !== undefined) {
+                    onMessageSelection(nextMessage);
+                  }
+                }}
+              />
+            )}
         </div>
       </div>
     </div>
   );
-}
+}, arePropsEqual);
+
+export default HumanMessage;

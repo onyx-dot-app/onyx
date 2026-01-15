@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { KeyIcon } from "@/components/icons/icons";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import { handleOAuthAuthorizationResponse } from "@/lib/oauth_utils";
-
+import { SvgKey } from "@opal/icons";
 export default function OAuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -112,7 +111,7 @@ export default function OAuthCallbackPage() {
 
   return (
     <div className="mx-auto h-screen flex flex-col">
-      <AdminPageTitle title={pageTitle} icon={<KeyIcon size={32} />} />
+      <AdminPageTitle title={pageTitle} icon={SvgKey} />
 
       <div className="flex-1 flex flex-col items-center justify-center">
         <CardSection className="max-w-md w-[500px] h-[250px] p-8">

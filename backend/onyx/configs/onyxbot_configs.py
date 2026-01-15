@@ -38,10 +38,6 @@ ONYX_BOT_DISPLAY_ERROR_MSGS = os.environ.get(
     "false",
     "",
 ]
-# Default is only respond in channels that are included by a slack config set in the UI
-ONYX_BOT_RESPOND_EVERY_CHANNEL = (
-    os.environ.get("ONYX_BOT_RESPOND_EVERY_CHANNEL", "").lower() == "true"
-)
 
 # Maximum Questions Per Minute, Default Uncapped
 ONYX_BOT_MAX_QPM = int(os.environ.get("ONYX_BOT_MAX_QPM") or 0) or None

@@ -40,6 +40,17 @@ variable "vpc_cidr_block" {
   default     = null
 }
 
+variable "s3_vpc_endpoint_id" {
+  type        = string
+  description = "ID of an existing S3 gateway VPC endpoint when reusing an existing VPC"
+  default     = null
+
+  validation {
+    condition     = var.create_vpc || var.s3_vpc_endpoint_id != null
+    error_message = "s3_vpc_endpoint_id must be provided when create_vpc is false."
+  }
+}
+
 variable "tags" {
   type        = map(string)
   description = "Base tags applied to all AWS resources"

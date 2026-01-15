@@ -127,6 +127,15 @@ class FileStore(ABC):
         """
 
     @abstractmethod
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
+        """
+        Get the size of a file in bytes.
+        Optionally provide a db_session for database access.
+        """
+
+    @abstractmethod
     def delete_file(self, file_id: str) -> None:
         """
         Delete a file by its ID.
@@ -136,7 +145,7 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
+    def get_file_with_mime_type(self, file_id: str) -> FileWithMimeType | None:
         """
         Get the file + parse out the mime type.
         """
@@ -422,6 +431,27 @@ class S3BackedFileStore(FileStore):
             )
         return file_record
 
+    def get_file_size(
+        self, file_id: str, db_session: Session | None = None
+    ) -> int | None:
+        """
+        Get the size of a file in bytes by querying S3 metadata.
+        """
+        try:
+            with get_session_with_current_tenant_if_none(db_session) as db_session:
+                file_record = get_filerecord_by_file_id(
+                    file_id=file_id, db_session=db_session
+                )
+
+            s3_client = self._get_s3_client()
+            response = s3_client.head_object(
+                Bucket=file_record.bucket_name, Key=file_record.object_key
+            )
+            return response.get("ContentLength")
+        except Exception as e:
+            logger.warning(f"Error getting file size for {file_id}: {e}")
+            return None
+
     def delete_file(self, file_id: str, db_session: Session | None = None) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
@@ -526,10 +556,10 @@ class S3BackedFileStore(FileStore):
                 )
                 raise
 
-    def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
+    def get_file_with_mime_type(self, file_id: str) -> FileWithMimeType | None:
         mime_type: str = "application/octet-stream"
         try:
-            file_io = self.read_file(filename, mode="b")
+            file_io = self.read_file(file_id, mode="b")
             file_content = file_io.read()
             matches = puremagic.magic_string(file_content)
             if matches:

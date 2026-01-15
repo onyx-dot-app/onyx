@@ -9,9 +9,7 @@ import {
 } from "@/components/ui/table";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { LoadingAnimation } from "@/components/Loading";
-import { BasicTable } from "@/components/admin/connectors/BasicTable";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { TrashIcon } from "@/components/icons/icons";
 import { deleteUserGroup } from "./lib";
 import { useRouter } from "next/navigation";
 import { FiEdit2, FiUser } from "react-icons/fi";
@@ -20,8 +18,7 @@ import Link from "next/link";
 import { DeleteButton } from "@/components/DeleteButton";
 import { TableHeader } from "@/components/ui/table";
 import Button from "@/refresh-components/buttons/Button";
-import SvgEdit from "@/icons/edit";
-
+import { SvgEdit } from "@opal/icons";
 const MAX_USERS_TO_DISPLAY = 6;
 
 const SimpleUserDisplay = ({ user }: { user: User }) => {

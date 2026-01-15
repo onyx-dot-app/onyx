@@ -39,6 +39,14 @@ def delete_vespa_chunks(
     http_client: httpx.Client,
     executor: concurrent.futures.ThreadPoolExecutor | None = None,
 ) -> None:
+    """Deletes a list of chunks from a Vespa index in parallel.
+
+    Args:
+        doc_chunk_ids: List of chunk IDs to delete.
+        index_name: Name of the index to delete from.
+        http_client: HTTP client to use for the request.
+        executor: Executor to use for the request.
+    """
     external_executor = True
 
     if not executor:

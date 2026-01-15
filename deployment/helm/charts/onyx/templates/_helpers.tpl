@@ -86,6 +86,69 @@ Create env vars from secrets
 {{- end }}
 
 {{/*
+Helpers for mounting a psql convenience script into pods.
+*/}}
+{{- define "onyx.pgInto.enabled" -}}
+{{- if and .Values.tooling .Values.tooling.pgInto .Values.tooling.pgInto.enabled }}true{{- end }}
+{{- end }}
+
+{{- define "onyx.pgInto.configMapName" -}}
+{{- printf "%s-pginto" (include "onyx.fullname" .) -}}
+{{- end }}
+
+{{- define "onyx.pgInto.checksumAnnotation" -}}
+{{- if (include "onyx.pgInto.enabled" .) }}
+checksum/pginto: {{ include (print $.Template.BasePath "/tooling-pginto-configmap.yaml") . | sha256sum }}
+{{- end }}
+{{- end }}
+
+{{- define "onyx.pgInto.volumeMount" -}}
+{{- if (include "onyx.pgInto.enabled" .) }}
+- name: pginto-script
+  mountPath: {{ default "/usr/local/bin/pginto" .Values.tooling.pgInto.mountPath }}
+  subPath: pginto
+  readOnly: true
+{{- end }}
+{{- end }}
+
+{{- define "onyx.pgInto.volume" -}}
+{{- if (include "onyx.pgInto.enabled" .) }}
+- name: pginto-script
+  configMap:
+    name: {{ include "onyx.pgInto.configMapName" . }}
+    defaultMode: 0755
+{{- end }}
+{{- end }}
+
+{{- define "onyx.renderVolumeMounts" -}}
+{{- $pginto := include "onyx.pgInto.volumeMount" .ctx -}}
+{{- $existing := .volumeMounts -}}
+{{- if or $pginto $existing -}}
+volumeMounts:
+{{- if $pginto }}
+{{ $pginto | nindent 2 }}
+{{- end }}
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.renderVolumes" -}}
+{{- $pginto := include "onyx.pgInto.volume" .ctx -}}
+{{- $existing := .volumes -}}
+{{- if or $pginto $existing -}}
+volumes:
+{{- if $pginto }}
+{{ $pginto | nindent 2 }}
+{{- end }}
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/*
 Return the configured autoscaling engine; defaults to HPA when unset.
 */}}
 {{- define "onyx.autoscaling.engine" -}}

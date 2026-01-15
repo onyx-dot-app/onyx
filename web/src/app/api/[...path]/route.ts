@@ -1,7 +1,7 @@
 import { INTERNAL_URL } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 
-/* NextJS is annoying and makes use use a separate function for 
+/* NextJS is annoying and makes use use a separate function for
 each request type >:( */
 
 export async function GET(
@@ -87,9 +87,25 @@ async function handleRequest(request: NextRequest, path: string[]) {
       backendUrl.searchParams.append(key, value);
     });
 
+    // Build headers, optionally injecting debug auth cookie
+    const headers = new Headers(request.headers);
+    if (
+      process.env.DEBUG_AUTH_COOKIE &&
+      process.env.NODE_ENV === "development"
+    ) {
+      // Inject the debug auth cookie for local development against remote backend
+      // Get from cloud site: DevTools → Application → Cookies → fastapiusersauth
+      const existingCookies = headers.get("cookie") || "";
+      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+      headers.set(
+        "cookie",
+        existingCookies ? `${existingCookies}; ${debugCookie}` : debugCookie
+      );
+    }
+
     const response = await fetch(backendUrl, {
       method: request.method,
-      headers: request.headers,
+      headers: headers,
       body: request.body,
       signal: request.signal,
       // @ts-ignore

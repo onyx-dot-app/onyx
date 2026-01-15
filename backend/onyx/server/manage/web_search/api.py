@@ -6,12 +6,6 @@ from fastapi import HTTPException
 from fastapi import Response
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    build_content_provider_from_config,
-)
-from onyx.agents.agent_search.dr.sub_agents.web_search.providers import (
-    build_search_provider_from_config,
-)
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
@@ -20,8 +14,10 @@ from onyx.db.web_search import deactivate_web_search_provider
 from onyx.db.web_search import delete_web_content_provider
 from onyx.db.web_search import delete_web_search_provider
 from onyx.db.web_search import fetch_web_content_provider_by_name
+from onyx.db.web_search import fetch_web_content_provider_by_type
 from onyx.db.web_search import fetch_web_content_providers
 from onyx.db.web_search import fetch_web_search_provider_by_name
+from onyx.db.web_search import fetch_web_search_provider_by_type
 from onyx.db.web_search import fetch_web_search_providers
 from onyx.db.web_search import set_active_web_content_provider
 from onyx.db.web_search import set_active_web_search_provider
@@ -33,6 +29,12 @@ from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderTestRequest
 from onyx.server.manage.web_search.models import WebSearchProviderUpsertRequest
 from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.tools.tool_implementations.web_search.providers import (
+    build_content_provider_from_config,
+)
+from onyx.tools.tool_implementations.web_search.providers import (
+    build_search_provider_from_config,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
@@ -147,11 +149,33 @@ def deactivate_search_provider(
 def test_search_provider(
     request: WebSearchProviderTestRequest,
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    provider_requires_api_key = request.provider_type != WebSearchProviderType.SEARXNG
+
+    # Determine which API key to use
+    api_key = request.api_key
+    if request.use_stored_key and provider_requires_api_key:
+        existing_provider = fetch_web_search_provider_by_type(
+            request.provider_type, db_session
+        )
+        if existing_provider is None or not existing_provider.api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="No stored API key found for this provider type.",
+            )
+        api_key = existing_provider.api_key
+
+    if provider_requires_api_key and not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API key is required. Either provide api_key or set use_stored_key to true.",
+        )
+
     try:
         provider = build_search_provider_from_config(
             provider_type=request.provider_type,
-            api_key=request.api_key,
+            api_key=api_key or "",
             config=request.config or {},
         )
     except ValueError as exc:
@@ -162,36 +186,13 @@ def test_search_provider(
             status_code=400, detail="Unable to build provider configuration."
         )
 
-    # Actually test the API key by making a real search call
+    # Run the API client's test_connection method to ensure the connection is valid.
     try:
-        test_results = provider.search("test")
-        if not test_results or not any(result.link for result in test_results):
-            raise HTTPException(
-                status_code=400,
-                detail="API key validation failed: search returned no results.",
-            )
+        return provider.test_connection()
     except HTTPException:
         raise
     except Exception as e:
-        error_msg = str(e)
-        if (
-            "api" in error_msg.lower()
-            or "key" in error_msg.lower()
-            or "auth" in error_msg.lower()
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid API key: {error_msg}",
-            ) from e
-        raise HTTPException(
-            status_code=400,
-            detail=f"API key validation failed: {error_msg}",
-        ) from e
-
-    logger.info(
-        f"Web search provider test succeeded for {request.provider_type.value}."
-    )
-    return {"status": "ok"}
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @admin_router.get("/content-providers", response_model=list[WebContentProviderView])
@@ -314,12 +315,32 @@ def deactivate_content_provider(
 def test_content_provider(
     request: WebContentProviderTestRequest,
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    # Determine which API key to use
+    api_key = request.api_key
+    if request.use_stored_key:
+        existing_provider = fetch_web_content_provider_by_type(
+            request.provider_type, db_session
+        )
+        if existing_provider is None or not existing_provider.api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="No stored API key found for this provider type.",
+            )
+        api_key = existing_provider.api_key
+
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API key is required. Either provide api_key or set use_stored_key to true.",
+        )
+
     try:
         provider = build_content_provider_from_config(
             provider_type=request.provider_type,
-            api_key=request.api_key,
-            config=request.config or {},
+            api_key=api_key,
+            config=request.config,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

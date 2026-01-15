@@ -1,0 +1,24 @@
+{{- if .Values.mcpServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-mcp-server-service
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- if .Values.mcpServer.deploymentLabels }}
+    {{- toYaml .Values.mcpServer.deploymentLabels | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.mcpServer.service.type }}
+  ports:
+    - port: {{ .Values.mcpServer.service.servicePort }}
+      targetPort: {{ .Values.mcpServer.service.targetPort }}
+      protocol: TCP
+      name: {{ .Values.mcpServer.service.portName }}
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    {{- if .Values.mcpServer.deploymentLabels }}
+    {{- toYaml .Values.mcpServer.deploymentLabels | nindent 4 }}
+    {{- end }}
+{{- end }}
+

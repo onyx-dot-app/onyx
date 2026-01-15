@@ -4,6 +4,7 @@ import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 export interface StarterMessageBase {
   message: string;
 }
+
 export interface StarterMessage extends StarterMessageBase {
   name: string;
 }
@@ -19,8 +20,7 @@ export interface MinimalPersonaSnapshot {
   llm_model_provider_override?: string;
 
   uploaded_image_id?: string;
-  icon_shape?: number;
-  icon_color?: string;
+  icon_name?: string;
 
   is_public: boolean;
   is_visible: boolean;
@@ -40,6 +40,7 @@ export interface Persona extends MinimalPersonaSnapshot {
 
   // Embedded prompt fields on persona
   system_prompt: string | null;
+  replace_base_system_prompt: boolean;
   task_prompt: string | null;
   datetime_aware: boolean;
 }

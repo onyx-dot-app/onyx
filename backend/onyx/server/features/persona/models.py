@@ -9,8 +9,8 @@ from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import StarterMessage
 from onyx.server.features.document_set.models import DocumentSetSummary
-from onyx.server.features.tool.models import should_expose_tool_to_fe
 from onyx.server.features.tool.models import ToolSnapshot
+from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 
@@ -69,10 +69,11 @@ class PersonaUpsertRequest(BaseModel):
     groups: list[int] = Field(default_factory=list)
     # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
     tool_ids: list[int]
-    icon_color: str | None = None
-    icon_shape: int | None = None
     remove_image: bool | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image
+    icon_name: str | None = (
+        None  # New field that is custom chosen during agent creation/editing
+    )
     search_start_date: datetime | None = None
     label_ids: list[int] | None = None
     is_default_persona: bool = False
@@ -82,6 +83,7 @@ class PersonaUpsertRequest(BaseModel):
 
     # prompt fields
     system_prompt: str
+    replace_base_system_prompt: bool = False
     task_prompt: str
     datetime_aware: bool
 
@@ -106,8 +108,7 @@ class MinimalPersonaSnapshot(BaseModel):
     llm_model_provider_override: str | None
 
     uploaded_image_id: str | None
-    icon_shape: int | None
-    icon_color: str | None
+    icon_name: str | None
 
     is_public: bool
     is_visible: bool
@@ -143,8 +144,7 @@ class MinimalPersonaSnapshot(BaseModel):
             llm_model_version_override=persona.llm_model_version_override,
             llm_model_provider_override=persona.llm_model_provider_override,
             uploaded_image_id=persona.uploaded_image_id,
-            icon_shape=persona.icon_shape,
-            icon_color=persona.icon_color,
+            icon_name=persona.icon_name,
             is_public=persona.is_public,
             is_visible=persona.is_visible,
             display_priority=persona.display_priority,
@@ -165,9 +165,8 @@ class PersonaSnapshot(BaseModel):
     description: str
     is_public: bool
     is_visible: bool
-    icon_shape: int | None
-    icon_color: str | None
     uploaded_image_id: str | None
+    icon_name: str | None
     # Return string UUIDs to frontend for consistency
     user_file_ids: list[str]
     display_priority: int | None
@@ -188,6 +187,7 @@ class PersonaSnapshot(BaseModel):
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
+    replace_base_system_prompt: bool = False
     task_prompt: str | None = None
     datetime_aware: bool = True
 
@@ -199,9 +199,8 @@ class PersonaSnapshot(BaseModel):
             description=persona.description,
             is_public=persona.is_public,
             is_visible=persona.is_visible,
-            icon_shape=persona.icon_shape,
-            icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
+            icon_name=persona.icon_name,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
@@ -233,6 +232,7 @@ class PersonaSnapshot(BaseModel):
             llm_model_version_override=persona.llm_model_version_override,
             num_chunks=persona.num_chunks,
             system_prompt=persona.system_prompt,
+            replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,
         )
@@ -262,9 +262,8 @@ class FullPersonaSnapshot(PersonaSnapshot):
             description=persona.description,
             is_public=persona.is_public,
             is_visible=persona.is_visible,
-            icon_shape=persona.icon_shape,
-            icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
+            icon_name=persona.icon_name,
             user_file_ids=[str(file.id) for file in persona.user_files],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
@@ -297,6 +296,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             system_prompt=persona.system_prompt,
+            replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
             datetime_aware=persona.datetime_aware,
         )

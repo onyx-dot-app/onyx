@@ -3,8 +3,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
 import useSWRMutation from "swr/mutation";
 import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
-import SvgXCircle from "@/icons/x-circle";
-
+import { SvgXCircle } from "@opal/icons";
 const DeactivateUserButton = ({
   user,
   deactivate,

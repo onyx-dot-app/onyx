@@ -13,6 +13,9 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+# TTL for settings keys - 30 days
+SETTINGS_TTL = 30 * 24 * 60 * 60
+
 
 def load_settings() -> Settings:
     kv_store = get_kv_store()
@@ -41,7 +44,9 @@ def load_settings() -> Settings:
             # Default to False
             anonymous_user_enabled = False
             # Optionally store the default back to Redis
-            redis_client.set(OnyxRedisLocks.ANONYMOUS_USER_ENABLED, "0")
+            redis_client.set(
+                OnyxRedisLocks.ANONYMOUS_USER_ENABLED, "0", ex=SETTINGS_TTL
+            )
     except Exception as e:
         # Log the error and reset to default
         logger.error(f"Error loading anonymous user setting from Redis: {str(e)}")
@@ -66,6 +71,7 @@ def store_settings(settings: Settings) -> None:
         redis_client.set(
             OnyxRedisLocks.ANONYMOUS_USER_ENABLED,
             "1" if settings.anonymous_user_enabled else "0",
+            ex=SETTINGS_TTL,
         )
 
     get_kv_store().store(KV_SETTINGS_KEY, settings.model_dump())

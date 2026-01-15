@@ -1,7 +1,7 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ClipboardIcon, EditIcon, TrashIcon } from "@/components/icons/icons";
+import { ClipboardIcon, EditIcon } from "@/components/icons/icons";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, JSX } from "react";
@@ -28,7 +29,8 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgTrash } from "@opal/icons";
 const NUM_RESULTS_PER_PAGE = 10;
 
 type Displayable = JSX.Element | string;
@@ -109,7 +111,7 @@ const StandardAnswersTableRow = ({
       entries={[
         <Link
           key={`edit-${standardAnswer.id}`}
-          href={`/admin/standard-answer/${standardAnswer.id}`}
+          href={`/ee/admin/standard-answer/${standardAnswer.id}` as Route}
         >
           <EditIcon />
         </Link>,
@@ -140,13 +142,11 @@ const StandardAnswersTableRow = ({
         >
           {standardAnswer.answer}
         </ReactMarkdown>,
-        <div
+        <IconButton
           key={`delete-${standardAnswer.id}`}
-          className="cursor-pointer"
+          icon={SvgTrash}
           onClick={() => handleDelete(standardAnswer.id)}
-        >
-          <TrashIcon />
-        </div>,
+        />,
       ]}
     />
   );
@@ -429,7 +429,7 @@ const Main = () => {
 
 const Page = () => {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <AdminPageTitle
         icon={<ClipboardIcon size={32} />}
         title="Standard Answers"

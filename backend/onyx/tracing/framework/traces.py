@@ -282,6 +282,5 @@ class TraceImpl(Trace):
             "object": "trace",
             "id": self.trace_id,
             "workflow_name": self.name,
-            "group_id": self.group_id,
             "metadata": self.metadata,
         }

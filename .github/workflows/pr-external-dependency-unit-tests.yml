@@ -7,6 +7,9 @@ on:
   merge_group:
   pull_request:
     branches: [main]
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -29,9 +32,14 @@ env:
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
   CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
 
+  # Jira
+  JIRA_ADMIN_API_TOKEN: ${{ secrets.JIRA_ADMIN_API_TOKEN }}
+
   # LLMs
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  VERTEX_CREDENTIALS: ${{ secrets.VERTEX_CREDENTIALS }}
+  VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION }}
 
   # Code Interpreter
   # TODO: debug why this is failing and enable
@@ -46,7 +54,7 @@ jobs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -74,12 +82,13 @@ jobs:
     env:
       PYTHONPATH: ./backend
       MODEL_SERVER_HOST: "disabled"
+      DISABLE_TELEMETRY: "true"
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -107,6 +116,7 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           CODE_INTERPRETER_BETA_ENABLED=true
+          DISABLE_TELEMETRY=true
           EOF
 
       - name: Set up Standard Dependencies
@@ -162,7 +172,7 @@ jobs:
 
       - name: Upload Docker logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v5
         with:
           name: docker-logs-${{ matrix.test-dir }}
           path: docker-logs/

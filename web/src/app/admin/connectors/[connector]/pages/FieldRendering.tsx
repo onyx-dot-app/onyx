@@ -17,6 +17,9 @@ import {
 } from "@/components/ui/fully_wrapped_tabs";
 import { useFormikContext } from "formik";
 
+// Define a general type for form values
+type FormValues = Record<string, any>;
+
 interface TabsFieldProps {
   tabField: TabOption;
   values: any;
@@ -30,6 +33,8 @@ const TabsField: FC<TabsFieldProps> = ({
   connector,
   currentCredential,
 }) => {
+  const { setFieldValue } = useFormikContext<FormValues>();
+
   return (
     <div className="w-full">
       {tabField.label && (
@@ -54,7 +59,7 @@ const TabsField: FC<TabsFieldProps> = ({
         <div className="text-sm text-muted-foreground">No tabs to display.</div>
       ) : (
         <Tabs
-          defaultValue={tabField.tabs[0]?.value} // Optional chaining for safety, though the length check above handles it
+          defaultValue={tabField.defaultTab || tabField.tabs[0]?.value}
           className="w-full"
           onValueChange={(newTab) => {
             // Clear values from other tabs but preserve defaults
@@ -63,7 +68,7 @@ const TabsField: FC<TabsFieldProps> = ({
                 tab.fields.forEach((field) => {
                   // Only clear if not default value
                   if (values[field.name] !== field.default) {
-                    values[field.name] = field.default;
+                    setFieldValue(field.name, field.default);
                   }
                 });
               }
@@ -128,7 +133,7 @@ export const RenderField: FC<RenderFieldProps> = ({
   connector,
   currentCredential,
 }) => {
-  const { setFieldValue } = useFormikContext<any>(); // Get Formik's context functions
+  const { setFieldValue } = useFormikContext<FormValues>(); // Get Formik's context functions
 
   const label =
     typeof field.label === "function"

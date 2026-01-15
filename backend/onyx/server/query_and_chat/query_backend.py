@@ -21,11 +21,12 @@ from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.context.search.models import ChunkSearchRequest
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import SearchRequest
-from onyx.context.search.pipeline import SearchPipeline
+from onyx.context.search.pipeline import merge_individual_chunks
+from onyx.context.search.pipeline import search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -38,18 +39,19 @@ from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.chat import get_search_docs_for_chat_message
 from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
+from onyx.db.usage import increment_usage
+from onyx.db.usage import UsageType
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa.index import VespaIndex
-from onyx.llm.factory import get_default_llms
-from onyx.llm.factory import get_llms_for_persona
-from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_llm_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import AdminSearchRequest
 from onyx.server.query_and_chat.models import AdminSearchResponse
@@ -63,8 +65,10 @@ from onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.server.query_and_chat.models import SearchSessionDetailResponse
 from onyx.server.query_and_chat.models import SourceTag
 from onyx.server.query_and_chat.models import TagResponse
-from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.usage_limits import check_usage_and_raise
+from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -98,7 +102,7 @@ def _normalize_pagination(limit: int | None, offset: int | None) -> tuple[int, i
     return resolved_limit, resolved_offset
 
 
-@basic_router.post("/document-search")
+@basic_router.post("/document-search", tags=PUBLIC_API_TAGS)
 def handle_search_request(
     search_request: DocumentSearchRequest,
     user: User | None = Depends(current_user),
@@ -108,36 +112,36 @@ def handle_search_request(
     query = search_request.message
     logger.notice(f"Received document search query: {query}")
 
-    llm, fast_llm = get_default_llms()
+    llm = get_default_llm()
     pagination_limit, pagination_offset = _normalize_pagination(
         limit=search_request.retrieval_options.limit,
         offset=search_request.retrieval_options.offset,
     )
 
-    search_pipeline = SearchPipeline(
-        search_request=SearchRequest(
-            query=query,
-            search_type=search_request.search_type,
-            human_selected_filters=search_request.retrieval_options.filters,
-            enable_auto_detect_filters=search_request.retrieval_options.enable_auto_detect_filters,
-            persona=None,  # For simplicity, default settings should be good for this search
-            offset=pagination_offset,
-            limit=pagination_limit + 1,
-            rerank_settings=search_request.rerank_settings,
-            evaluation_type=search_request.evaluation_type,
-            chunks_above=search_request.chunks_above,
-            chunks_below=search_request.chunks_below,
-            full_doc=search_request.full_doc,
-        ),
-        user=user,
-        llm=llm,
-        fast_llm=fast_llm,
-        skip_query_analysis=False,
-        db_session=db_session,
+    search_settings = get_current_search_settings(db_session)
+    document_index = get_default_document_index(search_settings, None)
+
+    chunk_search_request = ChunkSearchRequest(
+        query=query,
+        user_selected_filters=search_request.retrieval_options.filters,
+        limit=pagination_limit + 1,
+        offset=pagination_offset,
         bypass_acl=False,
     )
-    top_sections = search_pipeline.reranked_sections
-    relevance_sections = search_pipeline.section_relevance
+
+    retrieved_chunks = search_pipeline(
+        chunk_search_request=chunk_search_request,
+        document_index=document_index,
+        user=user,
+        persona=None,
+        db_session=db_session,
+        auto_detect_filters=search_request.retrieval_options.enable_auto_detect_filters
+        or False,
+        llm=llm,
+    )
+
+    top_sections = merge_individual_chunks(retrieved_chunks)
+    relevance_sections: list = []
     top_docs = [
         SavedSearchDocWithContent(
             document_id=section.center_chunk.document_id,
@@ -229,7 +233,7 @@ def get_answer_stream(
             is_for_edit=False,
         )
 
-    llm = get_main_llm_from_tuple(get_llms_for_persona(persona=persona_info, user=user))
+    llm = get_llm_for_persona(persona=persona_info, user=user)
 
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,
@@ -256,7 +260,6 @@ def get_answer_stream(
         retrieval_details=query_request.retrieval_options,
         rerank_settings=query_request.rerank_settings,
         db_session=db_session,
-        use_agentic_search=query_request.use_agentic_search,
         skip_gen_ai_answer_generation=query_request.skip_gen_ai_answer_generation,
     )
 
@@ -275,6 +278,22 @@ def get_answer_with_citation(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> OneShotQAResponse:
+    # Check and track non-streaming API usage limits
+    if is_usage_limits_enabled():
+        tenant_id = get_current_tenant_id()
+        check_usage_and_raise(
+            db_session=db_session,
+            usage_type=UsageType.NON_STREAMING_API_CALLS,
+            tenant_id=tenant_id,
+            pending_amount=1,
+        )
+        increment_usage(
+            db_session=db_session,
+            usage_type=UsageType.NON_STREAMING_API_CALLS,
+            amount=1,
+        )
+        db_session.commit()
+
     try:
         packets = get_answer_stream(request, user, db_session)
         answer = gather_stream(packets)
@@ -286,10 +305,7 @@ def get_answer_with_citation(
             answer=answer.answer,
             chat_message_id=answer.message_id,
             error_msg=answer.error_msg,
-            citations=[
-                CitationInfo(citation_num=i, document_id=doc_id)
-                for i, doc_id in answer.cited_documents.items()
-            ],
+            citations=answer.citation_info,
             docs=QADocsResponse(
                 top_documents=answer.top_documents,
                 predicted_flow=None,
@@ -482,7 +498,7 @@ def get_search_session(
         # `get_chat_session_by_id`, so we can skip it here
         skip_permission_check=True,
         # we need the tool call objs anyways, so just fetch them in a single call
-        prefetch_tool_calls=True,
+        prefetch_top_two_level_tool_calls=True,
     )
     docs_response: list[SearchDoc] = []
     for message in session_messages:
@@ -494,7 +510,7 @@ def get_search_session(
                 db_session=db_session, chat_message_id=message.id
             )
             for doc in docs:
-                server_doc = translate_db_search_doc_to_server_search_doc(doc)
+                server_doc = translate_db_search_doc_to_saved_search_doc(doc)
                 docs_response.append(server_doc)
 
     response = SearchSessionDetailResponse(

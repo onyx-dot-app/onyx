@@ -2,6 +2,7 @@ import * as Yup from "yup";
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
+import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
@@ -791,7 +792,7 @@ export const connectorConfigs: Record<
                   "\n    }" +
                   "\n  }" +
                   "\n}" +
-                  "\n\n[See our docs](https://docs.onyx.app/admin/connectors/official/salesforce) for more details.",
+                  `\n\n[See our docs](${DOCS_ADMINS_PATH}/connectors/official/salesforce) for more details.`,
               },
             ],
           },
@@ -813,6 +814,7 @@ export const connectorConfigs: Record<
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
+• Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.
 `,
       },
     ],
@@ -869,6 +871,79 @@ export const connectorConfigs: Record<
         label: "Categories",
         name: "categories",
         optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
+  drupal_wiki: {
+    description: "Configure Drupal Wiki connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base URL of the Drupal Wiki instance:",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+        description:
+          "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )",
+      },
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "What should we index from Drupal Wiki?",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything_description",
+                description:
+                  "This connector will index all spaces the provided credentials have access to!",
+              },
+            ],
+          },
+          {
+            value: "specific",
+            label: "Specific Spaces/Pages",
+            fields: [
+              {
+                type: "list",
+                query: "Enter space IDs to include:",
+                label: "Space IDs",
+                name: "spaces",
+                description:
+                  "Specify one or more space IDs to index. Only numeric values are allowed.",
+                optional: true,
+                transform: (values: string[]) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+              {
+                type: "list",
+                query: "Enter page IDs to include:",
+                label: "Page IDs",
+                name: "pages",
+                description:
+                  "Specify one or more page IDs to index. Only numeric values are allowed.",
+                optional: true,
+                transform: (values: string[]) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "checkbox",
+        query: "Include attachments?",
+        label: "Include Attachments",
+        name: "include_attachments",
+        description:
+          "Enable processing of page attachments including images and documents",
+        default: false,
       },
     ],
     advanced_values: [],
@@ -1000,6 +1075,11 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         optional: false,
       },
     ],
+    advanced_values: [],
+  },
+  coda: {
+    description: "Configure Coda connector",
+    values: [],
     advanced_values: [],
   },
   notion: {
@@ -1795,6 +1875,13 @@ export interface AxeroConfig {
   spaces?: string[];
 }
 
+export interface DrupalWikiConfig {
+  base_url: string;
+  spaces?: string[];
+  pages?: string[];
+  include_attachments?: boolean;
+}
+
 export interface TeamsConfig {
   teams?: string[];
 }
@@ -1830,6 +1917,10 @@ export interface FileConfig {
 export interface ZulipConfig {
   realm_name: string;
   realm_url: string;
+}
+
+export interface CodaConfig {
+  workspace_id?: string;
 }
 
 export interface NotionConfig {

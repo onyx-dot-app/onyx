@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
+from onyx.db.models import ImageGenerationConfig
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
@@ -16,6 +17,7 @@ from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -234,10 +236,8 @@ def upsert_llm_provider(
     existing_llm_provider.default_model_name = (
         llm_provider_upsert_request.default_model_name
     )
-    existing_llm_provider.fast_default_model_name = (
-        llm_provider_upsert_request.fast_default_model_name
-    )
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
+    existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
 
     if not existing_llm_provider.id:
@@ -251,15 +251,27 @@ def upsert_llm_provider(
 
     db_session.flush()
 
+    # Import here to avoid circular imports
+    from onyx.llm.utils import get_max_input_tokens
+
     for model_configuration in llm_provider_upsert_request.model_configurations:
+        # If max_input_tokens is not provided, look it up from LiteLLM
+        max_input_tokens = model_configuration.max_input_tokens
+        if max_input_tokens is None:
+            max_input_tokens = get_max_input_tokens(
+                model_name=model_configuration.name,
+                model_provider=llm_provider_upsert_request.provider,
+            )
+
         db_session.execute(
             insert(ModelConfiguration)
             .values(
                 llm_provider_id=existing_llm_provider.id,
                 name=model_configuration.name,
                 is_visible=model_configuration.is_visible,
-                max_input_tokens=model_configuration.max_input_tokens,
+                max_input_tokens=max_input_tokens,
                 supports_image_input=model_configuration.supports_image_input,
+                display_name=model_configuration.display_name,
             )
             .on_conflict_do_nothing()
         )
@@ -289,6 +301,56 @@ def upsert_llm_provider(
     return full_llm_provider
 
 
+def sync_model_configurations(
+    db_session: Session,
+    provider_name: str,
+    models: list[dict],
+) -> int:
+    """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama).
+
+    This inserts NEW models from the source API without overwriting existing ones.
+    User preferences (is_visible, max_input_tokens) are preserved for existing models.
+
+    Args:
+        db_session: Database session
+        provider_name: Name of the LLM provider
+        models: List of model dicts with keys: name, display_name, max_input_tokens, supports_image_input
+
+    Returns:
+        Number of new models added
+    """
+    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    if not provider:
+        raise ValueError(f"LLM Provider '{provider_name}' not found")
+
+    # Get existing model names to count new additions
+    existing_names = {mc.name for mc in provider.model_configurations}
+
+    new_count = 0
+    for model in models:
+        model_name = model["name"]
+        if model_name not in existing_names:
+            # Insert new model with is_visible=False (user must explicitly enable)
+            db_session.execute(
+                insert(ModelConfiguration)
+                .values(
+                    llm_provider_id=provider.id,
+                    name=model_name,
+                    is_visible=False,
+                    max_input_tokens=model.get("max_input_tokens"),
+                    supports_image_input=model.get("supports_image_input", False),
+                    display_name=model.get("display_name"),
+                )
+                .on_conflict_do_nothing()
+            )
+            new_count += 1
+
+    if new_count > 0:
+        db_session.commit()
+
+    return new_count
+
+
 def fetch_existing_embedding_providers(
     db_session: Session,
 ) -> list[CloudEmbeddingProviderModel]:
@@ -312,12 +374,29 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 def fetch_existing_llm_providers(
     db_session: Session,
     only_public: bool = False,
+    exclude_image_generation_providers: bool = False,
 ) -> list[LLMProviderModel]:
+    """Fetch all LLM providers with optional filtering.
+
+    Args:
+        db_session: Database session
+        only_public: If True, only return public providers
+        exclude_image_generation_providers: If True, exclude providers that are
+            used for image generation configs
+    """
     stmt = select(LLMProviderModel).options(
         selectinload(LLMProviderModel.model_configurations),
         selectinload(LLMProviderModel.groups),
         selectinload(LLMProviderModel.personas),
     )
+
+    if exclude_image_generation_providers:
+        # Get LLM provider IDs used by ImageGenerationConfig
+        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
+            ImageGenerationConfig
+        )
+        stmt = stmt.where(LLMProviderModel.id.not_in(image_gen_provider_ids))
+
     providers = list(db_session.scalars(stmt).all())
     if only_public:
         return [provider for provider in providers if provider.is_public]
@@ -423,6 +502,30 @@ def remove_llm_provider(db_session: Session, provider_id: int) -> None:
     db_session.commit()
 
 
+def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> None:
+    """Remove LLM provider."""
+    provider = db_session.get(LLMProviderModel, provider_id)
+    if not provider:
+        raise ValueError("LLM Provider not found")
+
+    # Clear the provider override from any personas using it
+    # This causes them to fall back to the default provider
+    personas_using_provider = get_personas_using_provider(db_session, provider.name)
+    for persona in personas_using_provider:
+        persona.llm_model_provider_override = None
+
+    db_session.execute(
+        delete(LLMProvider__UserGroup).where(
+            LLMProvider__UserGroup.llm_provider_id == provider_id
+        )
+    )
+    # Remove LLMProvider
+    db_session.execute(
+        delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
+    )
+    db_session.flush()
+
+
 def update_default_provider(provider_id: int, db_session: Session) -> None:
     new_default = db_session.scalar(
         select(LLMProviderModel).where(LLMProviderModel.id == provider_id)
@@ -478,3 +581,98 @@ def update_default_vision_provider(
     new_default.is_default_vision_provider = True
     new_default.default_vision_model = vision_model
     db_session.commit()
+
+
+def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
+    """Fetch all LLM providers that are in Auto mode."""
+    return list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(LLMProviderModel.is_auto_mode == True)  # noqa: E712
+            .options(selectinload(LLMProviderModel.model_configurations))
+        ).all()
+    )
+
+
+def sync_auto_mode_models(
+    db_session: Session,
+    provider: LLMProviderModel,
+    llm_recommendations: LLMRecommendations,
+) -> int:
+    """Sync models from GitHub config to a provider in Auto mode.
+
+    In Auto mode, the model list and default are controlled by GitHub config.
+    The schema has:
+    - default_model: The default model config (always visible)
+    - additional_visible_models: List of additional visible models
+
+    Admin only provides API credentials.
+
+    Args:
+        db_session: Database session
+        provider: LLM provider in Auto mode
+        github_config: Configuration from GitHub
+
+    Returns:
+        The number of changes made.
+    """
+    changes = 0
+
+    # Build the list of all visible models from the config
+    # All models in the config are visible (default + additional_visible_models)
+    recommended_visible_models = llm_recommendations.get_visible_models(provider.name)
+    recommended_visible_model_names = [
+        model.name for model in recommended_visible_models
+    ]
+
+    # Get existing models
+    existing_models: dict[str, ModelConfiguration] = {
+        mc.name: mc
+        for mc in db_session.scalars(
+            select(ModelConfiguration).where(
+                ModelConfiguration.llm_provider_id == provider.id
+            )
+        ).all()
+    }
+
+    # Remove models that are no longer in GitHub config
+    for model_name, model in existing_models.items():
+        if model_name not in recommended_visible_model_names:
+            db_session.delete(model)
+            changes += 1
+
+    # Add or update models from GitHub config
+    for model_config in recommended_visible_models:
+        if model_config.name in existing_models:
+            # Update existing model
+            existing = existing_models[model_config.name]
+            # Check each field for changes
+            updated = False
+            if existing.display_name != model_config.display_name:
+                existing.display_name = model_config.display_name
+                updated = True
+            # All models in the config are visible
+            if not existing.is_visible:
+                existing.is_visible = True
+                updated = True
+            if updated:
+                changes += 1
+        else:
+            # Add new model - all models from GitHub config are visible
+            new_model = ModelConfiguration(
+                llm_provider_id=provider.id,
+                name=model_config.name,
+                display_name=model_config.display_name,
+                is_visible=True,
+            )
+            db_session.add(new_model)
+            changes += 1
+
+    # In Auto mode, default model is always set from GitHub config
+    default_model = llm_recommendations.get_default_model(provider.name)
+    if default_model and provider.default_model_name != default_model.name:
+        provider.default_model_name = default_model.name
+        changes += 1
+
+    db_session.commit()
+    return changes

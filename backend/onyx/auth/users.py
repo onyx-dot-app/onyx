@@ -56,9 +56,11 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.disposable_email_validator import is_disposable_email
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
@@ -116,7 +118,7 @@ from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.timing import log_function_time
@@ -218,7 +220,7 @@ def verify_email_is_invited(email: str) -> None:
         raise PermissionError("Email must be specified")
 
     try:
-        email_info = validate_email(email)
+        email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
         raise PermissionError("Email is not valid")
 
@@ -226,7 +228,9 @@ def verify_email_is_invited(email: str) -> None:
         try:
             # normalized emails are now being inserted into the db
             # we can remove this normalization on read after some time has passed
-            email_info_whitelist = validate_email(email_whitelist)
+            email_info_whitelist = validate_email(
+                email_whitelist, check_deliverability=False
+            )
         except EmailNotValidError:
             continue
 
@@ -245,13 +249,23 @@ def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
 
 
 def verify_email_domain(email: str) -> None:
+    if email.count("@") != 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is not valid",
+        )
+
+    domain = email.split("@")[-1].lower()
+
+    # Check if email uses a disposable/temporary domain
+    if is_disposable_email(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Disposable email addresses are not allowed. Please use a permanent email address.",
+        )
+
+    # Check domain whitelist if configured
     if VALID_EMAIL_DOMAINS:
-        if email.count("@") != 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email is not valid",
-            )
-        domain = email.split("@")[-1].lower()
         if domain not in VALID_EMAIL_DOMAINS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -289,10 +303,56 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         safe: bool = False,
         request: Optional[Request] = None,
     ) -> User:
+        # Verify captcha if enabled (for cloud signup protection)
+        from onyx.auth.captcha import CaptchaVerificationError
+        from onyx.auth.captcha import is_captcha_enabled
+        from onyx.auth.captcha import verify_captcha_token
+
+        if is_captcha_enabled() and request is not None:
+            # Get captcha token from request body or headers
+            captcha_token = None
+            if hasattr(user_create, "captcha_token"):
+                captcha_token = getattr(user_create, "captcha_token", None)
+
+            # Also check headers as a fallback
+            if not captcha_token:
+                captcha_token = request.headers.get("X-Captcha-Token")
+
+            try:
+                await verify_captcha_token(
+                    captcha_token or "", expected_action="signup"
+                )
+            except CaptchaVerificationError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"reason": str(e)},
+                )
+
         # We verify the password here to make sure it's valid before we proceed
         await self.validate_password(
             user_create.password, cast(schemas.UC, user_create)
         )
+
+        # Check for disposable emails BEFORE provisioning tenant
+        # This prevents creating tenants for throwaway email addresses
+        try:
+            verify_email_domain(user_create.email)
+        except HTTPException as e:
+            # Log blocked disposable email attempts
+            if (
+                e.status_code == status.HTTP_400_BAD_REQUEST
+                and "Disposable email" in str(e.detail)
+            ):
+                domain = (
+                    user_create.email.split("@")[-1]
+                    if "@" in user_create.email
+                    else "unknown"
+                )
+                logger.warning(
+                    f"Blocked disposable email registration attempt: {domain}",
+                    extra={"email_domain": domain},
+                )
+            raise
 
         user_count: int | None = None
         referral_source = (
@@ -315,8 +375,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                verify_email_is_invited(user_create.email)
-                verify_email_domain(user_create.email)
+                # Check invite list based on deployment mode
+                if MULTI_TENANT:
+                    # Multi-tenant: Only require invite for existing tenants
+                    # New tenant creation (first user) doesn't require an invite
+                    user_count = await get_user_count()
+                    if user_count > 0:
+                        # Tenant already has users - require invite for new users
+                        verify_email_is_invited(user_create.email)
+                else:
+                    # Single-tenant: Check invite list (skips if SAML/OIDC or no list configured)
+                    verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
                     tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                         db_session, User, OAuthAccount
@@ -335,10 +404,41 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 user_created = False
                 try:
-                    user = await super().create(
-                        user_create, safe=safe, request=request
-                    )  # type: ignore
+                    user = await super().create(user_create, safe=safe, request=request)
                     user_created = True
+                except IntegrityError as error:
+                    # Race condition: another request created the same user after the
+                    # pre-insert existence check but before our commit.
+                    await self.user_db.session.rollback()
+                    logger.warning(
+                        "IntegrityError while creating user %s, assuming duplicate: %s",
+                        user_create.email,
+                        str(error),
+                    )
+                    try:
+                        user = await self.get_by_email(user_create.email)
+                    except exceptions.UserNotExists:
+                        # Unexpected integrity error, surface it for handling upstream.
+                        raise error
+
+                    if MULTI_TENANT:
+                        user_by_session = await db_session.get(User, user.id)
+                        if user_by_session:
+                            user = user_by_session
+
+                    if (
+                        user.role.is_web_login()
+                        or not isinstance(user_create, UserCreate)
+                        or not user_create.role.is_web_login()
+                    ):
+                        raise exceptions.UserAlreadyExists()
+
+                    user_update = UserUpdateWithRole(
+                        password=user_create.password,
+                        is_verified=user_create.is_verified,
+                        role=user_create.role,
+                    )
+                    user = await self.update(user_update, user)
                 except exceptions.UserAlreadyExists:
                     user = await self.get_by_email(user_create.email)
 
@@ -568,10 +668,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
-            if (
-                user.oidc_expiry is not None  # type: ignore
-                and not TRACK_EXTERNAL_IDP_EXPIRY
-            ):
+            if user.oidc_expiry is not None and not TRACK_EXTERNAL_IDP_EXPIRY:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # type: ignore
             remove_user_from_invited_users(user.email)
@@ -617,19 +714,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_count = await get_user_count()
             logger.debug(f"Current tenant user count: {user_count}")
 
-            with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-                event_type = (
-                    MilestoneRecordType.USER_SIGNED_UP
-                    if user_count == 1
-                    else MilestoneRecordType.MULTIPLE_USERS
-                )
-                create_milestone_and_report(
-                    user=user,
-                    distinct_id=user.email,
-                    event_type=event_type,
-                    properties=None,
-                    db_session=db_session,
-                )
+            mt_cloud_telemetry(
+                tenant_id=tenant_id,
+                distinct_id=user.email,
+                event=MilestoneRecordType.USER_SIGNED_UP,
+            )
 
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -1150,7 +1239,7 @@ async def _sync_jwt_oidc_expiry(
             return
 
         await user_manager.user_db.update(user, {"oidc_expiry": oidc_expiry})
-        user.oidc_expiry = oidc_expiry  # type: ignore
+        user.oidc_expiry = oidc_expiry
         return
 
     if user.oidc_expiry is not None:
@@ -1240,22 +1329,19 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-    user = await _check_for_saml_and_jwt(request, user, async_db_session)
 
-    # check if a PAT is present (before API key)
-    if user is None:
-        hashed_pat = get_hashed_pat_from_request(request)
-        if hashed_pat:
+    if user := await _check_for_saml_and_jwt(request, user, async_db_session):
+        # If user is already set, _check_for_saml_and_jwt returns the same user object
+        return user
+
+    try:
+        if hashed_pat := get_hashed_pat_from_request(request):
             user = await fetch_user_for_pat(hashed_pat, async_db_session)
-
-    # check if an API key is present
-    if user is None:
-        try:
-            hashed_api_key = get_hashed_api_key_from_request(request)
-        except ValueError:
-            hashed_api_key = None
-        if hashed_api_key:
+        elif hashed_api_key := get_hashed_api_key_from_request(request):
             user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+    except ValueError:
+        logger.warning("Issue with validating authentication token")
+        return None
 
     return user
 
@@ -1584,24 +1670,3 @@ def get_oauth_router(
         return redirect_response
 
     return router
-
-
-async def api_key_dep(
-    request: Request, async_db_session: AsyncSession = Depends(get_async_session)
-) -> User | None:
-    if AUTH_TYPE == AuthType.DISABLED:
-        return None
-
-    user: User | None = None
-
-    hashed_api_key = get_hashed_api_key_from_request(request)
-    if not hashed_api_key:
-        raise HTTPException(status_code=401, detail="Missing API key")
-
-    if hashed_api_key:
-        user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
-
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-    return user

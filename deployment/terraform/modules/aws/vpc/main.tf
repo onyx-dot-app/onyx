@@ -6,6 +6,8 @@ data "aws_availability_zones" "available" {
   }
 }
 
+data "aws_region" "current" {}
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.0.0"
@@ -32,4 +34,21 @@ module "vpc" {
   }
 
   tags = var.tags
+}
+
+data "aws_route_tables" "this" {
+  filter {
+    name   = "vpc-id"
+    values = [module.vpc.vpc_id]
+  }
+
+  depends_on = [module.vpc]
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = module.vpc.vpc_id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = data.aws_route_tables.this.ids
+  tags              = var.tags
 }

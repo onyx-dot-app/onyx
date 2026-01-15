@@ -105,6 +105,15 @@ inferenceCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
+  # This prevents pending pods when cluster resources are constrained
+  strategy: {}
+  # Example for RollingUpdate that terminates old pod first:
+  # strategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxSurge: 0
+  #     maxUnavailable: 1
 
 indexCapability:
   service:
@@ -141,8 +150,26 @@ indexCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
+  # This prevents pending pods when cluster resources are constrained
+  strategy: {}
+  # Example for RollingUpdate that terminates old pod first:
+  # strategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxSurge: 0
+  #     maxUnavailable: 1
 config:
   envConfigMapName: env-configmap
+
+tooling:
+  pgInto:
+    # -- Mounts a small helper script into app pods that opens psql using the pod's POSTGRES_* env vars.
+    enabled: false
+    # -- Where to place the helper inside the container.
+    mountPath: /usr/local/bin/pginto
+    # -- Which client binary to call; change if your image uses a non-default path.
+    psqlBinary: psql
 
 serviceAccount:
   # Specifies whether a service account should be created
@@ -165,6 +192,12 @@ nginx:
   controller:
     containerPort:
       http: 1024
+
+    # NOTE: When onyx-nginx-conf changes, nginx pods need to restart.
+    # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
+    # Workaround: Helm upgrade will restart if the following annotation value changes.
+    podAnnotations:
+      onyx.app/nginx-config-version: "1"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -684,6 +717,55 @@ slackbot:
   tolerations: []
   affinity: {}
 
+# Onyx Model Context Protocol (MCP) Server
+# Allows LLMs to use Onyx like invoking tools or accessing resources
+mcpServer:
+  enabled: false  # Disabled by default
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  # CORS origins for MCP clients (comma-separated)
+  # Example: "https://claude.ai,https://app.cursor.sh"
+  corsOrigins: ""
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+    app: mcp-server
+  deploymentLabels:
+    app: mcp-server
+  containerPorts:
+    server: 8090
+  service:
+    type: ClusterIP
+    servicePort: 8090
+    targetPort: mcp-server-port
+    portName: mcp-server-port
+  podSecurityContext: {}
+  securityContext: {}
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 celery_worker_docfetching:
   replicaCount: 1
   autoscaling:
@@ -749,6 +831,10 @@ redis:
     data: |
       appendonly no
       save ""
+      maxmemory 400mb
+      maxmemory-policy allkeys-lru
+      timeout 0
+      tcp-keepalive 300
   storageSpec:
     volumeClaimTemplate:
       spec:
@@ -778,6 +864,101 @@ minio:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+
+# Code Interpreter - Python code execution service (beta feature)
+codeInterpreter:
+  enabled: false  # Disabled by default (beta feature)
+
+  replicaCount: 1
+
+  image:
+    repository: onyxdotapp/code-interpreter
+    pullPolicy: Always
+    tag: ""  # Empty uses chart appVersion
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  # Execution limits
+  codeInterpreter:
+    maxExecTimeoutMs: 60000
+    maxOutputBytes: "1000000"
+    cpuTimeLimitSec: 5
+    memoryLimitMb: 256
+    host: "0.0.0.0"
+    port: 8000
+
+    # Kubernetes executor configuration (creates pods for code execution)
+    kubernetesExecutor:
+      namespace: ""  # Empty = same namespace as release
+      image: ""  # Empty = default sandbox image
+      serviceAccount: ""
+      podResources:
+        limits:
+          cpu: "1"
+          memory: "256Mi"
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+
+  # API container resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+  # RBAC for pod management (required for kubernetes executor)
+  rbac:
+    create: true
+
+  # Security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+  securityContext:
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+
+  # Health probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Optional features
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: false
+  serviceAccount:
+    create: true
+    automount: true
 
 ingress:
   enabled: false
@@ -910,7 +1091,6 @@ configMap:
   QA_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
   DISABLE_LLM_DOC_RELEVANCE: ""
-  DISABLE_LLM_CHOOSE_SEARCH: ""
   DISABLE_LLM_QUERY_REPHRASE: ""
   # Query Options
   DOC_TIME_DECAY: ""

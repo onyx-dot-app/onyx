@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
+  AuthType,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
 } from "./lib/constants";
@@ -29,7 +30,7 @@ export const config = {
     "/admin/groups/:path*",
     "/admin/performance/usage/:path*",
     "/admin/performance/query-history/:path*",
-    "/admin/whitelabeling/:path*",
+    "/admin/theme/:path*",
     "/admin/performance/custom-analytics/:path*",
     "/admin/standard-answer/:path*",
     "/assistants/stats/:path*",
@@ -44,7 +45,7 @@ const EE_ROUTES = [
   "/admin/groups",
   "/admin/performance/usage",
   "/admin/performance/query-history",
-  "/admin/whitelabeling",
+  "/admin/theme",
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
   "/assistants/stats",
@@ -57,7 +58,7 @@ export async function proxy(request: NextRequest) {
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
   // Skip auth checks entirely if auth is disabled
-  if (SERVER_SIDE_ONLY__AUTH_TYPE !== "disabled") {
+  if (SERVER_SIDE_ONLY__AUTH_TYPE !== AuthType.DISABLED) {
     const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
       pathname.startsWith(route)
     );

@@ -3,62 +3,30 @@ from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from typing import Literal
-from typing import TYPE_CHECKING
-from typing import Union
+from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import ConfigDict
 from pydantic import Field
-from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
-from onyx.context.search.models import RetrievalDocs
-from onyx.context.search.models import SavedSearchDoc
-from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.override_models import PromptOverride
+from onyx.file_store.models import InMemoryChatFile
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
-from onyx.tools.models import ToolCallFinalResult
+from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
-
-if TYPE_CHECKING:
-    from onyx.db.models import Persona
-
-
-# We need this value to be a constant instead of None to avoid JSON serialization issues
-DOCUMENT_CITATION_NUMBER_EMPTY_VALUE = -1
-
-
-class LlmDoc(BaseModel):
-    """This contains the minimal set information for the LLM portion including citations"""
-
-    # This is kind of cooked. We're overloading this field as both a "catch all" for identifying
-    # an LLM doc as well as a way to connect the LlmDoc to the DB. For internal search, it will
-    # be an id for the db but not for web search.
-    document_id: str
-    content: str
-    blurb: str
-    semantic_identifier: str
-    source_type: DocumentSource
-    metadata: dict[str, str | list[str]]
-    updated_at: datetime | None
-    link: str | None
-    source_links: dict[int, str] | None
-    match_highlights: list[str] | None
-    document_citation_number: int | None = DOCUMENT_CITATION_NUMBER_EMPTY_VALUE
 
 
 # First chunk of info for streaming QA
-class QADocsResponse(RetrievalDocs, SubQuestionIdentifier):
+class QADocsResponse(BaseModel):
+    top_documents: list[SearchDoc]
     rephrased_query: str | None = None
     predicted_flow: QueryFlow | None
     predicted_search: SearchType | None
@@ -87,7 +55,7 @@ class StreamType(Enum):
     MAIN_ANSWER = "main_answer"
 
 
-class StreamStopInfo(SubQuestionIdentifier):
+class StreamStopInfo(BaseModel):
     stop_reason: StreamStopReason
 
     stream_type: StreamType = StreamType.MAIN_ANSWER
@@ -129,18 +97,6 @@ class OnyxAnswerPiece(BaseModel):
     answer_piece: str | None  # if None, specifies the end of an Answer
 
 
-# An intermediate representation of citations, later translated into
-# a mapping of the citation [n] number to SearchDoc
-class AllCitations(BaseModel):
-    citations: list[CitationInfo]
-
-
-# This is a mapping of the citation number to the document index within
-# the result search doc set
-class MessageSpecificCitations(BaseModel):
-    citation_map: dict[int, int]
-
-
 class MessageResponseIDInfo(BaseModel):
     user_message_id: int | None
     reserved_assistant_message_id: int
@@ -149,6 +105,11 @@ class MessageResponseIDInfo(BaseModel):
 class StreamingError(BaseModel):
     error: str
     stack_trace: str | None = None
+    error_code: str | None = (
+        None  # e.g., "RATE_LIMIT", "AUTH_ERROR", "TOOL_CALL_FAILED"
+    )
+    is_retryable: bool = True  # Hint to frontend if retry might help
+    details: dict | None = None  # Additional context (tool name, model name, etc.)
 
 
 class OnyxAnswer(BaseModel):
@@ -172,6 +133,13 @@ class CustomToolResponse(BaseModel):
 
 class ToolConfig(BaseModel):
     id: int
+
+
+class ProjectSearchConfig(BaseModel):
+    """Configuration for search tool availability in project context."""
+
+    search_usage: SearchToolUsage
+    disable_forced_tool: bool
 
 
 class PromptOverrideConfig(BaseModel):
@@ -213,6 +181,10 @@ AnswerQuestionPossibleReturn = (
 )
 
 
+class CreateChatSessionID(BaseModel):
+    chat_session_id: UUID
+
+
 AnswerQuestionStreamReturn = Iterator[AnswerQuestionPossibleReturn]
 
 
@@ -224,173 +196,16 @@ class LLMMetricsContainer(BaseModel):
 StreamProcessor = Callable[[Iterator[str]], AnswerQuestionStreamReturn]
 
 
-class DocumentPruningConfig(BaseModel):
-    max_chunks: int | None = None
-    max_window_percentage: float | None = None
-    max_tokens: int | None = None
-    # different pruning behavior is expected when the
-    # user manually selects documents they want to chat with
-    # e.g. we don't want to truncate each document to be no more
-    # than one chunk long
-    is_manually_selected_docs: bool = False
-    # If user specifies to include additional context Chunks for each match, then different pruning
-    # is used. As many Sections as possible are included, and the last Section is truncated
-    # If this is false, all of the Sections are truncated if they are longer than the expected Chunk size.
-    # Sections are often expected to be longer than the maximum Chunk size but Chunks should not be.
-    use_sections: bool = True
-    # If using tools, then we need to consider the tool length
-    tool_num_tokens: int = 0
-    # If using a tool message to represent the docs, then we have to JSON serialize
-    # the document content, which adds to the token count.
-    using_tool_message: bool = False
-
-
-class ContextualPruningConfig(DocumentPruningConfig):
-    num_chunk_multiple: int
-
-    @classmethod
-    def from_doc_pruning_config(
-        cls, num_chunk_multiple: int, doc_pruning_config: DocumentPruningConfig
-    ) -> "ContextualPruningConfig":
-        return cls(
-            num_chunk_multiple=num_chunk_multiple,
-            **doc_pruning_config.model_dump(),
-        )
-
-
-class CitationConfig(BaseModel):
-    all_docs_useful: bool = False
-
-
-class AnswerStyleConfig(BaseModel):
-    citation_config: CitationConfig
-    # forces the LLM to return a structured response, see
-    # https://platform.openai.com/docs/guides/structured-outputs/introduction
-    # right now, only used by the simple chat API
-    structured_response_format: dict | None = None
-
-
-class PromptConfig(BaseModel):
-    """Final representation of the Prompt configuration passed
-    into the `PromptBuilder` object."""
-
-    default_behavior_system_prompt: str
-    custom_instructions: str | None
-    reminder: str
-    datetime_aware: bool
-
-    @classmethod
-    def from_model(
-        cls,
-        model: "Persona",
-        db_session: Session,
-        prompt_override: PromptOverride | None = None,
-    ) -> "PromptConfig":
-        from onyx.db.persona import get_default_behavior_persona
-
-        # Get the default persona's system prompt
-        default_persona = get_default_behavior_persona(db_session)
-        default_behavior_system_prompt = (
-            default_persona.system_prompt
-            if default_persona and default_persona.system_prompt
-            else ""
-        )
-
-        # Check if this persona is the default assistant
-        is_default_persona = default_persona and model.id == default_persona.id
-
-        # If this persona IS the default assistant, custom_instruction should be None
-        # Otherwise, it should be the persona's system_prompt
-        custom_instruction = None
-        if not is_default_persona:
-            custom_instruction = model.system_prompt or None
-
-        # Handle prompt overrides
-        override_system_prompt = (
-            prompt_override.system_prompt if prompt_override else None
-        )
-        override_task_prompt = prompt_override.task_prompt if prompt_override else None
-
-        # If there's an override, apply it to the appropriate field
-        if override_system_prompt:
-            if is_default_persona:
-                default_behavior_system_prompt = override_system_prompt
-            else:
-                custom_instruction = override_system_prompt
-
-        return cls(
-            default_behavior_system_prompt=default_behavior_system_prompt,
-            custom_instructions=custom_instruction,
-            reminder=override_task_prompt or model.task_prompt or "",
-            datetime_aware=model.datetime_aware,
-        )
-
-    model_config = ConfigDict(frozen=True)
-
-
-class SubQueryPiece(SubQuestionIdentifier):
-    sub_query: str
-    query_id: int
-
-
-class AgentAnswerPiece(SubQuestionIdentifier):
-    answer_piece: str
-    answer_type: Literal["agent_sub_answer", "agent_level_answer"]
-
-
-class SubQuestionPiece(SubQuestionIdentifier):
-    """Refined sub questions generated from the initial user question."""
-
-    sub_question: str
-
-
-class ExtendedToolResponse(ToolResponse, SubQuestionIdentifier):
-    pass
-
-
-class RefinedAnswerImprovement(BaseModel):
-    refined_answer_improvement: bool
-
-
-AgentSearchPacket = Union[
-    SubQuestionPiece
-    | AgentAnswerPiece
-    | SubQueryPiece
-    | ExtendedToolResponse
-    | RefinedAnswerImprovement
-]
-
-
-ResponsePart = (
-    OnyxAnswerPiece
-    | CitationInfo
-    | ToolCallKickoff
-    | ToolResponse
-    | ToolCallFinalResult
-    | StreamStopInfo
-    | AgentSearchPacket
-)
-
 AnswerStreamPart = (
     Packet
     | StreamStopInfo
     | MessageResponseIDInfo
     | StreamingError
     | UserKnowledgeFilePacket
+    | CreateChatSessionID
 )
 
 AnswerStream = Iterator[AnswerStreamPart]
-
-
-class AnswerPostInfo(BaseModel):
-    ai_message_files: list[FileDescriptor]
-    rephrased_query: str | None = None
-    reference_db_search_docs: list[DbSearchDoc] | None = None
-    dropped_indices: list[int] | None = None
-    tool_result: ToolCallFinalResult | None = None
-    message_specific_citations: MessageSpecificCitations | None = None
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ChatBasicResponse(BaseModel):
@@ -398,9 +213,85 @@ class ChatBasicResponse(BaseModel):
     answer: str
     answer_citationless: str
 
-    top_documents: list[SavedSearchDoc]
+    top_documents: list[SearchDoc]
 
     error_msg: str | None
     message_id: int
-    # this is a map of the citation number to the document id
-    cited_documents: dict[int, str]
+    citation_info: list[CitationInfo]
+
+
+class ToolCallResponse(BaseModel):
+    """Tool call with full details for non-streaming response."""
+
+    tool_name: str
+    tool_arguments: dict[str, Any]
+    tool_result: str
+    search_docs: list[SearchDoc] | None = None
+    generated_images: list[GeneratedImage] | None = None
+    # Reasoning that led to the tool call
+    pre_reasoning: str | None = None
+
+
+class ChatFullResponse(BaseModel):
+    """Complete non-streaming response with all available data."""
+
+    # Core response fields
+    answer: str
+    answer_citationless: str
+    pre_answer_reasoning: str | None = None
+    tool_calls: list[ToolCallResponse] = []
+
+    # Documents & citations
+    top_documents: list[SearchDoc]
+    citation_info: list[CitationInfo]
+
+    # Metadata
+    message_id: int
+    chat_session_id: UUID | None = None
+    error_msg: str | None = None
+
+
+class ChatLoadedFile(InMemoryChatFile):
+    content_text: str | None
+    token_count: int
+
+
+class ChatMessageSimple(BaseModel):
+    message: str
+    token_count: int
+    message_type: MessageType
+    # Only for USER type messages
+    image_files: list[ChatLoadedFile] | None = None
+    # Only for TOOL_CALL_RESPONSE type messages
+    tool_call_id: str | None = None
+    # The last message for which this is true
+    # AND is true for all previous messages
+    # (counting from the start of the history)
+    # represents the end of the cacheable prefix
+    # used for prompt caching
+    should_cache: bool = False
+
+
+class ProjectFileMetadata(BaseModel):
+    """Metadata for a project file to enable citation support."""
+
+    file_id: str
+    filename: str
+    file_content: str
+
+
+class ExtractedProjectFiles(BaseModel):
+    project_file_texts: list[str]
+    project_image_files: list[ChatLoadedFile]
+    project_as_filter: bool
+    total_token_count: int
+    # Metadata for project files to enable citations
+    project_file_metadata: list[ProjectFileMetadata]
+    # None if not a project
+    project_uncapped_token_count: int | None
+
+
+class LlmStepResult(BaseModel):
+    reasoning: str | None
+    answer: str | None
+    tool_calls: list[ToolCallKickoff] | None

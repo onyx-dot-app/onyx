@@ -5,8 +5,11 @@ import pytest
 import requests
 from requests.models import Response
 
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import litellm_thinks_model_supports_image_input
+from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
@@ -43,32 +46,61 @@ def assert_response_is_equivalent(
     def fill_max_input_tokens_and_supports_image_input(
         req: ModelConfigurationUpsertRequest,
     ) -> dict[str, Any]:
+        provider_name = created_provider["provider"]
+        # Match how ModelConfigurationView.from_model builds the key for parsing
+        model_key = req.name
+        if provider_name and not model_key.startswith(f"{provider_name}/"):
+            model_key = f"{provider_name}/{model_key}"
+        parsed = parse_litellm_model_name(model_key)
+
+        # Include region in display name for Bedrock cross-region models (matches from_model)
+        display_name = (
+            f"{parsed.display_name} ({parsed.region})"
+            if parsed.region
+            else parsed.display_name
+        )
+
         filled_with_max_input_tokens = ModelConfigurationUpsertRequest(
             name=req.name,
             is_visible=req.is_visible,
             max_input_tokens=req.max_input_tokens
-            or get_max_input_tokens(
-                model_name=req.name, model_provider=default_model_name
-            ),
+            or get_max_input_tokens(model_name=req.name, model_provider=provider_name),
         )
         return {
             **filled_with_max_input_tokens.model_dump(),
-            "supports_image_input": model_supports_image_input(
-                req.name, created_provider["provider"]
+            "supports_image_input": litellm_thinks_model_supports_image_input(
+                req.name, provider_name
             ),
+            "supports_reasoning": model_is_reasoning_model(req.name, provider_name),
+            "display_name": display_name,
+            "provider_display_name": parsed.provider_display_name,
+            "vendor": parsed.vendor,
+            "region": parsed.region,
+            "version": parsed.version,
         }
 
-    actual = set(
-        tuple(model_configuration.items())
-        for model_configuration in provider_data["model_configurations"]
+    # Compare model configurations by name (order-independent)
+    actual_by_name = {
+        config["name"]: config for config in provider_data["model_configurations"]
+    }
+    expected_by_name = {
+        config.name: fill_max_input_tokens_and_supports_image_input(config)
+        for config in model_configurations
+    }
+
+    assert set(actual_by_name.keys()) == set(expected_by_name.keys()), (
+        f"Model names don't match. "
+        f"Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
     )
-    expected = set(
-        tuple(
-            fill_max_input_tokens_and_supports_image_input(model_configuration).items()
+
+    for name in actual_by_name:
+        actual_config = actual_by_name[name]
+        expected_config = expected_by_name[name]
+        assert actual_config == expected_config, (
+            f"Config mismatch for {name}:\n"
+            f"Actual: {actual_config}\n"
+            f"Expected: {expected_config}"
         )
-        for model_configuration in model_configurations
-    )
-    assert actual == expected
 
     # test that returned key is sanitized
     if api_key:
@@ -151,7 +183,7 @@ def test_create_llm_provider(
         headers=admin_user.headers,
         json={
             "name": str(uuid.uuid4()),
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -250,7 +282,7 @@ def test_update_model_configurations(
         headers=admin_user.headers,
         json={
             "name": name,
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -355,7 +387,7 @@ def test_delete_llm_provider(
         headers=admin_user.headers,
         json={
             "name": "test-provider-delete",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
@@ -413,7 +445,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -426,10 +458,9 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o-mini",
             "model_configurations": [config.dict() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -464,7 +495,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=True,  # Now visible
             max_input_tokens=None,
             supports_image_input=None,
@@ -476,10 +507,9 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o-mini",
             "model_configurations": [
                 config.dict() for config in edit_configs_all_visible
             ],
@@ -513,7 +543,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
             supports_image_input=None,
         ),
         ModelConfigurationUpsertRequest(
-            name="gpt-3.5-turbo",
+            name="gpt-4-turbo",
             is_visible=False,
             max_input_tokens=None,
             supports_image_input=None,
@@ -525,10 +555,9 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
         headers=admin_user.headers,
         json={
             "name": "test-visibility-provider",
-            "provider": "openai",
+            "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": "gpt-4o",
-            "fast_default_model_name": "gpt-4o",  # Set to same as default to have only 1 visible
             "model_configurations": [
                 config.dict() for config in edit_configs_one_visible
             ],
@@ -539,7 +568,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
     )
     assert edit_response_2.status_code == 200
 
-    # Verify only 1 model is visible (both default and fast_default point to the same model)
+    # Verify only 1 model is visible
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is not None
     visible_models = [

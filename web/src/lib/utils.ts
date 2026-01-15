@@ -11,28 +11,50 @@ export const truncateString = (str: string, maxLength: number) => {
 };
 
 /**
- * Custom URL transformer function for ReactMarkdown
- * Allows specific protocols to be used in markdown links
- * We use this with the urlTransform prop in ReactMarkdown
+ * Ensures an href has a protocol, adding https:// only to bare domains.
+ * Preserves existing protocols, relative paths, anchors, mailto:, and tel: links.
  */
-export function transformLinkUri(href: string) {
+export function ensureHrefProtocol(
+  href: string | undefined
+): string | undefined {
   if (!href) return href;
+  const needsProtocol =
+    !href.includes("://") &&
+    !href.startsWith("/") &&
+    !href.startsWith("#") &&
+    !href.startsWith("mailto:") &&
+    !href.startsWith("tel:");
+  return needsProtocol ? `https://${href}` : href;
+}
 
-  const url = href.trim();
+/**
+ * Custom URL transformer function for ReactMarkdown.
+ * Only allows a small, safe set of protocols and strips everything else.
+ * Returning null removes the href attribute entirely.
+ */
+export function transformLinkUri(href: string): string | null {
+  if (!href) return null;
+
+  const trimmedHref = href.trim();
+  if (!trimmedHref) return null;
+
   try {
-    const parsedUrl = new URL(url);
-    if (
-      ALLOWED_URL_PROTOCOLS.some((protocol) =>
-        parsedUrl.protocol.startsWith(protocol)
-      )
-    ) {
-      return url;
+    const parsedUrl = new URL(trimmedHref);
+    const protocol = parsedUrl.protocol.toLowerCase();
+
+    if (ALLOWED_URL_PROTOCOLS.some((allowed) => allowed === protocol)) {
+      return trimmedHref;
     }
+
+    return null;
   } catch {
-    // If it's not a valid URL with protocol, return the original href
-    return href;
+    // Allow relative URLs, but drop anything that looks like a protocol-prefixed link
+    if (/^[a-zA-Z][a-zA-Z\d+.-]*:\S*/.test(trimmedHref)) {
+      return null;
+    }
+
+    return trimmedHref;
   }
-  return href;
 }
 
 export function isSubset(parent: string[], child: string[]): boolean {
@@ -103,6 +125,30 @@ export function isImageExtension(
   }
   const normalized = extension.toLowerCase();
   return (IMAGE_EXTENSIONS as readonly string[]).includes(normalized);
+}
+
+/**
+ * Formats bytes to human-readable file size.
+ */
+export function formatBytes(
+  bytes: number | undefined,
+  decimals: number = 2
+): string {
+  if (bytes == null) return "Unknown";
+  if (bytes === 0) return "0 Bytes";
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+
+  let unitIndex = Math.floor(Math.log(bytes) / Math.log(k));
+  if (unitIndex < 0) unitIndex = 0;
+  if (unitIndex >= sizes.length) unitIndex = sizes.length - 1;
+  return (
+    parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(dm)) +
+    " " +
+    sizes[unitIndex]
+  );
 }
 
 /**

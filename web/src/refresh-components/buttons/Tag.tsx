@@ -63,10 +63,10 @@ export default function Tag({
           active ? "max-w-[10rem] opacity-100" : "max-w-0 opacity-0"
         )}
       >
-        <Text>{children.length}</Text>
+        <Text as="p">{children.length}</Text>
       </div>
 
-      <Text>{label}</Text>
+      <Text as="p">{label}</Text>
     </button>
   );
 }

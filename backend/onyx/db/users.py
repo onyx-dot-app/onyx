@@ -257,7 +257,7 @@ def _get_users_by_emails(
     """given a list of lowercase emails,
     returns a list[User] of Users whose emails match and a list[str]
     the missing emails that had no User"""
-    stmt = select(User).filter(func.lower(User.email).in_(lower_emails))  # type: ignore
+    stmt = select(User).filter(func.lower(User.email).in_(lower_emails))
     found_users = list(db_session.scalars(stmt).unique().all())  # Convert to list
 
     # Extract found emails and convert to lowercase to avoid case sensitivity issues

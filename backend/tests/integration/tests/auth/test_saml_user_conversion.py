@@ -28,7 +28,7 @@ def test_saml_user_conversion(reset: None) -> None:
     are properly converted to authenticated roles during SAML login.
     """
     # Create an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(email="admin@onyx-test.com")
+    admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
     # Create a regular user that we'll convert to EXT_PERM_USER
     test_user_email = "ext_perm_user@example.com"

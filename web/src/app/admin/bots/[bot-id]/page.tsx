@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { BackButton } from "@/components/BackButton";
+import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
@@ -98,7 +98,7 @@ export default function Page({
   params: Promise<{ "bot-id": string }>;
 }) {
   return (
-    <div className="container mx-auto">
+    <div className="container">
       <SlackBotEditPage params={params} />
     </div>
   );

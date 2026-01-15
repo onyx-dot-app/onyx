@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any
 from typing import List
 
@@ -23,6 +24,12 @@ class NavigationItem(BaseModel):
         return instance
 
 
+class LogoDisplayStyle(str, Enum):
+    LOGO_AND_NAME = "logo_and_name"
+    LOGO_ONLY = "logo_only"
+    NAME_ONLY = "name_only"
+
+
 class EnterpriseSettings(BaseModel):
     """General settings that only apply to the Enterprise Edition of Onyx
 
@@ -31,6 +38,7 @@ class EnterpriseSettings(BaseModel):
     application_name: str | None = None
     use_custom_logo: bool = False
     use_custom_logotype: bool = False
+    logo_display_style: LogoDisplayStyle | None = None
 
     # custom navigation
     custom_nav_items: List[NavigationItem] = Field(default_factory=list)
@@ -42,6 +50,9 @@ class EnterpriseSettings(BaseModel):
     custom_popup_header: str | None = None
     custom_popup_content: str | None = None
     enable_consent_screen: bool | None = None
+    consent_screen_prompt: str | None = None
+    show_first_visit_notice: bool | None = None
+    custom_greeting_message: str | None = None
 
     def check_validity(self) -> None:
         return

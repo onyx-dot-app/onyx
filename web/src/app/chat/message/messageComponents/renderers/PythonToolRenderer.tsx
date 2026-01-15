@@ -1,14 +1,40 @@
-import React, { useEffect, useMemo } from "react";
-import SvgCode from "@/icons/code";
+import { useEffect, useMemo } from "react";
 import {
   PacketType,
   PythonToolPacket,
   PythonToolStart,
   PythonToolDelta,
   SectionEnd,
-} from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
-import { IconProps } from "@/icons";
+} from "@/app/chat/services/streamingModels";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/chat/message/messageComponents/interfaces";
+import { CodeBlock } from "@/app/chat/message/CodeBlock";
+import hljs from "highlight.js/lib/core";
+import python from "highlight.js/lib/languages/python";
+import { SvgCode } from "@opal/icons";
+
+// Register Python language for highlighting
+hljs.registerLanguage("python", python);
+
+// Component to render syntax-highlighted Python code
+function HighlightedPythonCode({ code }: { code: string }) {
+  const highlightedHtml = useMemo(() => {
+    try {
+      return hljs.highlight(code, { language: "python" }).value;
+    } catch {
+      return code;
+    }
+  }, [code]);
+
+  return (
+    <span
+      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+      className="hljs"
+    />
+  );
+}
 
 // Helper function to construct current Python execution state
 function constructCurrentPythonState(packets: PythonToolPacket[]) {
@@ -19,7 +45,9 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     .filter((packet) => packet.obj.type === PacketType.PYTHON_TOOL_DELTA)
     .map((packet) => packet.obj as PythonToolDelta);
   const pythonEnd = packets.find(
-    (packet) => packet.obj.type === PacketType.SECTION_END
+    (packet) =>
+      packet.obj.type === PacketType.SECTION_END ||
+      packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
   const code = pythonStart?.code || "";
@@ -45,14 +73,6 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     isComplete,
     hasError,
   };
-}
-
-function CodeIcon(props: IconProps) {
-  return (
-    <div className="w-4 h-4">
-      <SvgCode />
-    </div>
-  );
 }
 
 export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
@@ -88,7 +108,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     // Loading state - when executing
     if (isExecuting) {
       return children({
-        icon: CodeIcon,
+        icon: SvgCode,
         status: "Executing Python code...",
         content: (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -112,20 +132,19 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     // Complete state - show output
     if (isComplete) {
       return children({
-        icon: CodeIcon,
+        icon: SvgCode,
         status: hasError
           ? "Python execution failed"
           : "Python execution completed",
         content: (
           <div className="flex flex-col my-1 space-y-2">
             {code && (
-              <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 border border-blue-200 dark:border-blue-800">
-                <div className="text-xs font-semibold mb-1 text-blue-600 dark:text-blue-400">
-                  Code:
-                </div>
-                <pre className="text-sm whitespace-pre-wrap font-mono text-blue-900 dark:text-blue-100">
-                  {code}
-                </pre>
+              <div className="prose max-w-full">
+                {/* NOTE: note that we need to trim since otherwise there's a huge
+                "space" at the start of the code block */}
+                <CodeBlock className="language-python" codeText={code.trim()}>
+                  <HighlightedPythonCode code={code.trim()} />
+                </CodeBlock>
               </div>
             )}
             {stdout && (
@@ -166,7 +185,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
     // Fallback
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: status,
       content: <div></div>,
     });
@@ -175,7 +194,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   // Highlight/Short rendering
   if (isExecuting) {
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: "Executing Python code...",
       content: (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -198,7 +217,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   if (hasError) {
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: "Python execution failed",
       content: (
         <div className="text-sm text-red-600 dark:text-red-400">
@@ -210,7 +229,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   if (isComplete) {
     return children({
-      icon: CodeIcon,
+      icon: SvgCode,
       status: "Python execution completed",
       content: (
         <div className="text-sm text-muted-foreground">
@@ -225,7 +244,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   }
 
   return children({
-    icon: CodeIcon,
+    icon: SvgCode,
     status: "Python execution",
     content: (
       <div className="text-sm text-muted-foreground">Python execution</div>

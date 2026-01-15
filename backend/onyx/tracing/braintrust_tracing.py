@@ -2,19 +2,15 @@ import os
 import re
 from typing import Any
 
-import braintrust
-from agents import set_trace_processors
-from braintrust.wrappers.openai import BraintrustTracingProcessor
-from braintrust_langchain import set_global_handler  # type: ignore[import-untyped]
-from braintrust_langchain.callbacks import BraintrustCallbackHandler  # type: ignore[import-untyped]
-
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-MASKING_LENGTH = int(os.environ.get("BRAINTRUST_MASKING_LENGTH", "20000"))
+# Set very loosely because some tool call results may be very long.
+# Ideally we don't pass those to the LLM but it's fine if we want to trace them in full.
+MASKING_LENGTH = int(os.environ.get("BRAINTRUST_MASKING_LENGTH", "500000"))
 
 
 def _truncate_str(s: str) -> str:
@@ -75,16 +71,16 @@ def setup_braintrust_if_creds_available() -> None:
         logger.info("Braintrust API key not provided, skipping Braintrust setup")
         return
 
+    # Lazy imports to avoid loading braintrust when not needed
+    import braintrust
+
+    from onyx.tracing.braintrust_tracing_processor import BraintrustTracingProcessor
+    from onyx.tracing.framework import set_trace_processors
+
     braintrust_logger = braintrust.init_logger(
         project=BRAINTRUST_PROJECT,
         api_key=BRAINTRUST_API_KEY,
     )
     braintrust.set_masking_function(_mask)
     set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
-    _setup_legacy_langchain_tracing()
     logger.notice("Braintrust tracing initialized")
-
-
-def _setup_legacy_langchain_tracing() -> None:
-    handler = BraintrustCallbackHandler()
-    set_global_handler(handler)

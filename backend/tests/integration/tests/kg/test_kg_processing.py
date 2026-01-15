@@ -48,7 +48,7 @@ def reset_for_test() -> None:
     kg_config_settings.KG_EXPOSED = True
     kg_config_settings.KG_ENABLED = True
     kg_config_settings.KG_VENDOR = "Test"
-    kg_config_settings.KG_VENDOR_DOMAINS = ["onyx-test.com.app", "tester.ai"]
+    kg_config_settings.KG_VENDOR_DOMAINS = ["example.com", "tester.ai"]
     kg_config_settings.KG_IGNORE_EMAIL_DOMAINS = ["gmail.com"]
     kg_config_settings.KG_COVERAGE_START = "2020-01-01"
     set_kg_config_settings(kg_config_settings)
@@ -58,7 +58,7 @@ def reset_for_test() -> None:
 def kg_test_docs() -> tuple[list[str], int, list[KGEntityType]]:
 
     # create admin user
-    admin_user: DATestUser = UserManager.create(email="admin@onyx-test.com.app")
+    admin_user: DATestUser = UserManager.create(email="admin@example.com")
 
     # create a minimal file connector
     cc_pair = CCPairManager.create_from_scratch(

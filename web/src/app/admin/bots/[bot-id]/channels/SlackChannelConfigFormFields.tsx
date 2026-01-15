@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { FieldArray, useFormikContext, ErrorMessage, Field } from "formik";
-import { CCPairDescriptor, DocumentSetSummary } from "@/lib/types";
+import { useState, useEffect, useMemo } from "react";
+import { FieldArray, useFormikContext, ErrorMessage } from "formik";
+import { DocumentSetSummary } from "@/lib/types";
 import {
   Label,
   SelectorFormField,
@@ -20,6 +20,7 @@ import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import {
   Tooltip,
   TooltipContent,
@@ -28,7 +29,7 @@ import {
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
-import AgentIcon from "@/refresh-components/AgentIcon";
+import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
@@ -37,8 +38,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import Separator from "@/refresh-components/Separator";
-
-import { CheckboxField as CheckFormField } from "@/refresh-components/formik-fields/CheckboxField";
+import { CheckboxField } from "@/refresh-components/form/LabeledCheckboxField";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -181,7 +181,7 @@ export function SlackChannelConfigFormFields({
               messages (DMs) in your Slack workspace.
             </p>
             <div className="mt-4 p-4 bg-background rounded-md border border-neutral-300">
-              <CheckFormField
+              <CheckboxField
                 name="disabled"
                 label="Disable Default Configuration"
                 labelClassName="text-text"
@@ -385,12 +385,14 @@ export function SlackChannelConfigFormFields({
                       <button
                         type="button"
                         onClick={() =>
-                          router.push(`/admin/assistants/${persona.id}`)
+                          router.push(
+                            `/chat/agents/edit/${persona.id}` as Route
+                          )
                         }
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
                       >
-                        <AgentIcon agent={persona} size={16} />
+                        <AgentAvatar agent={persona} size={16} />
                         {persona.name}
                       </button>
                     )
@@ -452,7 +454,7 @@ export function SlackChannelConfigFormFields({
               Search Configuration
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-4">
+              <div className="space-y-4 pb-3">
                 <div className="w-64">
                   <SelectorFormField
                     name="response_type"
@@ -464,13 +466,7 @@ export function SlackChannelConfigFormFields({
                     ]}
                   />
                 </div>
-                <CheckFormField
-                  name="enable_auto_filters"
-                  label="Enable LLM Autofiltering"
-                  tooltip="If set, the LLM will generate source and time filters based on the user's query"
-                />
-
-                <CheckFormField
+                <CheckboxField
                   name="answer_validity_check_enabled"
                   label="Only respond if citations found"
                   tooltip="If set, will only answer questions where the model successfully produces citations"
@@ -484,13 +480,13 @@ export function SlackChannelConfigFormFields({
           <AccordionTrigger>General Configuration</AccordionTrigger>
           <AccordionContent className="overflow-visible">
             <div className="space-y-4">
-              <CheckFormField
+              <CheckboxField
                 name="show_continue_in_web_ui"
                 label="Show Continue in Web UI button"
                 tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Onyx Web UI"
               />
 
-              <CheckFormField
+              <CheckboxField
                 name="still_need_help_enabled"
                 onChange={(checked: boolean) => {
                   setFieldValue("still_need_help_enabled", checked);
@@ -521,22 +517,22 @@ export function SlackChannelConfigFormFields({
                 </CollapsibleSection>
               )}
 
-              <CheckFormField
+              <CheckboxField
                 name="questionmark_prefilter_enabled"
                 label="Only respond to questions"
                 tooltip="If set, OnyxBot will only respond to messages that contain a question mark"
               />
-              <CheckFormField
+              <CheckboxField
                 name="respond_tag_only"
                 label="Respond to @OnyxBot Only"
                 tooltip="If set, OnyxBot will only respond when directly tagged"
               />
-              <CheckFormField
+              <CheckboxField
                 name="respond_to_bots"
                 label="Respond to Bot messages"
                 tooltip="If not set, OnyxBot will always ignore messages from Bots"
               />
-              <CheckFormField
+              <CheckboxField
                 name="is_ephemeral"
                 label="Respond to user in a private (ephemeral) message"
                 tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also

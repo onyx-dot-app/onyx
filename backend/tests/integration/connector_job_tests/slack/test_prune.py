@@ -34,12 +34,12 @@ def test_slack_prune(
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
+        email="admin@example.com",
     )
 
     # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="test_user_1@onyx-test.com",
+        email="test_user_1@example.com",
     )
 
     slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])

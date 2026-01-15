@@ -2,6 +2,7 @@
 
 import { PageSelector } from "@/components/PageSelector";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useEffect, useState } from "react";
 import {
   Table,
@@ -29,11 +30,11 @@ function ClickableTableRow({
   const router = useRouter();
 
   useEffect(() => {
-    router.prefetch(url);
+    router.prefetch(url as Route);
   }, [router, url]);
 
   const navigate = () => {
-    router.push(url);
+    router.push(url as Route);
   };
 
   return (

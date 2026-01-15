@@ -9,7 +9,6 @@ from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -20,16 +19,19 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatSession
+from onyx.db.models import Project__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserProject
 from onyx.db.persona import get_personas_by_ids
+from onyx.db.projects import get_project_token_count
 from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import ChatSessionRequest
 from onyx.server.features.projects.models import TokenCountResponse
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -45,7 +47,7 @@ class UserFileDeleteResult(BaseModel):
     assistant_names: list[str] = []
 
 
-@router.get("/")
+@router.get("/", tags=PUBLIC_API_TAGS)
 def get_projects(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -57,7 +59,7 @@ def get_projects(
     return [UserProjectSnapshot.from_model(project) for project in projects]
 
 
-@router.post("/create")
+@router.post("/create", tags=PUBLIC_API_TAGS)
 def create_project(
     name: str,
     user: User | None = Depends(current_user),
@@ -72,7 +74,7 @@ def create_project(
     return UserProjectSnapshot.from_model(project)
 
 
-@router.post("/file/upload")
+@router.post("/file/upload", tags=PUBLIC_API_TAGS)
 def upload_user_files(
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
@@ -113,7 +115,7 @@ def upload_user_files(
         )
 
 
-@router.get("/{project_id}")
+@router.get("/{project_id}", tags=PUBLIC_API_TAGS)
 def get_project(
     project_id: int,
     user: User | None = Depends(current_user),
@@ -130,7 +132,7 @@ def get_project(
     return UserProjectSnapshot.from_model(project)
 
 
-@router.get("/files/{project_id}")
+@router.get("/files/{project_id}", tags=PUBLIC_API_TAGS)
 def get_files_in_project(
     project_id: int,
     user: User | None = Depends(current_user),
@@ -139,15 +141,19 @@ def get_files_in_project(
     user_id = user.id if user is not None else None
     user_files = (
         db_session.query(UserFile)
-        .filter(UserFile.projects.any(id=project_id), UserFile.user_id == user_id)
-        .filter(UserFile.status != UserFileStatus.FAILED)
-        .order_by(UserFile.created_at.desc())
+        .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)
+        .filter(
+            Project__UserFile.project_id == project_id,
+            UserFile.user_id == user_id,
+            UserFile.status != UserFileStatus.FAILED,
+        )
+        .order_by(Project__UserFile.created_at.desc())
         .all()
     )
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
 
 
-@router.delete("/{project_id}/files/{file_id}")
+@router.delete("/{project_id}/files/{file_id}", tags=PUBLIC_API_TAGS)
 def unlink_user_file_from_project(
     project_id: int,
     file_id: UUID,
@@ -196,7 +202,11 @@ def unlink_user_file_from_project(
     return Response(status_code=204)
 
 
-@router.post("/{project_id}/files/{file_id}", response_model=UserFileSnapshot)
+@router.post(
+    "/{project_id}/files/{file_id}",
+    response_model=UserFileSnapshot,
+    tags=PUBLIC_API_TAGS,
+)
 def link_user_file_to_project(
     project_id: int,
     file_id: UUID,
@@ -248,7 +258,11 @@ class ProjectInstructionsResponse(BaseModel):
     instructions: str | None
 
 
-@router.get("/{project_id}/instructions", response_model=ProjectInstructionsResponse)
+@router.get(
+    "/{project_id}/instructions",
+    response_model=ProjectInstructionsResponse,
+    tags=PUBLIC_API_TAGS,
+)
 def get_project_instructions(
     project_id: int,
     user: User | None = Depends(current_user),
@@ -271,7 +285,11 @@ class UpsertProjectInstructionsRequest(BaseModel):
     instructions: str
 
 
-@router.post("/{project_id}/instructions", response_model=ProjectInstructionsResponse)
+@router.post(
+    "/{project_id}/instructions",
+    response_model=ProjectInstructionsResponse,
+    tags=PUBLIC_API_TAGS,
+)
 def upsert_project_instructions(
     project_id: int,
     body: UpsertProjectInstructionsRequest,
@@ -301,7 +319,9 @@ class ProjectPayload(BaseModel):
     persona_id_to_is_default: dict[int, bool] | None = None
 
 
-@router.get("/{project_id}/details", response_model=ProjectPayload)
+@router.get(
+    "/{project_id}/details", response_model=ProjectPayload, tags=PUBLIC_API_TAGS
+)
 def get_project_details(
     project_id: int,
     user: User | None = Depends(current_user),
@@ -330,7 +350,7 @@ class UpdateProjectRequest(BaseModel):
     description: str | None = None
 
 
-@router.patch("/{project_id}", response_model=UserProjectSnapshot)
+@router.patch("/{project_id}", response_model=UserProjectSnapshot, tags=PUBLIC_API_TAGS)
 def update_project(
     project_id: int,
     body: UpdateProjectRequest,
@@ -356,7 +376,7 @@ def update_project(
     return UserProjectSnapshot.from_model(project)
 
 
-@router.delete("/{project_id}")
+@router.delete("/{project_id}", tags=PUBLIC_API_TAGS)
 def delete_project(
     project_id: int,
     user: User | None = Depends(current_user),
@@ -384,7 +404,7 @@ def delete_project(
     return Response(status_code=204)
 
 
-@router.delete("/file/{file_id}")
+@router.delete("/file/{file_id}", tags=PUBLIC_API_TAGS)
 def delete_user_file(
     file_id: UUID,
     user: User | None = Depends(current_user),
@@ -433,7 +453,7 @@ def delete_user_file(
     )
 
 
-@router.get("/file/{file_id}", response_model=UserFileSnapshot)
+@router.get("/file/{file_id}", response_model=UserFileSnapshot, tags=PUBLIC_API_TAGS)
 def get_user_file(
     file_id: UUID,
     user: User | None = Depends(current_user),
@@ -459,7 +479,9 @@ class UserFileIdsRequest(BaseModel):
     file_ids: list[UUID]
 
 
-@router.post("/file/statuses", response_model=list[UserFileSnapshot])
+@router.post(
+    "/file/statuses", response_model=list[UserFileSnapshot], tags=PUBLIC_API_TAGS
+)
 def get_user_file_statuses(
     body: UserFileIdsRequest,
     user: User | None = Depends(current_user),
@@ -542,23 +564,16 @@ def get_chat_session_project_token_count(
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
-    if chat_session.project_id is None:
-        return TokenCountResponse(total_tokens=0)
-
-    total_tokens = (
-        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
-        .filter(
-            UserFile.user_id == user_id,
-            UserFile.projects.any(id=chat_session.project_id),
-        )
-        .scalar()
-        or 0
+    total_tokens = get_project_token_count(
+        project_id=chat_session.project_id,
+        user_id=user_id,
+        db_session=db_session,
     )
 
-    return TokenCountResponse(total_tokens=int(total_tokens))
+    return TokenCountResponse(total_tokens=total_tokens)
 
 
-@router.get("/session/{chat_session_id}/files")
+@router.get("/session/{chat_session_id}/files", tags=PUBLIC_API_TAGS)
 def get_chat_session_project_files(
     chat_session_id: str,
     user: User | None = Depends(current_user),
@@ -597,7 +612,7 @@ def get_chat_session_project_files(
 
 
 @router.get("/{project_id}/token-count", response_model=TokenCountResponse)
-def get_project_token_count(
+def get_project_total_token_count(
     project_id: int,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -614,14 +629,10 @@ def get_project_token_count(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    total_tokens = (
-        db_session.query(func.coalesce(func.sum(UserFile.token_count), 0))
-        .filter(
-            UserFile.user_id == user_id,
-            UserFile.projects.any(id=project_id),
-        )
-        .scalar()
-        or 0
+    total_tokens = get_project_token_count(
+        project_id=project_id,
+        user_id=user_id,
+        db_session=db_session,
     )
 
-    return TokenCountResponse(total_tokens=int(total_tokens))
+    return TokenCountResponse(total_tokens=total_tokens)

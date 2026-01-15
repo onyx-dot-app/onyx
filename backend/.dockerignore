@@ -15,3 +15,4 @@ build/
 dist/
 .coverage
 htmlcov/
+model_server/legacy/

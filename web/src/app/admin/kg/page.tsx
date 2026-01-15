@@ -9,9 +9,9 @@ import {
   TextFormField,
 } from "@/components/Field";
 import { BrainIcon } from "@/components/icons/icons";
-import { Modal } from "@/components/Modal";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import UnlabeledSwitchField from "@/refresh-components/formik-fields/UnlabeledSwitchField";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import * as Yup from "yup";
@@ -29,8 +29,8 @@ import { redirect } from "next/navigation";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import KGEntityTypes from "@/app/admin/kg/KGEntityTypes";
 import Text from "@/refresh-components/texts/Text";
-import SvgSettings from "@/icons/settings";
 import { cn } from "@/lib/utils";
+import { SvgSettings } from "@opal/icons";
 
 function createDomainField(
   name: string,
@@ -174,7 +174,7 @@ function KGConfiguration({
                 label="Enabled"
                 subtext="Enable or disable Knowledge Graph."
               />
-              <UnlabeledSwitchField
+              <SwitchField
                 name="enabled"
                 onCheckedChange={(state) => {
                   if (!state) props.resetForm();
@@ -250,31 +250,33 @@ function Main() {
     <div className="flex flex-col py-4 gap-y-8">
       {popup}
       <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-2">
-        <Text headingH2>Knowledge Graph Configuration (Private Beta)</Text>
+        <Text as="p" headingH2>
+          Knowledge Graph Configuration (Private Beta)
+        </Text>
         <div className="flex flex-col gap-y-6">
           <div>
-            <Text text03>
+            <Text as="p" text03>
               The Knowledge Graph feature lets you explore your data in new
               ways. Instead of searching through unstructured text, your data is
               organized as entities and their relationships, enabling powerful
               queries like:
             </Text>
             <div className="p-4">
-              <Text text03>
+              <Text as="p" text03>
                 - &quot;Summarize my last 3 calls with account XYZ&quot;
               </Text>
-              <Text text03>
+              <Text as="p" text03>
                 - &quot;How many open Jiras are assigned to John Smith, ranked
                 by priority&quot;
               </Text>
             </div>
-            <Text text03>
+            <Text as="p" text03>
               (To use Knowledge Graph queries, you&apos;ll need a dedicated
               Assistant configured in a specific way. Please contact the Onyx
               team for setup instructions.)
             </Text>
           </div>
-          <Text text03>
+          <Text as="p" text03>
             <Title>Getting Started:</Title>
             Begin by configuring some high-level attributes, and then define the
             entities you want to model afterwards.
@@ -289,25 +291,32 @@ function Main() {
       </CardSection>
       {kgConfig.enabled && (
         <>
-          <Text headingH2>Entity Types</Text>
+          <Text as="p" headingH2>
+            Entity Types
+          </Text>
           <KGEntityTypes sourceAndEntityTypes={sourceAndEntityTypesData} />
         </>
       )}
       {configureModalShown && (
-        <Modal
-          title="Configure Knowledge Graph"
-          onOutsideClick={() => setConfigureModalShown(false)}
-          className="overflow-y-scroll"
-        >
-          <KGConfiguration
-            kgConfig={kgConfig}
-            setPopup={setPopup}
-            onSubmitSuccess={async () => {
-              await configMutate();
-              setConfigureModalShown(false);
-            }}
-            entityTypesMutate={entityTypesMutate}
-          />
+        <Modal open onOpenChange={() => setConfigureModalShown(false)}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgSettings}
+              title="Configure Knowledge Graph"
+              onClose={() => setConfigureModalShown(false)}
+            />
+            <Modal.Body>
+              <KGConfiguration
+                kgConfig={kgConfig}
+                setPopup={setPopup}
+                onSubmitSuccess={async () => {
+                  await configMutate();
+                  setConfigureModalShown(false);
+                }}
+                entityTypesMutate={entityTypesMutate}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
     </div>
@@ -326,7 +335,7 @@ export default function Page() {
   }
 
   return (
-    <div className="mx-auto container">
+    <div className="container">
       <AdminPageTitle
         title="Knowledge Graph"
         icon={<BrainIcon size={32} className="my-auto" />}

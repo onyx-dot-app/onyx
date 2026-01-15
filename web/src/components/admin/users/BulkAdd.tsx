@@ -25,6 +25,13 @@ interface FormValues {
   emails: string;
 }
 
+const normalizeEmails = (emails: string) =>
+  emails
+    .trim()
+    .split(WHITESPACE_SPLIT)
+    .filter(Boolean)
+    .map((email) => email.toLowerCase());
+
 const AddUserFormRenderer = ({
   touched,
   errors,
@@ -60,8 +67,8 @@ const AddUserForm = withFormik<FormProps, FormValues>({
     };
   },
   validate: (values: FormValues): FormikErrors<FormValues> => {
-    const emails = values.emails.trim().split(WHITESPACE_SPLIT);
-    if (!emails.some(Boolean)) {
+    const emails = normalizeEmails(values.emails);
+    if (!emails.length) {
       return { emails: "Required" };
     }
     for (let email of emails) {
@@ -72,7 +79,7 @@ const AddUserForm = withFormik<FormProps, FormValues>({
     return {};
   },
   handleSubmit: async (values: FormValues, formikBag) => {
-    const emails = values.emails.trim().split(WHITESPACE_SPLIT);
+    const emails = normalizeEmails(values.emails);
     formikBag.setSubmitting(true);
     await addUsers("/api/manage/admin/users", { arg: emails })
       .then((res) => {

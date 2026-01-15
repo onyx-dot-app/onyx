@@ -30,13 +30,14 @@ from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.llm.factory import get_default_llms
+from onyx.llm.factory import get_default_llm
 from onyx.llm.utils import test_llm
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.manage.models import BoostDoc
 from onyx.server.manage.models import BoostUpdateRequest
 from onyx.server.manage.models import HiddenUpdateRequest
 from onyx.server.models import StatusResponse
+from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -121,7 +122,7 @@ def validate_existing_genai_api_key(
         pass
 
     try:
-        llm, __ = get_default_llms(timeout=10)
+        llm = get_default_llm(timeout=10)
     except ValueError:
         raise HTTPException(status_code=404, detail="LLM not setup")
 
@@ -134,7 +135,7 @@ def validate_existing_genai_api_key(
     kv_store.store(KV_GEN_AI_KEY_CHECK_TIME, curr_time.timestamp())
 
 
-@router.post("/admin/deletion-attempt")
+@router.post("/admin/deletion-attempt", tags=PUBLIC_API_TAGS)
 def create_deletion_attempt_for_connector_id(
     connector_credential_pair_identifier: ConnectorCredentialPairIdentifier,
     user: User = Depends(current_curator_or_admin_user),

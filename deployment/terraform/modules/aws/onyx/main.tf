@@ -56,11 +56,10 @@ module "postgres" {
 }
 
 module "s3" {
-  source      = "../s3"
-  bucket_name = local.bucket_name
-  region      = var.region
-  vpc_id      = local.vpc_id
-  tags        = local.merged_tags
+  source             = "../s3"
+  bucket_name        = local.bucket_name
+  tags               = local.merged_tags
+  s3_vpc_endpoint_id = var.create_vpc ? module.vpc[0].s3_vpc_endpoint_id : var.s3_vpc_endpoint_id
 }
 
 module "eks" {

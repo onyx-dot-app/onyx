@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.models import SetCuratorRequest
@@ -362,14 +363,29 @@ def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
 
 def _add_user__user_group_relationships__no_commit(
     db_session: Session, user_group_id: int, user_ids: list[UUID]
-) -> list[User__UserGroup]:
-    """NOTE: does not commit the transaction."""
-    relationships = [
-        User__UserGroup(user_id=user_id, user_group_id=user_group_id)
-        for user_id in user_ids
-    ]
-    db_session.add_all(relationships)
-    return relationships
+) -> None:
+    """NOTE: does not commit the transaction.
+
+    This function is idempotent - it will skip users who are already in the group
+    to avoid duplicate key violations during concurrent operations or re-syncs.
+    Uses ON CONFLICT DO NOTHING to keep inserts atomic under concurrency.
+    """
+    if not user_ids:
+        return
+
+    insert_stmt = (
+        insert(User__UserGroup)
+        .values(
+            [
+                {"user_id": user_id, "user_group_id": user_group_id}
+                for user_id in user_ids
+            ]
+        )
+        .on_conflict_do_nothing(
+            index_elements=[User__UserGroup.user_group_id, User__UserGroup.user_id]
+        )
+    )
+    db_session.execute(insert_stmt)
 
 
 def _add_user_group__cc_pair_relationships__no_commit(

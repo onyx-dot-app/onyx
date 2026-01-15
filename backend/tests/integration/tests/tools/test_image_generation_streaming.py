@@ -7,10 +7,12 @@ import time
 
 import pytest
 
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     HEARTBEAT_INTERVAL,
 )
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
@@ -21,6 +23,7 @@ ART_PERSONA_ID = -3
 def test_image_generation_streaming(
     basic_user: DATestUser,
     llm_provider: DATestLLMProvider,
+    image_generation_config: DATestImageGenerationConfig,
 ) -> None:
     """
     Test image generation to verify:
@@ -60,7 +63,7 @@ def test_image_generation_streaming(
     # Verify we received heartbeat packets during image generation
     # Image generation typically takes a few seconds and sends heartbeats
     # every HEARTBEAT_INTERVAL seconds
-    expected_heartbeat_packets = max(1, total_time / HEARTBEAT_INTERVAL - 1)
+    expected_heartbeat_packets = max(1, int(total_time / HEARTBEAT_INTERVAL) - 1)
     assert len(analyzed_response.heartbeat_packets) >= expected_heartbeat_packets, (
         f"Expected at least {expected_heartbeat_packets} heartbeats for {total_time:.2f}s execution, "
         f"but got {len(analyzed_response.heartbeat_packets)}"
@@ -69,8 +72,10 @@ def test_image_generation_streaming(
     # Verify the heartbeat packets have the expected structure
     for packet in analyzed_response.heartbeat_packets:
         assert "obj" in packet, "Heartbeat packet should have 'obj' field"
-        assert packet["obj"].get("type") == "image_generation_tool_heartbeat", (
-            f"Expected heartbeat type to be 'image_generation_tool_heartbeat', "
+        assert (
+            packet["obj"].get("type") == StreamingType.IMAGE_GENERATION_HEARTBEAT.value
+        ), (
+            f"Expected heartbeat type to be {StreamingType.IMAGE_GENERATION_HEARTBEAT.value}, "
             f"got {packet['obj'].get('type')}"
         )
     # 4. Verify image generation tool delta packets with actual image data

@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 import requests
@@ -13,15 +14,13 @@ logger = setup_logger()
 
 
 def _get_gpu_status_from_model_server(indexing: bool) -> bool:
+    if os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true":
+        logger.info("DISABLE_MODEL_SERVER is set, assuming no GPU available")
+        return False
     if indexing:
         model_server_url = f"{INDEXING_MODEL_SERVER_HOST}:{INDEXING_MODEL_SERVER_PORT}"
     else:
         model_server_url = f"{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}"
-
-    # If model server is disabled, return False (no GPU available)
-    if model_server_url in ["disabled", "disabled:9000"]:
-        logger.info("Model server is disabled, assuming no GPU available")
-        return False
 
     if "http" not in model_server_url:
         model_server_url = f"http://{model_server_url}"

@@ -6,7 +6,6 @@ import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
-const APP_BASE_URL = "http://localhost:3000";
 const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 
 async function scrollToBottom(page: Page): Promise<void> {
@@ -71,7 +70,7 @@ test.describe("Default Assistant MCP Integration", () => {
     }
 
     // Create a basic user for testing
-    basicUserEmail = `pw-basic-user-${Date.now()}@test.com`;
+    basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
     await adminClient.registerUser(basicUserEmail, basicUserPassword);
 
@@ -105,126 +104,136 @@ test.describe("Default Assistant MCP Integration", () => {
 
     console.log(`[test] Starting with server name: ${serverName}`);
 
-    // Navigate to MCP server creation page
-    await page.goto(`${APP_BASE_URL}/admin/actions/edit-mcp`);
-    await page.waitForURL("**/admin/actions/edit-mcp**");
-    console.log(`[test] Navigated to MCP edit page`);
+    // Navigate to MCP actions page
+    await page.goto("/admin/actions/mcp");
+    await page.waitForURL("**/admin/actions/mcp**");
+    console.log(`[test] Navigated to MCP actions page`);
 
-    // Fill server details
-    console.log(`[test] Filling server URL: ${serverUrl}`);
+    // Click "Add MCP Server" button to open modal
+    await page.getByRole("button", { name: /Add MCP Server/i }).click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    console.log(`[test] Opened Add MCP Server modal`);
 
-    await page.locator('input[name="name"]').fill(serverName);
-    await page
-      .locator('input[name="description"]')
-      .fill("Test API key MCP server");
-    await page.locator('input[name="server_url"]').fill(serverUrl);
+    // Fill basic server info in AddMCPServerModal
+    await page.locator("input#name").fill(serverName);
+    await page.locator("textarea#description").fill("Test API key MCP server");
+    await page.locator("input#server_url").fill(serverUrl);
     console.log(`[test] Filled basic server details`);
 
-    // Select API Token authentication
-    const authTypeSelect = page.getByTestId("auth-type-select");
-    await expect(authTypeSelect).toBeVisible({ timeout: 5000 });
-    await authTypeSelect.scrollIntoViewIfNeeded();
-    await authTypeSelect.click();
-    await page.waitForTimeout(200);
-
-    const apiTokenOption = page.getByRole("option", { name: "API Token" });
-    await expect(apiTokenOption).toBeVisible({ timeout: 5000 });
-    await apiTokenOption.click();
-    await page.waitForTimeout(500); // Wait for dropdown to close and form to update
-    console.log(`[test] Selected API Token authentication`);
-
-    // Scroll to ensure auth-performer-select is in view
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
+    // Submit the modal to create server
+    const createServerResponsePromise = page.waitForResponse((resp) => {
+      try {
+        const url = new URL(resp.url());
+        return (
+          url.pathname === "/api/admin/mcp/server" &&
+          resp.request().method() === "POST" &&
+          resp.ok()
+        );
+      } catch {
+        return false;
+      }
     });
+    await page.getByRole("button", { name: "Add Server" }).click();
+    const createServerResponse = await createServerResponsePromise;
+    const createdServer = (await createServerResponse.json()) as {
+      id?: number;
+    };
+    expect(createdServer.id).toBeTruthy();
+    serverId = Number(createdServer.id);
+    expect(serverId).toBeGreaterThan(0);
+    console.log(`[test] Created MCP server with id: ${serverId}`);
+    await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
+    console.log(`[test] Created MCP server, auth modal should open`);
+
+    // MCPAuthenticationModal should now be open - configure API Key authentication
+    await page.waitForTimeout(500); // Ensure modal is fully rendered
+
+    // Select API Key as authentication method
+    const authMethodSelect = page.getByTestId("mcp-auth-method-select");
+    await authMethodSelect.click();
+    await page.getByRole("option", { name: "API Key" }).click();
+    console.log(`[test] Selected API Key authentication method`);
+
+    await page.waitForTimeout(500); // Wait for tabs to appear
+
+    // The modal now shows tabs - select "Shared Key (Admin)" tab
+    const adminTab = page.getByRole("tab", { name: /Shared Key.*Admin/i });
+    await expect(adminTab).toBeVisible({ timeout: 5000 });
+    await adminTab.click();
     await page.waitForTimeout(300);
+    console.log(`[test] Selected Shared Key (Admin) tab`);
 
-    // Select Admin-managed authentication
-    const authPerformerSelect = page.getByTestId("auth-performer-select");
-    await expect(authPerformerSelect).toBeVisible({ timeout: 10000 });
-    await authPerformerSelect.scrollIntoViewIfNeeded();
-    await authPerformerSelect.click();
-    await page.waitForTimeout(200);
-
-    const adminOption = page.getByRole("option", { name: "Admin" });
-    await expect(adminOption).toBeVisible({ timeout: 5000 });
-    await adminOption.click();
-    await page.waitForTimeout(500); // Wait for dropdown to close and form to update
-    console.log(`[test] Selected Admin performer`);
-
-    // Scroll to bring API token field into view
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
-    });
-    await page.waitForTimeout(300);
-
-    // Wait for API token field to appear and enter admin API key
+    // Wait for API token field to appear and fill it
     const apiTokenInput = page.locator('input[name="api_token"]');
     await expect(apiTokenInput).toBeVisible({ timeout: 10000 });
-    console.log(`[test] API token field is visible`);
-
-    // Scroll the input into view and fill
-    await apiTokenInput.scrollIntoViewIfNeeded();
     await apiTokenInput.click(); // Focus the field first
     await apiTokenInput.fill(API_KEY);
     console.log(`[test] Filled API key`);
 
-    // Scroll to bottom to find List Actions button
-    await scrollToBottom(page);
+    // Click Connect button to submit authentication
+    const connectButton = page.getByTestId("mcp-auth-connect-button");
+    await expect(connectButton).toBeVisible({ timeout: 5000 });
+    await connectButton.click();
+    console.log(`[test] Clicked Connect button`);
 
-    // List actions
-    const listActionsButton = page.getByRole("button", {
-      name: "List Actions",
-    });
-    await expect(listActionsButton).toBeVisible({ timeout: 5000 });
-    await listActionsButton.scrollIntoViewIfNeeded();
-    console.log(`[test] Clicking List Actions button`);
-    await listActionsButton.click();
-    await page.waitForURL("**listing_tools=true**", { timeout: 15000 });
-    console.log(`[test] URL updated to listing_tools=true`);
+    // Wait for the tools to be fetched
+    await page.waitForTimeout(1000);
+    console.log(`[test] Tools fetched successfully`);
 
-    // Wait for tools to load
-    await scrollToBottom(page);
-    await expect(page.getByText("Available Tools")).toBeVisible({
+    // Verify server card is visible
+    await expect(
+      page.getByText(serverName, { exact: false }).first()
+    ).toBeVisible({ timeout: 20000 });
+    console.log(`[test] Verified server card is visible`);
+
+    // Click the refresh button to fetch/refresh tools
+    const refreshButton = page.getByRole("button", { name: "Refresh tools" });
+    await expect(refreshButton).toBeVisible({ timeout: 5000 });
+    await refreshButton.click();
+    console.log(`[test] Clicked refresh tools button`);
+
+    // Wait for tools to load - "No tools available" should disappear
+    await expect(page.getByText("No tools available")).not.toBeVisible({
       timeout: 15000,
     });
-    console.log(`[test] Available Tools section visible`);
+    console.log(`[test] Tools loaded successfully`);
 
-    // Extract server ID from URL
-    const currentUrl = new URL(page.url());
-    const serverIdParam = currentUrl.searchParams.get("server_id");
-    expect(serverIdParam).toBeTruthy();
-    serverId = Number(serverIdParam);
-    expect(serverId).toBeGreaterThan(0);
-    console.log(`[test] Server ID: ${serverId}`);
+    // Disable multiple tools (tool_0, tool_1, tool_2, tool_3)
+    const toolIds = ["tool_11", "tool_12", "tool_13", "tool_14"];
+    let disabledToolsCount = 0;
 
-    // Select all tools
-    const selectAllCheckbox = page.getByLabel("tool-checkbox-select-all");
-    await expect(selectAllCheckbox).toBeVisible({ timeout: 5000 });
-    await selectAllCheckbox.scrollIntoViewIfNeeded();
-    await selectAllCheckbox.click();
-    await expect(page.getByText(/\d+ tools? selected/i)).toBeVisible({
-      timeout: 5000,
-    });
-    console.log(`[test] Selected all tools`);
+    for (const toolId of toolIds) {
+      const toolToggle = page.getByLabel(`tool-toggle-${toolId}`).first();
 
-    // Scroll to bottom again to find Create button
-    await scrollToBottom(page);
+      // Check if the tool exists
+      const isVisible = await toolToggle
+        .isVisible({ timeout: 2000 })
+        .catch(() => false);
 
-    // Create MCP server actions
-    const createButton = page.getByRole("button", {
-      name: /(?:Create|Update)\s+MCP Server Actions/i,
-    });
-    await expect(createButton).toBeVisible({ timeout: 10000 });
-    await expect(createButton).toBeEnabled({ timeout: 10000 });
-    await createButton.scrollIntoViewIfNeeded();
-    await createButton.click();
-    console.log(`[test] Clicked Create MCP Server Actions`);
+      if (!isVisible) {
+        console.log(`[test] Tool ${toolId} not found, skipping`);
+        continue;
+      }
 
-    await page.waitForURL("**/admin/actions**", { timeout: 15000 });
-    await expect(page.getByText(serverName)).toBeVisible({ timeout: 10000 });
+      console.log(`[test] Found tool: ${toolId}`);
 
-    console.log(`[test] MCP server created with ID ${serverId}`);
+      // Disable if currently enabled (tools are enabled by default)
+      const state = await toolToggle.getAttribute("data-state");
+      if (state === "checked") {
+        await toolToggle.click();
+        await expect(toolToggle).toHaveAttribute("data-state", "unchecked", {
+          timeout: 5000,
+        });
+        disabledToolsCount++;
+        console.log(`[test] Disabled tool: ${toolId}`);
+      } else {
+        console.log(`[test] Tool ${toolId} already disabled`);
+      }
+    }
+
+    console.log(
+      `[test] Successfully disabled ${disabledToolsCount} tools via UI`
+    );
   });
 
   test("Admin adds MCP tools to default assistant via default assistant page", async ({
@@ -237,14 +246,14 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as admin for default assistant config`);
 
     // Navigate to default assistant page
-    await page.goto(`${APP_BASE_URL}/admin/configuration/default-assistant`);
+    await page.goto("/admin/configuration/default-assistant");
     await page.waitForURL("**/admin/configuration/default-assistant**");
     console.log(`[test] Navigated to default assistant page`);
 
     // Wait for page to load
-    await expect(
-      page.getByRole("heading", { name: "Default Assistant" })
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
+      timeout: 10000,
+    });
     console.log(`[test] Page loaded`);
 
     // Scroll to actions section
@@ -309,7 +318,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
     // Navigate to chat (which uses default assistant for new users)
-    await page.goto(`${APP_BASE_URL}/chat`);
+    await page.goto("/chat");
     await page.waitForURL("**/chat**");
     console.log(`[test] Navigated to chat page`);
 
@@ -414,7 +423,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Testing tool modification`);
 
     // Navigate to default assistant page
-    await page.goto(`${APP_BASE_URL}/admin/configuration/default-assistant`);
+    await page.goto("/admin/configuration/default-assistant");
     await page.waitForURL("**/admin/configuration/default-assistant**");
 
     // Scroll to actions section
@@ -502,7 +511,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    await page.goto(`${APP_BASE_URL}/admin/configuration/default-assistant`);
+    await page.goto("/admin/configuration/default-assistant");
     await page.waitForURL("**/admin/configuration/default-assistant**");
 
     // Find the instructions textarea
@@ -550,7 +559,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as basic user to verify tool visibility`);
 
     // Navigate to chat
-    await page.goto(`${APP_BASE_URL}/chat`);
+    await page.goto("/chat");
     await page.waitForURL("**/chat**");
     console.log(`[test] Navigated to chat`);
 

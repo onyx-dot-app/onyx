@@ -18,7 +18,7 @@ jobs:
       # see https://github.com/orgs/community/discussions/27028#discussioncomment-3254367 for the workaround we
       # implement here which needs an actual user's deploy key
       - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
         with:
           ssh-key: "${{ secrets.DEPLOY_KEY }}"
           persist-credentials: true

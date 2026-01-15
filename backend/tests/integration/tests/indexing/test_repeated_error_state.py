@@ -11,7 +11,6 @@ from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
@@ -122,11 +121,13 @@ def test_repeated_error_state_detection_and_recovery(
             )
             assert cc_pair_obj is not None
             if cc_pair_obj.in_repeated_error_state:
-                # Verify the connector is also paused to prevent further indexing attempts
-                assert cc_pair_obj.status == ConnectorCredentialPairStatus.PAUSED, (
-                    f"Expected status to be PAUSED when in repeated error state, "
-                    f"but got {cc_pair_obj.status}"
-                )
+                # Pausing only happens for cloud deployments and the IT don't run with
+                # that auth type :(
+                # if AUTH_TYPE == AuthType.CLOUD:
+                #     assert cc_pair_obj.status == ConnectorCredentialPairStatus.PAUSED, (
+                #         f"Expected status to be PAUSED when in repeated error state, "
+                #         f"but got {cc_pair_obj.status}"
+                #     )
                 break
 
         if time.monotonic() - start_time > 30:

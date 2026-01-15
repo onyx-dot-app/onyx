@@ -25,17 +25,17 @@ class SlackEntities(BaseModel):
 
     # Direct message filtering
     include_dm: bool = Field(
-        default=False,
+        default=True,
         description="Include user direct messages in search results",
     )
     include_group_dm: bool = Field(
-        default=False,
+        default=True,
         description="Include group direct messages (multi-person DMs) in search results",
     )
 
     # Private channel filtering
     include_private_channels: bool = Field(
-        default=False,
+        default=True,
         description="Include private channels in search results (user must have access)",
     )
 
@@ -47,10 +47,10 @@ class SlackEntities(BaseModel):
 
     # Message count per slack request
     max_messages_per_query: int = Field(
-        default=25,
+        default=10,
         description=(
             "Maximum number of messages to retrieve per search query. "
-            "Higher values provide more context but may be slower."
+            "Higher values increase API calls and may trigger rate limits."
         ),
     )
 

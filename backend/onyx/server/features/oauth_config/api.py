@@ -92,6 +92,21 @@ def list_oauth_configs(
     return [_oauth_config_to_snapshot(config, db_session) for config in oauth_configs]
 
 
+@admin_router.get("/{oauth_config_id}")
+def get_oauth_config_endpoint(
+    oauth_config_id: int,
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_curator_or_admin_user),
+) -> OAuthConfigSnapshot:
+    """Retrieve a single OAuth configuration (admin only)."""
+    oauth_config = get_oauth_config(oauth_config_id, db_session)
+    if not oauth_config:
+        raise HTTPException(
+            status_code=404, detail=f"OAuth config with id {oauth_config_id} not found"
+        )
+    return _oauth_config_to_snapshot(oauth_config, db_session)
+
+
 @admin_router.put("/{oauth_config_id}")
 def update_oauth_config_endpoint(
     oauth_config_id: int,

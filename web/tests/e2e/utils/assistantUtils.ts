@@ -1,5 +1,6 @@
 import { Page } from "@playwright/test";
 import { expect } from "@chromatic-com/playwright";
+import { verifyAssistantIsChosen } from "./chatActions";
 
 export type AssistantParams = {
   name: string;
@@ -14,7 +15,7 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   // Navigate to creation flow
   // We assume we're on /chat; if not, go there first
   if (!page.url().includes("/chat")) {
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
   }
 
   // Open Assistants modal/list
@@ -22,19 +23,17 @@ export async function createAssistant(page: Page, params: AssistantParams) {
   await page.getByTestId("AgentsPage/new-agent-button").click();
 
   // Fill required fields
-  await page.getByTestId("name").fill(name);
+  await page.locator('input[name="name"]').fill(name);
   if (description) {
-    await page.getByTestId("description").fill(description);
+    await page.locator('textarea[name="description"]').fill(description);
   }
-  await page.getByTestId("system_prompt").fill(instructions);
+  await page.locator('textarea[name="instructions"]').fill(instructions);
 
   // Submit create
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify it is selected in chat (placeholder contains assistant name)
-  await expect(
-    page.getByPlaceholder(`How can ${name} help you today`)
-  ).toBeVisible({ timeout: 10000 });
+  await verifyAssistantIsChosen(page, name);
 }
 
 // Pin an assistant by its visible name in the sidebar list.
@@ -76,9 +75,7 @@ export async function pinAssistantByName(
  */
 export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Navigate to the default assistant configuration page
-  await page.goto(
-    "http://localhost:3000/admin/configuration/default-assistant"
-  );
+  await page.goto("/admin/configuration/default-assistant");
 
   // Wait for the page to load
   await page.waitForLoadState("networkidle");

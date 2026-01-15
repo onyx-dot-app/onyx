@@ -7,7 +7,7 @@ This directory contains Terraform modules to provision the core AWS infrastructu
 - `eks`: Provisions an Amazon EKS cluster, essential addons (EBS CSI, metrics server, cluster autoscaler), and optional IRSA for S3 access
 - `postgres`: Creates an Amazon RDS for PostgreSQL instance and returns a connection URL
 - `redis`: Creates an ElastiCache for Redis replication group
-- `s3`: Creates an S3 bucket (and VPC endpoint) for file storage
+- `s3`: Creates an S3 bucket and locks access to a provided S3 VPC endpoint
 - `onyx`: A higher-level composition that wires the above modules together for a complete, opinionated stack
 
 Use the `onyx` module if you want a working EKS + Postgres + Redis + S3 stack with sane defaults. Use the individual modules if you need more granular control.
@@ -93,7 +93,7 @@ terraform apply
 ```
 
 ### Using an existing VPC
-If you already have a VPC and subnets, disable VPC creation and provide IDs and CIDR:
+If you already have a VPC and subnets, disable VPC creation and provide IDs, CIDR, and the ID of the existing S3 gateway endpoint in that VPC:
 
 ```hcl
 module "onyx" {
@@ -109,6 +109,7 @@ module "onyx" {
   private_subnets  = ["subnet-aaaa", "subnet-bbbb", "subnet-cccc"]
   public_subnets   = ["subnet-dddd", "subnet-eeee", "subnet-ffff"]
   vpc_cidr_block   = "10.0.0.0/16"
+  s3_vpc_endpoint_id = "vpce-xxxxxxxxxxxxxxxxx"
 }
 ```
 
@@ -125,11 +126,11 @@ module "onyx" {
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
 - `postgres_username`, `postgres_password`
-- `create_vpc` (default true) or existing VPC details
+- `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
-- Outputs: `vpc_id`, `private_subnets`, `public_subnets`, `vpc_cidr_block`
+- Outputs: `vpc_id`, `private_subnets`, `public_subnets`, `vpc_cidr_block`, `s3_vpc_endpoint_id`
 
 ### `eks`
 - Creates the EKS cluster and node groups
@@ -155,7 +156,7 @@ Key inputs include:
 - Outputs endpoint, port, and whether SSL is enabled
 
 ### `s3`
-- Creates an S3 bucket for file storage and a gateway VPC endpoint for private access
+- Creates an S3 bucket for file storage and scopes access to the provided S3 gateway VPC endpoint
 
 ## Installing the Onyx Helm chart (after Terraform)
 Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.

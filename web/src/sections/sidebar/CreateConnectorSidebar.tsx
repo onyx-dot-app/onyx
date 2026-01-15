@@ -2,8 +2,8 @@ import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import Text from "@/refresh-components/texts/Text";
 import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
-import SvgSettings from "@/icons/settings";
 import { useUser } from "@/components/user/UserProvider";
+import { SvgSettings } from "@opal/icons";
 
 export default function Sidebar() {
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
@@ -58,7 +58,7 @@ export default function Sidebar() {
                   )}
                 </div>
               </div>
-              <Text text04={index <= formStep} text02={index > formStep}>
+              <Text as="p" text04={index <= formStep} text02={index > formStep}>
                 {step}
               </Text>
             </div>

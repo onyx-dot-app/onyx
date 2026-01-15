@@ -20,6 +20,7 @@ from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSI
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -40,17 +41,15 @@ from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.features.tool.models import should_expose_tool_to_fe
+from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
-DEFAULT_BEHAVIOR_PERSONA_ID = 0
-
 
 def get_default_behavior_persona(db_session: Session) -> Persona | None:
-    stmt = select(Persona).where(Persona.id == DEFAULT_BEHAVIOR_PERSONA_ID)
+    stmt = select(Persona).where(Persona.id == DEFAULT_PERSONA_ID)
     return db_session.scalars(stmt).first()
 
 
@@ -270,9 +269,9 @@ def create_update_persona(
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
             datetime_aware=create_persona_request.datetime_aware,
-            icon_color=create_persona_request.icon_color,
-            icon_shape=create_persona_request.icon_shape,
+            replace_base_system_prompt=create_persona_request.replace_base_system_prompt,
             uploaded_image_id=create_persona_request.uploaded_image_id,
+            icon_name=create_persona_request.icon_name,
             display_priority=create_persona_request.display_priority,
             remove_image=create_persona_request.remove_image,
             search_start_date=create_persona_request.search_start_date,
@@ -356,6 +355,17 @@ def _build_persona_filters(
     include_slack_bot_personas: bool,
     include_deleted: bool,
 ) -> Select[tuple[Persona]]:
+    """Filters which Personas are included in the query.
+
+    Args:
+        stmt: The base query to filter.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        The modified query with the filters applied.
+    """
     if not include_default:
         stmt = stmt.where(Persona.builtin_persona.is_(False))
     if not include_slack_bot_personas:
@@ -407,10 +417,242 @@ def get_persona_snapshots_for_user(
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
+        selectinload(Persona.user_files),
+        selectinload(Persona.users),
+        selectinload(Persona.groups),
     )
 
     results = db_session.scalars(stmt).all()
     return [PersonaSnapshot.from_model(persona) for persona in results]
+
+
+def get_persona_count_for_user(
+    user: User | None,
+    db_session: Session,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> int:
+    """Counts the total number of personas accessible to the user.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        db_session: Database session for executing queries.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        Total count of personas matching the filters and user permissions.
+    """
+    stmt = _build_persona_base_query(
+        user=user,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_slack_bot_personas=include_slack_bot_personas,
+        include_deleted=include_deleted,
+    )
+    # Convert to count query.
+    count_stmt = stmt.with_only_columns(func.count(func.distinct(Persona.id))).order_by(
+        None
+    )
+    return db_session.scalar(count_stmt) or 0
+
+
+def get_minimal_persona_snapshots_paginated(
+    user: User | None,
+    db_session: Session,
+    page_num: int,
+    page_size: int,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> list[MinimalPersonaSnapshot]:
+    """Gets a single page of minimal persona snapshots with ordering.
+
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC
+    distance from 0).
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        db_session: Database session for executing queries.
+        page_num: Zero-indexed page number (e.g., 0 for the first page).
+        page_size: Number of items per page.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        List of MinimalPersonaSnapshot objects for the requested page, ordered
+        by display_priority (nulls last) then ID.
+    """
+    stmt = _get_paginated_persona_query(
+        user,
+        page_num,
+        page_size,
+        get_editable,
+        include_default,
+        include_slack_bot_personas,
+        include_deleted,
+    )
+    # Do eager loading of columns we know MinimalPersonaSnapshot.from_model will
+    # need.
+    stmt = stmt.options(
+        selectinload(Persona.tools),
+        selectinload(Persona.labels),
+        selectinload(Persona.document_sets),
+        selectinload(Persona.user),
+    )
+
+    results = db_session.scalars(stmt).all()
+    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
+
+
+def get_persona_snapshots_paginated(
+    user: User | None,
+    db_session: Session,
+    page_num: int,
+    page_size: int,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> list[PersonaSnapshot]:
+    """Gets a single page of persona snapshots (admin view) with ordering.
+
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC
+    distance from 0).
+
+    This function returns PersonaSnapshot objects which contain more detailed
+    information than MinimalPersonaSnapshot, used for admin views.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        db_session: Database session for executing queries.
+        page_num: Zero-indexed page number (e.g., 0 for the first page).
+        page_size: Number of items per page.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        List of PersonaSnapshot objects for the requested page, ordered by
+        display_priority (nulls last) then ID.
+    """
+    stmt = _get_paginated_persona_query(
+        user,
+        page_num,
+        page_size,
+        get_editable,
+        include_default,
+        include_slack_bot_personas,
+        include_deleted,
+    )
+    # Do eager loading of columns we know PersonaSnapshot.from_model will need.
+    stmt = stmt.options(
+        selectinload(Persona.tools),
+        selectinload(Persona.labels),
+        selectinload(Persona.document_sets),
+        selectinload(Persona.user),
+        selectinload(Persona.user_files),
+        selectinload(Persona.users),
+        selectinload(Persona.groups),
+    )
+
+    results = db_session.scalars(stmt).all()
+    return [PersonaSnapshot.from_model(persona) for persona in results]
+
+
+def _get_paginated_persona_query(
+    user: User | None,
+    page_num: int,
+    page_size: int,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> Select[tuple[Persona]]:
+    """Builds a paginated query on personas ordered on display_priority and id.
+
+    Personas are ordered by display_priority (ASC, nulls last) then by ID (ASC
+    distance from 0) to match the frontend personaComparator() logic.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        page_num: Zero-indexed page number (e.g., 0 for the first page).
+        page_size: Number of items per page.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        SQLAlchemy Select statement with all filters, ordering, and pagination
+        applied.
+    """
+    stmt = _build_persona_base_query(
+        user=user,
+        get_editable=get_editable,
+        include_default=include_default,
+        include_slack_bot_personas=include_slack_bot_personas,
+        include_deleted=include_deleted,
+    )
+    # Add the abs(id) expression to the SELECT list (required for DISTINCT +
+    # ORDER BY).
+    stmt = stmt.add_columns(func.abs(Persona.id).label("abs_id"))
+    # Apply ordering.
+    stmt = stmt.order_by(
+        Persona.display_priority.asc().nullslast(),
+        func.abs(Persona.id).asc(),
+    )
+    # Apply pagination.
+    stmt = stmt.offset(page_num * page_size).limit(page_size)
+    return stmt
+
+
+def _build_persona_base_query(
+    user: User | None,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> Select[tuple[Persona]]:
+    """Builds a base persona query with all user and persona filters applied.
+
+    This helper constructs a filtered query that can then be customized for
+    counting, pagination, or full retrieval.
+
+    Args:
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        get_editable: If True, only returns personas the user can edit.
+        include_default: If True, includes builtin/default personas.
+        include_slack_bot_personas: If True, includes Slack bot personas.
+        include_deleted: If True, includes deleted personas.
+
+    Returns:
+        SQLAlchemy Select statement with all filters applied.
+    """
+    stmt = select(Persona)
+    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _build_persona_filters(
+        stmt, include_default, include_slack_bot_personas, include_deleted
+    )
+    return stmt
 
 
 def get_raw_personas_for_user(
@@ -421,15 +663,14 @@ def get_raw_personas_for_user(
     include_slack_bot_personas: bool = False,
     include_deleted: bool = False,
 ) -> Sequence[Persona]:
-    stmt = select(Persona)
-    stmt = _add_user_filters(stmt, user, get_editable)
-    stmt = _build_persona_filters(
-        stmt, include_default, include_slack_bot_personas, include_deleted
+    stmt = _build_persona_base_query(
+        user, get_editable, include_default, include_slack_bot_personas, include_deleted
     )
     return db_session.scalars(stmt).all()
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:
+    """WARNING: Unsafe, can fetch personas from all users."""
     stmt = select(Persona).distinct()
     stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
     stmt = stmt.where(Persona.deleted.is_(False))
@@ -474,19 +715,54 @@ def mark_delete_persona_by_name(
     db_session.commit()
 
 
-def update_all_personas_display_priority(
+def update_personas_display_priority(
     display_priority_map: dict[int, int],
     db_session: Session,
+    user: User | None,
+    commit_db_txn: bool = False,
 ) -> None:
-    """Updates the display priority of all lives Personas"""
-    personas = get_personas(db_session=db_session)
-    available_persona_ids = {persona.id for persona in personas}
-    if available_persona_ids != set(display_priority_map.keys()):
-        raise ValueError("Invalid persona IDs provided")
+    """Updates the display priorities of the specified Personas.
 
-    for persona in personas:
-        persona.display_priority = display_priority_map[persona.id]
-    db_session.commit()
+    Args:
+        display_priority_map: A map of persona IDs to intended display
+            priorities.
+        db_session: Database session for executing queries.
+        user: The user to filter personas for. If None and auth is disabled,
+            assumes the user is an admin. Otherwise, if None shows only public
+            personas.
+        commit_db_txn: If True, commits the database transaction after
+            updating the display priorities. Defaults to False.
+
+    Raises:
+        ValueError: The caller tried to update a persona for which the user does
+            not have access.
+    """
+    # No-op to save a query if it is not necessary.
+    if len(display_priority_map) == 0:
+        return
+
+    personas = get_raw_personas_for_user(
+        user,
+        db_session,
+        get_editable=False,
+        include_default=True,
+        include_slack_bot_personas=True,
+        include_deleted=True,
+    )
+    available_personas_map: dict[int, Persona] = {
+        persona.id: persona for persona in personas
+    }
+
+    for persona_id, priority in display_priority_map.items():
+        if persona_id not in available_personas_map:
+            raise ValueError(
+                f"Invalid persona ID provided: Persona with ID {persona_id} was not found for this user."
+            )
+
+        available_personas_map[persona_id].display_priority = priority
+
+    if commit_db_txn:
+        db_session.commit()
 
 
 def upsert_persona(
@@ -510,9 +786,8 @@ def upsert_persona(
     tool_ids: list[int] | None = None,
     persona_id: int | None = None,
     commit: bool = True,
-    icon_color: str | None = None,
-    icon_shape: int | None = None,
     uploaded_image_id: str | None = None,
+    icon_name: str | None = None,
     display_priority: int | None = None,
     is_visible: bool = True,
     remove_image: bool | None = None,
@@ -523,6 +798,7 @@ def upsert_persona(
     user_file_ids: list[UUID] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
+    replace_base_system_prompt: bool = False,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -613,10 +889,9 @@ def upsert_persona(
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
         existing_persona.is_public = is_public
-        existing_persona.icon_color = icon_color
-        existing_persona.icon_shape = icon_shape
         if remove_image or uploaded_image_id:
             existing_persona.uploaded_image_id = uploaded_image_id
+        existing_persona.icon_name = icon_name
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
         existing_persona.labels = labels or []
@@ -632,6 +907,7 @@ def upsert_persona(
             existing_persona.task_prompt = task_prompt
         if datetime_aware is not None:
             existing_persona.datetime_aware = datetime_aware
+        existing_persona.replace_base_system_prompt = replace_base_system_prompt
 
         # Do not delete any associations manually added unless
         # a new updated list is provided
@@ -672,14 +948,14 @@ def upsert_persona(
             system_prompt=system_prompt or "",
             task_prompt=task_prompt or "",
             datetime_aware=(datetime_aware if datetime_aware is not None else True),
+            replace_base_system_prompt=replace_base_system_prompt,
             document_sets=document_sets or [],
             llm_model_provider_override=llm_model_provider_override,
             llm_model_version_override=llm_model_version_override,
             starter_messages=starter_messages,
             tools=tools or [],
-            icon_shape=icon_shape,
-            icon_color=icon_color,
             uploaded_image_id=uploaded_image_id,
+            icon_name=icon_name,
             display_priority=display_priority,
             is_visible=is_visible,
             search_start_date=search_start_date,
@@ -829,7 +1105,7 @@ def get_persona_by_id(
 def get_personas_by_ids(
     persona_ids: list[int], db_session: Session
 ) -> Sequence[Persona]:
-    """Unsafe, can fetch personas from all users"""
+    """WARNING: Unsafe, can fetch personas from all users."""
     if not persona_ids:
         return []
     personas = db_session.scalars(
@@ -911,13 +1187,15 @@ def update_default_assistant_configuration(
     db_session: Session,
     tool_ids: list[int] | None = None,
     system_prompt: str | None = None,
+    update_system_prompt: bool = False,
 ) -> Persona:
     """Update only tools and system_prompt for the default assistant.
 
     Args:
         db_session: Database session
         tool_ids: List of tool IDs to enable (if None, tools are not updated)
-        system_prompt: New system prompt (if None, system prompt is not updated)
+        system_prompt: New system prompt value (None means use default)
+        update_system_prompt: If True, update the system_prompt field (allows setting to None)
 
     Returns:
         Updated Persona object
@@ -930,8 +1208,8 @@ def update_default_assistant_configuration(
     if not persona:
         raise ValueError("Default assistant not found")
 
-    # Update system prompt if provided
-    if system_prompt is not None:
+    # Update system prompt if explicitly requested
+    if update_system_prompt:
         persona.system_prompt = system_prompt
 
     # Update tools if provided

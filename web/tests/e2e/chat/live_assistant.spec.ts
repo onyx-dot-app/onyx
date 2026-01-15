@@ -4,6 +4,7 @@ import {
   sendMessage,
   startNewChat,
   verifyAssistantIsChosen,
+  verifyDefaultAssistantIsChosen,
 } from "../utils/chatActions";
 
 test("Chat workflow", async ({ page }) => {
@@ -17,7 +18,7 @@ test("Chat workflow", async ({ page }) => {
   await loginAsRandomUser(page);
 
   // Navigate to the chat page
-  await page.goto("http://localhost:3000/chat");
+  await page.goto("/chat");
   await page.waitForLoadState("networkidle");
 
   // Test interaction with the Default assistant
@@ -27,17 +28,21 @@ test("Chat workflow", async ({ page }) => {
   await startNewChat(page);
 
   // Verify the presence of the expected text
-  await verifyAssistantIsChosen(page, "Onyx");
+  await verifyDefaultAssistantIsChosen(page);
 
   // Test creation of a new assistant
   await page.getByTestId("AppSidebar/more-agents").click();
   await page.getByTestId("AgentsPage/new-agent-button").click();
-  await page.getByTestId("name").click();
-  await page.getByTestId("name").fill("Test Assistant");
-  await page.getByTestId("description").click();
-  await page.getByTestId("description").fill("Test Assistant Description");
-  await page.getByTestId("system_prompt").click();
-  await page.getByTestId("system_prompt").fill("Test Assistant Instructions");
+  await page.locator('input[name="name"]').click();
+  await page.locator('input[name="name"]').fill("Test Assistant");
+  await page.locator('textarea[name="description"]').click();
+  await page
+    .locator('textarea[name="description"]')
+    .fill("Test Assistant Description");
+  await page.locator('textarea[name="instructions"]').click();
+  await page
+    .locator('textarea[name="instructions"]')
+    .fill("Test Assistant Instructions");
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify the successful creation of the new assistant
@@ -48,5 +53,5 @@ test("Chat workflow", async ({ page }) => {
   await page.waitForLoadState("networkidle");
 
   // Verify the presence of the default assistant text
-  await verifyAssistantIsChosen(page, "Onyx");
+  await verifyDefaultAssistantIsChosen(page);
 });

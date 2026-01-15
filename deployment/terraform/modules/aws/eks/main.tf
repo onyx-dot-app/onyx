@@ -23,7 +23,21 @@ module "eks" {
     ami_type = "AL2023_x86_64_STANDARD"
   }
 
-  eks_managed_node_groups = var.eks_managed_node_groups
+  eks_managed_node_groups = {
+    for k, v in var.eks_managed_node_groups : k => merge(v,
+      {
+        instance_types = v.instance_types != null ? v.instance_types : (
+          k == "main" ? var.main_node_instance_types :
+          k == "vespa" ? var.vespa_node_instance_types :
+          v.instance_types
+        )
+      },
+      # Only add subnet_ids override for vespa node group if specified
+      k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {
+        subnet_ids = var.vespa_node_subnet_ids
+      } : {}
+    )
+  }
 
   tags = var.tags
 }

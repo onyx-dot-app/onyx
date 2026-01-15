@@ -177,6 +177,7 @@ class DocumentSource(str, Enum):
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
+    CODA = "coda"
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
@@ -208,6 +209,7 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    DRUPAL_WIKI = "drupal_wiki"
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
@@ -295,6 +297,15 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage
+    TOOL_CALL = "tool_call"
+    TOOL_CALL_RESPONSE = "tool_call_response"
+
+
+class ChatMessageSimpleType(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_CALL = "tool_call"
+    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):
@@ -322,7 +333,6 @@ class FileType(str, Enum):
 class MilestoneRecordType(str, Enum):
     TENANT_CREATED = "tenant_created"
     USER_SIGNED_UP = "user_signed_up"
-    MULTIPLE_USERS = "multiple_users"
     VISITED_ADMIN_PAGE = "visited_admin_page"
     CREATED_CONNECTOR = "created_connector"
     CONNECTOR_SUCCEEDED = "connector_succeeded"
@@ -482,7 +492,7 @@ class OnyxCeleryTask:
     CHECK_FOR_PRUNING = "check_for_pruning"
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
-    CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+    CHECK_FOR_AUTO_LLM_UPDATE = "check_for_auto_llm_update"
 
     # User file processing
     CHECK_FOR_USER_FILE_PROCESSING = "check_for_user_file_processing"
@@ -532,6 +542,7 @@ class OnyxCeleryTask:
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 
     EVAL_RUN_TASK = "eval_run_task"
+    SCHEDULED_EVAL_TASK = "scheduled_eval_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
@@ -552,9 +563,9 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPINTVL] = 15
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore[attr-defined,unused-ignore]
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore[attr-defined,unused-ignore]
 
 
 class OnyxCallTypes(str, Enum):
@@ -587,6 +598,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.SLAB: "slab data",
     DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
     DocumentSource.FILE: "files",
+    DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
     DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
 project management, and collaboration tools into a single, customizable platform",
     DocumentSource.ZULIP: "zulip data",
@@ -618,6 +630,7 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.EGNYTE: "egnyte - files",
     DocumentSource.AIRTABLE: "airtable - database",
     DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
 }

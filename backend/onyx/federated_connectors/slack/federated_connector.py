@@ -10,8 +10,8 @@ from slack_sdk import WebClient
 from typing_extensions import override
 
 from onyx.context.search.federated.slack_search import slack_retrieval
+from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import SearchQuery
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.federated_connectors.interfaces import FederatedConnector
 from onyx.federated_connectors.models import CredentialField
@@ -270,7 +270,7 @@ class SlackFederatedConnector(FederatedConnector):
     @override
     def search(
         self,
-        query: SearchQuery,
+        query: ChunkIndexRequest,
         entities: dict[str, Any],
         access_token: str,
         limit: int | None = None,
@@ -290,7 +290,7 @@ class SlackFederatedConnector(FederatedConnector):
         Returns:
             Search results in SlackSearchResponse format
         """
-        logger.info(f"Slack federated search called with entities: {entities}")
+        logger.debug(f"Slack federated search called with entities: {entities}")
 
         # Get team_id from Slack API for caching and filtering
         team_id = None
@@ -302,7 +302,7 @@ class SlackFederatedConnector(FederatedConnector):
             # Cast response.data to dict for type checking
             auth_data: dict[str, Any] = auth_response.data  # type: ignore
             team_id = auth_data.get("team_id")
-            logger.info(f"Slack team_id: {team_id}")
+            logger.debug(f"Slack team_id: {team_id}")
         except Exception as e:
             logger.warning(f"Could not fetch team_id from Slack API: {e}")
 

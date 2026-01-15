@@ -12,7 +12,7 @@ from onyx.connectors.models import TextSection
 def create_test_document(
     doc_id: str | None = None,
     text: str = "Test content",
-    link: str = "http://test.com",
+    link: str = "http://example.com",
     source: DocumentSource = DocumentSource.MOCK_CONNECTOR,
     metadata: dict | None = None,
 ) -> Document:
@@ -21,7 +21,7 @@ def create_test_document(
     Args:
         doc_id: Optional document ID. If not provided, a random UUID will be generated.
         text: The text content of the document. Defaults to "Test content".
-        link: The link for the document section. Defaults to "http://test.com".
+        link: The link for the document section. Defaults to "http://example.com".
         source: The document source. Defaults to MOCK_CONNECTOR.
         metadata: Optional metadata dictionary. Defaults to empty dict.
     """

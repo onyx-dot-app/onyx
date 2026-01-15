@@ -10,10 +10,7 @@ NUM_RETURNED_HITS = 50
 NUM_POSTPROCESSED_RESULTS = 20
 
 # May be less depending on model
-MAX_CHUNKS_FED_TO_CHAT = float(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 10.0)
-# For Chat, need to keep enough space for history and other prompt pieces
-# ~3k input, half for docs, half for chat history + prompts
-CHAT_TARGET_CHUNK_PERCENTAGE = 512 * 3 / 3072
+MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
 # Maximum percentage of the context window to fill with selected sections
 SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE = 0.8
@@ -30,10 +27,6 @@ FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
 # Currently only applies to search flow not chat
 CONTEXT_CHUNKS_ABOVE = int(os.environ.get("CONTEXT_CHUNKS_ABOVE") or 1)
 CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
-# Whether the LLM should be used to decide if a search would help given the chat history
-DISABLE_LLM_CHOOSE_SEARCH = (
-    os.environ.get("DISABLE_LLM_CHOOSE_SEARCH", "").lower() == "true"
-)
 DISABLE_LLM_QUERY_REPHRASE = (
     os.environ.get("DISABLE_LLM_QUERY_REPHRASE", "").lower() == "true"
 )
@@ -55,6 +48,7 @@ TITLE_CONTENT_RATIO = max(
 
 # A list of languages passed to the LLM to rephase the query
 # For example "English,French,Spanish", be sure to use the "," separator
+# TODO these are not used, should probably reintroduce these
 MULTILINGUAL_QUERY_EXPANSION = os.environ.get("MULTILINGUAL_QUERY_EXPANSION") or None
 LANGUAGE_HINT = "\n" + (
     os.environ.get("LANGUAGE_HINT")

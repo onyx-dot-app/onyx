@@ -21,6 +21,7 @@ from onyx.redis.redis_object_helper import RedisObjectHelper
 class RedisDocumentSet(RedisObjectHelper):
     PREFIX = "documentset"
     FENCE_PREFIX = PREFIX + "_fence"
+    FENCE_TTL = 7 * 24 * 60 * 60  # 7 days - defensive TTL to prevent memory leaks
     TASKSET_PREFIX = PREFIX + "_taskset"
 
     def __init__(self, tenant_id: str, id: int) -> None:
@@ -36,7 +37,7 @@ class RedisDocumentSet(RedisObjectHelper):
             self.redis.delete(self.fence_key)
             return
 
-        self.redis.set(self.fence_key, payload)
+        self.redis.set(self.fence_key, payload, ex=self.FENCE_TTL)
         self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     @property

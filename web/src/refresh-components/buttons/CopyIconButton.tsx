@@ -2,20 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import IconButton, { IconButtonProps } from "./IconButton";
-import SvgCopy from "@/icons/copy";
-import SvgCheck from "@/icons/check";
-import SvgAlertTriangle from "@/icons/alert-triangle";
-
+import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
 type CopyState = "idle" | "copied" | "error";
 
 export interface CopyIconButtonProps
   extends Omit<IconButtonProps, "icon" | "onClick"> {
   // Function that returns the text to copy to clipboard
   getCopyText: () => string;
+  // Optional function to get HTML content for rich copy
+  getHtmlContent?: () => string;
 }
 
 export default function CopyIconButton({
   getCopyText,
+  getHtmlContent,
   tooltip,
   ...iconButtonProps
 }: CopyIconButtonProps) {
@@ -36,8 +36,19 @@ export default function CopyIconButton({
         throw new Error("Clipboard API not available");
       }
 
-      // Copy to clipboard
-      await navigator.clipboard.writeText(text);
+      // If HTML content getter is provided, copy both HTML and plain text
+      if (getHtmlContent) {
+        const htmlContent = getHtmlContent();
+        const clipboardItem = new ClipboardItem({
+          "text/html": new Blob([htmlContent], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        });
+        await navigator.clipboard.write([clipboardItem]);
+      }
+      // Default: plain text only
+      else {
+        await navigator.clipboard.writeText(text);
+      }
 
       // Show "copied" state
       setCopyState("copied");

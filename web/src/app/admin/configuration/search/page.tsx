@@ -18,16 +18,14 @@ import { useContext } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import CardSection from "@/components/admin/CardSection";
 import { ErrorCallout } from "@/components/ErrorCallout";
-
+import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
+import { SvgSearch } from "@opal/icons";
 export interface EmbeddingDetails {
   api_key: string;
   custom_config: any;
   default_model_id?: number;
   name: string;
 }
-
-import { EmbeddingIcon } from "@/components/icons/icons";
-import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 
 function Main() {
   const settings = useContext(SettingsContext);
@@ -81,7 +79,7 @@ function Main() {
   }
 
   return (
-    <div className="h-screen">
+    <div>
       {searchSettingsPopup}
       {!futureEmbeddingModel ? (
         <>
@@ -180,11 +178,8 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="mx-auto container">
-      <AdminPageTitle
-        title="Search Settings"
-        icon={<EmbeddingIcon size={32} className="my-auto" />}
-      />
+    <div className="container">
+      <AdminPageTitle title="Search Settings" icon={SvgSearch} />
       <Main />
     </div>
   );

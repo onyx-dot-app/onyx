@@ -2,7 +2,7 @@
 
 import { MOBILE_SIDEBAR_BREAKPOINT_PX } from "@/lib/constants";
 import { useState, useCallback } from "react";
-import useIsMounted from "@/hooks/useIsMounted";
+import useOnMount from "@/hooks/useOnMount";
 
 export interface ScreenSize {
   height: number;
@@ -23,7 +23,7 @@ export default function useScreenSize(): ScreenSize {
     });
   }, []);
 
-  const isMounted = useIsMounted(() => {
+  const isMounted = useOnMount(() => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   });

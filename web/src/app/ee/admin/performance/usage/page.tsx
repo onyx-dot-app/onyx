@@ -1,27 +1,24 @@
 "use client";
 
-import { AdminDateRangeSelector } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
-import { OnyxBotChart } from "./OnyxBotChart";
-import { FeedbackChart } from "./FeedbackChart";
-import { QueryPerformanceChart } from "./QueryPerformanceChart";
-import { PersonaMessagesChart } from "./PersonaMessagesChart";
-import { useTimeRange } from "../lib";
+import { AdminDateRangeSelector } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { OnyxBotChart } from "@/app/ee/admin/performance/usage/OnyxBotChart";
+import { FeedbackChart } from "@/app/ee/admin/performance/usage/FeedbackChart";
+import { QueryPerformanceChart } from "@/app/ee/admin/performance/usage/QueryPerformanceChart";
+import { PersonaMessagesChart } from "@/app/ee/admin/performance/usage/PersonaMessagesChart";
+import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { FiActivity } from "react-icons/fi";
-import UsageReports from "./UsageReports";
+import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
 import Separator from "@/refresh-components/Separator";
-import { useAdminPersonas } from "@/app/admin/assistants/hooks";
+import { useAdminPersonas } from "@/hooks/useAdminPersonas";
+import { SvgActivity } from "@opal/icons";
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();
   const { personas } = useAdminPersonas();
 
   return (
-    <main className="pt-4 mx-auto container">
-      <AdminPageTitle
-        title="Usage Statistics"
-        icon={<FiActivity size={32} />}
-      />
+    <div className="container">
+      <AdminPageTitle title="Usage Statistics" icon={SvgActivity} />
       <AdminDateRangeSelector
         value={timeRange}
         onValueChange={(value) => setTimeRange(value as any)}
@@ -35,6 +32,6 @@ export default function AnalyticsPage() {
       />
       <Separator />
       <UsageReports />
-    </main>
+    </div>
   );
 }

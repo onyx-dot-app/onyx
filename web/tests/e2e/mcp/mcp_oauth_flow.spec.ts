@@ -636,52 +636,30 @@ async function completeOauthFlow(
   await tryConfirmConnected(false);
 }
 
-async function ensurePublicAssistant(page: Page) {
-  const publicRow = page
-    .locator("div.flex.items-center")
-    .filter({ hasText: "Organization Public" })
-    .first();
-  const switchLocator = publicRow.locator('[role="switch"]').first();
-  const state = await switchLocator.getAttribute("aria-checked");
-  if (state !== "true") {
-    await switchLocator.click();
-  }
-}
-
 async function selectMcpTools(
   page: Page,
   serverId: number,
   toolNames: string[]
 ) {
-  const sectionLocator = page.getByTestId(`mcp-server-section-${serverId}`);
-  const sectionExists = await sectionLocator.count();
-  if (sectionExists === 0) {
+  // Find the server toggle switch by its name attribute
+  const toggleButton = page.locator(
+    `button[role="switch"][name="mcp_server_${serverId}.enabled"]`
+  );
+  const toggleExists = await toggleButton.count();
+  if (toggleExists === 0) {
     throw new Error(
       `MCP server section ${serverId} not found in assistant form`
     );
   }
-  const toggleButton = page.getByTestId(`mcp-server-toggle-${serverId}`);
-  const dataState = await toggleButton.getAttribute("aria-expanded");
-  if (dataState === "false") {
+
+  // Check if the server is enabled (switch is checked)
+  const isEnabled = await toggleButton.getAttribute("aria-checked");
+  if (isEnabled !== "true") {
     await toggleButton.click();
   }
 
-  for (const toolName of toolNames) {
-    const checkboxLocator = sectionLocator.getByLabel(
-      `mcp-server-tool-checkbox-${toolName}`
-    );
-    if ((await checkboxLocator.count()) > 0) {
-      const isChecked = await checkboxLocator
-        .first()
-        .getAttribute("aria-checked");
-      if (isChecked !== "true") {
-        await checkboxLocator.first().click();
-      }
-      continue;
-    }
-
-    throw new Error(`Unable to locate MCP tool checkbox for ${toolName}`);
-  }
+  // Individual tools are automatically enabled when the server switch is turned on
+  // The new AgentEditorPage enables all tools when the server is enabled
 }
 
 const escapeRegex = (value: string): string =>
@@ -1092,7 +1070,7 @@ test.describe("MCP OAuth flows", () => {
 
     const basePassword = "TestPassword123!";
     curatorCredentials = {
-      email: `pw-curator-${Date.now()}@test.com`,
+      email: `pw-curator-${Date.now()}@example.com`,
       password: basePassword,
     };
     await adminClient.registerUser(
@@ -1113,7 +1091,7 @@ test.describe("MCP OAuth flows", () => {
       true
     );
     curatorTwoCredentials = {
-      email: `pw-curator-${Date.now()}-b@test.com`,
+      email: `pw-curator-${Date.now()}-b@example.com`,
       password: basePassword,
     };
     await adminClient.registerUser(
@@ -1208,155 +1186,127 @@ test.describe("MCP OAuth flows", () => {
     const serverName = `PW MCP Admin ${Date.now()}`;
     const assistantName = `PW Admin Assistant ${Date.now()}`;
 
-    await page.goto("http://localhost:3000/admin/actions/edit-mcp");
-    await page.waitForURL("**/admin/actions/edit-mcp**", { timeout: 15000 });
-    logStep("Opened MCP edit page");
+    await page.goto("/admin/actions/mcp");
+    await page.waitForURL("**/admin/actions/mcp**", { timeout: 15000 });
+    logStep("Opened MCP actions page");
 
-    await page.locator('input[name="name"]').fill(serverName);
+    // Click "Add MCP Server" button to open modal
+    await page.getByRole("button", { name: /Add MCP Server/i }).click();
+    await page.waitForTimeout(500); // Wait for modal to appear
+    logStep("Opened Add MCP Server modal");
+
+    // Fill basic server info in AddMCPServerModal
+    await page.locator("input#name").fill(serverName);
     await page
-      .locator('input[name="description"]')
+      .locator("textarea#description")
       .fill("Playwright MCP OAuth server (admin)");
-    await page.locator('input[name="server_url"]').fill(runtimeMcpServerUrl);
+    await page.locator("input#server_url").fill(runtimeMcpServerUrl);
     logStep(`Filled server URL: ${runtimeMcpServerUrl}`);
 
-    await page.getByTestId("auth-type-select").click();
+    // Submit the modal to create server
+    await page.getByRole("button", { name: "Add Server" }).click();
+    await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
+    logStep("Created MCP server, auth modal should open");
+
+    // MCPAuthenticationModal should now be open - configure OAuth
+    await page.waitForTimeout(500); // Ensure modal is fully rendered
+
+    // Select OAuth as authentication method
+    const authMethodSelect = page.getByTestId("mcp-auth-method-select");
+    await authMethodSelect.click();
     await page.getByRole("option", { name: "OAuth" }).click();
+    logStep("Selected OAuth authentication method");
 
-    await page.locator("#oauth_client_id").fill(CLIENT_ID);
-    await page.locator("#oauth_client_secret").fill(CLIENT_SECRET);
+    // Fill OAuth credentials
+    await page.locator('input[name="oauth_client_id"]').fill(CLIENT_ID);
+    await page.locator('input[name="oauth_client_secret"]').fill(CLIENT_SECRET);
+    logStep("Filled OAuth credentials");
 
-    const connectButton = page.getByTestId("connect-oauth-button");
+    // Click Connect button to trigger OAuth flow
+    const connectButton = page.getByTestId("mcp-auth-connect-button");
     const navPromise = page
       .waitForNavigation({ waitUntil: "load" })
       .catch(() => null);
     await connectButton.click();
     await navPromise;
     logStep("Triggered OAuth connection");
+
+    // Complete OAuth flow - tools will auto-fetch on return
+    let serverId: number | null = null;
     await completeOauthFlow(page, {
-      expectReturnPathContains: "/admin/actions/edit-mcp",
+      expectReturnPathContains: "/admin/actions/mcp",
       confirmConnected: async () => {
-        await expect(page.getByTestId("connect-oauth-button")).toContainText(
-          "OAuth Connected",
-          { timeout: 15000 }
-        );
+        // Extract server_id from URL after OAuth return
+        const url = new URL(page.url());
+        const serverIdParam = url.searchParams.get("server_id");
+        if (serverIdParam) {
+          serverId = Number(serverIdParam);
+        }
+        // Wait for server card to appear with the server name
+        await expect(
+          page.getByText(serverName, { exact: false }).first()
+        ).toBeVisible({ timeout: 15000 });
       },
-      scrollToBottomOnReturn: true,
+      scrollToBottomOnReturn: false,
     });
     logStep("Completed OAuth flow for MCP server");
 
-    await page.getByRole("button", { name: "List Actions" }).click();
-    await page.waitForURL("**listing_tools=true**", { timeout: 15000 });
-    await scrollToBottom(page);
-    await expect(page.getByText("Available Tools")).toBeVisible({
-      timeout: 15000,
-    });
-    logStep("Listed available tools");
-
-    const currentUrl = new URL(page.url());
-    const serverIdParam = currentUrl.searchParams.get("server_id");
-    if (!serverIdParam) {
-      throw new Error("Expected server_id in URL after listing tools");
-    }
-    const serverId = Number(serverIdParam);
-    if (Number.isNaN(serverId)) {
-      throw new Error(
-        `Invalid server_id parsed from URL: ${currentUrl.searchParams.get(
-          "server_id"
-        )}`
-      );
-    }
-
-    const toolSearchInput = page.getByPlaceholder("Search tools...");
-    await toolSearchInput.fill(TOOL_NAMES.admin);
-    await page.waitForTimeout(500); // allow filtering to apply
-
-    const adminToolCheckboxLocator = page
-      .getByLabel(`tool-checkbox-${TOOL_NAMES.admin}`)
-      .first();
-    const checkboxCount = await adminToolCheckboxLocator.count();
-
-    if (checkboxCount === 0) {
-      await toolSearchInput.fill("");
-      await page.waitForTimeout(500);
-      const selectAllCheckbox = page
-        .getByLabel("tool-checkbox-select-all")
-        .first();
-      const isChecked = await selectAllCheckbox.getAttribute("aria-checked");
-      if (isChecked !== "true") {
-        await selectAllCheckbox.click();
+    // Get serverId from URL if not already set
+    if (!serverId) {
+      const currentUrl = new URL(page.url());
+      const serverIdParam = currentUrl.searchParams.get("server_id");
+      if (!serverIdParam) {
+        throw new Error("Expected server_id in URL after OAuth flow");
       }
-      await expect(selectAllCheckbox).toHaveAttribute("aria-checked", "true", {
-        timeout: 10000,
-      });
-      logStep("Selected tool via select-all fallback");
-    } else {
-      await adminToolCheckboxLocator.waitFor({
-        state: "visible",
-        timeout: 10000,
-      });
-      // Ensure the tool ends up selected before proceeding
-      if (
-        (await adminToolCheckboxLocator.getAttribute("aria-checked")) !== "true"
-      ) {
-        await adminToolCheckboxLocator.click();
+      serverId = Number(serverIdParam);
+      if (Number.isNaN(serverId)) {
+        throw new Error(`Invalid server_id parsed from URL: ${serverIdParam}`);
       }
-      await expect(adminToolCheckboxLocator).toHaveAttribute(
-        "aria-checked",
-        "true",
-        {
-          timeout: 10000,
-        }
-      );
-      logStep("Selected tool via direct checkbox");
     }
 
-    await expect(page.getByText(/tool(s)? selected/i).first()).toContainText(
-      "tool",
-      { timeout: 10000 }
-    );
+    // Wait for tools to be fetched automatically
+    await page.waitForTimeout(3000);
+    logStep("Waited for tools to auto-fetch");
 
-    const createActionsButtonLocator = page.getByRole("button", {
-      name: /(?:Create|Update) MCP Server Actions/,
-    });
-    const createButtonCount = await createActionsButtonLocator.count();
-    if (createButtonCount === 0) {
-      await logPageStateWithTag(
-        page,
-        "(Create|Update) MCP Server Actions button not found"
-      );
-      throw new Error("(Create|Update) MCP Server Actions button not found");
-    }
-    await expect(createActionsButtonLocator).toBeVisible({ timeout: 15000 });
-    await expect(createActionsButtonLocator).toBeEnabled({ timeout: 15000 });
-    try {
-      await createActionsButtonLocator.click();
-    } catch (error) {
-      await logPageStateWithTag(
-        page,
-        "Failed to click Create MCP Server Actions button"
-      );
-      throw error;
-    }
-
-    await page.waitForURL("**/admin/actions**", { timeout: 20000 });
+    // Verify server card is visible with tools
     await expect(
       page.getByText(serverName, { exact: false }).first()
     ).toBeVisible({ timeout: 20000 });
-    logStep("Created/updated MCP server actions");
+    logStep("Verified server card is visible");
+
+    // Tools list automatically expands after fetch - wait for tool toggle to appear
+    const adminToolToggles = page.getByLabel(`tool-toggle-${TOOL_NAMES.admin}`);
+    await expect(adminToolToggles.first()).toBeVisible({ timeout: 10000 });
+
+    // Enable all matching tools (in case there are multiple on the page)
+    const toggleCount = await adminToolToggles.count();
+    logStep(`Found ${toggleCount} instance(s) of ${TOOL_NAMES.admin}`);
+
+    for (let i = 0; i < toggleCount; i++) {
+      const toggle = adminToolToggles.nth(i);
+      const isEnabled = await toggle.getAttribute("data-state");
+      if (isEnabled !== "checked") {
+        await toggle.click();
+        await page.waitForTimeout(300);
+        logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.admin}`);
+      }
+    }
+
+    logStep("Tools auto-fetched and enabled via UI");
 
     const assistantEditorUrl =
-      "http://localhost:3000/assistants/new?admin=true";
+      "http://localhost:3000/chat/agents/create?admin=true";
     let assistantPageLoaded = false;
     for (let attempt = 0; attempt < 2 && !assistantPageLoaded; attempt++) {
       await page.goto(assistantEditorUrl);
       try {
-        await page.waitForURL("**/assistants/new**", {
+        await page.waitForURL("**/chat/agents/create**", {
           timeout: 15000,
         });
         assistantPageLoaded = true;
       } catch (error) {
         const currentUrl = page.url();
-        if (currentUrl.includes("/assistants/new")) {
+        if (currentUrl.includes("/chat/agents/create")) {
           assistantPageLoaded = true;
           break;
         }
@@ -1371,29 +1321,24 @@ test.describe("MCP OAuth flows", () => {
         }
         await logPageStateWithTag(
           page,
-          "Timed out waiting for /assistants/new"
+          "Timed out waiting for /chat/agents/create"
         );
         throw error;
       }
     }
     if (!assistantPageLoaded) {
-      throw new Error("Unable to navigate to /assistants/new");
+      throw new Error("Unable to navigate to /chat/agents/create");
     }
     logStep("Assistant editor loaded");
 
     await page.locator('input[name="name"]').fill(assistantName);
     await page
-      .locator('textarea[name="system_prompt"]')
+      .locator('textarea[name="instructions"]')
       .fill("Assist with MCP OAuth testing.");
     await page
-      .locator('input[name="description"]')
+      .locator('textarea[name="description"]')
       .fill("Playwright admin MCP assistant.");
 
-    await page
-      .getByRole("button", { name: /Advanced Options/i })
-      .click()
-      .catch(() => {});
-    await ensurePublicAssistant(page);
     await selectMcpTools(page, serverId, [TOOL_NAMES.admin]);
 
     await page.getByRole("button", { name: "Create" }).click();
@@ -1425,7 +1370,7 @@ test.describe("MCP OAuth flows", () => {
         assistantName
       );
       assistantId = assistantRecord.id;
-      await page.goto(`http://localhost:3000/chat?assistantId=${assistantId}`);
+      await page.goto(`/chat?assistantId=${assistantId}`);
       await page.waitForURL(/\/chat\?assistantId=\d+/, { timeout: 20000 });
     }
     if (assistantId === null) {
@@ -1451,34 +1396,13 @@ test.describe("MCP OAuth flows", () => {
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible after reauth");
 
-    await page.goto(
-      `http://localhost:3000/admin/actions/edit-mcp?server_id=${serverId}`
-    );
-    await page.waitForURL("**listing_tools=true**", { timeout: 15000 });
-    await scrollToBottom(page);
-    await expect(page.getByText("Available Tools")).toBeVisible({
-      timeout: 15000,
-    });
-    const retentionCheckbox = page
-      .getByLabel(`tool-checkbox-${TOOL_NAMES.admin}`)
-      .first();
-    if ((await retentionCheckbox.count()) > 0) {
-      const isVisible = await retentionCheckbox.isVisible().catch(() => false);
-      if (isVisible) {
-        await expect(retentionCheckbox).toHaveAttribute("aria-checked", "true");
-        logStep(
-          "Verified MCP server retains tool selection (checkbox visible)"
-        );
-      } else {
-        logStep(
-          "Checkbox was found but not visible; skipping state assertion due to layout"
-        );
-      }
-    } else {
-      logStep(
-        "Tool checkbox not found after returning to edit page; skipping state assertion"
-      );
-    }
+    // Verify server card still shows the server and tools
+    await page.goto("/admin/actions/mcp");
+    await page.waitForURL("**/admin/actions/mcp**", { timeout: 15000 });
+    await expect(
+      page.getByText(serverName, { exact: false }).first()
+    ).toBeVisible({ timeout: 15000 });
+    logStep("Verified MCP server card is still visible on actions page");
 
     adminArtifacts = {
       serverId,
@@ -1542,108 +1466,132 @@ test.describe("MCP OAuth flows", () => {
         curatorRuntimeMcpServerUrl = `http://${host}:${port}/mcp`;
       }
 
-      await page.goto("http://localhost:3000/admin/actions/edit-mcp");
-      await page.waitForURL("**/admin/actions/edit-mcp**", { timeout: 15000 });
-      logStep("Opened MCP edit page (curator)");
+      await page.goto("/admin/actions/mcp");
+      await page.waitForURL("**/admin/actions/mcp**", { timeout: 15000 });
+      logStep("Opened MCP actions page (curator)");
 
-      await page.locator('input[name="name"]').fill(serverName);
+      // Click "Add MCP Server" button to open modal
+      await page.getByRole("button", { name: /Add MCP Server/i }).click();
+      await page.waitForTimeout(500); // Wait for modal to appear
+      logStep("Opened Add MCP Server modal");
+
+      // Fill basic server info in AddMCPServerModal
+      await page.locator("input#name").fill(serverName);
       await page
-        .locator('input[name="description"]')
+        .locator("textarea#description")
         .fill("Playwright MCP OAuth server (curator)");
-      await page
-        .locator('input[name="server_url"]')
-        .fill(curatorRuntimeMcpServerUrl);
+      await page.locator("input#server_url").fill(curatorRuntimeMcpServerUrl);
+      logStep(`Filled server URL: ${curatorRuntimeMcpServerUrl}`);
 
-      await page.getByTestId("auth-type-select").click();
+      // Submit the modal to create server
+      await page.getByRole("button", { name: "Add Server" }).click();
+      await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
+      logStep("Created MCP server, auth modal should open");
+
+      // MCPAuthenticationModal should now be open - configure OAuth
+      await page.waitForTimeout(500); // Ensure modal is fully rendered
+
+      // Select OAuth as authentication method
+      const authMethodSelect = page.getByTestId("mcp-auth-method-select");
+      await authMethodSelect.click();
       await page.getByRole("option", { name: "OAuth" }).click();
+      logStep("Selected OAuth authentication method");
 
-      await page.locator("#oauth_client_id").fill(CLIENT_ID);
-      await page.locator("#oauth_client_secret").fill(CLIENT_SECRET);
+      // Fill OAuth credentials
+      await page.locator('input[name="oauth_client_id"]').fill(CLIENT_ID);
+      await page
+        .locator('input[name="oauth_client_secret"]')
+        .fill(CLIENT_SECRET);
+      logStep("Filled OAuth credentials");
 
-      const connectButton = page.getByTestId("connect-oauth-button");
+      // Click Connect button to trigger OAuth flow
+      const connectButton = page.getByTestId("mcp-auth-connect-button");
       const navPromise = page
         .waitForNavigation({ waitUntil: "load" })
         .catch(() => null);
       await connectButton.click();
       await navPromise;
-      logStep("Triggered OAuth connect button");
+      logStep("Triggered OAuth connection");
+
+      // Complete OAuth flow - tools will auto-fetch on return
+      let serverId: number | null = null;
       await completeOauthFlow(page, {
-        expectReturnPathContains: "/admin/actions/edit-mcp",
+        expectReturnPathContains: "/admin/actions/mcp",
         confirmConnected: async () => {
-          await expect(page.getByTestId("connect-oauth-button")).toContainText(
-            "OAuth Connected",
-            { timeout: 15000 }
-          );
+          // Extract server_id from URL after OAuth return
+          const url = new URL(page.url());
+          const serverIdParam = url.searchParams.get("server_id");
+          if (serverIdParam) {
+            serverId = Number(serverIdParam);
+          }
+          // Wait for server card to appear with the server name
+          await expect(
+            page.getByText(serverName, { exact: false }).first()
+          ).toBeVisible({ timeout: 15000 });
         },
+        scrollToBottomOnReturn: false,
       });
+      logStep("Completed OAuth flow for MCP server");
 
-      await page.getByRole("button", { name: "List Actions" }).click();
-      await page.waitForURL("**listing_tools=true**", { timeout: 15000 });
-      await scrollToBottom(page);
-      await expect(page.getByText("Available Tools")).toBeVisible({
-        timeout: 15000,
-      });
-
-      const currentUrl = new URL(page.url());
-      const serverIdParam = currentUrl.searchParams.get("server_id");
-      if (!serverIdParam) {
-        throw new Error("Expected server_id in URL after listing tools");
+      // Get serverId from URL if not already set
+      if (!serverId) {
+        const currentUrl = new URL(page.url());
+        const serverIdParam = currentUrl.searchParams.get("server_id");
+        if (!serverIdParam) {
+          throw new Error("Expected server_id in URL after OAuth flow");
+        }
+        serverId = Number(serverIdParam);
+        if (Number.isNaN(serverId)) {
+          throw new Error(
+            `Invalid server_id parsed from URL: ${serverIdParam}`
+          );
+        }
       }
-      const serverId = Number(serverIdParam);
-      if (Number.isNaN(serverId)) {
-        throw new Error(`Invalid server_id ${serverIdParam}`);
-      }
 
-      // Click the checkbox and wait for it to be checked
-      const curatorCheckbox = page.getByLabel(
-        `tool-checkbox-${TOOL_NAMES.curator}`
-      );
-      await curatorCheckbox.waitFor({ state: "visible", timeout: 10000 });
-      await curatorCheckbox.click();
+      // Wait for tools to be fetched automatically
+      await page.waitForTimeout(3000);
+      logStep("Waited for tools to auto-fetch");
 
-      // Verify the checkbox is actually checked
-      await expect(curatorCheckbox).toHaveAttribute("aria-checked", "true", {
-        timeout: 10000,
-      });
-
-      // Verify the selection count updated to show 1 tool selected
-      await expect(page.getByText("1 tool selected")).toBeVisible({
-        timeout: 10000,
-      });
-      logStep("Selected curator tool checkbox");
-
-      await scrollToBottom(page);
-
-      // Wait for the button to be enabled before clicking
-      const createButton = page.getByRole("button", {
-        name: /(?:Create|Update) MCP Server Actions/,
-      });
-      await expect(createButton).toBeEnabled({ timeout: 10000 });
-      await createButton.click();
-      logStep("Created MCP server actions (curator)");
-
-      await page.waitForURL("**/admin/actions**", { timeout: 20000 });
+      // Verify server card is visible with tools
       await expect(
         page.getByText(serverName, { exact: false }).first()
       ).toBeVisible({ timeout: 20000 });
+      logStep("Verified server card is visible");
 
-      await page.goto("http://localhost:3000/assistants/new?admin=true");
-      await page.waitForURL("**/assistants/new**", { timeout: 15000 });
+      // Tools list automatically expands after fetch - wait for tool toggle to appear
+      const curatorToolToggles = page.getByLabel(
+        `tool-toggle-${TOOL_NAMES.curator}`
+      );
+      await expect(curatorToolToggles.first()).toBeVisible({ timeout: 10000 });
+
+      // Enable all matching tools (in case there are multiple on the page)
+      const toggleCount = await curatorToolToggles.count();
+      logStep(`Found ${toggleCount} instance(s) of ${TOOL_NAMES.curator}`);
+
+      for (let i = 0; i < toggleCount; i++) {
+        const toggle = curatorToolToggles.nth(i);
+        const isEnabled = await toggle.getAttribute("data-state");
+        if (isEnabled !== "checked") {
+          await toggle.click();
+          await page.waitForTimeout(300);
+          logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.curator}`);
+        }
+      }
+
+      logStep("Tools auto-fetched and enabled via UI");
+
+      await page.goto("/chat/agents/create?admin=true");
+      await page.waitForURL("**/chat/agents/create**", { timeout: 15000 });
       logStep("Assistant editor loaded (curator)");
 
       await page.locator('input[name="name"]').fill(assistantName);
       await page
-        .locator('textarea[name="system_prompt"]')
+        .locator('textarea[name="instructions"]')
         .fill("Curator MCP OAuth assistant.");
       await page
-        .locator('input[name="description"]')
+        .locator('textarea[name="description"]')
         .fill("Playwright curator MCP assistant.");
 
-      await page
-        .getByRole("button", { name: /Advanced Options/i })
-        .click()
-        .catch(() => {});
-      await ensurePublicAssistant(page);
       await selectMcpTools(page, serverId, [TOOL_NAMES.curator]);
 
       await page.getByRole("button", { name: "Create" }).click();
@@ -1728,12 +1676,11 @@ test.describe("MCP OAuth flows", () => {
         { email: curatorTwoCredentials!.email, role: "curator" },
         "CuratorFlow secondary login"
       );
-      await curatorTwoPage.goto("http://localhost:3000/admin/actions");
+      await curatorTwoPage.goto("/admin/actions/mcp");
       const serverLocator = curatorTwoPage.getByText(serverName, {
         exact: false,
       });
-      const visibleCount = await serverLocator.count();
-      await expect(visibleCount).toBeGreaterThan(0);
+      await expect(serverLocator).not.toHaveCount(0, { timeout: 15000 });
 
       const editResponse = await curatorTwoPage.request.get(
         `http://localhost:3000/api/admin/mcp/servers/${serverId}`
@@ -1773,7 +1720,7 @@ test.describe("MCP OAuth flows", () => {
     const serverName = adminArtifacts!.serverName;
     const toolName = adminArtifacts!.toolName;
 
-    await page.goto(`http://localhost:3000/chat?assistantId=${assistantId}`, {
+    await page.goto(`/chat?assistantId=${assistantId}`, {
       waitUntil: "load",
     });
     await ensureServerVisibleInActions(page, serverName);

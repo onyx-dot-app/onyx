@@ -16,8 +16,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { FetchError } from "@/lib/fetcher";
 import { CheckIcon } from "lucide-react";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import SvgCheck from "@/icons/check";
-
+import { SvgCheck } from "@opal/icons";
 const USERS_PER_PAGE = 10;
 
 interface Props {
@@ -70,13 +69,14 @@ const PendingUsersTable = ({
   }
 
   const handleAcceptRequest = async (email: string) => {
+    const normalizedEmail = email.toLowerCase();
     try {
       await fetch("/api/tenants/users/invite/approve", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       mutate();
       setUserToApprove(null);
@@ -120,7 +120,7 @@ const PendingUsersTable = ({
                   <div className="flex justify-end">
                     <Button
                       secondary
-                      onClick={() => setUserToApprove(user.email)}
+                      onClick={() => setUserToApprove(user.email.toLowerCase())}
                       leftIcon={SvgCheck}
                     >
                       Accept Join Request

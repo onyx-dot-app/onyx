@@ -15,20 +15,21 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SvgPaperclip from "@/icons/paperclip";
-import SvgFiles from "@/icons/files";
-import MoreHorizontal from "@/icons/more-horizontal";
-import SvgFileText from "@/icons/file-text";
-import SvgExternalLink from "@/icons/external-link";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
-import SvgLoader from "@/icons/loader";
 import { isImageFile } from "@/lib/utils";
-import SvgImage from "@/icons/image";
-
+import {
+  SvgExternalLink,
+  SvgFileText,
+  SvgFiles,
+  SvgImage,
+  SvgLoader,
+  SvgMoreHorizontal,
+  SvgPaperclip,
+} from "@opal/icons";
 const getFileExtension = (fileName: string): string => {
   const idx = fileName.lastIndexOf(".");
   if (idx === -1) return "";
@@ -87,6 +88,7 @@ function FileLineItem({
             className="hidden group-hover/LineItem:flex"
           />
           <Text
+            as="p"
             className="flex group-hover/LineItem:hidden"
             secondaryBody
             text03
@@ -141,7 +143,7 @@ function FilePickerPopoverContents({
         // Title
         hasFiles && (
           <div key="recent-files" className="pt-1">
-            <Text text02 secondaryBody className="py-1 px-3">
+            <Text as="p" text02 secondaryBody className="py-1 px-3">
               Recent Files
             </Text>
           </div>
@@ -159,7 +161,7 @@ function FilePickerPopoverContents({
 
         // Rest of the files
         shouldShowMoreFilesButton && (
-          <LineItem icon={MoreHorizontal} onClick={openRecentFilesModal}>
+          <LineItem icon={SvgMoreHorizontal} onClick={openRecentFilesModal}>
             All Recent Files
           </LineItem>
         ),
@@ -280,7 +282,6 @@ export default function FilePickerPopover({
         <UserFilesModal
           title="Recent Files"
           description="Upload files or pick from your recent files."
-          icon={SvgFiles}
           recentFiles={recentFilesSnapshot}
           onPickRecent={(file) => {
             onPickRecent && onPickRecent(file);

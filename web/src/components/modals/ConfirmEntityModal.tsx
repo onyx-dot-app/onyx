@@ -1,13 +1,16 @@
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
-import SvgAlertCircle from "@/icons/alert-circle";
 import Text from "@/refresh-components/texts/Text";
+import { SvgAlertCircle } from "@opal/icons";
+import type { IconProps } from "@opal/types";
 
 export interface ConfirmEntityModalProps {
   danger?: boolean;
 
   onClose: () => void;
   onSubmit: () => void;
+
+  icon?: React.FunctionComponent<IconProps>;
 
   entityType: string;
   entityName: string;
@@ -25,6 +28,8 @@ export function ConfirmEntityModal({
 
   onClose,
   onSubmit,
+
+  icon: Icon,
 
   entityType,
   entityName,
@@ -45,7 +50,7 @@ export function ConfirmEntityModal({
 
   return (
     <Modal
-      icon={SvgAlertCircle}
+      icon={Icon || SvgAlertCircle}
       title={`${buttonText} ${entityType}`}
       onClose={onClose}
       submit={
@@ -56,12 +61,16 @@ export function ConfirmEntityModal({
     >
       <div className="flex flex-col gap-4">
         {!removeConfirmationText && (
-          <Text>
+          <Text as="p">
             Are you sure you want to {actionText} <b>{entityName}</b>?
           </Text>
         )}
 
-        {additionalDetails && <Text text03>{additionalDetails}</Text>}
+        {additionalDetails && (
+          <Text as="p" text03>
+            {additionalDetails}
+          </Text>
+        )}
       </div>
     </Modal>
   );

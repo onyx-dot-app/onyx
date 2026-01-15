@@ -33,6 +33,7 @@ class RedisConnectorPrune:
     PREFIX = "connectorpruning"
 
     FENCE_PREFIX = f"{PREFIX}_fence"
+    FENCE_TTL = 7 * 24 * 60 * 60  # 7 days - defensive TTL to prevent memory leaks
 
     # phase 1 - geneartor task and progress signals
     GENERATORTASK_PREFIX = f"{PREFIX}+generator"  # connectorpruning+generator
@@ -115,7 +116,7 @@ class RedisConnectorPrune:
             self.redis.delete(self.fence_key)
             return
 
-        self.redis.set(self.fence_key, payload.model_dump_json())
+        self.redis.set(self.fence_key, payload.model_dump_json(), ex=self.FENCE_TTL)
         self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     def set_active(self) -> None:
@@ -148,7 +149,7 @@ class RedisConnectorPrune:
             self.redis.delete(self.generator_complete_key)
             return
 
-        self.redis.set(self.generator_complete_key, payload)
+        self.redis.set(self.generator_complete_key, payload, ex=self.FENCE_TTL)
 
     def generate_tasks(
         self,

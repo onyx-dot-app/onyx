@@ -3,6 +3,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
@@ -59,11 +60,25 @@ class WebContentProviderUpsertRequest(BaseModel):
 
 class WebSearchProviderTestRequest(BaseModel):
     provider_type: WebSearchProviderType
-    api_key: str | None = None
+    api_key: str | None = Field(
+        default=None,
+        description="API key for testing. If not provided, use_stored_key must be true.",
+    )
+    use_stored_key: bool = Field(
+        default=False,
+        description="If true, use the stored API key for this provider type instead of api_key.",
+    )
     config: dict[str, Any] | None = None
 
 
 class WebContentProviderTestRequest(BaseModel):
     provider_type: WebContentProviderType
-    api_key: str | None = None
-    config: dict[str, Any] | None = None
+    api_key: str | None = Field(
+        default=None,
+        description="API key for testing. If not provided, use_stored_key must be true.",
+    )
+    use_stored_key: bool = Field(
+        default=False,
+        description="If true, use the stored API key for this provider type instead of api_key.",
+    )
+    config: WebContentProviderConfig

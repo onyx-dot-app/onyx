@@ -15,16 +15,11 @@ class ChatFileType(str, Enum):
     PLAIN_TEXT = "plain_text"
     CSV = "csv"
 
-    # NOTE(rkuo): don't understand the motivation for this
-    # "user knowledge" is not a file type, it's a source or intent
-    USER_KNOWLEDGE = "user_knowledge"
-
     def is_text_file(self) -> bool:
         return self in (
             ChatFileType.PLAIN_TEXT,
             ChatFileType.DOC,
             ChatFileType.CSV,
-            ChatFileType.USER_KNOWLEDGE,
         )
 
 

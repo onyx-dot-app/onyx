@@ -30,9 +30,9 @@ import { ThemeProvider } from "next-themes";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
-import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fetchAppSidebarMetadata } from "@/lib/appSidebarSS";
+import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -73,13 +73,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [combinedSettings, assistants, user, authTypeMetadata] =
-    await Promise.all([
-      fetchSettingsSS(),
-      fetchAssistantData(),
-      getCurrentUserSS(),
-      getAuthTypeMetadataSS(),
-    ]);
+  const [combinedSettings, user, authTypeMetadata] = await Promise.all([
+    fetchSettingsSS(),
+    getCurrentUserSS(),
+    getAuthTypeMetadataSS(),
+  ]);
 
   const { folded } = await fetchAppSidebarMetadata(user);
 
@@ -156,7 +154,6 @@ export default async function RootLayout({
       authTypeMetadata={authTypeMetadata}
       user={user}
       settings={combinedSettings}
-      assistants={assistants}
       folded={folded}
     >
       <Suspense fallback={null}>
@@ -166,6 +163,9 @@ export default async function RootLayout({
         {children}
       </div>
       {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
+      {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
+        <StatsOverlayLoader />
+      )}
     </AppProvider>
   );
 }

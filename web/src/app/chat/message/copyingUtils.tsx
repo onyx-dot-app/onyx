@@ -37,6 +37,36 @@ export function handleCopy(
   }
 }
 
+// Convert markdown tables to TSV format for spreadsheet compatibility
+export function convertMarkdownTablesToTsv(content: string): string {
+  const lines = content.split("\n");
+  const result: string[] = [];
+
+  for (const line of lines) {
+    // Check if line is a markdown table row (starts and ends with |)
+    const trimmed = line.trim();
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      // Check if it's a separator row (contains only |, -, :, and spaces)
+      if (/^\|[\s\-:|\s]+\|$/.test(trimmed)) {
+        // Skip separator rows
+        continue;
+      }
+      // Convert table row: split by |, trim cells, join with tabs
+      const placeholder = "\x00";
+      const cells = trimmed
+        .slice(1, -1) // Remove leading and trailing |
+        .replace(/\\\|/g, placeholder) // Preserve escaped pipes
+        .split("|")
+        .map((cell) => cell.trim().replace(new RegExp(placeholder, "g"), "|"));
+      result.push(cells.join("\t"));
+    } else {
+      result.push(line);
+    }
+  }
+
+  return result.join("\n");
+}
+
 // For copying the entire content
 export function copyAll(content: string) {
   // Convert markdown to HTML using unified ecosystem

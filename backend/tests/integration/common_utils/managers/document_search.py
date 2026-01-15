@@ -14,12 +14,11 @@ class DocumentSearchManager:
     @staticmethod
     def search_documents(
         query: str,
-        search_type: SearchType = SearchType.KEYWORD,
         user_performing_action: DATestUser | None = None,
     ) -> list[str]:
         search_request = DocumentSearchRequest(
             message=query,
-            search_type=search_type,
+            search_type=SearchType.SEMANTIC,
             retrieval_options=RetrievalDetails(),
             evaluation_type=LLMEvaluationType.SKIP,
         )

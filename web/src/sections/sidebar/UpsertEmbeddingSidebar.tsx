@@ -1,8 +1,7 @@
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import Text from "@/refresh-components/texts/Text";
 import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
-import SvgSettings from "@/icons/settings";
-
+import { SvgSettings } from "@opal/icons";
 export default function EmbeddingSidebar() {
   const { formStep, setFormStep } = useEmbeddingFormContext();
 
@@ -42,7 +41,7 @@ export default function EmbeddingSidebar() {
                   )}
                 </div>
               </div>
-              <Text text04={index <= formStep} text02={index > formStep}>
+              <Text as="p" text04={index <= formStep} text02={index > formStep}>
                 {step}
               </Text>
             </div>

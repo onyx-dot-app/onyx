@@ -1,9 +1,8 @@
 import React from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { SvgProps } from "@/icons";
+import type { IconProps } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
-import SvgLoader from "@/icons/loader";
-
+import { SvgLoader } from "@opal/icons";
 export interface ProviderModalProps {
   // Modal configurations
   clickOutsideToClose?: boolean;
@@ -11,7 +10,7 @@ export interface ProviderModalProps {
   // Base modal props
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  icon: React.FunctionComponent<SvgProps>;
+  icon: React.FunctionComponent<IconProps>;
   title: string;
   description?: string;
   className?: string;
@@ -38,7 +37,7 @@ export default function ProviderModal({
   submitLabel = "Connect",
   cancelLabel = "Cancel",
 }: ProviderModalProps) {
-  const SpinningLoader: React.FunctionComponent<SvgProps> = (props) => (
+  const SpinningLoader: React.FunctionComponent<IconProps> = (props) => (
     <SvgLoader
       {...props}
       className={`${
@@ -66,9 +65,16 @@ export default function ProviderModal({
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
       <Modal.Content tall onKeyDown={handleKeyDown}>
-        <Modal.Header icon={icon} title={title} description={description} />
+        <Modal.Header
+          icon={icon}
+          title={title}
+          description={description}
+          onClose={() => onOpenChange(false)}
+        />
 
-        <Modal.Body className="flex-1 overflow-y-auto">{children}</Modal.Body>
+        <Modal.Body className="flex-1 overflow-y-auto bg-background-tint-01">
+          {children}
+        </Modal.Body>
 
         {onSubmit && (
           <Modal.Footer className="flex justify-end gap-2 p-4 ">

@@ -45,9 +45,7 @@ class PgRedisKVStore(KeyValueStore):
                 obj.value = plain_val
                 obj.encrypted_value = encrypted_val
             else:
-                obj = KVStore(
-                    key=key, value=plain_val, encrypted_value=encrypted_val
-                )  # type: ignore
+                obj = KVStore(key=key, value=plain_val, encrypted_value=encrypted_val)
                 db_session.query(KVStore).filter_by(key=key).delete()  # just in case
                 db_session.add(obj)
             db_session.commit()
@@ -80,7 +78,11 @@ class PgRedisKVStore(KeyValueStore):
                 value = None
 
             try:
-                self.redis_client.set(REDIS_KEY_PREFIX + key, json.dumps(value))
+                self.redis_client.set(
+                    REDIS_KEY_PREFIX + key,
+                    json.dumps(value),
+                    ex=KV_REDIS_KEY_EXPIRATION,
+                )
             except Exception as e:
                 logger.error(f"Failed to set value in Redis for key '{key}': {str(e)}")
 
@@ -93,7 +95,7 @@ class PgRedisKVStore(KeyValueStore):
             logger.error(f"Failed to delete value from Redis for key '{key}': {str(e)}")
 
         with get_session_with_current_tenant() as db_session:
-            result = db_session.query(KVStore).filter_by(key=key).delete()  # type: ignore
+            result = db_session.query(KVStore).filter_by(key=key).delete()
             if result == 0:
                 raise KvKeyNotFoundError
             db_session.commit()

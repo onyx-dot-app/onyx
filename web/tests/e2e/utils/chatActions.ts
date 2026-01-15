@@ -1,13 +1,17 @@
 import { Page } from "@playwright/test";
 import { expect } from "@chromatic-com/playwright";
 
+export async function verifyDefaultAssistantIsChosen(page: Page) {
+  await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
+}
+
 export async function verifyAssistantIsChosen(
   page: Page,
   assistantName: string,
   timeout: number = 5000
 ) {
   await expect(
-    page.getByPlaceholder(`How can ${assistantName} help you today`)
+    page.getByTestId("assistant-name-display").getByText(assistantName)
   ).toBeVisible({ timeout });
 }
 
@@ -63,7 +67,7 @@ export async function switchModel(page: Page, modelName: string) {
   const modelButton = page
     .locator('[role="dialog"]')
     .locator("button")
-    .filter({ hasText: new RegExp(`${modelName}$`, "i") })
+    .filter({ hasText: modelName })
     .first();
 
   await modelButton.click();

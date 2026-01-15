@@ -4,7 +4,8 @@ import React, { useMemo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { SvgProps } from "@/icons";
+import type { Route } from "next";
+import type { IconProps } from "@opal/types";
 
 const variantClasses = (transient?: boolean) =>
   ({
@@ -281,33 +282,36 @@ export interface ButtonProps
   transient?: boolean;
 
   // Icons:
-  leftIcon?: React.FunctionComponent<SvgProps>;
-  rightIcon?: React.FunctionComponent<SvgProps>;
+  leftIcon?: React.FunctionComponent<IconProps>;
+  rightIcon?: React.FunctionComponent<IconProps>;
 
   href?: string;
 }
 
-export default function Button({
-  main,
-  action,
-  danger,
+function ButtonInner(
+  {
+    main,
+    action,
+    danger,
 
-  primary,
-  secondary,
-  tertiary,
-  internal,
+    primary,
+    secondary,
+    tertiary,
+    internal,
 
-  disabled,
-  transient,
+    disabled,
+    transient,
 
-  leftIcon: LeftIcon,
-  rightIcon: RightIcon,
+    leftIcon: LeftIcon,
+    rightIcon: RightIcon,
 
-  href,
-  children,
-  className,
-  ...props
-}: ButtonProps) {
+    href,
+    children,
+    className,
+    ...props
+  }: ButtonProps,
+  ref: React.ForwardedRef<HTMLButtonElement>
+) {
   if (LeftIcon && RightIcon)
     throw new Error(
       "The left and right icons cannot be both specified at the same time"
@@ -342,6 +346,7 @@ export default function Button({
 
   const content = (
     <button
+      ref={ref}
       className={cn(
         "p-2 h-fit rounded-12 group/Button w-fit flex flex-row items-center justify-center gap-1.5",
         buttonClass,
@@ -356,7 +361,9 @@ export default function Button({
           <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
         </div>
       )}
-      <div className={cn(LeftIcon && "pr-1", RightIcon && "pl-1")}>
+      <div
+        className={cn("leading-none", LeftIcon && "pr-1", RightIcon && "pl-1")}
+      >
         {typeof children === "string" ? (
           <Text
             className={cn(
@@ -379,5 +386,10 @@ export default function Button({
   );
 
   if (!href) return content;
-  return <Link href={href}>{content}</Link>;
+  return <Link href={href as Route}>{content}</Link>;
 }
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(ButtonInner);
+Button.displayName = "Button";
+
+export default Button;

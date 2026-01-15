@@ -6,8 +6,7 @@ import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgX } from "@opal/icons";
 interface ConnectorMultiSelectProps {
   name: string;
   label: string;
@@ -118,7 +117,7 @@ export const ConnectorMultiSelect = ({
     <div className="flex flex-col w-full space-y-2 mb-4">
       {label && <Label className="text-base font-medium">{label}</Label>}
 
-      <Text mainUiMuted text03>
+      <Text as="p" mainUiMuted text03>
         All documents indexed by the selected connectors will be part of this
         document set.
       </Text>

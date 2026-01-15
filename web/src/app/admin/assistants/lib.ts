@@ -1,5 +1,8 @@
-import { LLMProviderView } from "../configuration/llm/interfaces";
-import { MinimalPersonaSnapshot, Persona, StarterMessage } from "./interfaces";
+import {
+  MinimalPersonaSnapshot,
+  Persona,
+  StarterMessage,
+} from "@/app/admin/assistants/interfaces";
 
 interface PersonaUpsertRequest {
   name: string;
@@ -19,21 +22,22 @@ interface PersonaUpsertRequest {
   users?: string[];
   groups: number[];
   tool_ids: number[];
-  icon_color: string | null;
-  icon_shape: number | null;
   remove_image?: boolean;
   uploaded_image_id: string | null;
+  icon_name: string | null;
   search_start_date: Date | null;
   is_default_persona: boolean;
   display_priority: number | null;
   label_ids: number[] | null;
   user_file_ids: string[] | null;
+  replace_base_system_prompt: boolean;
 }
 
 export interface PersonaUpsertParameters {
   name: string;
   description: string;
   system_prompt: string;
+  replace_base_system_prompt: boolean;
   task_prompt: string;
   datetime_aware: boolean;
   document_set_ids: number[];
@@ -46,73 +50,40 @@ export interface PersonaUpsertParameters {
   users?: string[];
   groups: number[];
   tool_ids: number[];
-  icon_color: string | null;
-  icon_shape: number | null;
   remove_image?: boolean;
   search_start_date: Date | null;
-  uploaded_image: File | null;
+  uploaded_image_id: string | null;
+  icon_name: string | null;
   is_default_persona: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
 }
 
-export const createPersonaLabel = (name: string) => {
-  return fetch("/api/persona/labels", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name }),
-  });
-};
-
-export const deletePersonaLabel = (labelId: number) => {
-  return fetch(`/api/admin/persona/label/${labelId}`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-};
-
-export const updatePersonaLabel = (
-  id: number,
-  name: string
-): Promise<Response> => {
-  return fetch(`/api/admin/persona/label/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      label_name: name,
-    }),
-  });
-};
-
-function buildPersonaUpsertRequest(
-  creationRequest: PersonaUpsertParameters,
-  uploaded_image_id: string | null
-): PersonaUpsertRequest {
-  const {
-    name,
-    description,
-    system_prompt,
-    task_prompt,
-    document_set_ids,
-    num_chunks,
-    is_public,
-    groups,
-    datetime_aware,
-    users,
-    tool_ids,
-    icon_color,
-    icon_shape,
-    remove_image,
-    search_start_date,
-    user_file_ids,
-  } = creationRequest;
-
+function buildPersonaUpsertRequest({
+  name,
+  description,
+  system_prompt,
+  task_prompt,
+  document_set_ids,
+  num_chunks,
+  is_public,
+  groups,
+  datetime_aware,
+  users,
+  tool_ids,
+  remove_image,
+  search_start_date,
+  user_file_ids,
+  icon_name,
+  uploaded_image_id,
+  is_default_persona,
+  llm_relevance_filter,
+  llm_model_provider_override,
+  llm_model_version_override,
+  starter_messages,
+  label_ids,
+  replace_base_system_prompt,
+}: PersonaUpsertParameters): PersonaUpsertRequest {
   return {
     name,
     description,
@@ -122,26 +93,24 @@ function buildPersonaUpsertRequest(
     num_chunks,
     is_public,
     uploaded_image_id,
+    icon_name,
     groups,
     users,
     tool_ids,
-    icon_color,
-    icon_shape,
     remove_image,
     search_start_date,
     datetime_aware,
-    is_default_persona: creationRequest.is_default_persona ?? false,
+    is_default_persona: is_default_persona ?? false,
     recency_bias: "base_decay",
     llm_filter_extraction: false,
-    llm_relevance_filter: creationRequest.llm_relevance_filter ?? null,
-    llm_model_provider_override:
-      creationRequest.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      creationRequest.llm_model_version_override ?? null,
-    starter_messages: creationRequest.starter_messages ?? null,
+    llm_relevance_filter: llm_relevance_filter ?? null,
+    llm_model_provider_override: llm_model_provider_override ?? null,
+    llm_model_version_override: llm_model_version_override ?? null,
+    starter_messages: starter_messages ?? null,
     display_priority: null,
-    label_ids: creationRequest.label_ids ?? null,
+    label_ids: label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
+    replace_base_system_prompt,
   };
 }
 
@@ -151,6 +120,7 @@ export async function uploadFile(file: File): Promise<string | null> {
   const response = await fetch("/api/admin/persona/upload-image", {
     method: "POST",
     body: formData,
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -165,21 +135,13 @@ export async function uploadFile(file: File): Promise<string | null> {
 export async function createPersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = null;
-  if (personaUpsertParams.uploaded_image) {
-    fileId = await uploadFile(personaUpsertParams.uploaded_image);
-    if (!fileId) {
-      return null;
-    }
-  }
   const createPersonaResponse = await fetch("/api/persona", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
-    ),
+    body: JSON.stringify(buildPersonaUpsertRequest(personaUpsertParams)),
+    credentials: "include",
   });
 
   return createPersonaResponse;
@@ -189,22 +151,13 @@ export async function updatePersona(
   id: number,
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
-  let fileId = null;
-  if (personaUpsertParams.uploaded_image) {
-    fileId = await uploadFile(personaUpsertParams.uploaded_image);
-    if (!fileId) {
-      return null;
-    }
-  }
-
   const updatePersonaResponse = await fetch(`/api/persona/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
-    ),
+    body: JSON.stringify(buildPersonaUpsertRequest(personaUpsertParams)),
+    credentials: "include",
   });
 
   return updatePersonaResponse;
@@ -213,6 +166,7 @@ export async function updatePersona(
 export function deletePersona(personaId: number) {
   return fetch(`/api/persona/${personaId}`, {
     method: "DELETE",
+    credentials: "include",
   });
 }
 
@@ -260,10 +214,10 @@ export function personaComparator(
   return closerToZeroNegativesFirstComparator(a.id, b.id);
 }
 
-export const togglePersonaDefault = async (
+export async function togglePersonaDefault(
   personaId: number,
   isDefault: boolean
-) => {
+) {
   const response = await fetch(`/api/admin/persona/${personaId}/default`, {
     method: "PATCH",
     headers: {
@@ -272,14 +226,15 @@ export const togglePersonaDefault = async (
     body: JSON.stringify({
       is_default_persona: !isDefault,
     }),
+    credentials: "include",
   });
   return response;
-};
+}
 
-export const togglePersonaVisibility = async (
+export async function togglePersonaVisibility(
   personaId: number,
   isVisible: boolean
-) => {
+) {
   const response = await fetch(`/api/admin/persona/${personaId}/visible`, {
     method: "PATCH",
     headers: {
@@ -288,37 +243,7 @@ export const togglePersonaVisibility = async (
     body: JSON.stringify({
       is_visible: !isVisible,
     }),
+    credentials: "include",
   });
   return response;
-};
-
-export const togglePersonaPublicStatus = async (
-  personaId: number,
-  isPublic: boolean
-) => {
-  const response = await fetch(`/api/persona/${personaId}/public`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      is_public: isPublic,
-    }),
-  });
-  return response;
-};
-
-export function checkPersonaRequiresImageGeneration(persona: Persona) {
-  for (const tool of persona.tools) {
-    if (tool.name === "ImageGenerationTool") {
-      return true;
-    }
-  }
-  return false;
-}
-
-export function providersContainImageGeneratingSupport(
-  providers: LLMProviderView[]
-) {
-  return providers.some((provider) => provider.provider === "openai");
 }

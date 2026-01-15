@@ -1,6 +1,18 @@
 from datetime import datetime
+from typing import TypedDict
 
 from pydantic import BaseModel
+
+from onyx.onyxbot.slack.models import ChannelType
+
+
+class ChannelMetadata(TypedDict):
+    """Type definition for cached channel metadata."""
+
+    name: str
+    type: ChannelType
+    is_private: bool
+    is_member: bool
 
 
 class SlackMessage(BaseModel):

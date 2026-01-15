@@ -1,0 +1,26 @@
+[package]
+name = "onyx"
+version = "0.0.0-dev"
+description = "Lightweight desktop app for Onyx Cloud"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-shell = "2.0"
+tauri-plugin-global-shortcut = "2.0"
+tauri-plugin-window-state = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
+directories = "5.0"
+tokio = { version = "1", features = ["time"] }
+window-vibrancy = "0.5"
+url = "2.5"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

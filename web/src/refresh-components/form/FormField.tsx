@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import { FieldContext } from "./FieldContext";
 import {
@@ -56,6 +58,8 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
   leftIcon,
   rightIcon,
   optional,
+  required,
+  rightAction,
   className,
   children,
   ...props
@@ -66,17 +70,26 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       id={`${baseId}-label`}
       htmlFor={`${baseId}-control`}
       className={cn(
-        "ml-0.5 text-text-04 font-main-ui-action flex flex-row",
+        "ml-0.5 text-text-04 font-main-ui-action flex flex-row items-center gap-1",
         className
       )}
       {...props}
     >
+      {leftIcon && <span className="flex items-center">{leftIcon}</span>}
       {children}
-      {optional ? (
-        <Text text03 mainUiMuted className="mx-0.5">
+      {required ? (
+        <Text as="p" text03 mainUiMuted className="mx-0.5">
+          {"(Required)"}
+        </Text>
+      ) : optional ? (
+        <Text as="p" text03 mainUiMuted className="mx-0.5">
           {"(Optional)"}
         </Text>
       ) : null}
+      {rightIcon && <span className="flex items-center">{rightIcon}</span>}
+      {rightAction && (
+        <span className="ml-auto flex items-center">{rightAction}</span>
+      )}
     </label>
   );
 };
@@ -118,6 +131,7 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
   if (!content) return null;
   return (
     <Text
+      as="p"
       id={`${baseId}-desc`}
       text03
       secondaryBody

@@ -14,6 +14,7 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.search_settings import get_current_search_settings
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbedTextType
@@ -116,6 +117,17 @@ def inference_section_from_chunks(
     )
 
 
+# If it should be a real section, don't use this one
+def inference_section_from_single_chunk(
+    chunk: InferenceChunk,
+) -> InferenceSection:
+    return InferenceSection(
+        center_chunk=chunk,
+        chunks=[chunk],
+        combined_content=chunk.content,
+    )
+
+
 def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
     from nltk.corpus import stopwords  # type:ignore
     from nltk.tokenize import word_tokenize  # type:ignore
@@ -150,5 +162,16 @@ def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedd
     return query_embedding
 
 
+@log_function_time(print_only=True, debug_only=True)
 def get_query_embedding(query: str, db_session: Session) -> Embedding:
     return get_query_embeddings([query], db_session)[0]
+
+
+def convert_inference_sections_to_search_docs(
+    inference_sections: list[InferenceSection],
+    is_internet: bool = False,
+) -> list[SearchDoc]:
+    search_docs = SearchDoc.from_chunks_or_sections(inference_sections)
+    for search_doc in search_docs:
+        search_doc.is_internet = is_internet
+    return search_docs

@@ -1,15 +1,13 @@
 import { OAuthConfig } from "@/lib/tools/interfaces";
 import { SelectorFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 import { useState } from "react";
 import { OAuthConfigForm } from "@/app/admin/oauth-configs/OAuthConfigForm";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useFormikContext } from "formik";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { KeyedMutator } from "swr";
-import SvgEdit from "@/icons/edit";
-
+import { SvgEdit, SvgPlusCircle } from "@opal/icons";
 interface OAuthConfigSelectorProps {
   name: string;
   label?: string;

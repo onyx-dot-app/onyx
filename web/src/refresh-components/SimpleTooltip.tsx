@@ -35,6 +35,13 @@ export default function SimpleTooltip({
   // If no hover content, just render children without tooltip
   if (!hoverContent) return <>{children}</>;
 
+  // TooltipTrigger `asChild` expects a ref-aware DOM element; wrap anything
+  // else in a span so non-forwardRef components and fragments don't crash.
+  const isDomElement =
+    React.isValidElement(children) && typeof children.type === "string";
+
+  const triggerChild = isDomElement ? children : <span>{children}</span>;
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -43,7 +50,7 @@ export default function SimpleTooltip({
           // Doesn't work for some reason.
           // disabled={disabled}
         >
-          <div>{children}</div>
+          {triggerChild}
         </TooltipTrigger>
         {!disabled && (
           <TooltipContent
@@ -51,7 +58,9 @@ export default function SimpleTooltip({
             className={cn("max-w-[30rem]", className)}
             {...rest}
           >
-            <Text textLight05>{hoverContent}</Text>
+            <Text as="p" textLight05>
+              {hoverContent}
+            </Text>
           </TooltipContent>
         )}
       </Tooltip>

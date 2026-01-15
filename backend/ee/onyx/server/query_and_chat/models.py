@@ -8,10 +8,29 @@ from pydantic import model_validator
 
 from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import BasicChunkRequest
 from onyx.context.search.models import ChunkContext
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import RetrievalDetails
 from onyx.server.manage.models import StandardAnswer
-from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
+
+
+class StandardAnswerRequest(BaseModel):
+    message: str
+    slack_bot_categories: list[str]
+
+
+class StandardAnswerResponse(BaseModel):
+    standard_answers: list[StandardAnswer] = Field(default_factory=list)
+
+
+class DocumentSearchRequest(BasicChunkRequest):
+    user_selected_filters: BaseFilters | None = None
+
+
+class DocumentSearchResponse(BaseModel):
+    top_documents: list[InferenceChunk]
 
 
 class BasicCreateChatMessageRequest(ChunkContext):
@@ -35,9 +54,6 @@ class BasicCreateChatMessageRequest(ChunkContext):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
 
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
-
     @model_validator(mode="after")
     def validate_chat_session_or_persona(self) -> "BasicCreateChatMessageRequest":
         if self.chat_session_id is None and self.persona_id is None:
@@ -57,8 +73,6 @@ class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
     # only works if using an OpenAI model. See the following for more details:
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
-    # If True, uses agentic search instead of basic search
-    use_agentic_search: bool = False
 
 
 class SimpleDoc(BaseModel):
@@ -71,17 +85,17 @@ class SimpleDoc(BaseModel):
     metadata: dict | None
 
 
-class AgentSubQuestion(SubQuestionIdentifier):
+class AgentSubQuestion(BaseModel):
     sub_question: str
     document_ids: list[str]
 
 
-class AgentAnswer(SubQuestionIdentifier):
+class AgentAnswer(BaseModel):
     answer: str
     answer_type: Literal["agent_sub_answer", "agent_level_answer"]
 
 
-class AgentSubQuery(SubQuestionIdentifier):
+class AgentSubQuery(BaseModel):
     sub_query: str
     query_id: int
 
@@ -127,12 +141,3 @@ class AgentSubQuery(SubQuestionIdentifier):
             sorted(level_question_dict.items(), key=lambda x: (x is None, x))
         )
         return sorted_dict
-
-
-class StandardAnswerRequest(BaseModel):
-    message: str
-    slack_bot_categories: list[str]
-
-
-class StandardAnswerResponse(BaseModel):
-    standard_answers: list[StandardAnswer] = Field(default_factory=list)

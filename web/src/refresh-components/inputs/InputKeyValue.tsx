@@ -74,16 +74,16 @@ import React, {
   useEffect,
   useMemo,
   useId,
+  useRef,
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import SvgMinusCircle from "@/icons/minus-circle";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
-import SvgPlusCircle from "@/icons/plus-circle";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
 import { FieldMessage } from "../messages/FieldMessage";
+import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 
 export type KeyValue = { key: string; value: string };
 
@@ -236,6 +236,8 @@ export interface KeyValueInputProps
   validateEmptyKeys?: boolean;
   /** Optional name for the field (for accessibility) */
   name?: string;
+  /** Custom label for the add button (defaults to "Add Line") */
+  addButtonLabel?: string;
 }
 
 const KeyValueInput = ({
@@ -255,6 +257,7 @@ const KeyValueInput = ({
   validateDuplicateKeys = true,
   validateEmptyKeys = true,
   name,
+  addButtonLabel = "Add Line",
   className,
   ...rest
 }: KeyValueInputProps) => {
@@ -367,14 +370,25 @@ const KeyValueInput = ({
   }, [hasAnyError, errors]);
 
   // Notify parent of validation changes
+  const onValidationChangeRef = useRef(onValidationChange);
+  const onValidationErrorRef = useRef(onValidationError);
+
   useEffect(() => {
-    onValidationChange?.(isValid, errors);
-  }, [isValid, errors, onValidationChange]);
+    onValidationChangeRef.current = onValidationChange;
+  }, [onValidationChange]);
+
+  useEffect(() => {
+    onValidationErrorRef.current = onValidationError;
+  }, [onValidationError]);
+
+  useEffect(() => {
+    onValidationChangeRef.current?.(isValid, errors);
+  }, [isValid, errors]);
 
   // Notify parent of error state for form library integration
   useEffect(() => {
-    onValidationError?.(errorMessage);
-  }, [errorMessage, onValidationError]);
+    onValidationErrorRef.current?.(errorMessage);
+  }, [errorMessage]);
 
   const canRemoveItems = mode === "line" || items.length > 1;
 
@@ -432,10 +446,10 @@ const KeyValueInput = ({
     >
       <div id={`${fieldId}-header`} className="flex gap-1 items-center w-full">
         <div className="flex gap-2 flex-1">
-          <Text text04 mainUiAction className={headerKeyClassName}>
+          <Text as="p" text04 mainUiAction className={headerKeyClassName}>
             {keyTitle}
           </Text>
-          <Text text04 mainUiAction className={headerValueClassName}>
+          <Text as="p" text04 mainUiAction className={headerValueClassName}>
             {valueTitle}
           </Text>
         </div>
@@ -467,7 +481,7 @@ const KeyValueInput = ({
           ))}
         </div>
       ) : (
-        <Text text03 secondaryBody className="ml-0.5">
+        <Text as="p" text03 secondaryBody className="ml-0.5">
           No items added yet.
         </Text>
       )}
@@ -481,7 +495,7 @@ const KeyValueInput = ({
           aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
           type="button"
         >
-          Add Line
+          {addButtonLabel}
         </Button>
       </div>
     </div>

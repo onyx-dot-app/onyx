@@ -4,9 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SvgCheck from "@/icons/check";
-import SvgX from "@/icons/x";
-
+import { SvgCheck, SvgX } from "@opal/icons";
 interface EditableStringFieldDisplayProps {
   value: string;
   isEditable: boolean;

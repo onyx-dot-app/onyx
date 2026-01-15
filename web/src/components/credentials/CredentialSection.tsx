@@ -21,7 +21,7 @@ import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
-import { Modal } from "../Modal";
+import Modal from "@/refresh-components/Modal";
 import EditCredential from "./actions/EditCredential";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
@@ -36,16 +36,19 @@ import { Spinner } from "@/components/Spinner";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Card } from "../ui/card";
 import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
+import { SvgEdit, SvgKey } from "@opal/icons";
+
+export interface CredentialSectionProps {
+  ccPair: CCPairFullInfo;
+  sourceType: ValidSources;
+  refresh: () => void;
+}
 
 export default function CredentialSection({
   ccPair,
   sourceType,
   refresh,
-}: {
-  ccPair: CCPairFullInfo;
-  sourceType: ValidSources;
-  refresh: () => void;
-}) {
+}: CredentialSectionProps) {
   const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
     buildSimilarCredentialInfoURL(sourceType),
     errorHandlingFetcher,
@@ -240,70 +243,85 @@ export default function CredentialSection({
       </Card>
 
       {showModifyCredential && (
-        <Modal
-          onOutsideClick={closeModifyCredential}
-          className="max-w-3xl rounded-lg"
-          title="Update Credentials"
-        >
-          <ModifyCredential
-            close={closeModifyCredential}
-            accessType={ccPair.access_type}
-            attachedConnector={ccPair.connector}
-            defaultedCredential={defaultedCredential}
-            credentials={credentials}
-            editableCredentials={editableCredentials}
-            onDeleteCredential={onDeleteCredential}
-            onEditCredential={(credential: Credential<any>) =>
-              onEditCredential(credential)
-            }
-            onSwap={onSwap}
-            onCreateNew={() => makeShowCreateCredential()}
-          />
+        <Modal open onOpenChange={closeModifyCredential}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgEdit}
+              title="Update Credentials"
+              onClose={closeModifyCredential}
+            />
+            <Modal.Body>
+              <ModifyCredential
+                close={closeModifyCredential}
+                accessType={ccPair.access_type}
+                attachedConnector={ccPair.connector}
+                defaultedCredential={defaultedCredential}
+                credentials={credentials}
+                editableCredentials={editableCredentials}
+                onDeleteCredential={onDeleteCredential}
+                onEditCredential={(credential: Credential<any>) =>
+                  onEditCredential(credential)
+                }
+                onSwap={onSwap}
+                onCreateNew={() => makeShowCreateCredential()}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
 
       {editingCredential && (
-        <Modal
-          onOutsideClick={closeEditingCredential}
-          className="max-w-3xl rounded-lg"
-          title="Edit Credential"
-        >
-          <EditCredential
-            onUpdate={onUpdateCredential}
-            setPopup={setPopup}
-            credential={editingCredential}
-            onClose={closeEditingCredential}
-          />
+        <Modal open onOpenChange={closeEditingCredential}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgEdit}
+              title="Edit Credential"
+              onClose={closeEditingCredential}
+            />
+            <Modal.Body>
+              <EditCredential
+                onUpdate={onUpdateCredential}
+                setPopup={setPopup}
+                credential={editingCredential}
+                onClose={closeEditingCredential}
+              />
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
 
       {showCreateCredential && (
-        <Modal
-          onOutsideClick={closeCreateCredential}
-          className="max-w-3xl flex flex-col items-start rounded-lg"
-          title={`Create ${getSourceDisplayName(sourceType)} Credential`}
-        >
-          {oauthDetailsLoading ? (
-            <Spinner />
-          ) : (
-            <>
-              {oauthDetails && oauthDetails.oauth_enabled ? (
-                <CreateStdOAuthCredential
-                  sourceType={sourceType}
-                  additionalFields={oauthDetails.additional_kwargs}
-                />
+        <Modal open onOpenChange={closeCreateCredential}>
+          <Modal.Content medium>
+            <Modal.Header
+              icon={SvgKey}
+              title={`Create ${getSourceDisplayName(sourceType)} Credential`}
+              onClose={closeCreateCredential}
+            />
+            <Modal.Body>
+              {oauthDetailsLoading ? (
+                <Spinner />
               ) : (
-                <CreateCredential
-                  sourceType={sourceType}
-                  accessType={ccPair.access_type}
-                  swapConnector={ccPair.connector}
-                  setPopup={setPopup}
-                  onSwap={onSwap}
-                  onClose={closeCreateCredential}
-                />
+                <>
+                  {oauthDetails && oauthDetails.oauth_enabled ? (
+                    <CreateStdOAuthCredential
+                      sourceType={sourceType}
+                      additionalFields={oauthDetails.additional_kwargs}
+                    />
+                  ) : (
+                    <CreateCredential
+                      sourceType={sourceType}
+                      accessType={ccPair.access_type}
+                      swapConnector={ccPair.connector}
+                      setPopup={setPopup}
+                      onSwap={onSwap}
+                      onClose={closeCreateCredential}
+                    />
+                  )}
+                </>
               )}
-            </>
-          )}
+            </Modal.Body>
+          </Modal.Content>
         </Modal>
       )}
     </div>

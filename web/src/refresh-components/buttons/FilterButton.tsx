@@ -3,11 +3,9 @@
 import React, { useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
-import { SvgProps } from "@/icons";
-import SvgChevronDownSmall from "@/icons/chevron-down-small";
+import type { IconProps } from "@opal/types";
 import IconButton from "./IconButton";
-import SvgX from "@/icons/x";
-
+import { SvgChevronDownSmall, SvgX } from "@opal/icons";
 const buttonClasses = (transient?: boolean) =>
   ({
     active: [
@@ -51,7 +49,7 @@ export interface FilterButtonProps
   active?: boolean;
   transient?: boolean;
 
-  leftIcon: React.FunctionComponent<SvgProps>;
+  leftIcon: React.FunctionComponent<IconProps>;
   onClear?: () => void;
 
   children?: string;
@@ -90,7 +88,7 @@ export default function FilterButton({
         />
       </div>
 
-      <Text nowrap className={cn(textClasses(transient)[state])}>
+      <Text as="p" nowrap className={cn(textClasses(transient)[state])}>
         {children}
       </Text>
       <div className="pl-0">

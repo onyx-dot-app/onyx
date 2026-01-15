@@ -15,11 +15,12 @@ from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -44,10 +45,9 @@ def test_answer_with_only_anthropic_provider(
     anthropic_provider = upsert_llm_provider(
         LLMProviderUpsertRequest(
             name=provider_name,
-            provider="anthropic",
+            provider=LlmProviderNames.ANTHROPIC,
             api_key=anthropic_api_key,
             default_model_name=anthropic_model,
-            fast_default_model_name=anthropic_model,
             is_public=True,
             groups=[],
             model_configurations=[
@@ -97,13 +97,13 @@ def test_answer_with_only_anthropic_provider(
         assert has_message_id, "Should include reserved assistant message ID"
 
         has_message_start = any(
-            isinstance(packet, Packet) and isinstance(packet.obj, MessageStart)
+            isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseStart)
             for packet in response_stream
         )
         assert has_message_start, "Stream should have a MessageStart packet"
 
         has_message_delta = any(
-            isinstance(packet, Packet) and isinstance(packet.obj, MessageDelta)
+            isinstance(packet, Packet) and isinstance(packet.obj, AgentResponseDelta)
             for packet in response_stream
         )
         assert has_message_delta, "Stream should have a MessageDelta packet"

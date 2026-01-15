@@ -1,5 +1,5 @@
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { CreateRateLimitModal } from "../../../../admin/token-rate-limits/CreateRateLimitModal";
+import CreateRateLimitModal from "../../../../admin/token-rate-limits/CreateRateLimitModal";
 import { Scope } from "../../../../admin/token-rate-limits/types";
 import { insertGroupTokenRateLimit } from "../../../../admin/token-rate-limits/lib";
 import { mutate } from "swr";

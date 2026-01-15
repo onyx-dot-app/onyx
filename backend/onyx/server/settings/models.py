@@ -15,9 +15,10 @@ class PageType(str, Enum):
 
 
 class ApplicationStatus(str, Enum):
-    PAYMENT_REMINDER = "payment_reminder"
-    GATED_ACCESS = "gated_access"
     ACTIVE = "active"
+    PAYMENT_REMINDER = "payment_reminder"
+    GRACE_PERIOD = "grace_period"
+    GATED_ACCESS = "gated_access"
 
 
 class Notification(BaseModel):

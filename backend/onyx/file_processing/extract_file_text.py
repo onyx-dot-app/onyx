@@ -8,8 +8,6 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import Sequence
 from email.parser import Parser as EmailParser
-from enum import auto
-from enum import IntFlag
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -25,64 +23,20 @@ from PIL import Image
 
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
-from onyx.file_processing.file_validation import TEXT_MIME_TYPE
+from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.file_types import PRESENTATION_MIME_TYPE
+from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
-from onyx.utils.file_types import PRESENTATION_MIME_TYPE
-from onyx.utils.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from markitdown import MarkItDown
 logger = setup_logger()
 
-# NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
 TEXT_SECTION_SEPARATOR = "\n\n"
-
-ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
-    ".txt",
-    ".md",
-    ".mdx",
-    ".conf",
-    ".log",
-    ".json",
-    ".csv",
-    ".tsv",
-    ".xml",
-    ".yml",
-    ".yaml",
-    ".sql",
-]
-
-ACCEPTED_DOCUMENT_FILE_EXTENSIONS = [
-    ".pdf",
-    ".docx",
-    ".pptx",
-    ".xlsx",
-    ".eml",
-    ".epub",
-    ".html",
-]
-
-ACCEPTED_IMAGE_FILE_EXTENSIONS = [
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".webp",
-]
-
-ALL_ACCEPTED_FILE_EXTENSIONS = (
-    ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
-    + ACCEPTED_DOCUMENT_FILE_EXTENSIONS
-    + ACCEPTED_IMAGE_FILE_EXTENSIONS
-)
-
-IMAGE_MEDIA_TYPES = [
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-]
 
 _MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
@@ -102,40 +56,9 @@ def get_markitdown_converter() -> "MarkItDown":
     return _MARKITDOWN_CONVERTER
 
 
-class OnyxExtensionType(IntFlag):
-    Plain = auto()
-    Document = auto()
-    Multimedia = auto()
-    All = Plain | Document | Multimedia
-
-
-def is_text_file_extension(file_name: str) -> bool:
-    return any(file_name.endswith(ext) for ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS)
-
-
 def get_file_ext(file_path_or_name: str | Path) -> str:
     _, extension = os.path.splitext(file_path_or_name)
     return extension.lower()
-
-
-def is_valid_media_type(media_type: str) -> bool:
-    return media_type in IMAGE_MEDIA_TYPES
-
-
-def is_accepted_file_ext(ext: str, ext_type: OnyxExtensionType) -> bool:
-    if ext_type & OnyxExtensionType.Plain:
-        if ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS:
-            return True
-
-    if ext_type & OnyxExtensionType.Document:
-        if ext in ACCEPTED_DOCUMENT_FILE_EXTENSIONS:
-            return True
-
-    if ext_type & OnyxExtensionType.Multimedia:
-        if ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
-            return True
-
-    return False
 
 
 def is_text_file(file: IO[bytes]) -> bool:
@@ -347,9 +270,10 @@ def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
         logger.exception("Failed to extract all docx images")
 
 
-def docx_to_text_and_images(
+def read_docx_file(
     file: IO[Any],
     file_name: str = "",
+    extract_images: bool = False,
     image_callback: Callable[[bytes, str], None] | None = None,
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
@@ -390,14 +314,16 @@ def docx_to_text_and_images(
         return text_content_raw or "", []
 
     file.seek(0)
-    if image_callback is None:
-        return doc.markdown, list(extract_docx_images(to_bytesio(file)))
-    # If a callback is provided, iterate and stream images without accumulating
-    try:
-        for img_file_bytes, img_file_name in extract_docx_images(to_bytesio(file)):
-            image_callback(img_file_bytes, img_file_name)
-    except Exception:
-        logger.exception("Failed to stream docx images")
+
+    if extract_images:
+        if image_callback is None:
+            return doc.markdown, list(extract_docx_images(to_bytesio(file)))
+        # If a callback is provided, iterate and stream images without accumulating
+        try:
+            for img_file_bytes, img_file_name in extract_docx_images(to_bytesio(file)):
+                image_callback(img_file_bytes, img_file_name)
+        except Exception:
+            logger.exception("Failed to stream docx images")
     return doc.markdown, []
 
 
@@ -555,7 +481,7 @@ def extract_file_text(
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
-        ".docx": lambda f: docx_to_text_and_images(f, file_name)[0],  # no images
+        ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
         ".pptx": lambda f: pptx_to_text(f, file_name),
         ".xlsx": lambda f: xlsx_to_text(f, file_name),
         ".eml": eml_to_text,
@@ -574,9 +500,7 @@ def extract_file_text(
         if extension is None:
             extension = get_file_ext(file_name)
 
-        if is_accepted_file_ext(
-            extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
-        ):
+        if extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
             func = extension_to_function.get(extension, file_io_to_text)
             file.seek(0)
             return func(file)
@@ -627,6 +551,23 @@ def extract_text_and_images(
     """
     Primary new function for the updated connector.
     Returns structured extraction result with text content, embedded images, and metadata.
+
+    Args:
+        file: File-like object to extract content from.
+        file_name: Name of the file (used to determine extension/type).
+        pdf_pass: Optional password for encrypted PDFs.
+        content_type: Optional MIME type override for the file.
+        image_callback: Optional callback for streaming image extraction. When provided,
+            embedded images are passed to this callback one at a time as (bytes, filename)
+            instead of being accumulated in the returned ExtractionResult.embedded_images
+            list. This is a memory optimization for large documents with many images -
+            the caller can process/store each image immediately rather than holding all
+            images in memory. When using a callback, ExtractionResult.embedded_images
+            will be an empty list.
+
+    Returns:
+        ExtractionResult containing text_content, embedded_images (empty if callback used),
+        and metadata extracted from the file.
     """
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
@@ -663,7 +604,7 @@ def _extract_text_and_images(
     # with content types in UploadMimeTypes.DOCUMENT_MIME_TYPES as plain text files.
     # As a result, the file name extension may differ from the original content type.
     # We process files with a plain text content type first to handle this scenario.
-    if content_type == TEXT_MIME_TYPE:
+    if content_type in OnyxMimeTypes.TEXT_MIME_TYPES:
         return extract_result_from_text_file(file)
 
     # Default processing
@@ -671,8 +612,8 @@ def _extract_text_and_images(
         extension = get_file_ext(file_name)
         # docx example for embedded images
         if extension == ".docx":
-            text_content, images = docx_to_text_and_images(
-                file, file_name, image_callback=image_callback
+            text_content, images = read_docx_file(
+                file, file_name, extract_images=True, image_callback=image_callback
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
@@ -725,7 +666,7 @@ def _extract_text_and_images(
             )
 
         # If we reach here and it's a recognized text extension
-        if is_text_file_extension(file_name):
+        if extension in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS:
             return extract_result_from_text_file(file)
 
         # If it's an image file or something else, we do not parse embedded images from them
