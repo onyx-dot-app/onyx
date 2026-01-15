@@ -723,6 +723,13 @@ class HierarchyNode(Base):
         back_populates="parent_hierarchy_node",
         foreign_keys="Document.parent_hierarchy_node_id",
     )
+    # Personas that have this hierarchy node attached for scoped search
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="persona__hierarchy_node",
+        back_populates="hierarchy_nodes",
+        viewonly=True,
+    )
 
     __table_args__ = (
         # Unique constraint: same raw_node_id + source should not exist twice
@@ -3068,6 +3075,12 @@ class Persona(Base):
         secondary=Persona__PersonaLabel.__table__,
         back_populates="personas",
     )
+    # Hierarchy nodes attached to this persona for scoped search
+    hierarchy_nodes: Mapped[list["HierarchyNode"]] = relationship(
+        "HierarchyNode",
+        secondary="persona__hierarchy_node",
+        back_populates="personas",
+    )
 
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
@@ -3086,6 +3099,23 @@ class Persona__UserFile(Base):
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
     user_file_id: Mapped[UUID] = mapped_column(
         ForeignKey("user_file.id"), primary_key=True
+    )
+
+
+class Persona__HierarchyNode(Base):
+    """Association table linking personas to hierarchy nodes.
+
+    This allows assistants to be configured with specific hierarchy nodes
+    (folders, spaces, channels, etc.) for scoped search/retrieval.
+    """
+
+    __tablename__ = "persona__hierarchy_node"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    hierarchy_node_id: Mapped[int] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
     )
 
 

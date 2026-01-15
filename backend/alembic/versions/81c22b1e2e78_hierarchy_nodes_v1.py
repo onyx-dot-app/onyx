@@ -208,8 +208,48 @@ def upgrade() -> None:
         )
     )
 
+    # Create the persona__hierarchy_node association table
+    op.create_table(
+        "persona__hierarchy_node",
+        sa.Column("persona_id", sa.Integer(), nullable=False),
+        sa.Column("hierarchy_node_id", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["persona_id"],
+            ["persona.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["hierarchy_node_id"],
+            ["hierarchy_node.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("persona_id", "hierarchy_node_id"),
+    )
+
+    # Add indexes for efficient lookups
+    op.create_index(
+        "ix_persona__hierarchy_node_persona_id",
+        "persona__hierarchy_node",
+        ["persona_id"],
+    )
+    op.create_index(
+        "ix_persona__hierarchy_node_hierarchy_node_id",
+        "persona__hierarchy_node",
+        ["hierarchy_node_id"],
+    )
+
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_persona__hierarchy_node_hierarchy_node_id",
+        table_name="persona__hierarchy_node",
+    )
+    op.drop_index(
+        "ix_persona__hierarchy_node_persona_id",
+        table_name="persona__hierarchy_node",
+    )
+    op.drop_table("persona__hierarchy_node")
+
     # Remove parent_hierarchy_node_id from document
     op.drop_index("ix_document_parent_hierarchy_node_id", table_name="document")
     op.drop_constraint(
