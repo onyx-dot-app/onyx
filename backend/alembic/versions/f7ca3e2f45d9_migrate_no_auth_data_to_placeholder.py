@@ -23,7 +23,7 @@ down_revision = "73e9983e5091"
 branch_labels = None
 depends_on = None
 
-# Must match constants in onyx/configs/constants.py
+# Must match constants in onyx/configs/constants.py file
 NO_AUTH_PLACEHOLDER_USER_UUID = "00000000-0000-0000-0000-000000000001"
 NO_AUTH_PLACEHOLDER_USER_EMAIL = "no-auth-placeholder@onyx.app"
 
