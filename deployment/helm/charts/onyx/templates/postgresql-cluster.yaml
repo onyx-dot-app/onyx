@@ -1,0 +1,26 @@
+{{- if .Values.postgresql.enabled -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Release.Name }}-{{ default "postgresql" .Values.postgresql.nameOverride }}
+  labels:
+    app.kubernetes.io/name: {{ default "postgresql" .Values.postgresql.nameOverride }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  instances: {{ .Values.postgresql.cluster.instances | default 1 }}
+  
+  # Use the standard image or fallback
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.1
+  
+  # Storage Configuration
+  storage:
+    size: {{ .Values.postgresql.cluster.storage.size | default "10Gi" }}
+    {{- if .Values.postgresql.cluster.storage.storageClass }}
+    storageClass: {{ .Values.postgresql.cluster.storage.storageClass }}
+    {{- end }}
+
+  # Superuser Secret (matches values.yaml config)
+  enableSuperuserAccess: {{ .Values.postgresql.cluster.enableSuperuserAccess }}
+  superuserSecret:
+    name: {{ .Values.postgresql.cluster.superuserSecret.name }}
+{{- end }}
