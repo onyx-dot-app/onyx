@@ -126,6 +126,10 @@ export function usePacketProcessor(
     setForceShowAnswer(true);
   }, []);
 
+  console.log("toolTurnGroups", toolTurnGroups);
+  console.log("displayGroups", displayGroups);
+  console.log("result.toolGroups", result.toolGroups);
+
   return {
     // Data
     toolGroups: result.toolGroups,

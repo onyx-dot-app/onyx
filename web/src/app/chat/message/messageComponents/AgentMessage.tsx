@@ -11,12 +11,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/chat/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
-import {
-  TimelineIcons,
-  TimelineContent,
-  StepConnector,
-} from "@/app/chat/message/messageComponents/timeline";
-import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
+import { AgentTimeline } from "@/app/chat/message/messageComponents/timeline";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -130,41 +125,13 @@ const AgentMessage = React.memo(function AgentMessage({
     >
       {/* Row 1: Two-column layout for tool steps */}
 
-      <div className="flex items-start px-1">
-        {/* Left column: Avatar + Step icons */}
-        <div className="flex flex-col items-center flex-shrink-0">
-          <AgentAvatar agent={chatState.assistant} size={24} />
-          {hasSteps && (
-            <>
-              <StepConnector className="min-h-3" />
-              <TimelineIcons turnGroups={toolTurnGroups} />
-            </>
-          )}
-        </div>
-
-        {/* Right column: Tool steps content */}
-        <div className="break-words pl-4 w-full">
-          {toolGroups.length === 0 && displayGroups.length === 0 ? (
-            // Show blinking dot when no content yet, or stopped message if user cancelled
-            stopReason === StopReason.USER_CANCELLED ? (
-              <Text as="p" secondaryBody text04>
-                User has stopped generation
-              </Text>
-            ) : (
-              <Text as="p" mainUiAction text05 className="animate-pulse">
-                Thinking...
-              </Text>
-            )
-          ) : (
-            <TimelineContent
-              turnGroups={toolTurnGroups}
-              chatState={effectiveChatState}
-              stopPacketSeen={stopPacketSeen}
-              stopReason={stopReason}
-            />
-          )}
-        </div>
-      </div>
+      <AgentTimeline
+        packetGroups={toolGroups}
+        chatState={effectiveChatState}
+        stopPacketSeen={stopPacketSeen}
+        stopReason={stopReason}
+        hasDisplayContent={displayGroups.length > 0}
+      />
 
       {/* Row 2: Display content + MessageToolbar */}
       <div
@@ -177,7 +144,7 @@ const AgentMessage = React.memo(function AgentMessage({
           }
         }}
       >
-        {(toolGroups.length > 0 || displayGroups.length > 0) && (
+        {displayGroups.length > 0 && (
           <div ref={finalAnswerRef}>
             {displayGroups.map((displayGroup, index) => (
               <RendererComponent

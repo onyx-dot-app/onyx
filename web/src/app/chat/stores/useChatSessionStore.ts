@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 import {
   ChatState,
   RegenerationState,
@@ -168,373 +169,404 @@ const createInitialSessionData = (
   ...initialData,
 });
 
-export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
-  // Initial state
-  currentSessionId: null,
-  sessions: new Map<string, ChatSessionData>(),
+export const useChatSessionStore = create<ChatSessionStore>()(
+  devtools(
+    (set, get) => ({
+      // Initial state
+      currentSessionId: null,
+      sessions: new Map<string, ChatSessionData>(),
 
-  // Session Management Actions
-  setCurrentSession: (sessionId: string | null) => {
-    set((state) => {
-      if (sessionId && !state.sessions.has(sessionId)) {
-        // Create new session if it doesn't exist
-        const newSession = createInitialSessionData(sessionId);
-        const newSessions = new Map(state.sessions);
-        newSessions.set(sessionId, newSession);
+      // Session Management Actions
+      setCurrentSession: (sessionId: string | null) => {
+        set((state) => {
+          if (sessionId && !state.sessions.has(sessionId)) {
+            // Create new session if it doesn't exist
+            const newSession = createInitialSessionData(sessionId);
+            const newSessions = new Map(state.sessions);
+            newSessions.set(sessionId, newSession);
 
-        return {
-          currentSessionId: sessionId,
-          sessions: newSessions,
-        };
-      }
+            return {
+              currentSessionId: sessionId,
+              sessions: newSessions,
+            };
+          }
 
-      // Update last accessed for the new current session
-      if (sessionId && state.sessions.has(sessionId)) {
-        const session = state.sessions.get(sessionId)!;
-        const updatedSession = { ...session, lastAccessed: new Date() };
-        const newSessions = new Map(state.sessions);
-        newSessions.set(sessionId, updatedSession);
+          // Update last accessed for the new current session
+          if (sessionId && state.sessions.has(sessionId)) {
+            const session = state.sessions.get(sessionId)!;
+            const updatedSession = { ...session, lastAccessed: new Date() };
+            const newSessions = new Map(state.sessions);
+            newSessions.set(sessionId, updatedSession);
 
-        return {
-          currentSessionId: sessionId,
-          sessions: newSessions,
-        };
-      }
+            return {
+              currentSessionId: sessionId,
+              sessions: newSessions,
+            };
+          }
 
-      return { currentSessionId: sessionId };
-    });
-  },
-
-  createSession: (
-    sessionId: string,
-    initialData?: Partial<ChatSessionData>
-  ) => {
-    set((state) => {
-      const newSession = createInitialSessionData(sessionId, initialData);
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, newSession);
-
-      return { sessions: newSessions };
-    });
-  },
-
-  updateSessionData: (sessionId: string, updates: Partial<ChatSessionData>) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      const updatedSession = {
-        ...(session || createInitialSessionData(sessionId)),
-        ...updates,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-
-      return { sessions: newSessions };
-    });
-  },
-
-  updateSessionMessageTree: (
-    sessionId: string,
-    messageTree: MessageTreeState
-  ) => {
-    get().updateSessionData(sessionId, { messageTree });
-  },
-
-  updateSessionAndMessageTree: (
-    sessionId: string,
-    messageTree: MessageTreeState
-  ) => {
-    set((state) => {
-      // Ensure session exists
-      const existingSession = state.sessions.get(sessionId);
-      const session = existingSession || createInitialSessionData(sessionId);
-
-      // Update session with new message tree
-      const updatedSession = {
-        ...session,
-        messageTree,
-        lastAccessed: new Date(),
-      };
-
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-
-      // Return both updates in a single state change
-      return {
-        currentSessionId: sessionId,
-        sessions: newSessions,
-      };
-    });
-  },
-
-  // Message Management Actions
-  updateChatState: (sessionId: string, chatState: ChatState) => {
-    get().updateSessionData(sessionId, { chatState });
-  },
-
-  updateRegenerationState: (
-    sessionId: string,
-    regenerationState: RegenerationState | null
-  ) => {
-    get().updateSessionData(sessionId, { regenerationState });
-  },
-
-  updateCanContinue: (sessionId: string, canContinue: boolean) => {
-    get().updateSessionData(sessionId, { canContinue });
-  },
-
-  updateSubmittedMessage: (sessionId: string, submittedMessage: string) => {
-    get().updateSessionData(sessionId, { submittedMessage });
-  },
-
-  updateMessageFeedback: (
-    sessionId: string,
-    messageId: number,
-    feedback: string | null
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) {
-        console.warn(`Session ${sessionId} not found`);
-        return state;
-      }
-
-      const message = getMessageByMessageId(session.messageTree, messageId);
-      if (!message) {
-        console.warn(`Message ${messageId} not found in session ${sessionId}`);
-        return state;
-      }
-
-      // Create new message object with updated feedback (immutable update)
-      const updatedMessage = {
-        ...message,
-        currentFeedback: feedback as FeedbackType | null,
-      };
-
-      // Create new messageTree Map with updated message
-      const newMessageTree = new Map(session.messageTree);
-      newMessageTree.set(message.nodeId, updatedMessage);
-
-      // Create new session object with new messageTree
-      const updatedSession = {
-        ...session,
-        messageTree: newMessageTree,
-        lastAccessed: new Date(),
-      };
-
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-
-      return { sessions: newSessions };
-    });
-  },
-
-  updateCurrentMessageFeedback: (
-    messageId: number,
-    feedback: string | null
-  ) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateMessageFeedback(currentSessionId, messageId, feedback);
-    }
-  },
-
-  updateSelectedNodeForDocDisplay: (
-    sessionId: string,
-    selectedMessageForDocDisplay: number | null
-  ) => {
-    get().updateSessionData(sessionId, {
-      selectedNodeIdForDocDisplay: selectedMessageForDocDisplay,
-    });
-  },
-
-  updateHasPerformedInitialScroll: (
-    sessionId: string,
-    hasPerformedInitialScroll: boolean
-  ) => {
-    get().updateSessionData(sessionId, { hasPerformedInitialScroll });
-  },
-
-  updateDocumentSidebarVisible: (
-    sessionId: string,
-    documentSidebarVisible: boolean
-  ) => {
-    get().updateSessionData(sessionId, { documentSidebarVisible });
-  },
-
-  updateCurrentDocumentSidebarVisible: (documentSidebarVisible: boolean) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateDocumentSidebarVisible(
-        currentSessionId,
-        documentSidebarVisible
-      );
-    }
-  },
-
-  updateHasSentLocalUserMessage: (
-    sessionId: string,
-    hasSentLocalUserMessage: boolean
-  ) => {
-    get().updateSessionData(sessionId, { hasSentLocalUserMessage });
-  },
-
-  updateCurrentHasSentLocalUserMessage: (hasSentLocalUserMessage: boolean) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateHasSentLocalUserMessage(
-        currentSessionId,
-        hasSentLocalUserMessage
-      );
-    }
-  },
-
-  // Convenience functions that automatically use current session ID
-  updateCurrentSelectedNodeForDocDisplay: (
-    selectedNodeForDocDisplay: number | null
-  ) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateSelectedNodeForDocDisplay(
-        currentSessionId,
-        selectedNodeForDocDisplay
-      );
-    }
-  },
-
-  updateCurrentChatSessionSharedStatus: (
-    chatSessionSharedStatus: ChatSessionSharedStatus
-  ) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateSessionData(currentSessionId, { chatSessionSharedStatus });
-    }
-  },
-
-  updateCurrentChatState: (chatState: ChatState) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateChatState(currentSessionId, chatState);
-    }
-  },
-
-  updateCurrentRegenerationState: (
-    regenerationState: RegenerationState | null
-  ) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateRegenerationState(currentSessionId, regenerationState);
-    }
-  },
-
-  updateCurrentCanContinue: (canContinue: boolean) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateCanContinue(currentSessionId, canContinue);
-    }
-  },
-
-  updateCurrentSubmittedMessage: (submittedMessage: string) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateSubmittedMessage(currentSessionId, submittedMessage);
-    }
-  },
-
-  // Session-specific State Actions (previously global)
-  setIsFetchingChatMessages: (
-    sessionId: string,
-    isFetchingChatMessages: boolean
-  ) => {
-    get().updateSessionData(sessionId, { isFetchingChatMessages });
-  },
-
-  setUncaughtError: (sessionId: string, uncaughtError: string | null) => {
-    get().updateSessionData(sessionId, { uncaughtError });
-  },
-
-  setLoadingError: (sessionId: string, loadingError: string | null) => {
-    get().updateSessionData(sessionId, { loadingError });
-  },
-
-  setIsReady: (sessionId: string, isReady: boolean) => {
-    get().updateSessionData(sessionId, { isReady });
-  },
-
-  // Abort Controller Actions
-  setAbortController: (sessionId: string, controller: AbortController) => {
-    get().updateSessionData(sessionId, { abortController: controller });
-  },
-
-  abortSession: (sessionId: string) => {
-    const session = get().sessions.get(sessionId);
-    if (session?.abortController) {
-      session.abortController.abort();
-      get().updateSessionData(sessionId, {
-        abortController: new AbortController(),
-      });
-    }
-  },
-
-  abortAllSessions: () => {
-    const { sessions } = get();
-    sessions.forEach((session, sessionId) => {
-      if (session.abortController) {
-        session.abortController.abort();
-        get().updateSessionData(sessionId, {
-          abortController: new AbortController(),
+          return { currentSessionId: sessionId };
         });
-      }
-    });
-  },
+      },
 
-  // Utilities
-  initializeSession: (
-    sessionId: string,
-    backendSession?: BackendChatSession
-  ) => {
-    const initialData: Partial<ChatSessionData> = {
-      isLoaded: true,
-      description: backendSession?.description,
-      personaId: backendSession?.persona_id,
-    };
+      createSession: (
+        sessionId: string,
+        initialData?: Partial<ChatSessionData>
+      ) => {
+        set((state) => {
+          const newSession = createInitialSessionData(sessionId, initialData);
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, newSession);
 
-    const existingSession = get().sessions.get(sessionId);
-    if (existingSession) {
-      get().updateSessionData(sessionId, initialData);
-    } else {
-      get().createSession(sessionId, initialData);
-    }
-  },
+          return { sessions: newSessions };
+        });
+      },
 
-  cleanupOldSessions: (maxSessions: number = 10) => {
-    set((state) => {
-      const sortedSessions = Array.from(state.sessions.entries()).sort(
-        ([, a], [, b]) => b.lastAccessed.getTime() - a.lastAccessed.getTime()
-      );
+      updateSessionData: (
+        sessionId: string,
+        updates: Partial<ChatSessionData>
+      ) => {
+        set((state) => {
+          const session = state.sessions.get(sessionId);
+          const updatedSession = {
+            ...(session || createInitialSessionData(sessionId)),
+            ...updates,
+            lastAccessed: new Date(),
+          };
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
 
-      if (sortedSessions.length <= maxSessions) {
-        return state;
-      }
+          return { sessions: newSessions };
+        });
+      },
 
-      const sessionsToKeep = sortedSessions.slice(0, maxSessions);
-      const sessionsToRemove = sortedSessions.slice(maxSessions);
+      updateSessionMessageTree: (
+        sessionId: string,
+        messageTree: MessageTreeState
+      ) => {
+        get().updateSessionData(sessionId, { messageTree });
+      },
 
-      // Abort controllers for sessions being removed
-      sessionsToRemove.forEach(([, session]) => {
-        if (session.abortController) {
-          session.abortController.abort();
+      updateSessionAndMessageTree: (
+        sessionId: string,
+        messageTree: MessageTreeState
+      ) => {
+        set((state) => {
+          // Ensure session exists
+          const existingSession = state.sessions.get(sessionId);
+          const session =
+            existingSession || createInitialSessionData(sessionId);
+
+          // Update session with new message tree
+          const updatedSession = {
+            ...session,
+            messageTree,
+            lastAccessed: new Date(),
+          };
+
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
+
+          // Return both updates in a single state change
+          return {
+            currentSessionId: sessionId,
+            sessions: newSessions,
+          };
+        });
+      },
+
+      // Message Management Actions
+      updateChatState: (sessionId: string, chatState: ChatState) => {
+        get().updateSessionData(sessionId, { chatState });
+      },
+
+      updateRegenerationState: (
+        sessionId: string,
+        regenerationState: RegenerationState | null
+      ) => {
+        get().updateSessionData(sessionId, { regenerationState });
+      },
+
+      updateCanContinue: (sessionId: string, canContinue: boolean) => {
+        get().updateSessionData(sessionId, { canContinue });
+      },
+
+      updateSubmittedMessage: (sessionId: string, submittedMessage: string) => {
+        get().updateSessionData(sessionId, { submittedMessage });
+      },
+
+      updateMessageFeedback: (
+        sessionId: string,
+        messageId: number,
+        feedback: string | null
+      ) => {
+        set((state) => {
+          const session = state.sessions.get(sessionId);
+          if (!session) {
+            console.warn(`Session ${sessionId} not found`);
+            return state;
+          }
+
+          const message = getMessageByMessageId(session.messageTree, messageId);
+          if (!message) {
+            console.warn(
+              `Message ${messageId} not found in session ${sessionId}`
+            );
+            return state;
+          }
+
+          // Create new message object with updated feedback (immutable update)
+          const updatedMessage = {
+            ...message,
+            currentFeedback: feedback as FeedbackType | null,
+          };
+
+          // Create new messageTree Map with updated message
+          const newMessageTree = new Map(session.messageTree);
+          newMessageTree.set(message.nodeId, updatedMessage);
+
+          // Create new session object with new messageTree
+          const updatedSession = {
+            ...session,
+            messageTree: newMessageTree,
+            lastAccessed: new Date(),
+          };
+
+          const newSessions = new Map(state.sessions);
+          newSessions.set(sessionId, updatedSession);
+
+          return { sessions: newSessions };
+        });
+      },
+
+      updateCurrentMessageFeedback: (
+        messageId: number,
+        feedback: string | null
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateMessageFeedback(currentSessionId, messageId, feedback);
         }
-      });
+      },
 
-      const newSessions = new Map(sessionsToKeep);
+      updateSelectedNodeForDocDisplay: (
+        sessionId: string,
+        selectedMessageForDocDisplay: number | null
+      ) => {
+        get().updateSessionData(sessionId, {
+          selectedNodeIdForDocDisplay: selectedMessageForDocDisplay,
+        });
+      },
 
-      return {
-        sessions: newSessions,
-      };
-    });
-  },
-}));
+      updateHasPerformedInitialScroll: (
+        sessionId: string,
+        hasPerformedInitialScroll: boolean
+      ) => {
+        get().updateSessionData(sessionId, { hasPerformedInitialScroll });
+      },
+
+      updateDocumentSidebarVisible: (
+        sessionId: string,
+        documentSidebarVisible: boolean
+      ) => {
+        get().updateSessionData(sessionId, { documentSidebarVisible });
+      },
+
+      updateCurrentDocumentSidebarVisible: (
+        documentSidebarVisible: boolean
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateDocumentSidebarVisible(
+            currentSessionId,
+            documentSidebarVisible
+          );
+        }
+      },
+
+      updateHasSentLocalUserMessage: (
+        sessionId: string,
+        hasSentLocalUserMessage: boolean
+      ) => {
+        get().updateSessionData(sessionId, { hasSentLocalUserMessage });
+      },
+
+      updateCurrentHasSentLocalUserMessage: (
+        hasSentLocalUserMessage: boolean
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateHasSentLocalUserMessage(
+            currentSessionId,
+            hasSentLocalUserMessage
+          );
+        }
+      },
+
+      // Convenience functions that automatically use current session ID
+      updateCurrentSelectedNodeForDocDisplay: (
+        selectedNodeForDocDisplay: number | null
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateSelectedNodeForDocDisplay(
+            currentSessionId,
+            selectedNodeForDocDisplay
+          );
+        }
+      },
+
+      updateCurrentChatSessionSharedStatus: (
+        chatSessionSharedStatus: ChatSessionSharedStatus
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateSessionData(currentSessionId, {
+            chatSessionSharedStatus,
+          });
+        }
+      },
+
+      updateCurrentChatState: (chatState: ChatState) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateChatState(currentSessionId, chatState);
+        }
+      },
+
+      updateCurrentRegenerationState: (
+        regenerationState: RegenerationState | null
+      ) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateRegenerationState(currentSessionId, regenerationState);
+        }
+      },
+
+      updateCurrentCanContinue: (canContinue: boolean) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateCanContinue(currentSessionId, canContinue);
+        }
+      },
+
+      updateCurrentSubmittedMessage: (submittedMessage: string) => {
+        const { currentSessionId } = get();
+        if (currentSessionId) {
+          get().updateSubmittedMessage(currentSessionId, submittedMessage);
+        }
+      },
+
+      // Session-specific State Actions (previously global)
+      setIsFetchingChatMessages: (
+        sessionId: string,
+        isFetchingChatMessages: boolean
+      ) => {
+        get().updateSessionData(sessionId, { isFetchingChatMessages });
+      },
+
+      setUncaughtError: (sessionId: string, uncaughtError: string | null) => {
+        get().updateSessionData(sessionId, { uncaughtError });
+      },
+
+      setLoadingError: (sessionId: string, loadingError: string | null) => {
+        get().updateSessionData(sessionId, { loadingError });
+      },
+
+      setIsReady: (sessionId: string, isReady: boolean) => {
+        get().updateSessionData(sessionId, { isReady });
+      },
+
+      // Abort Controller Actions
+      setAbortController: (sessionId: string, controller: AbortController) => {
+        get().updateSessionData(sessionId, { abortController: controller });
+      },
+
+      abortSession: (sessionId: string) => {
+        const session = get().sessions.get(sessionId);
+        if (session?.abortController) {
+          session.abortController.abort();
+          get().updateSessionData(sessionId, {
+            abortController: new AbortController(),
+          });
+        }
+      },
+
+      abortAllSessions: () => {
+        const { sessions } = get();
+        sessions.forEach((session, sessionId) => {
+          if (session.abortController) {
+            session.abortController.abort();
+            get().updateSessionData(sessionId, {
+              abortController: new AbortController(),
+            });
+          }
+        });
+      },
+
+      // Utilities
+      initializeSession: (
+        sessionId: string,
+        backendSession?: BackendChatSession
+      ) => {
+        const initialData: Partial<ChatSessionData> = {
+          isLoaded: true,
+          description: backendSession?.description,
+          personaId: backendSession?.persona_id,
+        };
+
+        const existingSession = get().sessions.get(sessionId);
+        if (existingSession) {
+          get().updateSessionData(sessionId, initialData);
+        } else {
+          get().createSession(sessionId, initialData);
+        }
+      },
+
+      cleanupOldSessions: (maxSessions: number = 10) => {
+        set((state) => {
+          const sortedSessions = Array.from(state.sessions.entries()).sort(
+            ([, a], [, b]) =>
+              b.lastAccessed.getTime() - a.lastAccessed.getTime()
+          );
+
+          if (sortedSessions.length <= maxSessions) {
+            return state;
+          }
+
+          const sessionsToKeep = sortedSessions.slice(0, maxSessions);
+          const sessionsToRemove = sortedSessions.slice(maxSessions);
+
+          // Abort controllers for sessions being removed
+          sessionsToRemove.forEach(([, session]) => {
+            if (session.abortController) {
+              session.abortController.abort();
+            }
+          });
+
+          const newSessions = new Map(sessionsToKeep);
+
+          return {
+            sessions: newSessions,
+          };
+        });
+      },
+    }),
+    {
+      name: "ChatSessionStore",
+      serialize: {
+        replacer: (_key: string, value: unknown) => {
+          if (value instanceof Map) {
+            return {
+              __type: "Map",
+              entries: Array.from(value.entries()),
+            };
+          }
+          return value;
+        },
+      },
+    }
+  )
+);
 
 export const useCurrentMessageTree = () =>
   useChatSessionStore((state) => {
