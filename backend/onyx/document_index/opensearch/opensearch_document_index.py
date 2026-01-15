@@ -82,7 +82,7 @@ def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
             retrieval as a match score makes no sense in those contexts.
 
     Returns:
-        InferenceChunkUncleaned: _description_
+        An Onyx inference chunk representation.
     """
     return InferenceChunkUncleaned(
         chunk_id=chunk.chunk_index,
