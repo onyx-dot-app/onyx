@@ -462,7 +462,7 @@ class OpenSearchClient:
             Exception: There was an error searching the index.
 
         Returns:
-            List of document chunks that match the search request.
+            List of search hits that match the search request.
         """
         result: dict[str, Any]
         if search_pipeline_id:
