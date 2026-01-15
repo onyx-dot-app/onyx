@@ -3,10 +3,10 @@
 from typing import Any
 
 from onyx.mcp_server.api import mcp_server
-from onyx.mcp_server.utils import get_api_server_url
 from onyx.mcp_server.utils import get_http_client
 from onyx.mcp_server.utils import require_access_token
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 
 logger = setup_logger()
 
@@ -119,7 +119,7 @@ logger = setup_logger()
 #     # Call the API server
 #     try:
 #         response = await get_http_client().post(
-#             f"{get_api_server_url()}/query/document-search",
+#             f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/query/document-search",
 #             json=search_request.model_dump(mode="json"),
 #             headers={"Authorization": f"Bearer {access_token.token}"},
 #         )
@@ -183,7 +183,7 @@ async def search_web(
     try:
         request_payload = {"queries": [query], "max_results": limit}
         response = await get_http_client().post(
-            f"{get_api_server_url()}/web-search/search-lite",
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/web-search/search-lite",
             json=request_payload,
             headers={"Authorization": f"Bearer {access_token.token}"},
         )
@@ -229,7 +229,7 @@ async def open_urls(
 
     try:
         response = await get_http_client().post(
-            f"{get_api_server_url()}/web-search/open-urls",
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/web-search/open-urls",
             json={"urls": urls},
             headers={"Authorization": f"Bearer {access_token.token}"},
         )

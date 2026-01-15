@@ -4,6 +4,12 @@ import inspect
 from typing import Any
 from typing import TypeVar
 
+from onyx.configs.app_configs import API_SERVER_HOST
+from onyx.configs.app_configs import API_SERVER_PROTOCOL
+from onyx.configs.app_configs import API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
+from onyx.configs.app_configs import APP_API_PREFIX
+from onyx.configs.app_configs import APP_PORT
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.utils.logger import setup_logger
 
@@ -158,3 +164,22 @@ def fetch_ee_implementation_or_noop(
     except Exception as e:
         logger.error(f"Failed to fetch implementation for {module}.{attribute}: {e}")
         raise
+
+
+def build_api_server_url_for_http_requests(
+    respect_env_override_if_set: bool = False,
+) -> str:
+    """
+    Builds the API server URL for HTTP requests.
+    """
+    if DEV_MODE:
+        url = f"http://127.0.0.1:{APP_PORT}"
+    elif respect_env_override_if_set and API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS:
+        url = API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS.rstrip("/")
+    else:
+        url = f"{API_SERVER_PROTOCOL}://{API_SERVER_HOST}:{APP_PORT}"
+
+    if APP_API_PREFIX:
+        url += f"/{APP_API_PREFIX.strip('/')}"
+
+    return url
