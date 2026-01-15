@@ -36,6 +36,7 @@ from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
@@ -297,6 +298,7 @@ def run_llm_loop(
     forced_tool_id: int | None = None,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
+    chat_files: list[ChatFile] | None = None,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -515,6 +517,7 @@ def run_llm_loop(
                 next_citation_num=citation_processor.get_next_citation_number(),
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
+                chat_files=chat_files,
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping

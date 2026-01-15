@@ -9,15 +9,18 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
 from onyx.tools.models import ParallelToolCallResponse
+from onyx.tools.models import PythonToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.framework.create import function_span
@@ -195,6 +198,8 @@ def run_tool_calls(
     max_concurrent_tools: int | None = None,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
+    # Files from the chat session to pass to tools like PythonTool
+    chat_files: list[ChatFile] | None = None,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -294,6 +299,7 @@ def run_tool_calls(
             SearchToolOverrideKwargs
             | WebSearchToolOverrideKwargs
             | OpenURLToolOverrideKwargs
+            | PythonToolOverrideKwargs
             | None
         ) = None
 
@@ -326,6 +332,11 @@ def run_tool_calls(
                 citation_mapping=url_to_citation,
             )
             starting_citation_num += 100
+
+        elif isinstance(tool, PythonTool):
+            override_kwargs = PythonToolOverrideKwargs(
+                chat_files=chat_files or [],
+            )
 
         tool_run_params.append((tool, tool_call, override_kwargs))
 
