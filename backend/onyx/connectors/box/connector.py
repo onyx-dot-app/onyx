@@ -162,18 +162,20 @@ class BoxConnector(
     def normalize_url(cls, url: str) -> NormalizationResult:
         """Normalize a Box URL to match the canonical Document.id format."""
         parsed = urlparse(url)
-        netloc = parsed.netloc.lower()
+        # Use hostname instead of netloc to exclude port/userinfo
+        # netloc includes port (e.g., "app.box.com:443"), which would break validation
+        hostname = (parsed.hostname or "").lower()
 
         # Security: Use exact domain match to prevent subdomain attacks
         # e.g., "app.box.com.evil.com" should not match
         # Only allow exact matches or valid Box subdomains (single-level subdomains only)
         is_box_domain = False
-        if netloc == "app.box.com" or netloc == "box.com":
+        if hostname == "app.box.com" or hostname == "box.com":
             is_box_domain = True
-        elif netloc.endswith(".box.com"):
+        elif hostname.endswith(".box.com"):
             # Allow subdomains like "api.box.com" but not "app.box.com.evil.com"
             # Check that there's exactly one dot before ".box.com"
-            domain_part = netloc[: -len(".box.com")]
+            domain_part = hostname[: -len(".box.com")]
             if domain_part and "." not in domain_part:
                 is_box_domain = True
 

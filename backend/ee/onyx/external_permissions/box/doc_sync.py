@@ -142,10 +142,22 @@ def get_external_access_for_raw_box_file(
                     else:
                         access_value = str(sl.access)
 
+                # Check for password protection - Box may omit password field for security,
+                # but is_password_enabled indicates if a password is required
+                is_password_enabled = (
+                    getattr(sl, "is_password_enabled", None)
+                    if hasattr(sl, "is_password_enabled")
+                    else None
+                )
+                password = (
+                    getattr(sl, "password", None) if hasattr(sl, "password") else None
+                )
+
                 shared_link = {
                     "url": sl.url if hasattr(sl, "url") else None,
                     "access": access_value,
-                    "password": (sl.password if hasattr(sl, "password") else None),
+                    "password": password,
+                    "is_password_enabled": is_password_enabled,
                 }
     except Exception as e:
         # If we can't fetch file details, fall back to shared_link from file dict
@@ -157,15 +169,20 @@ def get_external_access_for_raw_box_file(
         if isinstance(shared_link, dict):
             access = shared_link.get("access")
             password = shared_link.get("password")
+            is_password_enabled = shared_link.get("is_password_enabled")
             # Handle both string and enum values for access
             # Box SDK may return enum objects, so convert to string for comparison
             access_str = str(access).lower() if access else None
             # Mark as public if access is "open" and not password-protected
             if access_str == "open":
-                # If password is explicitly set and truthy, it's password-protected
-                # If password is None/False or doesn't exist, assume it's public
-                # (Box API may not always return password field)
-                if not password:
+                # Check both password field and is_password_enabled flag
+                # Box may omit password field for security, but is_password_enabled indicates protection
+                is_protected = (
+                    password is not None and password
+                ) or (  # password field is set and truthy
+                    is_password_enabled is True
+                )  # is_password_enabled flag is True
+                if not is_protected:
                     public = True
             else:
                 # Log when access is not "open" to help debug
@@ -212,18 +229,34 @@ def get_external_access_for_raw_box_file(
                             # Dict format (from our conversion)
                             parent_access = parent_shared_link.get("access")
 
-                        # Get password field
+                        # Get password field and is_password_enabled flag
+                        parent_password = None
+                        parent_is_password_enabled = None
+
                         if hasattr(parent_shared_link, "password"):
                             parent_password = parent_shared_link.password
                         elif isinstance(parent_shared_link, dict):
                             parent_password = parent_shared_link.get("password")
 
+                        if hasattr(parent_shared_link, "is_password_enabled"):
+                            parent_is_password_enabled = (
+                                parent_shared_link.is_password_enabled
+                            )
+                        elif isinstance(parent_shared_link, dict):
+                            parent_is_password_enabled = parent_shared_link.get(
+                                "is_password_enabled"
+                            )
+
                         # Mark as public if access is "open" and not password-protected
                         if parent_access == "open":
-                            # If password is explicitly set and truthy, it's password-protected
-                            # If password is None/False or doesn't exist, assume it's public
-                            # (Box API may not always return password field)
-                            if not parent_password:
+                            # Check both password field and is_password_enabled flag
+                            # Box may omit password field for security, but is_password_enabled indicates protection
+                            is_protected = (
+                                parent_password is not None and parent_password
+                            ) or (  # password field is set and truthy
+                                parent_is_password_enabled is True
+                            )  # is_password_enabled flag is True
+                            if not is_protected:
                                 public = True
                 except Exception as e:
                     # If we can't fetch parent folder, log but don't fail

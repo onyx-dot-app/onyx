@@ -106,6 +106,11 @@ def _box_file_to_dict(file: BoxFile | BoxFolder) -> BoxFileType:
                     if hasattr(file.shared_link, "password")
                     else None
                 ),
+                "is_password_enabled": (
+                    file.shared_link.is_password_enabled
+                    if hasattr(file.shared_link, "is_password_enabled")
+                    else None
+                ),
             }
             if hasattr(file, "shared_link") and file.shared_link
             else None

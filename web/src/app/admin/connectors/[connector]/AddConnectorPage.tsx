@@ -217,7 +217,7 @@ export default function AddConnector({
     if (!noCredentials && !credentialActivated && formStep != 0) {
       setFormStep(Math.min(formStep, 0));
     }
-  }, [noCredentials, formStep, setFormStep]);
+  }, [noCredentials, credentialActivated, formStep, setFormStep]);
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;

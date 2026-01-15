@@ -233,8 +233,9 @@ def test_box_perm_sync_with_real_data(
         print(f"Checked permissions for {checked_files} test files")
     else:
         # If no files were checked, it means no test files (file_*.txt) were found
-        print(
-            f"WARNING: No test files (file_*.txt) found to validate permissions. "
+        # This is a critical failure - the test cannot validate permissions without test files
+        assert False, (
+            f"No test files (file_*.txt) found to validate permissions. "
             f"Found {len(doc_access_list)} documents total, but none matched the test file pattern. "
             f"This test validates permissions for files matching 'file_*.txt' pattern."
         )
