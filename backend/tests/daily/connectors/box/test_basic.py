@@ -298,6 +298,8 @@ def test_checkpoint_resumption(
     all_docs = first_batch_docs.copy()
     max_iterations = 2  # Test a few batches to verify checkpointing
     iteration_count = 0
+    # Track checkpoint size at start of each iteration to verify growth
+    previous_checkpoint_file_count = len(checkpoint.all_retrieved_file_ids)
     while checkpoint.has_more and iteration_count < max_iterations:
         iteration_count += 1
 
@@ -315,8 +317,14 @@ def test_checkpoint_resumption(
 
         all_docs.extend(batch_docs)
         if checkpoint.has_more:
-            # Checkpoint should be updated with more file IDs
-            assert len(checkpoint.all_retrieved_file_ids) > first_checkpoint_file_count
+            # Checkpoint should be updated with more file IDs after this batch
+            current_checkpoint_file_count = len(checkpoint.all_retrieved_file_ids)
+            assert current_checkpoint_file_count > previous_checkpoint_file_count, (
+                f"Checkpoint should grow after batch {iteration_count}: "
+                f"was {previous_checkpoint_file_count}, now {current_checkpoint_file_count}"
+            )
+            # Update baseline for next iteration
+            previous_checkpoint_file_count = current_checkpoint_file_count
 
     # Verify we got documents and checkpointing is working
     assert len(all_docs) > 0, "Should have retrieved at least some documents"

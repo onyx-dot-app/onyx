@@ -164,7 +164,20 @@ class BoxConnector(
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
-        if not (netloc.startswith("app.box.com") or netloc.startswith("box.com")):
+        # Security: Use exact domain match to prevent subdomain attacks
+        # e.g., "app.box.com.evil.com" should not match
+        # Only allow exact matches or valid Box subdomains (single-level subdomains only)
+        is_box_domain = False
+        if netloc == "app.box.com" or netloc == "box.com":
+            is_box_domain = True
+        elif netloc.endswith(".box.com"):
+            # Allow subdomains like "api.box.com" but not "app.box.com.evil.com"
+            # Check that there's exactly one dot before ".box.com"
+            domain_part = netloc[: -len(".box.com")]
+            if domain_part and "." not in domain_part:
+                is_box_domain = True
+
+        if not is_box_domain:
             return NormalizationResult(normalized_url=None, use_default=False)
 
         # Extract file/folder ID from path
@@ -188,7 +201,8 @@ class BoxConnector(
                 current_user = self._box_client.users.get_user_me()
                 self._user_id = current_user.id
             except Exception as e:
-                logger.warning(f"Could not get current user info: {e}")
+                sanitized_error = _sanitize_error_message(e)
+                logger.warning(f"Could not get current user info: {sanitized_error}")
                 self._user_id = credentials.get("box_user_id", "me")
             self._creds_dict = credentials
             return None

@@ -27,6 +27,39 @@ class BoxJWTConfig(BaseModel):
     boxAppSettings: dict[str, Any]
     enterpriseID: str | None = None
 
+    def model_post_init(self, __context: Any) -> None:
+        """Validate required nested keys after model initialization."""
+        # Validate boxAppSettings structure
+        if not isinstance(self.boxAppSettings, dict):
+            raise ValueError(
+                f"boxAppSettings must be a dict, got {type(self.boxAppSettings).__name__}"
+            )
+
+        # Validate required top-level fields in boxAppSettings
+        if "clientID" not in self.boxAppSettings:
+            raise ValueError("boxAppSettings missing required 'clientID' field")
+        if "clientSecret" not in self.boxAppSettings:
+            raise ValueError("boxAppSettings missing required 'clientSecret' field")
+        if "appAuth" not in self.boxAppSettings:
+            raise ValueError("boxAppSettings missing required 'appAuth' field")
+
+        # Validate appAuth structure
+        app_auth = self.boxAppSettings["appAuth"]
+        if not isinstance(app_auth, dict):
+            raise ValueError(
+                f"boxAppSettings.appAuth must be a dict, got {type(app_auth).__name__}"
+            )
+
+        # Validate required fields in appAuth
+        if "privateKey" not in app_auth:
+            raise ValueError(
+                "boxAppSettings.appAuth missing required 'privateKey' field"
+            )
+        if "publicKeyID" not in app_auth:
+            raise ValueError(
+                "boxAppSettings.appAuth missing required 'publicKeyID' field"
+            )
+
     @property
     def client_id(self) -> str:
         return self.boxAppSettings["clientID"]

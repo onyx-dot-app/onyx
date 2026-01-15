@@ -51,8 +51,9 @@ def get_external_access_for_raw_box_file(
         )
 
     try:
-        collaborations_response = box_client.collaborations.get_file_collaborations(
-            file_id=file_id
+        # Box SDK v10 uses list_collaborations manager for getting file collaborations
+        collaborations_response = (
+            box_client.list_collaborations.get_file_collaborations(file_id=file_id)
         )
 
         for collaboration in collaborations_response.entries:
@@ -82,28 +83,154 @@ def get_external_access_for_raw_box_file(
                     public = True
 
     except Exception as e:
-        logger.warning(
-            f"Failed to get collaborations for Box file {file_id}: {e}. "
-            "Returning minimal access (file owner retains access via retriever user)."
+        # Sanitize error message to avoid leaking sensitive data (URLs, tokens, etc.)
+        import re
+
+        error_str = str(e)
+        # Remove URLs
+        error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
+        # Remove potential tokens (long alphanumeric strings)
+        error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
+
+        # Check if this is a transient error that should be retried
+        error_lower = error_str.lower()
+        is_transient = any(
+            indicator in error_lower
+            for indicator in [
+                "timeout",
+                "connection",
+                "503",
+                "502",
+                "500",
+                "rate limit",
+            ]
         )
+
+        if is_transient:
+            logger.warning(
+                f"Transient error getting collaborations for Box file {file_id}: {error_str}. "
+                "This may be retried on next sync."
+            )
+        else:
+            logger.warning(
+                f"Failed to get collaborations for Box file {file_id}: {error_str}. "
+                "Returning minimal access (file owner retains access via retriever user)."
+            )
 
     # Check for shared link (indicates potential public access)
     # Only mark as public if the shared link is actually public (access="open")
     # and not password-protected
+    # Note: Box API may not return password field for security reasons, so we need
+    # to fetch file details to check password protection, or be conservative
     shared_link = file.get("shared_link")
+
+    # Always try to fetch the file directly to get the most up-to-date shared_link
+    # (folder listing responses may not include shared_link or may have stale data)
+    try:
+        file_info = box_client.files.get_file_by_id(
+            file_id=file_id, fields=["shared_link"]
+        )
+        if file_info.shared_link:
+            # Convert Box SDK object to dict format for consistent handling
+            sl = file_info.shared_link
+            # Check if shared_link has the necessary attributes
+            if hasattr(sl, "access") or hasattr(sl, "url"):
+                access_value = None
+                if hasattr(sl, "access"):
+                    if hasattr(sl.access, "value"):
+                        access_value = sl.access.value
+                    else:
+                        access_value = str(sl.access)
+
+                shared_link = {
+                    "url": sl.url if hasattr(sl, "url") else None,
+                    "access": access_value,
+                    "password": (sl.password if hasattr(sl, "password") else None),
+                }
+    except Exception as e:
+        # If we can't fetch file details, fall back to shared_link from file dict
+        # Log but continue with the shared_link from the file dict if available
+        logger.debug(f"Could not fetch shared_link for file {file_id}: {e}")
+
     if shared_link:
         # shared_link can be a string (legacy) or a dict with access/password info
         if isinstance(shared_link, dict):
             access = shared_link.get("access")
             password = shared_link.get("password")
-            # Only mark as public if access is "open" and not password-protected
-            if access == "open" and not password:
-                public = True
+            # Handle both string and enum values for access
+            # Box SDK may return enum objects, so convert to string for comparison
+            access_str = str(access).lower() if access else None
+            # Mark as public if access is "open" and not password-protected
+            if access_str == "open":
+                # If password is explicitly set and truthy, it's password-protected
+                # If password is None/False or doesn't exist, assume it's public
+                # (Box API may not always return password field)
+                if not password:
+                    public = True
+            else:
+                # Log when access is not "open" to help debug
+                logger.debug(
+                    f"File {file_id} has shared_link but access is '{access}' (str: '{access_str}'), not 'open'"
+                )
         elif isinstance(shared_link, str):
             # Legacy: if it's just a URL string, we can't determine access level
             # Don't assume it's public - only mark as public if we found a public
             # collaboration above
             pass
+    else:
+        # Log when file has no shared_link to help debug
+        logger.debug(f"File {file_id} has no shared_link")
+
+    # If file doesn't have its own shared link, check parent folder's shared link
+    # Files in public folders inherit the folder's public access
+    if not public:
+        parent = file.get("parent")
+        if parent and isinstance(parent, dict):
+            parent_id = parent.get("id")
+            if parent_id:
+                try:
+                    # Fetch parent folder to check its shared link
+                    parent_folder = box_client.folders.get_folder_by_id(
+                        folder_id=parent_id, fields=["shared_link"]
+                    )
+                    if parent_folder.shared_link:
+                        # Check if parent folder has a public shared link
+                        parent_shared_link = parent_folder.shared_link
+
+                        # Handle Box SDK object format
+                        parent_access = None
+                        parent_password = None
+
+                        if hasattr(parent_shared_link, "access"):
+                            # Box SDK object: access is an enum
+                            access_value = parent_shared_link.access
+                            if hasattr(access_value, "value"):
+                                parent_access = access_value.value
+                            else:
+                                parent_access = str(access_value)
+                        elif isinstance(parent_shared_link, dict):
+                            # Dict format (from our conversion)
+                            parent_access = parent_shared_link.get("access")
+
+                        # Get password field
+                        if hasattr(parent_shared_link, "password"):
+                            parent_password = parent_shared_link.password
+                        elif isinstance(parent_shared_link, dict):
+                            parent_password = parent_shared_link.get("password")
+
+                        # Mark as public if access is "open" and not password-protected
+                        if parent_access == "open":
+                            # If password is explicitly set and truthy, it's password-protected
+                            # If password is None/False or doesn't exist, assume it's public
+                            # (Box API may not always return password field)
+                            if not parent_password:
+                                public = True
+                except Exception as e:
+                    # If we can't fetch parent folder, log but don't fail
+                    # This might happen if we don't have access to the parent folder
+                    logger.debug(
+                        f"Could not fetch parent folder {parent_id} for file {file_id}: {e}"
+                    )
 
     return ExternalAccess(
         external_user_emails=user_emails,

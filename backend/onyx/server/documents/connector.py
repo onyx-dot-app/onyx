@@ -464,11 +464,15 @@ def upsert_box_jwt_credential(
     # Clean up existing Box JWT credentials before creating a new one
     # This prevents accumulation of stale/duplicate credentials
     # Note: cleanup_box_jwt_credentials handles deletion of related connector/document pairs
-    cleanup_box_jwt_credentials(db_session=db_session)
+    # Make this atomic: only commit if both cleanup and creation succeed
+    # Pass commit=False to cleanup so we can commit both operations together
+    cleanup_box_jwt_credentials(db_session=db_session, commit=False)
     # `user=None` since this credential is not a personal credential
     credential = create_credential(
         credential_data=credential_base, user=user, db_session=db_session
     )
+    # Both operations succeeded, commit the transaction atomically
+    db_session.commit()
     return ObjectCreationIdResponse(id=credential.id)
 
 

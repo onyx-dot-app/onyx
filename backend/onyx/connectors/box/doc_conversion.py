@@ -236,11 +236,21 @@ def _download_and_extract_sections(
 
         sections: list[TextSection | ImageSection] = []
         try:
+            # Map file extensions to standard MIME types
+            mime_type_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".gif": "image/gif",
+                ".bmp": "image/bmp",
+                ".webp": "image/webp",
+            }
+            media_type = mime_type_map.get(file_ext, f"image/{file_ext[1:]}")
             section, embedded_id = store_image_and_create_section(
                 image_data=response_call(),
                 file_id=file_id,
                 display_name=file_name,
-                media_type=f"image/{file_ext[1:]}",
+                media_type=media_type,
                 file_origin=FileOrigin.CONNECTOR,
                 link=link,
             )
@@ -456,8 +466,17 @@ def convert_box_item_to_document(
             doc_id = "unknown"
 
         file_name = file.get("name", "unknown")
-        error_str = f"Error converting file '{file_name}' to Document as {retriever_user_id}: {e}"
-        logger.warning(error_str)
+        # Sanitize error message to avoid leaking sensitive data (URLs, tokens, etc.)
+        import re
+
+        error_str = str(e)
+        # Remove URLs
+        error_str = re.sub(r"https?://[^\s]+", "[URL_REDACTED]", error_str)
+        # Remove potential tokens (long alphanumeric strings)
+        error_str = re.sub(r"\b[a-zA-Z0-9]{32,}\b", "[TOKEN_REDACTED]", error_str)
+        logger.warning(
+            f"Error converting file '{file_name}' to Document as {retriever_user_id}: {error_str}"
+        )
 
         return ConnectorFailure(
             failed_document=DocumentFailure(

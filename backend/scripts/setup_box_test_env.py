@@ -608,6 +608,44 @@ def setup_box_test_environment() -> dict[str, Any]:
         print("  (This is optional - folder can be shared manually via Box UI)")
         print(f"  To make it public manually: Folder ID {folder_1_2.id}")
 
+    # Make individual files 55-56 public (PUBLIC_FILE_IDS)
+    # These files should have individual public shared links, not inherit from folder
+    # This ensures only files 55-56 are public, not the entire folder (which would make 57-59 public too)
+    print("\nMaking files 55-56 public (PUBLIC_FILE_IDS)...")
+    from tests.daily.connectors.box.consts_and_utils import PUBLIC_FILE_IDS, id_to_name
+    from box_sdk_gen.managers.files import (
+        UpdateFileByIdSharedLink,
+        UpdateFileByIdSharedLinkAccessField,
+    )
+
+    for file_id_num in PUBLIC_FILE_IDS:
+        file_name = id_to_name(file_id_num)
+        try:
+            # Find the file by name in Folder 2-2
+            # We need to search for the file - let's get all files in folder_2_2
+            items = admin_client.folders.get_folder_items(
+                folder_id=folder_2_2.id, fields=["id", "name", "type"]
+            )
+            target_file = None
+            for item in items.entries:
+                if item.type.value == "file" and item.name == file_name:
+                    target_file = item
+                    break
+
+            if target_file:
+                admin_client.files.update_file_by_id(
+                    file_id=target_file.id,
+                    shared_link=UpdateFileByIdSharedLink(
+                        access=UpdateFileByIdSharedLinkAccessField.OPEN
+                    ),
+                )
+                print(f"  ✓ File {file_name} (ID: {target_file.id}) is now public")
+            else:
+                print(f"  ✗ Warning: Could not find file {file_name} in Folder 2-2")
+        except Exception as e:
+            print(f"  ✗ Warning: Could not make file {file_name} public: {e}")
+            print("  (This is optional - file can be shared manually via Box UI)")
+
     # Compile results
     results = {
         "admin_user_id": admin_user_id,

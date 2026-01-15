@@ -482,11 +482,15 @@ def cleanup_google_drive_credentials(db_session: Session) -> None:
     db_session.commit()
 
 
-def cleanup_box_jwt_credentials(db_session: Session) -> None:
+def cleanup_box_jwt_credentials(db_session: Session, commit: bool = True) -> None:
     """Clean up Box JWT credentials that reference the deleted JWT config.
 
     This function properly handles deletion of related connector/document pairs
     to avoid foreign key constraint violations.
+
+    Args:
+        db_session: Database session
+        commit: If True, commit the deletions. If False, caller must commit.
     """
     from onyx.connectors.box.box_kv import (
         BOX_AUTHENTICATION_METHOD_UPLOADED,
@@ -505,12 +509,38 @@ def cleanup_box_jwt_credentials(db_session: Session) -> None:
         ):
             # Use _delete_credential_internal with force=True to properly clean up
             # related connector/document pairs and avoid FK constraint violations
-            _delete_credential_internal(
-                credential=credential,
-                credential_id=credential.id,
-                db_session=db_session,
-                force=True,
+            # Note: _delete_credential_internal commits, so we need to handle this differently
+            # for atomic operations. We'll delete directly without committing.
+            associated_connectors = (
+                db_session.query(ConnectorCredentialPair)
+                .filter(ConnectorCredentialPair.credential_id == credential.id)
+                .all()
             )
+
+            associated_doc_cc_pairs = (
+                db_session.query(DocumentByConnectorCredentialPair)
+                .filter(
+                    DocumentByConnectorCredentialPair.credential_id == credential.id
+                )
+                .all()
+            )
+
+            # Delete related records first
+            for doc_cc_pair in associated_doc_cc_pairs:
+                db_session.delete(doc_cc_pair)
+
+            for connector in associated_connectors:
+                db_session.delete(connector)
+
+            db_session.flush()
+
+            _cleanup_credential__user_group_relationships__no_commit(
+                db_session, credential.id
+            )
+            db_session.delete(credential)
+
+    if commit:
+        db_session.commit()
 
 
 def delete_service_account_credentials(

@@ -27,57 +27,99 @@ def box_group_sync(
     logger.info("Starting Box group sync...")
 
     try:
-        # Get all groups in the enterprise
+        # Get all groups in the enterprise with pagination
         # Box API: GET /groups
-        groups_response = box_client.groups.get_groups()
+        limit = 1000  # Box API max items per page
+        marker: str | None = None
+        page_num = 0
 
-        for group in groups_response.entries:
-            group_id = str(group.id)
-            group_name = getattr(group, "name", None) or f"Group_{group_id}"
+        while True:
+            page_num += 1
+            groups_response = box_client.groups.get_groups(
+                limit=limit,
+                marker=marker,
+            )
 
-            logger.debug(f"Processing Box group: {group_name} (ID: {group_id})")
+            logger.debug(
+                f"Box API groups page {page_num}: {len(groups_response.entries)} groups"
+            )
 
-            # Get members of this group
-            # Box API: GET /groups/{group_id}/memberships
-            try:
-                memberships_response = box_client.groups.get_group_memberships(
-                    group_id=group_id
-                )
+            for group in groups_response.entries:
+                group_id = str(group.id)
+                group_name = getattr(group, "name", None) or f"Group_{group_id}"
 
-                user_emails: set[str] = set()
-                for membership in memberships_response.entries:
-                    user = getattr(membership, "user", None)
-                    if user:
-                        # Extract email from user object
-                        email = getattr(user, "login", None) or getattr(
-                            user, "email", None
+                logger.debug(f"Processing Box group: {group_name} (ID: {group_id})")
+
+                # Get members of this group with pagination
+                # Box API: GET /groups/{group_id}/memberships
+                try:
+                    membership_limit = 1000  # Box API max items per page
+                    membership_marker: str | None = None
+                    membership_page_num = 0
+                    user_emails: set[str] = set()
+
+                    while True:
+                        membership_page_num += 1
+                        memberships_response = box_client.groups.get_group_memberships(
+                            group_id=group_id,
+                            limit=membership_limit,
+                            marker=membership_marker,
                         )
-                        if email:
-                            user_emails.add(email)
+
+                        logger.debug(
+                            f"Box API memberships page {membership_page_num} for group {group_name}: "
+                            f"{len(memberships_response.entries)} members"
+                        )
+
+                        for membership in memberships_response.entries:
+                            user = getattr(membership, "user", None)
+                            if user:
+                                # Extract email from user object
+                                email = getattr(user, "login", None) or getattr(
+                                    user, "email", None
+                                )
+                                if email:
+                                    user_emails.add(email)
+                                else:
+                                    logger.warning(
+                                        f"Group member {getattr(user, 'id', 'unknown')} "
+                                        f"has no email/login in group {group_name}"
+                                    )
+
+                        # Check for more membership pages
+                        membership_next_marker = getattr(
+                            memberships_response, "next_marker", None
+                        )
+                        if membership_next_marker:
+                            membership_marker = membership_next_marker
                         else:
-                            logger.warning(
-                                f"Group member {getattr(user, 'id', 'unknown')} "
-                                f"has no email/login in group {group_name}"
-                            )
+                            break
 
-                if user_emails:
-                    logger.info(
-                        f"Found {len(user_emails)} members in Box group {group_name}"
-                    )
-                    yield ExternalUserGroup(
-                        id=group_id,
-                        user_emails=list(user_emails),
-                    )
-                else:
-                    logger.warning(
-                        f"Box group {group_name} (ID: {group_id}) has no members with emails"
-                    )
+                    if user_emails:
+                        logger.info(
+                            f"Found {len(user_emails)} members in Box group {group_name}"
+                        )
+                        yield ExternalUserGroup(
+                            id=group_id,
+                            user_emails=list(user_emails),
+                        )
+                    else:
+                        logger.warning(
+                            f"Box group {group_name} (ID: {group_id}) has no members with emails"
+                        )
 
-            except Exception as e:
-                logger.error(
-                    f"Error fetching members for Box group {group_name} (ID: {group_id}): {e}"
-                )
-                # Continue with other groups even if one fails
+                except Exception as e:
+                    logger.error(
+                        f"Error fetching members for Box group {group_name} (ID: {group_id}): {e}"
+                    )
+                    # Continue with other groups even if one fails
+
+            # Check for more groups pages
+            next_marker = getattr(groups_response, "next_marker", None)
+            if next_marker:
+                marker = next_marker
+            else:
+                break
 
     except Exception as e:
         logger.error(f"Error during Box group sync: {e}")
