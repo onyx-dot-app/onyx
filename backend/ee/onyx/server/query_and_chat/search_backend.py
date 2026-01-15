@@ -92,15 +92,6 @@ def handle_send_search_message(
                 search_docs=[],
                 error=str(e),
             )
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.exception("Error processing search query")
-            return SearchFullResponse(
-                all_executed_queries=[],
-                search_docs=[],
-                error=str(e),
-            )
 
     # Streaming path
     def stream_generator() -> Generator[str, None, None]:
@@ -130,12 +121,31 @@ def get_search_history(
     Fetch past search queries for the authenticated user.
 
     Args:
-        limit: Maximum number of queries to return (default 10)
+        limit: Maximum number of queries to return (default 100)
         filter_days: Only return queries from the last N days (optional)
 
     Returns:
         SearchHistoryResponse with list of search queries, ordered by most recent first.
     """
+    # Validate limit
+    if limit <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="limit must be greater than 0",
+        )
+    if limit > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="limit must be at most 1000",
+        )
+
+    # Validate filter_days
+    if filter_days is not None and filter_days <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="filter_days must be greater than 0",
+        )
+
     # TODO remove this
     if user is None:
         # Return empty list for unauthenticated users
