@@ -42,6 +42,7 @@ from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
+from onyx.document_index.opensearch.hierarchy_bitmap import encode_hierarchy_bitmap
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
@@ -199,6 +200,11 @@ def _convert_onyx_chunk_to_opensearch_document(
         # instance variable. One source of truth -> less chance of a very bad
         # bug in prod.
         tenant_id=TenantState(tenant_id=chunk.tenant_id, multitenant=MULTI_TENANT),
+        # Encode ancestor hierarchy node IDs as RoaringBitmap for efficient
+        # hierarchy-based filtering in search queries.
+        ancestor_hierarchy_bitmap=encode_hierarchy_bitmap(
+            chunk.ancestor_hierarchy_node_ids
+        ),
     )
 
 

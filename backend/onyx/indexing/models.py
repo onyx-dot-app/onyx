@@ -114,6 +114,10 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     user_project: list[int]
     boost: int
     aggregated_chunk_boost_factor: float
+    # Full ancestor path from root hierarchy node to document's parent.
+    # This is encoded as a RoaringBitmap when written to OpenSearch.
+    # Empty list means no hierarchy info (document excluded from hierarchy searches).
+    ancestor_hierarchy_node_ids: list[int]
 
     @classmethod
     def from_index_chunk(
@@ -125,6 +129,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         boost: int,
         aggregated_chunk_boost_factor: float,
         tenant_id: str,
+        ancestor_hierarchy_node_ids: list[int] | None = None,
     ) -> "DocMetadataAwareIndexChunk":
         index_chunk_data = index_chunk.model_dump()
         return cls(
@@ -135,6 +140,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             boost=boost,
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,
+            ancestor_hierarchy_node_ids=ancestor_hierarchy_node_ids or [],
         )
 
 
