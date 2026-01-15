@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
@@ -76,7 +77,7 @@ func (p *PRInfo) ForkRepo() string {
 }
 
 func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
-	checkGitHubCLI()
+	git.CheckGitHubCLI()
 
 	prNumber := args[0]
 	log.Debugf("Running CI for PR: %s", prNumber)
@@ -86,7 +87,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	}
 
 	// Save the current branch to switch back later
-	originalBranch, err := getCurrentBranch()
+	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
 		log.Fatalf("Failed to get current branch: %v", err)
 	}
@@ -125,7 +126,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	}
 	forkRemote := fmt.Sprintf("https://github.com/%s.git", forkRepo)
 	log.Infof("Fetching branch %s from %s", prInfo.HeadRefName, forkRepo)
-	if err := runGitCommand("fetch", "--quiet", forkRemote, prInfo.HeadRefName); err != nil {
+	if err := git.RunCommand("fetch", "--quiet", forkRemote, prInfo.HeadRefName); err != nil {
 		log.Fatalf("Failed to fetch fork branch: %v", err)
 	}
 
@@ -133,34 +134,34 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	if originalBranch == ciBranch {
 		// Already on the CI branch - stash any uncommitted changes before resetting
 		stashed := false
-		if hasUncommittedChanges() {
+		if git.HasUncommittedChanges() {
 			log.Info("Stashing uncommitted changes...")
-			if err := runGitCommand("stash", "--include-untracked"); err != nil {
+			if err := git.RunCommand("stash", "--include-untracked"); err != nil {
 				log.Fatalf("Failed to stash changes: %v", err)
 			}
 			stashed = true
 		}
 		log.Infof("Already on %s, resetting to fork's HEAD", ciBranch)
-		if err := runGitCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
+		if err := git.RunCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
 			log.Fatalf("Failed to reset branch to fork's HEAD: %v", err)
 		}
 		if stashed {
 			log.Info("Restoring stashed changes...")
-			if err := runGitCommand("stash", "pop"); err != nil {
+			if err := git.RunCommand("stash", "pop"); err != nil {
 				log.Warnf("Failed to restore stashed changes (may have conflicts): %v", err)
 				log.Info("Your changes are still in the stash. Run 'git stash pop' to restore them manually.")
 			}
 		}
 	} else {
 		// Delete branch if it already exists locally (to ensure we're in sync with fork)
-		if branchExists(ciBranch) {
+		if git.BranchExists(ciBranch) {
 			log.Infof("Deleting existing local branch: %s", ciBranch)
-			if err := runGitCommand("branch", "-D", ciBranch); err != nil {
+			if err := git.RunCommand("branch", "-D", ciBranch); err != nil {
 				log.Fatalf("Failed to delete existing branch: %v", err)
 			}
 		}
 		log.Infof("Creating CI branch: %s", ciBranch)
-		if err := runGitCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
+		if err := git.RunCommand("checkout", "--quiet", "-b", ciBranch, "FETCH_HEAD"); err != nil {
 			log.Fatalf("Failed to create CI branch: %v", err)
 		}
 	}
@@ -169,7 +170,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		log.Warnf("[DRY RUN] Would push CI branch: %s", ciBranch)
 		log.Warnf("[DRY RUN] Would create PR: %s", prTitle)
 		// Switch back to original branch
-		if err := runGitCommand("switch", "--quiet", originalBranch); err != nil {
+		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
 			log.Warnf("Failed to switch back to original branch: %v", err)
 		}
 		return
@@ -177,9 +178,9 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 
 	// Push the CI branch (force push in case it already exists)
 	log.Infof("Pushing CI branch: %s", ciBranch)
-	if err := runGitCommand("push", "--quiet", "-f", "-u", "origin", ciBranch); err != nil {
+	if err := git.RunCommand("push", "--quiet", "-f", "-u", "origin", ciBranch); err != nil {
 		// Switch back to original branch before exiting
-		if switchErr := runGitCommand("switch", "--quiet", originalBranch); switchErr != nil {
+		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
 		log.Fatalf("Failed to push CI branch: %v", err)
@@ -190,7 +191,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	prURL, err := createCIPR(ciBranch, prInfo.BaseRefName, prTitle, prBody)
 	if err != nil {
 		// Switch back to original branch before exiting
-		if switchErr := runGitCommand("switch", "--quiet", originalBranch); switchErr != nil {
+		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)
 		}
 		log.Fatalf("Failed to create PR: %v", err)
@@ -198,7 +199,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 
 	// Switch back to the original branch
 	log.Infof("Switching back to original branch: %s", originalBranch)
-	if err := runGitCommand("switch", "--quiet", originalBranch); err != nil {
+	if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
 		log.Warnf("Failed to switch back to original branch: %v", err)
 	}
 
@@ -245,18 +246,4 @@ func createCIPR(headBranch, baseBranch, title, body string) (string, error) {
 
 	prURL := strings.TrimSpace(string(output))
 	return prURL, nil
-}
-
-// branchExists checks if a local git branch exists
-func branchExists(branchName string) bool {
-	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", fmt.Sprintf("refs/heads/%s", branchName))
-	return cmd.Run() == nil
-}
-
-// hasUncommittedChanges checks if there are uncommitted changes in the working directory
-func hasUncommittedChanges() bool {
-	// git diff --quiet returns exit code 1 if there are changes
-	staged := exec.Command("git", "diff", "--quiet", "--cached")
-	unstaged := exec.Command("git", "diff", "--quiet")
-	return staged.Run() != nil || unstaged.Run() != nil
 }
