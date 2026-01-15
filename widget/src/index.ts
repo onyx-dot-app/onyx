@@ -6,7 +6,9 @@
 import { OnyxChatWidget } from "./widget";
 
 // Define the custom element
-if (!customElements.get("onyx-chat-widget")) {
+if (typeof customElements !== "undefined" && !customElements.get("onyx-chat-widget")) {
+  customElements.define("onyx-chat-widget", OnyxChatWidget);
+}
   customElements.define("onyx-chat-widget", OnyxChatWidget);
 }
 
