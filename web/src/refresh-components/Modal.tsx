@@ -371,9 +371,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             )}
           </Section>
           <DialogPrimitive.Title asChild>
-            <Text headingH3>
-              {title}
-            </Text>
+            <Text headingH3>{title}</Text>
           </DialogPrimitive.Title>
           {description && (
             <DialogPrimitive.Description asChild>
