@@ -7,6 +7,7 @@ import { LitElement, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { WidgetConfig, ChatMessage } from "./types/widget-types";
 import { resolveConfig } from "./config/config";
 import { theme } from "./styles/theme";
@@ -149,7 +150,8 @@ export class OnyxChatWidget extends LitElement {
   private renderMarkdown(content: string) {
     try {
       const htmlContent = marked.parse(content, { async: false }) as string;
-      return unsafeHTML(htmlContent);
+      const sanitizedHTML = DOMPurify.sanitize(htmlContent);
+      return unsafeHTML(sanitizedHTML);
     } catch (err) {
       console.error("Failed to parse markdown:", err);
       return content; // Fallback to plain text
