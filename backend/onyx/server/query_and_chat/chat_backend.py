@@ -530,7 +530,34 @@ def handle_new_chat_message(
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@router.post("/send-chat-message", response_model=None, tags=PUBLIC_API_TAGS)
+@router.post(
+    "/send-chat-message",
+    response_model=None,
+    response_class=StreamingResponse,  # default; actual runtime can still return JSON too
+    tags=PUBLIC_API_TAGS,
+    responses={
+        200: {
+            "description": (
+                "If `stream=true`, returns `text/event-stream`.\n"
+                "If `stream=false`, returns `application/json` (ChatFullResponse)."
+            ),
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                    "examples": {
+                        "stream": {
+                            "summary": "Stream of NDJSON AnswerStreamPart's",
+                            "value": "string",
+                        }
+                    },
+                },
+                "application/json": {
+                    "schema": ChatFullResponse.model_json_schema(),
+                },
+            },
+        }
+    },
+)
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
