@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { FiGlobe, FiLink } from "react-icons/fi";
 import { FetchToolPacket } from "@/app/chat/services/streamingModels";
 import { MessageRenderer } from "@/app/chat/message/messageComponents/interfaces";
@@ -15,6 +15,7 @@ import {
   READING_MIN_DURATION_MS,
   READ_MIN_DURATION_MS,
 } from "./fetchStateUtils";
+import Text from "@/refresh-components/texts/Text";
 
 /**
  * Main renderer for fetch tool packets.
@@ -40,6 +41,12 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     activeDurationMs: READING_MIN_DURATION_MS,
     completeDurationMs: READ_MIN_DURATION_MS,
   });
+
+  // Memoize icon factory to prevent re-renders during streaming
+  const getGlobeIconFactory = useCallback(
+    () => (props: IconProps) => <FiGlobe size={props.size} />,
+    []
+  );
 
   // Don't render anything if fetch hasn't started
   if (!hasStarted) {
@@ -67,9 +74,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
             initialCount={INITIAL_URLS_TO_SHOW}
             expansionCount={URLS_PER_EXPANSION}
             getKey={(doc: OnyxDocument) => doc.document_id}
-            getIconFactory={() => (props: IconProps) => (
-              <FiGlobe size={props.size} />
-            )}
+            getIconFactory={getGlobeIconFactory}
             getTitle={(doc: OnyxDocument) =>
               doc.semantic_identifier || doc.link || ""
             }
@@ -89,9 +94,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
             initialCount={INITIAL_URLS_TO_SHOW}
             expansionCount={URLS_PER_EXPANSION}
             getKey={(url: string) => url}
-            getIconFactory={() => (props: IconProps) => (
-              <FiGlobe size={props.size} />
-            )}
+            getIconFactory={getGlobeIconFactory}
             getTitle={(url: string) => url}
             onClick={(url: string) => {
               window.open(url, "_blank");
@@ -107,9 +110,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         {/* Reading results section */}
         {(displayDocuments || displayUrls) && (
           <>
-            <div className="text-sm text-text-500 mt-3 mb-1">
+            <Text as="p" mainUiMuted text03>
               Reading results:
-            </div>
+            </Text>
             <SearchChipList
               items={
                 displayDocuments ? documents : urls.map((url) => ({ url }))
@@ -119,9 +122,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               getKey={(item: any) =>
                 displayDocuments ? item.document_id : item.url
               }
-              getIconFactory={() => (props: IconProps) => (
-                <FiGlobe size={props.size} />
-              )}
+              getIconFactory={getGlobeIconFactory}
               getTitle={(item: any) =>
                 displayDocuments
                   ? item.semantic_identifier || item.link || ""

@@ -22,6 +22,7 @@ export type RegenerationFactory = (regenerationRequest: {
 
 export interface AgentMessageProps {
   rawPackets: Packet[];
+  packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
   chatState: FullChatState;
   nodeId: number;
   messageId?: number;
@@ -36,8 +37,6 @@ export interface AgentMessageProps {
 }
 
 // TODO: Consider more robust comparisons:
-// - `rawPackets.length` assumes packets are append-only. Could compare the last
-//   packet or use a shallow comparison if packets can be modified in place.
 // - `chatState.docs`, `chatState.citations`, and `otherMessagesCanSwitchTo` use
 //   reference equality. Shallow array/object comparison would be more robust if
 //   these are recreated with the same values.
@@ -49,7 +48,9 @@ function arePropsEqual(
     prev.nodeId === next.nodeId &&
     prev.messageId === next.messageId &&
     prev.currentFeedback === next.currentFeedback &&
-    prev.rawPackets.length === next.rawPackets.length &&
+    // Compare packetCount (primitive) instead of rawPackets.length
+    // The array is mutated in place, so reading .length from prev and next would return same value
+    prev.packetCount === next.packetCount &&
     prev.chatState.assistant?.id === next.chatState.assistant?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
@@ -126,7 +127,7 @@ const AgentMessage = React.memo(function AgentMessage({
       {/* Row 1: Two-column layout for tool steps */}
 
       <AgentTimeline
-        packetGroups={toolGroups}
+        turnGroups={toolTurnGroups}
         chatState={effectiveChatState}
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}

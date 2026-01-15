@@ -332,6 +332,7 @@ const ChatUI = React.memo(
                       /> */}
                       <AgentMessage
                         rawPackets={message.packets}
+                        packetCount={message.packetCount}
                         chatState={chatStateData}
                         nodeId={message.nodeId}
                         messageId={message.messageId}

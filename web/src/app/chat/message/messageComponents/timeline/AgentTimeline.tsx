@@ -1,8 +1,7 @@
 "use client";
 
-import React, { FunctionComponent, useMemo, useState } from "react";
+import React, { FunctionComponent, useState } from "react";
 import { StopReason } from "@/app/chat/services/streamingModels";
-import { GroupedPacket } from "../packetProcessor";
 import { FullChatState } from "../interfaces";
 import { TurnGroup, TransformedStep } from "./transformers";
 import { cn } from "@/lib/utils";
@@ -14,10 +13,11 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { IconProps } from "@opal/types";
 import { RendererComponent } from "../renderMessageComponent";
 import Text from "@/refresh-components/texts/Text";
+import { useTimelineHeader } from "./useTimelineHeader";
 
 export interface AgentTimelineProps {
-  /** Grouped packets from usePacketProcessor */
-  packetGroups: GroupedPacket[];
+  /** Turn groups from usePacketProcessor */
+  turnGroups: TurnGroup[];
   /** Chat state for rendering content */
   chatState: FullChatState;
   /** Whether the stop packet has been seen */
@@ -30,8 +30,6 @@ export interface AgentTimelineProps {
   hasDisplayContent?: boolean;
   /** Content to render after timeline (final message + toolbar) - slot pattern */
   children?: React.ReactNode;
-  /** Header to render above the timeline */
-  header?: React.ReactNode;
   /** Whether the timeline is collapsible */
   collapsible?: boolean;
   /** Title of the button to toggle the timeline */
@@ -43,13 +41,12 @@ export interface AgentTimelineProps {
 }
 
 export function AgentTimeline({
-  packetGroups,
+  turnGroups,
   chatState,
   stopPacketSeen = false,
   stopReason,
   finalAnswerComing = false,
   hasDisplayContent = false,
-  header,
   collapsible = true,
   buttonTitle,
   className,
@@ -57,12 +54,37 @@ export function AgentTimeline({
 }: AgentTimelineProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const handleToggle = () => setIsExpanded((prev) => !prev);
+  const { headerText, hasPackets, userStopped } = useTimelineHeader(
+    turnGroups,
+    stopReason
+  );
 
-  if (packetGroups.length === 0) {
+  if (!hasPackets && !hasDisplayContent) {
     return (
-      <Text as="p" mainUiAction text05 className="animate-pulse">
-        Thinking...
-      </Text>
+      <div className={cn("flex flex-col", className)}>
+        <div className="flex w-full h-9">
+          <div className="flex justify-center items-center size-9">
+            <AgentAvatar agent={chatState.assistant} size={24} />
+          </div>
+          <div className="flex w-full h-full items-center px-2">
+            <Text as="p" mainUiAction text03 className="animate-pulse">
+              {headerText}
+            </Text>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasDisplayContent && !hasPackets) {
+    return (
+      <div className={cn("flex flex-col", className)}>
+        <div className="flex w-full h-9">
+          <div className="flex justify-center items-center size-9">
+            <AgentAvatar agent={chatState.assistant} size={24} />
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -75,12 +97,12 @@ export function AgentTimeline({
         {/* Header row */}
         <div
           className={cn(
-            "flex w-full h-full items-center bg-background-tint-00 justify-between rounded-t-12",
+            "flex w-full h-full items-center bg-background-tint-00 justify-between rounded-t-12 px-2",
             !isExpanded && "rounded-b-12"
           )}
         >
-          <Text as="p" mainUiAction text05>
-            Thinking...
+          <Text as="p" mainUiAction text03>
+            {headerText}
           </Text>
 
           {/* Button */}
@@ -105,29 +127,35 @@ export function AgentTimeline({
       {/* Children (collapsible) */}
       {isExpanded && (
         <div className="w-full">
-          {packetGroups.map((group) => (
-            <RendererComponent
-              key={`${group.turn_index}-${group.tab_index}`}
-              packets={group.packets}
-              chatState={chatState}
-              onComplete={() => {}}
-              animate={!stopPacketSeen}
-              stopPacketSeen={stopPacketSeen}
-              stopReason={stopReason}
-            >
-              {({ icon, status, content }) => (
-                <StepContainer
-                  stepIcon={icon as FunctionComponent<IconProps> | undefined}
-                  header={status}
-                  collapsible={true}
-                  defaultExpanded={true}
-                  isLastStep={group.turn_index === packetGroups.length - 1}
-                >
-                  {content}
-                </StepContainer>
-              )}
-            </RendererComponent>
-          ))}
+          {turnGroups.map((turnGroup, turnIdx) =>
+            turnGroup.steps.map((step, stepIdx) => (
+              <RendererComponent
+                key={step.key}
+                packets={step.packets}
+                chatState={chatState}
+                onComplete={() => {}}
+                animate={!stopPacketSeen}
+                stopPacketSeen={stopPacketSeen}
+                stopReason={stopReason}
+              >
+                {({ icon, status, content }) => (
+                  <StepContainer
+                    stepIcon={icon as FunctionComponent<IconProps> | undefined}
+                    header={status}
+                    collapsible={true}
+                    defaultExpanded={true}
+                    isLastStep={
+                      turnIdx === turnGroups.length - 1 &&
+                      stepIdx === turnGroup.steps.length - 1
+                    }
+                    packetLength={step.packets.length}
+                  >
+                    {content}
+                  </StepContainer>
+                )}
+              </RendererComponent>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -171,7 +199,7 @@ export function StepContainer({
 
   return (
     <div className={cn("flex w-full", className)}>
-      <div className="flex flex-col justify-center items-center w-9 pt-1">
+      <div className="flex flex-col items-center w-9 pt-2">
         {StepIconComponent && (
           <StepIconComponent className="size-4 stroke-text-02" />
         )}
@@ -189,9 +217,13 @@ export function StepContainer({
       >
         {/* Header row */}
         {packetLength && packetLength > 1 && (
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between px-2">
             {/* Header text */}
-            {header && <div className="text-text-03">{header}</div>}
+            {header && (
+              <Text as="p" mainUiMuted text03>
+                {header}
+              </Text>
+            )}
 
             {/* Button */}
             {collapsible &&

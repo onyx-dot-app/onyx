@@ -17,10 +17,10 @@ import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "./renderers/PythonToolRenderer";
 import { ReasoningRenderer } from "./renderers/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
-import { FetchToolRenderer } from "./renderers/FetchToolRenderer";
+import { FetchToolRenderer } from "./timeline/fetch/FetchToolRenderer";
 import { DeepResearchPlanRenderer } from "./renderers/DeepResearchPlanRenderer";
 import { ResearchAgentRenderer } from "./renderers/ResearchAgentRenderer";
-import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
+import { SearchToolRenderer } from "./timeline/search/SearchToolRenderer";
 
 // Different types of chat packets using discriminated unions
 export interface GroupedPackets {

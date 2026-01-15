@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { SvgSearch, SvgGlobe } from "@opal/icons";
 import { SearchToolPacket } from "@/app/chat/services/streamingModels";
 import { MessageRenderer } from "@/app/chat/message/messageComponents/interfaces";
@@ -18,6 +18,7 @@ import {
   INITIAL_RESULTS_TO_SHOW,
   RESULTS_PER_EXPANSION,
 } from "./searchStateUtils";
+import Text from "@/refresh-components/texts/Text";
 
 /**
  * Main renderer for search tool packets.
@@ -55,6 +56,19 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     ? "Searching the web for:"
     : "Searching internal documents for:";
 
+  // Memoize icon factories to prevent re-renders during streaming
+  const getQueryIconFactory = useCallback(
+    () => (props: IconProps) => <SvgSearch size={props.size} />,
+    []
+  );
+
+  const getResultIconFactory = useCallback(
+    (doc: OnyxDocument) => (props: IconProps) => (
+      <ResultIcon doc={doc} size={props.size ?? 10} />
+    ),
+    []
+  );
+
   // Don't render content if search hasn't started
   if (queries.length === 0) {
     return children({
@@ -75,9 +89,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
           initialCount={INITIAL_QUERIES_TO_SHOW}
           expansionCount={QUERIES_PER_EXPANSION}
           getKey={(_, index) => index}
-          getIconFactory={() => (props: IconProps) => (
-            <SvgSearch size={props.size} />
-          )}
+          getIconFactory={getQueryIconFactory}
           getTitle={(query: string) => query}
           emptyState={<BlinkingDot />}
         />
@@ -85,17 +97,15 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         {/* Results section - show for both internal and web search */}
         {(results.length > 0 || queries.length > 0) && (
           <>
-            <div className="text-sm text-text-500 mt-3 mb-1">
+            <Text as="p" mainUiMuted text03>
               Reading results:
-            </div>
+            </Text>
             <SearchChipList
               items={results}
               initialCount={INITIAL_RESULTS_TO_SHOW}
               expansionCount={RESULTS_PER_EXPANSION}
               getKey={(doc: OnyxDocument) => doc.document_id}
-              getIconFactory={(doc: OnyxDocument) => (props: IconProps) => (
-                <ResultIcon doc={doc} size={props.size ?? 10} />
-              )}
+              getIconFactory={getResultIconFactory}
               getTitle={(doc: OnyxDocument) => doc.semantic_identifier || ""}
               onClick={(doc: OnyxDocument) => {
                 if (doc.link) {

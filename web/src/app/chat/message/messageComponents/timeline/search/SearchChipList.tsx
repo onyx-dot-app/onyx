@@ -1,7 +1,7 @@
 import React, { JSX, useState, useEffect, useRef } from "react";
 import { IconProps } from "@/components/icons/icons";
 import Tag from "@/refresh-components/buttons/Tag";
-import { truncateString } from "@/lib/utils";
+import { cn, truncateString } from "@/lib/utils";
 import { MAX_TITLE_LENGTH } from "./searchStateUtils";
 
 const ANIMATION_DELAY_MS = 30;
@@ -85,7 +85,8 @@ export function SearchChipList<T>({
 
     setDisplayList(initial);
     setBatchId(0);
-    animatedKeysRef.current.clear();
+    // Don't clear animatedKeysRef - existing items keep their animated state
+    // Only new items (not in animatedKeysRef) will animate
   }, [items, initialCount]);
 
   // Calculate remaining count for button text
@@ -139,7 +140,7 @@ export function SearchChipList<T>({
   let newItemCounter = 0;
 
   return (
-    <div className={`flex flex-wrap gap-x-2 gap-y-2 ml-1 ${className}`}>
+    <div className={cn("flex flex-wrap gap-x-2 gap-y-2", className)}>
       {displayList.map((entry) => {
         const key = getEntryKey(entry);
         const isNew = !animatedKeysRef.current.has(key);
@@ -148,11 +149,9 @@ export function SearchChipList<T>({
         return (
           <div
             key={key}
-            className={`text-xs ${
-              isNew
-                ? "animate-in fade-in slide-in-from-left-2 duration-150"
-                : ""
-            }`}
+            className={cn("text-xs", {
+              "animate-in fade-in slide-in-from-left-2 duration-150": isNew,
+            })}
             style={
               isNew
                 ? {
