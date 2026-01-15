@@ -2333,6 +2333,19 @@ class SearchDoc(Base):
     )
 
 
+class SearchQuery(Base):
+    __tablename__ = "search_query"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("user.id"))
+    query: Mapped[str] = mapped_column(String)
+    query_expansions: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 """
 Feedback, Logging, Metrics Tables
 """

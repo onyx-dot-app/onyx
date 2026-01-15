@@ -22,3 +22,11 @@ class DocumentSearchRequest(BasicChunkRequest):
 
 class DocumentSearchResponse(BaseModel):
     top_documents: list[InferenceChunk]
+
+
+class SearchFlowClassificationRequest(BaseModel):
+    user_query: str
+
+
+class SearchFlowClassificationResponse(BaseModel):
+    is_search_flow: bool
