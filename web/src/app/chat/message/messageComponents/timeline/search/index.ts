@@ -35,5 +35,5 @@ export {
   type UseExpandableListResult,
 } from "./useExpandableList";
 
-// Component (for potential reuse)
+// Components (for potential reuse)
 export { SearchChipList, type SearchChipListProps } from "./SearchChipList";

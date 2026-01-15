@@ -3,7 +3,7 @@
 import React from "react";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import { SVGProps } from "react";
+import { IconProps } from "@/components/icons/icons";
 
 const getVariantClasses = (active?: boolean) => [
   active ? "bg-background-tint-00" : "bg-background-tint-01",
@@ -17,7 +17,7 @@ export interface TagProps {
   // Tag content:
   label: string;
   className?: string;
-  children: React.FunctionComponent<SVGProps<SVGSVGElement>>[];
+  children: React.FunctionComponent<IconProps>[];
   onClick?: React.MouseEventHandler;
 }
 
@@ -50,7 +50,7 @@ export default function Tag({
             className="relative bg-background-tint-00 border border-background-tint-01 p-0.5 rounded-04"
             style={{ zIndex: visibleIcons.length - index }}
           >
-            <Icon className="w-[0.6rem] h-[0.6rem] stroke-text-04" />
+            <Icon size={10} className="stroke-text-04" />
           </div>
         ))}
       </div>

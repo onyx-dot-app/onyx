@@ -4,7 +4,11 @@ import { SearchToolPacket } from "@/app/chat/services/streamingModels";
 import { MessageRenderer } from "@/app/chat/message/messageComponents/interfaces";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { ResultIcon } from "@/components/chat/sources/SourceCard";
+import {
+  ResultIcon,
+  getUniqueIconFactories,
+} from "@/components/chat/sources/SourceCard";
+import { IconProps } from "@/components/icons/icons";
 import { SearchChipList } from "./SearchChipList";
 import { useToolTiming } from "./useToolTiming";
 import {
@@ -71,7 +75,9 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
           initialCount={INITIAL_QUERIES_TO_SHOW}
           expansionCount={QUERIES_PER_EXPANSION}
           getKey={(_, index) => index}
-          getIcon={() => <SvgSearch size={10} />}
+          getIconFactory={() => (props: IconProps) => (
+            <SvgSearch size={props.size} />
+          )}
           getTitle={(query: string) => query}
           emptyState={<BlinkingDot />}
         />
@@ -87,8 +93,8 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               initialCount={INITIAL_RESULTS_TO_SHOW}
               expansionCount={RESULTS_PER_EXPANSION}
               getKey={(doc: OnyxDocument) => doc.document_id}
-              getIcon={(doc: OnyxDocument) => (
-                <ResultIcon doc={doc} size={10} />
+              getIconFactory={(doc: OnyxDocument) => (props: IconProps) => (
+                <ResultIcon doc={doc} size={props.size ?? 10} />
               )}
               getTitle={(doc: OnyxDocument) => doc.semantic_identifier || ""}
               onClick={(doc: OnyxDocument) => {
@@ -96,6 +102,9 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
                   window.open(doc.link, "_blank");
                 }
               }}
+              getMoreIconFactories={(remaining) =>
+                getUniqueIconFactories(remaining)
+              }
               emptyState={<BlinkingDot />}
             />
           </>

@@ -13,6 +13,7 @@ import {
   JSONIcon,
   ImagesIcon,
   XMLIcon,
+  IconProps,
 } from "@/components/icons/icons";
 
 export function getFileIconFromFileNameAndLink(
@@ -169,6 +170,43 @@ export function getUniqueIcons(docs: OnyxDocument[]): JSX.Element[] {
 
   // Slice to just the first 3 if there are more than 3
   return uniqueIcons.slice(0, 3);
+}
+
+/**
+ * Returns unique icon factory functions for documents.
+ * Used with Tag component which expects FunctionComponent<IconProps>[].
+ */
+export function getUniqueIconFactories(
+  docs: OnyxDocument[]
+): React.FunctionComponent<IconProps>[] {
+  const factories: React.FunctionComponent<IconProps>[] = [];
+  const seenDomains = new Set<string>();
+  const seenSourceTypes = new Set<ValidSources>();
+
+  for (const doc of docs) {
+    if (factories.length >= 3) break;
+
+    if ((doc.is_internet || doc.source_type === ValidSources.Web) && doc.link) {
+      const domain = getDomainFromUrl(doc.link);
+      if (domain && !seenDomains.has(domain)) {
+        seenDomains.add(domain);
+        const url = doc.link;
+        factories.push((props: IconProps) => (
+          <WebResultIcon url={url} size={props.size} />
+        ));
+      }
+    } else {
+      if (!seenSourceTypes.has(doc.source_type)) {
+        seenSourceTypes.add(doc.source_type);
+        const sourceType = doc.source_type;
+        factories.push((props: IconProps) => (
+          <SourceIcon sourceType={sourceType} iconSize={props.size ?? 10} />
+        ));
+      }
+    }
+  }
+
+  return factories;
 }
 
 export function SeeMoreBlock({

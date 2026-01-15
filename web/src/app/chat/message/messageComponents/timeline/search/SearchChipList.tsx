@@ -1,5 +1,6 @@
 import React, { JSX, useState, useEffect, useRef } from "react";
-import { SourceChip2 } from "@/app/chat/components/SourceChip2";
+import { IconProps } from "@/components/icons/icons";
+import Tag from "@/refresh-components/buttons/Tag";
 import { truncateString } from "@/lib/utils";
 import { MAX_TITLE_LENGTH } from "./searchStateUtils";
 
@@ -14,8 +15,11 @@ export interface SearchChipListProps<T> {
   expansionCount: number;
   /** Get a unique key for each item */
   getKey: (item: T, index: number) => string | number;
-  /** Get the icon element for each item */
-  getIcon: (item: T, index: number) => JSX.Element;
+  /** Get the icon factory for each item */
+  getIconFactory: (
+    item: T,
+    index: number
+  ) => React.FunctionComponent<IconProps>;
   /** Get the title text for each item */
   getTitle: (item: T) => string;
   /** Optional click handler for each chip */
@@ -24,6 +28,10 @@ export interface SearchChipListProps<T> {
   emptyState?: React.ReactNode;
   /** Additional className for the container */
   className?: string;
+  /** Optional: get icon factories for "more" button from remaining items */
+  getMoreIconFactories?: (
+    remainingItems: T[]
+  ) => React.FunctionComponent<IconProps>[];
 }
 
 type DisplayEntry<T> =
@@ -39,11 +47,12 @@ export function SearchChipList<T>({
   initialCount,
   expansionCount,
   getKey,
-  getIcon,
+  getIconFactory,
   getTitle,
   onClick,
   emptyState,
   className = "",
+  getMoreIconFactories,
 }: SearchChipListProps<T>): JSX.Element {
   // List state includes both chips AND the "more" button
   const [displayList, setDisplayList] = useState<DisplayEntry<T>[]>([]);
@@ -154,16 +163,18 @@ export function SearchChipList<T>({
             }
           >
             {entry.type === "chip" ? (
-              <SourceChip2
-                icon={getIcon(entry.item, entry.index)}
-                title={truncateString(getTitle(entry.item), MAX_TITLE_LENGTH)}
+              <Tag
+                label={truncateString(getTitle(entry.item), MAX_TITLE_LENGTH)}
                 onClick={onClick ? () => onClick(entry.item) : undefined}
-              />
+              >
+                {[getIconFactory(entry.item, entry.index)]}
+              </Tag>
             ) : (
-              <SourceChip2
-                title={`${remainingCount} more...`}
-                onClick={handleShowMore}
-              />
+              <Tag label={`+${remainingCount} more`} onClick={handleShowMore}>
+                {getMoreIconFactories
+                  ? getMoreIconFactories(items.slice(chipCount))
+                  : [getIconFactory(items[chipCount]!, chipCount)]}
+              </Tag>
             )}
           </div>
         );

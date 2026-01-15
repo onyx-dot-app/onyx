@@ -4,6 +4,8 @@ import { FetchToolPacket } from "@/app/chat/services/streamingModels";
 import { MessageRenderer } from "@/app/chat/message/messageComponents/interfaces";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
+import { getUniqueIconFactories } from "@/components/chat/sources/SourceCard";
+import { IconProps } from "@/components/icons/icons";
 import { SearchChipList } from "../search/SearchChipList";
 import { useToolTiming, useExpandableList } from "../search";
 import {
@@ -65,7 +67,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
             initialCount={INITIAL_URLS_TO_SHOW}
             expansionCount={URLS_PER_EXPANSION}
             getKey={(doc: OnyxDocument) => doc.document_id}
-            getIcon={() => <FiGlobe size={10} />}
+            getIconFactory={() => (props: IconProps) => (
+              <FiGlobe size={props.size} />
+            )}
             getTitle={(doc: OnyxDocument) =>
               doc.semantic_identifier || doc.link || ""
             }
@@ -74,6 +78,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 window.open(doc.link, "_blank");
               }
             }}
+            getMoreIconFactories={(remaining) =>
+              getUniqueIconFactories(remaining)
+            }
             emptyState={<BlinkingDot />}
           />
         ) : displayUrls ? (
@@ -82,7 +89,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
             initialCount={INITIAL_URLS_TO_SHOW}
             expansionCount={URLS_PER_EXPANSION}
             getKey={(url: string) => url}
-            getIcon={() => <FiGlobe size={10} />}
+            getIconFactory={() => (props: IconProps) => (
+              <FiGlobe size={props.size} />
+            )}
             getTitle={(url: string) => url}
             onClick={(url: string) => {
               window.open(url, "_blank");
@@ -110,7 +119,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               getKey={(item: any) =>
                 displayDocuments ? item.document_id : item.url
               }
-              getIcon={() => <FiGlobe size={10} />}
+              getIconFactory={() => (props: IconProps) => (
+                <FiGlobe size={props.size} />
+              )}
               getTitle={(item: any) =>
                 displayDocuments
                   ? item.semantic_identifier || item.link || ""
@@ -122,6 +133,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                   window.open(link, "_blank");
                 }
               }}
+              getMoreIconFactories={
+                displayDocuments
+                  ? (remaining: any) => getUniqueIconFactories(remaining)
+                  : undefined
+              }
               emptyState={<BlinkingDot />}
             />
           </>

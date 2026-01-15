@@ -5,6 +5,7 @@ import { RendererResult } from "@/app/chat/message/messageComponents/interfaces"
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon } from "@/components/chat/sources/SourceCard";
+import { IconProps } from "@/components/icons/icons";
 import { SearchChipList } from "./SearchChipList";
 import {
   constructCurrentSearchState,
@@ -43,7 +44,9 @@ export function SourceRetrievalStepRenderer({
           initialCount={INITIAL_QUERIES_TO_SHOW}
           expansionCount={QUERIES_PER_EXPANSION}
           getKey={(_, index) => index}
-          getIcon={() => <SvgSearch size={10} />}
+          getIconFactory={() => (props: IconProps) => (
+            <SvgSearch size={props.size} />
+          )}
           getTitle={(query: string) => query}
           emptyState={
             isCancelled ? (
@@ -80,7 +83,9 @@ export function ReadDocumentsStepRenderer({
           initialCount={INITIAL_RESULTS_TO_SHOW}
           expansionCount={RESULTS_PER_EXPANSION}
           getKey={(doc: OnyxDocument) => doc.document_id}
-          getIcon={(doc: OnyxDocument) => <ResultIcon doc={doc} size={10} />}
+          getIconFactory={(doc: OnyxDocument) => (props: IconProps) => (
+            <ResultIcon doc={doc} size={props.size ?? 10} />
+          )}
           getTitle={(doc: OnyxDocument) => doc.semantic_identifier || ""}
           onClick={(doc: OnyxDocument) => {
             if (doc.link) {

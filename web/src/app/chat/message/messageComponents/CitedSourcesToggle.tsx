@@ -4,9 +4,8 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
+import { IconProps } from "@/components/icons/icons";
 import Tag from "@/refresh-components/buttons/Tag";
-
-const SIZE = 14;
 
 interface SourcesToggleProps {
   citations: Array<{
@@ -30,42 +29,10 @@ export default function CitedSourcesToggle({
     return null;
   }
 
-  // Helper function to create icon for a document
-  const createDocumentIcon = (doc: OnyxDocument, documentId: string) => {
-    let sourceKey: string;
-    let iconElement: React.ReactNode;
-    if (doc.is_internet || doc.source_type === ValidSources.Web) {
-      // For web sources, use the hostname as the unique key
-      try {
-        const hostname = new URL(doc.link).hostname;
-        sourceKey = `web_${hostname}`;
-      } catch {
-        sourceKey = `web_${doc.link}`;
-      }
-      iconElement = (
-        <WebResultIcon key={documentId} url={doc.link} size={SIZE} />
-      );
-    } else {
-      sourceKey = `source_${doc.source_type}`;
-      iconElement = (
-        <SourceIcon
-          key={documentId}
-          sourceType={doc.source_type}
-          iconSize={SIZE}
-        />
-      );
-    }
-
-    return { sourceKey, iconElement };
-  };
-
-  // Get unique icons by creating a unique identifier for each source
-  const getUniqueIcons = () => {
+  // Get unique icon factory functions
+  const getIconFactories = (): React.FunctionComponent<IconProps>[] => {
     const seenSources = new Set<string>();
-    const uniqueIcons: Array<{
-      id: string;
-      element: React.ReactNode;
-    }> = [];
+    const factories: React.FunctionComponent<IconProps>[] = [];
 
     // Get documents to process - either from citations or fallback to all documents
     const documentsToProcess =
@@ -80,38 +47,51 @@ export default function CitedSourcesToggle({
           }));
 
     for (const { documentId, doc } of documentsToProcess) {
-      if (uniqueIcons.length >= 2) break;
+      if (factories.length >= 2) break;
 
       let sourceKey: string;
-      let iconElement: React.ReactNode;
+      let iconFactory: React.FunctionComponent<IconProps>;
 
       if (doc) {
-        const iconData = createDocumentIcon(doc, documentId);
-        sourceKey = iconData.sourceKey;
-        iconElement = iconData.iconElement;
+        if (doc.is_internet || doc.source_type === ValidSources.Web) {
+          // For web sources, use the hostname as the unique key
+          try {
+            const hostname = new URL(doc.link).hostname;
+            sourceKey = `web_${hostname}`;
+          } catch {
+            sourceKey = `web_${doc.link}`;
+          }
+          const url = doc.link;
+          iconFactory = (props: IconProps) => (
+            <WebResultIcon url={url} size={props.size} />
+          );
+        } else {
+          sourceKey = `source_${doc.source_type}`;
+          const sourceType = doc.source_type;
+          iconFactory = (props: IconProps) => (
+            <SourceIcon sourceType={sourceType} iconSize={props.size ?? 10} />
+          );
+        }
       } else {
         // Fallback for missing document (only possible with citations)
         sourceKey = `file_${documentId}`;
-        iconElement = <FiFileText key={documentId} size={SIZE} />;
+        iconFactory = (props: IconProps) => (
+          <FiFileText size={props.size} className={props.className} />
+        );
       }
 
       if (!seenSources.has(sourceKey)) {
         seenSources.add(sourceKey);
-        uniqueIcons.push({
-          id: sourceKey,
-          element: iconElement,
-        });
+        factories.push(iconFactory);
       }
     }
 
-    return uniqueIcons;
+    return factories;
   };
-
-  const uniqueIcons = getUniqueIcons();
 
   return (
     <Tag label="Sources" onClick={() => onToggle(nodeId)}>
-      {uniqueIcons.map((icon) => (() => icon.element) as any)}
+      {getIconFactories()}
     </Tag>
   );
 }
