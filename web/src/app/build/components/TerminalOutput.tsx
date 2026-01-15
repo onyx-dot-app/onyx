@@ -43,9 +43,10 @@ export default function TerminalOutput({
       <pre
         ref={containerRef}
         className={cn(
-          "p-4 bg-background-inverted-neutral-03 font-main-content-mono text-text-inverted-03",
-          "overflow-auto max-h-96 text-sm"
+          "p-4 bg-background-neutral-inverted-03 text-text-inverted-05",
+          "overflow-auto max-h-96 text-xs whitespace-pre-wrap break-words"
         )}
+        style={{ fontFamily: "var(--font-dm-mono)" }}
       >
         {output || "Waiting for output..."}
       </pre>

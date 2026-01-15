@@ -23,6 +23,7 @@ from claude_agent_sdk.types import ThinkingBlock
 from claude_agent_sdk.types import ToolResultBlock
 from claude_agent_sdk.types import ToolUseBlock
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.configs.app_configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.utils.logger import setup_logger
@@ -38,6 +39,8 @@ MessageEmitter = Callable[[Message], None]
 
 class Sandbox(BaseModel):
     """Sandbox for running the Next.js dev server and the Claude agent."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     path: Path
     nextjs_process: subprocess.Popen[bytes] | None = None
@@ -291,8 +294,6 @@ class SimpleCLIClient:
             shutil.copy(template_path, claude_md_path)
 
         logger.info(f"Running agent with task: {task}")
-        # Wait for user input before starting the agent
-        input("\nPress Enter to start the agent...")
 
         # Use provided emitter or fall back to print_message
         message_handler = emitter if emitter is not None else print_message
