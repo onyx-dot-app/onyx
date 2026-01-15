@@ -295,7 +295,7 @@ numpy==2.4.1
     #   pandas-stubs
     #   shapely
     #   voyageai
-onyx-devtools==0.3.1
+onyx-devtools==0.3.2
     # via onyx
 openai==2.14.0
     # via
