@@ -19,9 +19,10 @@ export function resolveConfig(attributes: Partial<WidgetConfig>): WidgetConfig {
   };
 
   if (!config.backendUrl || !config.apiKey) {
-    throw new Error("backendUrl and apiKey are required for the widget to function");
+    throw new Error(
+      "backendUrl and apiKey are required for the widget to function",
+    );
   }
 
   return config;
-  };
 }
