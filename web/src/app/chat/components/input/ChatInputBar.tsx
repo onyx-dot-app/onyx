@@ -1,3 +1,5 @@
+"use client";
+
 import React, {
   useCallback,
   useContext,
@@ -19,7 +21,7 @@ import { ChatState } from "@/app/chat/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { CalendarIcon, XIcon } from "lucide-react";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
-import { truncateString, cn, hasNonImageFiles } from "@/lib/utils";
+import { truncateString, cn } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
