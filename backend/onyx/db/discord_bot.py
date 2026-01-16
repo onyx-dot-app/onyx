@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from datetime import timezone
-from uuid import UUID
 
 from sqlalchemy import delete
 from sqlalchemy import select
@@ -47,7 +46,7 @@ def delete_discord_bot_config(db_session: Session) -> bool:
 # === DiscordGuildConfig ===
 
 
-def get_discord_guild_configs(
+def get_guild_configs(
     db_session: Session,
     include_channels: bool = False,
 ) -> list[DiscordGuildConfig]:
@@ -58,19 +57,39 @@ def get_discord_guild_configs(
     return list(db_session.scalars(stmt).unique().all())
 
 
-def get_discord_guild_config_by_id(
+def get_guild_config_by_internal_id(
     db_session: Session,
-    config_id: UUID,
-    include_channels: bool = False,
+    internal_id: int,
 ) -> DiscordGuildConfig | None:
-    """Get a specific guild config by its UUID."""
-    stmt = select(DiscordGuildConfig).where(DiscordGuildConfig.id == config_id)
-    if include_channels:
-        stmt = stmt.options(joinedload(DiscordGuildConfig.channels))
-    return db_session.scalar(stmt)
+    """Get a specific guild config by its ID."""
+    return db_session.scalar(
+        select(DiscordGuildConfig).where(DiscordGuildConfig.id == internal_id)
+    )
 
 
-def create_discord_guild_config(
+def get_guild_config_by_discord_id(
+    db_session: Session,
+    guild_id: int,
+) -> DiscordGuildConfig | None:
+    """Get a guild config by Discord guild ID."""
+    return db_session.scalar(
+        select(DiscordGuildConfig).where(DiscordGuildConfig.guild_id == guild_id)
+    )
+
+
+def get_guild_config_by_registration_key(
+    db_session: Session,
+    registration_key: str,
+) -> DiscordGuildConfig | None:
+    """Get a guild config by its registration key."""
+    return db_session.scalar(
+        select(DiscordGuildConfig).where(
+            DiscordGuildConfig.registration_key == registration_key
+        )
+    )
+
+
+def create_guild_config(
     db_session: Session,
     registration_key: str,
 ) -> DiscordGuildConfig:
@@ -81,7 +100,7 @@ def create_discord_guild_config(
     return config
 
 
-def register_discord_guild(
+def register_guild(
     db_session: Session,
     config: DiscordGuildConfig,
     guild_id: int,
@@ -95,31 +114,26 @@ def register_discord_guild(
     return config
 
 
-def update_discord_guild_config(
+def update_guild_config(
     db_session: Session,
     config: DiscordGuildConfig,
-    enabled: bool | None = None,
-    respond_in_all_public_channels: bool | None = None,
-    default_persona_id: int | None = None,
+    enabled: bool,
+    default_persona_id: int,
 ) -> DiscordGuildConfig:
     """Update guild config fields."""
-    if enabled is not None:
-        config.enabled = enabled
-    if respond_in_all_public_channels is not None:
-        config.respond_in_all_public_channels = respond_in_all_public_channels
-    if default_persona_id is not None:
-        config.default_persona_id = default_persona_id
+    config.enabled = enabled
+    config.default_persona_id = default_persona_id
     db_session.flush()
     return config
 
 
-def delete_discord_guild_config(
+def delete_guild_config(
     db_session: Session,
-    config_id: UUID,
+    internal_id: int,
 ) -> bool:
     """Delete guild config (cascades to channel configs). Returns True if deleted."""
     result = db_session.execute(
-        delete(DiscordGuildConfig).where(DiscordGuildConfig.id == config_id)
+        delete(DiscordGuildConfig).where(DiscordGuildConfig.id == internal_id)
     )
     db_session.flush()
     return result.rowcount > 0
@@ -128,9 +142,9 @@ def delete_discord_guild_config(
 # === DiscordChannelConfig ===
 
 
-def get_discord_channel_configs(
+def get_channel_configs(
     db_session: Session,
-    guild_config_id: UUID,
+    guild_config_id: int,
 ) -> list[DiscordChannelConfig]:
     """Get all channel configs for a guild."""
     return list(
@@ -142,72 +156,65 @@ def get_discord_channel_configs(
     )
 
 
-def get_discord_channel_config(
+def get_channel_config_by_discord_ids(
     db_session: Session,
-    guild_config_id: UUID,
+    guild_id: int,
     channel_id: int,
 ) -> DiscordChannelConfig | None:
-    """Get a specific channel config."""
+    """Get a specific channel config by guild_id and channel_id."""
     return db_session.scalar(
-        select(DiscordChannelConfig).where(
-            DiscordChannelConfig.guild_config_id == guild_config_id,
+        select(DiscordChannelConfig)
+        .join(DiscordGuildConfig)
+        .where(
+            DiscordGuildConfig.guild_id == guild_id,
             DiscordChannelConfig.channel_id == channel_id,
         )
     )
 
 
-def create_discord_channel_config(
+def get_channel_config_by_internal_ids(
     db_session: Session,
-    guild_config_id: UUID,
-    channel_id: int,
-    channel_name: str,
-    require_bot_invocation: bool = True,
-    persona_override_id: int | None = None,
-) -> DiscordChannelConfig:
-    """Create a new channel config (whitelist a channel)."""
-    config = DiscordChannelConfig(
-        guild_config_id=guild_config_id,
-        channel_id=channel_id,
-        channel_name=channel_name,
-        require_bot_invocation=require_bot_invocation,
-        persona_override_id=persona_override_id,
+    guild_config_id: int,
+    channel_config_id: int,
+) -> DiscordChannelConfig | None:
+    """Get a specific channel config by guild_config_id and channel_config_id"""
+    return db_session.scalar(
+        select(DiscordChannelConfig).where(
+            DiscordChannelConfig.guild_config_id == guild_config_id,
+            DiscordChannelConfig.id == channel_config_id,
+        )
     )
-    db_session.add(config)
-    db_session.flush()
-    return config
 
 
 def update_discord_channel_config(
     db_session: Session,
     config: DiscordChannelConfig,
-    channel_name: str | None = None,
-    require_bot_invocation: bool | None = None,
-    persona_override_id: int | None = None,
-    enabled: bool | None = None,
+    channel_name: str,
+    thread_only_mode: bool,
+    require_bot_invocation: bool,
+    persona_override_id: int,
+    enabled: bool,
 ) -> DiscordChannelConfig:
     """Update channel config fields."""
-    if channel_name is not None:
-        config.channel_name = channel_name
-    if require_bot_invocation is not None:
-        config.require_bot_invocation = require_bot_invocation
-    if persona_override_id is not None:
-        config.persona_override_id = persona_override_id
-    if enabled is not None:
-        config.enabled = enabled
+    config.channel_name = channel_name
+    config.require_bot_invocation = require_bot_invocation
+    config.persona_override_id = persona_override_id
+    config.enabled = enabled
+    config.thread_only_mode = thread_only_mode
     db_session.flush()
     return config
 
 
 def delete_discord_channel_config(
     db_session: Session,
-    guild_config_id: UUID,
-    channel_id: int,
+    guild_config_id: int,
+    channel_config_id: int,
 ) -> bool:
     """Delete a channel config. Returns True if deleted."""
     result = db_session.execute(
         delete(DiscordChannelConfig).where(
             DiscordChannelConfig.guild_config_id == guild_config_id,
-            DiscordChannelConfig.channel_id == channel_id,
+            DiscordChannelConfig.id == channel_config_id,
         )
     )
     db_session.flush()
