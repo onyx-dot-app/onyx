@@ -242,7 +242,8 @@ def update_channel_request(
     config = update_discord_channel_config(
         db_session,
         config,
-        channel_name=request.channel_name,
+        channel_name=config.channel_name,  # Keep existing name, only Discord can update
+        thread_only_mode=request.thread_only_mode,
         require_bot_invocation=request.require_bot_invocation,
         persona_override_id=request.persona_override_id,
         enabled=request.enabled,
