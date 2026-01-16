@@ -34,6 +34,19 @@ export interface ErrorEvent {
   message: string;
 }
 
+export interface FileSystemEntry {
+  name: string;
+  path: string;
+  is_directory: boolean;
+  size: number | null;
+  mime_type: string | null;
+}
+
+export interface DirectoryListing {
+  path: string;
+  entries: FileSystemEntry[];
+}
+
 export type BuildEvent =
   | { type: "output"; data: OutputEvent }
   | { type: "status"; data: StatusEvent }
@@ -137,6 +150,20 @@ export async function listArtifacts(
 
 export function getArtifactUrl(sessionId: string, path: string): string {
   return `/api/build/sessions/${sessionId}/artifacts/${path}`;
+}
+
+export async function listDirectory(
+  sessionId: string,
+  path: string = ""
+): Promise<DirectoryListing> {
+  const url = path
+    ? `/api/build/sessions/${sessionId}/files?path=${encodeURIComponent(path)}`
+    : `/api/build/sessions/${sessionId}/files`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to list directory: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 export function getWebappUrl(path: string = ""): string {

@@ -10,6 +10,7 @@ import Message from "@/refresh-components/messages/Message";
 import Card from "@/refresh-components/cards/Card";
 import TerminalOutput from "./components/TerminalOutput";
 import ArtifactList from "./components/ArtifactList";
+import FileBrowser from "./components/FileBrowser";
 import {
   SvgPlayCircle,
   SvgTrash,
@@ -92,6 +93,8 @@ export default function BuildPage() {
       {(packets.length > 0 || status === "running") && (
         <TerminalOutput packets={packets} isStreaming={status === "running"} />
       )}
+
+      {sessionId && <FileBrowser sessionId={sessionId} />}
 
       {artifacts.length > 0 && sessionId && (
         <ArtifactList artifacts={artifacts} sessionId={sessionId} />
