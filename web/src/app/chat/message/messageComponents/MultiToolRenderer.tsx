@@ -895,7 +895,7 @@ export default function MultiToolRenderer({
       >
         <div
           className={cn(
-            "p-4 transition-transform duration-300 ease-in-out",
+            "py-4 px-0.5 transition-transform duration-300 ease-in-out",
             isExpanded ? "transform translate-y-0" : "transform"
           )}
         >
