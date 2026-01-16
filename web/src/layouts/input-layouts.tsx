@@ -200,7 +200,7 @@ function LabelLayout({
           {label}
         </Text>
         {optional && (
-          <Text text03 mainContentMuted as="span">
+          <Text text03 mainContentMuted>
             {" (Optional)"}
           </Text>
         )}

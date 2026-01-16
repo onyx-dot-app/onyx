@@ -95,7 +95,7 @@ export function ChatPopup() {
                   <Text as="p" mainUiBody text03 {...props} />
                 ),
                 strong: ({ node, ...props }) => (
-                  <Text as="span" mainUiBody text03 {...props} />
+                  <Text mainUiBody text03 {...props} />
                 ),
                 h1: ({ node, ...props }) => (
                   <Text as="p" headingH1 text03 {...props} />
@@ -155,7 +155,7 @@ export function ChatPopup() {
                           />
                         ),
                         strong: ({ node, ...props }) => (
-                          <Text as="span" mainUiBody text04 {...props} />
+                          <Text mainUiBody text04 {...props} />
                         ),
                         li: ({ node, ...props }) => (
                           <Text as="li" mainUiBody text04 {...props} />
