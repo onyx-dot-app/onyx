@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -18,6 +19,7 @@ from claude_agent_sdk import Message
 from claude_agent_sdk import query
 from claude_agent_sdk import ResultMessage
 from claude_agent_sdk.types import ContentBlock
+from claude_agent_sdk.types import McpStdioServerConfig
 from claude_agent_sdk.types import TextBlock
 from claude_agent_sdk.types import ThinkingBlock
 from claude_agent_sdk.types import ToolResultBlock
@@ -30,7 +32,9 @@ from onyx.utils.logger import setup_logger
 
 SANDBOX_BASE_PATH = "/Users/chrisweaver/data/sandboxes"
 OUTPUTS_TEMPLATE_PATH = "/Users/chrisweaver/data/outputs_template/outputs"
+VENV_TEMPLATE_PATH = "/Users/chrisweaver/data/venv_template"
 OUTPUTS_DIR = "outputs"
+VENV_DIR = ".venv"
 
 logger = setup_logger()
 
@@ -52,8 +56,29 @@ class Sandbox(BaseModel):
 # =============================================================================
 
 
+def build_venv_env(venv_path: Path) -> dict[str, str]:
+    """
+    Build environment variables dict with the virtual environment activated.
+
+    Args:
+        venv_path: Path to the virtual environment directory
+
+    Returns:
+        Environment variables dict with PATH and VIRTUAL_ENV set
+    """
+    env = os.environ.copy()
+    venv_bin = str(venv_path / "bin")
+    env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
+    env["VIRTUAL_ENV"] = str(venv_path)
+    # Unset PYTHONHOME if set (can interfere with venv)
+    env.pop("PYTHONHOME", None)
+    return env
+
+
 async def run_claude_agent(
-    task: str, path: str | Path
+    task: str,
+    path: str | Path,
+    venv_path: Path | None = None,
 ) -> AsyncGenerator[Message, None]:
     """
     Run the Claude agent and yield SDK message types.
@@ -61,11 +86,15 @@ async def run_claude_agent(
     Args:
         task: The task/prompt for the agent
         path: Working directory for the agent
+        venv_path: Optional path to virtual environment to use
 
     Yields:
         Message: SDK message types (AssistantMessage, ResultMessage, etc.)
     """
     all_tools = ["Read", "Edit", "Bash", "Glob", "Grep"]
+
+    # Build environment with venv if provided
+    env = build_venv_env(venv_path) if venv_path else None
 
     async for message in query(
         prompt=task,
@@ -74,6 +103,15 @@ async def run_claude_agent(
             permission_mode="bypassPermissions",
             cwd=path,
             setting_sources=["project"],
+            mcp_servers={
+                "nano-banana": McpStdioServerConfig(
+                    command="npx nano-banana-mcp",
+                    env={
+                        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
+                    },
+                )
+            },
+            **({"env": env} if env else {}),  # type: ignore
         ),
     ):
         yield message
@@ -212,6 +250,7 @@ class SimpleCLIClient:
         self,
         file_system_path: Path | str = PERSISTENT_DOCUMENT_STORAGE_PATH,
         outputs_template_path: Path | str = OUTPUTS_TEMPLATE_PATH,
+        venv_template_path: Path | str = VENV_TEMPLATE_PATH,
         sandbox_base_path: Path | str = SANDBOX_BASE_PATH,
     ):
         self.file_system_path = (
@@ -223,6 +262,11 @@ class SimpleCLIClient:
             outputs_template_path
             if isinstance(outputs_template_path, Path)
             else Path(outputs_template_path)
+        )
+        self.venv_template_path = (
+            venv_template_path
+            if isinstance(venv_template_path, Path)
+            else Path(venv_template_path)
         )
         self.sandbox_base_path = (
             sandbox_base_path
@@ -271,6 +315,12 @@ class SimpleCLIClient:
         graphs_dir = output_dir / "graphs"
         graphs_dir.mkdir(parents=True, exist_ok=True)
 
+        # set up the virtual environment - copy from template
+        venv_path = sandbox_path / VENV_DIR
+        if not venv_path.exists() and self.venv_template_path.exists():
+            logger.info(f"Copying venv from {self.venv_template_path} to {venv_path}")
+            shutil.copytree(self.venv_template_path, venv_path, symlinks=True)
+
         # start the Next.js dev server on port 3002
         web_dir = output_dir / "web"
         if not web_dir.exists():
@@ -311,7 +361,11 @@ class SimpleCLIClient:
 
         # run the agent and emit messages as they arrive
         async def _run_and_emit() -> None:
-            async for message in run_claude_agent(task=task, path=sandbox_path):
+            async for message in run_claude_agent(
+                task=task,
+                path=sandbox_path,
+                venv_path=venv_path,
+            ):
                 message_handler(message)
 
         sandbox = Sandbox(path=sandbox_path, nextjs_process=nextjs_process)
