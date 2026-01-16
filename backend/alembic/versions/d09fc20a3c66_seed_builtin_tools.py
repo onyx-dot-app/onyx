@@ -70,80 +70,66 @@ BUILT_IN_TOOLS = [
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # Start transaction
-    conn.execute(sa.text("BEGIN"))
+    # Get existing tools to check what already exists
+    existing_tools = conn.execute(
+        sa.text("SELECT in_code_tool_id FROM tool WHERE in_code_tool_id IS NOT NULL")
+    ).fetchall()
+    existing_tool_ids = {row[0] for row in existing_tools}
 
-    try:
-        # Get existing tools to check what already exists
-        existing_tools = conn.execute(
-            sa.text(
-                "SELECT in_code_tool_id FROM tool WHERE in_code_tool_id IS NOT NULL"
+    # Insert or update built-in tools
+    for tool in BUILT_IN_TOOLS:
+        in_code_id = tool["in_code_tool_id"]
+
+        # Handle historical rename: InternetSearchTool -> WebSearchTool
+        if (
+            in_code_id == "WebSearchTool"
+            and "WebSearchTool" not in existing_tool_ids
+            and "InternetSearchTool" in existing_tool_ids
+        ):
+            # Rename the existing InternetSearchTool row in place and update fields
+            conn.execute(
+                sa.text(
+                    """
+                    UPDATE tool
+                    SET name = :name,
+                        display_name = :display_name,
+                        description = :description,
+                        in_code_tool_id = :in_code_tool_id
+                    WHERE in_code_tool_id = 'InternetSearchTool'
+                    """
+                ),
+                tool,
             )
-        ).fetchall()
-        existing_tool_ids = {row[0] for row in existing_tools}
+            # Keep the local view of existing ids in sync to avoid duplicate insert
+            existing_tool_ids.discard("InternetSearchTool")
+            existing_tool_ids.add("WebSearchTool")
+            continue
 
-        # Insert or update built-in tools
-        for tool in BUILT_IN_TOOLS:
-            in_code_id = tool["in_code_tool_id"]
-
-            # Handle historical rename: InternetSearchTool -> WebSearchTool
-            if (
-                in_code_id == "WebSearchTool"
-                and "WebSearchTool" not in existing_tool_ids
-                and "InternetSearchTool" in existing_tool_ids
-            ):
-                # Rename the existing InternetSearchTool row in place and update fields
-                conn.execute(
-                    sa.text(
-                        """
-                        UPDATE tool
-                        SET name = :name,
-                            display_name = :display_name,
-                            description = :description,
-                            in_code_tool_id = :in_code_tool_id
-                        WHERE in_code_tool_id = 'InternetSearchTool'
-                        """
-                    ),
-                    tool,
-                )
-                # Keep the local view of existing ids in sync to avoid duplicate insert
-                existing_tool_ids.discard("InternetSearchTool")
-                existing_tool_ids.add("WebSearchTool")
-                continue
-
-            if in_code_id in existing_tool_ids:
-                # Update existing tool
-                conn.execute(
-                    sa.text(
-                        """
-                        UPDATE tool
-                        SET name = :name,
-                            display_name = :display_name,
-                            description = :description
-                        WHERE in_code_tool_id = :in_code_tool_id
-                        """
-                    ),
-                    tool,
-                )
-            else:
-                # Insert new tool
-                conn.execute(
-                    sa.text(
-                        """
-                        INSERT INTO tool (name, display_name, description, in_code_tool_id)
-                        VALUES (:name, :display_name, :description, :in_code_tool_id)
-                        """
-                    ),
-                    tool,
-                )
-
-        # Commit transaction
-        conn.execute(sa.text("COMMIT"))
-
-    except Exception as e:
-        # Rollback on error
-        conn.execute(sa.text("ROLLBACK"))
-        raise e
+        if in_code_id in existing_tool_ids:
+            # Update existing tool
+            conn.execute(
+                sa.text(
+                    """
+                    UPDATE tool
+                    SET name = :name,
+                        display_name = :display_name,
+                        description = :description
+                    WHERE in_code_tool_id = :in_code_tool_id
+                    """
+                ),
+                tool,
+            )
+        else:
+            # Insert new tool
+            conn.execute(
+                sa.text(
+                    """
+                    INSERT INTO tool (name, display_name, description, in_code_tool_id)
+                    VALUES (:name, :display_name, :description, :in_code_tool_id)
+                    """
+                ),
+                tool,
+            )
 
 
 def downgrade() -> None:
