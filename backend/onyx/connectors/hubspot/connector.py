@@ -490,6 +490,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     semantic_identifier=title,
                     doc_updated_at=ticket.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
+                    doc_metadata={
+                        "hierarchy": {
+                            "source_path": ["Tickets"],
+                            "object_type": "ticket",
+                            "object_id": ticket.id,
+                        }
+                    },
                 )
             )
 
@@ -615,6 +622,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     semantic_identifier=title,
                     doc_updated_at=company.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
+                    doc_metadata={
+                        "hierarchy": {
+                            "source_path": ["Companies"],
+                            "object_type": "company",
+                            "object_id": company.id,
+                        }
+                    },
                 )
             )
 
@@ -738,6 +752,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     semantic_identifier=title,
                     doc_updated_at=deal.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
+                    doc_metadata={
+                        "hierarchy": {
+                            "source_path": ["Deals"],
+                            "object_type": "deal",
+                            "object_id": deal.id,
+                        }
+                    },
                 )
             )
 
@@ -881,6 +902,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     semantic_identifier=title,
                     doc_updated_at=contact.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
+                    doc_metadata={
+                        "hierarchy": {
+                            "source_path": ["Contacts"],
+                            "object_type": "contact",
+                            "object_id": contact.id,
+                        }
+                    },
                 )
             )
 
