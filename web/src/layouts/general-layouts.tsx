@@ -195,7 +195,6 @@ function LineItemLayout({
             )}
           />
         )}
-
         {typeof title === "string" ? (
           <Text
             mainContentEmphasis={!secondary}
