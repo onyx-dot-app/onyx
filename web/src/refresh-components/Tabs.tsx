@@ -81,12 +81,7 @@ const TabsList = React.forwardRef<
 >((props, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className="grid w-full rounded-08 bg-background-tint-03"
-    style={{
-      gridTemplateColumns: `repeat(${React.Children.count(
-        props.children
-      )}, 1fr)`,
-    }}
+    className="flex w-full rounded-08 bg-background-tint-03"
     {...props}
   />
 ));
@@ -176,7 +171,7 @@ const TabsTrigger = React.forwardRef<
         ref={ref}
         disabled={disabled}
         className={cn(
-          "inline-flex items-center justify-center whitespace-nowrap rounded-08 p-2 gap-2",
+          "flex-1 inline-flex items-center justify-center whitespace-nowrap rounded-08 p-2 gap-2",
 
           // active/inactive states:
           "data-[state=active]:bg-background-neutral-00 data-[state=active]:text-text-04 data-[state=active]:shadow-01 data-[state=active]:border",
@@ -200,7 +195,7 @@ const TabsTrigger = React.forwardRef<
     if (tooltip && disabled) {
       return (
         <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
-          <span className="inline-flex align-middle justify-center">
+          <span className="flex-1 inline-flex align-middle justify-center">
             {trigger}
           </span>
         </SimpleTooltip>

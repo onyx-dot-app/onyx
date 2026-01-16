@@ -135,10 +135,10 @@ function HorizontalInputLayout({
           alignment
         )}
       >
-        <div className="w-[70%]">
+        <div className="min-w-[70%]">
           <LabelLayout {...fieldLabelProps} />
         </div>
-        <div className="flex flex-col items-end min-w-[12rem]">{children}</div>
+        <div className="flex flex-col items-end">{children}</div>
       </label>
       {name && <ErrorLayout name={name} />}
     </div>
@@ -257,37 +257,34 @@ function ErrorLayout({ name }: FieldErrorLayoutProps) {
   const hasError = meta.touched && meta.error;
   const hasWarning = warning; // Don't require touched for warnings
 
-  if (!hasError && !hasWarning) return null;
+  // If `hasError` and `hasWarning` are both true at the same time, the error is prioritized and returned first.
+  if (hasError)
+    return <ErrorTextLayout type="error">{meta.error}</ErrorTextLayout>;
+  else if (hasWarning)
+    return <ErrorTextLayout type="warning">{warning}</ErrorTextLayout>;
+  else return null;
+}
+
+export type ErrorTextType = "error" | "warning";
+interface ErrorTextLayoutProps {
+  children?: string;
+  type?: ErrorTextType;
+}
+function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
+  const Icon = type === "error" ? SvgXOctagon : SvgAlertCircle;
+  const colorClass =
+    type === "error" ? "text-status-error-05" : "text-status-warning-05";
+  const strokeClass =
+    type === "error" ? "stroke-status-error-05" : "stroke-status-warning-05";
 
   return (
-    <div className="flex flex-row items-center gap-1 px-1">
-      {hasError && (
-        <>
-          <SvgXOctagon size={12} className="stroke-status-error-05" />
-          <Text
-            as="p"
-            secondaryBody
-            className="text-status-error-05"
-            role="alert"
-          >
-            {meta.error}
-          </Text>
-        </>
-      )}
-
-      {hasWarning && (
-        <>
-          <SvgAlertCircle size={12} className="stroke-status-warning-05" />
-          <Text
-            as="p"
-            secondaryBody
-            className="text-status-warning-05"
-            role="alert"
-          >
-            {warning}
-          </Text>
-        </>
-      )}
+    <div className="px-1">
+      <Section flexDirection="row" justifyContent="start" gap={0.25}>
+        <Icon size={12} className={strokeClass} />
+        <Text secondaryBody className={colorClass} role="alert">
+          {children}
+        </Text>
+      </Section>
     </div>
   );
 }
@@ -297,4 +294,5 @@ export {
   HorizontalInputLayout as Horizontal,
   LabelLayout as Label,
   ErrorLayout as Error,
+  ErrorTextLayout,
 };

@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import Title from "@/components/ui/title";
-import Text from "@/components/ui/text";
+import Text from "@/refresh-components/texts/Text";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -14,50 +13,43 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SourceChip } from "../components/input/ChatInputBar";
+import { SourceChip } from "@/app/chat/components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { SvgMoreHorizontal, SvgPlus, SvgX } from "@opal/icons";
+import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 
 export default function InputPrompts() {
-  const [inputPrompts, setInputPrompts] = useState<InputPrompt[]>([]);
+  const {
+    promptShortcuts: inputPrompts,
+    refresh,
+    error,
+  } = usePromptShortcuts();
   const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
   const [newPrompt, setNewPrompt] = useState<Partial<InputPrompt>>({});
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const { popup, setPopup } = usePopup();
 
   useEffect(() => {
-    fetchInputPrompts();
-  }, []);
-
-  const fetchInputPrompts = async () => {
-    try {
-      const response = await fetch("/api/input_prompt");
-      if (response.ok) {
-        const data = await response.json();
-        setInputPrompts(data);
-      } else {
-        throw new Error("Failed to fetch prompt shortcuts");
-      }
-    } catch (error) {
+    if (error) {
       setPopup({ message: "Failed to fetch prompt shortcuts", type: "error" });
     }
-  };
+  }, [error, setPopup]);
 
-  const isPromptPublic = (prompt: InputPrompt): boolean => {
+  function isPromptPublic(prompt: InputPrompt): boolean {
     return prompt.is_public;
-  };
+  }
 
   // UPDATED: Remove partial merging to avoid overwriting fresh data
-  const handleEdit = (promptId: number) => {
+  function handleEdit(promptId: number) {
     setEditingPromptId(promptId);
-  };
+  }
 
-  const handleSave = async (
+  async function handleSave(
     promptId: number,
     updatedPrompt: string,
     updatedContent: string
-  ) => {
+  ) {
     const promptToUpdate = inputPrompts.find((p) => p.id === promptId);
     if (!promptToUpdate || isPromptPublic(promptToUpdate)) return;
 
@@ -76,23 +68,15 @@ export default function InputPrompts() {
         throw new Error("Failed to update prompt");
       }
 
-      // Update local state with new values
-      setInputPrompts((prevPrompts) =>
-        prevPrompts.map((prompt) =>
-          prompt.id === promptId
-            ? { ...prompt, prompt: updatedPrompt, content: updatedContent }
-            : prompt
-        )
-      );
-
+      await refresh();
       setEditingPromptId(null);
       setPopup({ message: "Prompt updated successfully", type: "success" });
     } catch (error) {
       setPopup({ message: "Failed to update prompt", type: "error" });
     }
-  };
+  }
 
-  const handleDelete = async (id: number) => {
+  async function handleDelete(id: number) {
     const promptToDelete = inputPrompts.find((p) => p.id === id);
     if (!promptToDelete) return;
 
@@ -114,9 +98,7 @@ export default function InputPrompts() {
         throw new Error("Failed to delete/hide prompt");
       }
 
-      setInputPrompts((prevPrompts) =>
-        prevPrompts.filter((prompt) => prompt.id !== id)
-      );
+      await refresh();
       setPopup({
         message: isPromptPublic(promptToDelete)
           ? "Prompt hidden successfully"
@@ -126,9 +108,9 @@ export default function InputPrompts() {
     } catch (error) {
       setPopup({ message: "Failed to delete/hide prompt", type: "error" });
     }
-  };
+  }
 
-  const handleCreate = async () => {
+  async function handleCreate() {
     try {
       const response = await fetch("/api/input_prompt", {
         method: "POST",
@@ -140,15 +122,14 @@ export default function InputPrompts() {
         throw new Error("Failed to create prompt");
       }
 
-      const createdPrompt = await response.json();
-      setInputPrompts((prevPrompts) => [...prevPrompts, createdPrompt]);
+      await refresh();
       setNewPrompt({});
       setIsCreatingNew(false);
       setPopup({ message: "Prompt created successfully", type: "success" });
     } catch (error) {
       setPopup({ message: "Failed to create prompt", type: "error" });
     }
-  };
+  }
 
   return (
     <div className="mx-auto max-w-4xl py-8">
@@ -158,7 +139,7 @@ export default function InputPrompts() {
       {popup}
       <div className="flex justify-between items-start mb-6">
         <div className="flex flex-col gap-2">
-          <Title>Prompt Shortcuts</Title>
+          <Text headingH3>Prompt Shortcuts</Text>
           <Text>
             Manage and customize prompt shortcuts for your assistants. Use your
             prompt shortcuts by starting a new message with &quot;/&quot; in
@@ -224,13 +205,13 @@ interface PromptCardProps {
   isEditing: boolean;
 }
 
-const PromptCard: React.FC<PromptCardProps> = ({
+function PromptCard({
   prompt,
   onEdit,
   onSave,
   onDelete,
   isEditing,
-}) => {
+}: PromptCardProps) {
   const [localPrompt, setLocalPrompt] = useState(prompt.prompt);
   const [localContent, setLocalContent] = useState(prompt.content);
 
@@ -329,4 +310,4 @@ const PromptCard: React.FC<PromptCardProps> = ({
       )}
     </div>
   );
-};
+}

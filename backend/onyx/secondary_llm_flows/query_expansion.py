@@ -1,15 +1,10 @@
-from collections.abc import Callable
-
 from onyx.configs.constants import MessageType
-from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
-from onyx.llm.utils import llm_response_to_string
-from onyx.prompts.miscellaneous_prompts import LANGUAGE_REPHRASE_PROMPT
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.search_prompts import KEYWORD_REPHRASE_SYSTEM_PROMPT
 from onyx.prompts.search_prompts import KEYWORD_REPHRASE_USER_PROMPT
@@ -18,7 +13,6 @@ from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT
 from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_USER_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
@@ -221,37 +215,3 @@ def keyword_query_expansion(
 
     queries = [line.strip() for line in content.strip().split("\n") if line.strip()]
     return queries
-
-
-def llm_multilingual_query_expansion(query: str, language: str) -> str:
-    llm = get_default_llm(timeout=5)
-
-    prompt = LANGUAGE_REPHRASE_PROMPT.format(query=query, target_language=language)
-    model_output = llm_response_to_string(
-        llm.invoke(prompt, reasoning_effort=ReasoningEffort.OFF)
-    )
-    logger.debug(model_output)
-
-    return model_output
-
-
-def multilingual_query_expansion(
-    query: str,
-    expansion_languages: list[str],
-    use_threads: bool = True,
-) -> list[str]:
-    languages = [language.strip() for language in expansion_languages]
-    if use_threads:
-        functions_with_args: list[tuple[Callable, tuple]] = [
-            (llm_multilingual_query_expansion, (query, language))
-            for language in languages
-        ]
-
-        query_rephrases = run_functions_tuples_in_parallel(functions_with_args)
-        return query_rephrases
-
-    else:
-        query_rephrases = [
-            llm_multilingual_query_expansion(query, language) for language in languages
-        ]
-        return query_rephrases

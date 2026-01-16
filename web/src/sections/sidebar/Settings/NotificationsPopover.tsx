@@ -15,6 +15,8 @@ import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { Section } from "@/layouts/general-layouts";
+import Separator from "@/refresh-components/Separator";
 
 function getNotificationIcon(
   notifType: string
@@ -90,59 +92,57 @@ export default function NotificationsPopover({
   };
 
   return (
-    <>
-      <div className="w-[20rem] h-[32rem] flex flex-col">
-        <div className="flex flex-row justify-between items-center p-4 border-b border-divider-subtle">
-          <Text as="p" headingH2>
-            Notifications
-          </Text>
-          <SvgX
-            className="stroke-text-05 w-[1.2rem] h-[1.2rem] hover:stroke-text-04 cursor-pointer"
-            onClick={onClose}
-          />
-        </div>
+    <Section gap={0.5} padding={0.25}>
+      <Section flexDirection="row" justifyContent="between" padding={0.5}>
+        <Text headingH3>Notifications</Text>
+        <IconButton icon={SvgX} internal onClick={onClose} />
+      </Section>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          {isLoading ? (
-            <div className="w-full h-48 flex flex-col justify-center items-center">
-              <SimpleLoader className="animate-spin" />
-            </div>
-          ) : !notifications || notifications.length === 0 ? (
-            <div className="w-full h-48 flex flex-col justify-center items-center">
+      <Separator noPadding className="px-2" />
+
+      <Section>
+        {isLoading ? (
+          <div className="h-48">
+            <Section>
+              <SimpleLoader />
+            </Section>
+          </div>
+        ) : !notifications || notifications.length === 0 ? (
+          <div className="h-48">
+            <Section>
               <Text as="p" text03>
                 No notifications
               </Text>
-            </div>
-          ) : (
-            <div className="flex flex-col py-2">
+            </Section>
+          </div>
+        ) : (
+          <div className="max-h-96 overflow-y-auto w-full">
+            <Section alignItems="stretch" gap={0}>
               {notifications.map((notification) => (
-                <div
+                <LineItem
                   key={notification.id}
-                  className={notification.dismissed ? "opacity-50" : ""}
+                  icon={getNotificationIcon(notification.notif_type)}
+                  description={notification.description ?? undefined}
+                  onClick={() => handleNotificationClick(notification)}
+                  strikethrough={notification.dismissed}
+                  rightChildren={
+                    !notification.dismissed ? (
+                      <IconButton
+                        internal
+                        icon={SvgX}
+                        onClick={(e) => handleDismiss(notification.id, e)}
+                        tooltip="Dismiss"
+                      />
+                    ) : undefined
+                  }
                 >
-                  <LineItem
-                    icon={getNotificationIcon(notification.notif_type)}
-                    description={notification.description ?? undefined}
-                    onClick={() => handleNotificationClick(notification)}
-                    rightChildren={
-                      !notification.dismissed ? (
-                        <IconButton
-                          internal
-                          icon={SvgX}
-                          onClick={(e) => handleDismiss(notification.id, e)}
-                          tooltip="Dismiss"
-                        />
-                      ) : undefined
-                    }
-                  >
-                    {notification.title}
-                  </LineItem>
-                </div>
+                  {notification.title}
+                </LineItem>
               ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+            </Section>
+          </div>
+        )}
+      </Section>
+    </Section>
   );
 }

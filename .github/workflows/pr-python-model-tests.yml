@@ -5,11 +5,6 @@ on:
     # This cron expression runs the job daily at 16:00 UTC (9am PT)
     - cron: "0 16 * * *"
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to run the workflow on'
-        required: false
-        default: 'main'
 
 permissions:
   contents: read
@@ -31,7 +26,11 @@ env:
 jobs:
   model-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}-model-check"]
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-model-check"
+      - "extras=ecr-cache"
     timeout-minutes: 45
 
     env:
@@ -43,104 +42,83 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+
+      - name: Format branch name for cache
+        id: format-branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ -n "${PR_NUMBER}" ]; then
+            CACHE_SUFFIX="${PR_NUMBER}"
+          else
+            # shellcheck disable=SC2001
+            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
+          fi
+          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
+
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # tag every docker image with "test" so that we can spin up the correct set
-      # of images during testing
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
 
-      # We don't need to build the Web Docker image since it's not yet used
-      # in the integration tests. We have a separate action to verify that it builds
-      # successfully.
-      - name: Pull Model Server Docker image
-        run: |
-          docker pull onyxdotapp/onyx-model-server:latest
-          docker tag onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:test
-
-      - name: Set up Python
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # ratchet:actions/setup-python@v6
+      - name: Build and load
+        uses: docker/bake-action@5be5f02ff8819ecd3092ea6b2e6261c31774f2b4 # ratchet:docker/bake-action@v6
+        env:
+          TAG: model-server-${{ github.run_id }}
         with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: |
-            backend/requirements/default.txt
-            backend/requirements/dev.txt
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
-          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
+          load: true
+          targets: model-server
+          set: |
+            model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
+            model-server.cache-from=type=registry,ref=onyxdotapp/onyx-model-server:latest
+            model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
       - name: Start Docker containers
+        id: start_docker
+        env:
+          IMAGE_TAG: model-server-${{ github.run_id }}
         run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          AUTH_TYPE=basic \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
-          docker compose -f docker-compose.model-server-test.yml up -d indexing_model_server
-        id: start_docker
-
-      - name: Wait for service to be ready
-        run: |
-          echo "Starting wait-for-service script..."
-
-          start_time=$(date +%s)
-          timeout=300  # 5 minutes in seconds
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
-
-            # Use curl with error handling to ignore specific exit code 56
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9000/api/health || echo "curl_error")
-
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
-
-            sleep 5
-          done
-          echo "Finished waiting for service."
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            up -d --wait \
+            inference_model_server
 
       - name: Run Tests
-        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/llm
           py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/embedding
 
       - name: Alert on Failure
         if: failure() && github.event_name == 'schedule'
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          curl -X POST \
-            -H 'Content-type: application/json' \
-            --data "{\"text\":\"Scheduled Model Tests failed! Check the run at: https://github.com/${REPO}/actions/runs/${RUN_ID}\"}" \
-            $SLACK_WEBHOOK
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          failed-jobs: model-check
+          title: "🚨 Scheduled Model Tests failed!"
+          ref-name: ${{ github.ref_name }}
 
       - name: Dump all-container logs (optional)
         if: always()
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.model-server-test.yml logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+          docker compose logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
 
       - name: Upload logs
         if: always()

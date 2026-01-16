@@ -4,7 +4,7 @@ These tests assume OpenSearch is running and test all implemented methods
 using real schemas, pipelines, and search queries from the codebase.
 """
 
-import json
+import re
 import uuid
 from collections.abc import Generator
 from datetime import datetime
@@ -15,6 +15,7 @@ import pytest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
+from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
@@ -70,7 +71,7 @@ def _create_test_document_chunk(
         content=content,
         content_vector=content_vector,
         source_type="test_source",
-        metadata=json.dumps({}),
+        metadata_list=None,
         last_updated=now,
         public=public,
         access_control_list=[],
@@ -83,7 +84,7 @@ def _create_test_document_chunk(
         doc_summary="Test doc summary",
         chunk_context="Test chunk context",
         document_sets=None,
-        project_ids=None,
+        user_projects=None,
         primary_owners=None,
         secondary_owners=None,
         tenant_id=tenant_state,
@@ -493,10 +494,75 @@ class TestOpenSearchClient:
         keep_ids = test_client.search_for_document_ids(body=keep_query)
         assert len(keep_ids) == 1
 
-    def test_update_document(self, test_client: OpenSearchClient) -> None:
-        """Tests that update_document raises a NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            test_client.update_document()
+    def test_update_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests updating a document's properties."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Create a document to update.
+        doc = _create_test_document_chunk(
+            document_id="test-doc-update",
+            chunk_index=0,
+            content="Original content",
+            tenant_state=tenant_state,
+            public=True,
+            hidden=False,
+        )
+        test_client.index_document(document=doc)
+
+        # Under test.
+        doc_chunk_id = get_opensearch_doc_chunk_id(
+            document_id=doc.document_id,
+            chunk_index=doc.chunk_index,
+            max_chunk_size=doc.max_chunk_size,
+        )
+        properties_to_update = {
+            "hidden": True,
+            "global_boost": 5,
+        }
+        test_client.update_document(
+            document_chunk_id=doc_chunk_id,
+            properties_to_update=properties_to_update,
+        )
+
+        # Postcondition.
+        # Retrieve the document and verify updates were applied.
+        updated_doc = test_client.get_document(document_chunk_id=doc_chunk_id)
+        assert updated_doc.hidden is True
+        assert updated_doc.global_boost == 5
+        # Other properties should remain unchanged.
+        assert updated_doc.document_id == doc.document_id
+        assert updated_doc.content == doc.content
+        assert updated_doc.public == doc.public
+
+    def test_update_nonexistent_document(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests updating a nonexistent document raises an error."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Try to update a document that doesn't exist.
+        with pytest.raises(Exception, match="404"):
+            test_client.update_document(
+                document_chunk_id="test_source__nonexistent__512__0",
+                properties_to_update={"hidden": True},
+            )
 
     def test_search_basic(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
@@ -559,12 +625,20 @@ class TestOpenSearchClient:
         assert len(results) == 3
         # Assert that all the chunks above are present.
         assert all(
-            chunk.document_id in ["search-doc-1", "search-doc-2", "search-doc-3"]
+            chunk.document_chunk.document_id
+            in ["search-doc-1", "search-doc-2", "search-doc-3"]
             for chunk in results
         )
         # Make sure the chunk contents are preserved.
         for chunk in results:
-            assert chunk == docs[chunk.document_id]
+            assert chunk.document_chunk == docs[chunk.document_chunk.document_id]
+            # Make sure score reporting seems reasonable (it should not be None
+            # or 0).
+            assert chunk.score
+
+        # Make sure there is some kind of match highlight for the first hit. We
+        # don't expect highlights for any other hit.
+        assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_with_pipeline(
         self,
@@ -625,12 +699,17 @@ class TestOpenSearchClient:
         assert len(results) == 2
         # Assert that all the chunks above are present.
         assert all(
-            chunk.document_id in ["pipeline-doc-1", "pipeline-doc-2"]
+            chunk.document_chunk.document_id in ["pipeline-doc-1", "pipeline-doc-2"]
             for chunk in results
         )
         # Make sure the chunk contents are preserved.
         for chunk in results:
-            assert chunk == docs[chunk.document_id]
+            assert chunk.document_chunk == docs[chunk.document_chunk.document_id]
+            # Make sure score reporting seems reasonable (it should not be None
+            # or 0).
+            assert chunk.score
+            # Make sure there is some kind of match highlight.
+            assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_empty_index(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
@@ -741,9 +820,14 @@ class TestOpenSearchClient:
         # Postcondition.
         # Should only get the public, non-hidden document.
         assert len(results) == 1
-        assert results[0].document_id == "public-doc-1"
+        assert results[0].document_chunk.document_id == "public-doc-1"
         # Make sure the chunk contents are preserved.
-        assert results[0] == docs["public-doc-1"]
+        assert results[0].document_chunk == docs["public-doc-1"]
+        # Make sure score reporting seems reasonable (it should not be None
+        # or 0).
+        assert results[0].score
+        # Make sure there is some kind of match highlight.
+        assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,
@@ -843,7 +927,7 @@ class TestOpenSearchClient:
         # Postcondition.
         # Should only get public, non-hidden documents (3 out of 5).
         assert len(results) == 3
-        result_ids = [chunk.document_id for chunk in results]
+        result_ids = [chunk.document_chunk.document_id for chunk in results]
         assert "highly-relevant-1" in result_ids
         assert "somewhat-relevant-1" in result_ids
         assert "not-very-relevant-1" in result_ids
@@ -852,7 +936,25 @@ class TestOpenSearchClient:
         assert "private-but-relevant-1" not in result_ids
 
         # Most relevant document should be first due to normalization pipeline.
-        assert results[0].document_id == "highly-relevant-1"
+        assert results[0].document_chunk.document_id == "highly-relevant-1"
+
+        # Make sure there is some kind of match highlight for the most relevant
+        # result.
+        match_highlights = results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
+        assert len(match_highlights) == 1
+        # We expect the terms "Artificial" and "intelligence" to be matched.
+        highlight_split = re.findall(r"<hi>(.*?)</hi>", match_highlights[0])
+        assert len(highlight_split) == 2
+        assert highlight_split[0] == "Artificial"
+        assert highlight_split[1] == "intelligence"
+
+        # Returned documents should be ordered by descending score.
+        previous_score = float("inf")
+        for result in results:
+            current_score = result.score
+            assert current_score
+            assert current_score < previous_score
+            previous_score = current_score
 
     def test_delete_by_query_multitenant_isolation(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch

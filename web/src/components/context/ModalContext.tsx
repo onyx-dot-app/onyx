@@ -1,8 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import NewTeamModal from "@/components/modals/NewTeamModal";
-import NewTenantModal from "@/components/modals/NewTenantModal";
+import NewTenantModal from "@/sections/modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
@@ -38,7 +38,7 @@ export const ModalProvider: React.FC<{
   );
 
   // Initialize modal states based on user info
-  React.useEffect(() => {
+  useEffect(() => {
     if (user?.tenant_info?.new_tenant) {
       setNewTenantInfo(user.tenant_info.new_tenant);
     }

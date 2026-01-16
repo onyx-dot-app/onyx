@@ -133,7 +133,8 @@ export default function AddMCPServerModal({
   return (
     <Modal open={isOpen} onOpenChange={handleModalClose}>
       <Modal.Content
-        tall
+        width="sm"
+        height="lg"
         preventAccidentalClose={false}
         skipOverlay={skipOverlay}
       >

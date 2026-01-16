@@ -61,7 +61,7 @@ export default function FeedbackModal({
       {popup}
 
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-        <Modal.Content mini>
+        <Modal.Content width="sm">
           <Modal.Header
             icon={feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown}
             title="Feedback"

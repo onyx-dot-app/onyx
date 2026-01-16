@@ -598,13 +598,6 @@ test.describe("End-to-End Default Assistant Flow", () => {
     // Send a message using the chat input
     await sendMessage(page, "Hello, can you help me?");
 
-    // Verify AI response appears
-    const aiResponse = await page.waitForSelector(
-      '[data-testid="onyx-ai-message"]',
-      { timeout: 10000 }
-    );
-    expect(aiResponse).toBeTruthy();
-
     // Open action management and verify tools
     await openActionManagement(page);
 

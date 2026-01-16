@@ -462,21 +462,6 @@ export function useFilters(): FilterManager {
   };
 }
 
-interface UseUsersParams {
-  includeApiKeys: boolean;
-}
-
-export const useUsers = ({ includeApiKeys }: UseUsersParams) => {
-  const url = `/api/manage/users?include_api_keys=${includeApiKeys}`;
-
-  const swrResponse = useSWR<AllUsersResponse>(url, errorHandlingFetcher);
-
-  return {
-    ...swrResponse,
-    refreshIndexingStatus: () => mutate(url),
-  };
-};
-
 export interface LlmDescriptor {
   name: string;
   provider: string;

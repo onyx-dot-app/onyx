@@ -201,7 +201,8 @@ export default function TextView({
       }}
     >
       <Modal.Content
-        large
+        width="lg"
+        height="full"
         preventAccidentalClose={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >

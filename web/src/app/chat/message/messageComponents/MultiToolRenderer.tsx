@@ -783,9 +783,9 @@ export default function MultiToolRenderer({
       });
 
     return (
-      <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow">
+      <div className="mb-4 w-full relative pt-4">
         {/* Timeline content */}
-        <div className="relative">
+        <div className="relative border border-border-medium rounded-lg p-4 shadow">
           <div className="flex flex-col">
             {visibleTurnGroups.map((turnGroup, turnGroupIndex) => {
               const isLastTurnGroup =
@@ -867,13 +867,13 @@ export default function MultiToolRenderer({
 
   // If complete, show summary with toggle and render each turn group independently
   return (
-    <div className="pb-4">
+    <>
       {/* Summary header - clickable */}
       <div
-        className="flex flex-row w-fit items-center group/StepsButton select-none"
+        className="flex flex-row flex-1 items-center pl-4 group/StepsButton select-none"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <Text as="p" text03 className="group-hover/StepsButton:text-text-04">
+        <Text text03 className="group-hover/StepsButton:text-text-04">
           {displayItems.length} steps
         </Text>
         <SvgChevronDownSmall
@@ -887,7 +887,7 @@ export default function MultiToolRenderer({
       {/* Expanded content */}
       <div
         className={cn(
-          "transition-all duration-300 ease-in-out overflow-hidden",
+          "w-full transition-all duration-300 ease-in-out overflow-hidden",
           isExpanded
             ? "max-h-[1000px] overflow-y-auto opacity-100"
             : "max-h-0 opacity-0"
@@ -895,7 +895,7 @@ export default function MultiToolRenderer({
       >
         <div
           className={cn(
-            "p-4 transition-transform duration-300 ease-in-out",
+            "py-4 px-0.5 transition-transform duration-300 ease-in-out",
             isExpanded ? "transform translate-y-0" : "transform"
           )}
         >
@@ -1029,6 +1029,6 @@ export default function MultiToolRenderer({
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
