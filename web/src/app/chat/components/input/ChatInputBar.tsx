@@ -40,6 +40,8 @@ import {
 } from "@/app/chat/services/actionUtils";
 import { SvgArrowUp, SvgHourglass, SvgPlusCircle, SvgStop } from "@opal/icons";
 
+const LINE_HEIGHT = 24;
+const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 200;
 
 export interface SourceChipProps {
@@ -92,7 +94,6 @@ export interface ChatInputBarProps {
   initialMessage?: string;
   stopGenerating: () => void;
   onSubmit: (message: string) => void;
-  onHeightChange?: (delta: number) => void;
   llmManager: LlmManager;
   chatState: ChatState;
   currentSessionFileTokenCount: number;
@@ -123,7 +124,6 @@ const ChatInputBar = React.memo(
         initialMessage = "",
         stopGenerating,
         onSubmit,
-        onHeightChange,
         chatState,
         currentSessionFileTokenCount,
         availableContextTokens,
@@ -143,9 +143,6 @@ const ChatInputBar = React.memo(
       const [message, setMessage] = useState(initialMessage);
       const textAreaRef = useRef<HTMLTextAreaElement>(null);
       const containerRef = useRef<HTMLDivElement>(null);
-      const previousHeightRef = useRef<number | null>(null);
-      const onHeightChangeRef = useRef(onHeightChange);
-      onHeightChangeRef.current = onHeightChange;
 
       // Expose reset and focus methods to parent via ref
       React.useImperativeHandle(ref, () => ({
@@ -200,15 +197,37 @@ const ChatInputBar = React.memo(
 
       const combinedSettings = useContext(SettingsContext);
 
+      // Track previous message to detect when lines might decrease
+      const prevMessageRef = useRef("");
+
       // Auto-resize textarea based on content
       useEffect(() => {
         const textarea = textAreaRef.current;
         if (textarea) {
-          textarea.style.height = "0px"; // this is necessary in order to "reset" the scrollHeight
-          textarea.style.height = `${Math.min(
-            textarea.scrollHeight,
-            MAX_INPUT_HEIGHT
-          )}px`;
+          const prevLineCount = (prevMessageRef.current.match(/\n/g) || [])
+            .length;
+          const currLineCount = (message.match(/\n/g) || []).length;
+          const lineRemoved = currLineCount < prevLineCount;
+          prevMessageRef.current = message;
+
+          if (message.length === 0) {
+            textarea.style.height = `${MIN_INPUT_HEIGHT}px`;
+            return;
+          } else if (lineRemoved) {
+            const linesRemoved = prevLineCount - currLineCount;
+            textarea.style.height = `${Math.max(
+              MIN_INPUT_HEIGHT,
+              Math.min(
+                textarea.scrollHeight - LINE_HEIGHT * linesRemoved,
+                MAX_INPUT_HEIGHT
+              )
+            )}px`;
+          } else {
+            textarea.style.height = `${Math.min(
+              textarea.scrollHeight,
+              MAX_INPUT_HEIGHT
+            )}px`;
+          }
         }
       }, [message]);
 
@@ -217,27 +236,6 @@ const ChatInputBar = React.memo(
           setMessage(initialMessage);
         }
       }, [initialMessage]);
-
-      // Detect height changes and notify parent for scroll adjustment
-      useEffect(() => {
-        if (!containerRef.current) return;
-
-        const observer = new ResizeObserver((entries) => {
-          for (const entry of entries) {
-            const newHeight = entry.contentRect.height;
-            if (previousHeightRef.current !== null) {
-              const delta = newHeight - previousHeightRef.current;
-              if (delta !== 0) {
-                onHeightChangeRef.current?.(delta);
-              }
-            }
-            previousHeightRef.current = newHeight;
-          }
-        });
-
-        observer.observe(containerRef.current);
-        return () => observer.disconnect();
-      }, []);
 
       const handlePaste = (event: React.ClipboardEvent) => {
         const items = event.clipboardData?.items;

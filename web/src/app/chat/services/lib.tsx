@@ -518,29 +518,18 @@ export function useScrollonStream({
       if (
         scrollDist.current < distance &&
         !blockActionRef.current &&
-        !blockActionRef.current &&
         !preventScroll.current &&
         endDivRef &&
         endDivRef.current
       ) {
-        // catch up if necessary!
-        const scrollAmount = scrollDist.current + (mobile ? 1000 : 10000);
-        if (scrollDist.current > 300) {
-          // if (scrollDist.current > 140) {
-          endDivRef.current.scrollIntoView();
-        } else {
-          blockActionRef.current = true;
+        blockActionRef.current = true;
 
-          scrollableDivRef?.current?.scrollBy({
-            left: 0,
-            top: Math.max(0, scrollAmount),
-            behavior: "smooth",
-          });
+        // Smooth scroll to end of content
+        endDivRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
 
-          setTimeout(() => {
-            blockActionRef.current = false;
-          }, debounceNumber);
-        }
+        setTimeout(() => {
+          blockActionRef.current = false;
+        }, debounceNumber);
       }
     }
   });
