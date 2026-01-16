@@ -47,8 +47,8 @@ const Separator = React.forwardRef(
     return (
       <div
         className={cn(
-          isHorizontal ? "w-full" : "h-full",
           !noPadding && (isHorizontal ? "py-4" : "px-4"),
+          isHorizontal ? "w-full" : "h-full",
           className
         )}
       >
