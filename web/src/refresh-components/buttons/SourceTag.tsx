@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -27,6 +27,18 @@ const sizeClasses = {
     container: "rounded-08 p-1 gap-1",
   },
 } as const;
+
+const getIconKey = (source: SourceInfo): string => {
+  if (source.icon) return source.icon.name || "custom";
+  if (source.sourceType === "web" && source.sourceUrl) {
+    try {
+      return new URL(source.sourceUrl).hostname;
+    } catch {
+      return source.sourceUrl;
+    }
+  }
+  return source.sourceType;
+};
 
 export interface SourceTagProps {
   /** Use inline citation size (smaller, for use within text) */
@@ -62,6 +74,15 @@ export default function SourceTag({
 }: SourceTagProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+
+  const uniqueSources = useMemo(
+    () =>
+      sources.filter(
+        (source, index, arr) =>
+          arr.findIndex((s) => getIconKey(s) === getIconKey(source)) === index
+      ),
+    [sources]
+  );
 
   const showCount = sources.length > 1;
   const extraCount = sources.length - 1;
@@ -104,8 +125,8 @@ export default function SourceTag({
     >
       {/* Stacked icons container - only for tag variant */}
       {!inlineCitation && (
-        <div className="flex items-center px-0.5 -space-x-1.5">
-          {sources.slice(0, 3).map((source, index) => (
+        <div className="flex items-center -space-x-1.5">
+          {uniqueSources.slice(0, 3).map((source, index) => (
             <div
               key={source.id}
               className={cn(
@@ -117,7 +138,7 @@ export default function SourceTag({
                 !showDetailsCard &&
                   "group-hover:border-background-tint-inverted-03"
               )}
-              style={{ zIndex: sources.slice(0, 3).length - index }}
+              style={{ zIndex: uniqueSources.slice(0, 3).length - index }}
             >
               {source.icon ? (
                 <source.icon size={12} />
@@ -139,12 +160,7 @@ export default function SourceTag({
       )}
 
       {/* Text content */}
-      <div
-        className={cn(
-          "flex items-baseline gap-0.5",
-          !inlineCitation && "px-0.5"
-        )}
-      >
+      <div className={cn("flex items-baseline", !inlineCitation && "pr-0.5")}>
         <Text
           figureSmallValue={inlineCitation && !isOpen}
           figureSmallLabel={inlineCitation && isOpen}
