@@ -7,7 +7,8 @@ from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
 from onyx.llm.prompt_cache.providers.openai import OpenAIPromptCacheProvider
 from onyx.llm.prompt_cache.providers.vertex import VertexAIPromptCacheProvider
-from onyx.llm.well_known_providers.llm_provider_options import get_anthropic_model_names
+
+ANTHROPIC_BEDROCK_PREFIX = "anthropic.bedrock"
 
 
 def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
@@ -19,12 +20,11 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
     Returns:
         PromptCacheProvider instance for the given provider
     """
-    anthropic_models = get_anthropic_model_names()
     if llm_config.model_provider == LlmProviderNames.OPENAI:
         return OpenAIPromptCacheProvider()
     elif llm_config.model_provider == LlmProviderNames.ANTHROPIC or (
         llm_config.model_provider == LlmProviderNames.BEDROCK
-        and llm_config.model_name in anthropic_models
+        and ANTHROPIC_BEDROCK_PREFIX in llm_config.model_name
     ):
         return AnthropicPromptCacheProvider()
     elif llm_config.model_provider == LlmProviderNames.VERTEX_AI:
