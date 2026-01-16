@@ -24,12 +24,12 @@ export default function WelcomeMessage({
   const enterpriseSettings = settings?.enterpriseSettings;
 
   // Use a stable default for SSR, then randomize on client after hydration
-  const [greeting, setGreeting] = useState(
-    enterpriseSettings?.custom_greeting_message || GREETING_MESSAGES[0]
-  );
+  const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);
 
   useEffect(() => {
-    if (!enterpriseSettings?.custom_greeting_message) {
+    if (enterpriseSettings?.custom_greeting_message) {
+      setGreeting(enterpriseSettings.custom_greeting_message);
+    } else {
       setGreeting(getRandomGreeting());
     }
   }, [enterpriseSettings?.custom_greeting_message]);
