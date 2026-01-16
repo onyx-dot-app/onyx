@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import "@/app/css/color-swatch.css";
 
 /**
@@ -20,12 +19,11 @@ export interface ColorSwatchProps {
 }
 
 export default function ColorSwatch({ light, dark }: ColorSwatchProps) {
-  // Determine which mode to display (default to light if neither specified)
-  const isDark = dark && !light;
+  const mode = light ? "light" : dark ? "dark" : "light";
 
   return (
-    <div className={cn("color-swatch", isDark && "color-swatch--dark")}>
-      <div className="rounded-full h-[0.3rem] w-[0.3rem] bg-blue-500" />
+    <div className="color-swatch" data-state={mode}>
+      <div className="rounded-full h-[0.3rem] w-[0.3rem] bg-action-link-05" />
       <span className="color-swatch__text">Aa</span>
     </div>
   );
