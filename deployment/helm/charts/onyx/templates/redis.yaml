@@ -15,7 +15,7 @@ spec:
     redisSecret:
       name: {{ .Values.redis.secretName | default "onyx-redis" }}
       key: redis_password
-  securityContext:
+  podSecurityContext:
     fsGroup: 1000
     runAsUser: 1000
 
