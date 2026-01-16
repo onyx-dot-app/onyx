@@ -1,13 +1,12 @@
-import React, { useCallback } from "react";
-import { FiGlobe, FiLink } from "react-icons/fi";
+import React from "react";
+import { FiLink } from "react-icons/fi";
 import { FetchToolPacket } from "@/app/chat/services/streamingModels";
 import { MessageRenderer } from "@/app/chat/message/messageComponents/interfaces";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { getUniqueIconFactories } from "@/components/chat/sources/SourceCard";
-import { IconProps } from "@/components/icons/icons";
-import { SearchChipList } from "../search/SearchChipList";
-import { useToolTiming } from "../search";
+import { ValidSources } from "@/lib/types";
+import { SearchChipList, SourceInfo } from "../search/SearchChipList";
+import { useToolTiming, getMetadataTags } from "../search";
 import {
   constructCurrentFetchState,
   INITIAL_URLS_TO_SHOW,
@@ -17,10 +16,25 @@ import {
 } from "./fetchStateUtils";
 import Text from "@/refresh-components/texts/Text";
 
-/**
- * Main renderer for fetch tool packets.
- * Handles URL fetching with timing, animations, and visual feedback.
- */
+const urlToSourceInfo = (url: string, index: number): SourceInfo => ({
+  id: `url-${index}`,
+  title: url,
+  sourceType: "web",
+  sourceUrl: url,
+});
+
+const documentToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
+  id: doc.document_id,
+  title: doc.semantic_identifier || doc.link || "",
+  sourceType: doc.source_type || ValidSources.Web,
+  sourceUrl: doc.link,
+  description: doc.blurb,
+  metadata: {
+    date: doc.updated_at || undefined,
+    tags: getMetadataTags(doc.metadata),
+  },
+});
+
 export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   packets,
   onComplete,
@@ -31,7 +45,6 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   const fetchState = constructCurrentFetchState(packets);
   const { urls, documents, hasStarted, isLoading, isComplete } = fetchState;
 
-  // Use timing hook for minimum display durations
   useToolTiming({
     hasStarted: isLoading || isComplete,
     isComplete,
@@ -42,13 +55,6 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     completeDurationMs: READ_MIN_DURATION_MS,
   });
 
-  // Memoize icon factory to prevent re-renders during streaming
-  const getGlobeIconFactory = useCallback(
-    () => (props: IconProps) => <FiGlobe size={props.size} />,
-    []
-  );
-
-  // Don't render anything if fetch hasn't started
   if (!hasStarted) {
     return children({
       icon: FiLink,
@@ -57,7 +63,6 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     });
   }
 
-  // Show documents if available, otherwise fall back to URLs
   const displayDocuments = documents.length > 0;
   const displayUrls = !displayDocuments && isComplete && urls.length > 0;
   const showLoading = !displayDocuments && !displayUrls;
@@ -67,25 +72,16 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     status: "Opening URLs:",
     content: (
       <div className="flex flex-col">
-        {/* URLs section */}
         {displayDocuments ? (
           <SearchChipList
             items={documents}
             initialCount={INITIAL_URLS_TO_SHOW}
             expansionCount={URLS_PER_EXPANSION}
             getKey={(doc: OnyxDocument) => doc.document_id}
-            getIconFactory={getGlobeIconFactory}
-            getTitle={(doc: OnyxDocument) =>
-              doc.semantic_identifier || doc.link || ""
-            }
+            toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
             onClick={(doc: OnyxDocument) => {
-              if (doc.link) {
-                window.open(doc.link, "_blank");
-              }
+              if (doc.link) window.open(doc.link, "_blank");
             }}
-            getMoreIconFactories={(remaining) =>
-              getUniqueIconFactories(remaining)
-            }
             emptyState={<BlinkingDot />}
           />
         ) : displayUrls ? (
@@ -94,11 +90,8 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
             initialCount={INITIAL_URLS_TO_SHOW}
             expansionCount={URLS_PER_EXPANSION}
             getKey={(url: string) => url}
-            getIconFactory={getGlobeIconFactory}
-            getTitle={(url: string) => url}
-            onClick={(url: string) => {
-              window.open(url, "_blank");
-            }}
+            toSourceInfo={urlToSourceInfo}
+            onClick={(url: string) => window.open(url, "_blank")}
             emptyState={<BlinkingDot />}
           />
         ) : (
@@ -107,40 +100,36 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
           </div>
         )}
 
-        {/* Reading results section */}
         {(displayDocuments || displayUrls) && (
           <>
             <Text as="p" mainUiMuted text03>
               Reading results:
             </Text>
-            <SearchChipList
-              items={
-                displayDocuments ? documents : urls.map((url) => ({ url }))
-              }
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(item: any) =>
-                displayDocuments ? item.document_id : item.url
-              }
-              getIconFactory={getGlobeIconFactory}
-              getTitle={(item: any) =>
-                displayDocuments
-                  ? item.semantic_identifier || item.link || ""
-                  : item.url
-              }
-              onClick={(item: any) => {
-                const link = displayDocuments ? item.link : item.url;
-                if (link) {
-                  window.open(link, "_blank");
+            {displayDocuments ? (
+              <SearchChipList
+                items={documents}
+                initialCount={INITIAL_URLS_TO_SHOW}
+                expansionCount={URLS_PER_EXPANSION}
+                getKey={(doc: OnyxDocument) => `reading-${doc.document_id}`}
+                toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
+                onClick={(doc: OnyxDocument) => {
+                  if (doc.link) window.open(doc.link, "_blank");
+                }}
+                emptyState={<BlinkingDot />}
+              />
+            ) : (
+              <SearchChipList
+                items={urls}
+                initialCount={INITIAL_URLS_TO_SHOW}
+                expansionCount={URLS_PER_EXPANSION}
+                getKey={(url: string, index: number) =>
+                  `reading-${url}-${index}`
                 }
-              }}
-              getMoreIconFactories={
-                displayDocuments
-                  ? (remaining: any) => getUniqueIconFactories(remaining)
-                  : undefined
-              }
-              emptyState={<BlinkingDot />}
-            />
+                toSourceInfo={urlToSourceInfo}
+                onClick={(url: string) => window.open(url, "_blank")}
+                emptyState={<BlinkingDot />}
+              />
+            )}
           </>
         )}
       </div>

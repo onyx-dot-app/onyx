@@ -10,6 +10,7 @@ export {
   QUERIES_PER_EXPANSION,
   INITIAL_RESULTS_TO_SHOW,
   RESULTS_PER_EXPANSION,
+  getMetadataTags,
 } from "./searchStateUtils";
 
 // Hooks (for potential reuse)
@@ -20,4 +21,8 @@ export {
 } from "./useToolTiming";
 
 // Components (for potential reuse)
-export { SearchChipList, type SearchChipListProps } from "./SearchChipList";
+export {
+  SearchChipList,
+  type SearchChipListProps,
+  type SourceInfo,
+} from "./SearchChipList";
