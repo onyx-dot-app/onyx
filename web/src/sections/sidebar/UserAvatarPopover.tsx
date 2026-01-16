@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/app/admin/settings/interfaces";
-import useSWR from "swr";
+import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
@@ -15,6 +15,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
+
 import {
   SvgBell,
   SvgExternalLink,
@@ -41,23 +42,26 @@ function getDisplayName(email?: string, personalName?: string): string {
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
-  onNotificationsClick: () => void;
+  onOpenNotifications: () => void;
 }
 
 function SettingsPopover({
   onUserSettingsClick,
-  onNotificationsClick,
+  onOpenNotifications,
 }: SettingsPopoverProps) {
   const { user } = useUser();
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
   );
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { popup, setPopup } = usePopup();
 
+  const undismissedCount =
+    notifications?.filter((n) => !n.dismissed).length ?? 0;
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
@@ -65,7 +69,7 @@ function SettingsPopover({
     logout()
       .then((response) => {
         if (!response?.ok) {
-          setPopup({ message: "Failed to logout", type: "error" });
+          alert("Failed to logout");
           return;
         }
 
@@ -79,20 +83,11 @@ function SettingsPopover({
           `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
         );
       })
+
       .catch(() => {
         setPopup({ message: "Failed to logout", type: "error" });
       });
   };
-
-  const notificationCount = useMemo(
-    () =>
-      notifications?.reduce(
-        (prevCount, notification) =>
-          notification.dismissed ? prevCount : prevCount + 1,
-        0
-      ) ?? 0,
-    [notifications]
-  );
 
   return (
     <>
@@ -108,16 +103,22 @@ function SettingsPopover({
           <LineItem
             key="notifications"
             icon={SvgBell}
-            onClick={onNotificationsClick}
+            onClick={onOpenNotifications}
           >
             {`Notifications${
-              notificationCount > 0 ? ` (${notificationCount})` : ""
+              undismissedCount > 0 ? ` (${undismissedCount})` : ""
             }`}
           </LineItem>,
           <LineItem
             key="help-faq"
             icon={SvgExternalLink}
-            onClick={() => window.open("https://docs.onyx.app", "_blank")}
+            onClick={() =>
+              window.open(
+                "https://docs.onyx.app",
+                "_blank",
+                "noopener,noreferrer"
+              )
+            }
           >
             Help & FAQ
           </LineItem>,
@@ -138,28 +139,36 @@ function SettingsPopover({
   );
 }
 
-export interface UserAvatarPopoverProps {
+export interface SettingsProps {
   folded?: boolean;
 }
 
-export default function UserAvatarPopover({ folded }: UserAvatarPopoverProps) {
+export default function Settings({ folded }: SettingsProps) {
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
   const router = useRouter();
 
+  // Fetch notifications for display
+  // The GET endpoint also triggers a refresh if release notes are stale
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
     errorHandlingFetcher
   );
 
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
-  const hasNotifications =
-    notifications?.some((notification) => !notification.dismissed) ?? false;
+  const undismissedCount =
+    notifications?.filter((n) => !n.dismissed).length ?? 0;
+  const hasNotifications = undismissedCount > 0;
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
+      // Prefetch user settings data when popover opens for instant modal display
+      preload("/api/user/pats", errorHandlingFetcher);
+      preload("/api/federated/oauth-status", errorHandlingFetcher);
+      preload("/api/manage/connector-status", errorHandlingFetcher);
+      preload("/api/llm/provider", errorHandlingFetcher);
       setPopupState("Settings");
     } else {
       setPopupState(undefined);
@@ -198,14 +207,20 @@ export default function UserAvatarPopover({ folded }: UserAvatarPopoverProps) {
           </SidebarTab>
         </div>
       </Popover.Trigger>
-      <Popover.Content align="end" side="right" md>
+
+      <Popover.Content
+        align="end"
+        side="right"
+        lg={popupState === "Notifications"}
+        md={popupState === "Settings"}
+      >
         {popupState === "Settings" && (
           <SettingsPopover
             onUserSettingsClick={() => {
               setPopupState(undefined);
               router.push("/chat/settings");
             }}
-            onNotificationsClick={() => setPopupState("Notifications")}
+            onOpenNotifications={() => setPopupState("Notifications")}
           />
         )}
         {popupState === "Notifications" && (
