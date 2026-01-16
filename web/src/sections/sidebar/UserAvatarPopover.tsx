@@ -23,6 +23,7 @@ import {
   SvgNotificationBubble,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
+import { usePopup } from "@/components/admin/connectors/Popup";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -55,27 +56,32 @@ function SettingsPopover({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { popup, setPopup } = usePopup();
 
   const showLogout =
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
   const handleLogout = () => {
-    logout().then((response) => {
-      if (!response?.ok) {
-        alert("Failed to logout");
-        return;
-      }
+    logout()
+      .then((response) => {
+        if (!response?.ok) {
+          setPopup({ message: "Failed to logout", type: "error" });
+          return;
+        }
 
-      const currentUrl = `${pathname}${
-        searchParams?.toString() ? `?${searchParams.toString()}` : ""
-      }`;
+        const currentUrl = `${pathname}${
+          searchParams?.toString() ? `?${searchParams.toString()}` : ""
+        }`;
 
-      const encodedRedirect = encodeURIComponent(currentUrl);
+        const encodedRedirect = encodeURIComponent(currentUrl);
 
-      router.push(
-        `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
-      );
-    });
+        router.push(
+          `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
+        );
+      })
+      .catch(() => {
+        setPopup({ message: "Failed to logout", type: "error" });
+      });
   };
 
   const notificationCount = useMemo(
@@ -90,6 +96,8 @@ function SettingsPopover({
 
   return (
     <>
+      {popup}
+
       <PopoverMenu>
         {[
           <div key="user-settings" data-testid="Settings/user-settings">
