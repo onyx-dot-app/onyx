@@ -538,12 +538,11 @@ const AIMessage = React.memo(function AIMessage({
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
         className="flex items-start pb-5 md:pt-5"
       >
-        <AgentAvatar agent={chatState.assistant} size={24} />
         {/* w-full ensures the MultiToolRenderer non-expanded state takes up the full width */}
-        <div className="max-w-message-max break-words pl-4 w-full">
+        <div className="break-words w-full">
           <div
             ref={markdownRef}
-            className="overflow-x-visible max-w-content-max focus:outline-none select-text"
+            className="overflow-x-visible focus:outline-none select-text"
             onCopy={(e) => {
               if (markdownRef.current) {
                 handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
@@ -552,29 +551,35 @@ const AIMessage = React.memo(function AIMessage({
           >
             {groupedPackets.length === 0 ? (
               // Show blinking dot when no content yet, or stopped message if user cancelled
-              stopReason === StopReason.USER_CANCELLED ? (
-                <Text as="p" secondaryBody text04>
-                  User has stopped generation
-                </Text>
-              ) : (
-                <BlinkingDot addMargin />
-              )
+              <div className="flex items-center gap-2">
+                <AgentAvatar agent={chatState.assistant} size={24} />
+                {stopReason === StopReason.USER_CANCELLED ? (
+                  <Text as="p" secondaryBody text04>
+                    User has stopped generation
+                  </Text>
+                ) : (
+                  <BlinkingDot addMargin />
+                )}
+              </div>
             ) : (
               <>
-                {/* Render tool groups in multi-tool renderer */}
-                {toolGroups.length > 0 && (
-                  <MultiToolRenderer
-                    packetGroups={toolGroups}
-                    chatState={effectiveChatState}
-                    isComplete={finalAnswerComing}
-                    isFinalAnswerComing={finalAnswerComingRef.current}
-                    stopPacketSeen={stopPacketSeen}
-                    stopReason={stopReason}
-                    isStreaming={globalChatState === "streaming"}
-                    onAllToolsDisplayed={() => setFinalAnswerComing(true)}
-                    expectedBranchesPerTurn={expectedBranchesRef.current}
-                  />
-                )}
+                <div className="flex flex-wrap pb-4">
+                  <AgentAvatar agent={chatState.assistant} size={24} />
+                  {/* Render tool groups in multi-tool renderer */}
+                  {toolGroups.length > 0 && (
+                    <MultiToolRenderer
+                      packetGroups={toolGroups}
+                      chatState={effectiveChatState}
+                      isComplete={finalAnswerComing}
+                      isFinalAnswerComing={finalAnswerComingRef.current}
+                      stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
+                      isStreaming={globalChatState === "streaming"}
+                      onAllToolsDisplayed={() => setFinalAnswerComing(true)}
+                      expectedBranchesPerTurn={expectedBranchesRef.current}
+                    />
+                  )}
+                </div>
 
                 {/* Render all display groups (messages + image generation) in main area */}
                 <div ref={finalAnswerRef}>
