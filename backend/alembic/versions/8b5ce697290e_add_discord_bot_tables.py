@@ -1,18 +1,17 @@
 """Add Discord bot tables
 
 Revision ID: 8b5ce697290e
-Revises: d1b637d7050a
+Revises: 73e9983e5091
 Create Date: 2025-01-14
 
 """
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "8b5ce697290e"
-down_revision = "d1b637d7050a"
+down_revision = "73e9983e5091"
 branch_labels: None = None
 depends_on: None = None
 
@@ -21,7 +20,7 @@ def upgrade() -> None:
     # DiscordBotConfig
     op.create_table(
         "discord_bot_config",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("bot_token", sa.LargeBinary(), nullable=False),  # EncryptedString
         sa.Column(
             "created_at",
@@ -34,17 +33,11 @@ def upgrade() -> None:
     # DiscordGuildConfig
     op.create_table(
         "discord_guild_config",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("guild_id", sa.BigInteger(), nullable=True, unique=True),
         sa.Column("guild_name", sa.String(), nullable=True),
         sa.Column("registration_key", sa.String(), nullable=False, unique=True),
         sa.Column("registered_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "respond_in_all_public_channels",
-            sa.Boolean(),
-            server_default=sa.text("false"),
-            nullable=False,
-        ),
         sa.Column(
             "default_persona_id",
             sa.Integer(),
@@ -59,15 +52,21 @@ def upgrade() -> None:
     # DiscordChannelConfig
     op.create_table(
         "discord_channel_config",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column(
             "guild_config_id",
-            postgresql.UUID(as_uuid=True),
+            sa.Integer(),
             sa.ForeignKey("discord_guild_config.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("channel_id", sa.BigInteger(), nullable=False),
         sa.Column("channel_name", sa.String(), nullable=False),
+        sa.Column(
+            "thread_only_mode",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
         sa.Column(
             "require_bot_invocation",
             sa.Boolean(),
@@ -81,7 +80,7 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column(
-            "enabled", sa.Boolean(), server_default=sa.text("true"), nullable=False
+            "enabled", sa.Boolean(), server_default=sa.text("false"), nullable=False
         ),
     )
 

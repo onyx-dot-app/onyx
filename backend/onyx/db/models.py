@@ -3047,9 +3047,7 @@ class DiscordBotConfig(Base):
 
     __tablename__ = "discord_bot_config"
 
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[int] = mapped_column(primary_key=True)
     bot_token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -3066,9 +3064,7 @@ class DiscordGuildConfig(Base):
 
     __tablename__ = "discord_guild_config"
 
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[int] = mapped_column(primary_key=True)
 
     # Discord snowflake - NULL until registered via command in Discord
     guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, unique=True)
@@ -3082,9 +3078,6 @@ class DiscordGuildConfig(Base):
     )
 
     # Configuration
-    respond_in_all_public_channels: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("false"), nullable=False
-    )
     default_persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
     )
@@ -3109,16 +3102,20 @@ class DiscordChannelConfig(Base):
 
     __tablename__ = "discord_channel_config"
 
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
-    )
-    guild_config_id: Mapped[UUID] = mapped_column(
+    id: Mapped[int] = mapped_column(primary_key=True)
+    guild_config_id: Mapped[int] = mapped_column(
         ForeignKey("discord_guild_config.id", ondelete="CASCADE"), nullable=False
     )
 
     # Discord snowflake
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     channel_name: Mapped[str] = mapped_column(String(), nullable=False)
+
+    # If true, bot only responds to messages in threads
+    # Otherwise, will reply in channel
+    thread_only_mode: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
 
     # If true (default), bot only responds when @mentioned
     # If false, bot responds to ALL messages in this channel
@@ -3132,7 +3129,7 @@ class DiscordChannelConfig(Base):
     )
 
     enabled: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), nullable=False
+        Boolean, server_default=text("false"), nullable=False
     )
 
     # Relationships
