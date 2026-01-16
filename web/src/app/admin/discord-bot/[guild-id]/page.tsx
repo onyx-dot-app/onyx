@@ -223,21 +223,21 @@ function GuildDetailContent({ guildId }: { guildId: number }) {
             >
               <Button
                 onClick={handleEnableAll}
-                disabled={isUpdating || !guild.enabled}
+                disabled={!guild.enabled}
                 secondary
               >
                 Enable All
               </Button>
               <Button
                 onClick={handleDisableAll}
-                disabled={isUpdating || !guild.enabled}
+                disabled={!guild.enabled}
                 secondary
               >
                 Disable All
               </Button>
               <Button
                 onClick={handleSaveChanges}
-                disabled={isUpdating || !hasUnsavedChanges || !guild.enabled}
+                disabled={!hasUnsavedChanges || !guild.enabled}
               >
                 Update
               </Button>
@@ -265,7 +265,7 @@ function GuildDetailContent({ guildId }: { guildId: number }) {
             <DiscordChannelsTable
               channels={localChannels}
               onChannelUpdate={handleChannelUpdate}
-              disabled={isUpdating || !guild.enabled}
+              disabled={!guild.enabled}
             />
           </>
         )}

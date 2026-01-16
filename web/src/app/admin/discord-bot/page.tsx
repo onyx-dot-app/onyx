@@ -12,16 +12,26 @@ import Modal from "@/refresh-components/Modal";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Card from "@/refresh-components/cards/Card";
 import { SvgKey } from "@opal/icons";
-import { useDiscordGuilds } from "@/app/admin/discord-bot/hooks";
+import {
+  useDiscordGuilds,
+  useDiscordBotConfig,
+} from "@/app/admin/discord-bot/hooks";
 import { createGuildConfig } from "@/app/admin/discord-bot/lib";
 import { DiscordGuildsTable } from "@/app/admin/discord-bot/DiscordGuildsTable";
+import { BotConfigCard } from "@/app/admin/discord-bot/BotConfigCard";
 import { MonoDiscordIcon } from "@/components/icons/icons";
 
 function DiscordBotContent() {
   const { popup, setPopup } = usePopup();
   const { data: guilds, isLoading, error, refreshGuilds } = useDiscordGuilds();
+  const { data: botConfig, isManaged } = useDiscordBotConfig();
   const [registrationKey, setRegistrationKey] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  // Bot is available if:
+  // - Managed externally (Cloud/env) - assume it's configured
+  // - Self-hosted and explicitly configured via UI
+  const isBotAvailable = isManaged || botConfig?.configured === true;
 
   const handleCreateGuild = async () => {
     setIsCreating(true);
@@ -57,6 +67,8 @@ function DiscordBotContent() {
     <>
       {popup}
 
+      <BotConfigCard setPopup={setPopup} />
+
       <Modal open={!!registrationKey}>
         <Modal.Content small>
           <Modal.Header
@@ -87,7 +99,7 @@ function DiscordBotContent() {
         </Modal.Content>
       </Modal>
 
-      <Card>
+      <Card disabled={!isBotAvailable}>
         <Section
           flexDirection="row"
           justifyContent="between"
@@ -96,7 +108,10 @@ function DiscordBotContent() {
           <Text mainContentEmphasis text05>
             Server Configurations
           </Text>
-          <CreateButton onClick={handleCreateGuild} disabled={isCreating}>
+          <CreateButton
+            onClick={handleCreateGuild}
+            disabled={isCreating || !isBotAvailable}
+          >
             {isCreating ? "Creating..." : "Add Server"}
           </CreateButton>
         </Section>
