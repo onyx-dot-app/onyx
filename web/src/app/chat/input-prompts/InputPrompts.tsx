@@ -20,11 +20,21 @@ import { SvgMoreHorizontal, SvgPlus, SvgX } from "@opal/icons";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 
 export default function InputPrompts() {
-  const { promptShortcuts: inputPrompts, refresh } = usePromptShortcuts();
+  const {
+    promptShortcuts: inputPrompts,
+    refresh,
+    error,
+  } = usePromptShortcuts();
   const [editingPromptId, setEditingPromptId] = useState<number | null>(null);
   const [newPrompt, setNewPrompt] = useState<Partial<InputPrompt>>({});
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const { popup, setPopup } = usePopup();
+
+  useEffect(() => {
+    if (error) {
+      setPopup({ message: "Failed to fetch prompt shortcuts", type: "error" });
+    }
+  }, [error, setPopup]);
 
   function isPromptPublic(prompt: InputPrompt): boolean {
     return prompt.is_public;
