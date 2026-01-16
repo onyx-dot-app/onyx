@@ -308,6 +308,7 @@ async def run_async_migrations() -> None:
                         schema_name=schema,
                         create_schema=create_schema,
                     )
+                    await connection.commit()
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
                 if not continue_on_error:
@@ -345,6 +346,7 @@ async def run_async_migrations() -> None:
                         schema_name=schema,
                         create_schema=create_schema,
                     )
+                    await connection.commit()
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
                 if not continue_on_error:
