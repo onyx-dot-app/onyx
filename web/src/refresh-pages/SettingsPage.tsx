@@ -819,7 +819,6 @@ function ChatPreferencesSettings() {
     updateUserAutoScroll,
     updateUserShortcuts,
   } = useUser();
-  const { popup, setPopup } = usePopup();
   const llmManager = useLlmManager();
 
   const {
@@ -838,109 +837,105 @@ function ChatPreferencesSettings() {
   );
 
   return (
-    <>
-      {popup}
+    <Section gap={2}>
+      <Section gap={0.75}>
+        <InputLayouts.Label label="Chats" />
+        <Card>
+          <InputLayouts.Horizontal
+            label="Default Model"
+            description="This model will be used by Onyx by default in your chats."
+          >
+            <LLMPopover
+              llmManager={llmManager}
+              // TODO (@raunakab)
+              // Update saving default model.
+              //
+              // onSelect={(selected) => {
+              //   if (selected === null) {
+              //     void handleChangeDefaultModel(null);
+              //   } else {
+              //     const { modelName, provider, name } =
+              //       parseLlmDescriptor(selected);
+              //     if (modelName && name) {
+              //       void handleChangeDefaultModel(
+              //         structureValue(name, provider, modelName)
+              //       );
+              //     }
+              //   }
+              // }}
+            />
+          </InputLayouts.Horizontal>
 
-      <Section gap={2}>
-        <Section gap={0.75}>
-          <InputLayouts.Label label="Chats" />
-          <Card>
-            <InputLayouts.Horizontal
-              label="Default Model"
-              description="This model will be used by Onyx by default in your chats."
-            >
-              <LLMPopover
-                llmManager={llmManager}
-                // TODO (@raunakab)
-                // Update saving default model.
-                //
-                // onSelect={(selected) => {
-                //   if (selected === null) {
-                //     void handleChangeDefaultModel(null);
-                //   } else {
-                //     const { modelName, provider, name } =
-                //       parseLlmDescriptor(selected);
-                //     if (modelName && name) {
-                //       void handleChangeDefaultModel(
-                //         structureValue(name, provider, modelName)
-                //       );
-                //     }
-                //   }
-                // }}
-              />
-            </InputLayouts.Horizontal>
+          <InputLayouts.Horizontal
+            label="Chat Auto-scroll"
+            description="Automatically scroll to new content as chat generates response."
+          >
+            <Switch
+              checked={user?.preferences.auto_scroll}
+              onCheckedChange={(checked) => {
+                updateUserAutoScroll(checked);
+              }}
+            />
+          </InputLayouts.Horizontal>
 
-            <InputLayouts.Horizontal
-              label="Chat Auto-scroll"
-              description="Automatically scroll to new content as chat generates response."
-            >
-              <Switch
-                checked={user?.preferences.auto_scroll}
-                onCheckedChange={(checked) => {
-                  updateUserAutoScroll(checked);
-                }}
-              />
-            </InputLayouts.Horizontal>
-
-            <InputLayouts.Horizontal
-              label="Temperature override"
-              description="Set the temperature for the LLM."
-            >
-              <Switch
-                checked={user?.preferences.temperature_override_enabled}
-                onCheckedChange={(checked) => {
-                  updateUserTemperatureOverrideEnabled(checked);
-                }}
-              />
-            </InputLayouts.Horizontal>
-          </Card>
-        </Section>
-
-        <Section gap={0.75}>
-          <InputLayouts.Label label="Prompt Shortcuts" />
-          <Card>
-            <InputLayouts.Horizontal
-              label="Use Prompt Shortcuts"
-              description="Enable shortcuts to quickly insert common prompts."
-            >
-              <Switch
-                checked={user?.preferences?.shortcut_enabled}
-                onCheckedChange={(checked) => {
-                  updateUserShortcuts(checked);
-                }}
-              />
-            </InputLayouts.Horizontal>
-
-            {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
-          </Card>
-        </Section>
-
-        <Section gap={0.75}>
-          <InputLayouts.Label label="Personalization" />
-          <Card>
-            <InputLayouts.Horizontal
-              label="Reference Stored Memories"
-              description="Let Onyx reference stored memories in chats."
-            >
-              <Switch
-                checked={personalizationValues.use_memories}
-                onCheckedChange={(checked) => {
-                  toggleUseMemories(checked);
-                  void handleSavePersonalization({ use_memories: checked });
-                }}
-              />
-            </InputLayouts.Horizontal>
-
-            {personalizationValues.use_memories && (
-              <Memories
-                memories={personalizationValues.memories}
-                onSaveMemories={handleSaveMemories}
-              />
-            )}
-          </Card>
-        </Section>
+          <InputLayouts.Horizontal
+            label="Temperature override"
+            description="Set the temperature for the LLM."
+          >
+            <Switch
+              checked={user?.preferences.temperature_override_enabled}
+              onCheckedChange={(checked) => {
+                updateUserTemperatureOverrideEnabled(checked);
+              }}
+            />
+          </InputLayouts.Horizontal>
+        </Card>
       </Section>
-    </>
+
+      <Section gap={0.75}>
+        <InputLayouts.Label label="Prompt Shortcuts" />
+        <Card>
+          <InputLayouts.Horizontal
+            label="Use Prompt Shortcuts"
+            description="Enable shortcuts to quickly insert common prompts."
+          >
+            <Switch
+              checked={user?.preferences?.shortcut_enabled}
+              onCheckedChange={(checked) => {
+                updateUserShortcuts(checked);
+              }}
+            />
+          </InputLayouts.Horizontal>
+
+          {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
+        </Card>
+      </Section>
+
+      <Section gap={0.75}>
+        <InputLayouts.Label label="Personalization" />
+        <Card>
+          <InputLayouts.Horizontal
+            label="Reference Stored Memories"
+            description="Let Onyx reference stored memories in chats."
+          >
+            <Switch
+              checked={personalizationValues.use_memories}
+              onCheckedChange={(checked) => {
+                toggleUseMemories(checked);
+                void handleSavePersonalization({ use_memories: checked });
+              }}
+            />
+          </InputLayouts.Horizontal>
+
+          {personalizationValues.use_memories && (
+            <Memories
+              memories={personalizationValues.memories}
+              onSaveMemories={handleSaveMemories}
+            />
+          )}
+        </Card>
+      </Section>
+    </Section>
   );
 }
 
