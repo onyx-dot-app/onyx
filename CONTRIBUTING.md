@@ -6,7 +6,7 @@ Hey there! We are so excited that you're interested in Onyx.
 The [GitHub Issues](https://github.com/onyx-dot-app/onyx/issues) page is a great place to look for and share contribution ideas.
 
 If you have your own feature that you would like to build please create an issue and community members can provide feedback and
-thumbs it up if they feel a common need. 
+thumb it up if they feel a common need. 
 
 
 ## Contributing Code

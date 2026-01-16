@@ -14,7 +14,7 @@ Onyx being a fully functional app, relies on some external software, specificall
 
 ### Local Set Up
 
-Be sure to use Python version 3.11. For instructions on installing Python 3.11 on macOS, refer to the [CONTRIBUTING_MACOS.md](./CONTRIBUTING_MACOS.md) readme.
+Be sure to use Python version 3.11. For instructions on installing Python 3.11 on macOS, refer to the [contributing_macos.md](./contributing_macos.md) readme.
 
 If using a lower version, modifications will have to be made to the code.
 If using a higher version, sometimes some libraries will not be available (i.e. we had problems with Tensorflow in the past with higher versions of python).
@@ -99,7 +99,7 @@ Re-stage your changes and commit again.
 ## Developing using VSCode Debugger (recommended)
 
 **We highly recommend using VSCode debugger for development.**
-See [CONTRIBUTING_VSCODE.md](./CONTRIBUTING_VSCODE.md) for more details.
+See [contributing_vscode.md](./contributing_vscode.md) for more details.
 
 Otherwise, you can follow the instructions below to run the application for development.
 

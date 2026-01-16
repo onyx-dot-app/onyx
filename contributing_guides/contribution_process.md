@@ -11,7 +11,7 @@ We strive to provide the best user experience possible so we have to be intentio
 
 
 ## 2. Get the design approved
-The Onyx team will either provide a design doc and PRD for the feature or request one from you the contributor.
+The Onyx team will either provide a design doc and PRD for the feature or request one from you, the contributor.
 
 The scope and detail of the design will depend on the individual feature.
 
