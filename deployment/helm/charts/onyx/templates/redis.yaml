@@ -12,12 +12,13 @@ spec:
     imagePullPolicy: {{ .Values.redis.redisStandalone.imagePullPolicy }}
     resources:
       {{- toYaml .Values.redis.redisStandalone.resources | nindent 6 }}
-    securityContext:
-      fsGroup: 1000
-      runAsUser: 1000
     redisSecret:
       name: {{ .Values.redis.secretName | default "onyx-redis" }}
       key: redis_password
+  securityContext:
+    fsGroup: 1000
+    runAsUser: 1000
+
   storage:
     volumeClaimTemplate:
       spec:
