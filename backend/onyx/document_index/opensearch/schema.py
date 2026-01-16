@@ -25,7 +25,7 @@ TITLE_VECTOR_FIELD_NAME = "title_vector"
 CONTENT_FIELD_NAME = "content"
 CONTENT_VECTOR_FIELD_NAME = "content_vector"
 SOURCE_TYPE_FIELD_NAME = "source_type"
-METADATA_FIELD_NAME = "metadata"
+METADATA_LIST_FIELD_NAME = "metadata_list"
 LAST_UPDATED_FIELD_NAME = "last_updated"
 PUBLIC_FIELD_NAME = "public"
 ACCESS_CONTROL_LIST_FIELD_NAME = "access_control_list"
@@ -35,7 +35,7 @@ SEMANTIC_IDENTIFIER_FIELD_NAME = "semantic_identifier"
 IMAGE_FILE_ID_FIELD_NAME = "image_file_id"
 SOURCE_LINKS_FIELD_NAME = "source_links"
 DOCUMENT_SETS_FIELD_NAME = "document_sets"
-PROJECT_IDS_FIELD_NAME = "project_ids"
+USER_PROJECTS_FIELD_NAME = "user_projects"
 DOCUMENT_ID_FIELD_NAME = "document_id"
 CHUNK_INDEX_FIELD_NAME = "chunk_index"
 MAX_CHUNK_SIZE_FIELD_NAME = "max_chunk_size"
@@ -43,6 +43,7 @@ TENANT_ID_FIELD_NAME = "tenant_id"
 BLURB_FIELD_NAME = "blurb"
 DOC_SUMMARY_FIELD_NAME = "doc_summary"
 CHUNK_CONTEXT_FIELD_NAME = "chunk_context"
+METADATA_SUFFIX_FIELD_NAME = "metadata_suffix"
 PRIMARY_OWNERS_FIELD_NAME = "primary_owners"
 SECONDARY_OWNERS_FIELD_NAME = "secondary_owners"
 
@@ -101,12 +102,9 @@ class DocumentChunk(BaseModel):
     content_vector: list[float]
 
     source_type: str
-    # Contains a string representation of a dict which maps string key to either
-    # string value or list of string values.
-    # TODO(andrei): When we augment content with metadata this can just be an
-    # index pointer, and when we support metadata list that will just be a list
-    # of strings.
-    metadata: str
+    # A list of key-value pairs separated by INDEX_SEPARATOR. See
+    # convert_metadata_dict_to_list_of_strings.
+    metadata_list: list[str] | None = None
     # If it exists, time zone should always be UTC.
     last_updated: datetime | None = None
 
@@ -123,12 +121,16 @@ class DocumentChunk(BaseModel):
     # chunk text to the link corresponding to that point.
     source_links: str | None = None
     blurb: str
+    # doc_summary, chunk_context, and metadata_suffix are all stored simply to
+    # reverse the augmentations to content. Ideally these would just be start
+    # and stop indices into the content string. For legacy reasons they are not
+    # right now.
     doc_summary: str
     chunk_context: str
+    metadata_suffix: str | None = None
 
     document_sets: list[str] | None = None
-    # User projects.
-    project_ids: list[int] | None = None
+    user_projects: list[int] | None = None
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
 
@@ -351,7 +353,7 @@ class DocumentSchema:
                     },
                 },
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
-                METADATA_FIELD_NAME: {"type": "keyword"},
+                METADATA_LIST_FIELD_NAME: {"type": "keyword"},
                 # TODO(andrei): Check if Vespa stores seconds, we may wanna do
                 # seconds here not millis.
                 LAST_UPDATED_FIELD_NAME: {
@@ -429,9 +431,16 @@ class DocumentSchema:
                     # Generally False by default; just making sure.
                     "store": False,
                 },
+                # Same as above.
+                METADATA_SUFFIX_FIELD_NAME: {
+                    "type": "keyword",
+                    "index": False,
+                    "doc_values": False,
+                    "store": False,
+                },
                 # Product-specific fields.
                 DOCUMENT_SETS_FIELD_NAME: {"type": "keyword"},
-                PROJECT_IDS_FIELD_NAME: {"type": "integer"},
+                USER_PROJECTS_FIELD_NAME: {"type": "integer"},
                 PRIMARY_OWNERS_FIELD_NAME: {"type": "keyword"},
                 SECONDARY_OWNERS_FIELD_NAME: {"type": "keyword"},
                 # OpenSearch metadata fields.
