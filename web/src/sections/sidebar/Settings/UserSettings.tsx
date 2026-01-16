@@ -437,6 +437,7 @@ export default function UserSettings() {
                       onCheckedChange={(checked) => {
                         updateUserAutoScroll(checked);
                       }}
+                      aria-label="Auto-scroll"
                     />
                   </div>
                   <div className="flex items-center justify-between">
