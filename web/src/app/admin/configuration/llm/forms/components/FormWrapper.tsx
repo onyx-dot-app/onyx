@@ -5,7 +5,6 @@ import useSWR, { useSWRConfig, KeyedMutator } from "swr";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import {
   LLMProviderView,
-  ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "../../interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
