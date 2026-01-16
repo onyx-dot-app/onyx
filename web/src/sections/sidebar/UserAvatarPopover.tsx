@@ -15,7 +15,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
-
 import {
   SvgBell,
   SvgExternalLink,
