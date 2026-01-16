@@ -28,7 +28,6 @@ import {
   restrictToFirstScrollableAncestor,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
-import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
@@ -65,6 +64,7 @@ import {
   SvgOnyxOctagon,
   SvgSettings,
 } from "@opal/icons";
+import UserAvatarPopover from "./UserAvatarPopover";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -420,7 +420,7 @@ const MemoizedAppSidebarInner = memo(
               {isAdmin ? "Admin Panel" : "Curator Panel"}
             </SidebarTab>
           )}
-          <Settings folded={folded} />
+          <UserAvatarPopover folded={folded} />
         </div>
       ),
       [folded, isAdmin, isCurator]
