@@ -511,6 +511,19 @@ const AIMessage = React.memo(function AIMessage({
 
   const groupedPackets = groupedPacketsRef.current;
 
+  // Derive tool groups and display groups from grouped packets
+  const toolGroups = groupedPackets.filter(
+    (group) => group.packets[0] && isToolPacket(group.packets[0], false)
+  );
+
+  // Non-tools include messages AND image generation
+  const displayGroups =
+    finalAnswerComing || toolGroups.length === 0
+      ? groupedPackets.filter(
+          (group) => group.packets[0] && isDisplayPacket(group.packets[0])
+        )
+      : [];
+
   // Return a list of rendered message components, one for each ind
   return (
     <>
@@ -547,76 +560,57 @@ const AIMessage = React.memo(function AIMessage({
                 <BlinkingDot addMargin />
               )
             ) : (
-              (() => {
-                // Simple split: tools vs non-tools
-                const toolGroups = groupedPackets.filter(
-                  (group) =>
-                    group.packets[0] && isToolPacket(group.packets[0], false)
-                );
+              <>
+                {/* Render tool groups in multi-tool renderer */}
+                {toolGroups.length > 0 && (
+                  <MultiToolRenderer
+                    packetGroups={toolGroups}
+                    chatState={effectiveChatState}
+                    isComplete={finalAnswerComing}
+                    isFinalAnswerComing={finalAnswerComingRef.current}
+                    stopPacketSeen={stopPacketSeen}
+                    stopReason={stopReason}
+                    isStreaming={globalChatState === "streaming"}
+                    onAllToolsDisplayed={() => setFinalAnswerComing(true)}
+                    expectedBranchesPerTurn={expectedBranchesRef.current}
+                  />
+                )}
 
-                // Non-tools include messages AND image generation
-                const displayGroups =
-                  finalAnswerComing || toolGroups.length === 0
-                    ? groupedPackets.filter(
-                        (group) =>
-                          group.packets[0] && isDisplayPacket(group.packets[0])
-                      )
-                    : [];
-
-                return (
-                  <>
-                    {/* Render tool groups in multi-tool renderer */}
-                    {toolGroups.length > 0 && (
-                      <MultiToolRenderer
-                        packetGroups={toolGroups}
-                        chatState={effectiveChatState}
-                        isComplete={finalAnswerComing}
-                        isFinalAnswerComing={finalAnswerComingRef.current}
-                        stopPacketSeen={stopPacketSeen}
-                        stopReason={stopReason}
-                        isStreaming={globalChatState === "streaming"}
-                        onAllToolsDisplayed={() => setFinalAnswerComing(true)}
-                        expectedBranchesPerTurn={expectedBranchesRef.current}
-                      />
+                {/* Render all display groups (messages + image generation) in main area */}
+                <div ref={finalAnswerRef}>
+                  {displayGroups.map((displayGroup, index) => (
+                    <RendererComponent
+                      key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+                      packets={displayGroup.packets}
+                      chatState={effectiveChatState}
+                      onComplete={() => {
+                        // if we've reverted to final answer not coming, don't set display complete
+                        // this happens when using claude and a tool calling packet comes after
+                        // some message packets
+                        // Only mark complete on the last display group
+                        if (
+                          finalAnswerComingRef.current &&
+                          index === displayGroups.length - 1
+                        ) {
+                          setDisplayComplete(true);
+                        }
+                      }}
+                      animate={false}
+                      stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
+                    >
+                      {({ content }) => <div>{content}</div>}
+                    </RendererComponent>
+                  ))}
+                  {/* Show stopped message when user cancelled and no display content */}
+                  {displayGroups.length === 0 &&
+                    stopReason === StopReason.USER_CANCELLED && (
+                      <Text as="p" secondaryBody text04>
+                        User has stopped generation
+                      </Text>
                     )}
-
-                    {/* Render all display groups (messages + image generation) in main area */}
-                    <div ref={finalAnswerRef}>
-                      {displayGroups.map((displayGroup, index) => (
-                        <RendererComponent
-                          key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-                          packets={displayGroup.packets}
-                          chatState={effectiveChatState}
-                          onComplete={() => {
-                            // if we've reverted to final answer not coming, don't set display complete
-                            // this happens when using claude and a tool calling packet comes after
-                            // some message packets
-                            // Only mark complete on the last display group
-                            if (
-                              finalAnswerComingRef.current &&
-                              index === displayGroups.length - 1
-                            ) {
-                              setDisplayComplete(true);
-                            }
-                          }}
-                          animate={false}
-                          stopPacketSeen={stopPacketSeen}
-                          stopReason={stopReason}
-                        >
-                          {({ content }) => <div>{content}</div>}
-                        </RendererComponent>
-                      ))}
-                      {/* Show stopped message when user cancelled and no display content */}
-                      {displayGroups.length === 0 &&
-                        stopReason === StopReason.USER_CANCELLED && (
-                          <Text as="p" secondaryBody text04>
-                            User has stopped generation
-                          </Text>
-                        )}
-                    </div>
-                  </>
-                );
-              })()
+                </div>
+              </>
             )}
           </div>
 
