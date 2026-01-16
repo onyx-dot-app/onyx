@@ -139,7 +139,8 @@ export default function UserAvatarPopover({ folded }: UserAvatarPopoverProps) {
   );
 
   const displayName = getDisplayName(user?.email, user?.personalization?.name);
-  const hasNotifications = notifications && notifications.length > 0;
+  const hasNotifications =
+    notifications?.some((notification) => !notification.dismissed) ?? false;
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
