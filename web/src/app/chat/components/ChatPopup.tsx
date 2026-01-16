@@ -75,7 +75,6 @@ export function ChatPopup() {
     <Modal open onOpenChange={() => {}}>
       <Modal.Content tall>
         <Modal.Header
-          titleClassName="text-text-04"
           icon={headerIcon}
           title={popupTitle || "Welcome to Onyx!"}
         />

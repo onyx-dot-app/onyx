@@ -7,7 +7,6 @@ import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 
@@ -34,7 +33,7 @@ const ModalRoot = DialogPrimitive.Root;
  *
  * @example
  * ```tsx
- * <Modal.Overlay className="bg-custom-overlay" />
+ * <Modal.Overlay />
  * ```
  */
 const ModalOverlay = React.forwardRef<
@@ -87,7 +86,7 @@ const sizeClassNames = {
 /**
  * Modal Content Component
  *
- * Main modal container with default styling. Size and other styles controlled via className or size prop.
+ * Main modal container with default styling.
  *
  * @example
  * ```tsx
@@ -110,12 +109,6 @@ const sizeClassNames = {
  *
  * <Modal.Content mini>
  *   {/* Mini modal: w-[32rem] h-fit *\/}
- * </Modal.Content>
- *
- * // Custom size with className
- * // (Highly discouraged! Always try to default to predefined sizings, please.)
- * <Modal.Content className="w-[48rem]">
- *   {/* Custom sized modal *\/}
  * </Modal.Content>
  * ```
  */
@@ -349,23 +342,11 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
 interface ModalHeaderProps extends WithoutStyles<SectionProps> {
   icon: React.FunctionComponent<IconProps>;
   title: string;
-  titleClassName?: string;
   description?: string;
   onClose?: () => void;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
-  (
-    {
-      icon: Icon,
-      title,
-      titleClassName,
-      description,
-      onClose,
-      children,
-      ...props
-    },
-    ref
-  ) => {
+  ({ icon: Icon, title, description, onClose, children, ...props }, ref) => {
     const { closeButtonRef } = useModalContext();
 
     return (
@@ -377,7 +358,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             flexDirection="row"
             justifyContent="between"
           >
-            <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
+            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
             {onClose && (
               <div
                 tabIndex={-1}
@@ -390,9 +371,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             )}
           </Section>
           <DialogPrimitive.Title asChild>
-            <Truncated headingH3 as="span" className={titleClassName}>
-              {title}
-            </Truncated>
+            <Text headingH3>{title}</Text>
           </DialogPrimitive.Title>
           {description && (
             <DialogPrimitive.Description asChild>
@@ -412,17 +391,12 @@ ModalHeader.displayName = "ModalHeader";
 /**
  * Modal Body Component
  *
- * Content area for the main modal content. All styling via className.
+ * Content area for the main modal content.
  *
  * @example
  * ```tsx
- * <Modal.Body className="p-4">
+ * <Modal.Body>
  *   {/* Content *\/}
- * </Modal.Body>
- *
- * // With custom background and overflow
- * <Modal.Body className="bg-background-tint-02 flex-1 overflow-auto p-6">
- *   {/* Scrollable content *\/}
  * </Modal.Body>
  * ```
  */
@@ -459,7 +433,7 @@ ModalBody.displayName = "ModalBody";
 /**
  * Modal Footer Component
  *
- * Footer section for actions/buttons. All styling via className.
+ * Footer section for actions/buttons.
  *
  * @example
  * ```tsx
