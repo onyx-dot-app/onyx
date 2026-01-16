@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
 import { Notification } from "@/app/admin/settings/interfaces";
 import useSWR from "swr";
@@ -78,6 +78,16 @@ function SettingsPopover({
     });
   };
 
+  const notificationCount = useMemo(
+    () =>
+      notifications?.reduce(
+        (prevCount, notification) =>
+          notification.dismissed ? prevCount : prevCount + 1,
+        0
+      ) ?? 0,
+    [notifications]
+  );
+
   return (
     <>
       <PopoverMenu>
@@ -92,10 +102,8 @@ function SettingsPopover({
             icon={SvgBell}
             onClick={onNotificationsClick}
           >
-            {`Notifications ${
-              notifications && notifications.length > 0
-                ? `(${notifications.length})`
-                : ""
+            {`Notifications${
+              notificationCount > 0 ? ` (${notificationCount})` : ""
             }`}
           </LineItem>,
           <LineItem
