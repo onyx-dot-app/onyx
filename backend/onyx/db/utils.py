@@ -40,3 +40,8 @@ class DocumentRow(BaseModel):
 class SortOrder(str, Enum):
     ASC = "asc"
     DESC = "desc"
+
+
+class DiscordChannelView(BaseModel):
+    channel_id: int
+    channel_name: str

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import DiscordBotConfig
 from onyx.db.models import DiscordChannelConfig
 from onyx.db.models import DiscordGuildConfig
+from onyx.db.utils import DiscordChannelView
 
 
 # === DiscordBotConfig ===
@@ -219,3 +220,103 @@ def delete_discord_channel_config(
     )
     db_session.flush()
     return result.rowcount > 0
+
+
+def create_channel_config(
+    db_session: Session,
+    guild_config_id: int,
+    channel_view: DiscordChannelView,
+) -> DiscordChannelConfig:
+    """Create a new channel config with default settings (disabled by default, admin enables via UI)."""
+    config = DiscordChannelConfig(
+        guild_config_id=guild_config_id,
+        channel_id=channel_view.channel_id,
+        channel_name=channel_view.channel_name,
+    )
+    db_session.add(config)
+    db_session.flush()
+    return config
+
+
+def bulk_create_channel_configs(
+    db_session: Session,
+    guild_config_id: int,
+    channels: list[DiscordChannelView],
+) -> list[DiscordChannelConfig]:
+    """Create multiple channel configs at once. Skips existing channels."""
+    # Get existing channel IDs for this guild
+    existing_channel_ids = set(
+        db_session.scalars(
+            select(DiscordChannelConfig.channel_id).where(
+                DiscordChannelConfig.guild_config_id == guild_config_id
+            )
+        ).all()
+    )
+
+    # Create configs for new channels only
+    new_configs = []
+    for channel_view in channels:
+        if channel_view.channel_id not in existing_channel_ids:
+            config = DiscordChannelConfig(
+                guild_config_id=guild_config_id,
+                channel_id=channel_view.channel_id,
+                channel_name=channel_view.channel_name,
+            )
+            db_session.add(config)
+            new_configs.append(config)
+
+    db_session.flush()
+    return new_configs
+
+
+def sync_channel_configs(
+    db_session: Session,
+    guild_config_id: int,
+    current_channels: list[DiscordChannelView],
+) -> tuple[int, int, int]:
+    """Sync channel configs with current Discord channels.
+
+    - Creates configs for new channels (disabled by default)
+    - Removes configs for deleted channels
+    - Updates names for existing channels if changed
+
+    Returns: (added_count, removed_count, updated_count)
+    """
+    current_channel_map = {
+        channel_view.channel_id: channel_view.channel_name
+        for channel_view in current_channels
+    }
+    current_channel_ids = set(current_channel_map.keys())
+
+    # Get existing configs
+    existing_configs = get_channel_configs(db_session, guild_config_id)
+    existing_channel_ids = {c.channel_id for c in existing_configs}
+
+    # Find channels to add, remove, and potentially update
+    to_add = current_channel_ids - existing_channel_ids
+    to_remove = existing_channel_ids - current_channel_ids
+
+    # Add new channels
+    added_count = 0
+    for channel_info in to_add:
+        create_channel_config(db_session, guild_config_id, channel_info)
+        added_count += 1
+
+    # Remove deleted channels
+    removed_count = 0
+    for config in existing_configs:
+        if config.channel_id in to_remove:
+            db_session.delete(config)
+            removed_count += 1
+
+    # Update names for existing channels if changed
+    updated_count = 0
+    for config in existing_configs:
+        if config.channel_id in current_channel_ids:
+            new_name = current_channel_map[config.channel_id]
+            if config.channel_name != new_name:
+                config.channel_name = new_name
+                updated_count += 1
+
+    db_session.flush()
+    return added_count, removed_count, updated_count
