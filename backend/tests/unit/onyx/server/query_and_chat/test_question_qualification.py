@@ -30,6 +30,8 @@ def mock_heavy_dependencies():
         "onyx.db.models",
         "onyx.chat.models",
         "onyx.context.search.models",
+        "onyx.db.engine.sql_engine",
+        "onyx.db.llm",
         "sqlalchemy",
         "sqlalchemy.orm",
     ]
@@ -44,11 +46,23 @@ def mock_heavy_dependencies():
     mock_llm.config.model_name = "test-model"
     mock_llm.config.model_provider = "test-provider"
 
-    # Mock get_default_llms to return (llm, fast_llm)
-    sys.modules["onyx.llm.factory"].get_default_llms = MagicMock(
-        return_value=(mock_llm, mock_llm)
-    )
+    # Mock get_default_llm (singular) - returns a single LLM instance
+    sys.modules["onyx.llm.factory"].get_default_llm = MagicMock(return_value=mock_llm)
+    # Mock llm_from_provider - used when QUESTION_QUALIFICATION_MODEL is set
+    sys.modules["onyx.llm.factory"].llm_from_provider = MagicMock(return_value=mock_llm)
     sys.modules["onyx.llm.interfaces"].LLM = MagicMock
+    # Mock db engine session context manager
+    sys.modules["onyx.db.engine.sql_engine"].get_session_with_current_tenant = (
+        MagicMock(
+            return_value=MagicMock(
+                __enter__=MagicMock(return_value=MagicMock()), __exit__=MagicMock()
+            )
+        )
+    )
+    # Mock fetch_default_provider
+    sys.modules["onyx.db.llm"].fetch_default_provider = MagicMock(
+        return_value=MagicMock()
+    )
 
     yield
 
