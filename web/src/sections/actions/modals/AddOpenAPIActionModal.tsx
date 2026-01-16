@@ -238,7 +238,7 @@ function FormContent({
       <Modal.Body>
         <InputLayouts.Vertical
           name="definition"
-          label="OpenAPI Schema Definition"
+          title="OpenAPI Schema Definition"
           subDescription={
             <>
               Specify an OpenAPI schema that defines the APIs you want to make
@@ -337,7 +337,12 @@ function FormContent({
             gap={1}
           >
             <Section gap={0.25} alignItems="start">
-              <Section flexDirection="row" gap={0.5} alignItems="center" fit>
+              <Section
+                flexDirection="row"
+                gap={0.5}
+                alignItems="center"
+                width="fit"
+              >
                 <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
                 <Text>
                   {existingTool?.enabled
@@ -351,7 +356,12 @@ function FormContent({
                 </Text>
               )}
             </Section>
-            <Section flexDirection="row" gap={0.5} alignItems="center" fit>
+            <Section
+              flexDirection="row"
+              gap={0.5}
+              alignItems="center"
+              width="fit"
+            >
               <IconButton
                 icon={SvgUnplug}
                 tertiary

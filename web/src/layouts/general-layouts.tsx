@@ -1,12 +1,15 @@
 import { cn } from "@/lib/utils";
+import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
+import { IconProps } from "@opal/types";
 import React, { forwardRef } from "react";
 
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
 export type AlignItems = "start" | "center" | "end" | "stretch";
+export type Length = "auto" | "fit" | "full";
 
-const directionClassMap: Record<FlexDirection, string> = {
+const flexDirectionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
   column: "flex-col",
 };
@@ -21,6 +24,16 @@ const alignClassMap: Record<AlignItems, string> = {
   center: "items-center",
   end: "items-end",
   stretch: "items-stretch",
+};
+const widthClassmap: Record<Length, string> = {
+  auto: "w-auto",
+  fit: "w-fit",
+  full: "w-full",
+};
+const heightClassmap: Record<Length, string> = {
+  auto: "h-auto",
+  fit: "h-fit",
+  full: "h-full",
 };
 
 /**
@@ -77,38 +90,46 @@ export interface SectionProps
   flexDirection?: FlexDirection;
   justifyContent?: JustifyContent;
   alignItems?: AlignItems;
+  width?: Length;
+  height?: Length;
+
   gap?: number;
   padding?: number;
-  fit?: boolean;
   wrap?: boolean;
-}
 
+  // Debugging utilities
+  dbg?: boolean;
+}
 const Section = forwardRef<HTMLDivElement, SectionProps>(
   (
     {
       flexDirection = "column",
       justifyContent = "center",
       alignItems = "center",
+      width = "full",
+      height = "full",
       gap = 1,
       padding = 0,
-      fit,
       wrap,
+      dbg,
       ...rest
     },
     ref
   ) => {
-    const width = fit ? "w-fit" : "w-full";
-
     return (
       <div
         ref={ref}
         className={cn(
-          "flex h-full",
-          wrap && "flex-wrap",
+          "flex",
+
+          flexDirectionClassMap[flexDirection],
           justifyClassMap[justifyContent],
           alignClassMap[alignItems],
-          width,
-          directionClassMap[flexDirection]
+          widthClassmap[width],
+          heightClassmap[height],
+
+          wrap && "flex-wrap",
+          dbg && "dbg-red"
         )}
         style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
         {...rest}
@@ -118,4 +139,61 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(
 );
 Section.displayName = "Section";
 
-export { Section };
+export interface LineItemLayoutProps {
+  icon: React.FunctionComponent<IconProps>;
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  rightChildren?: React.ReactNode;
+
+  strikethrough?: boolean;
+}
+function LineItemLayout({
+  icon: Icon,
+  title,
+  description,
+  rightChildren,
+
+  strikethrough,
+}: LineItemLayoutProps) {
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      alignItems={!!description ? "start" : "center"}
+      gap={0.75}
+    >
+      <div className={cn("flex-shrink-0", !!description && "mt-0.5")}>
+        <Icon size={20} className="stroke-text-04" />
+      </div>
+
+      <div className="flex-1">
+        <Section justifyContent="start" alignItems="start" gap={0}>
+          {typeof title === "string" ? (
+            <Text
+              mainContentEmphasis
+              className={cn(strikethrough && "line-through")}
+            >
+              {title}
+            </Text>
+          ) : (
+            title
+          )}
+          {description &&
+            (typeof description === "string" ? (
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            ) : (
+              description
+            ))}
+        </Section>
+      </div>
+
+      <div className="flex-shrink">
+        <Section alignItems="end">{rightChildren}</Section>
+      </div>
+    </Section>
+  );
+}
+
+export { Section, LineItemLayout };
