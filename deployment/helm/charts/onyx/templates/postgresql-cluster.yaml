@@ -8,17 +8,14 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   instances: {{ .Values.postgresql.cluster.instances | default 1 }}
-  
   # Use the standard image or fallback
   imageName: {{ default "ghcr.io/cloudnative-pg/postgresql:16.1" .Values.postgresql.cluster.imageName }}
-  
   # Storage Configuration
   storage:
     size: {{ .Values.postgresql.cluster.storage.size | default "10Gi" }}
     {{- if .Values.postgresql.cluster.storage.storageClass }}
     storageClass: {{ .Values.postgresql.cluster.storage.storageClass }}
     {{- end }}
-
   # Superuser Secret (matches values.yaml config)
   enableSuperuserAccess: {{ .Values.postgresql.cluster.enableSuperuserAccess }}
   superuserSecret:
