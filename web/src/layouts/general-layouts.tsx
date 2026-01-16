@@ -140,7 +140,7 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(
 Section.displayName = "Section";
 
 export interface LineItemLayoutProps {
-  icon: React.FunctionComponent<IconProps>;
+  icon?: React.FunctionComponent<IconProps>;
   title: React.ReactNode;
   description?: React.ReactNode;
   rightChildren?: React.ReactNode;
@@ -162,9 +162,11 @@ function LineItemLayout({
       alignItems={!!description ? "start" : "center"}
       gap={0.75}
     >
-      <div className={cn("flex-shrink-0", !!description && "mt-0.5")}>
-        <Icon size={20} className="stroke-text-04" />
-      </div>
+      {Icon && (
+        <div className={cn("flex-shrink-0", !!description && "mt-0.5")}>
+          <Icon size={20} className="stroke-text-04" />
+        </div>
+      )}
 
       <div className="flex-1">
         <Section justifyContent="start" alignItems="start" gap={0}>
@@ -190,7 +192,7 @@ function LineItemLayout({
       </div>
 
       <div className="flex-shrink">
-        <Section alignItems="end">{rightChildren}</Section>
+        <Section>{rightChildren}</Section>
       </div>
     </Section>
   );
