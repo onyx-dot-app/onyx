@@ -776,10 +776,24 @@ class VespaIndex(DocumentIndex):
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
+        # This function will break if callers do not supply tenant ID, which we
+        # were seeing for id_based_retrieval. In practice callers always supply
+        # tenant ID for this function as of the time of this writing so this
+        # should not break, and the extra check below is good. In practice
+        # callers were not supplying tenant ID for id_based_retrieval.
+        tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
             multitenant=MULTI_TENANT,
         )
+        if tenant_state.tenant_id != tenant_id:
+            raise ValueError(
+                f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {tenant_id}."
+            )
+        if tenant_state.multitenant != self.multitenant:
+            raise ValueError(
+                f"Bug: Multitenant mismatch. Expected {tenant_state.multitenant}, got {self.multitenant}."
+            )
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
             tenant_state=tenant_state,
