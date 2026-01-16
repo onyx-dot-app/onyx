@@ -188,7 +188,7 @@ cryptography==46.0.3
     #   unstructured-client
 cyclopts==4.2.4
     # via fastmcp
-dask==2025.11.0
+dask==2026.1.1
     # via
     #   distributed
     #   onyx
