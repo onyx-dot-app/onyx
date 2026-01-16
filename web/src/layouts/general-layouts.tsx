@@ -145,6 +145,7 @@ export interface LineItemLayoutProps {
   description?: React.ReactNode;
   rightChildren?: React.ReactNode;
 
+  compact?: boolean;
   strikethrough?: boolean;
 }
 function LineItemLayout({
@@ -153,6 +154,7 @@ function LineItemLayout({
   description,
   rightChildren,
 
+  compact,
   strikethrough,
 }: LineItemLayoutProps) {
   return (
@@ -160,11 +162,11 @@ function LineItemLayout({
       flexDirection="row"
       justifyContent="between"
       alignItems={!!description ? "start" : "center"}
-      gap={0.75}
+      gap={compact ? 0.5 : 0.75}
     >
       {Icon && (
         <div className={cn("flex-shrink-0", !!description && "mt-0.5")}>
-          <Icon size={20} className="stroke-text-04" />
+          <Icon size={compact ? 18 : 20} className="stroke-text-04" />
         </div>
       )}
 

@@ -387,7 +387,7 @@ function ActionsTool({
   disabled,
 }: ActionsToolProps) {
   return (
-    <Card>
+    <Card padding={0.75}>
       <label className="w-full cursor-pointer" htmlFor={name}>
         <LineItemLayout
           icon={icon}
@@ -395,6 +395,7 @@ function ActionsTool({
           description={description}
           rightChildren={rightChildren}
           strikethrough={disabled}
+          compact
         />
       </label>
     </Card>
