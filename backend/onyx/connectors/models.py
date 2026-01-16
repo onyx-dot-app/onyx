@@ -288,9 +288,9 @@ def convert_metadata_list_of_strings_to_dict(
         if key in metadata:
             # We have already seen this key therefore it must point to a list.
             if isinstance(metadata[key], list):
-                metadata[key].append(value)
+                cast(list[str], metadata[key]).append(value)
             else:
-                metadata[key] = [metadata[key], value]
+                metadata[key] = [cast(str, metadata[key]), value]
         else:
             metadata[key] = value
     return metadata
