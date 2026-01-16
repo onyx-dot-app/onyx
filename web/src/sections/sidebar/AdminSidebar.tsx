@@ -15,7 +15,7 @@ import { MdOutlineCreditCard } from "react-icons/md";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
-  PaintingIconSkeleton,
+  MonoDiscordIcon,
   SlackIconSkeleton,
   BrainIcon,
 } from "@/components/icons/icons";
@@ -90,11 +90,18 @@ const custom_assistants_items = (
   ];
 
   if (!isCurator) {
-    items.push({
-      name: "Slack Bots",
-      icon: SlackIconSkeleton,
-      link: "/admin/bots",
-    });
+    items.push(
+      {
+        name: "Slack Bots",
+        icon: SlackIconSkeleton,
+        link: "/admin/bots",
+      },
+      {
+        name: "Discord Bots",
+        icon: MonoDiscordIcon,
+        link: "/admin/discord-bot",
+      }
+    );
   }
 
   items.push(
