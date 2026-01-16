@@ -44,7 +44,7 @@ function VerticalInputLayout({
   ...fieldLabelProps
 }: VerticalLayoutProps) {
   return (
-    <div className="flex flex-col w-full h-full gap-1">
+    <Section gap={0.25} alignItems="start">
       <LabelLayout name={name} {...fieldLabelProps} />
       {children}
       {name && <ErrorLayout name={name} />}
@@ -53,7 +53,7 @@ function VerticalInputLayout({
           {subDescription}
         </Text>
       )}
-    </div>
+    </Section>
   );
 }
 
@@ -127,7 +127,7 @@ function HorizontalInputLayout({
         : "items-center";
 
   return (
-    <div className="flex flex-col gap-1 h-full w-full">
+    <Section gap={0.25} alignItems="stretch">
       <label
         htmlFor={name}
         className={cn(
@@ -135,13 +135,15 @@ function HorizontalInputLayout({
           alignment
         )}
       >
-        <div className="min-w-[70%]">
+        <div className="flex-[2]">
           <LabelLayout {...fieldLabelProps} />
         </div>
-        <div className="flex flex-col items-end">{children}</div>
+        <div className="flex-1">
+          <Section alignItems="end">{children}</Section>
+        </div>
       </label>
       {name && <ErrorLayout name={name} />}
-    </div>
+    </Section>
   );
 }
 
@@ -265,6 +267,32 @@ function ErrorLayout({ name }: FieldErrorLayoutProps) {
   else return null;
 }
 
+/**
+ * ErrorTextLayout - A styled text component for displaying error or warning messages
+ *
+ * Renders a message with an appropriate icon and color based on the type.
+ * Use this for standalone error/warning messages outside of Formik context.
+ *
+ * Exported as `ErrorTextLayout` for direct usage.
+ *
+ * @param children - The error or warning message text
+ * @param type - The message type: "error" (red) or "warning" (yellow). Defaults to "error"
+ *
+ * @example
+ * ```tsx
+ * import { ErrorTextLayout } from "@/layouts/input-layouts";
+ *
+ * // Error message
+ * <ErrorTextLayout type="error">
+ *   This field is required
+ * </ErrorTextLayout>
+ *
+ * // Warning message
+ * <ErrorTextLayout type="warning">
+ *   This action cannot be undone
+ * </ErrorTextLayout>
+ * ```
+ */
 export type ErrorTextType = "error" | "warning";
 interface ErrorTextLayoutProps {
   children?: string;
