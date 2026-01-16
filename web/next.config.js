@@ -16,6 +16,7 @@ const cspHeader = `
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
   productionBrowserSourceMaps: false,
   output: "standalone",
   transpilePackages: ["@onyx/opal"],
