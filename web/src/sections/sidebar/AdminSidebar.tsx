@@ -44,7 +44,7 @@ import {
   SvgPaintBrush,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
-import UserAvatarPopover from "./UserAvatarPopover";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 
 const connectors_items = () => [
   {

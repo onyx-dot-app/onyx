@@ -56,7 +56,6 @@ import { useUser } from "@/components/user/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
   SvgEditBig,
   SvgFolderPlus,
@@ -64,7 +63,7 @@ import {
   SvgOnyxOctagon,
   SvgSettings,
 } from "@opal/icons";
-import UserAvatarPopover from "./UserAvatarPopover";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
