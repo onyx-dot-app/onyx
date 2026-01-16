@@ -390,7 +390,10 @@ const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
     return (
       <div
         ref={ref}
-        className={cn(twoTone && "bg-background-tint-01", "overflow-y-auto")}
+        className={cn(
+          twoTone && "bg-background-tint-01",
+          "min-h-0 overflow-y-auto"
+        )}
       >
         <Section padding={1} gap={1} alignItems="start" {...props}>
           {children}
