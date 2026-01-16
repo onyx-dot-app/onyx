@@ -96,10 +96,6 @@ export default function NotificationsPopover({
       <Section flexDirection="row" justifyContent="between" padding={0.5}>
         <Text headingH3>Notifications</Text>
         <IconButton icon={SvgX} internal onClick={onClose} />
-        {/*<SvgX
-          className="stroke-text-05 w-[1.2rem] h-[1.2rem] hover:stroke-text-04 cursor-pointer"
-          onClick={onClose}
-        />*/}
       </Section>
 
       <Separator noPadding className="px-2" />
