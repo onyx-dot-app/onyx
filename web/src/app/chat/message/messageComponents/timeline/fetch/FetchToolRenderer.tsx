@@ -7,7 +7,7 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { getUniqueIconFactories } from "@/components/chat/sources/SourceCard";
 import { IconProps } from "@/components/icons/icons";
 import { SearchChipList } from "../search/SearchChipList";
-import { useToolTiming, useExpandableList } from "../search";
+import { useToolTiming } from "../search";
 import {
   constructCurrentFetchState,
   INITIAL_URLS_TO_SHOW,

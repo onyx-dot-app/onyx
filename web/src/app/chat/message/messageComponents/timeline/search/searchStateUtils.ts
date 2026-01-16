@@ -17,10 +17,6 @@ export const QUERIES_PER_EXPANSION = 5;
 export const INITIAL_RESULTS_TO_SHOW = 3;
 export const RESULTS_PER_EXPANSION = 10;
 
-// Timing constants
-export const SEARCHING_MIN_DURATION_MS = 1000;
-export const SEARCHED_MIN_DURATION_MS = 1000;
-
 export interface SearchState {
   queries: string[];
   results: OnyxDocument[];

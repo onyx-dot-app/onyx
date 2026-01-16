@@ -5,7 +5,6 @@ export { FetchToolRenderer } from "./FetchToolRenderer";
 export {
   constructCurrentFetchState,
   type FetchState,
-  MAX_TITLE_LENGTH,
   INITIAL_URLS_TO_SHOW,
   URLS_PER_EXPANSION,
   READING_MIN_DURATION_MS,

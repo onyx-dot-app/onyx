@@ -146,8 +146,3 @@ export function useToolTiming({
     shouldShowAsComplete,
   };
 }
-
-// Backward compatibility alias
-export const useSearchTiming = useToolTiming;
-export type UseSearchTimingOptions = UseToolTimingOptions;
-export type UseSearchTimingResult = UseToolTimingResult;

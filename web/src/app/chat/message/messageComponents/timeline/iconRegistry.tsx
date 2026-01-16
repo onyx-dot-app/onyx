@@ -23,7 +23,7 @@ import { IconType } from "./AgentStep";
 /**
  * Icon size class for timeline icons
  */
-export const ICON_SIZE_CLASS = "w-4 h-4";
+const ICON_SIZE_CLASS = "w-4 h-4";
 
 /**
  * Registry of packet types to their icons

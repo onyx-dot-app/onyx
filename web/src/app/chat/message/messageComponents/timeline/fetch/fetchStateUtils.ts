@@ -6,9 +6,6 @@ import {
 } from "@/app/chat/services/streamingModels";
 import { OnyxDocument } from "@/lib/search/interfaces";
 
-// Display constants
-export const MAX_TITLE_LENGTH = 25;
-
 // Expansion constants
 export const INITIAL_URLS_TO_SHOW = 3;
 export const URLS_PER_EXPANSION = 5;

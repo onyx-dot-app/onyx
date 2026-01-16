@@ -252,23 +252,4 @@ export function StepContainer({
   );
 }
 
-/**
- * Helper to get the first step from a turn group (for icon display)
- */
-export function getFirstStep(turnGroup: TurnGroup): TransformedStep | null {
-  return turnGroup.steps[0] ?? null;
-}
-
-/**
- * Helper to determine if connector should show after a turn group
- */
-export function shouldShowConnector(
-  turnIndex: number,
-  totalTurns: number,
-  hasMoreContent?: boolean
-): boolean {
-  const isLastTurn = turnIndex === totalTurns - 1;
-  return !isLastTurn || !!hasMoreContent;
-}
-
 export default AgentTimeline;
