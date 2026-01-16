@@ -11,11 +11,11 @@ export default function usePromptShortcuts() {
   );
 
   const promptShortcuts = data ?? [];
-  const publicPromptShortcuts = promptShortcuts.filter((p) => !p.is_public);
+  const userPromptShortcuts = promptShortcuts.filter((p) => !p.is_public);
 
   return {
     promptShortcuts,
-    publicPromptShortcuts,
+    userPromptShortcuts,
     isLoading,
     error,
     refresh: mutate,
