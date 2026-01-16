@@ -5,7 +5,7 @@ export const colors = css`
     /* Main Colors - Configurable via env vars */
     --onyx-primary: #1c1c1c; /* Default primary color (buttons, accents) */
     --onyx-primary-hover: #000000; /* Darker on hover */
-    --onyx-background: #e9e9e9; /* Default background color */
+    --onyx-background: #ffffff; /* Default background color */
     --onyx-background-hover: #d9d9d9; /* Background color on hover */
     --onyx-text: #000000bf; /* Default text color (75% opacity) */
 
