@@ -99,12 +99,16 @@ the `outputs/document` directory, and name each page `1.MD`, `2.MD`, ...
 
 ### Graphs/Charts
 
-Graphs and charts should be created with a python script. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+Graphs and charts should be placed in the `outputs/charts` directory.
 
-The actual graphs/charts should be placed in the `outputs/charts` directory.
+Graphs and charts should be created with a python script. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
 
 ## Your Environment
 
 You are in an ephemeral virtual machine. 
 
-You currently have Python 3.11.13 and Node v22.21.1. Most useful packages are already installed. If needed, install python packages (with `pip`) or javascript packages (with `npm` from within the `outputs/web` directory).  
+You currently have Python 3.11.13 and Node v22.21.1. 
+
+**Python Virtual Environment**: A Python virtual environment is pre-configured at `.venv/` with common data science and visualization packages already installed (numpy, pandas, matplotlib, scipy, PIL, etc.). The environment should be automatically activated, but if you run into issues with missing packages, you can explicitly use `.venv/bin/python` or `.venv/bin/pip`.
+
+If you need additional packages, install them with `pip install <package>` (or `.venv/bin/pip install <package>` if the venv isn't active). For javascript packages, use `npm` from within the `outputs/web` directory.  
