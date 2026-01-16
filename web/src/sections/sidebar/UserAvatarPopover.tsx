@@ -25,6 +25,7 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import useAppFocus from "@/hooks/useAppFocus";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -143,12 +144,13 @@ export interface SettingsProps {
   folded?: boolean;
 }
 
-export default function Settings({ folded }: SettingsProps) {
+export default function UserAvatarPopover({ folded }: SettingsProps) {
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
   const router = useRouter();
+  const appFocus = useAppFocus();
 
   // Fetch notifications for display
   // The GET endpoint also triggers a refresh if release notes are stale
@@ -200,7 +202,7 @@ export default function Settings({ folded }: SettingsProps) {
                 </Section>
               ) : undefined
             }
-            transient={!!popupState}
+            transient={!!popupState || appFocus.isUserSettings()}
             folded={folded}
           >
             {displayName}
