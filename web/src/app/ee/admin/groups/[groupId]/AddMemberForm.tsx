@@ -22,7 +22,7 @@ export default function AddMemberForm({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgUserPlus}
           title="Add New User"

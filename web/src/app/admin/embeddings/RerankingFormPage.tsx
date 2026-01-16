@@ -323,7 +323,7 @@ const RerankingDetailsForm = forwardRef<
                     open
                     onOpenChange={() => setShowGpuWarningModalModel(null)}
                   >
-                    <Modal.Content small>
+                    <Modal.Content width="sm" height="sm">
                       <Modal.Header
                         icon={SvgAlertTriangle}
                         title="GPU Not Enabled"
@@ -358,7 +358,7 @@ const RerankingDetailsForm = forwardRef<
                       setShowLiteLLMConfigurationModal(false);
                     }}
                   >
-                    <Modal.Content medium>
+                    <Modal.Content>
                       <Modal.Header
                         icon={SvgKey}
                         title="API Key Configuration"
@@ -462,7 +462,7 @@ const RerankingDetailsForm = forwardRef<
                       setIsApiKeyModalOpen(false);
                     }}
                   >
-                    <Modal.Content medium>
+                    <Modal.Content>
                       <Modal.Header
                         icon={SvgKey}
                         title="API Key Configuration"

@@ -39,7 +39,7 @@ export default function DisconnectEntityModal({
       }}
     >
       <Modal.Content
-        mini
+        width="sm"
         preventAccidentalClose={false}
         skipOverlay={skipOverlay}
         onOpenAutoFocus={(e) => {

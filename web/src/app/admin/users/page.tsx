@@ -351,7 +351,7 @@ const AddUserButton = ({
 
       {bulkAddUsersModal && (
         <Modal open onOpenChange={() => setBulkAddUsersModal(false)}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgUserPlus}
               title="Bulk Add Users"
