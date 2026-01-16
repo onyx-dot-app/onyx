@@ -123,7 +123,7 @@ def get_tenant_usage_limit_overrides(
 
         load_usage_limit_overrides()
 
-    # If we have failed to fetch from the control plane, don't usage limit everyone.
+    # If we have failed to fetch from the control plane or we're in dev mode, don't usage limit anyone.
     if _tenant_usage_limit_overrides is None or DEV_MODE:
         return unlimited(tenant_id)
     return _tenant_usage_limit_overrides.get(tenant_id)
