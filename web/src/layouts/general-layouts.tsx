@@ -147,7 +147,25 @@ export interface LineItemLayoutProps {
 
   compact?: boolean;
   strikethrough?: boolean;
+  secondary?: boolean;
 }
+/**
+ * LineItemLayout - A layout for icon + title + description rows
+ *
+ * Structure:
+ *   Flexbox Row [
+ *     Grid [
+ *       [Icon] [Title      ]
+ *       [    ] [Description]
+ *     ],
+ *     rightChildren
+ *   ]
+ *
+ * - Icon column auto-sizes to icon width
+ * - Icon vertically centers with title
+ * - Description aligns with title's left edge (both in grid column 2)
+ * - rightChildren is outside the grid, in the outer flexbox
+ */
 function LineItemLayout({
   icon: Icon,
   title,
@@ -156,46 +174,55 @@ function LineItemLayout({
 
   compact,
   strikethrough,
+  secondary,
 }: LineItemLayoutProps) {
   return (
-    <Section
-      flexDirection="row"
-      justifyContent="between"
-      alignItems={!!description ? "start" : "center"}
-      gap={compact ? 0.5 : 0.75}
-    >
-      {Icon && (
-        <div className={cn("flex-shrink-0", !!description && "mt-0.5")}>
-          <Icon size={compact ? 18 : 20} className="stroke-text-04" />
-        </div>
-      )}
+    <Section flexDirection="row" justifyContent="between" alignItems="start">
+      <div
+        className="grid flex-1"
+        style={{
+          gridTemplateColumns: Icon ? "auto 1fr" : "1fr",
+          columnGap: "0.5rem",
+        }}
+      >
+        {/* Row 1: Icon, Title */}
+        {Icon && (
+          <Icon
+            size={compact ? 16 : 20}
+            className={cn(
+              "self-center",
+              secondary ? "stroke-text-03" : "stroke-text-04"
+            )}
+          />
+        )}
 
-      <div className="flex-1">
-        <Section justifyContent="start" alignItems="start" gap={0}>
-          {typeof title === "string" ? (
-            <Text
-              mainContentEmphasis
-              className={cn(strikethrough && "line-through")}
-            >
-              {title}
-            </Text>
-          ) : (
-            title
-          )}
-          {description &&
-            (typeof description === "string" ? (
+        {typeof title === "string" ? (
+          <Text
+            mainContentEmphasis={!secondary}
+            text03={secondary}
+            className={cn(strikethrough && "line-through")}
+          >
+            {title}
+          </Text>
+        ) : (
+          title
+        )}
+
+        {/* Row 2: Description (column 2, or column 1 if no icon) */}
+        {description && (
+          <div className={cn("leading-none", Icon && "col-start-2")}>
+            {typeof description === "string" ? (
               <Text secondaryBody text03>
                 {description}
               </Text>
             ) : (
               description
-            ))}
-        </Section>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex-shrink">
-        <Section>{rightChildren}</Section>
-      </div>
+      {rightChildren && <div className="flex-shrink-0">{rightChildren}</div>}
     </Section>
   );
 }

@@ -262,7 +262,7 @@ function FormContent({
             </>
           }
         >
-          <div className="group/DefinitionTextAreaField relative">
+          <div className="group/DefinitionTextAreaField relative w-full">
             {values.definition.trim() && (
               <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
                 <CopyIconButton
