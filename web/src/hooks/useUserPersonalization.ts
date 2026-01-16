@@ -144,6 +144,13 @@ export default function useUserPersonalization(
     }));
   }, []);
 
+  const setMemories = useCallback((memories: string[]) => {
+    setPersonalizationValues((prev) => ({
+      ...prev,
+      memories,
+    }));
+  }, []);
+
   const handleSavePersonalization = useCallback(async () => {
     setIsSavingPersonalization(true);
     const trimmedMemories = personalizationValues.memories
@@ -181,6 +188,7 @@ export default function useUserPersonalization(
     toggleUseMemories,
     updateMemoryAtIndex,
     addMemory,
+    setMemories,
     handleSavePersonalization,
     isSavingPersonalization,
   };

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
@@ -22,6 +22,7 @@ import Card from "@/refresh-components/cards/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/components/user/UserProvider";
@@ -111,7 +112,7 @@ function PATModal({
       }
       hideCancel={!!createdToken}
     >
-      <GeneralLayouts.Section gap={1}>
+      <Section gap={1}>
         {/* Token Creation*/}
         {!!createdToken?.token ? (
           <InputLayouts.Vertical label="Token Value">
@@ -150,7 +151,7 @@ function PATModal({
             </InputLayouts.Vertical>
           </>
         )}
-      </GeneralLayouts.Section>
+      </Section>
     </ConfirmationModalLayout>
   );
 }
@@ -240,18 +241,18 @@ function GeneralSettings() {
             </Button>
           }
         >
-          <GeneralLayouts.Section gap={0.5} alignItems="start">
+          <Section gap={0.5} alignItems="start">
             <Text>
               All your chat sessions and history will be permanently deleted.
               Deletion cannot be undone.
             </Text>
             <Text>Are you sure you want to delete all chats?</Text>
-          </GeneralLayouts.Section>
+          </Section>
         </ConfirmationModalLayout>
       )}
 
-      <GeneralLayouts.Section gap={2}>
-        <GeneralLayouts.Section gap={0.75}>
+      <Section gap={2}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Profile" />
           <Card>
             <InputLayouts.Horizontal
@@ -298,9 +299,9 @@ function GeneralSettings() {
               />
             </InputLayouts.Horizontal>
           </Card>
-        </GeneralLayouts.Section>
+        </Section>
 
-        <GeneralLayouts.Section gap={0.75}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Appearance" />
           <Card>
             <InputLayouts.Horizontal
@@ -351,11 +352,11 @@ function GeneralSettings() {
               </InputSelect>
             </InputLayouts.Horizontal>
           </Card>
-        </GeneralLayouts.Section>
+        </Section>
 
         <Separator noPadding />
 
-        <GeneralLayouts.Section gap={0.75}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Danger Zone" />
           <Card>
             <InputLayouts.Horizontal
@@ -374,8 +375,8 @@ function GeneralSettings() {
               </Button>
             </InputLayouts.Horizontal>
           </Card>
-        </GeneralLayouts.Section>
-      </GeneralLayouts.Section>
+        </Section>
+      </Section>
     </>
   );
 }
@@ -473,23 +474,21 @@ function PromptShortcuts() {
   );
 
   const handleRemoveShortcut = useCallback(
-    async (index: number) => {
-      const shortcut = shortcuts[index];
-      if (!shortcut) return;
-
+    async (id: number) => {
       // If it's a new shortcut (negative ID), just remove from state
-      if (shortcut.id < 0) {
-        setShortcuts((prev) => prev.filter((_, i) => i !== index));
+      if (id < 0) {
+        setShortcuts((prev) => prev.filter((s) => s.id !== id));
         return;
       }
 
       // Otherwise, delete from backend
       try {
-        const response = await fetch(`/api/input_prompt/${shortcut.id}`, {
+        const response = await fetch(`/api/input_prompt/${id}`, {
           method: "DELETE",
         });
 
         if (response.ok) {
+          setShortcuts((prev) => prev.filter((s) => s.id !== id));
           await refresh();
           setPopup({ message: "Shortcut deleted", type: "success" });
         } else {
@@ -499,7 +498,7 @@ function PromptShortcuts() {
         setPopup({ message: "Failed to delete shortcut", type: "error" });
       }
     },
-    [shortcuts, setPopup, refresh]
+    [setPopup, refresh]
   );
 
   const handleSaveShortcut = useCallback(
@@ -597,207 +596,214 @@ function PromptShortcuts() {
         const showContentError = isExisting && !hasContent;
 
         return (
-          <div key={shortcut.id}>
-            <GeneralLayouts.Section flexDirection="row" gap={0.25}>
-              <div className="w-[60%]">
-                <InputTypeIn
-                  placeholder="/Shortcut"
-                  value={shortcut.prompt}
-                  onChange={(e) =>
-                    handleUpdateShortcut(index, "prompt", e.target.value)
-                  }
-                  onBlur={() => void handleBlurShortcut(index)}
-                  error={showPromptError}
-                />
-              </div>
+          <Section
+            key={shortcut.id}
+            flexDirection="row"
+            justifyContent="between"
+            gap={0.25}
+          >
+            <div className="flex-1">
+              <InputTypeIn
+                placeholder="/Shortcut"
+                value={shortcut.prompt}
+                onChange={(e) =>
+                  handleUpdateShortcut(index, "prompt", e.target.value)
+                }
+                onBlur={() => handleBlurShortcut(index)}
+                error={showPromptError}
+              />
+            </div>
+            <div className="flex-[2]">
               <InputTypeIn
                 placeholder="Full prompt"
                 value={shortcut.content}
                 onChange={(e) =>
                   handleUpdateShortcut(index, "content", e.target.value)
                 }
-                onBlur={() => void handleBlurShortcut(index)}
+                onBlur={() => handleBlurShortcut(index)}
                 error={showContentError}
               />
-              <IconButton
-                icon={SvgMinusCircle}
-                onClick={() => void handleRemoveShortcut(index)}
-                tertiary
-                disabled={isEmpty && !isExisting}
-                aria-label="Remove shortcut"
-              />
-            </GeneralLayouts.Section>
-          </div>
+            </div>
+            <IconButton
+              icon={SvgMinusCircle}
+              onClick={() => handleRemoveShortcut(shortcut.id)}
+              tertiary
+              disabled={!isExisting && isEmpty}
+              aria-label="Remove shortcut"
+            />
+          </Section>
         );
       })}
     </>
   );
 }
 
-interface MemoriesModalProps {
-  showMemoriesModal: boolean;
-  setShowMemoriesModal: (show: boolean) => void;
-  personalizationValues: {
-    memories: string[];
-  };
-  handleSavePersonalization: () => Promise<any>;
+interface Memory {
+  id: number;
+  content: string;
 }
 
-function MemoriesModal({
-  showMemoriesModal,
-  setShowMemoriesModal,
-  personalizationValues,
-  handleSavePersonalization,
-}: MemoriesModalProps) {
-  const [isSaving, setIsSaving] = useState(false);
+interface LocalMemory extends Memory {
+  isNew: boolean;
+}
 
-  interface MemoriesFormValues {
-    newMemory: string;
-    existingMemories: string[];
-  }
+interface MemoriesProps {
+  memories: string[];
+  onSaveMemories: (memories: string[]) => Promise<boolean>;
+}
 
-  const initialValues: MemoriesFormValues = {
-    newMemory: "",
-    existingMemories: [...personalizationValues.memories],
-  };
+function Memories({ memories, onSaveMemories }: MemoriesProps) {
+  const { popup, setPopup } = usePopup();
+  const [localMemories, setLocalMemories] = useState<LocalMemory[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const initialMemoriesRef = useRef<string[]>([]);
 
-  async function handleSubmit(values: MemoriesFormValues, formikHelpers: any) {
-    setIsSaving(true);
+  // Initialize local memories from props
+  useEffect(() => {
+    // Convert string[] to LocalMemory[] with isNew: false for existing items
+    const existingMemories: LocalMemory[] = memories.map((content, index) => ({
+      id: index + 1,
+      content,
+      isNew: false,
+    }));
 
-    try {
-      // Combine new memory (if not empty) with existing memories
-      const allMemories: string[] = [];
+    // Always ensure there's at least one empty row
+    setLocalMemories([
+      ...existingMemories,
+      { id: Date.now(), content: "", isNew: true },
+    ]);
+    initialMemoriesRef.current = memories;
+    setIsInitialLoad(false);
+  }, [memories]);
 
-      if (values.newMemory.trim().length > 0) {
-        allMemories.push(values.newMemory.trim());
-      }
+  // Auto-add empty row when user starts typing in the last row
+  useEffect(() => {
+    if (isInitialLoad) return;
 
-      // Add all non-empty existing memories
-      values.existingMemories.forEach((memory) => {
-        if (memory.trim().length > 0) {
-          allMemories.push(memory.trim());
-        }
-      });
+    // Only manage new/unsaved rows (isNew: true)
+    const newMemories = localMemories.filter((m) => m.isNew);
+    const emptyNewRows = newMemories.filter((m) => !m.content.trim());
+    const emptyNewRowsCount = emptyNewRows.length;
 
-      // Update personalizationValues.memories by replacing the entire array
-      // We need to do this before calling handleSavePersonalization
-      // because that function reads from personalizationValues.memories
-      const originalMemories = personalizationValues.memories;
-      personalizationValues.memories = allMemories;
-
-      const result = await handleSavePersonalization();
-
-      if (result) {
-        // Save was successful - update form with saved memories and empty newMemory field
-        // Use resetForm with new values to reset both values AND dirty state
-        formikHelpers.resetForm({
-          values: {
-            newMemory: "",
-            existingMemories: allMemories,
-          },
-        });
-      } else {
-        // Save failed - restore original memories
-        personalizationValues.memories = originalMemories;
-      }
-    } finally {
-      setIsSaving(false);
+    // If we have no empty new rows, add one
+    if (emptyNewRowsCount === 0) {
+      setLocalMemories((prev) => [
+        ...prev,
+        { id: Date.now(), content: "", isNew: true },
+      ]);
     }
-  }
+    // If we have more than one empty new row, keep only one
+    else if (emptyNewRowsCount > 1) {
+      setLocalMemories((prev) => {
+        const existingMemories = prev.filter((m) => !m.isNew);
+        const filledNewMemories = prev.filter(
+          (m) => m.isNew && m.content.trim()
+        );
+        return [
+          ...existingMemories,
+          ...filledNewMemories,
+          { id: Date.now(), content: "", isNew: true },
+        ];
+      });
+    }
+  }, [localMemories, isInitialLoad]);
 
-  function handleClose(resetForm: () => void) {
-    // Reset to original memories on close without saving
-    resetForm();
-    setShowMemoriesModal(false);
-  }
+  const handleUpdateMemory = useCallback((index: number, value: string) => {
+    setLocalMemories((prev) =>
+      prev.map((memory, i) =>
+        i === index ? { ...memory, content: value } : memory
+      )
+    );
+  }, []);
+
+  const handleRemoveMemory = useCallback(
+    async (index: number) => {
+      const memory = localMemories[index];
+      if (!memory) return;
+
+      // If it's a new memory (isNew: true), just remove from state
+      if (memory.isNew) {
+        setLocalMemories((prev) => prev.filter((_, i) => i !== index));
+        return;
+      }
+
+      // For existing memories, remove and save
+      const newMemories = localMemories
+        .filter((_, i) => i !== index)
+        .filter((m) => !m.isNew || m.content.trim())
+        .map((m) => m.content);
+
+      const success = await onSaveMemories(newMemories);
+      if (success) {
+        setPopup({ message: "Memory deleted", type: "success" });
+      } else {
+        setPopup({ message: "Failed to delete memory", type: "error" });
+      }
+    },
+    [localMemories, onSaveMemories, setPopup]
+  );
+
+  const handleBlurMemory = useCallback(
+    async (index: number) => {
+      const memory = localMemories[index];
+      if (!memory || !memory.content.trim()) return;
+
+      // Build the new memories array from current state
+      const newMemories = localMemories
+        .filter((m) => m.content.trim())
+        .map((m) => m.content);
+
+      // Check if anything actually changed
+      const memoriesChanged =
+        JSON.stringify(newMemories) !==
+        JSON.stringify(initialMemoriesRef.current);
+
+      if (!memoriesChanged) return;
+
+      const success = await onSaveMemories(newMemories);
+      if (success) {
+        initialMemoriesRef.current = newMemories;
+        setPopup({ message: "Memory saved", type: "success" });
+      } else {
+        setPopup({ message: "Failed to save memory", type: "error" });
+      }
+    },
+    [localMemories, onSaveMemories, setPopup]
+  );
 
   return (
-    <Formik initialValues={initialValues} onSubmit={handleSubmit}>
-      {({ values, dirty, resetForm, submitForm, setFieldValue }) => {
-        const handleDeleteMemory = (index: number) => {
-          const newMemories = values.existingMemories.filter(
-            (_, i) => i !== index
-          );
-          setFieldValue("existingMemories", newMemories);
-        };
+    <>
+      {popup}
+
+      {localMemories.map((memory, index) => {
+        const isEmpty = !memory.content.trim();
+        const isExisting = !memory.isNew;
 
         return (
-          <Modal open={showMemoriesModal} onOpenChange={setShowMemoriesModal}>
-            <Modal.Content
-              width="sm"
-              height="lg"
-              preventAccidentalClose={false}
-            >
-              <Modal.Header
-                icon={SvgLightbulbSimple}
-                title="Memory"
-                description="Let Onyx reference these stored notes and memories in chats."
-              />
-              <Modal.Body>
-                <GeneralLayouts.Section gap={0.5}>
-                  {/* New memory input - always at the top */}
-                  <GeneralLayouts.Section
-                    flexDirection="row"
-                    alignItems="start"
-                    gap={0.5}
-                  >
-                    <InputTextAreaField
-                      name="newMemory"
-                      placeholder="Type or paste in text content"
-                      rows={3}
-                    />
-                    <IconButton icon={SvgMinusCircle} internal disabled />
-                  </GeneralLayouts.Section>
-
-                  {/* Existing memories */}
-                  {values.existingMemories &&
-                    values.existingMemories.length > 0 && (
-                      <>
-                        <Separator noPadding />
-                        {values.existingMemories.map((_, index) => (
-                          <GeneralLayouts.Section
-                            flexDirection="row"
-                            alignItems="start"
-                            gap={0.5}
-                            key={index}
-                          >
-                            <InputTextAreaField
-                              name={`existingMemories.${index}`}
-                              rows={3}
-                            />
-                            <IconButton
-                              icon={SvgMinusCircle}
-                              internal
-                              onClick={() => handleDeleteMemory(index)}
-                            />
-                          </GeneralLayouts.Section>
-                        ))}
-                      </>
-                    )}
-                </GeneralLayouts.Section>
-              </Modal.Body>
-
-              <Modal.Footer>
-                <Button
-                  secondary
-                  type="button"
-                  onClick={() => handleClose(resetForm)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={submitForm}
-                  disabled={isSaving || !dirty}
-                >
-                  {isSaving ? "Saving..." : "Save Memory"}
-                </Button>
-              </Modal.Footer>
-            </Modal.Content>
-          </Modal>
+          <Section
+            key={memory.id}
+            flexDirection="row"
+            alignItems="start"
+            gap={0.5}
+          >
+            <InputTextArea
+              placeholder="Type or paste in text content"
+              value={memory.content}
+              onChange={(e) => handleUpdateMemory(index, e.target.value)}
+              onBlur={() => void handleBlurMemory(index)}
+              rows={3}
+            />
+            <IconButton
+              icon={SvgMinusCircle}
+              onClick={() => void handleRemoveMemory(index)}
+              tertiary
+              disabled={isEmpty && !isExisting}
+              aria-label="Remove memory"
+            />
+          </Section>
         );
-      }}
-    </Formik>
+      })}
+    </>
   );
 }
 
@@ -811,34 +817,30 @@ function ChatPreferencesSettings() {
   } = useUser();
   const { popup, setPopup } = usePopup();
   const llmManager = useLlmManager();
-  const [showMemoriesModal, setShowMemoriesModal] = useState(false);
 
   const {
     personalizationValues,
     toggleUseMemories,
-    updateMemoryAtIndex,
-    addMemory,
+    setMemories,
     handleSavePersonalization,
-    isSavingPersonalization,
-  } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () =>
-      setPopup({
-        message: "Personalization updated successfully",
-        type: "success",
-      }),
-    onError: () =>
-      setPopup({
-        message: "Failed to update personalization",
-        type: "error",
-      }),
-  });
+  } = useUserPersonalization(user, updateUserPersonalization, {});
+
+  // Wrapper to save memories and return success/failure
+  const handleSaveMemories = useCallback(
+    async (newMemories: string[]): Promise<boolean> => {
+      setMemories(newMemories);
+      const result = await handleSavePersonalization();
+      return !!result;
+    },
+    [setMemories, handleSavePersonalization]
+  );
 
   return (
     <>
       {popup}
 
-      <GeneralLayouts.Section gap={2}>
-        <GeneralLayouts.Section gap={0.75}>
+      <Section gap={2}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Chats" />
           <Card>
             <InputLayouts.Horizontal
@@ -890,9 +892,9 @@ function ChatPreferencesSettings() {
               />
             </InputLayouts.Horizontal>
           </Card>
-        </GeneralLayouts.Section>
+        </Section>
 
-        <GeneralLayouts.Section gap={0.75}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Prompt Shortcuts" />
           <Card>
             <InputLayouts.Horizontal
@@ -909,55 +911,28 @@ function ChatPreferencesSettings() {
 
             {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
           </Card>
-        </GeneralLayouts.Section>
+        </Section>
 
-        <GeneralLayouts.Section gap={0.75}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Personalization" />
-          <Card gap={0} padding={0.25}>
-            <GeneralLayouts.Section padding={0.75}>
-              <InputLayouts.Horizontal
-                label="Reference Stored Memories"
-                description="Let Onyx reference stored memories in chats."
-              >
-                <Switch
-                  checked={personalizationValues.use_memories}
-                  onCheckedChange={(checked) => toggleUseMemories(checked)}
-                />
-              </InputLayouts.Horizontal>
-            </GeneralLayouts.Section>
+          <Card>
+            <InputLayouts.Horizontal
+              label="Reference Stored Memories"
+              description="Let Onyx reference stored memories in chats."
+            >
+              <Switch
+                checked={personalizationValues.use_memories}
+                onCheckedChange={(checked) => toggleUseMemories(checked)}
+              />
+            </InputLayouts.Horizontal>
 
-            {personalizationValues.memories.length === 0 ? (
-              <Button
-                tertiary
-                onClick={() => setShowMemoriesModal(true)}
-                className="w-full"
-              >
-                Add Memory
-              </Button>
-            ) : (
-              <GeneralLayouts.Section gap={0}>
-                {personalizationValues.memories.map((memory, index) => (
-                  <AttachmentButton
-                    key={index}
-                    icon={SvgLightbulbSimple}
-                    actionIcon={SvgExpand}
-                    onAction={() => setShowMemoriesModal(true)}
-                  >
-                    {memory}
-                  </AttachmentButton>
-                ))}
-              </GeneralLayouts.Section>
-            )}
+            <Memories
+              memories={personalizationValues.memories}
+              onSaveMemories={handleSaveMemories}
+            />
           </Card>
-        </GeneralLayouts.Section>
-
-        <MemoriesModal
-          showMemoriesModal={showMemoriesModal}
-          setShowMemoriesModal={setShowMemoriesModal}
-          personalizationValues={personalizationValues}
-          handleSavePersonalization={handleSavePersonalization}
-        />
-      </GeneralLayouts.Section>
+        </Section>
+      </Section>
     </>
   );
 }
@@ -1171,13 +1146,13 @@ function AccountsAccessSettings() {
             </Button>
           }
         >
-          <GeneralLayouts.Section gap={0.5} alignItems="start">
+          <Section gap={0.5} alignItems="start">
             <Text>
               Any application using this token will lose access to Onyx. This
               action cannot be undone.
             </Text>
             <Text>Are you sure you want to revoke this token?</Text>
-          </GeneralLayouts.Section>
+          </Section>
         </ConfirmationModalLayout>
       )}
 
@@ -1216,7 +1191,7 @@ function AccountsAccessSettings() {
                   setShowPasswordModal(false);
                 }}
               >
-                <GeneralLayouts.Section gap={1}>
+                <Section gap={1}>
                   <InputLayouts.Vertical label="Current Password">
                     <InputTypeIn
                       name="currentPassword"
@@ -1241,15 +1216,15 @@ function AccountsAccessSettings() {
                       onChange={handleChange}
                     />
                   </InputLayouts.Vertical>
-                </GeneralLayouts.Section>
+                </Section>
               </ConfirmationModalLayout>
             </Form>
           )}
         </Formik>
       )}
 
-      <GeneralLayouts.Section gap={2}>
-        <GeneralLayouts.Section gap={0.75}>
+      <Section gap={2}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Accounts" />
           <Card>
             <InputLayouts.Horizontal
@@ -1277,19 +1252,15 @@ function AccountsAccessSettings() {
               </InputLayouts.Horizontal>
             )}
           </Card>
-        </GeneralLayouts.Section>
+        </Section>
 
         {showTokensSection && (
-          <GeneralLayouts.Section gap={0.75}>
+          <Section gap={0.75}>
             <InputLayouts.Label label="Access Tokens" />
             <Card padding={0.25}>
-              <GeneralLayouts.Section gap={0}>
+              <Section gap={0}>
                 {/* Header with search/empty state and create button */}
-                <GeneralLayouts.Section
-                  flexDirection="row"
-                  padding={0.25}
-                  gap={0.5}
-                >
+                <Section flexDirection="row" padding={0.25} gap={0.5}>
                   {pats.length === 0 ? (
                     <Text as="span" text03 secondaryBody className="flex-1">
                       {isLoading
@@ -1313,7 +1284,7 @@ function AccountsAccessSettings() {
                   >
                     New Access Token
                   </CreateButton>
-                </GeneralLayouts.Section>
+                </Section>
 
                 {/* Token List */}
                 {filteredPats.map((pat) => (
@@ -1330,11 +1301,11 @@ function AccountsAccessSettings() {
                     {pat.name}
                   </AttachmentButton>
                 ))}
-              </GeneralLayouts.Section>
+              </Section>
             </Card>
-          </GeneralLayouts.Section>
+          </Section>
         )}
-      </GeneralLayouts.Section>
+      </Section>
     </>
   );
 }
@@ -1402,8 +1373,8 @@ function ConnectorsSettings() {
     <>
       {popup}
 
-      <GeneralLayouts.Section gap={2}>
-        <GeneralLayouts.Section gap={0.75}>
+      <Section gap={2}>
+        <Section gap={0.75}>
           <InputLayouts.Label label="Connectors" />
           {hasConnectors ? (
             <Card>
@@ -1540,8 +1511,8 @@ function ConnectorsSettings() {
           ) : (
             <EmptyMessage title="No connectors set up for your organization." />
           )}
-        </GeneralLayouts.Section>
-      </GeneralLayouts.Section>
+        </Section>
+      </Section>
     </>
   );
 }
