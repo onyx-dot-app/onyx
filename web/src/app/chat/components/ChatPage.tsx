@@ -640,20 +640,18 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
               )}
 
               {/* ChatUI */}
-              {!!currentChatSessionId && (
-                <ChatUI
-                  ref={chatUiRef}
-                  liveAssistant={liveAssistant}
-                  llmManager={llmManager}
-                  deepResearchEnabled={deepResearchEnabled}
-                  currentMessageFiles={currentMessageFiles}
-                  setPresentingDocument={setPresentingDocument}
-                  onSubmit={onSubmit}
-                  onMessageSelection={onMessageSelection}
-                  stopGenerating={stopGenerating}
-                  handleResubmitLastMessage={handleResubmitLastMessage}
-                />
-              )}
+              <ChatUI
+                ref={chatUiRef}
+                liveAssistant={liveAssistant}
+                llmManager={llmManager}
+                deepResearchEnabled={deepResearchEnabled}
+                currentMessageFiles={currentMessageFiles}
+                setPresentingDocument={setPresentingDocument}
+                onSubmit={onSubmit}
+                onMessageSelection={onMessageSelection}
+                stopGenerating={stopGenerating}
+                handleResubmitLastMessage={handleResubmitLastMessage}
+              />
 
               {!currentChatSessionId && !currentProjectId && (
                 <div className="w-full flex-1 flex flex-col items-center justify-end">
