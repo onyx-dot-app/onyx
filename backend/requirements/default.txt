@@ -796,7 +796,7 @@ py-key-value-shared==0.3.0
     # via py-key-value-aio
 pyairtable==3.0.1
     # via onyx
-pyasn1==0.6.1
+pyasn1==0.6.2
     # via
     #   pyasn1-modules
     #   rsa
