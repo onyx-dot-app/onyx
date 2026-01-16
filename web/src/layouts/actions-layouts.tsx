@@ -432,23 +432,12 @@ function ActionsToolSkeleton() {
       className="w-full p-3 rounded-12 border bg-background-tint-00"
     >
       <LineItemLayout
-        icon={({ className }) => (
-          <div
-            className={cn(
-              className,
-              "bg-background-neutral-02 rounded-04 animate-pulse"
-            )}
-          />
-        )}
-        title={
-          <div className="h-4 bg-background-neutral-02 rounded-04 w-1/3 animate-pulse" />
-        }
-        description={
-          <div className="h-3 bg-background-neutral-02 rounded-04 w-2/3 animate-pulse" />
-        }
-        rightChildren={
-          <div className="h-5 w-10 bg-background-neutral-02 rounded-full animate-pulse" />
-        }
+        // We provide dummy values here.
+        // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
+        title="..."
+        description="..."
+        rightChildren={<></>}
+        loading
       />
     </div>
   ));

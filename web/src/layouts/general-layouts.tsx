@@ -141,13 +141,14 @@ Section.displayName = "Section";
 
 export interface LineItemLayoutProps {
   icon?: React.FunctionComponent<IconProps>;
-  title: React.ReactNode;
-  description?: React.ReactNode;
+  title: string;
+  description?: string;
   rightChildren?: React.ReactNode;
 
   compact?: boolean;
   strikethrough?: boolean;
   secondary?: boolean;
+  loading?: boolean;
 }
 /**
  * LineItemLayout - A layout for icon + title + description rows
@@ -171,10 +172,10 @@ function LineItemLayout({
   title,
   description,
   rightChildren,
-
   compact,
   strikethrough,
   secondary,
+  loading,
 }: LineItemLayoutProps) {
   return (
     <Section flexDirection="row" justifyContent="between" alignItems="start">
@@ -183,6 +184,7 @@ function LineItemLayout({
         style={{
           gridTemplateColumns: Icon ? "auto 1fr" : "1fr",
           columnGap: "0.5rem",
+          rowGap: loading ? "0.25rem" : undefined,
         }}
       >
         {/* Row 1: Icon, Title */}
@@ -195,7 +197,9 @@ function LineItemLayout({
             )}
           />
         )}
-        {typeof title === "string" ? (
+        {loading ? (
+          <div className="h-4 bg-background-neutral-01 rounded-08 w-1/3 animate-pulse" />
+        ) : typeof title === "string" ? (
           <Text
             mainContentEmphasis={!secondary}
             text03={secondary}
@@ -208,7 +212,9 @@ function LineItemLayout({
         )}
 
         {/* Row 2: Description (column 2, or column 1 if no icon) */}
-        {description && (
+        {loading && description ? (
+          <div className="h-6 bg-background-neutral-01 rounded-08 w-2/3 animate-pulse" />
+        ) : description ? (
           <div className={cn("leading-none", Icon && "col-start-2")}>
             {typeof description === "string" ? (
               <Text secondaryBody text03>
@@ -218,10 +224,14 @@ function LineItemLayout({
               description
             )}
           </div>
-        )}
+        ) : undefined}
       </div>
 
-      {rightChildren && <div className="flex-shrink-0">{rightChildren}</div>}
+      {loading && rightChildren ? (
+        <div className="h-5 w-10 bg-background-neutral-01 rounded-full animate-pulse" />
+      ) : rightChildren ? (
+        <div className="flex-shrink-0">{rightChildren}</div>
+      ) : undefined}
     </Section>
   );
 }
