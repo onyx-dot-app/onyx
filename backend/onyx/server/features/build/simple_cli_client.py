@@ -274,22 +274,19 @@ class SimpleCLIClient:
             else Path(sandbox_base_path)
         )
 
-    def run_cli_agent(
-        self,
-        sandbox_id: str,
-        task: str,
-        emitter: MessageEmitter | None = None,
-    ) -> Sandbox:
+    def create_sandbox(self, sandbox_id: str) -> Sandbox:
         """
-        Run the CLI agent in a sandbox.
+        Create and set up a sandbox directory structure.
+
+        This creates the sandbox directories, symlinks, and copies templates,
+        but does NOT start the Next.js server or run the agent.
 
         Args:
             sandbox_id: Unique identifier for the sandbox
-            task: The task/prompt for the agent
-            emitter: Optional callback that receives each message as it arrives.
-                     If not provided, messages are printed to stdout.
+
+        Returns:
+            Sandbox object with the path set (nextjs_process will be None)
         """
-        # set up the sandbox
         sandbox_path = self.sandbox_base_path / sandbox_id
         sandbox_path.mkdir(parents=True, exist_ok=True)
 
@@ -326,33 +323,6 @@ class SimpleCLIClient:
             logger.info(f"Copying venv from {self.venv_template_path} to {venv_path}")
             shutil.copytree(self.venv_template_path, venv_path, symlinks=True)
 
-        # start the Next.js dev server on port 3002
-        web_dir = output_dir / "web"
-        if not web_dir.exists():
-            raise RuntimeError("Web directory does not exist")
-
-        # Clear Next.js cache to avoid stale paths from template
-        next_cache = web_dir / ".next"
-        if next_cache.exists():
-            shutil.rmtree(next_cache)
-
-        logger.info("Starting Next.js dev server on port 3002...")
-        nextjs_process = subprocess.Popen(
-            ["npm", "run", "dev", "--", "-p", "3002"],
-            cwd=web_dir,
-        )
-        # Wait for the server to be ready
-        server_url = "http://localhost:3002"
-        logger.info(f"Waiting for Next.js server at {server_url}...")
-        if wait_for_server(server_url, timeout=60.0):
-            logger.info(f"Next.js dev server is ready at {server_url}")
-        else:
-            logger.error(
-                f"Next.js dev server failed to start within 60 seconds. "
-                f"Process still running: {nextjs_process.poll() is None}"
-            )
-            raise RuntimeError("Next.js dev server failed to start")
-
         # build the instructions file - copy CLAUDE.template.md to CLAUDE.md
         claude_md_path = sandbox_path / "CLAUDE.md"
         if not claude_md_path.exists():
@@ -366,6 +336,62 @@ class SimpleCLIClient:
             skills_dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(skills_source, skills_dest)
             logger.info(f"Copied skills from {skills_source} to {skills_dest}")
+
+        return Sandbox(path=sandbox_path, nextjs_process=None)
+
+    def run_cli_agent(
+        self,
+        sandbox_id: str,
+        task: str,
+        emitter: MessageEmitter | None = None,
+        sandbox: Sandbox | None = None,
+    ) -> Sandbox:
+        """
+        Run the CLI agent in a sandbox.
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+            task: The task/prompt for the agent
+            emitter: Optional callback that receives each message as it arrives.
+                     If not provided, messages are printed to stdout.
+            sandbox: Optional existing sandbox. If not provided, one will be created.
+        """
+        # Use existing sandbox or create a new one
+        if sandbox is None:
+            sandbox = self.create_sandbox(sandbox_id)
+
+        sandbox_path = sandbox.path
+        output_dir = sandbox_path / OUTPUTS_DIR
+        venv_path = sandbox_path / VENV_DIR
+
+        # start the Next.js dev server on port 3002 if not already running
+        web_dir = output_dir / "web"
+        if not web_dir.exists():
+            raise RuntimeError("Web directory does not exist")
+
+        nextjs_process = sandbox.nextjs_process
+        if nextjs_process is None:
+            # Clear Next.js cache to avoid stale paths from template
+            next_cache = web_dir / ".next"
+            if next_cache.exists():
+                shutil.rmtree(next_cache)
+
+            logger.info("Starting Next.js dev server on port 3002...")
+            nextjs_process = subprocess.Popen(
+                ["npm", "run", "dev", "--", "-p", "3002"],
+                cwd=web_dir,
+            )
+            # Wait for the server to be ready
+            server_url = "http://localhost:3002"
+            logger.info(f"Waiting for Next.js server at {server_url}...")
+            if wait_for_server(server_url, timeout=60.0):
+                logger.info(f"Next.js dev server is ready at {server_url}")
+            else:
+                logger.error(
+                    f"Next.js dev server failed to start within 60 seconds. "
+                    f"Process still running: {nextjs_process.poll() is None}"
+                )
+                raise RuntimeError("Next.js dev server failed to start")
 
         logger.info(f"Running agent with task: {task}")
 
