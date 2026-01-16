@@ -35,7 +35,7 @@ export default function CreateProjectModal() {
 
   return (
     <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-      <Modal.Content mini>
+      <Modal.Content width="sm">
         <Modal.Header
           icon={SvgFolderPlus}
           title="Create New Project"

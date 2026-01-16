@@ -31,7 +31,7 @@ export default function AddInstructionModal() {
 
   return (
     <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-      <Modal.Content mini>
+      <Modal.Content width="sm">
         <Modal.Header
           icon={SvgAddLines}
           title="Set Project Instructions"

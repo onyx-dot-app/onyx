@@ -63,7 +63,7 @@ def process_with_prompt_cache(
         return suffix, None
 
     # Get provider adapter
-    provider_adapter = get_provider_adapter(llm_config.model_provider)
+    provider_adapter = get_provider_adapter(llm_config)
 
     # If provider doesn't support caching, combine and return unchanged
     if not provider_adapter.supports_caching():

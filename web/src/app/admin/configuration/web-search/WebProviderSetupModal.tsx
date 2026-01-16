@@ -81,7 +81,7 @@ export const WebProviderSetupModal = memo(
 
     return (
       <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <Modal.Content mini preventAccidentalClose>
+        <Modal.Content width="sm" preventAccidentalClose>
           <Modal.Header
             icon={LogoArrangement}
             title={`Set up ${providerLabel}`}

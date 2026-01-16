@@ -21,7 +21,7 @@ export default function DeleteCredentialsModal({
 }: DeleteCredentialsModalProps) {
   return (
     <Modal open onOpenChange={onCancel}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgTrash}
           title={`Delete ${getFormattedProviderName(

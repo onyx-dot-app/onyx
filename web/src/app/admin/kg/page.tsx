@@ -299,7 +299,7 @@ function Main() {
       )}
       {configureModalShown && (
         <Modal open onOpenChange={() => setConfigureModalShown(false)}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgSettings}
               title="Configure Knowledge Graph"

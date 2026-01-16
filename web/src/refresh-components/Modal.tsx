@@ -53,13 +53,13 @@ const ModalOverlay = React.forwardRef<
 ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 /**
- * Modal Context for managing close button ref, warning state, and size variant
+ * Modal Context for managing close button ref, warning state, and height variant
  */
 interface ModalContextValue {
   closeButtonRef: React.RefObject<HTMLDivElement | null>;
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
-  sizeVariant: "large" | "medium" | "small" | "tall" | "mini";
+  height: keyof typeof heightClasses;
 }
 
 const ModalContext = React.createContext<ModalContextValue | null>(null);
@@ -72,16 +72,18 @@ const useModalContext = () => {
   return context;
 };
 
-/**
- * Size class names mapping for modal variants
- */
-const sizeClassNames = {
-  large: ["w-[80dvw]", "h-[80dvh]"],
-  medium: ["w-[60rem]", "h-fit"],
-  small: ["w-[32rem]", "max-h-[30rem]"],
-  tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
-  mini: ["w-[32rem]", "h-fit"],
-} as const;
+const widthClasses = {
+  lg: "w-[80dvw]",
+  md: "w-[60rem]",
+  sm: "w-[32rem]",
+};
+
+const heightClasses = {
+  fit: "h-fit",
+  sm: "max-h-[30rem] overflow-y-auto",
+  lg: "max-h-[calc(100dvh-4rem)] overflow-y-auto",
+  full: "h-[80dvh] overflow-y-auto",
+};
 
 /**
  * Modal Content Component
@@ -90,25 +92,21 @@ const sizeClassNames = {
  *
  * @example
  * ```tsx
- * // Using size variants
- * <Modal.Content large>
- *   {/* Main modal: w-[80dvw] h-[80dvh] *\/}
+ * // Using width and height props
+ * <Modal.Content width="lg" height="full">
+ *   {/* Large modal: w-[80dvw] h-[80dvh] *\/}
  * </Modal.Content>
  *
- * <Modal.Content medium>
+ * <Modal.Content width="md" height="fit">
  *   {/* Medium modal: w-[60rem] h-fit *\/}
  * </Modal.Content>
  *
- * <Modal.Content small>
- *   {/* Small modal: w-[32rem] h-[30rem] *\/}
+ * <Modal.Content width="sm" height="sm">
+ *   {/* Small modal: w-[32rem] max-h-[30rem] *\/}
  * </Modal.Content>
  *
- * <Modal.Content tall>
- *   {/* Tall modal: w-[32rem] *\/}
- * </Modal.Content>
- *
- * <Modal.Content mini>
- *   {/* Mini modal: w-[32rem] h-fit *\/}
+ * <Modal.Content width="sm" height="lg">
+ *   {/* Tall modal: w-[32rem] max-h-[calc(100dvh-4rem)] *\/}
  * </Modal.Content>
  * ```
  */
@@ -116,11 +114,8 @@ interface ModalContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
   > {
-  large?: boolean;
-  medium?: boolean;
-  small?: boolean;
-  tall?: boolean;
-  mini?: boolean;
+  width?: keyof typeof widthClasses;
+  height?: keyof typeof heightClasses;
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
 }
@@ -131,28 +126,14 @@ const ModalContent = React.forwardRef<
   (
     {
       children,
-      large,
-      medium,
-      small,
-      tall,
-      mini,
+      width = "md",
+      height = "fit",
       preventAccidentalClose = true,
       skipOverlay = false,
       ...props
     },
     ref
   ) => {
-    const variant = large
-      ? "large"
-      : medium
-        ? "medium"
-        : small
-          ? "small"
-          : tall
-            ? "tall"
-            : mini
-              ? "mini"
-              : "medium";
     const closeButtonRef = React.useRef<HTMLDivElement>(null);
     const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
     const hasUserTypedRef = React.useRef(false);
@@ -268,7 +249,7 @@ const ModalContent = React.forwardRef<
           closeButtonRef,
           hasAttemptedClose,
           setHasAttemptedClose,
-          sizeVariant: variant,
+          height,
         }}
       >
         <DialogPrimitive.Portal>
@@ -295,8 +276,9 @@ const ModalContent = React.forwardRef<
               "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
               "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
               "duration-200",
-              // Size variants
-              sizeClassNames[variant]
+              // Size classes
+              widthClasses[width],
+              heightClasses[height]
             )}
             onOpenAutoFocus={(e) => {
               // Reset typing detection when modal opens
@@ -405,20 +387,12 @@ interface ModalBodyProps extends WithoutStyles<SectionProps> {
 }
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
   ({ twoTone = true, children, ...props }, ref) => {
-    const { sizeVariant } = useModalContext();
-
-    // Apply overflow-auto for fixed height variants (large, small, tall)
-    const hasFixedHeight =
-      sizeVariant === "large" ||
-      sizeVariant === "small" ||
-      sizeVariant === "tall";
-
     return (
       <div
         ref={ref}
         className={cn(
           twoTone && "bg-background-tint-01",
-          hasFixedHeight && "overflow-auto min-h-0"
+          "min-h-0 overflow-y-auto"
         )}
       >
         <Section padding={1} gap={1} alignItems="start" {...props}>

@@ -190,7 +190,7 @@ export default function ModifyCredential({
     <>
       {confirmDeletionCredential != null && (
         <Modal open onOpenChange={() => setConfirmDeletionCredential(null)}>
-          <Modal.Content small>
+          <Modal.Content width="sm" height="sm">
             <Modal.Header
               icon={SvgAlertTriangle}
               title="Confirm Deletion"
