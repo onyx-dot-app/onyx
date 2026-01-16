@@ -53,6 +53,9 @@ export async function sendMessage(page: Page, message: string) {
     null,
     { timeout: 10000 }
   );
+
+  // wait for stream to complete
+  await page.waitForLoadState("networkidle");
 }
 
 export async function verifyCurrentModel(page: Page, modelName: string) {
