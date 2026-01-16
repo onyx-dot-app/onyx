@@ -26,7 +26,9 @@ from onyx.db.models import User
 from onyx.server.features.build.models import ArtifactInfo
 from onyx.server.features.build.models import CreateSessionRequest
 from onyx.server.features.build.models import CreateSessionResponse
+from onyx.server.features.build.models import DirectoryListing
 from onyx.server.features.build.models import ExecuteRequest
+from onyx.server.features.build.models import FileSystemEntry
 from onyx.server.features.build.models import SessionStatus
 from onyx.server.features.build.session_manager import get_session_manager
 from onyx.utils.logger import setup_logger
@@ -206,12 +208,15 @@ def execute_task(
         """Run the agent in a background thread."""
         try:
             client = manager.client
+            # Pass the existing sandbox so we don't recreate it
+            existing_sandbox = session.sandbox
             sandbox = client.run_cli_agent(
                 sandbox_id=session_id,
                 task=request.task,
                 emitter=message_emitter,
+                sandbox=existing_sandbox,
             )
-            # Store sandbox in session
+            # Update sandbox in session (may have new nextjs_process)
             manager.update_session(session_id, sandbox=sandbox)
         except Exception as e:
             logger.error(f"Agent thread error: {e}")
@@ -353,6 +358,90 @@ def list_artifacts(
             )
 
     return artifacts
+
+
+# Hidden directories/files to filter from listings
+HIDDEN_PATTERNS = {
+    ".venv",
+    ".git",
+    ".next",
+    "__pycache__",
+    "node_modules",
+    ".DS_Store",
+    ".env",
+    ".gitignore",
+}
+
+
+@session_router.get("/sessions/{session_id}/files")
+def list_directory(
+    session_id: str,
+    path: str = "",
+    user: User | None = Depends(current_user),
+) -> DirectoryListing:
+    """
+    List files and directories in the sandbox.
+
+    Args:
+        session_id: The session ID
+        path: Relative path from sandbox root (empty string for root)
+
+    Returns:
+        DirectoryListing with sorted entries (directories first, then files)
+    """
+    manager = get_session_manager()
+    sandbox_path = manager.get_sandbox_path(session_id)
+
+    if sandbox_path is None:
+        raise HTTPException(status_code=404, detail="Session not found or not started")
+
+    # Construct the target directory path
+    target_dir = sandbox_path / path if path else sandbox_path
+
+    # Security check: ensure path doesn't escape sandbox via .. traversal
+    # We check the path components before resolving symlinks
+    try:
+        # Normalize without resolving symlinks to check for .. escapes
+        normalized = os.path.normpath(str(target_dir))
+        sandbox_normalized = os.path.normpath(str(sandbox_path))
+        if not normalized.startswith(sandbox_normalized):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not target_dir.exists():
+        raise HTTPException(status_code=404, detail="Directory not found")
+
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+
+    entries: list[FileSystemEntry] = []
+
+    for item in target_dir.iterdir():
+        # Filter hidden files and directories
+        if item.name in HIDDEN_PATTERNS or item.name.startswith("."):
+            continue
+
+        # Compute relative path from the logical path, not the resolved path
+        # This handles symlinked directories correctly
+        rel_path = f"{path}/{item.name}" if path else item.name
+        is_dir = item.is_dir()
+
+        entry = FileSystemEntry(
+            name=item.name,
+            path=rel_path,
+            is_directory=is_dir,
+            size=item.stat().st_size if not is_dir else None,
+            mime_type=mimetypes.guess_type(str(item))[0] if not is_dir else None,
+        )
+        entries.append(entry)
+
+    # Sort: directories first, then files, both alphabetically
+    entries.sort(key=lambda e: (not e.is_directory, e.name.lower()))
+
+    return DirectoryListing(path=path, entries=entries)
 
 
 @session_router.get("/sessions/{session_id}/artifacts/{path:path}")

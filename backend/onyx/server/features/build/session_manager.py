@@ -61,8 +61,12 @@ class BuildSessionManager:
         """Create a new build session and return the session ID."""
         session_id = f"build-{uuid.uuid4().hex[:12]}"
 
+        # Create the sandbox immediately so files are accessible
+        sandbox = self._client.create_sandbox(session_id)
+
         session = BuildSession(
             session_id=session_id,
+            sandbox=sandbox,
             task=task,
             user_id=user_id,
             tenant_id=tenant_id,
