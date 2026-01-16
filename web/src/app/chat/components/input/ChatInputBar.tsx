@@ -264,7 +264,7 @@ const ChatInputBar = React.memo(
         [setCurrentMessageFiles]
       );
 
-      const { promptShortcuts } = usePromptShortcuts();
+      const { publicPromptShortcuts } = usePromptShortcuts();
       const { ccPairs, isLoading: ccPairsLoading } = useCCPairs();
       const { data: federatedConnectorsData, isLoading: federatedLoading } =
         useFederatedConnectors();
@@ -340,12 +340,12 @@ const ChatInputBar = React.memo(
 
       const filteredPrompts = useMemo(
         () =>
-          promptShortcuts.filter(
+          publicPromptShortcuts.filter(
             (prompt) =>
               prompt.active &&
               prompt.prompt.toLowerCase().startsWith(startFilterSlash)
           ),
-        [promptShortcuts, startFilterSlash]
+        [publicPromptShortcuts, startFilterSlash]
       );
 
       // Determine if we should hide processing state based on context limits

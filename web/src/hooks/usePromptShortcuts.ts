@@ -10,12 +10,14 @@ export default function usePromptShortcuts() {
     errorHandlingFetcher
   );
 
-  const promptShortcuts = data?.filter((p) => !p.is_public) ?? [];
+  const promptShortcuts = data ?? [];
+  const publicPromptShortcuts = promptShortcuts.filter((p) => !p.is_public);
 
   return {
     promptShortcuts,
+    publicPromptShortcuts,
     isLoading,
     error,
-    refetch: mutate,
+    refresh: mutate,
   };
 }
