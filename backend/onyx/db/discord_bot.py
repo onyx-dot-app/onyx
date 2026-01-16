@@ -298,8 +298,11 @@ def sync_channel_configs(
 
     # Add new channels
     added_count = 0
-    for channel_info in to_add:
-        create_channel_config(db_session, guild_config_id, channel_info)
+    for channel_id in to_add:
+        channel_view = DiscordChannelView(
+            channel_id=channel_id, channel_name=current_channel_map[channel_id]
+        )
+        create_channel_config(db_session, guild_config_id, channel_view)
         added_count += 1
 
     # Remove deleted channels
