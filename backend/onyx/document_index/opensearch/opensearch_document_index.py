@@ -44,7 +44,7 @@ from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
-from onyx.document_index.opensearch.schema import PROJECT_IDS_FIELD_NAME
+from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
     MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
@@ -170,7 +170,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         # Small optimization, if this list is empty we can supply None to
         # OpenSearch and it will not store any data at all for this field, which
         # is different from supplying an empty list.
-        user_projects=chunk.user_project if chunk.user_project else None,
+        user_projects=chunk.user_project or None,
         primary_owners=get_experts_stores_representations(
             chunk.source_document.primary_owners
         ),
@@ -559,7 +559,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.hidden is not None:
                 properties_to_update[HIDDEN_FIELD_NAME] = update_request.hidden
             if update_request.project_ids is not None:
-                properties_to_update[PROJECT_IDS_FIELD_NAME] = list(
+                properties_to_update[USER_PROJECTS_FIELD_NAME] = list(
                     update_request.project_ids
                 )
 
