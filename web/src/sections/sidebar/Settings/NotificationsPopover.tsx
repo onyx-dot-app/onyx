@@ -95,10 +95,11 @@ export default function NotificationsPopover({
     <Section gap={0.5} padding={0.25}>
       <Section flexDirection="row" justifyContent="between" padding={0.5}>
         <Text headingH3>Notifications</Text>
-        <SvgX
+        <IconButton icon={SvgX} internal onClick={onClose} />
+        {/*<SvgX
           className="stroke-text-05 w-[1.2rem] h-[1.2rem] hover:stroke-text-04 cursor-pointer"
           onClick={onClose}
-        />
+        />*/}
       </Section>
 
       <Separator noPadding className="px-2" />
@@ -119,16 +120,15 @@ export default function NotificationsPopover({
             </Section>
           </div>
         ) : (
-          <Section alignItems="stretch" gap={0}>
-            {notifications.map((notification) => (
-              <div
-                key={notification.id}
-                className={notification.dismissed ? "opacity-50" : ""}
-              >
+          <div className="max-h-96 overflow-y-auto w-full">
+            <Section alignItems="stretch" gap={0}>
+              {notifications.map((notification) => (
                 <LineItem
+                  key={notification.id}
                   icon={getNotificationIcon(notification.notif_type)}
                   description={notification.description ?? undefined}
                   onClick={() => handleNotificationClick(notification)}
+                  strikethrough={notification.dismissed}
                   rightChildren={
                     !notification.dismissed ? (
                       <IconButton
@@ -142,9 +142,9 @@ export default function NotificationsPopover({
                 >
                   {notification.title}
                 </LineItem>
-              </div>
-            ))}
-          </Section>
+              ))}
+            </Section>
+          </div>
         )}
       </Section>
     </Section>
