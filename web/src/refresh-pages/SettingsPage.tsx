@@ -9,10 +9,8 @@ import { Section } from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
-  SvgExpand,
   SvgExternalLink,
   SvgKey,
-  SvgLightbulbSimple,
   SvgLock,
   SvgMinusCircle,
   SvgSliders,
@@ -21,7 +19,6 @@ import {
 import Card from "@/refresh-components/cards/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
@@ -54,7 +51,6 @@ import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
-import Modal from "@/refresh-components/Modal";
 
 interface PAT {
   id: number;
@@ -584,56 +580,60 @@ function PromptShortcuts() {
     <>
       {popup}
 
-      {shortcuts.map((shortcut, index) => {
-        const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
-        const isExisting = shortcut.id > 0;
-        const hasPrompt = shortcut.prompt.trim();
-        const hasContent = shortcut.content.trim();
+      {shortcuts.length > 0 && (
+        <Section gap={0.5}>
+          {shortcuts.map((shortcut, index) => {
+            const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
+            const isExisting = shortcut.id > 0;
+            const hasPrompt = shortcut.prompt.trim();
+            const hasContent = shortcut.content.trim();
 
-        // Show error for existing shortcuts with incomplete fields
-        // (either one field empty or both fields empty)
-        const showPromptError = isExisting && !hasPrompt;
-        const showContentError = isExisting && !hasContent;
+            // Show error for existing shortcuts with incomplete fields
+            // (either one field empty or both fields empty)
+            const showPromptError = isExisting && !hasPrompt;
+            const showContentError = isExisting && !hasContent;
 
-        return (
-          <Section
-            key={shortcut.id}
-            flexDirection="row"
-            justifyContent="between"
-            gap={0.25}
-          >
-            <div className="flex-1">
-              <InputTypeIn
-                placeholder="/Shortcut"
-                value={shortcut.prompt}
-                onChange={(e) =>
-                  handleUpdateShortcut(index, "prompt", e.target.value)
-                }
-                onBlur={() => handleBlurShortcut(index)}
-                error={showPromptError}
-              />
-            </div>
-            <div className="flex-[2]">
-              <InputTypeIn
-                placeholder="Full prompt"
-                value={shortcut.content}
-                onChange={(e) =>
-                  handleUpdateShortcut(index, "content", e.target.value)
-                }
-                onBlur={() => handleBlurShortcut(index)}
-                error={showContentError}
-              />
-            </div>
-            <IconButton
-              icon={SvgMinusCircle}
-              onClick={() => handleRemoveShortcut(shortcut.id)}
-              tertiary
-              disabled={!isExisting && isEmpty}
-              aria-label="Remove shortcut"
-            />
-          </Section>
-        );
-      })}
+            return (
+              <Section
+                key={shortcut.id}
+                flexDirection="row"
+                justifyContent="between"
+                gap={0.25}
+              >
+                <div className="flex-1">
+                  <InputTypeIn
+                    placeholder="/Shortcut"
+                    value={shortcut.prompt}
+                    onChange={(e) =>
+                      handleUpdateShortcut(index, "prompt", e.target.value)
+                    }
+                    onBlur={() => handleBlurShortcut(index)}
+                    error={showPromptError}
+                  />
+                </div>
+                <div className="flex-[2]">
+                  <InputTypeIn
+                    placeholder="Full prompt"
+                    value={shortcut.content}
+                    onChange={(e) =>
+                      handleUpdateShortcut(index, "content", e.target.value)
+                    }
+                    onBlur={() => handleBlurShortcut(index)}
+                    error={showContentError}
+                  />
+                </div>
+                <IconButton
+                  icon={SvgMinusCircle}
+                  onClick={() => handleRemoveShortcut(shortcut.id)}
+                  tertiary
+                  disabled={!isExisting && isEmpty}
+                  aria-label="Remove shortcut"
+                />
+              </Section>
+            );
+          })}
+        </Section>
+      )}
     </>
   );
 }
@@ -775,34 +775,38 @@ function Memories({ memories, onSaveMemories }: MemoriesProps) {
     <>
       {popup}
 
-      {localMemories.map((memory, index) => {
-        const isEmpty = !memory.content.trim();
-        const isExisting = !memory.isNew;
+      {localMemories.length > 0 && (
+        <Section gap={0.5}>
+          {localMemories.map((memory, index) => {
+            const isEmpty = !memory.content.trim();
+            const isExisting = !memory.isNew;
 
-        return (
-          <Section
-            key={memory.id}
-            flexDirection="row"
-            alignItems="start"
-            gap={0.5}
-          >
-            <InputTextArea
-              placeholder="Type or paste in text content"
-              value={memory.content}
-              onChange={(e) => handleUpdateMemory(index, e.target.value)}
-              onBlur={() => void handleBlurMemory(index)}
-              rows={3}
-            />
-            <IconButton
-              icon={SvgMinusCircle}
-              onClick={() => void handleRemoveMemory(index)}
-              tertiary
-              disabled={isEmpty && !isExisting}
-              aria-label="Remove memory"
-            />
-          </Section>
-        );
-      })}
+            return (
+              <Section
+                key={memory.id}
+                flexDirection="row"
+                alignItems="start"
+                gap={0.5}
+              >
+                <InputTextArea
+                  placeholder="Type or paste in a personal note or memory"
+                  value={memory.content}
+                  onChange={(e) => handleUpdateMemory(index, e.target.value)}
+                  onBlur={() => void handleBlurMemory(index)}
+                  rows={2}
+                />
+                <IconButton
+                  icon={SvgMinusCircle}
+                  onClick={() => void handleRemoveMemory(index)}
+                  tertiary
+                  disabled={isEmpty && !isExisting}
+                  aria-label="Remove memory"
+                />
+              </Section>
+            );
+          })}
+        </Section>
+      )}
     </>
   );
 }
@@ -821,18 +825,16 @@ function ChatPreferencesSettings() {
   const {
     personalizationValues,
     toggleUseMemories,
-    setMemories,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {});
 
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
     async (newMemories: string[]): Promise<boolean> => {
-      setMemories(newMemories);
-      const result = await handleSavePersonalization();
+      const result = await handleSavePersonalization({ memories: newMemories });
       return !!result;
     },
-    [setMemories, handleSavePersonalization]
+    [handleSavePersonalization]
   );
 
   return (
@@ -926,10 +928,12 @@ function ChatPreferencesSettings() {
               />
             </InputLayouts.Horizontal>
 
-            <Memories
-              memories={personalizationValues.memories}
-              onSaveMemories={handleSaveMemories}
-            />
+            {personalizationValues.use_memories && (
+              <Memories
+                memories={personalizationValues.memories}
+                onSaveMemories={handleSaveMemories}
+              />
+            )}
           </Card>
         </Section>
       </Section>
@@ -1262,11 +1266,13 @@ function AccountsAccessSettings() {
                 {/* Header with search/empty state and create button */}
                 <Section flexDirection="row" padding={0.25} gap={0.5}>
                   {pats.length === 0 ? (
-                    <Text as="span" text03 secondaryBody className="flex-1">
-                      {isLoading
-                        ? "Loading tokens..."
-                        : "No access tokens created."}
-                    </Text>
+                    <Section padding={0.5} alignItems="start">
+                      <Text as="span" text03 secondaryBody>
+                        {isLoading
+                          ? "Loading tokens..."
+                          : "No access tokens created."}
+                      </Text>
+                    </Section>
                   ) : (
                     <InputTypeIn
                       placeholder="Search..."

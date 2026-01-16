@@ -151,36 +151,41 @@ export default function useUserPersonalization(
     }));
   }, []);
 
-  const handleSavePersonalization = useCallback(async () => {
-    setIsSavingPersonalization(true);
-    const trimmedMemories = personalizationValues.memories
-      .map((memory) => memory.trim())
-      .filter((memory) => memory.length > 0);
+  const handleSavePersonalization = useCallback(
+    async (overrides?: Partial<UserPersonalization>) => {
+      setIsSavingPersonalization(true);
 
-    const updatedPersonalization: UserPersonalization = {
-      ...personalizationValues,
-      memories: trimmedMemories,
-    };
+      const valuesToSave = { ...personalizationValues, ...overrides };
+      const trimmedMemories = valuesToSave.memories
+        .map((memory) => memory.trim())
+        .filter((memory) => memory.length > 0);
 
-    try {
-      await persistPersonalization(updatedPersonalization);
-      setPersonalizationValues(updatedPersonalization);
-      onSuccess?.(updatedPersonalization);
-      return updatedPersonalization;
-    } catch (error) {
-      setPersonalizationValues(basePersonalization);
-      onError?.(error);
-      return null;
-    } finally {
-      setIsSavingPersonalization(false);
-    }
-  }, [
-    basePersonalization,
-    onError,
-    onSuccess,
-    persistPersonalization,
-    personalizationValues,
-  ]);
+      const updatedPersonalization: UserPersonalization = {
+        ...valuesToSave,
+        memories: trimmedMemories,
+      };
+
+      try {
+        await persistPersonalization(updatedPersonalization);
+        setPersonalizationValues(updatedPersonalization);
+        onSuccess?.(updatedPersonalization);
+        return updatedPersonalization;
+      } catch (error) {
+        setPersonalizationValues(basePersonalization);
+        onError?.(error);
+        return null;
+      } finally {
+        setIsSavingPersonalization(false);
+      }
+    },
+    [
+      basePersonalization,
+      onError,
+      onSuccess,
+      persistPersonalization,
+      personalizationValues,
+    ]
+  );
 
   return {
     personalizationValues,
