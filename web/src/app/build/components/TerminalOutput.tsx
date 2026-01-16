@@ -4,23 +4,24 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgTerminalSmall, SvgLoader } from "@opal/icons";
+import { OutputPacket } from "@/hooks/useBuild";
 
 interface TerminalOutputProps {
-  output: string;
+  packets: OutputPacket[];
   isStreaming: boolean;
 }
 
 export default function TerminalOutput({
-  output,
+  packets,
   isStreaming,
 }: TerminalOutputProps) {
-  const containerRef = useRef<HTMLPreElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isStreaming && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [output, isStreaming]);
+  }, [packets, isStreaming]);
 
   return (
     <div className="border border-border-02 rounded-12 overflow-hidden">
@@ -40,16 +41,32 @@ export default function TerminalOutput({
           </div>
         )}
       </div>
-      <pre
+      <div
         ref={containerRef}
         className={cn(
           "p-4 bg-background-neutral-inverted-03 text-text-inverted-05",
-          "overflow-auto max-h-96 text-xs whitespace-pre-wrap break-words"
+          "overflow-auto max-h-96 text-xs"
         )}
         style={{ fontFamily: "var(--font-dm-mono)" }}
       >
-        {output || "Waiting for output..."}
-      </pre>
+        {packets.length === 0 ? (
+          <span className="text-text-inverted-03">Waiting for output...</span>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {packets.map((packet, index) => (
+              <pre
+                key={index}
+                className={cn(
+                  "whitespace-pre-wrap break-words m-0",
+                  packet.type === "stderr" && "text-status-error-05"
+                )}
+              >
+                {packet.content}
+              </pre>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

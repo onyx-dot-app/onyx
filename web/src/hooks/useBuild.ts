@@ -16,10 +16,16 @@ export type BuildStatus =
   | "completed"
   | "failed";
 
+export interface OutputPacket {
+  type: "stdout" | "stderr";
+  content: string;
+  timestamp: number;
+}
+
 export interface UseBuildReturn {
   status: BuildStatus;
   sessionId: string | null;
-  output: string;
+  packets: OutputPacket[];
   artifacts: ArtifactInfo[];
   error: string | null;
   run: (task: string, context?: string) => Promise<void>;
@@ -29,7 +35,7 @@ export interface UseBuildReturn {
 export function useBuild(): UseBuildReturn {
   const [status, setStatus] = useState<BuildStatus>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [output, setOutput] = useState("");
+  const [packets, setPackets] = useState<OutputPacket[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +43,7 @@ export function useBuild(): UseBuildReturn {
 
   const run = useCallback(async (task: string, context?: string) => {
     setStatus("creating");
-    setOutput("");
+    setPackets([]);
     setArtifacts([]);
     setError(null);
 
@@ -53,7 +59,14 @@ export function useBuild(): UseBuildReturn {
         (event: BuildEvent) => {
           switch (event.type) {
             case "output":
-              setOutput((prev) => prev + event.data.data);
+              setPackets((prev) => [
+                ...prev,
+                {
+                  type: event.data.stream,
+                  content: event.data.data,
+                  timestamp: Date.now(),
+                },
+              ]);
               break;
             case "status":
               if (event.data.status === "completed") {
@@ -108,7 +121,7 @@ export function useBuild(): UseBuildReturn {
       setSessionId(null);
     }
     setStatus("idle");
-    setOutput("");
+    setPackets([]);
     setArtifacts([]);
     setError(null);
   }, [sessionId]);
@@ -116,7 +129,7 @@ export function useBuild(): UseBuildReturn {
   return {
     status,
     sessionId,
-    output,
+    packets,
     artifacts,
     error,
     run,

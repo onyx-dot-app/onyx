@@ -30,6 +30,7 @@ from onyx.utils.logger import setup_logger
 
 SANDBOX_BASE_PATH = "/Users/chrisweaver/data/sandboxes"
 OUTPUTS_TEMPLATE_PATH = "/Users/chrisweaver/data/outputs_template/outputs"
+OUTPUTS_DIR = "outputs"
 
 logger = setup_logger()
 
@@ -256,9 +257,19 @@ class SimpleCLIClient:
             file_system_link.symlink_to(self.file_system_path, target_is_directory=True)
 
         # set up the output directory - copy the template
-        output_dir = sandbox_path / "outputs"
+        output_dir = sandbox_path / OUTPUTS_DIR
         if not output_dir.exists():
             shutil.copytree(self.outputs_template_path, output_dir, symlinks=True)
+
+        # set up additional output directories for generated content
+        slides_dir = output_dir / "slides"
+        slides_dir.mkdir(parents=True, exist_ok=True)
+
+        markdown_dir = output_dir / "markdown"
+        markdown_dir.mkdir(parents=True, exist_ok=True)
+
+        graphs_dir = output_dir / "graphs"
+        graphs_dir.mkdir(parents=True, exist_ok=True)
 
         # start the Next.js dev server on port 3002
         web_dir = output_dir / "web"

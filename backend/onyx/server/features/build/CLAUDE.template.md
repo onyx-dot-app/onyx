@@ -16,6 +16,7 @@ a folder for each repository tilted `[REPO_NAME]`. Within each repository there 
 within the appropriate folder. Pull requests are structured as `[PR_ID]__[PR_NAME].json` and issues 
 are structured as `[ISSUE_ID]__[ISSUE_NAME].json`.
 - Fireflies has all calls in the root, each as a single file titled `CALL_TITLE.json`.
+- HubSpot has four folders in the root: `Tickets`, `Companies`, `Deals`, and `Contacts`. Each object is stored as a file named after its title/name (e.g., `[TICKET_SUBJECT].json`, `[COMPANY_NAME].json`, `[DEAL_NAME].json`, `[CONTACT_NAME].json`).
 
 Across all names, spaces are replaced by `_`.
 
@@ -65,7 +66,7 @@ Feel free to write/edit anything you find in here.
 
 There should be four main types of outputs:
 1. Web Applications / Dashboards
-2. PPTX Slides
+2. Slides
 3. Markdown Documents
 4. Graphs/Charts
 
@@ -82,17 +83,25 @@ The Next.js app is already running and accessible at http://localhost:3002. Do n
 
 If the app needs any pre-computation, then create a bash script called `prepare.sh` at the root of the `web` directory.
 
-### PPTX Slides
+### Slides
 
-todo
+Slides should be created using the nano-banana MCP. 
+
+The outputs should be placed within the `outputs/slides` directory, named `[SLIDE_NUMBER].png`.
+
+Before creating slides, create a `SLIDE_OUTLINE.md` file describing the overall message as well as the content and structure of each slide.
 
 ### Markdown Documents
 
-todo
+Markdown documents should be placed within the `outputs/document` directory.
+If you want to have a single "Document" that has multiple distinct pages, then create a folder within
+the `outputs/document` directory, and name each page `1.MD`, `2.MD`, ...
 
 ### Graphs/Charts
 
-todo
+Graphs and charts should be created with a python script. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+
+The actual graphs/charts should be placed in the `outputs/charts` directory.
 
 ## Your Environment
 
