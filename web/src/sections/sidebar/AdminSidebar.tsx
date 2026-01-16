@@ -14,7 +14,6 @@ import { MdOutlineCreditCard } from "react-icons/md";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
-  PaintingIconSkeleton,
   SlackIconSkeleton,
   BrainIcon,
 } from "@/components/icons/icons";
@@ -46,6 +45,7 @@ import {
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 import UserAvatarPopover from "./UserAvatarPopover";
+
 const connectors_items = () => [
   {
     name: "Existing Connectors",
