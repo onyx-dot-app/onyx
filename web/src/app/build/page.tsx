@@ -20,7 +20,7 @@ import {
 
 export default function BuildPage() {
   const [taskInput, setTaskInput] = useState("");
-  const { status, sessionId, output, artifacts, error, run, cleanup } =
+  const { status, sessionId, packets, artifacts, error, run, cleanup } =
     useBuild();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,8 +89,8 @@ export default function BuildPage() {
         />
       )}
 
-      {output && (
-        <TerminalOutput output={output} isStreaming={status === "running"} />
+      {(packets.length > 0 || status === "running") && (
+        <TerminalOutput packets={packets} isStreaming={status === "running"} />
       )}
 
       {artifacts.length > 0 && sessionId && (
