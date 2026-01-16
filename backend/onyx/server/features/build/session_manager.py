@@ -1,5 +1,4 @@
 import threading
-import uuid
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
@@ -59,7 +58,7 @@ class BuildSessionManager:
         tenant_id: str | None = None,
     ) -> str:
         """Create a new build session and return the session ID."""
-        session_id = f"build-{uuid.uuid4().hex[:12]}"
+        session_id = f"build-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         # Create the sandbox immediately so files are accessible
         sandbox = self._client.create_sandbox(session_id)
