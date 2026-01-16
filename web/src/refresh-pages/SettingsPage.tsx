@@ -5,14 +5,18 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { Section } from "@/layouts/general-layouts";
+import * as ActionsLayouts from "@/layouts/actions-layouts";
+import { useActionsLayout } from "@/layouts/actions-layouts";
+import { LineItemLayout, Section } from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
+  SvgActions,
   SvgExternalLink,
   SvgKey,
   SvgLock,
   SvgMinusCircle,
+  SvgPlug,
   SvgSliders,
   SvgTrash,
 } from "@opal/icons";
@@ -39,7 +43,6 @@ import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
-import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
@@ -1314,6 +1317,33 @@ function AccountsAccessSettings() {
   );
 }
 
+interface ConnectorCardProps {
+  title: string;
+  description: string;
+  rightChildren?: React.ReactNode;
+}
+
+function ConnectorCard({
+  title,
+  description,
+  rightChildren,
+}: ConnectorCardProps) {
+  const { Provider } = useActionsLayout();
+
+  return (
+    <Provider>
+      <ActionsLayouts.Root>
+        <ActionsLayouts.Header
+          title={title}
+          description={description}
+          icon={SvgPlug}
+          rightChildren={rightChildren}
+        />
+      </ActionsLayouts.Root>
+    </Provider>
+  );
+}
+
 function ConnectorsSettings() {
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -1369,9 +1399,34 @@ function ConnectorsSettings() {
       .join(" ");
   }
 
-  const hasConnectors =
-    (ccPairs && ccPairs.length > 0) ||
-    (federatedConnectors && federatedConnectors.length > 0);
+  // Group indexed connectors by source
+  const groupedConnectors = ccPairs.reduce(
+    (acc, ccPair) => {
+      const source = ccPair.source;
+      if (!acc[source]) {
+        acc[source] = {
+          source,
+          count: 0,
+          hasSuccessfulRun: false,
+        };
+      }
+      acc[source]!.count++;
+      if (ccPair.has_successful_run) {
+        acc[source]!.hasSuccessfulRun = true;
+      }
+      return acc;
+    },
+    {} as Record<
+      string,
+      {
+        source: ValidSources;
+        count: number;
+        hasSuccessfulRun: boolean;
+      }
+    >
+  );
+
+  const hasConnectors = ccPairs.length > 0 || federatedConnectors.length > 0;
 
   return (
     <>
@@ -1382,137 +1437,79 @@ function ConnectorsSettings() {
           <InputLayouts.Label label="Connectors" />
           {hasConnectors ? (
             <Card>
-              {/* Indexed Connectors Section */}
-              {ccPairs.length > 0 && (
-                <div className="space-y-3 mb-6">
-                  <h4 className="text-md font-medium text-muted-foreground">
-                    Indexed Connectors
-                  </h4>
-                  {(() => {
-                    const groupedConnectors = ccPairs.reduce(
-                      (acc, ccPair) => {
-                        const source = ccPair.source;
-                        if (!acc[source]) {
-                          acc[source] = {
-                            source,
-                            count: 0,
-                            hasSuccessfulRun: false,
-                          };
-                        }
-                        acc[source]!.count++;
-                        if (ccPair.has_successful_run) {
-                          acc[source]!.hasSuccessfulRun = true;
-                        }
-                        return acc;
-                      },
-                      {} as Record<
-                        string,
-                        {
-                          source: ValidSources;
-                          count: number;
-                          hasSuccessfulRun: boolean;
-                        }
-                      >
-                    );
-
-                    return Object.values(groupedConnectors).map((group) => (
-                      <div
-                        key={group.source}
-                        className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30"
-                      >
-                        <div className="flex items-center gap-3">
-                          <SourceIcon sourceType={group.source} iconSize={24} />
-                          <div>
-                            <p className="font-medium">
-                              {formatSourceName(group.source)}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {group.count > 1
-                                ? `${group.count} connectors`
-                                : "Connected"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-sm text-muted-foreground font-medium">
-                          Active
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              )}
-
-              {/* Federated Search Section */}
-              {federatedConnectors.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="text-md font-medium text-muted-foreground">
-                    Federated Connectors
-                  </h4>
-                  {federatedConnectors.map((connector) => {
-                    const sourceMetadata = getSourceMetadata(
-                      connector.source as ValidSources
-                    );
-                    return (
-                      <div
-                        key={connector.federated_connector_id}
-                        className="flex items-center justify-between p-4 rounded-lg border border-border"
-                      >
-                        <div className="flex items-center gap-3">
-                          <SourceIcon
-                            sourceType={sourceMetadata.internalName}
-                            iconSize={24}
-                          />
-                          <div>
-                            <p className="font-medium">
-                              {formatSourceName(sourceMetadata.displayName)}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {connector.has_oauth_token
-                                ? "Connected"
-                                : "Not connected"}
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          {connector.has_oauth_token ? (
-                            <Button
-                              secondary
-                              onClick={() =>
-                                void handleDisconnectOAuth(
-                                  connector.federated_connector_id
-                                )
-                              }
-                              disabled={
-                                isDisconnecting ===
-                                connector.federated_connector_id
-                              }
-                            >
-                              {isDisconnecting ===
-                              connector.federated_connector_id
-                                ? "Disconnecting..."
-                                : "Disconnect"}
-                            </Button>
-                          ) : (
-                            <Button
-                              onClick={() => {
-                                if (connector.authorize_url) {
-                                  handleConnectOAuth(connector.authorize_url);
-                                }
-                              }}
-                              disabled={!connector.authorize_url}
-                              leftIcon={SvgExternalLink}
-                            >
-                              Connect
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <LineItemLayout
+                icon={SvgActions}
+                title="asdf"
+                description="asdf"
+              />
             </Card>
           ) : (
+            // <Section gap={0.5}>
+            //   {/* Indexed Connectors */}
+            //   {Object.values(groupedConnectors).map((group) => (
+            //     <ConnectorCard
+            //       key={group.source}
+            //       title={formatSourceName(group.source)}
+            //       description={
+            //         group.count > 1
+            //           ? `${group.count} connectors active`
+            //           : "Connected"
+            //       }
+            //       rightChildren={
+            //         <Text as="span" text03 secondaryBody>
+            //           Active
+            //         </Text>
+            //       }
+            //     />
+            //   ))}
+
+            //   {/* Federated Connectors */}
+            //   {federatedConnectors.map((connector) => {
+            //     const sourceMetadata = getSourceMetadata(
+            //       connector.source as ValidSources
+            //     );
+            //     return (
+            //       <ConnectorCard
+            //         key={connector.federated_connector_id}
+            //         title={formatSourceName(sourceMetadata.displayName)}
+            //         description={
+            //           connector.has_oauth_token ? "Connected" : "Not connected"
+            //         }
+            //         rightChildren={
+            //           connector.has_oauth_token ? (
+            //             <Button
+            //               secondary
+            //               onClick={() =>
+            //                 void handleDisconnectOAuth(
+            //                   connector.federated_connector_id
+            //                 )
+            //               }
+            //               disabled={
+            //                 isDisconnecting === connector.federated_connector_id
+            //               }
+            //             >
+            //               {isDisconnecting === connector.federated_connector_id
+            //                 ? "Disconnecting..."
+            //                 : "Disconnect"}
+            //             </Button>
+            //           ) : (
+            //             <Button
+            //               onClick={() => {
+            //                 if (connector.authorize_url) {
+            //                   handleConnectOAuth(connector.authorize_url);
+            //                 }
+            //               }}
+            //               disabled={!connector.authorize_url}
+            //               leftIcon={SvgExternalLink}
+            //             >
+            //               Connect
+            //             </Button>
+            //           )
+            //         }
+            //       />
+            //     );
+            //   })}
+            // </Section>
             <EmptyMessage title="No connectors set up for your organization." />
           )}
         </Section>
