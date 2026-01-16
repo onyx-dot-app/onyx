@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import Card from "@/refresh-components/cards/Card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -213,6 +212,7 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<FileSystemEntry | null>(null);
+  const [isOpen, setIsOpen] = useState(true);
 
   const loadRoot = useCallback(async () => {
     if (rootEntries !== null) return;
@@ -232,6 +232,7 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
   }, [sessionId, rootEntries]);
 
   const handleToggleRoot = async (open: boolean) => {
+    setIsOpen(open);
     if (open) {
       await loadRoot();
     }
@@ -245,28 +246,40 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
     setPreviewFile(null);
   };
 
+  // Auto-load on mount
+  useEffect(() => {
+    loadRoot();
+  }, []);
+
   return (
     <>
-      <Card>
-        <Collapsible onOpenChange={handleToggleRoot}>
+      <div className="border border-border-01 rounded-08 overflow-hidden">
+        <Collapsible open={isOpen} onOpenChange={handleToggleRoot}>
           <CollapsibleTrigger asChild>
-            <button className="w-full flex flex-row items-center gap-2 p-1 hover:bg-background-neutral-01 rounded-08 transition-colors">
+            <button className="w-full flex flex-row items-center gap-2 p-2 bg-background-neutral-01 hover:bg-background-neutral-02 transition-colors">
               {isLoading ? (
                 <SvgLoader className="size-4 stroke-text-03 animate-spin" />
+              ) : isOpen ? (
+                <SvgChevronDown className="size-4 stroke-text-03" />
               ) : (
-                <SvgChevronRight className="size-4 stroke-text-03 data-[state=open]:rotate-90 transition-transform" />
+                <SvgChevronRight className="size-4 stroke-text-03" />
               )}
               <SvgHardDrive className="size-4 stroke-text-03" />
               <Text mainUiAction text03>
-                File Browser
+                Workspace Files
               </Text>
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="pt-2">
+            <div className="p-1 max-h-[50vh] overflow-auto">
               {error && (
                 <Text secondaryBody className="text-status-error-01 p-2">
                   {error}
+                </Text>
+              )}
+              {rootEntries?.length === 0 && (
+                <Text secondaryBody text03 className="p-2 text-center">
+                  No files yet
                 </Text>
               )}
               {rootEntries?.map((entry) =>
@@ -291,7 +304,7 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
             </div>
           </CollapsibleContent>
         </Collapsible>
-      </Card>
+      </div>
 
       {previewFile && (
         <FilePreviewModal
