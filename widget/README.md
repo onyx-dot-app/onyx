@@ -26,11 +26,11 @@ Add these two lines to your website:
 
 ```html
 <!-- Load the widget -->
-<script type="module" src="https://YOUR_CDN/widget/v1/onyx-widget.js"></script>
+<script type="module" src="https://cdn.onyx.app/widget/1.0/dist/onyx-widget.js"></script>
 
 <!-- Configure and display -->
 <onyx-chat-widget
-  backend-url="https://api.onyx.app"
+  backend-url="https://cloud.onyx.app/api"
   api-key="your_api_key_here"
   mode="launcher"
 >
@@ -127,7 +127,7 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 **Basic Setup:**
 
 ```html
-<onyx-chat-widget backend-url="https://api.onyx.app" api-key="on_abc123">
+<onyx-chat-widget backend-url="https://cloud.onyx.app/api" api-key="on_abc123">
 </onyx-chat-widget>
 ```
 
@@ -135,7 +135,7 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 
 ```html
 <onyx-chat-widget
-  backend-url="https://api.onyx.app"
+  backend-url="https://cloud.onyx.app/api"
   api-key="on_abc123"
   agent-id="42"
   agent-name="Support Bot"
@@ -153,7 +153,7 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 ```html
 <div style="width: 400px; height: 600px;">
   <onyx-chat-widget
-    backend-url="https://api.onyx.app"
+    backend-url="https://cloud.onyx.app/api"
     api-key="on_abc123"
     mode="inline"
   >
