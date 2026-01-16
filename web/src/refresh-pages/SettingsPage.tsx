@@ -924,7 +924,10 @@ function ChatPreferencesSettings() {
             >
               <Switch
                 checked={personalizationValues.use_memories}
-                onCheckedChange={(checked) => toggleUseMemories(checked)}
+                onCheckedChange={(checked) => {
+                  toggleUseMemories(checked);
+                  void handleSavePersonalization({ use_memories: checked });
+                }}
               />
             </InputLayouts.Horizontal>
 
