@@ -93,7 +93,7 @@ export default function FeedbackModal({
       {popup}
 
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-        <Modal.Content mini>
+        <Modal.Content width="sm" height="sm">
           <Modal.Header
             icon={icon}
             title="Provide Additional Feedback"

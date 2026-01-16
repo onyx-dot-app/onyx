@@ -244,7 +244,7 @@ export default function CredentialSection({
 
       {showModifyCredential && (
         <Modal open onOpenChange={closeModifyCredential}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgEdit}
               title="Update Credentials"
@@ -272,7 +272,7 @@ export default function CredentialSection({
 
       {editingCredential && (
         <Modal open onOpenChange={closeEditingCredential}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgEdit}
               title="Edit Credential"
@@ -292,7 +292,7 @@ export default function CredentialSection({
 
       {showCreateCredential && (
         <Modal open onOpenChange={closeCreateCredential}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgKey}
               title={`Create ${getSourceDisplayName(sourceType)} Credential`}

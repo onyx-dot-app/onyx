@@ -128,7 +128,7 @@ export default function FederatedOAuthModal() {
 
   return (
     <Modal open>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgLink}
           title="Connect Your Apps"

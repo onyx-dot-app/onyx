@@ -105,7 +105,7 @@ function Main() {
       {popup}
 
       <Modal open={!!fullApiKey}>
-        <Modal.Content small>
+        <Modal.Content width="sm" height="sm">
           <Modal.Header
             title="New API Key"
             icon={SvgKey}
