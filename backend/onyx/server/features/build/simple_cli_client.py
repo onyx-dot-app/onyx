@@ -296,16 +296,21 @@ class SimpleCLIClient:
         logger.info(f"Sandbox path: {sandbox_path}")
 
         # set up the file system - create a read-only symlink to the source files
+        logger.info(f"Setting up file system - linking to {self.file_system_path}")
         file_system_link = sandbox_path / "files"
         if not file_system_link.exists():
             file_system_link.symlink_to(self.file_system_path, target_is_directory=True)
 
         # set up the output directory - copy the template
+        logger.info(
+            f"Setting up output directory - copying from {self.outputs_template_path}"
+        )
         output_dir = sandbox_path / OUTPUTS_DIR
         if not output_dir.exists():
             shutil.copytree(self.outputs_template_path, output_dir, symlinks=True)
 
         # set up additional output directories for generated content
+        logger.info("Setting up additional output directories")
         slides_dir = output_dir / "slides"
         slides_dir.mkdir(parents=True, exist_ok=True)
 
@@ -354,6 +359,14 @@ class SimpleCLIClient:
             template_path = Path(__file__).parent / "CLAUDE.template.md"
             shutil.copy(template_path, claude_md_path)
 
+        # copy skills directory to .claude/skills in the sandbox
+        skills_source = Path(__file__).parent / "skills"
+        skills_dest = sandbox_path / ".claude" / "skills"
+        if skills_source.exists() and not skills_dest.exists():
+            skills_dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(skills_source, skills_dest)
+            logger.info(f"Copied skills from {skills_source} to {skills_dest}")
+
         logger.info(f"Running agent with task: {task}")
 
         # Use provided emitter or fall back to print_message
@@ -395,18 +408,31 @@ class SimpleCLIClient:
 
 
 if __name__ == "__main__":
-    client = SimpleCLIClient()
-    sandbox_id = f"sandbox-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    sandbox = client.run_cli_agent(
-        sandbox_id,
-        "".join(
-            [
-                "Build a dashboard that shows/categorizes the new things added to the repo. "
-                "Specifically want to know how many of each 'tag' went in (e.g. feat, fix, chore, etc.). "
-                "Allow me to set the group by period (e.g. day, week, month)",
-            ]
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run Claude agent in a sandbox")
+    parser.add_argument(
+        "prompt",
+        nargs="?",
+        default=(
+            "Build a dashboard that shows/categorizes the new things added to the repo. "
+            "Specifically want to know how many of each 'tag' went in (e.g. feat, fix, chore, etc.). "
+            "Allow me to set the group by period (e.g. day, week, month)"
         ),
+        help="The prompt/task for the agent",
     )
+    parser.add_argument(
+        "--sandbox-id",
+        default=None,
+        help="Custom sandbox ID (default: auto-generated with timestamp)",
+    )
+    args = parser.parse_args()
+
+    client = SimpleCLIClient()
+    sandbox_id = (
+        args.sandbox_id or f"sandbox-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
+    sandbox = client.run_cli_agent(sandbox_id, args.prompt)
 
     # Wait for user input before cleanup
     input("\nPress Enter to delete the sandbox and exit...")
