@@ -225,7 +225,6 @@ def do_run_migrations(
 ) -> None:
     if create_schema:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
-        connection.execute(text("COMMIT"))
 
     connection.execute(text(f'SET search_path TO "{schema_name}"'))
 
