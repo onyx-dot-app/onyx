@@ -1,5 +1,5 @@
 {{- if .Values.redis.enabled -}}
-apiVersion: redis.redis.opstreelabs.in/v1beta1
+apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: Redis
 metadata:
   name: {{ .Release.Name }}-redis
@@ -12,6 +12,12 @@ spec:
     imagePullPolicy: {{ .Values.redis.redisStandalone.imagePullPolicy }}
     resources:
       {{- toYaml .Values.redis.redisStandalone.resources | nindent 6 }}
+    securityContext:
+      fsGroup: 1000
+      runAsUser: 1000
+    redisSecret:
+      name: {{ .Values.redis.secretName | default "onyx-redis" }}
+      key: redis_password
   storage:
     volumeClaimTemplate:
       spec:
