@@ -206,18 +206,11 @@ test.describe("Admin Workflow E2E Flows", () => {
     if (await syncButton.isVisible()) {
       await syncButton.click();
 
-      // Should show syncing state
-      const syncing = adminPage.locator(
-        '.syncing, text=/syncing/i, [role="progressbar"]'
-      );
-
-      // Wait for sync to complete
-      await adminPage.waitForTimeout(2000);
-
-      // Success message should appear
+      // Success message should appear after sync completes
       const successMessage = adminPage.locator(
-        "text=/synced|updated/i, .toast.success"
+        "text=/synced|updated|refreshed/i, .toast.success"
       );
+      await expect(successMessage).toBeVisible({ timeout: 10000 });
     }
   });
 

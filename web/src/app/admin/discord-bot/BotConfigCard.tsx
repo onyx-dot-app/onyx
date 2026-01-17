@@ -66,7 +66,7 @@ export function BotConfigCard({ setPopup }: Props) {
 
     setIsSubmitting(true);
     try {
-      await createBotConfig(botToken);
+      await createBotConfig(botToken.trim());
       setBotToken("");
       refreshBotConfig();
       setPopup({ type: "success", message: "Bot token saved successfully" });
