@@ -1,7 +1,10 @@
 import React from "react";
 import { SvgSearch, SvgGlobe } from "@opal/icons";
 import { SearchToolPacket } from "@/app/chat/services/streamingModels";
-import { MessageRenderer } from "@/app/chat/message/messageComponents/interfaces";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/chat/message/messageComponents/interfaces";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
@@ -41,6 +44,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   onComplete,
   animate,
   stopPacketSeen,
+  renderType,
   children,
 }) => {
   const searchState = constructCurrentSearchState(packets);
@@ -48,6 +52,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     searchState;
 
   const hasStarted = isSearching || isComplete;
+  const isCompact = renderType === RenderType.COMPACT;
 
   useToolTiming({
     hasStarted,
@@ -75,15 +80,17 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     status: queriesHeader,
     content: (
       <div className="flex flex-col">
-        <SearchChipList
-          items={queries}
-          initialCount={INITIAL_QUERIES_TO_SHOW}
-          expansionCount={QUERIES_PER_EXPANSION}
-          getKey={(_, index) => index}
-          toSourceInfo={queryToSourceInfo}
-          emptyState={<BlinkingDot />}
-          showDetailsCard={false}
-        />
+        {!isCompact && (
+          <SearchChipList
+            items={queries}
+            initialCount={INITIAL_QUERIES_TO_SHOW}
+            expansionCount={QUERIES_PER_EXPANSION}
+            getKey={(_, index) => index}
+            toSourceInfo={queryToSourceInfo}
+            emptyState={<BlinkingDot />}
+            showDetailsCard={false}
+          />
+        )}
 
         {(results.length > 0 || queries.length > 0) && (
           <>

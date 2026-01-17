@@ -11,6 +11,7 @@ import { CitationMap } from "../../interfaces";
 export enum RenderType {
   HIGHLIGHT = "highlight",
   FULL = "full",
+  COMPACT = "compact",
 }
 
 export interface FullChatState {
