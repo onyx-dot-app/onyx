@@ -220,6 +220,8 @@ class TestThreadContextBuilder:
         thread = MagicMock(spec=discord.Thread)
         thread.id = 666666
         thread.parent = MagicMock(spec=discord.ForumChannel)  # Forum!
+        # Set up mock before calling function so we can verify it wasn't called
+        thread.parent.fetch_message = AsyncMock()
 
         def history(**kwargs: Any) -> AsyncIteratorMock:
             return AsyncIteratorMock(messages)
@@ -233,8 +235,7 @@ class TestThreadContextBuilder:
         await _build_thread_context(msg, mock_bot_user)
 
         # Should not try to fetch starter message for forum channels
-        thread.parent.fetch_message = MagicMock()
-        # Verify fetch_message wasn't called (if it was set up)
+        thread.parent.fetch_message.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_build_thread_context_starter_fetch_fails(
