@@ -108,8 +108,8 @@ def get_or_create_discord_service_api_key(
         )
 
         if not api_key_descriptor.api_key:
-            raise APIKeyProvisioningError(
-                f"Failed to get raw API key after creation for tenant {tenant_id}"
+            raise Exception(
+                f"Failed to create Discord service API key for tenant {tenant_id}"
             )
 
         return api_key_descriptor.api_key
