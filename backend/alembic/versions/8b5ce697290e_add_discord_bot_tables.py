@@ -17,7 +17,7 @@ depends_on: None = None
 
 
 def upgrade() -> None:
-    # DiscordBotConfig
+    # DiscordBotConfig (singleton table - one per tenant)
     op.create_table(
         "discord_bot_config",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -26,6 +26,14 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
+            nullable=False,
+        ),
+        # Singleton guard: always TRUE, unique constraint ensures only one row
+        sa.Column(
+            "singleton_guard",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            unique=True,
             nullable=False,
         ),
     )
@@ -61,6 +69,18 @@ def upgrade() -> None:
         ),
         sa.Column("channel_id", sa.BigInteger(), nullable=False),
         sa.Column("channel_name", sa.String(), nullable=False),
+        sa.Column(
+            "channel_type",
+            sa.String(20),
+            server_default=sa.text("'text'"),
+            nullable=False,
+        ),
+        sa.Column(
+            "is_private",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
         sa.Column(
             "thread_only_mode",
             sa.Boolean(),
