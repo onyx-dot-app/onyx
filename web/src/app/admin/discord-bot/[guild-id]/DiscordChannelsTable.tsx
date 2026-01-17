@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Switch from "@/refresh-components/inputs/Switch";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
@@ -18,6 +19,7 @@ import {
 } from "@/app/admin/discord-bot/types";
 import { SvgHash, SvgBubbleText, SvgLock } from "@opal/icons";
 import { IconProps } from "@opal/types";
+import { Persona } from "@/app/admin/assistants/interfaces";
 
 function getChannelIcon(
   channelType: DiscordChannelType,
@@ -38,16 +40,22 @@ function getChannelIcon(
 
 interface Props {
   channels: DiscordChannelConfig[];
+  personas: Persona[];
   onChannelUpdate: (
     channelId: number,
-    field: "enabled" | "require_bot_invocation" | "thread_only_mode",
-    value: boolean
+    field:
+      | "enabled"
+      | "require_bot_invocation"
+      | "thread_only_mode"
+      | "persona_override_id",
+    value: boolean | number | null
   ) => void;
   disabled?: boolean;
 }
 
 export function DiscordChannelsTable({
   channels,
+  personas,
   onChannelUpdate,
   disabled = false,
 }: Props) {
@@ -63,11 +71,12 @@ export function DiscordChannelsTable({
   return (
     <Table>
       <TableHeader>
-        <TableRow>
+        <TableRow className="[&>th]:whitespace-nowrap">
           <TableHead>Channel</TableHead>
           <TableHead>Enabled</TableHead>
           <TableHead>Require @mention</TableHead>
           <TableHead>Thread Only Mode</TableHead>
+          <TableHead>Agent Override</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -83,7 +92,7 @@ export function DiscordChannelsTable({
                   flexDirection="row"
                   justifyContent="start"
                   gap={0.5}
-                  fit
+                  width="fit"
                 >
                   <ChannelIcon width={16} height={16} />
                   <Text text04 mainUiBody>
@@ -123,6 +132,33 @@ export function DiscordChannelsTable({
                     disabled={disabled}
                   />
                 )}
+              </TableCell>
+              <TableCell>
+                <InputSelect
+                  value={channel.persona_override_id?.toString() ?? "default"}
+                  onValueChange={(value: string) =>
+                    onChannelUpdate(
+                      channel.id,
+                      "persona_override_id",
+                      value === "default" ? null : parseInt(value)
+                    )
+                  }
+                  disabled={disabled}
+                  className="w-[160px]"
+                >
+                  <InputSelect.Trigger placeholder="-" />
+                  <InputSelect.Content>
+                    <InputSelect.Item value="default">-</InputSelect.Item>
+                    {personas.map((persona) => (
+                      <InputSelect.Item
+                        key={persona.id}
+                        value={persona.id.toString()}
+                      >
+                        {persona.name}
+                      </InputSelect.Item>
+                    ))}
+                  </InputSelect.Content>
+                </InputSelect>
               </TableCell>
             </TableRow>
           );

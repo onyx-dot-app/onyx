@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Section } from "@/layouts/general-layouts";
+import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
@@ -14,6 +14,7 @@ import { Callout } from "@/components/ui/callout";
 import Message from "@/refresh-components/messages/Message";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgServer } from "@opal/icons";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   useDiscordGuild,
   useDiscordChannels,
@@ -24,12 +25,20 @@ import {
 } from "@/app/admin/discord-bot/lib";
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
+import { useAdminPersonas } from "@/hooks/useAdminPersonas";
+import { Persona } from "@/app/admin/assistants/interfaces";
 
 interface Props {
   params: Promise<{ "guild-id": string }>;
 }
 
-function GuildDetailContent({ guildId }: { guildId: number }) {
+function GuildDetailContent({
+  guildId,
+  personas,
+}: {
+  guildId: number;
+  personas: Persona[];
+}) {
   const { popup, setPopup } = usePopup();
   const {
     data: guild,
@@ -71,7 +80,8 @@ function GuildDetailContent({ guildId }: { guildId: number }) {
       if (
         local.enabled !== original.enabled ||
         local.require_bot_invocation !== original.require_bot_invocation ||
-        local.thread_only_mode !== original.thread_only_mode
+        local.thread_only_mode !== original.thread_only_mode ||
+        local.persona_override_id !== original.persona_override_id
       ) {
         return true;
       }
@@ -97,7 +107,8 @@ function GuildDetailContent({ guildId }: { guildId: number }) {
       if (
         local.enabled !== original.enabled ||
         local.require_bot_invocation !== original.require_bot_invocation ||
-        local.thread_only_mode !== original.thread_only_mode
+        local.thread_only_mode !== original.thread_only_mode ||
+        local.persona_override_id !== original.persona_override_id
       ) {
         changes.push({
           channelConfigId: local.id,
@@ -117,8 +128,12 @@ function GuildDetailContent({ guildId }: { guildId: number }) {
   const handleChannelUpdate = useCallback(
     (
       channelId: number,
-      field: "enabled" | "require_bot_invocation" | "thread_only_mode",
-      value: boolean
+      field:
+        | "enabled"
+        | "require_bot_invocation"
+        | "thread_only_mode"
+        | "persona_override_id",
+      value: boolean | number | null
     ) => {
       setLocalChannels((prev) =>
         prev.map((channel) =>
@@ -205,45 +220,42 @@ function GuildDetailContent({ guildId }: { guildId: number }) {
       )}
 
       <Card disabled={!guild.enabled}>
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="center"
-        >
-          <Text mainContentEmphasis text05>
-            Channel Configuration
-          </Text>
-          {isRegistered && !channelsLoading && !channelsError && (
-            <Section
-              flexDirection="row"
-              justifyContent="end"
-              alignItems="center"
-              fit
-              gap={0.5}
-            >
-              <Button
-                onClick={handleEnableAll}
-                disabled={!guild.enabled}
-                secondary
+        <LineItemLayout
+          title="Channel Configuration"
+          description="Run !sync-channels in Discord to update the channel list."
+          rightChildren={
+            isRegistered && !channelsLoading && !channelsError ? (
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                alignItems="center"
+                width="fit"
+                gap={0.5}
               >
-                Enable All
-              </Button>
-              <Button
-                onClick={handleDisableAll}
-                disabled={!guild.enabled}
-                secondary
-              >
-                Disable All
-              </Button>
-              <Button
-                onClick={handleSaveChanges}
-                disabled={!hasUnsavedChanges || !guild.enabled}
-              >
-                Update
-              </Button>
-            </Section>
-          )}
-        </Section>
+                <Button
+                  onClick={handleEnableAll}
+                  disabled={!guild.enabled}
+                  secondary
+                >
+                  Enable All
+                </Button>
+                <Button
+                  onClick={handleDisableAll}
+                  disabled={!guild.enabled}
+                  secondary
+                >
+                  Disable All
+                </Button>
+                <Button
+                  onClick={handleSaveChanges}
+                  disabled={!hasUnsavedChanges || !guild.enabled}
+                >
+                  Update
+                </Button>
+              </Section>
+            ) : undefined
+          }
+        />
 
         {!isRegistered ? (
           <Text text03 secondaryBody>
@@ -258,16 +270,12 @@ function GuildDetailContent({ guildId }: { guildId: number }) {
             errorMsg={channelsError?.info?.detail || "Could not load channels"}
           />
         ) : (
-          <>
-            <Text text03 secondaryBody>
-              Run !sync-channels in Discord to update the channel list.
-            </Text>
-            <DiscordChannelsTable
-              channels={localChannels}
-              onChannelUpdate={handleChannelUpdate}
-              disabled={!guild.enabled}
-            />
-          </>
+          <DiscordChannelsTable
+            channels={localChannels}
+            personas={personas}
+            onChannelUpdate={handleChannelUpdate}
+            disabled={!guild.enabled}
+          />
         )}
       </Card>
 
@@ -296,6 +304,9 @@ export default function Page({ params }: Props) {
   const guildId = Number(unwrappedParams["guild-id"]);
   const { popup, setPopup } = usePopup();
   const { data: guild, refreshGuild } = useDiscordGuild(guildId);
+  const { personas, isLoading: personasLoading } = useAdminPersonas({
+    includeDefault: true,
+  });
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleToggleEnabled = async () => {
@@ -321,6 +332,32 @@ export default function Page({ params }: Props) {
     }
   };
 
+  const handleDefaultPersonaChange = async (personaId: number | null) => {
+    if (!guild) return;
+    setIsUpdating(true);
+    try {
+      await updateGuildConfig(guildId, {
+        enabled: guild.enabled,
+        default_persona_id: personaId,
+      });
+      refreshGuild();
+      setPopup({
+        type: "success",
+        message: personaId
+          ? "Default assistant updated"
+          : "Default assistant cleared",
+      });
+    } catch (err) {
+      setPopup({
+        type: "error",
+        message:
+          err instanceof Error ? err.message : "Failed to update assistant",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const registeredText = guild?.registered_at
     ? `Registered: ${new Date(guild.registered_at).toLocaleString()}`
     : "Pending registration";
@@ -338,7 +375,7 @@ export default function Page({ params }: Props) {
             flexDirection="row"
             justifyContent="end"
             alignItems="center"
-            fit
+            width="fit"
             gap={0.5}
           >
             <Text secondaryBody text03>
@@ -353,7 +390,42 @@ export default function Page({ params }: Props) {
         }
       />
       <SettingsLayouts.Body>
-        <GuildDetailContent guildId={guildId} />
+        {/* Default Persona Selector */}
+        <Card disabled={!guild?.enabled}>
+          <LineItemLayout
+            title="Default Agent"
+            description="The agent used by the bot in all channels unless overridden."
+            rightChildren={
+              <InputSelect
+                value={guild?.default_persona_id?.toString() ?? "default"}
+                onValueChange={(value: string) =>
+                  handleDefaultPersonaChange(
+                    value === "default" ? null : parseInt(value)
+                  )
+                }
+                disabled={isUpdating || !guild?.enabled || personasLoading}
+                className="w-[200px]"
+              >
+                <InputSelect.Trigger placeholder="Select agent" />
+                <InputSelect.Content>
+                  <InputSelect.Item value="default">
+                    Default Assistant
+                  </InputSelect.Item>
+                  {personas.map((persona) => (
+                    <InputSelect.Item
+                      key={persona.id}
+                      value={persona.id.toString()}
+                    >
+                      {persona.name}
+                    </InputSelect.Item>
+                  ))}
+                </InputSelect.Content>
+              </InputSelect>
+            }
+          />
+        </Card>
+
+        <GuildDetailContent guildId={guildId} personas={personas} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
