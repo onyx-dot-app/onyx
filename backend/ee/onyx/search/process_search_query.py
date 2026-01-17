@@ -3,16 +3,15 @@ from collections.abc import Generator
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.search import create_search_query
+from ee.onyx.server.query_and_chat.models import SearchDocWithContent
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from ee.onyx.server.query_and_chat.streaming_models import SearchDocsPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
 from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import SearchDoc
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
-from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.models import User
 from onyx.document_index.factory import get_current_primary_default_document_index
 
@@ -53,8 +52,12 @@ def stream_search_query(
     # Merge chunks into sections
     sections = merge_individual_chunks(chunks)
 
-    # Convert to SearchDoc list
-    search_docs = convert_inference_sections_to_search_docs(sections, is_internet=False)
+    # Convert to SearchDocWithContent list, optionally including content
+    search_docs = SearchDocWithContent.from_inference_sections(
+        sections,
+        include_content=request.include_content,
+        is_internet=False,
+    )
 
     # Track executed queries (just the original for now)
     all_executed_queries = [request.search_query]
@@ -84,7 +87,7 @@ def gather_search_stream(
     Aggregate all streaming packets into SearchFullResponse.
     """
     all_executed_queries: list[str] = []
-    search_docs: list[SearchDoc] = []
+    search_docs: list[SearchDocWithContent] = []
     error: str | None = None
 
     for packet in packets:

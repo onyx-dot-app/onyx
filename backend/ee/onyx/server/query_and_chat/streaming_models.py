@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
-from onyx.context.search.models import SearchDoc
+from ee.onyx.server.query_and_chat.models import SearchDocWithContent
 
 
 class SearchQueriesPacket(BaseModel):
@@ -17,7 +17,7 @@ class SearchDocsPacket(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     type: Literal["search_docs"] = "search_docs"
-    search_docs: list[SearchDoc]
+    search_docs: list[SearchDocWithContent]
 
 
 class SearchErrorPacket(BaseModel):
