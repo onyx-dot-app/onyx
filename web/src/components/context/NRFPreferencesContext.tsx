@@ -12,7 +12,6 @@ import { ThemePreference } from "@/lib/types";
 
 interface NRFPreferencesContextValue {
   theme: ThemePreference;
-  setTheme: (t: ThemePreference) => void;
   defaultLightBackgroundUrl: string;
   setDefaultLightBackgroundUrl: (val: string) => void;
   defaultDarkBackgroundUrl: string;
@@ -55,11 +54,14 @@ export function NRFPreferencesProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { setTheme: setNextThemesTheme } = useTheme();
-  const [theme, setThemeState] = useLocalStorageState<ThemePreference>(
-    LocalStorageKeys.THEME,
-    ThemePreference.DARK
-  );
+  // Read theme from system/user settings via next-themes (no local override)
+  const { resolvedTheme } = useTheme();
+
+  // Map next-themes resolved theme to our ThemePreference enum
+  // Default to DARK if theme hasn't resolved yet
+  const theme: ThemePreference =
+    resolvedTheme === "light" ? ThemePreference.LIGHT : ThemePreference.DARK;
+
   const [defaultLightBackgroundUrl, setDefaultLightBackgroundUrl] =
     useLocalStorageState<string>(
       LocalStorageKeys.LIGHT_BG_URL,
@@ -75,18 +77,6 @@ export function NRFPreferencesProvider({
     true
   );
 
-  // Sync NRF theme with next-themes to enable Tailwind dark mode classes
-  // This ensures the HTML element gets the 'dark' class for Tailwind dark: classes to work
-  useEffect(() => {
-    setNextThemesTheme(theme);
-  }, [theme, setNextThemesTheme]);
-
-  // Wrapper function to update both local state and next-themes
-  const setTheme = (newTheme: ThemePreference) => {
-    setThemeState(newTheme);
-    setNextThemesTheme(newTheme);
-  };
-
   useEffect(() => {
     if (theme === ThemePreference.DARK) {
       notifyExtensionOfThemeChange(theme, defaultDarkBackgroundUrl);
@@ -99,7 +89,6 @@ export function NRFPreferencesProvider({
     <NRFPreferencesContext.Provider
       value={{
         theme,
-        setTheme,
         defaultLightBackgroundUrl,
         setDefaultLightBackgroundUrl,
         defaultDarkBackgroundUrl,

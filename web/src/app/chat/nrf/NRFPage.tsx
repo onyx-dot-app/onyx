@@ -320,15 +320,23 @@ export default function NRFPage({
         </header>
       )}
 
-      {/* Settings button */}
+      {/* Header buttons */}
       {!isSidePanel && (
-        <div className="nrf-settings-button-container">
+        <div className="nrf-header-buttons-container">
+          <Button
+            tertiary
+            rightIcon={SvgExternalLink}
+            onClick={handleOpenInOnyx}
+            className="nrf-header-button"
+          >
+            Open in Onyx
+          </Button>
           <IconButton
             icon={SvgMenu}
             onClick={toggleSettings}
             tertiary
             tooltip="Open settings"
-            className="nrf-settings-button"
+            className="nrf-header-button"
           />
         </div>
       )}

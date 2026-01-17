@@ -37,24 +37,31 @@
   gap: 0.5rem;
 }
 
-/* Settings button */
-.nrf-settings-button-container {
+/* Header buttons (Open in Onyx + Settings) */
+.nrf-header-buttons-container {
   position: absolute;
   top: 0;
   right: 0;
   padding: 1rem;
   z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.nrf-settings-button {
-  background-color: var(--mask-02) !important;
-  backdrop-filter: blur(12px);
-  border-radius: var(--border-radius-full);
-  box-shadow: 0px 2px 12px 0px var(--shadow-02);
+.nrf-header-button {
+  background-color: var(--background-tint-02) !important;
+  border-radius: var(--border-radius-12);
 }
 
-.nrf-settings-button:hover {
-  background-color: var(--mask-03) !important;
+/* Settings icon button specific sizing */
+button.nrf-header-button[aria-label="Open settings"] {
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+}
+
+.nrf-header-button:hover {
+  background-color: var(--background-tint-03) !important;
 }
 
 /* Dropzone container */
@@ -153,6 +160,9 @@
   transform: translate(-50%, -50%);
   width: 90%;
   max-width: 48rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 @media (min-width: 1024px) {
@@ -174,10 +184,10 @@
 }
 
 .nrf-welcome-heading {
-  padding-left: 0.5rem;
-  text-align: left;
+  text-align: center;
   width: 100%;
-  margin-bottom: 1rem;
+  font-size: 2.5rem !important;
+  line-height: 1.2 !important;
 }
 
 /* Settings panel overlay */
