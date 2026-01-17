@@ -51,7 +51,7 @@ def delete_discord_bot_config(db_session: Session) -> bool:
     """Delete the Discord bot config. Returns True if deleted."""
     result = db_session.execute(delete(DiscordBotConfig))
     db_session.flush()
-    return result.rowcount > 0
+    return result.rowcount > 0  # type: ignore[attr-defined]
 
 
 # === DiscordGuildConfig ===
