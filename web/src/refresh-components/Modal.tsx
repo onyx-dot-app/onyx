@@ -60,7 +60,7 @@ interface ModalContextValue {
   closeButtonRef: React.RefObject<HTMLDivElement | null>;
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
-  sizeVariant: "large" | "medium" | "small" | "tall" | "mini";
+  sizeVariant: "large" | "medium" | "expanded" | "small" | "tall" | "mini";
 }
 
 const ModalContext = React.createContext<ModalContextValue | null>(null);
@@ -79,6 +79,7 @@ const useModalContext = () => {
 const sizeClassNames = {
   large: ["w-[80dvw]", "h-[80dvh]"],
   medium: ["w-[60rem]", "h-fit"],
+  expanded: ["w-[40rem]", "max-h-[calc(100dvh-4rem)]"],
   small: ["w-[32rem]", "max-h-[30rem]"],
   tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
   mini: ["w-[32rem]", "h-fit"],
@@ -125,6 +126,7 @@ interface ModalContentProps
   > {
   large?: boolean;
   medium?: boolean;
+  expanded?: boolean;
   small?: boolean;
   tall?: boolean;
   mini?: boolean;
@@ -140,6 +142,7 @@ const ModalContent = React.forwardRef<
       children,
       large,
       medium,
+      expanded,
       small,
       tall,
       mini,
@@ -153,13 +156,15 @@ const ModalContent = React.forwardRef<
       ? "large"
       : medium
         ? "medium"
-        : small
-          ? "small"
-          : tall
-            ? "tall"
-            : mini
-              ? "mini"
-              : "medium";
+        : expanded
+          ? "expanded"
+          : small
+            ? "small"
+            : tall
+              ? "tall"
+              : mini
+                ? "mini"
+                : "medium";
     const closeButtonRef = React.useRef<HTMLDivElement>(null);
     const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
     const hasUserTypedRef = React.useRef(false);

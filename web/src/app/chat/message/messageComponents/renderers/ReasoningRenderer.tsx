@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   PacketType,
@@ -6,7 +12,10 @@ import {
   ReasoningPacket,
 } from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState } from "../interfaces";
-import { useMarkdownRenderer } from "../markdownUtils";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import ExpandableTextDisplay from "@/refresh-components/ExpandableTextDisplay";
+import { mutedTextMarkdownComponents } from "./sharedMarkdownComponents";
+import { SvgCircle } from "@opal/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
@@ -39,7 +48,7 @@ function constructCurrentReasoningState(packets: ReasoningPacket[]) {
 export const ReasoningRenderer: MessageRenderer<
   ReasoningPacket,
   FullChatState
-> = ({ packets, state, onComplete, animate, children }) => {
+> = ({ packets, onComplete, animate, children }) => {
   const { hasStart, hasEnd, content } = useMemo(
     () => constructCurrentReasoningState(packets),
     [packets]
@@ -92,21 +101,36 @@ export const ReasoningRenderer: MessageRenderer<
     };
   }, []);
 
-  const { renderedContent } = useMarkdownRenderer(
-    content,
-    state,
-    "text-text-03 font-main-ui-body"
+  // Markdown renderer callback for ExpandableTextDisplay
+  const renderMarkdown = useCallback(
+    (text: string) => (
+      <MinimalMarkdown
+        content={text}
+        components={mutedTextMarkdownComponents}
+      />
+    ),
+    []
   );
 
   if (!hasStart && !hasEnd && content.length === 0) {
-    return children({ icon: null, status: null, content: <></> });
+    return children({ icon: SvgCircle, status: null, content: <></> });
   }
 
+  const reasoningContent = (
+    <ExpandableTextDisplay
+      title="Thinking"
+      content={content}
+      displayContent={content}
+      maxLines={5}
+      renderContent={renderMarkdown}
+    />
+  );
+
   return children({
-    icon: null,
+    icon: SvgCircle,
     status: THINKING_STATUS,
-    content: renderedContent,
-    expandedText: renderedContent,
+    content: reasoningContent,
+    expandedText: reasoningContent,
   });
 };
 

@@ -1,7 +1,5 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import { FiList } from "react-icons/fi";
-import { SvgChevronDown } from "@opal/icons";
-import { cn } from "@/lib/utils";
 
 import {
   DeepResearchPlanPacket,
@@ -9,7 +7,9 @@ import {
 } from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { usePacketAnimationAndCollapse } from "../hooks/usePacketAnimationAndCollapse";
-import { useMarkdownRenderer } from "../markdownUtils";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import ExpandableTextDisplay from "@/refresh-components/ExpandableTextDisplay";
+import { mutedTextMarkdownComponents } from "./sharedMarkdownComponents";
 
 /**
  * Renderer for deep research plan packets.
@@ -31,31 +31,33 @@ export const DeepResearchPlanRenderer: MessageRenderer<
   // Check if plan generation is complete (has SECTION_END)
   const isComplete = packets.some((p) => p.obj.type === PacketType.SECTION_END);
 
-  // Use shared hook for animation and auto-collapse logic
-  const { displayedPacketCount, isExpanded, toggleExpanded } =
-    usePacketAnimationAndCollapse({
-      packets,
-      animate,
-      isComplete,
-      onComplete,
-    });
+  // Use shared hook for animation logic (collapse behavior no longer needed)
+  const { displayedPacketCount } = usePacketAnimationAndCollapse({
+    packets,
+    animate,
+    isComplete,
+    onComplete,
+  });
 
   // Get the full content from all packets
-  const fullContent = packets
-    .map((packet) => {
-      if (packet.obj.type === PacketType.DEEP_RESEARCH_PLAN_DELTA) {
-        return packet.obj.content;
-      }
-      return "";
-    })
-    .join("");
+  const fullContent = useMemo(
+    () =>
+      packets
+        .map((packet) => {
+          if (packet.obj.type === PacketType.DEEP_RESEARCH_PLAN_DELTA) {
+            return packet.obj.content;
+          }
+          return "";
+        })
+        .join(""),
+    [packets]
+  );
 
-  // Get content based on displayed packet count
-  const content = useMemo(() => {
+  // Animated content for collapsed view (respects streaming animation)
+  const animatedContent = useMemo(() => {
     if (!animate || displayedPacketCount === -1) {
       return fullContent;
     }
-
     return packets
       .slice(0, displayedPacketCount)
       .map((packet) => {
@@ -67,49 +69,32 @@ export const DeepResearchPlanRenderer: MessageRenderer<
       .join("");
   }, [animate, displayedPacketCount, fullContent, packets]);
 
-  // Use markdown renderer to render the plan content
-  const { renderedContent } = useMarkdownRenderer(
-    content,
-    state,
-    "text-text-03 font-main-ui-body"
+  // Markdown renderer callback for ExpandableTextDisplay
+  const renderMarkdown = useCallback(
+    (text: string) => (
+      <MinimalMarkdown
+        content={text}
+        components={mutedTextMarkdownComponents}
+      />
+    ),
+    []
   );
 
   const statusText = isComplete ? "Generated plan" : "Generating plan";
 
-  const statusElement = (
-    <div
-      className="flex items-center justify-between gap-2 cursor-pointer group w-full"
-      onClick={toggleExpanded}
-    >
-      <span>{statusText}</span>
-      <div className="flex items-center gap-2">
-        <SvgChevronDown
-          className={cn(
-            "w-4 h-4 stroke-text-400 transition-transform duration-150 ease-in-out",
-            !isExpanded && "rotate-[-90deg]"
-          )}
-        />
-      </div>
-    </div>
-  );
-
   const planContent = (
-    <div className="text-text-600 text-sm overflow-hidden">
-      {/* Collapsible content */}
-      <div
-        className={cn(
-          "overflow-hidden transition-all duration-200 ease-in-out",
-          isExpanded ? "max-h-[2000px] opacity-100 mt-2" : "max-h-0 opacity-0"
-        )}
-      >
-        {renderedContent}
-      </div>
-    </div>
+    <ExpandableTextDisplay
+      title="Deep research plan"
+      content={fullContent}
+      displayContent={animatedContent}
+      maxLines={5}
+      renderContent={renderMarkdown}
+    />
   );
 
   return children({
     icon: FiList,
-    status: statusElement,
+    status: statusText,
     content: planContent,
     expandedText: planContent,
   });
