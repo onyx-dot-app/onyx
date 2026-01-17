@@ -148,8 +148,8 @@ export default function AccessRestricted() {
 
           <Text text03>
             If you are the administrator, please visit the{" "}
-            <Link className={linkClassName} href="/admin/settings">
-              Admin Settings
+            <Link className={linkClassName} href="/ee/admin/billing">
+              Admin Billing
             </Link>{" "}
             page to update your license, or reach out to{" "}
             <a className={linkClassName} href="mailto:support@onyx.app">
