@@ -8,7 +8,11 @@ import Button from "@/refresh-components/buttons/Button";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { useDiscordBotConfig } from "@/app/admin/discord-bot/hooks";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import {
+  useDiscordBotConfig,
+  useDiscordGuilds,
+} from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
@@ -23,6 +27,7 @@ export function BotConfigCard({ setPopup }: Props) {
     isManaged,
     refreshBotConfig,
   } = useDiscordBotConfig();
+  const { data: guilds } = useDiscordGuilds();
 
   const [botToken, setBotToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,6 +56,7 @@ export function BotConfigCard({ setPopup }: Props) {
   }
 
   const isConfigured = botConfig?.configured ?? false;
+  const hasServerConfigs = (guilds?.length ?? 0) > 0;
 
   const handleSaveToken = async () => {
     if (!botToken.trim()) {
@@ -94,8 +100,8 @@ export function BotConfigCard({ setPopup }: Props) {
 
   return (
     <Card>
-      <Section flexDirection="row" justifyContent="between" alignItems="center">
-        <Section flexDirection="row" alignItems="center" gap={0.5} fit>
+      <Section flexDirection="row" justifyContent="between">
+        <Section flexDirection="row" gap={0.5} width="fit">
           <Text mainContentEmphasis text05>
             Bot Token
           </Text>
@@ -106,9 +112,20 @@ export function BotConfigCard({ setPopup }: Props) {
           )}
         </Section>
         {isConfigured && (
-          <Button onClick={handleDeleteToken} disabled={isSubmitting} danger>
-            Delete Token
-          </Button>
+          <SimpleTooltip
+            tooltip={
+              hasServerConfigs ? "Delete server configs first" : undefined
+            }
+            disabled={!hasServerConfigs}
+          >
+            <Button
+              onClick={handleDeleteToken}
+              disabled={isSubmitting || hasServerConfigs}
+              danger
+            >
+              Delete Discord Token
+            </Button>
+          </SimpleTooltip>
         )}
       </Section>
 
