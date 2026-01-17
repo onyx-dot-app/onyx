@@ -166,7 +166,7 @@ function LabelLayout({
   center,
 }: LabelLayoutProps) {
   const content = (
-    <Section gap={0}>
+    <Section gap={0} height="fit">
       <Section
         flexDirection="row"
         justifyContent={center ? "center" : "start"}

@@ -37,7 +37,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section, SectionProps } from "@/layouts/general-layouts";
 
 const classNames = {
   main: ["bg-background-tint-00 border"],
@@ -47,7 +47,7 @@ const classNames = {
   ],
 } as const;
 
-export interface CardProps extends GeneralLayouts.SectionProps {
+export interface CardProps extends SectionProps {
   // card variants
   translucent?: boolean;
   borderless?: boolean;
@@ -74,7 +74,7 @@ export default function Card({
         borderless && "border-none"
       )}
     >
-      <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
+      <Section alignItems="start" padding={padding} height="fit" {...props} />
     </div>
   );
 }
