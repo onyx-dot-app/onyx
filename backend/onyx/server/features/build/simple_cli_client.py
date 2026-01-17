@@ -19,7 +19,6 @@ from claude_agent_sdk import Message
 from claude_agent_sdk import query
 from claude_agent_sdk import ResultMessage
 from claude_agent_sdk.types import ContentBlock
-from claude_agent_sdk.types import McpStdioServerConfig
 from claude_agent_sdk.types import TextBlock
 from claude_agent_sdk.types import ThinkingBlock
 from claude_agent_sdk.types import ToolResultBlock
@@ -95,6 +94,13 @@ async def run_claude_agent(
 
     # Build environment with venv if provided
     env = build_venv_env(venv_path) if venv_path else None
+    if not env:
+        env = {**os.environ}
+
+    final_env = {
+        **env,
+        "MAX_THINKING_TOKENS": "1024",
+    }
 
     async for message in query(
         prompt=task,
@@ -103,15 +109,7 @@ async def run_claude_agent(
             permission_mode="bypassPermissions",
             cwd=path,
             setting_sources=["project"],
-            mcp_servers={
-                "nano-banana": McpStdioServerConfig(
-                    command="npx nano-banana-mcp",
-                    env={
-                        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
-                    },
-                )
-            },
-            **({"env": env} if env else {}),  # type: ignore
+            env=final_env,
         ),
     ):
         yield message
