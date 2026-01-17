@@ -112,7 +112,8 @@ class TestGuildRegistrationCommand:
         ):
             mock_db = MagicMock()
             mock_session.return_value.__enter__ = MagicMock(return_value=mock_db)
-            mock_session.return_value.__exit__ = MagicMock()
+            # Must return False so exceptions are not suppressed
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
             mock_cache_manager.get_tenant.return_value = None
 
             result = await handle_registration_command(
@@ -147,7 +148,8 @@ class TestGuildRegistrationCommand:
         ):
             mock_db = MagicMock()
             mock_session.return_value.__enter__ = MagicMock(return_value=mock_db)
-            mock_session.return_value.__exit__ = MagicMock()
+            # Must return False so exceptions are not suppressed
+            mock_session.return_value.__exit__ = MagicMock(return_value=False)
 
             mock_config = MagicMock()
             mock_config.guild_id = 999999  # Already registered!
@@ -588,7 +590,7 @@ class TestBotLifecycle:
             bot.ready = True
 
             # Mock parent close
-            async def mock_super_close():
+            async def mock_super_close() -> None:
                 pass
 
             with patch("discord.ext.commands.Bot.close", mock_super_close):

@@ -182,6 +182,7 @@ class TestAPIRequestIsolation:
 
         # When processing message from guild 123456
         tenant = cache.get_tenant(123456)
+        assert tenant is not None
         api_key = cache.get_api_key(tenant)
 
         assert tenant == "tenant1"

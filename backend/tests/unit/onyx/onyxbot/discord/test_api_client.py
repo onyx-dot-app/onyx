@@ -3,6 +3,7 @@
 Tests for OnyxAPIClient class functionality.
 """
 
+from typing import Any
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -16,6 +17,24 @@ from onyx.onyxbot.discord.constants import API_REQUEST_TIMEOUT
 from onyx.onyxbot.discord.exceptions import APIConnectionError
 from onyx.onyxbot.discord.exceptions import APIResponseError
 from onyx.onyxbot.discord.exceptions import APITimeoutError
+
+
+class MockAsyncContextManager:
+    """Helper class to create proper async context managers for testing."""
+
+    def __init__(
+        self, return_value: Any = None, enter_side_effect: Exception | None = None
+    ) -> None:
+        self.return_value = return_value
+        self.enter_side_effect = enter_side_effect
+
+    async def __aenter__(self) -> Any:
+        if self.enter_side_effect:
+            raise self.enter_side_effect
+        return self.return_value
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        pass
 
 
 class TestClientLifecycle:
@@ -91,16 +110,13 @@ class TestSendChatMessage:
             "error_msg": None,
         }
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(return_value=response_data)
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -121,16 +137,13 @@ class TestSendChatMessage:
 
         response_data = {"answer": "Response", "citations": [], "error_msg": None}
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(return_value=response_data)
 
         mock_session = MagicMock()
         mock_post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
         mock_session.post = mock_post
 
@@ -153,15 +166,12 @@ class TestSendChatMessage:
         """Invalid API key returns APIResponseError with 401."""
         client = OnyxAPIClient()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 401
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -176,15 +186,12 @@ class TestSendChatMessage:
         """Persona not accessible returns APIResponseError with 403."""
         client = OnyxAPIClient()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 403
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -201,9 +208,8 @@ class TestSendChatMessage:
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(side_effect=TimeoutError("Timeout")),
-                __aexit__=AsyncMock(),
+            return_value=MockAsyncContextManager(
+                enter_side_effect=TimeoutError("Timeout")
             )
         )
 
@@ -219,13 +225,10 @@ class TestSendChatMessage:
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(
-                    side_effect=aiohttp.ClientConnectorError(
-                        MagicMock(), OSError("Connection refused")
-                    )
-                ),
-                __aexit__=AsyncMock(),
+            return_value=MockAsyncContextManager(
+                enter_side_effect=aiohttp.ClientConnectorError(
+                    MagicMock(), OSError("Connection refused")
+                )
             )
         )
 
@@ -239,16 +242,13 @@ class TestSendChatMessage:
         """500 response raises APIResponseError with 500."""
         client = OnyxAPIClient()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 500
         mock_response.text = AsyncMock(return_value="Internal Server Error")
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -267,15 +267,12 @@ class TestHealthCheck:
         """Server healthy returns True."""
         client = OnyxAPIClient()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 200
 
         mock_session = MagicMock()
         mock_session.get = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -288,15 +285,12 @@ class TestHealthCheck:
         """Server unhealthy returns False."""
         client = OnyxAPIClient()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 503
 
         mock_session = MagicMock()
         mock_session.get = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -311,9 +305,8 @@ class TestHealthCheck:
 
         mock_session = MagicMock()
         mock_session.get = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(side_effect=TimeoutError("Timeout")),
-                __aexit__=AsyncMock(),
+            return_value=MockAsyncContextManager(
+                enter_side_effect=TimeoutError("Timeout")
             )
         )
 
@@ -339,16 +332,13 @@ class TestResponseParsing:
         """API returns invalid JSON raises exception."""
         client = OnyxAPIClient()
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(side_effect=ValueError("Invalid JSON"))
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -367,16 +357,13 @@ class TestResponseParsing:
             "error_msg": "Some warning",
         }
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(return_value=response_data)
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session
@@ -402,16 +389,13 @@ class TestResponseParsing:
             "error_msg": None,
         }
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(return_value=response_data)
 
         mock_session = MagicMock()
         mock_session.post = MagicMock(
-            return_value=AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
+            return_value=MockAsyncContextManager(return_value=mock_response)
         )
 
         client._session = mock_session

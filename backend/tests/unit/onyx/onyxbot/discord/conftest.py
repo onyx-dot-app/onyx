@@ -1,6 +1,8 @@
 """Fixtures for Discord bot unit tests."""
 
 import random
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
@@ -11,14 +13,14 @@ import pytest
 class AsyncIteratorMock:
     """Helper class to mock async iterators like channel.history()."""
 
-    def __init__(self, items: list) -> None:
+    def __init__(self, items: list[Any]) -> None:
         self.items = items
         self.index = 0
 
     def __aiter__(self) -> "AsyncIteratorMock":
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> Any:
         if self.index >= len(self.items):
             raise StopAsyncIteration
         item = self.items[self.index]
@@ -139,13 +141,13 @@ def mock_thread_with_messages(mock_bot_user: MagicMock) -> MagicMock:
     ]
 
     # Setup async iterator for history
-    def history(**kwargs):
+    def history(**kwargs: Any) -> AsyncIteratorMock:
         return AsyncIteratorMock(messages)
 
     thread.history = history
 
     # Mock parent.fetch_message
-    async def fetch_starter(msg_id):
+    async def fetch_starter(msg_id: int) -> MagicMock:
         if msg_id == thread.id:
             return starter
         raise discord.NotFound(MagicMock(), "Not found")
@@ -210,7 +212,7 @@ def mock_guild_config_disabled() -> MagicMock:
 
 
 @pytest.fixture
-def mock_channel_config_factory() -> callable:
+def mock_channel_config_factory() -> Callable[..., MagicMock]:
     """Factory fixture for creating channel configs with various settings."""
 
     def _make_config(
@@ -258,17 +260,17 @@ def mock_guild_with_members() -> MagicMock:
     """Mock guild for mention resolution."""
     guild = MagicMock(spec=discord.Guild)
 
-    def get_member(member_id):
+    def get_member(member_id: int) -> MagicMock:
         member = MagicMock()
         member.display_name = f"User{member_id}"
         return member
 
-    def get_role(role_id):
+    def get_role(role_id: int) -> MagicMock:
         role = MagicMock()
         role.name = f"Role{role_id}"
         return role
 
-    def get_channel(channel_id):
+    def get_channel(channel_id: int) -> MagicMock:
         channel = MagicMock()
         channel.name = f"channel{channel_id}"
         return channel

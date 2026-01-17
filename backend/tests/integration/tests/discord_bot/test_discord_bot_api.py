@@ -3,9 +3,12 @@
 These tests hit real API endpoints and verify database operations.
 """
 
+from collections.abc import Generator
+
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.discord_bot import bulk_create_channel_configs
 from onyx.db.discord_bot import create_discord_bot_config
 from onyx.db.discord_bot import create_guild_config
@@ -19,8 +22,37 @@ from onyx.db.discord_bot import get_guild_configs
 from onyx.db.discord_bot import sync_channel_configs
 from onyx.db.discord_bot import update_discord_channel_config
 from onyx.db.discord_bot import update_guild_config
+from onyx.db.models import Persona
 from onyx.db.utils import DiscordChannelView
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
+
+
+def _create_test_persona(db_session: Session, persona_id: int, name: str) -> Persona:
+    """Create a minimal test persona."""
+    persona = Persona(
+        id=persona_id,
+        name=name,
+        description="Test persona for Discord bot tests",
+        num_chunks=5.0,
+        chunks_above=1,
+        chunks_below=1,
+        llm_relevance_filter=False,
+        llm_filter_extraction=False,
+        recency_bias=RecencyBiasSetting.FAVOR_RECENT,
+        is_visible=True,
+        is_default_persona=False,
+        deleted=False,
+        builtin_persona=False,
+    )
+    db_session.add(persona)
+    db_session.flush()
+    return persona
+
+
+def _delete_test_persona(db_session: Session, persona_id: int) -> None:
+    """Delete a test persona."""
+    db_session.query(Persona).filter(Persona.id == persona_id).delete()
+    db_session.flush()
 
 
 class TestBotConfigAPI:
@@ -462,6 +494,10 @@ class TestPersonaConfigurationAPI:
 
     def test_guild_persona_used_in_api_call(self, db_session: Session) -> None:
         """Guild default_persona_id is used when no channel override."""
+        # Create test persona first
+        _create_test_persona(db_session, 42, "Test Persona 42")
+        db_session.commit()
+
         key = generate_discord_registration_key("tenant")
         guild = create_guild_config(db_session, registration_key=key)
         update_guild_config(db_session, guild, enabled=True, default_persona_id=42)
@@ -469,14 +505,21 @@ class TestPersonaConfigurationAPI:
 
         # Verify persona is set
         config = get_guild_config_by_internal_id(db_session, guild.id)
+        assert config is not None
         assert config.default_persona_id == 42
 
         # Cleanup
         delete_guild_config(db_session, guild.id)
+        _delete_test_persona(db_session, 42)
         db_session.commit()
 
     def test_channel_persona_override_in_api_call(self, db_session: Session) -> None:
         """Channel persona_override_id takes precedence over guild default."""
+        # Create test personas first
+        _create_test_persona(db_session, 42, "Test Persona 42")
+        _create_test_persona(db_session, 99, "Test Persona 99")
+        db_session.commit()
+
         key = generate_discord_registration_key("tenant")
         guild = create_guild_config(db_session, registration_key=key)
         update_guild_config(db_session, guild, enabled=True, default_persona_id=42)
@@ -509,6 +552,8 @@ class TestPersonaConfigurationAPI:
 
         # Cleanup
         delete_guild_config(db_session, guild.id)
+        _delete_test_persona(db_session, 42)
+        _delete_test_persona(db_session, 99)
         db_session.commit()
 
     def test_no_persona_uses_default(self, db_session: Session) -> None:
@@ -519,6 +564,7 @@ class TestPersonaConfigurationAPI:
         db_session.commit()
 
         config = get_guild_config_by_internal_id(db_session, guild.id)
+        assert config is not None
         assert config.default_persona_id is None
 
         # Cleanup
@@ -528,7 +574,7 @@ class TestPersonaConfigurationAPI:
 
 # Pytest fixture for db_session
 @pytest.fixture
-def db_session():
+def db_session() -> Generator[Session, None, None]:
     """Create database session for tests."""
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.db.engine.sql_engine import SqlEngine

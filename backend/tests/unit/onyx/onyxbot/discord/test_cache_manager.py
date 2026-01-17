@@ -239,7 +239,7 @@ class TestThreadSafety:
 
         call_count = 0
 
-        async def slow_refresh():
+        async def slow_refresh() -> tuple[list[int], str]:
             nonlocal call_count
             call_count += 1
             # Simulate slow operation
@@ -273,12 +273,12 @@ class TestThreadSafety:
         cache = DiscordCacheManager()
         cache._guild_tenants[111111] = "tenant1"
 
-        async def read_loop():
+        async def read_loop() -> None:
             for _ in range(10):
                 cache.get_tenant(111111)
                 await asyncio.sleep(0.001)
 
-        async def write_loop():
+        async def write_loop() -> None:
             for i in range(10):
                 cache._guild_tenants[200000 + i] = f"tenant{i}"
                 await asyncio.sleep(0.001)
@@ -384,7 +384,7 @@ class TestGatedTenantHandling:
         mock_config_t2.guild_id = 222222
         mock_config_t2.enabled = True
 
-        def mock_get_configs(db):
+        def mock_get_configs(db: MagicMock) -> list[MagicMock]:
             # Track which tenant this was called for
             return [mock_config_t1]  # Always return same for simplicity
 
@@ -492,7 +492,7 @@ class TestCacheErrorHandling:
 
         call_count = 0
 
-        async def mock_load(tenant_id):
+        async def mock_load(tenant_id: str) -> tuple[list[int], str]:
             nonlocal call_count
             call_count += 1
             if tenant_id == "tenant1":
