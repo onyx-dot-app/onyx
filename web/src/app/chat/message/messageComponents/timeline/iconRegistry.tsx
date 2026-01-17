@@ -18,7 +18,10 @@ import {
   SearchToolPacket,
 } from "@/app/chat/services/streamingModels";
 import { constructCurrentSearchState } from "../renderers/SearchToolRenderer";
-import { IconType } from "./AgentStep";
+/**
+ * Icon state type for timeline steps
+ */
+export type IconType = "default" | "loading" | "complete" | "error";
 
 /**
  * Icon size class for timeline icons

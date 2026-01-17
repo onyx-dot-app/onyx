@@ -2,7 +2,6 @@
 // These components provide a timeline-based view for displaying agent actions
 
 // Core Components
-export { AgentStep, type AgentStepProps, type IconType } from "./AgentStep";
 export {
   AgentTimeline,
   StepContainer,
@@ -22,6 +21,7 @@ export {
   getIconTypeForPackets,
   isToolPacketGroup,
   isDisplayPacketGroup,
+  type IconType,
 } from "./iconRegistry";
 
 // Transformers

@@ -1,12 +1,12 @@
 import { JSX } from "react";
 import { GroupedPacket } from "../packetProcessor";
-import { IconType } from "./AgentStep";
 import {
   getIconForPackets,
   getNameForPackets,
   getIconTypeForPackets,
   isToolPacketGroup,
   isDisplayPacketGroup,
+  IconType,
 } from "./iconRegistry";
 
 /**
