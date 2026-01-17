@@ -1,5 +1,5 @@
 import React from "react";
-import { SvgSearch, SvgGlobe } from "@opal/icons";
+import { SvgSearch, SvgGlobe, SvgSearchMenu } from "@opal/icons";
 import { SearchToolPacket } from "@/app/chat/services/streamingModels";
 import {
   MessageRenderer,
@@ -62,7 +62,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     onComplete,
   });
 
-  const icon = isInternetSearch ? SvgGlobe : SvgSearch;
+  const icon = isInternetSearch ? SvgGlobe : SvgSearchMenu;
   const queriesHeader = isInternetSearch
     ? "Searching the web for:"
     : "Searching internal documents for:";

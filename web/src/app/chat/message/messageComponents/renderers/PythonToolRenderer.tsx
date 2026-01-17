@@ -13,7 +13,7 @@ import {
 import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
-import { SvgCode } from "@opal/icons";
+import { SvgTerminal } from "@opal/icons";
 import FadeDiv from "@/components/FadeDiv";
 
 // Register Python language for highlighting
@@ -168,7 +168,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       {/* No output fallback - only when complete with no output */}
       {isComplete && !stdout && !stderr && (
         <div className="py-2 text-center text-gray-500 dark:text-gray-400">
-          <SvgCode className="w-4 h-4 mx-auto mb-1 opacity-50" />
+          <SvgTerminal className="w-4 h-4 mx-auto mb-1 opacity-50" />
           <p className="text-xs">No output</p>
         </div>
       )}
@@ -178,7 +178,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   // FULL mode: render content directly
   if (renderType === RenderType.FULL) {
     return children({
-      icon: SvgCode,
+      icon: SvgTerminal,
       status,
       content,
     });
@@ -186,7 +186,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   // Compact mode: wrap content in FadeDiv
   return children({
-    icon: SvgCode,
+    icon: SvgTerminal,
     status,
     content: (
       <FadeDiv direction="bottom" height={80}>
