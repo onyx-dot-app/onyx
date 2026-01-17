@@ -399,7 +399,7 @@ const ChatScrollContainer = React.memo(
             }}
           >
             <div
-              className="w-[min(50rem,100%)] px-4 pb-8"
+              className="w-full flex flex-col items-center"
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",
