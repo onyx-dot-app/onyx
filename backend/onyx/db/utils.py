@@ -45,3 +45,5 @@ class SortOrder(str, Enum):
 class DiscordChannelView(BaseModel):
     channel_id: int
     channel_name: str
+    channel_type: str = "text"  # text, forum
+    is_private: bool = False  # True if @everyone cannot view the channel

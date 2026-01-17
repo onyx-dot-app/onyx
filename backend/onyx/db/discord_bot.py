@@ -5,6 +5,7 @@ from datetime import timezone
 
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
@@ -26,14 +27,23 @@ def create_discord_bot_config(
     db_session: Session,
     bot_token: str,
 ) -> DiscordBotConfig:
-    """Create the Discord bot config. Raises if already exists."""
+    """Create the Discord bot config. Raises ValueError if already exists.
+
+    The singleton_guard unique constraint ensures only one config per tenant,
+    even under concurrent requests.
+    """
     existing = get_discord_bot_config(db_session)
     if existing:
         raise ValueError("Discord bot config already exists")
 
     config = DiscordBotConfig(bot_token=bot_token)
     db_session.add(config)
-    db_session.flush()
+    try:
+        db_session.flush()
+    except IntegrityError:
+        # Race condition: another request created the config concurrently
+        db_session.rollback()
+        raise ValueError("Discord bot config already exists")
     return config
 
 
@@ -119,7 +129,7 @@ def update_guild_config(
     db_session: Session,
     config: DiscordGuildConfig,
     enabled: bool,
-    default_persona_id: int,
+    default_persona_id: int | None = None,
 ) -> DiscordGuildConfig:
     """Update guild config fields."""
     config.enabled = enabled
@@ -193,8 +203,8 @@ def update_discord_channel_config(
     channel_name: str,
     thread_only_mode: bool,
     require_bot_invocation: bool,
-    persona_override_id: int,
     enabled: bool,
+    persona_override_id: int | None = None,
 ) -> DiscordChannelConfig:
     """Update channel config fields."""
     config.channel_name = channel_name
@@ -232,6 +242,8 @@ def create_channel_config(
         guild_config_id=guild_config_id,
         channel_id=channel_view.channel_id,
         channel_name=channel_view.channel_name,
+        channel_type=channel_view.channel_type,
+        is_private=channel_view.is_private,
     )
     db_session.add(config)
     db_session.flush()
@@ -261,6 +273,8 @@ def bulk_create_channel_configs(
                 guild_config_id=guild_config_id,
                 channel_id=channel_view.channel_id,
                 channel_name=channel_view.channel_name,
+                channel_type=channel_view.channel_type,
+                is_private=channel_view.is_private,
             )
             db_session.add(config)
             new_configs.append(config)
@@ -278,13 +292,12 @@ def sync_channel_configs(
 
     - Creates configs for new channels (disabled by default)
     - Removes configs for deleted channels
-    - Updates names for existing channels if changed
+    - Updates names and types for existing channels if changed
 
     Returns: (added_count, removed_count, updated_count)
     """
     current_channel_map = {
-        channel_view.channel_id: channel_view.channel_name
-        for channel_view in current_channels
+        channel_view.channel_id: channel_view for channel_view in current_channels
     }
     current_channel_ids = set(current_channel_map.keys())
 
@@ -299,9 +312,7 @@ def sync_channel_configs(
     # Add new channels
     added_count = 0
     for channel_id in to_add:
-        channel_view = DiscordChannelView(
-            channel_id=channel_id, channel_name=current_channel_map[channel_id]
-        )
+        channel_view = current_channel_map[channel_id]
         create_channel_config(db_session, guild_config_id, channel_view)
         added_count += 1
 
@@ -312,13 +323,22 @@ def sync_channel_configs(
             db_session.delete(config)
             removed_count += 1
 
-    # Update names for existing channels if changed
+    # Update names, types, and privacy for existing channels if changed
     updated_count = 0
     for config in existing_configs:
         if config.channel_id in current_channel_ids:
-            new_name = current_channel_map[config.channel_id]
-            if config.channel_name != new_name:
-                config.channel_name = new_name
+            channel_view = current_channel_map[config.channel_id]
+            changed = False
+            if config.channel_name != channel_view.channel_name:
+                config.channel_name = channel_view.channel_name
+                changed = True
+            if config.channel_type != channel_view.channel_type:
+                config.channel_type = channel_view.channel_type
+                changed = True
+            if config.is_private != channel_view.is_private:
+                config.is_private = channel_view.is_private
+                changed = True
+            if changed:
                 updated_count += 1
 
     db_session.flush()

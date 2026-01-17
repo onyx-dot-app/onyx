@@ -3043,6 +3043,7 @@ class DiscordBotConfig(Base):
     """Global Discord bot configuration (one per tenant).
 
     Stores the bot token when not provided via DISCORD_BOT_TOKEN env var.
+    Uses singleton_guard with unique constraint to enforce only one row per tenant.
     """
 
     __tablename__ = "discord_bot_config"
@@ -3051,6 +3052,10 @@ class DiscordBotConfig(Base):
     bot_token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # Singleton guard: always TRUE, unique constraint ensures only one row
+    singleton_guard: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), unique=True, nullable=False
     )
 
 
@@ -3110,6 +3115,16 @@ class DiscordChannelConfig(Base):
     # Discord snowflake
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     channel_name: Mapped[str] = mapped_column(String(), nullable=False)
+
+    # Channel type from Discord (text, forum)
+    channel_type: Mapped[str] = mapped_column(
+        String(20), server_default=text("'text'"), nullable=False
+    )
+
+    # True if @everyone cannot view the channel
+    is_private: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
 
     # If true, bot only responds to messages in threads
     # Otherwise, will reply in channel
