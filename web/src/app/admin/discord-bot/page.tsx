@@ -70,7 +70,7 @@ function DiscordBotContent() {
       <BotConfigCard setPopup={setPopup} />
 
       <Modal open={!!registrationKey}>
-        <Modal.Content small>
+        <Modal.Content width="sm">
           <Modal.Header
             title="Registration Key"
             icon={SvgKey}
