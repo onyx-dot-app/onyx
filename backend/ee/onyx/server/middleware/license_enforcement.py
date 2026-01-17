@@ -19,10 +19,17 @@ from shared_configs.contextvars import get_current_tenant_id
 ALLOWED_PATH_PREFIXES = {
     "/auth",
     "/health",
+    "/openapi.json",
     "/license",
     "/tenants/billing-information",
     "/tenants/create-customer-portal-session",
     "/tenants/create-subscription-session",
+    "/settings",
+    "/enterprise-settings",
+    "/me",
+    "/metrics",
+    "/docs",
+    "/redoc",
 }
 
 
