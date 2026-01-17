@@ -45,7 +45,8 @@ class DiscordCacheManager:
                     set(),
                 )()
 
-                for tenant_id in get_all_tenant_ids():
+                tenant_ids = await asyncio.to_thread(get_all_tenant_ids)
+                for tenant_id in tenant_ids:
                     if tenant_id in gated:
                         continue
 
@@ -55,13 +56,12 @@ class DiscordCacheManager:
                         if not guild_ids:
                             logger.debug(f"No guilds found for tenant {tenant_id}")
                             continue
-                        if guild_ids:
-                            for guild_id in guild_ids:
-                                new_guild_tenants[guild_id] = tenant_id
-                            # Use cached key if available, otherwise use newly provisioned one
-                            new_api_keys[tenant_id] = api_key or self._api_keys.get(
-                                tenant_id, ""
-                            )
+                        for guild_id in guild_ids:
+                            new_guild_tenants[guild_id] = tenant_id
+                        # Use cached key if available, otherwise use newly provisioned one
+                        new_api_keys[tenant_id] = api_key or self._api_keys.get(
+                            tenant_id, ""
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to refresh tenant {tenant_id}: {e}")
                     finally:

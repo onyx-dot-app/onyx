@@ -1,6 +1,7 @@
 """Discord bot client with integrated message handling."""
 
 import asyncio
+import time
 
 import discord
 from discord.ext import commands
@@ -93,15 +94,15 @@ class OnyxDiscordClient(commands.Bot):
             except asyncio.CancelledError:
                 pass
 
+        # Close Discord connection first - stops new commands from triggering cache ops
+        if not self.is_closed():
+            await super().close()
+
         # Close API client
         await self.api_client.close()
 
-        # Clear cache
+        # Clear cache (safe now - no concurrent operations possible)
         self.cache.clear()
-
-        # Close Discord connection
-        if not self.is_closed():
-            await super().close()
 
         self.ready = False
         logger.info("Discord bot shutdown complete")
@@ -197,19 +198,27 @@ def main() -> None:
     # Initialize EE features based on environment
     set_is_ee_based_on_env_variable()
 
-    token = get_bot_token()
-    if not token:
-        logger.error("No Discord bot token configured (DISCORD_BOT_TOKEN)")
-        return
+    counter = 0
+    while True:
+        token = get_bot_token()
+        if not token:
+            if counter % 180 == 0:
+                logger.info(
+                    "Discord bot is dormant. Waiting for token configuration..."
+                )
+            counter += 1
+            time.sleep(5)
+            continue
+        counter = 0
+        bot = OnyxDiscordClient()
 
-    bot = OnyxDiscordClient()
+        try:
+            # bot.run() handles SIGINT/SIGTERM and calls close() automatically
+            bot.run(token)
 
-    try:
-        # bot.run() handles SIGINT/SIGTERM and calls close() automatically
-        bot.run(token)
-    except Exception:
-        logger.exception("Fatal error in Discord bot")
-        raise
+        except Exception:
+            logger.exception("Fatal error in Discord bot")
+            raise
 
 
 if __name__ == "__main__":

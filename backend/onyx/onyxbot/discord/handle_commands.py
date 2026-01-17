@@ -6,6 +6,7 @@ from datetime import timezone
 
 import discord
 
+from onyx.configs.app_configs import DISCORD_BOT_INVOKE_CHAR
 from onyx.configs.constants import ONYX_DISCORD_URL
 from onyx.db.discord_bot import bulk_create_channel_configs
 from onyx.db.discord_bot import get_guild_config_by_discord_id
@@ -15,7 +16,6 @@ from onyx.db.discord_bot import sync_channel_configs
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.utils import DiscordChannelView
 from onyx.onyxbot.discord.cache import DiscordCacheManager
-from onyx.onyxbot.discord.constants import COMMAND_PREFIX
 from onyx.onyxbot.discord.constants import REGISTER_COMMAND
 from onyx.onyxbot.discord.constants import SYNC_CHANNELS_COMMAND
 from onyx.onyxbot.discord.exceptions import InvalidRegistrationKeyError
@@ -52,7 +52,7 @@ async def handle_registration_command(
     content = message.content.strip()
 
     # Check for !register command
-    if not content.startswith(f"{COMMAND_PREFIX}{REGISTER_COMMAND}"):
+    if not content.startswith(f"{DISCORD_BOT_INVOKE_CHAR}{REGISTER_COMMAND}"):
         return False
 
     logger.info(f"Handling registration command for guild {message.guild.id}")
@@ -61,7 +61,7 @@ async def handle_registration_command(
     parts = content.split(maxsplit=1)
     if len(parts) < 2:
         await message.reply(
-            f"**Usage:** `{COMMAND_PREFIX}{REGISTER_COMMAND} <registration_key>`\n\n"
+            f"**Usage:** `{DISCORD_BOT_INVOKE_CHAR}{REGISTER_COMMAND} <registration_key>`\n\n"
             "Get your registration key from the Onyx admin panel."
         )
         return True
@@ -187,9 +187,27 @@ def get_text_channels(guild: discord.Guild) -> list[DiscordChannelView]:
     for channel in guild.channels:
         # Include text channels and forum channels (where threads can be created)
         if isinstance(channel, (discord.TextChannel, discord.ForumChannel)):
-            channels.append(
-                DiscordChannelView(channel_id=channel.id, channel_name=channel.name)
+            # Check if channel is private (not visible to @everyone)
+            everyone_perms = channel.permissions_for(guild.default_role)
+            is_private = not everyone_perms.view_channel
+
+            logger.debug(
+                f"Found channel: name={channel.name}, id={channel.id}, "
+                f"type={channel.type.name}, is_private={is_private}"
             )
+
+            channels.append(
+                DiscordChannelView(
+                    channel_id=channel.id,
+                    channel_name=channel.name,
+                    channel_type=channel.type.name,  # "text" or "forum"
+                    is_private=is_private,
+                )
+            )
+
+    logger.debug(
+        f"Retrieved {len(channels)} channels from guild {guild.id} ({guild.name})"
+    )
     return channels
 
 
@@ -207,7 +225,7 @@ async def handle_sync_channels_command(
     content = message.content.strip()
 
     # Check for !sync-channels command
-    if not content.startswith(f"{COMMAND_PREFIX}{SYNC_CHANNELS_COMMAND}"):
+    if not content.startswith(f"{DISCORD_BOT_INVOKE_CHAR}{SYNC_CHANNELS_COMMAND}"):
         return False
 
     logger.info(f"Handling sync-channels command for guild {message.guild.id}")
@@ -216,7 +234,7 @@ async def handle_sync_channels_command(
     if not tenant_id:
         await message.reply(
             ":x: **This server is not registered.**\n\n"
-            f"Use `{COMMAND_PREFIX}{REGISTER_COMMAND} <key>` first."
+            f"Use `{DISCORD_BOT_INVOKE_CHAR}{REGISTER_COMMAND} <key>` first."
         )
         return True
 
@@ -258,12 +276,13 @@ async def handle_sync_channels_command(
         )
     except ValueError as e:
         logger.error(f"Channel sync failed: {e}")
-        await message.reply(f":x: **Channel sync failed.**\n\n*Error: {e}*")
+        await message.reply(
+            ":x: **Channel sync failed.**\n\nYou may want to contact Onyx for support :sweat_smile:"
+        )
     except Exception as e:
         logger.exception(f"Channel sync failed: {e}")
         await message.reply(
-            ":x: **Channel sync failed.**\n\n"
-            "An unexpected error occurred. Please try again later."
+            ":x: **Channel sync failed.**\n\nPlease try again later :sweat_smile:"
         )
 
     return True
