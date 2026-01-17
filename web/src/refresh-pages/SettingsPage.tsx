@@ -2,21 +2,19 @@
 
 import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import type { Route } from "next";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import * as ActionsLayouts from "@/layouts/actions-layouts";
-import { useActionsLayout } from "@/layouts/actions-layouts";
 import { LineItemLayout, Section } from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
+  SvgArrowExchange,
   SvgKey,
   SvgLock,
   SvgMinusCircle,
-  SvgPlug,
   SvgSliders,
   SvgTrash,
+  SvgUnplug,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
@@ -52,6 +50,7 @@ import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 
 interface PAT {
   id: number;
@@ -378,26 +377,38 @@ function GeneralSettings() {
   );
 }
 
+interface LocalShortcut extends InputPrompt {
+  isNew: boolean;
+}
+
 function PromptShortcuts() {
   const { popup, setPopup } = usePopup();
   const { promptShortcuts, isLoading, error, refresh } = usePromptShortcuts();
-
-  const [shortcuts, setShortcuts] = useState<InputPrompt[]>([]);
+  const [shortcuts, setShortcuts] = useState<LocalShortcut[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Initialize shortcuts when input prompts are loaded
   useEffect(() => {
     if (isLoading || error) return;
 
+    // Convert InputPrompt[] to LocalShortcut[] with isNew: false for existing items
+    const existingShortcuts: LocalShortcut[] = promptShortcuts.map(
+      (shortcut) => ({
+        ...shortcut,
+        isNew: false,
+      })
+    );
+
     // Always ensure there's at least one empty row
     setShortcuts([
-      ...promptShortcuts,
+      ...existingShortcuts,
       {
-        id: -Date.now(),
+        id: Date.now(),
         prompt: "",
         content: "",
         active: true,
         is_public: false,
+        isNew: true,
       },
     ]);
     setIsInitialLoad(false);
@@ -414,8 +425,8 @@ function PromptShortcuts() {
     // Skip during initial load - the fetch useEffect handles the initial empty row
     if (isInitialLoad) return;
 
-    // Only manage new/unsaved rows (negative IDs) - never touch existing shortcuts
-    const newShortcuts = shortcuts.filter((s) => s.id < 0);
+    // Only manage new/unsaved rows (isNew: true) - never touch existing shortcuts
+    const newShortcuts = shortcuts.filter((s) => s.isNew);
     const emptyNewRows = newShortcuts.filter(
       (s) => !s.prompt.trim() && !s.content.trim()
     );
@@ -426,33 +437,35 @@ function PromptShortcuts() {
       setShortcuts((prev) => [
         ...prev,
         {
-          id: -Date.now(),
+          id: Date.now(),
           prompt: "",
           content: "",
           active: true,
           is_public: false,
+          isNew: true,
         },
       ]);
     }
     // If we have more than one empty new row, keep only one
     else if (emptyNewRowsCount > 1) {
       setShortcuts((prev) => {
-        // Keep all existing shortcuts (id > 0) regardless of their state
+        // Keep all existing shortcuts regardless of their state
         // Keep all new shortcuts that have at least one field filled
         // Add one empty new shortcut
-        const existingShortcuts = prev.filter((s) => s.id > 0);
+        const existingShortcuts = prev.filter((s) => !s.isNew);
         const filledNewShortcuts = prev.filter(
-          (s) => s.id < 0 && (s.prompt.trim() || s.content.trim())
+          (s) => s.isNew && (s.prompt.trim() || s.content.trim())
         );
         return [
           ...existingShortcuts,
           ...filledNewShortcuts,
           {
-            id: -Date.now(),
+            id: Date.now(),
             prompt: "",
             content: "",
             active: true,
             is_public: false,
+            isNew: true,
           },
         ];
       });
@@ -471,21 +484,24 @@ function PromptShortcuts() {
   );
 
   const handleRemoveShortcut = useCallback(
-    async (id: number) => {
-      // If it's a new shortcut (negative ID), just remove from state
-      if (id < 0) {
-        setShortcuts((prev) => prev.filter((s) => s.id !== id));
+    async (index: number) => {
+      const shortcut = shortcuts[index];
+      if (!shortcut) return;
+
+      // If it's a new shortcut, just remove from state
+      if (shortcut.isNew) {
+        setShortcuts((prev) => prev.filter((_, i) => i !== index));
         return;
       }
 
       // Otherwise, delete from backend
       try {
-        const response = await fetch(`/api/input_prompt/${id}`, {
+        const response = await fetch(`/api/input_prompt/${shortcut.id}`, {
           method: "DELETE",
         });
 
         if (response.ok) {
-          setShortcuts((prev) => prev.filter((s) => s.id !== id));
+          setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
           setPopup({ message: "Shortcut deleted", type: "success" });
         } else {
@@ -495,7 +511,7 @@ function PromptShortcuts() {
         setPopup({ message: "Failed to delete shortcut", type: "error" });
       }
     },
-    [setPopup, refresh]
+    [shortcuts, setPopup, refresh]
   );
 
   const handleSaveShortcut = useCallback(
@@ -510,7 +526,7 @@ function PromptShortcuts() {
       }
 
       try {
-        if (shortcut.id < 0) {
+        if (shortcut.isNew) {
           // Create new shortcut
           const response = await fetch("/api/input_prompt", {
             method: "POST",
@@ -585,7 +601,7 @@ function PromptShortcuts() {
         <Section gap={0.5}>
           {shortcuts.map((shortcut, index) => {
             const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
-            const isExisting = shortcut.id > 0;
+            const isExisting = !shortcut.isNew;
             const hasPrompt = shortcut.prompt.trim();
             const hasContent = shortcut.content.trim();
 
@@ -608,7 +624,7 @@ function PromptShortcuts() {
                     onChange={(e) =>
                       handleUpdateShortcut(index, "prompt", e.target.value)
                     }
-                    onBlur={() => handleBlurShortcut(index)}
+                    onBlur={() => void handleBlurShortcut(index)}
                     error={showPromptError}
                   />
                 </div>
@@ -619,15 +635,15 @@ function PromptShortcuts() {
                     onChange={(e) =>
                       handleUpdateShortcut(index, "content", e.target.value)
                     }
-                    onBlur={() => handleBlurShortcut(index)}
+                    onBlur={() => void handleBlurShortcut(index)}
                     error={showContentError}
                   />
                 </div>
                 <IconButton
                   icon={SvgMinusCircle}
-                  onClick={() => handleRemoveShortcut(shortcut.id)}
+                  onClick={() => void handleRemoveShortcut(index)}
                   tertiary
-                  disabled={!isExisting && isEmpty}
+                  disabled={shortcut.isNew && isEmpty}
                   aria-label="Remove shortcut"
                 />
               </Section>
@@ -1315,75 +1331,121 @@ function AccountsAccessSettings() {
   );
 }
 
-function ConnectorsSettings() {
+interface IndexedConnectorCardProps {
+  source: ValidSources;
+  count: number;
+}
+
+function IndexedConnectorCard({ source, count }: IndexedConnectorCardProps) {
+  const sourceMetadata = getSourceMetadata(source);
+
+  return (
+    <Card padding={0.75}>
+      <LineItemLayout
+        icon={sourceMetadata.icon}
+        title={sourceMetadata.displayName}
+        description={count > 1 ? `${count} connectors active` : "Connected"}
+      />
+    </Card>
+  );
+}
+
+interface FederatedConnectorCardProps {
+  connector: FederatedConnectorOAuthStatus;
+  onDisconnectSuccess: () => void;
+}
+
+function FederatedConnectorCard({
+  connector,
+  onDisconnectSuccess,
+}: FederatedConnectorCardProps) {
   const { popup, setPopup } = usePopup();
-  const router = useRouter();
-  const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const sourceMetadata = getSourceMetadata(connector.source as ValidSources);
+
+  const handleDisconnect = useCallback(async () => {
+    setIsDisconnecting(true);
+    try {
+      const response = await fetch(
+        `/api/federated/${connector.federated_connector_id}/oauth`,
+        { method: "DELETE" }
+      );
+
+      if (response.ok) {
+        setPopup({
+          message: "Disconnected successfully",
+          type: "success",
+        });
+        onDisconnectSuccess();
+      } else {
+        throw new Error("Failed to disconnect");
+      }
+    } catch (error) {
+      setPopup({
+        message: "Failed to disconnect",
+        type: "error",
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }, [connector.federated_connector_id, onDisconnectSuccess, setPopup]);
+
+  return (
+    <>
+      {popup}
+
+      <Card padding={0.75}>
+        <LineItemLayout
+          icon={sourceMetadata.icon}
+          title={sourceMetadata.displayName}
+          description={
+            connector.has_oauth_token ? "Connected" : "Not connected"
+          }
+          rightChildren={
+            connector.has_oauth_token ? (
+              <IconButton
+                icon={SvgUnplug}
+                internal
+                onClick={() => void handleDisconnect()}
+                disabled={isDisconnecting}
+              />
+            ) : connector.authorize_url ? (
+              <Button
+                href={connector.authorize_url}
+                target="_blank"
+                internal
+                rightIcon={SvgArrowExchange}
+              >
+                Connect
+              </Button>
+            ) : undefined
+          }
+        />
+      </Card>
+    </>
+  );
+}
+
+function ConnectorsSettings() {
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
   } = useFederatedOAuthStatus();
   const { ccPairs } = useCCPairs();
 
-  const handleConnectOAuth = useCallback(
-    (authorizeUrl: string) => {
-      router.push(authorizeUrl as Route);
-    },
-    [router]
-  );
-
-  const handleDisconnectOAuth = useCallback(
-    async (connectorId: number) => {
-      setIsDisconnecting(connectorId);
-      try {
-        const response = await fetch(`/api/federated/${connectorId}/oauth`, {
-          method: "DELETE",
-        });
-
-        if (response.ok) {
-          setPopup({
-            message: "Disconnected successfully",
-            type: "success",
-          });
-          if (refetchFederatedConnectors) {
-            refetchFederatedConnectors();
-          }
-        } else {
-          throw new Error("Failed to disconnect");
-        }
-      } catch (error) {
-        setPopup({
-          message: "Failed to disconnect",
-          type: "error",
-        });
-      } finally {
-        setIsDisconnecting(null);
-      }
-    },
-    [refetchFederatedConnectors, setPopup]
-  );
-
-  function formatSourceName(source: string) {
-    return source
-      .split("_")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  }
-
   // Group indexed connectors by source
   const groupedConnectors = ccPairs.reduce(
     (acc, ccPair) => {
-      const source = ccPair.source;
-      if (!acc[source]) {
-        acc[source] = {
-          source,
+      if (!acc[ccPair.source]) {
+        acc[ccPair.source] = {
+          source: ccPair.source,
           count: 0,
           hasSuccessfulRun: false,
         };
       }
-      acc[source]!.count++;
+      acc[ccPair.source]!.count++;
       if (ccPair.has_successful_run) {
-        acc[source]!.hasSuccessfulRun = true;
+        acc[ccPair.source]!.hasSuccessfulRun = true;
       }
       return acc;
     },
@@ -1397,99 +1459,38 @@ function ConnectorsSettings() {
     >
   );
 
-  const hasConnectors = ccPairs.length > 0 || federatedConnectors.length > 0;
+  const hasConnectors =
+    Object.keys(groupedConnectors).length > 0 || federatedConnectors.length > 0;
 
   return (
-    <>
-      {popup}
+    <Section gap={2}>
+      <Section gap={0.75} justifyContent="start">
+        <InputLayouts.Label title="Connectors" />
+        {hasConnectors ? (
+          <>
+            {/* Indexed Connectors */}
+            {Object.values(groupedConnectors).map((connector) => (
+              <IndexedConnectorCard
+                key={connector.source}
+                source={connector.source}
+                count={connector.count}
+              />
+            ))}
 
-      <Section gap={2}>
-        <Section gap={0.75} justifyContent="start">
-          <InputLayouts.Label title="Connectors" />
-          {hasConnectors ? (
-            Object.values(groupedConnectors).map((connector) => {
-              const sourceMetadata = getSourceMetadata(connector.source);
-              return (
-                <Card key={connector.source} padding={0.75}>
-                  <LineItemLayout
-                    icon={sourceMetadata.icon}
-                    title={sourceMetadata.displayName}
-                    description={
-                      connector.count > 1
-                        ? `${connector.count} connectors active`
-                        : "Connected"
-                    }
-                  />
-                </Card>
-              );
-            })
-          ) : (
-            // <Section gap={0.5}>
-            //   {/* Indexed Connectors */}
-            //   {Object.values(groupedConnectors).map((group) => (
-            //     <ConnectorCard
-            //       key={group.source}
-            //
-            //       rightChildren={
-            //         <Text as="span" text03 secondaryBody>
-            //           Active
-            //         </Text>
-            //       }
-            //     />
-            //   ))}
-
-            //   {/* Federated Connectors */}
-            //   {federatedConnectors.map((connector) => {
-            //     const sourceMetadata = getSourceMetadata(
-            //       connector.source as ValidSources
-            //     );
-            //     return (
-            //       <ConnectorCard
-            //         key={connector.federated_connector_id}
-            //         title={formatSourceName(sourceMetadata.displayName)}
-            //         description={
-            //           connector.has_oauth_token ? "Connected" : "Not connected"
-            //         }
-            //         rightChildren={
-            //           connector.has_oauth_token ? (
-            //             <Button
-            //               secondary
-            //               onClick={() =>
-            //                 void handleDisconnectOAuth(
-            //                   connector.federated_connector_id
-            //                 )
-            //               }
-            //               disabled={
-            //                 isDisconnecting === connector.federated_connector_id
-            //               }
-            //             >
-            //               {isDisconnecting === connector.federated_connector_id
-            //                 ? "Disconnecting..."
-            //                 : "Disconnect"}
-            //             </Button>
-            //           ) : (
-            //             <Button
-            //               onClick={() => {
-            //                 if (connector.authorize_url) {
-            //                   handleConnectOAuth(connector.authorize_url);
-            //                 }
-            //               }}
-            //               disabled={!connector.authorize_url}
-            //               leftIcon={SvgExternalLink}
-            //             >
-            //               Connect
-            //             </Button>
-            //           )
-            //         }
-            //       />
-            //     );
-            //   })}
-            // </Section>
-            <EmptyMessage title="No connectors set up for your organization." />
-          )}
-        </Section>
+            {/* Federated Connectors */}
+            {federatedConnectors.map((connector) => (
+              <FederatedConnectorCard
+                key={connector.federated_connector_id}
+                connector={connector}
+                onDisconnectSuccess={() => refetchFederatedConnectors?.()}
+              />
+            ))}
+          </>
+        ) : (
+          <EmptyMessage title="No connectors set up for your organization." />
+        )}
       </Section>
-    </>
+    </Section>
   );
 }
 
