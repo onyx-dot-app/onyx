@@ -29,6 +29,7 @@ interface UserPreferences {
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
   theme_preference: ThemePreference | null;
+  chat_background: string | null;
 }
 
 export interface UserPersonalization {
