@@ -18,6 +18,7 @@ from onyx.db.utils import DiscordChannelView
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.onyxbot.discord.constants import REGISTER_COMMAND
 from onyx.onyxbot.discord.constants import SYNC_CHANNELS_COMMAND
+from onyx.onyxbot.discord.exceptions import GuildAlreadyRegisteredError
 from onyx.onyxbot.discord.exceptions import InvalidRegistrationKeyError
 from onyx.onyxbot.discord.exceptions import RegistrationError
 from onyx.onyxbot.discord.exceptions import RegistrationKeyAlreadyUsedError
@@ -115,6 +116,12 @@ async def handle_registration_command(
             "Each key can only be used once. "
             "Please generate a new key from the Onyx admin panel."
         )
+    except GuildAlreadyRegisteredError:
+        logger.debug(f"Registration failed - guild already registered: {guild_name}")
+        await message.reply(
+            ":x: **This server is already registered.**\n\n"
+            "OnyxBot can only connect one Discord server to one Onyx workspace."
+        )
     except RegistrationError as e:
         logger.warning(f"Registration failed: {guild_name}, error={e}")
         await message.reply(
@@ -152,10 +159,20 @@ async def _register_guild(
 
     logger.info(f"Parsed tenant_id {tenant_id} from registration key")
 
+    # Check if this guild is already registered to any tenant
+    guild_id = message.guild.id
+    existing_tenant = cache.get_tenant(guild_id)
+    if existing_tenant is not None:
+        logger.warning(
+            f"Guild {guild_id} is already registered to tenant {existing_tenant}"
+        )
+        raise GuildAlreadyRegisteredError(
+            "This server is already registered to another Onyx workspace."
+        )
+
     context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
         guild = message.guild
-        guild_id = guild.id
         guild_name = guild.name
 
         # Collect all text channels from the guild
