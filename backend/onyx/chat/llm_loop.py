@@ -534,7 +534,7 @@ def run_llm_loop(
                 next_citation_num=citation_processor.get_next_citation_number(),
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
-                url_summary_map=_extract_url_summary_map(gathered_documents),
+                url_summary_map=_extract_url_summary_map(gathered_documents or []),
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
