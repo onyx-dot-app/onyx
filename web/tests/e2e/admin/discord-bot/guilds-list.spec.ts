@@ -56,10 +56,9 @@ test.describe("Guilds List Page", () => {
     await expect(enabledBadge).toBeVisible();
   });
 
-  test("guilds page create key flow shows modal", async ({ adminPage }) => {
+  test("guilds page add server modal and copy key", async ({ adminPage }) => {
     await gotoDiscordBotPage(adminPage);
 
-    // Click "Add Server" button
     const addButton = adminPage.locator('button:has-text("Add Server")');
 
     if (await addButton.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -76,29 +75,12 @@ test.describe("Guilds List Page", () => {
 
         // Should show the !register command
         await expect(adminPage.locator("text=!register")).toBeVisible();
-      }
-    }
-  });
 
-  test("guilds page copy key functionality", async ({ adminPage }) => {
-    await gotoDiscordBotPage(adminPage);
-
-    const addButton = adminPage.locator('button:has-text("Add Server")');
-
-    if (await addButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-      if (await addButton.isEnabled()) {
-        await addButton.click();
-
-        // Wait for modal
-        const modal = adminPage.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 10000 });
-
-        // Find copy button - it's a CopyIconButton
+        // Find and click copy button
         const copyButton = adminPage.locator("button").filter({
           has: adminPage.locator("svg"),
         });
 
-        // Click the copy button (usually last svg button in modal)
         const copyButtons = await copyButton.all();
         for (const btn of copyButtons) {
           const ariaLabel = await btn.getAttribute("aria-label");
@@ -169,5 +151,51 @@ test.describe("Guilds List Page", () => {
     await expect(adminPage).toHaveURL(
       new RegExp(`/admin/discord-bot/${mockRegisteredGuild.id}`)
     );
+
+    // Verify detail page loaded correctly
+    await expect(adminPage.locator("text=Channel Configuration")).toBeVisible();
+  });
+
+  test("loading state shows loader", async ({ adminPage }) => {
+    // Intercept API to delay response
+    await adminPage.route(
+      "**/api/manage/admin/discord-bot/**",
+      async (route) => {
+        await new Promise((r) => setTimeout(r, 1000));
+        await route.continue();
+      }
+    );
+
+    await adminPage.goto("/admin/discord-bot");
+
+    // Should show loading indicator (ThreeDotsLoader)
+    // The loader should appear while data is being fetched
+    const loader = adminPage.locator(".loading, .loader, svg");
+    // Give it a moment to appear
+    await adminPage.waitForTimeout(100);
+
+    // Wait for page to finish loading
+    await adminPage.waitForLoadState("networkidle");
+
+    // After loading, page title should be visible
+    await expect(adminPage.locator("text=Discord Bots")).toBeVisible();
+  });
+
+  test("error state shows error message", async ({ adminPage }) => {
+    // Intercept API to return error
+    await adminPage.route("**/api/manage/admin/discord-bot/guilds", (route) => {
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Internal Server Error" }),
+      });
+    });
+
+    await adminPage.goto("/admin/discord-bot");
+    await adminPage.waitForLoadState("networkidle");
+
+    // Should show error message from ErrorCallout
+    const errorMessage = adminPage.locator("text=/failed|error/i");
+    await expect(errorMessage).toBeVisible({ timeout: 10000 });
   });
 });

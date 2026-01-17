@@ -1,18 +1,95 @@
 /**
- * E2E tests for Discord channel configuration.
+ * E2E tests for Discord guild detail page and channel configuration.
  *
- * Tests the channel configuration table which shows:
- * - List of channels with icons (text/forum)
- * - Enabled toggle per channel
- * - Require @mention toggle
- * - Thread Only Mode toggle
- * - Agent Override dropdown
+ * Tests the guild detail page which includes:
+ * - Guild enabled/disabled toggle
+ * - Default Agent (persona) selector
+ * - Channel Configuration section with:
+ *   - List of channels with icons (text/forum)
+ *   - Enabled toggle per channel
+ *   - Require @mention toggle
+ *   - Thread Only Mode toggle
+ *   - Agent Override dropdown
  */
 
 import { test, expect, gotoGuildDetailPage } from "./fixtures";
 
+test.describe("Guild Detail Page & Channel Configuration", () => {
+  test("guild detail page loads", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Page should load with guild info
+    await expect(adminPage).toHaveURL(
+      new RegExp(`/admin/discord-bot/${mockRegisteredGuild.id}`)
+    );
+
+    // Should show the guild name in the header
+    await expect(
+      adminPage.locator(`text=${mockRegisteredGuild.name}`)
+    ).toBeVisible();
+  });
+
+  test("guild enabled toggle works", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Find the enabled toggle in the header area
+    const enabledLabel = adminPage.locator("text=Enabled");
+    await expect(enabledLabel).toBeVisible({ timeout: 10000 });
+
+    const enabledToggle = adminPage.locator('[role="switch"]').first();
+    await expect(enabledToggle).toBeVisible();
+
+    // Should be enabled (checked) for our mock guild
+    await expect(enabledToggle).toHaveAttribute("aria-checked", "true");
+
+    // Get initial state and toggle
+    const initialState = await enabledToggle.getAttribute("aria-checked");
+    await enabledToggle.click();
+
+    // State should change (optimistic update)
+    await expect(enabledToggle).toHaveAttribute(
+      "aria-checked",
+      initialState === "true" ? "false" : "true"
+    );
+  });
+
+  test("guild default agent dropdown shows options", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Should show "Default Agent" section
+    await expect(adminPage.locator("text=Default Agent")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Find the persona/agent dropdown (InputSelect)
+    const agentDropdown = adminPage.locator(
+      'button:has-text("Default Assistant")'
+    );
+
+    if (await agentDropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await agentDropdown.click();
+
+      // Dropdown should show available options
+      const options = adminPage.locator('[role="option"]');
+      await expect(options.first()).toBeVisible({ timeout: 5000 });
+    }
+  });
+});
+
 test.describe("Channel Configuration", () => {
-  test("channels list displays", async ({ adminPage, mockRegisteredGuild }) => {
+  test("channels table displays with action buttons", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
     // Channel list table should be visible
@@ -23,6 +100,15 @@ test.describe("Channel Configuration", () => {
     await expect(adminPage.locator("text=general")).toBeVisible();
     await expect(adminPage.locator("text=help-forum")).toBeVisible();
     await expect(adminPage.locator("text=private-support")).toBeVisible();
+
+    // Should show action buttons
+    await expect(
+      adminPage.locator('button:has-text("Enable All")')
+    ).toBeVisible();
+    await expect(
+      adminPage.locator('button:has-text("Disable All")')
+    ).toBeVisible();
+    await expect(adminPage.locator('button:has-text("Update")')).toBeVisible();
   });
 
   test("channels table has correct columns", async ({
@@ -222,5 +308,36 @@ test.describe("Channel Configuration", () => {
 
     // Unsaved changes indicator should appear
     await expect(unsavedMessage).toBeVisible({ timeout: 5000 });
+  });
+
+  test("error toast appears on save failure", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Intercept PATCH to return error
+    await adminPage.route(
+      `**/api/manage/admin/discord-bot/guilds/${mockRegisteredGuild.id}`,
+      (route) => {
+        if (route.request().method() === "PATCH") {
+          route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({ detail: "Validation error" }),
+          });
+        } else {
+          route.continue();
+        }
+      }
+    );
+
+    // Toggle to trigger save
+    const toggle = adminPage.locator('[role="switch"]').first();
+    await toggle.click();
+
+    // Error toast should appear
+    const errorToast = adminPage.locator("text=/error|failed/i");
+    await expect(errorToast).toBeVisible({ timeout: 5000 });
   });
 });

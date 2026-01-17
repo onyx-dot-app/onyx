@@ -37,6 +37,30 @@ interface MockChannel {
 }
 
 /**
+ * Constants for mock data
+ */
+const MOCK_GUILD_ID = 999;
+
+/**
+ * Helper to authenticate and clear cookies
+ */
+async function authenticateAdmin(page: Page): Promise<void> {
+  await page.context().clearCookies();
+  await loginAs(page, "admin");
+}
+
+/**
+ * Helper to create JSON response
+ */
+function jsonResponse(data: unknown, status = 200) {
+  return {
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(data),
+  };
+}
+
+/**
  * Creates mock channel data for a registered guild
  */
 function createMockChannels(): MockChannel[] {
@@ -122,23 +146,20 @@ export const test = base.extend<{
 }>({
   // Admin page fixture - ensures proper authentication before each test
   adminPage: async ({ page }, use) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+    await authenticateAdmin(page);
     await use(page);
   },
 
   // API client fixture - provides access to OnyxApiClient for backend operations
   apiClient: async ({ page }, use) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+    await authenticateAdmin(page);
     const client = new OnyxApiClient(page);
     await use(client);
   },
 
   // Seeded guild fixture - creates a real pending guild via API
   seededGuild: async ({ page }, use) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+    await authenticateAdmin(page);
 
     const apiClient = new OnyxApiClient(page);
     const guild = await apiClient.createDiscordGuild();
@@ -156,31 +177,22 @@ export const test = base.extend<{
   // Mock registered guild fixture - provides a fully mocked registered guild with channels
   // This intercepts API calls to simulate a registered guild without needing Discord
   mockRegisteredGuild: async ({ page }, use) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
+    await authenticateAdmin(page);
 
-    const mockGuildId = 999;
-    const mockGuild = createMockRegisteredGuild(mockGuildId);
+    const mockGuild = createMockRegisteredGuild(MOCK_GUILD_ID);
     const mockChannels = createMockChannels();
 
-    // Mock the guild list endpoint to include our mock guild
+    // Mock the guild list endpoint
     await page.route(
       "**/api/manage/admin/discord-bot/guilds",
       async (route) => {
-        if (route.request().method() === "GET") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify([mockGuild]),
-          });
-        } else if (route.request().method() === "POST") {
+        const method = route.request().method();
+        if (method === "GET") {
+          await route.fulfill(jsonResponse([mockGuild]));
+        } else if (method === "POST") {
           // Allow creating new guilds - return a new pending guild
-          const newGuild = createMockPendingGuild(mockGuildId + 1);
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify(newGuild),
-          });
+          const newGuild = createMockPendingGuild(MOCK_GUILD_ID + 1);
+          await route.fulfill(jsonResponse(newGuild));
         } else {
           await route.continue();
         }
@@ -189,28 +201,18 @@ export const test = base.extend<{
 
     // Mock the specific guild endpoint
     await page.route(
-      `**/api/manage/admin/discord-bot/guilds/${mockGuildId}`,
+      `**/api/manage/admin/discord-bot/guilds/${MOCK_GUILD_ID}`,
       async (route) => {
-        if (route.request().method() === "GET") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify(mockGuild),
-          });
-        } else if (route.request().method() === "PATCH") {
+        const method = route.request().method();
+        if (method === "GET") {
+          await route.fulfill(jsonResponse(mockGuild));
+        } else if (method === "PATCH") {
           // Handle updates - merge with current state
-          const body = route.request().postDataJSON();
+          const body = (await route.request().postDataJSON()) || {};
           const updatedGuild = { ...mockGuild, ...body };
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify(updatedGuild),
-          });
-        } else if (route.request().method() === "DELETE") {
-          await route.fulfill({
-            status: 204,
-            body: "",
-          });
+          await route.fulfill(jsonResponse(updatedGuild));
+        } else if (method === "DELETE") {
+          await route.fulfill({ status: 204, body: "" });
         } else {
           await route.continue();
         }
@@ -219,32 +221,37 @@ export const test = base.extend<{
 
     // Mock the channels endpoint for this guild
     await page.route(
-      `**/api/manage/admin/discord-bot/guilds/${mockGuildId}/channels`,
+      `**/api/manage/admin/discord-bot/guilds/${MOCK_GUILD_ID}/channels`,
       async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(mockChannels),
-        });
+        await route.fulfill(jsonResponse(mockChannels));
       }
     );
 
     // Mock channel update endpoint
     await page.route(
-      `**/api/manage/admin/discord-bot/guilds/${mockGuildId}/channels/*`,
+      `**/api/manage/admin/discord-bot/guilds/${MOCK_GUILD_ID}/channels/*`,
       async (route) => {
         if (route.request().method() === "PATCH") {
-          const body = route.request().postDataJSON();
-          const urlParts = route.request().url().split("/channels/");
-          const channelIdStr = urlParts[1] || "0";
-          const channelId = parseInt(channelIdStr, 10);
-          const channel = mockChannels.find((c) => c.id === channelId);
-          const updatedChannel = { ...channel, ...body };
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify(updatedChannel),
-          });
+          const body = (await route.request().postDataJSON()) || {};
+          // Extract channel ID from URL: .../channels/{id}
+          const urlMatch = route
+            .request()
+            .url()
+            .match(/\/channels\/(\d+)/);
+          const channelIdStr = urlMatch?.[1];
+          const channelId = channelIdStr ? parseInt(channelIdStr, 10) : null;
+          const channel = channelId
+            ? mockChannels.find((c) => c.id === channelId)
+            : null;
+
+          if (channel) {
+            const updatedChannel = { ...channel, ...body };
+            await route.fulfill(jsonResponse(updatedChannel));
+          } else {
+            await route.fulfill(
+              jsonResponse({ error: "Channel not found" }, 404)
+            );
+          }
         } else {
           await route.continue();
         }
@@ -252,7 +259,7 @@ export const test = base.extend<{
     );
 
     await use({
-      id: mockGuildId,
+      id: MOCK_GUILD_ID,
       name: mockGuild.guild_name!,
       guild: mockGuild,
       channels: mockChannels,
@@ -263,32 +270,19 @@ export const test = base.extend<{
 
   // Mock bot configuration state
   mockBotConfigured: async ({ page }, use) => {
+    const configResponse = {
+      configured: true,
+      created_at: new Date().toISOString(),
+    };
+
     await page.route(
       "**/api/manage/admin/discord-bot/config",
       async (route) => {
-        if (route.request().method() === "GET") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify({
-              configured: true,
-              created_at: new Date().toISOString(),
-            }),
-          });
-        } else if (route.request().method() === "POST") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify({
-              configured: true,
-              created_at: new Date().toISOString(),
-            }),
-          });
-        } else if (route.request().method() === "DELETE") {
-          await route.fulfill({
-            status: 204,
-            body: "",
-          });
+        const method = route.request().method();
+        if (method === "GET" || method === "POST") {
+          await route.fulfill(jsonResponse(configResponse));
+        } else if (method === "DELETE") {
+          await route.fulfill({ status: 204, body: "" });
         } else {
           await route.continue();
         }

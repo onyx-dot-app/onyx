@@ -61,6 +61,12 @@ test.describe("Bot Configuration Page", () => {
 
       // Save button should now be enabled
       await expect(saveTokenButton).toBeEnabled();
+
+      // Clear input
+      await tokenInput.clear();
+
+      // Button should be disabled again
+      await expect(saveTokenButton).toBeDisabled();
     }
   });
 
@@ -81,19 +87,5 @@ test.describe("Bot Configuration Page", () => {
 
     // Should show delete button when configured
     await expect(deleteButton).toBeVisible();
-  });
-
-  test("bot config shows server configurations section", async ({
-    adminPage,
-  }) => {
-    await gotoDiscordBotPage(adminPage);
-
-    // Should show Server Configurations section
-    const serverConfigSection = adminPage.locator("text=Server Configurations");
-    await expect(serverConfigSection).toBeVisible({ timeout: 10000 });
-
-    // Should show Add Server button
-    const addServerButton = adminPage.locator('button:has-text("Add Server")');
-    await expect(addServerButton).toBeVisible();
   });
 });
