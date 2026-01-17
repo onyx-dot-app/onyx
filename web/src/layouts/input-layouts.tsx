@@ -160,7 +160,7 @@ export interface LabelLayoutProps {
 }
 function LabelLayout({
   name,
-  title: title,
+  title,
   optional,
   description,
   center,
