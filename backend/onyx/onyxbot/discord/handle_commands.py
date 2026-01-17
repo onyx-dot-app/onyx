@@ -18,15 +18,8 @@ from onyx.db.utils import DiscordChannelView
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.onyxbot.discord.constants import REGISTER_COMMAND
 from onyx.onyxbot.discord.constants import SYNC_CHANNELS_COMMAND
-from onyx.onyxbot.discord.exceptions import GuildAlreadyRegisteredError
-from onyx.onyxbot.discord.exceptions import InvalidRegistrationKeyError
 from onyx.onyxbot.discord.exceptions import RegistrationError
-from onyx.onyxbot.discord.exceptions import RegistrationKeyAlreadyUsedError
-from onyx.onyxbot.discord.exceptions import RegistrationKeyNotFoundError
-from onyx.onyxbot.discord.exceptions import RegistrationPermissionError
 from onyx.onyxbot.discord.exceptions import SyncChannelsError
-from onyx.onyxbot.discord.exceptions import SyncChannelsPermissionError
-from onyx.onyxbot.discord.exceptions import SyncChannelsServerNotFoundError
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -45,6 +38,43 @@ async def handle_dm(message: discord.Message) -> None:
 
 
 # -------------------------------------------------------------------------
+# Helper functions for error handling
+# -------------------------------------------------------------------------
+
+
+async def _try_dm_author(message: discord.Message, content: str) -> bool:
+    """Attempt to DM the message author. Returns True if successful."""
+    logger.debug(f"Responding in Discord DM with {content}")
+    try:
+        await message.author.send(content)
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        # User has DMs disabled or other error - fail silently
+        return False
+
+
+async def _try_delete_message(message: discord.Message) -> bool:
+    """Attempt to delete a message. Returns True if successful."""
+    logger.debug(f"Deleting potentially sensitive message {message.id}")
+    try:
+        await message.delete()
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        # Bot lacks permission or other error - fail silently
+        return False
+
+
+async def _try_react_x(message: discord.Message) -> bool:
+    """Attempt to react to a message with ❌. Returns True if successful."""
+    try:
+        await message.add_reaction("❌")
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        # Bot lacks permission or other error - fail silently
+        return False
+
+
+# -------------------------------------------------------------------------
 # Registration
 # -------------------------------------------------------------------------
 
@@ -54,41 +84,45 @@ async def handle_registration_command(
     cache: DiscordCacheManager,
 ) -> bool:
     """Handle !register command. Returns True if command was handled."""
-    if not message.guild:
-        raise RegistrationError("This command can only be used in a server.")
-
     content = message.content.strip()
 
     # Check for !register command
     if not content.startswith(f"{DISCORD_BOT_INVOKE_CHAR}{REGISTER_COMMAND}"):
         return False
 
+    # Must be in a server
+    if not message.guild:
+        await _try_dm_author(
+            message, "This command can only be used in a server channel."
+        )
+        return True
+
     guild_name = message.guild.name
     logger.info(f"Registration command received: {guild_name}")
 
-    # Parse the registration key
-    parts = content.split(maxsplit=1)
-    if len(parts) < 2:
-        raise InvalidRegistrationKeyError(
-            "Invalid registration key format. Please check the key and try again."
-        )
-
-    registration_key = parts[1].strip()
-
-    if not message.author or not isinstance(message.author, discord.Member):
-        raise RegistrationPermissionError(
-            "You need to be a server administrator to register the bot."
-        )
-
-    # Check permissions - require admin or manage_guild
-    if not message.author.guild_permissions.administrator:
-        if not message.author.guild_permissions.manage_guild:
-            raise RegistrationPermissionError(
-                "You need **Administrator** or **Manage Server** permissions to register this bot."
+    try:
+        # Parse the registration key
+        parts = content.split(maxsplit=1)
+        if len(parts) < 2:
+            raise RegistrationError(
+                "Invalid registration key format. Please check the key and try again."
             )
 
-    # Process registration
-    try:
+        registration_key = parts[1].strip()
+
+        if not message.author or not isinstance(message.author, discord.Member):
+            raise RegistrationError(
+                "You need to be a server administrator to register the bot."
+            )
+
+        # Check permissions - require admin or manage_guild
+        if not message.author.guild_permissions.administrator:
+            if not message.author.guild_permissions.manage_guild:
+                raise RegistrationError(
+                    "You need **Administrator** or **Manage Server** permissions "
+                    "to register this bot."
+                )
+
         await _register_guild(message, registration_key, cache)
         logger.info(f"Registration successful: {guild_name}")
         await message.reply(
@@ -96,43 +130,18 @@ async def handle_registration_command(
             "This server is now connected to Onyx. "
             "I'll respond to messages based on your server and channel settings set in Onyx."
         )
-    except InvalidRegistrationKeyError:
-        logger.debug(f"Registration failed - invalid key: {guild_name}")
-        await message.reply(
-            ":x: **Invalid registration key format.**\n\n"
-            "Please check the key and try again."
-        )
-    except RegistrationKeyNotFoundError:
-        logger.debug(f"Registration failed - key not found: {guild_name}")
-        await message.reply(
-            ":x: **Registration key not found.**\n\n"
-            "The key may have expired or been deleted. "
-            "Please generate a new one from the Onyx admin panel."
-        )
-    except RegistrationKeyAlreadyUsedError:
-        logger.debug(f"Registration failed - key already used: {guild_name}")
-        await message.reply(
-            ":x: **This registration key has already been used.**\n\n"
-            "Each key can only be used once. "
-            "Please generate a new key from the Onyx admin panel."
-        )
-    except GuildAlreadyRegisteredError:
-        logger.debug(f"Registration failed - guild already registered: {guild_name}")
-        await message.reply(
-            ":x: **This server is already registered.**\n\n"
-            "OnyxBot can only connect one Discord server to one Onyx workspace."
-        )
     except RegistrationError as e:
-        logger.warning(f"Registration failed: {guild_name}, error={e}")
-        await message.reply(
-            f":x: **Registration failed: {e}**\n\n" "Please try again later."
-        )
+        logger.debug(f"Registration failed: {guild_name}, error={e}")
+        await _try_dm_author(message, f":x: **Registration failed.**\n\n{e}")
+        await _try_delete_message(message)
     except Exception:
         logger.exception(f"Registration failed unexpectedly: {guild_name}")
-        await message.reply(
+        await _try_dm_author(
+            message,
             ":x: **Registration failed.**\n\n"
-            "An unexpected error occurred. Please try again later."
+            "An unexpected error occurred. Please try again later.",
         )
+        await _try_delete_message(message)
 
     return True
 
@@ -153,7 +162,9 @@ async def _register_guild(
     # Parse tenant_id from registration key
     parsed = parse_discord_registration_key(registration_key)
     if parsed is None:
-        raise InvalidRegistrationKeyError()
+        raise RegistrationError(
+            "Invalid registration key format. Please check the key and try again."
+        )
 
     tenant_id = parsed
 
@@ -166,8 +177,9 @@ async def _register_guild(
         logger.warning(
             f"Guild {guild_id} is already registered to tenant {existing_tenant}"
         )
-        raise GuildAlreadyRegisteredError(
-            "This server is already registered to another Onyx workspace."
+        raise RegistrationError(
+            "This server is already registered.\n\n"
+            "OnyxBot can only connect one Discord server to one Onyx workspace."
         )
 
     context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -185,14 +197,18 @@ async def _register_guild(
                 # Find the guild config by registration key
                 config = get_guild_config_by_registration_key(db, registration_key)
                 if not config:
-                    raise RegistrationKeyNotFoundError(
-                        f"Key not found for tenant {tenant_id}"
+                    raise RegistrationError(
+                        "Registration key not found.\n\n"
+                        "The key may have expired or been deleted. "
+                        "Please generate a new one from the Onyx admin panel."
                     )
 
                 # Check if already used
                 if config.guild_id is not None:
-                    raise RegistrationKeyAlreadyUsedError(
-                        f"Key already registered by guild {config.guild_id}"
+                    raise RegistrationError(
+                        "This registration key has already been used.\n\n"
+                        "Each key can only be used once. "
+                        "Please generate a new key from the Onyx admin panel."
                     )
 
                 # Update the guild config
@@ -257,43 +273,48 @@ async def handle_sync_channels_command(
     bot: discord.Client,
 ) -> bool:
     """Handle !sync-channels command. Returns True if command was handled."""
+    content = message.content.strip()
+
+    # Check for !sync-channels command
+    if not content.startswith(f"{DISCORD_BOT_INVOKE_CHAR}{SYNC_CHANNELS_COMMAND}"):
+        return False
+
+    # Must be in a server
+    if not message.guild:
+        await _try_dm_author(
+            message, "This command can only be used in a server channel."
+        )
+        return True
+
+    guild_name = message.guild.name
+    logger.info(f"Sync-channels command received: {guild_name}")
+
     try:
-        if not message.guild:
-            raise SyncChannelsError("This command can only be used in a server.")
-
-        content = message.content.strip()
-
-        # Check for !sync-channels command
-        if not content.startswith(f"{DISCORD_BOT_INVOKE_CHAR}{SYNC_CHANNELS_COMMAND}"):
-            return False
-
-        guild_name = message.guild.name
-        logger.info(f"Sync-channels command received: {guild_name}")
-
         # Must be registered
         if not tenant_id:
-            raise SyncChannelsServerNotFoundError(
+            raise SyncChannelsError(
                 "This server is not registered. Please register it first."
             )
 
         # Check permissions - require admin or manage_guild
         if not message.author or not isinstance(message.author, discord.Member):
-            raise SyncChannelsPermissionError(
+            raise SyncChannelsError(
                 "You need to be a server administrator to sync channels."
             )
 
         if not message.author.guild_permissions.administrator:
             if not message.author.guild_permissions.manage_guild:
-                raise SyncChannelsPermissionError(
-                    "You need **Administrator** or **Manage Server** permissions to sync channels."
+                raise SyncChannelsError(
+                    "You need **Administrator** or **Manage Server** permissions "
+                    "to sync channels."
                 )
 
         # Get guild config ID
         def _get_guild_config_id() -> int | None:
             with get_session_with_tenant(tenant_id=tenant_id) as db:
                 if not message.guild:
-                    raise SyncChannelsServerNotFoundError(
-                        "Guild not found. This shouldn't happen. Please contact support."
+                    raise SyncChannelsError(
+                        "Server not found. This shouldn't happen. Please contact Onyx support."
                     )
                 config = get_guild_config_by_discord_id(db, message.guild.id)
                 return config.id if config else None
@@ -301,8 +322,8 @@ async def handle_sync_channels_command(
         guild_config_id = await asyncio.to_thread(_get_guild_config_id)
 
         if not guild_config_id:
-            raise SyncChannelsServerNotFoundError(
-                "Guild config not found. This shouldn't happen. Please contact support."
+            raise SyncChannelsError(
+                "Server config not found. This shouldn't happen. Please contact Onyx support."
             )
 
         # Perform the sync
@@ -320,29 +341,18 @@ async def handle_sync_channels_command(
             f"* **{updated}** channel name(s) updated\n\n"
             "New channels are disabled by default. Enable them in the Onyx admin panel."
         )
-    except SyncChannelsPermissionError:
-        await message.reply(
-            ":x: **You need **Administrator** or **Manage Server** permissions to sync channels.**"
-        )
-    except SyncChannelsServerNotFoundError:
-        await message.reply(
-            ":x: **Guild config not found.**\n\n"
-            "This server is not registered. Please register it first."
-        )
-    except SyncChannelsError:
-        logger.warning(
-            f"Sync-channels failed: {message.guild.name if message.guild else 'unknown'}"
-        )
-        await message.reply(
-            ":x: **Channel sync failed.**\n\nPlease try again later :sweat_smile:"
-        )
+    except SyncChannelsError as e:
+        logger.debug(f"Sync-channels failed: {guild_name}, error={e}")
+        await _try_dm_author(message, f":x: **Channel sync failed.**\n\n{e}")
+        await _try_react_x(message)
     except Exception:
-        logger.exception(
-            f"Sync-channels failed unexpectedly: {message.guild.name if message.guild else 'unknown'}"
+        logger.exception(f"Sync-channels failed unexpectedly: {guild_name}")
+        await _try_dm_author(
+            message,
+            ":x: **Channel sync failed.**\n\n"
+            "An unexpected error occurred. Please try again later.",
         )
-        await message.reply(
-            ":x: **Channel sync failed.**\n\nYou may want to contact Onyx for support :sweat_smile:"
-        )
+        await _try_react_x(message)
 
     return True
 

@@ -14,7 +14,6 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import ApiKey
 from onyx.db.models import User
 from onyx.onyxbot.discord.constants import DISCORD_SERVICE_API_KEY_NAME
-from onyx.onyxbot.discord.exceptions import APIKeyProvisioningError
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -77,7 +76,7 @@ def get_or_create_discord_service_api_key(
         The raw API key string (not hashed).
 
     Raises:
-        APIKeyProvisioningError: If API key creation fails.
+        RuntimeError: If API key creation fails.
     """
     # Check for existing key
     existing = get_api_key_by_name(db_session, DISCORD_SERVICE_API_KEY_NAME)
@@ -95,30 +94,23 @@ def get_or_create_discord_service_api_key(
         return new_api_key
 
     # Create new API key
-    try:
-        logger.info(f"Creating Discord service API key for tenant {tenant_id}")
-        api_key_args = APIKeyArgs(
-            name=DISCORD_SERVICE_API_KEY_NAME,
-            role=UserRole.LIMITED,  # Limited role is sufficient for chat requests
+    logger.info(f"Creating Discord service API key for tenant {tenant_id}")
+    api_key_args = APIKeyArgs(
+        name=DISCORD_SERVICE_API_KEY_NAME,
+        role=UserRole.LIMITED,  # Limited role is sufficient for chat requests
+    )
+    api_key_descriptor = insert_api_key(
+        db_session=db_session,
+        api_key_args=api_key_args,
+        user_id=None,  # Service account, no owner
+    )
+
+    if not api_key_descriptor.api_key:
+        raise RuntimeError(
+            f"Failed to create Discord service API key for tenant {tenant_id}"
         )
-        api_key_descriptor = insert_api_key(
-            db_session=db_session,
-            api_key_args=api_key_args,
-            user_id=None,  # Service account, no owner
-        )
 
-        if not api_key_descriptor.api_key:
-            raise Exception(
-                f"Failed to create Discord service API key for tenant {tenant_id}"
-            )
-
-        return api_key_descriptor.api_key
-
-    except Exception as e:
-        logger.error(f"Failed to create Discord service API key: {e}")
-        raise APIKeyProvisioningError(
-            f"Failed to provision API key for tenant {tenant_id}: {e}"
-        ) from e
+    return api_key_descriptor.api_key
 
 
 def delete_discord_service_api_key(db_session: Session, tenant_id: str) -> bool:
