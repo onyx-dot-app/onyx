@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useMemo, FunctionComponent } from "react";
-import { StopReason } from "@/app/chat/services/streamingModels";
+import {
+  StopReason,
+  PacketType,
+  Packet,
+} from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { getToolName, getToolIcon } from "../toolDisplayHelpers";
@@ -10,6 +14,10 @@ import Tabs from "@/refresh-components/Tabs";
 import { SvgBranch } from "@opal/icons";
 import { StepContainer } from "./AgentTimeline";
 import { IconProps } from "@/components/icons/icons";
+
+/** Check if packets are for ResearchAgentRenderer (which has its own StepContainer layout) */
+const isResearchAgentPackets = (packets: Packet[]) =>
+  packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 
 export interface ParallelTimelineTabsProps {
   /** Turn group containing parallel steps */
@@ -79,19 +87,24 @@ export function ParallelTimelineTabs({
             stopReason={stopReason}
             defaultExpanded={true}
           >
-            {({ icon, status, content, isExpanded, onToggle }) => (
-              <StepContainer
-                stepIcon={icon as FunctionComponent<IconProps> | undefined}
-                header={status}
-                isExpanded={isExpanded}
-                onToggle={onToggle}
-                collapsible={true}
-                isLastStep={isLastTurnGroup}
-                packetLength={activeStep?.packets.length ?? 0}
-              >
-                {content}
-              </StepContainer>
-            )}
+            {({ icon, status, content, isExpanded, onToggle }) =>
+              isResearchAgentPackets(activeStep?.packets ?? []) ? (
+                // ResearchAgentRenderer has its own StepContainer layout
+                content
+              ) : (
+                <StepContainer
+                  stepIcon={icon as FunctionComponent<IconProps> | undefined}
+                  header={status}
+                  isExpanded={isExpanded}
+                  onToggle={onToggle}
+                  collapsible={true}
+                  isLastStep={isLastTurnGroup}
+                  packetLength={activeStep?.packets.length ?? 0}
+                >
+                  {content}
+                </StepContainer>
+              )
+            }
           </TimelineRendererComponent>
         </div>
       </div>
