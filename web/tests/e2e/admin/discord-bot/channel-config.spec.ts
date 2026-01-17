@@ -42,21 +42,25 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
     // Find the enabled toggle in the header area
-    const enabledLabel = adminPage.locator("text=Enabled");
+    // The first switch is in the header (guild enabled toggle)
+    const headerSwitch = adminPage.locator('[role="switch"]').first();
+    await expect(headerSwitch).toBeVisible({ timeout: 10000 });
+
+    // Find the "Enabled" label in the header area (not the table column header)
+    // The header appears before the table in DOM, so the first "Enabled" text is in the header
+    // We can also verify it's not in a table header by checking it's near the switch
+    const enabledLabel = adminPage.getByText("Enabled").first();
     await expect(enabledLabel).toBeVisible({ timeout: 10000 });
 
-    const enabledToggle = adminPage.locator('[role="switch"]').first();
-    await expect(enabledToggle).toBeVisible();
-
     // Should be enabled (checked) for our mock guild
-    await expect(enabledToggle).toHaveAttribute("aria-checked", "true");
+    await expect(headerSwitch).toHaveAttribute("aria-checked", "true");
 
     // Get initial state and toggle
-    const initialState = await enabledToggle.getAttribute("aria-checked");
-    await enabledToggle.click();
+    const initialState = await headerSwitch.getAttribute("aria-checked");
+    await headerSwitch.click();
 
     // State should change (optimistic update)
-    await expect(enabledToggle).toHaveAttribute(
+    await expect(headerSwitch).toHaveAttribute(
       "aria-checked",
       initialState === "true" ? "false" : "true"
     );

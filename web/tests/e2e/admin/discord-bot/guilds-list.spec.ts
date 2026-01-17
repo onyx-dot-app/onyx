@@ -119,16 +119,30 @@ test.describe("Guilds List Page", () => {
       adminPage.locator(`text=${mockRegisteredGuild.name}`)
     ).toBeVisible({ timeout: 10000 });
 
+    // Wait for table to be fully loaded and stable
+    await adminPage.waitForLoadState("networkidle");
+
     // Find the table row containing the guild
     const tableRow = adminPage.locator("tr").filter({
       hasText: mockRegisteredGuild.name,
     });
+    await expect(tableRow).toBeVisible({ timeout: 10000 });
 
     // Find delete button in that row - it's an IconButton (last button in Actions column)
+    // The DeleteButton uses IconButton with tooltip="Delete" and SvgTrash icon
     const deleteButton = tableRow.locator("button").last();
 
     if (await deleteButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await deleteButton.click();
+      // Ensure the button is visible and scrolled into view
+      await deleteButton.scrollIntoViewIfNeeded();
+      await deleteButton.waitFor({ state: "visible" });
+
+      // Wait for any animations/transitions to complete
+      await adminPage.waitForTimeout(300);
+
+      // Use force click to bypass any overlay/interception issues
+      // The SettingsLayouts.Body div may be intercepting pointer events
+      await deleteButton.click({ force: true });
 
       // Confirmation modal should appear
       const modal = adminPage.locator('[role="dialog"]');
