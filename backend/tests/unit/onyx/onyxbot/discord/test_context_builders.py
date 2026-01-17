@@ -354,7 +354,7 @@ class TestReplyChainContextBuilder:
         # Mock fetch to return the chain
         message_map = {2: msg_b, 3: msg_c, 4: msg_d}
 
-        async def fetch_message(msg_id):
+        async def fetch_message(msg_id: int) -> MagicMock:
             if msg_id in message_map:
                 return message_map[msg_id]
             raise discord.NotFound(MagicMock(), "Not found")
@@ -389,7 +389,7 @@ class TestReplyChainContextBuilder:
         start.channel = MagicMock()
         start.channel.name = "general"
 
-        async def fetch_message(msg_id):
+        async def fetch_message(msg_id: int) -> MagicMock:
             if msg_id in messages:
                 return messages[msg_id]
             raise discord.NotFound(MagicMock(), "Not found")
@@ -607,7 +607,7 @@ class TestContextFormatting:
 
     def test_context_format_output(self, mock_bot_user: MagicMock) -> None:
         """Build full context has expected format."""
-        messages = [
+        messages: list[Any] = [
             mock_message(content="Hello bot", author_bot=False),
         ]
         messages[0].type = discord.MessageType.default

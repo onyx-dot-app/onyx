@@ -10,6 +10,7 @@ from unittest.mock import patch
 import discord
 import pytest
 
+from onyx.onyxbot.discord.exceptions import RegistrationError
 from onyx.onyxbot.discord.exceptions import RegistrationPermissionError
 from onyx.onyxbot.discord.handle_commands import get_text_channels
 from onyx.onyxbot.discord.handle_commands import handle_dm
@@ -218,14 +219,15 @@ class TestGuildRegistrationCommand:
         self,
         mock_cache_manager: MagicMock,
     ) -> None:
-        """Registration in DM returns error."""
+        """Registration in DM raises RegistrationError."""
         msg = MagicMock(spec=discord.Message)
         msg.guild = None  # DM
         msg.content = "!register discord_public.token"
 
-        # Should not process (returns False) or raise error
-        await handle_registration_command(msg, mock_cache_manager)
-        # DM case should be handled - either False or exception
+        # Should raise RegistrationError for DM
+        with pytest.raises(RegistrationError) as exc_info:
+            await handle_registration_command(msg, mock_cache_manager)
+        assert "server" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_register_syncs_forum_channels(
