@@ -42,15 +42,19 @@ import {
   SvgAlertTriangle,
 } from "@opal/icons";
 import { ThemePreference } from "@/lib/types";
+import { NRFDisplayMode } from "./types";
 
 interface NRFPageProps {
-  isSidePanel?: boolean;
+  displayMode?: NRFDisplayMode;
 }
 
 // Reserve half of the context window for the model's response output
 const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
 
-export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
+export default function NRFPage({
+  displayMode = NRFDisplayMode.NEW_TAB,
+}: NRFPageProps) {
+  const isSidePanel = displayMode === NRFDisplayMode.SIDE_PANEL;
   const {
     theme,
     defaultLightBackgroundUrl,

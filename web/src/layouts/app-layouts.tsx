@@ -46,7 +46,7 @@ import {
 } from "@/sections/sidebar/sidebarUtils";
 import { LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import { deleteChatSession } from "@/app/chat/services/lib";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { PopoverMenu } from "@/refresh-components/Popover";
@@ -93,6 +93,10 @@ function AppHeader() {
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
+  const pathname = usePathname();
+
+  // Hide sidebar toggle on NRF side-panel page
+  const isNRFSidePanel = pathname === "/chat/nrf/side-panel";
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -304,66 +308,69 @@ function AppHeader() {
         </ConfirmationModalLayout>
       )}
 
-      {(isMobile || customHeaderContent || currentChatSessionId) && (
-        <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
-          {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
-          <div className="flex-1">
-            <IconButton
-              icon={SvgSidebar}
-              onClick={() => setFolded(false)}
-              className={cn(!isMobile && "invisible")}
-              internal
-            />
-          </div>
-
-          {/* Center - contains the custom-header-content */}
-          <div className="flex-1 flex flex-col items-center overflow-hidden">
-            <Text
-              as="p"
-              text03
-              mainUiBody
-              className="text-center break-words w-full"
-            >
-              {customHeaderContent}
-            </Text>
-          </div>
-
-          {/* Right - contains the share and more-options buttons */}
-          <div
-            className={cn(
-              "flex-1 flex flex-row items-center justify-end px-1",
-              !currentChatSessionId && "invisible"
-            )}
-          >
-            <Button
-              leftIcon={SvgShare}
-              transient={showShareModal}
-              tertiary
-              onClick={() => setShowShareModal(true)}
-            >
-              Share Chat
-            </Button>
-            <SimplePopover
-              trigger={
+      {!isNRFSidePanel &&
+        (isMobile || customHeaderContent || currentChatSessionId) && (
+          <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+            {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
+            <div className="flex-1">
+              {!isNRFSidePanel && (
                 <IconButton
-                  icon={SvgMoreHorizontal}
-                  className="ml-2"
-                  transient={popoverOpen}
-                  tertiary
+                  icon={SvgSidebar}
+                  onClick={() => setFolded(false)}
+                  className={cn(!isMobile && "invisible")}
+                  internal
                 />
-              }
-              onOpenChange={(state) => {
-                setPopoverOpen(state);
-                if (!state) setShowMoveOptions(false);
-              }}
-              side="bottom"
-              align="end"
+              )}
+            </div>
+
+            {/* Center - contains the custom-header-content */}
+            <div className="flex-1 flex flex-col items-center overflow-hidden">
+              <Text
+                as="p"
+                text03
+                mainUiBody
+                className="text-center break-words w-full"
+              >
+                {customHeaderContent}
+              </Text>
+            </div>
+
+            {/* Right - contains the share and more-options buttons */}
+            <div
+              className={cn(
+                "flex-1 flex flex-row items-center justify-end px-1",
+                !currentChatSessionId && "invisible"
+              )}
             >
-              <PopoverMenu>{popoverItems}</PopoverMenu>
-            </SimplePopover>
-          </div>
-        </header>
-      )}
+              <Button
+                leftIcon={SvgShare}
+                transient={showShareModal}
+                tertiary
+                onClick={() => setShowShareModal(true)}
+              >
+                Share Chat
+              </Button>
+              <SimplePopover
+                trigger={
+                  <IconButton
+                    icon={SvgMoreHorizontal}
+                    className="ml-2"
+                    transient={popoverOpen}
+                    tertiary
+                  />
+                }
+                onOpenChange={(state) => {
+                  setPopoverOpen(state);
+                  if (!state) setShowMoveOptions(false);
+                }}
+                side="bottom"
+                align="end"
+              >
+                <PopoverMenu>{popoverItems}</PopoverMenu>
+              </SimplePopover>
+            </div>
+          </header>
+        )}
     </>
   );
 }
