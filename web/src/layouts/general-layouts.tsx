@@ -199,7 +199,7 @@ function LineItemLayout({
         )}
         {loading ? (
           <div className="h-4 bg-background-neutral-01 rounded-08 w-1/3 animate-pulse" />
-        ) : typeof title === "string" ? (
+        ) : (
           <Text
             mainContentEmphasis={!secondary}
             text03={secondary}
@@ -207,8 +207,6 @@ function LineItemLayout({
           >
             {title}
           </Text>
-        ) : (
-          title
         )}
 
         {/* Row 2: Description (column 2, or column 1 if no icon) */}
@@ -216,13 +214,9 @@ function LineItemLayout({
           <div className="h-6 bg-background-neutral-01 rounded-08 w-2/3 animate-pulse" />
         ) : description ? (
           <div className={cn("leading-none", Icon && "col-start-2")}>
-            {typeof description === "string" ? (
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            ) : (
-              description
-            )}
+            <Text secondaryBody text03>
+              {description}
+            </Text>
           </div>
         ) : undefined}
       </div>
