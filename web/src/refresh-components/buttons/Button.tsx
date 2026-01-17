@@ -107,7 +107,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           )}
         >
           {typeof children === "string" ? (
-            <Text className={cn("whitespace-nowrap", textClass)} as="span">
+            <Text className={cn("whitespace-nowrap", textClass)}>
               {children}
             </Text>
           ) : (

@@ -200,6 +200,7 @@ def construct_tools(
                                 img_generation_llm_config.deployment_name
                                 or img_generation_llm_config.model_name
                             ),
+                            custom_config=img_generation_llm_config.custom_config,
                         ),
                         provider=img_generation_llm_config.model_provider,
                         model=img_generation_llm_config.model_name,

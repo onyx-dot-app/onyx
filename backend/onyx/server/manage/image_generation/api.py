@@ -60,6 +60,7 @@ def _build_llm_provider_request(
     api_base: str | None,
     api_version: str | None,
     deployment_name: str | None,
+    custom_config: dict[str, str] | None,
 ) -> LLMProviderUpsertRequest:
     """Build LLM provider request for image generation config.
 
@@ -93,6 +94,7 @@ def _build_llm_provider_request(
                     is_visible=True,
                 )
             ],
+            custom_config=custom_config,
         )
 
     if not provider:
@@ -106,7 +108,7 @@ def _build_llm_provider_request(
         api_base=api_base,
         api_version=api_version,
         deployment_name=deployment_name,
-        custom_config=None,
+        custom_config=custom_config,
     )
 
     if not validate_credentials(provider, credentials):
@@ -131,6 +133,7 @@ def _build_llm_provider_request(
                 is_visible=True,
             )
         ],
+        custom_config=custom_config,
     )
 
 
@@ -155,6 +158,7 @@ def _create_image_gen_llm_provider__no_commit(
         default_model_name=provider_request.default_model_name,
         deployment_name=provider_request.deployment_name,
         is_public=provider_request.is_public,
+        custom_config=provider_request.custom_config,
     )
     db_session.add(new_provider)
     db_session.flush()  # Get the ID
@@ -227,6 +231,7 @@ def test_image_generation(
                 deployment_name=(
                     test_request.deployment_name or test_request.model_name
                 ),
+                custom_config=test_request.custom_config,
             ),
         )
     except ValueError:
@@ -299,6 +304,7 @@ def create_config(
             api_base=config_create.api_base,
             api_version=config_create.api_version,
             deployment_name=config_create.deployment_name,
+            custom_config=config_create.custom_config,
         )
 
         model_configuration_id = _create_image_gen_llm_provider__no_commit(
@@ -414,6 +420,7 @@ def update_config(
             api_base=config_update.api_base,
             api_version=config_update.api_version,
             deployment_name=config_update.deployment_name,
+            custom_config=config_update.custom_config,
         )
 
         new_model_config_id = _create_image_gen_llm_provider__no_commit(
