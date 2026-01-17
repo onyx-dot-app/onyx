@@ -6,10 +6,10 @@ import time
 import discord
 from discord.ext import commands
 
+from onyx.configs.app_configs import DISCORD_BOT_INVOKE_CHAR
 from onyx.onyxbot.discord.api_client import OnyxAPIClient
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.onyxbot.discord.constants import CACHE_REFRESH_INTERVAL
-from onyx.onyxbot.discord.constants import COMMAND_PREFIX
 from onyx.onyxbot.discord.handle_commands import handle_dm
 from onyx.onyxbot.discord.handle_commands import handle_registration_command
 from onyx.onyxbot.discord.handle_commands import handle_sync_channels_command
@@ -31,7 +31,7 @@ class OnyxDiscordClient(commands.Bot):
     - Multi-tenant support via cached API keys
     """
 
-    def __init__(self, command_prefix: str = COMMAND_PREFIX) -> None:
+    def __init__(self, command_prefix: str = DISCORD_BOT_INVOKE_CHAR) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
@@ -76,6 +76,9 @@ class OnyxDiscordClient(commands.Bot):
         if self.ready:
             return
 
+        if not self.user:
+            raise RuntimeError("Critical error: Discord Bot user not found")
+
         logger.info(f"Discord Bot connected as {self.user} (ID: {self.user.id})")
         logger.info(f"Connected to {len(self.guilds)} guild(s)")
         logger.info(f"Cached {len(self.cache.get_all_guild_ids())} registered guild(s)")
@@ -113,6 +116,9 @@ class OnyxDiscordClient(commands.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         """Main message handler."""
+        # mypy
+        if not self.user:
+            raise RuntimeError("Critical error: Discord Bot user not found")
 
         try:
             # Ignore bot messages
@@ -125,11 +131,11 @@ class OnyxDiscordClient(commands.Bot):
                 return
 
             # Must have a guild
-            if not message.guild:
+            if not message.guild or not message.guild.id:
                 return
 
             # Check for registration command first
-            if await handle_registration_command(message, self.cache, self):
+            if await handle_registration_command(message, self.cache):
                 return
 
             # Look up guild in cache
@@ -166,18 +172,6 @@ class OnyxDiscordClient(commands.Bot):
 
         except Exception as e:
             logger.exception(f"Error processing message: {e}")
-
-    # -------------------------------------------------------------------------
-    # Error Handlers
-    # -------------------------------------------------------------------------
-
-    async def on_error(self, event: str, *args, **kwargs) -> None:
-        """Handle Discord errors."""
-        logger.exception(f"Discord error in event '{event}'")
-
-    async def on_command_error(self, ctx: commands.Context, error: Exception) -> None:
-        """Handle command errors."""
-        logger.exception(f"Command error: {error}")
 
 
 # -----------------------------------------------------------------------------
