@@ -6,6 +6,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import UserMessage
 from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
@@ -122,7 +123,10 @@ def classify_section_relevance(
 
     # Call LLM for classification
     try:
-        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
+        response = llm.invoke(
+            prompt=UserMessage(content=prompt_text),
+            reasoning_effort=ReasoningEffort.OFF,
+        )
         llm_response = response.choice.message.content
 
         if not llm_response:
@@ -253,16 +257,20 @@ def select_sections_for_expansion(
 
     # Build the prompt
     extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
-    prompt_text = DOCUMENT_SELECTION_PROMPT.format(
-        max_sections=max_sections,
-        extra_instructions=extra_instructions,
-        formatted_doc_sections=json.dumps(sections_dict, indent=2),
-        user_query=user_query,
+    prompt_text = UserMessage(
+        content=DOCUMENT_SELECTION_PROMPT.format(
+            max_sections=max_sections,
+            extra_instructions=extra_instructions,
+            formatted_doc_sections=json.dumps(sections_dict, indent=2),
+            user_query=user_query,
+        )
     )
 
     # Call LLM for selection
     try:
-        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
+        response = llm.invoke(
+            prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
+        )
         llm_response = response.choice.message.content
 
         if not llm_response:

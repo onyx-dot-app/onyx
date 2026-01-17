@@ -96,7 +96,7 @@ def stream_search_query(
     # Build list of all executed queries for tracking
     all_executed_queries = [original_query] + keyword_expansions
 
-    # Save search query to DB (only if user is authenticated)
+    # TODO remove this check, user should not be None
     if user is not None:
         create_search_query(
             db_session=db_session,

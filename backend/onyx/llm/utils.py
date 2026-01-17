@@ -4,7 +4,6 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 from typing import cast
-from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
@@ -23,14 +22,12 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
+from onyx.llm.models import UserMessage
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-
-
-if TYPE_CHECKING:
-    from onyx.server.manage.llm.models import LLMProviderView
 
 
 logger = setup_logger()
@@ -320,7 +317,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke("Do not respond")
+            llm.invoke(UserMessage(content="Do not respond"))
             return None
         except Exception as e:
             error_msg = str(e)
