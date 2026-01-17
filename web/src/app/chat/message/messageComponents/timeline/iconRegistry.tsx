@@ -157,39 +157,3 @@ export function getIconTypeForPackets(packets: Packet[]): IconType {
 
   return isComplete ? "complete" : "loading";
 }
-
-/**
- * Helper to check if packets represent a tool (vs message/display content)
- */
-export function isToolPacketGroup(packets: Packet[]): boolean {
-  const firstPacket = packets[0];
-  if (!firstPacket) return false;
-
-  const toolTypes: PacketType[] = [
-    PacketType.SEARCH_TOOL_START,
-    PacketType.PYTHON_TOOL_START,
-    PacketType.FETCH_TOOL_START,
-    PacketType.CUSTOM_TOOL_START,
-    PacketType.REASONING_START,
-    PacketType.DEEP_RESEARCH_PLAN_START,
-    PacketType.RESEARCH_AGENT_START,
-  ];
-
-  return toolTypes.includes(firstPacket.obj.type as PacketType);
-}
-
-/**
- * Helper to check if packets represent displayable content (message, image)
- */
-export function isDisplayPacketGroup(packets: Packet[]): boolean {
-  const firstPacket = packets[0];
-  if (!firstPacket) return false;
-
-  const displayTypes: PacketType[] = [
-    PacketType.MESSAGE_START,
-    PacketType.IMAGE_GENERATION_TOOL_START,
-    PacketType.PYTHON_TOOL_START,
-  ];
-
-  return displayTypes.includes(firstPacket.obj.type as PacketType);
-}

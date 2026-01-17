@@ -4,8 +4,6 @@ import {
   getIconForPackets,
   getNameForPackets,
   getIconTypeForPackets,
-  isToolPacketGroup,
-  isDisplayPacketGroup,
   IconType,
 } from "./iconRegistry";
 
@@ -27,10 +25,6 @@ export interface TransformedStep {
   name: string;
   /** Raw packets for content rendering */
   packets: GroupedPacket["packets"];
-  /** Whether this is a tool step */
-  isTool: boolean;
-  /** Whether this is a display step (message, image) */
-  isDisplay: boolean;
 }
 
 /**
@@ -55,8 +49,6 @@ export function transformPacketGroup(group: GroupedPacket): TransformedStep {
     iconType: getIconTypeForPackets(group.packets),
     name: getNameForPackets(group.packets),
     packets: group.packets,
-    isTool: isToolPacketGroup(group.packets),
-    isDisplay: isDisplayPacketGroup(group.packets),
   };
 }
 

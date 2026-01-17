@@ -19,8 +19,6 @@ export {
   getIconForPackets,
   getNameForPackets,
   getIconTypeForPackets,
-  isToolPacketGroup,
-  isDisplayPacketGroup,
   type IconType,
 } from "./iconRegistry";
 
