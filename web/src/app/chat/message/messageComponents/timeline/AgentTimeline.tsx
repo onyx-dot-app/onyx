@@ -3,15 +3,14 @@
 import React, { FunctionComponent, useState } from "react";
 import { StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
-import { TurnGroup, TransformedStep } from "./transformers";
+import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
-import { IconType } from "./AgentStep";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { IconProps } from "@opal/types";
-import { RendererComponent } from "../renderMessageComponent";
+import { TimelineRendererComponent } from "./TimelineRendererComponent";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineHeader } from "./useTimelineHeader";
 
@@ -129,7 +128,7 @@ export function AgentTimeline({
         <div className="w-full">
           {turnGroups.map((turnGroup, turnIdx) =>
             turnGroup.steps.map((step, stepIdx) => (
-              <RendererComponent
+              <TimelineRendererComponent
                 key={step.key}
                 packets={step.packets}
                 chatState={chatState}
@@ -137,13 +136,15 @@ export function AgentTimeline({
                 animate={!stopPacketSeen}
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
+                defaultExpanded={true}
               >
-                {({ icon, status, content }) => (
+                {({ icon, status, content, isExpanded, onToggle }) => (
                   <StepContainer
                     stepIcon={icon as FunctionComponent<IconProps> | undefined}
                     header={status}
+                    isExpanded={isExpanded}
+                    onToggle={onToggle}
                     collapsible={true}
-                    defaultExpanded={true}
                     isLastStep={
                       turnIdx === turnGroups.length - 1 &&
                       stepIdx === turnGroup.steps.length - 1
@@ -153,7 +154,7 @@ export function AgentTimeline({
                     {content}
                   </StepContainer>
                 )}
-              </RendererComponent>
+              </TimelineRendererComponent>
             ))
           )}
         </div>
@@ -171,10 +172,12 @@ export interface StepContainerProps {
   header?: React.ReactNode;
   /** Time/duration string to display (e.g., "2.3s") */
   buttonTitle?: string;
+  /** Controlled expanded state */
+  isExpanded?: boolean;
+  /** Toggle callback for controlled mode */
+  onToggle?: () => void;
   /** Whether collapsible control is shown */
   collapsible?: boolean;
-  /** Initial expanded state (default: true) */
-  defaultExpanded?: boolean;
   /** Additional class names */
   className?: string;
   /** Whether this is the last step */
@@ -188,14 +191,14 @@ export function StepContainer({
   stepIcon: StepIconComponent,
   header,
   buttonTitle,
+  isExpanded = true,
+  onToggle,
   collapsible = true,
-  defaultExpanded = true,
   isLastStep = false,
   className,
   packetLength,
 }: StepContainerProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const handleToggle = () => setIsExpanded((prev) => !prev);
+  // Fully controlled by props - no local state
 
   return (
     <div className={cn("flex w-full", className)}>
@@ -227,10 +230,11 @@ export function StepContainer({
 
             {/* Button */}
             {collapsible &&
+              onToggle &&
               (buttonTitle ? (
                 <Button
                   tertiary
-                  onClick={handleToggle}
+                  onClick={onToggle}
                   rightIcon={isExpanded ? SvgFold : SvgExpand}
                 >
                   {buttonTitle}
@@ -238,7 +242,7 @@ export function StepContainer({
               ) : (
                 <IconButton
                   tertiary
-                  onClick={handleToggle}
+                  onClick={onToggle}
                   icon={isExpanded ? SvgFold : SvgExpand}
                 />
               ))}

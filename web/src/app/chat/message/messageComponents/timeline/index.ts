@@ -9,6 +9,11 @@ export {
   type AgentTimelineProps,
   type StepContainerProps,
 } from "./AgentTimeline";
+export {
+  TimelineRendererComponent,
+  type TimelineRendererComponentProps,
+  type TimelineRendererResult,
+} from "./TimelineRendererComponent";
 
 // Registries
 export {
