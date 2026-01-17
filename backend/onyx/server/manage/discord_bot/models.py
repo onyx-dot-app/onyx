@@ -42,7 +42,7 @@ class DiscordGuildConfigCreateResponse(BaseModel):
 
 class DiscordGuildConfigUpdateRequest(BaseModel):
     enabled: bool
-    default_persona_id: int
+    default_persona_id: int | None
 
 
 # === Channel Config ===
@@ -52,6 +52,8 @@ class DiscordChannelConfigResponse(BaseModel):
     id: int
     channel_id: int
     channel_name: str
+    channel_type: str
+    is_private: bool
     require_bot_invocation: bool
     thread_only_mode: bool
     persona_override_id: int | None
@@ -63,6 +65,6 @@ class DiscordChannelConfigResponse(BaseModel):
 
 class DiscordChannelConfigUpdateRequest(BaseModel):
     require_bot_invocation: bool
-    persona_override_id: int
+    persona_override_id: int | None
     enabled: bool
     thread_only_mode: bool
