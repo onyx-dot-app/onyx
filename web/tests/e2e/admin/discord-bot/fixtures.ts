@@ -3,27 +3,16 @@
  */
 
 import { test as base, expect, Page } from "@playwright/test";
+import { loginAs } from "../../utils/auth";
 
 // Extend base test with Discord bot fixtures
 export const test = base.extend<{
   adminPage: Page;
   seededGuild: { id: number; name: string; registrationKey: string };
 }>({
-  // Admin page fixture - logs in as admin
+  // Admin page fixture - logs in as admin using standard auth
   adminPage: async ({ page }, use) => {
-    // Navigate to login
-    await page.goto("/auth/login");
-
-    // Fill in admin credentials
-    await page.fill('[name="email"]', "admin@onyx.app");
-    await page.fill('[name="password"]', "password");
-
-    // Submit login
-    await page.click('button[type="submit"]');
-
-    // Wait for redirect to main page
-    await page.waitForURL(/\/(chat|admin)/);
-
+    await loginAs(page, "admin");
     await use(page);
   },
 
@@ -38,6 +27,12 @@ export const test = base.extend<{
         },
       }
     );
+
+    if (!createResponse.ok()) {
+      throw new Error(
+        `Failed to create test guild: ${createResponse.status()} ${await createResponse.text()}`
+      );
+    }
 
     const guild = await createResponse.json();
 
