@@ -1,18 +1,19 @@
 /**
  * Playwright fixtures for Discord bot admin UI tests.
+ *
+ * Note: These tests run under the "admin" project which uses storageState: "admin_auth.json",
+ * so authentication is already handled by the global setup. No need to call loginAs().
  */
 
 import { test as base, expect, Page } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
 
 // Extend base test with Discord bot fixtures
 export const test = base.extend<{
   adminPage: Page;
   seededGuild: { id: number; name: string; registrationKey: string };
 }>({
-  // Admin page fixture - logs in as admin using standard auth
+  // Admin page fixture - uses the already-authenticated page from storage state
   adminPage: async ({ page }, use) => {
-    await loginAs(page, "admin");
     await use(page);
   },
 

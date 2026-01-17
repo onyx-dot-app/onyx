@@ -1,24 +1,24 @@
 """Multi-tenant isolation tests for Discord bot.
 
 These tests ensure tenant isolation and prevent data leakage between tenants.
+Tests follow the multi-tenant integration test pattern using API requests.
 """
 
-from collections.abc import Generator
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
-from sqlalchemy.orm import Session
+import requests
 
 from onyx.configs.constants import AuthType
-from onyx.db.discord_bot import create_guild_config
-from onyx.db.discord_bot import delete_guild_config
-from onyx.db.discord_bot import get_channel_config_by_discord_ids
-from onyx.db.discord_bot import get_guild_configs
+from onyx.db.models import UserRole
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.onyxbot.discord.constants import REGISTRATION_KEY_PREFIX
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestUser
 
 
 class TestBotConfigIsolationCloudMode:
@@ -27,8 +27,9 @@ class TestBotConfigIsolationCloudMode:
     def test_cannot_create_bot_config_in_cloud_mode(self) -> None:
         """Bot config creation is blocked in cloud mode."""
         with patch("onyx.configs.app_configs.AUTH_TYPE", AuthType.CLOUD):
-            from onyx.server.manage.discord_bot.api import _check_bot_config_api_access
             from fastapi import HTTPException
+
+            from onyx.server.manage.discord_bot.api import _check_bot_config_api_access
 
             with pytest.raises(HTTPException) as exc_info:
                 _check_bot_config_api_access()
@@ -88,140 +89,205 @@ class TestGuildRegistrationIsolation:
 
 
 class TestGuildDataIsolation:
-    """Tests for guild data isolation between tenants."""
+    """Tests for guild data isolation between tenants via API."""
 
-    def test_tenant_cannot_see_other_tenant_guilds(self, db_session: Session) -> None:
+    def test_tenant_cannot_see_other_tenant_guilds(
+        self, reset_multitenant: None
+    ) -> None:
         """Guilds created in tenant 1 are not visible from tenant 2.
 
-        Creates guilds in current tenant, then queries with get_guild_configs
-        to verify only guilds for current tenant are returned.
+        Creates guilds via API in tenant 1, then queries from tenant 2
+        context to verify the guilds are not visible.
         """
-        from onyx.db.discord_bot import get_guild_config_by_discord_id
-        from onyx.db.discord_bot import register_guild
+        unique = uuid4().hex
 
-        # Create two guilds in current tenant
-        reg_key1 = generate_discord_registration_key("public")
-        reg_key2 = generate_discord_registration_key("public")
-        guild1 = create_guild_config(db_session, registration_key=reg_key1)
-        guild2 = create_guild_config(db_session, registration_key=reg_key2)
-        db_session.commit()
+        # Create admin user for tenant 1
+        admin_user1: DATestUser = UserManager.create(
+            email=f"discord_admin1+{unique}@example.com",
+        )
+        assert UserManager.is_role(admin_user1, UserRole.ADMIN)
+
+        # Create admin user for tenant 2
+        admin_user2: DATestUser = UserManager.create(
+            email=f"discord_admin2+{unique}@example.com",
+        )
+        assert UserManager.is_role(admin_user2, UserRole.ADMIN)
+
+        # Create a guild registration key in tenant 1
+        response1 = requests.post(
+            f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+            headers=admin_user1.headers,
+        )
+
+        # If Discord bot feature is not enabled, skip the test
+        if response1.status_code == 404:
+            pytest.skip("Discord bot feature not enabled")
+
+        assert response1.ok, f"Failed to create guild in tenant 1: {response1.text}"
+        guild1_data = response1.json()
+        guild1_id = guild1_data["id"]
 
         try:
-            # Register guild1 with Discord guild ID
-            register_guild(db_session, guild1, 111111111, "Guild 1")
-            # Register guild2 with different Discord guild ID
-            register_guild(db_session, guild2, 222222222, "Guild 2")
-            db_session.commit()
+            # List guilds from tenant 1 - should see the guild
+            list_response1 = requests.get(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+                headers=admin_user1.headers,
+            )
+            assert list_response1.ok
+            tenant1_guilds = list_response1.json()
+            tenant1_guild_ids = [g["id"] for g in tenant1_guilds]
+            assert guild1_id in tenant1_guild_ids
 
-            # Query all guilds - should return both
-            all_guilds = get_guild_configs(db_session)
-            guild_ids = [g.guild_id for g in all_guilds]
-            assert 111111111 in guild_ids
-            assert 222222222 in guild_ids
-
-            # Query for a guild that doesn't exist in this tenant
-            nonexistent = get_guild_config_by_discord_id(db_session, 999999999)
-            assert nonexistent is None
+            # List guilds from tenant 2 - should NOT see tenant 1's guild
+            list_response2 = requests.get(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+                headers=admin_user2.headers,
+            )
+            assert list_response2.ok
+            tenant2_guilds = list_response2.json()
+            tenant2_guild_ids = [g["id"] for g in tenant2_guilds]
+            assert guild1_id not in tenant2_guild_ids
 
         finally:
-            # Cleanup
-            delete_guild_config(db_session, guild1.id)
-            delete_guild_config(db_session, guild2.id)
-            db_session.commit()
+            # Cleanup - delete guild from tenant 1
+            requests.delete(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
+                headers=admin_user1.headers,
+            )
 
-    def test_guild_list_returns_only_own_tenant(self, db_session: Session) -> None:
+    def test_guild_list_returns_only_own_tenant(self, reset_multitenant: None) -> None:
         """List guilds returns exactly the guilds for that tenant.
 
-        Creates multiple guilds and verifies get_guild_configs returns
-        only those guilds created in the current tenant context.
+        Creates guilds in both tenants and verifies each tenant only sees their own.
         """
-        from onyx.db.discord_bot import register_guild
+        unique = uuid4().hex
 
-        # Create three guilds in current tenant
-        guilds = []
-        for i in range(3):
-            reg_key = generate_discord_registration_key("public")
-            guild = create_guild_config(db_session, registration_key=reg_key)
-            guilds.append(guild)
-        db_session.commit()
+        # Create admin users for two tenants
+        admin_user1: DATestUser = UserManager.create(
+            email=f"discord_list1+{unique}@example.com",
+        )
+        admin_user2: DATestUser = UserManager.create(
+            email=f"discord_list2+{unique}@example.com",
+        )
+
+        # Create guilds in tenant 1
+        guild_ids_tenant1 = []
+        for i in range(2):
+            response = requests.post(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+                headers=admin_user1.headers,
+            )
+            if response.status_code == 404:
+                pytest.skip("Discord bot feature not enabled")
+            assert response.ok, f"Failed to create guild {i} in tenant 1"
+            guild_ids_tenant1.append(response.json()["id"])
+
+        # Create guilds in tenant 2
+        guild_ids_tenant2 = []
+        for i in range(2):
+            response = requests.post(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+                headers=admin_user2.headers,
+            )
+            assert response.ok, f"Failed to create guild {i} in tenant 2"
+            guild_ids_tenant2.append(response.json()["id"])
 
         try:
-            # Register each guild with unique Discord guild ID
-            for i, guild in enumerate(guilds):
-                register_guild(db_session, guild, 100000000 + i, f"Test Guild {i}")
-            db_session.commit()
+            # Verify tenant 1 sees only their guilds
+            list_response1 = requests.get(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+                headers=admin_user1.headers,
+            )
+            assert list_response1.ok
+            visible_ids_1 = {g["id"] for g in list_response1.json()}
 
-            # Get all guilds for this tenant
-            result = get_guild_configs(db_session)
+            for gid in guild_ids_tenant1:
+                assert gid in visible_ids_1, f"Tenant 1 should see guild {gid}"
+            for gid in guild_ids_tenant2:
+                assert gid not in visible_ids_1, f"Tenant 1 should NOT see guild {gid}"
 
-            # Should have at least the 3 we created (may have more from other tests)
-            result_guild_ids = {g.guild_id for g in result}
-            for i in range(3):
-                assert 100000000 + i in result_guild_ids
+            # Verify tenant 2 sees only their guilds
+            list_response2 = requests.get(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+                headers=admin_user2.headers,
+            )
+            assert list_response2.ok
+            visible_ids_2 = {g["id"] for g in list_response2.json()}
+
+            for gid in guild_ids_tenant2:
+                assert gid in visible_ids_2, f"Tenant 2 should see guild {gid}"
+            for gid in guild_ids_tenant1:
+                assert gid not in visible_ids_2, f"Tenant 2 should NOT see guild {gid}"
 
         finally:
             # Cleanup
-            for guild in guilds:
-                delete_guild_config(db_session, guild.id)
-            db_session.commit()
-
-
-class TestChannelDataIsolation:
-    """Tests for channel data isolation between tenants."""
-
-    def test_tenant_cannot_see_other_tenant_channels(self, db_session: Session) -> None:
-        """Channels in tenant 1 guild are not visible from tenant 2.
-
-        Creates a guild with channel in tenant1, then queries from tenant2
-        context to verify the channel is not visible.
-        """
-        tenant1_guild_id = 111111111
-        tenant1_channel_id = 222222222
-
-        # Create guild in tenant1 (current context is "public" which acts as tenant1)
-        reg_key = generate_discord_registration_key("public")
-        guild = create_guild_config(db_session, registration_key=reg_key)
-        db_session.commit()
-
-        try:
-            # Register the guild with a Discord guild ID
-            from onyx.db.discord_bot import register_guild
-
-            register_guild(db_session, guild, tenant1_guild_id, "Tenant1 Guild")
-            db_session.commit()
-
-            # Create a channel config for this guild
-            from onyx.db.discord_bot import bulk_create_channel_configs
-            from onyx.db.utils import DiscordChannelView
-
-            channels = [
-                DiscordChannelView(
-                    channel_id=tenant1_channel_id,
-                    channel_name="test-channel",
-                    channel_type="text",
+            for gid in guild_ids_tenant1:
+                requests.delete(
+                    f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{gid}",
+                    headers=admin_user1.headers,
                 )
-            ]
-            bulk_create_channel_configs(db_session, guild.id, channels)
-            db_session.commit()
+            for gid in guild_ids_tenant2:
+                requests.delete(
+                    f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{gid}",
+                    headers=admin_user2.headers,
+                )
 
-            # Verify channel exists in tenant1 context
-            result_in_tenant1 = get_channel_config_by_discord_ids(
-                db_session, guild_id=tenant1_guild_id, channel_id=tenant1_channel_id
-            )
-            assert result_in_tenant1 is not None
 
-            # Query from a different tenant context
-            # The channel should not be visible because the guild belongs to "public" tenant
-            # and we're querying with different guild_id that doesn't exist in this tenant
-            result_wrong_guild = get_channel_config_by_discord_ids(
-                db_session, guild_id=999999999, channel_id=tenant1_channel_id
+class TestGuildAccessIsolation:
+    """Tests for guild access isolation between tenants."""
+
+    def test_tenant_cannot_access_other_tenant_guild(
+        self, reset_multitenant: None
+    ) -> None:
+        """Tenant 2 cannot access or modify tenant 1's guild by ID.
+
+        Creates a guild in tenant 1, then attempts to access it from tenant 2.
+        """
+        unique = uuid4().hex
+
+        # Create admin users for two tenants
+        admin_user1: DATestUser = UserManager.create(
+            email=f"discord_access1+{unique}@example.com",
+        )
+        admin_user2: DATestUser = UserManager.create(
+            email=f"discord_access2+{unique}@example.com",
+        )
+
+        # Create a guild in tenant 1
+        response = requests.post(
+            f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+            headers=admin_user1.headers,
+        )
+        if response.status_code == 404:
+            pytest.skip("Discord bot feature not enabled")
+        assert response.ok
+        guild1_id = response.json()["id"]
+
+        try:
+            # Tenant 2 tries to get the guild - should fail (404 or 403)
+            get_response = requests.get(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
+                headers=admin_user2.headers,
             )
-            assert result_wrong_guild is None
+            # Should either return 404 (not found) or 403 (forbidden)
+            assert get_response.status_code in [
+                403,
+                404,
+            ], f"Expected 403 or 404, got {get_response.status_code}"
+
+            # Tenant 2 tries to delete the guild - should fail
+            delete_response = requests.delete(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
+                headers=admin_user2.headers,
+            )
+            assert delete_response.status_code in [403, 404]
 
         finally:
-            # Cleanup
-            delete_guild_config(db_session, guild.id)
-            db_session.commit()
+            # Cleanup - delete from tenant 1
+            requests.delete(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
+                headers=admin_user1.headers,
+            )
 
 
 class TestCacheManagerIsolation:
@@ -287,20 +353,3 @@ class TestAPIRequestIsolation:
 
         assert tenant == "target_tenant"
         assert api_key == "target_key"
-
-
-# Pytest fixture for db_session
-@pytest.fixture
-def db_session() -> Generator[Session, None, None]:
-    """Create database session for tests."""
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant
-    from onyx.db.engine.sql_engine import SqlEngine
-
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set("public")
-    try:
-        with get_session_with_current_tenant() as session:
-            yield session
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

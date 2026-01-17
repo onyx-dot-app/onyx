@@ -237,6 +237,10 @@ class TestGuildConfigAPI:
 
     def test_update_guild_persona(self, db_session: Session) -> None:
         """Update guild default persona."""
+        # Create test persona first to satisfy foreign key constraint
+        _create_test_persona(db_session, 5, "Test Persona 5")
+        db_session.commit()
+
         key = generate_discord_registration_key("tenant")
         config = create_guild_config(db_session, registration_key=key)
         db_session.commit()
@@ -251,6 +255,7 @@ class TestGuildConfigAPI:
 
         # Cleanup
         delete_guild_config(db_session, config.id)
+        _delete_test_persona(db_session, 5)
         db_session.commit()
 
 
