@@ -157,7 +157,7 @@ export default function AddMCPServerModal({
               />
 
               <Modal.Body>
-                <InputLayouts.Vertical name="name" label="Server Name">
+                <InputLayouts.Vertical name="name" title="Server Name">
                   <InputTypeInField
                     name="name"
                     placeholder="Name your MCP server"
@@ -167,7 +167,7 @@ export default function AddMCPServerModal({
 
                 <InputLayouts.Vertical
                   name="description"
-                  label="Description"
+                  title="Description"
                   optional
                 >
                   <InputTextAreaField
@@ -181,7 +181,7 @@ export default function AddMCPServerModal({
 
                 <InputLayouts.Vertical
                   name="server_url"
-                  label="MCP Server URL"
+                  title="MCP Server URL"
                   subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
                 >
                   <InputTypeInField
@@ -205,7 +205,7 @@ export default function AddMCPServerModal({
                           flexDirection="row"
                           gap={0.5}
                           alignItems="center"
-                          fit
+                          width="fit"
                         >
                           <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
                           <Text>Authenticated &amp; Connected</Text>
@@ -222,7 +222,7 @@ export default function AddMCPServerModal({
                         flexDirection="row"
                         gap={0.5}
                         alignItems="center"
-                        fit
+                        width="fit"
                       >
                         <IconButton
                           icon={SvgUnplug}

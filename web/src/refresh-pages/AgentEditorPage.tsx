@@ -1119,7 +1119,7 @@ export default function AgentEditorPage({
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputLayouts.Vertical name="name" label="Name">
+                          <InputLayouts.Vertical name="name" title="Name">
                             <InputTypeInField
                               name="name"
                               placeholder="Name your agent"
@@ -1128,7 +1128,7 @@ export default function AgentEditorPage({
 
                           <InputLayouts.Vertical
                             name="description"
-                            label="Description"
+                            title="Description"
                             optional
                           >
                             <InputTextAreaField
@@ -1138,10 +1138,10 @@ export default function AgentEditorPage({
                           </InputLayouts.Vertical>
                         </GeneralLayouts.Section>
 
-                        <GeneralLayouts.Section fit>
+                        <GeneralLayouts.Section width="fit">
                           <InputLayouts.Vertical
                             name="agent_avatar"
-                            label="Agent Avatar"
+                            title="Agent Avatar"
                             center
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
@@ -1154,7 +1154,7 @@ export default function AgentEditorPage({
                       <GeneralLayouts.Section>
                         <InputLayouts.Vertical
                           name="instructions"
-                          label="Instructions"
+                          title="Instructions"
                           optional
                           description="Add instructions to tailor the response for this agent."
                         >
@@ -1166,7 +1166,7 @@ export default function AgentEditorPage({
 
                         <InputLayouts.Vertical
                           name="starter_messages"
-                          label="Conversation Starters"
+                          title="Conversation Starters"
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           optional
                         >
@@ -1179,15 +1179,14 @@ export default function AgentEditorPage({
                       <GeneralLayouts.Section>
                         <GeneralLayouts.Section gap={1}>
                           <InputLayouts.Label
-                            name="knowledge"
-                            label="Knowledge"
+                            title="Knowledge"
                             description="Add specific connectors and documents for this agent to use to inform its responses."
                           />
 
                           <Card>
                             <InputLayouts.Horizontal
                               name="enable_knowledge"
-                              label="Enable Knowledge"
+                              title="Enable Knowledge"
                               center
                             >
                               <SwitchField name="enable_knowledge" />
@@ -1196,7 +1195,7 @@ export default function AgentEditorPage({
                             {values.enable_knowledge && (
                               <InputLayouts.Horizontal
                                 name="knowledge_source"
-                                label="Knowledge Source"
+                                title="Knowledge Source"
                                 description="Choose the sources of truth this agent refers to."
                                 center
                               >
@@ -1366,7 +1365,7 @@ export default function AgentEditorPage({
                             <Card disabled={!isImageGenerationAvailable}>
                               <InputLayouts.Horizontal
                                 name="image_generation"
-                                label="Image Generation"
+                                title="Image Generation"
                                 description="Generate and manipulate images using AI-powered tools."
                               >
                                 <SwitchField
@@ -1380,7 +1379,7 @@ export default function AgentEditorPage({
                           <Card>
                             <InputLayouts.Horizontal
                               name="web_search"
-                              label="Web Search"
+                              title="Web Search"
                               description="Search the web for real-time information and up-to-date results."
                             >
                               <SwitchField
@@ -1393,7 +1392,7 @@ export default function AgentEditorPage({
                           <Card>
                             <InputLayouts.Horizontal
                               name="open_url"
-                              label="Open URL"
+                              title="Open URL"
                               description="Fetch and read content from web URLs."
                             >
                               <SwitchField
@@ -1406,7 +1405,7 @@ export default function AgentEditorPage({
                           <Card disabled={!codeInterpreterTool}>
                             <InputLayouts.Horizontal
                               name="code_interpreter"
-                              label="Code Interpreter"
+                              title="Code Interpreter"
                               description="Generate and run code."
                             >
                               <SwitchField
@@ -1465,7 +1464,7 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section>
                           <Card>
                             <InputLayouts.Horizontal
-                              label="Share This Agent"
+                              title="Share This Agent"
                               description="Share this agent with other users, groups, or everyone in your organization. "
                               center
                             >
@@ -1482,7 +1481,7 @@ export default function AgentEditorPage({
                           <Card>
                             <InputLayouts.Horizontal
                               name="llm_model"
-                              label="Default Model"
+                              title="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
                               center
                             >
@@ -1496,7 +1495,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
                               name="knowledge_cutoff_date"
-                              label="Knowledge Cutoff Date"
+                              title="Knowledge Cutoff Date"
                               description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
                               center
                             >
@@ -1504,7 +1503,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
                               name="replace_base_system_prompt"
-                              label="Overwrite System Prompt"
+                              title="Overwrite System Prompt"
                               description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
                             >
                               <SwitchField name="replace_base_system_prompt" />
@@ -1514,7 +1513,7 @@ export default function AgentEditorPage({
                           <GeneralLayouts.Section gap={0.25}>
                             <InputLayouts.Vertical
                               name="reminders"
-                              label="Reminders"
+                              title="Reminders"
                             >
                               <InputTextAreaField
                                 name="reminders"
@@ -1538,7 +1537,7 @@ export default function AgentEditorPage({
 
                           <Card>
                             <InputLayouts.Horizontal
-                              label="Delete This Agent"
+                              title="Delete This Agent"
                               description="Anyone using this agent will no longer be able to access it."
                               center
                             >
