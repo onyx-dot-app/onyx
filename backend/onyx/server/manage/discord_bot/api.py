@@ -13,7 +13,6 @@ from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import create_discord_bot_config
 from onyx.db.discord_bot import create_guild_config
 from onyx.db.discord_bot import delete_discord_bot_config
-from onyx.db.discord_bot import delete_discord_channel_config
 from onyx.db.discord_bot import delete_guild_config
 from onyx.db.discord_bot import get_channel_config_by_internal_ids
 from onyx.db.discord_bot import get_channel_configs
@@ -113,9 +112,10 @@ def delete_bot_config_endpoint(
 ) -> dict:
     """Delete Discord bot config."""
     deleted = delete_discord_bot_config(db_session)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Bot config not found")
     db_session.commit()
-
-    return {"deleted": deleted}
+    return {"deleted": True}
 
 
 # === Guild Config ===
@@ -156,7 +156,7 @@ def get_guild_config(
     db_session: Session = Depends(get_session),
 ) -> DiscordGuildConfigResponse:
     """Get specific guild config."""
-    config = get_guild_config_by_internal_id(db_session, config_id=config_id)
+    config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not config:
         raise HTTPException(status_code=404, detail="Guild config not found")
     return DiscordGuildConfigResponse.model_validate(config)
@@ -170,7 +170,7 @@ def update_guild_request(
     db_session: Session = Depends(get_session),
 ) -> DiscordGuildConfigResponse:
     """Update guild config."""
-    config = get_guild_config_by_internal_id(db_session, config_id=config_id)
+    config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not config:
         raise HTTPException(status_code=404, detail="Guild config not found")
 
@@ -211,7 +211,7 @@ def list_channel_configs(
     db_session: Session = Depends(get_session),
 ) -> list[DiscordChannelConfigResponse]:
     """List whitelisted channels for a guild."""
-    guild_config = get_guild_config_by_internal_id(db_session, config_id=config_id)
+    guild_config = get_guild_config_by_internal_id(db_session, internal_id=config_id)
     if not guild_config:
         raise HTTPException(status_code=404, detail="Guild config not found")
     if not guild_config.guild_id:
@@ -251,18 +251,3 @@ def update_channel_request(
     db_session.commit()
 
     return DiscordChannelConfigResponse.model_validate(config)
-
-
-@router.delete("/guilds/{config_id}/channels/{channel_id}")
-def delete_channel_request(
-    config_id: int,
-    channel_id: int,
-    _: User = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> dict:
-    """Remove channel from whitelist."""
-    deleted = delete_discord_channel_config(db_session, config_id, channel_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Channel config not found")
-    db_session.commit()
-    return {"deleted": True}
