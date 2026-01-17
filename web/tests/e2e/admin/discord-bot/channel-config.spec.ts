@@ -1,90 +1,226 @@
 /**
  * E2E tests for Discord channel configuration.
+ *
+ * Tests the channel configuration table which shows:
+ * - List of channels with icons (text/forum)
+ * - Enabled toggle per channel
+ * - Require @mention toggle
+ * - Thread Only Mode toggle
+ * - Agent Override dropdown
  */
 
-import { test, expect } from "./fixtures";
+import { test, expect, gotoGuildDetailPage } from "./fixtures";
 
 test.describe("Channel Configuration", () => {
-  test("channels list displays", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+  test("channels list displays", async ({ adminPage, mockRegisteredGuild }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Channel list should be visible
-    const channelList = adminPage.locator(
-      '[data-testid="channel-list"], table, .channel-list'
-    );
+    // Channel list table should be visible
+    const channelTable = adminPage.locator("table");
+    await expect(channelTable).toBeVisible({ timeout: 10000 });
 
-    // Either list is visible or "no channels" message
-    const noChannels = adminPage.locator("text=/no channels/i");
-    await expect(channelList.or(noChannels)).toBeVisible();
+    // Should show our mock channels
+    await expect(adminPage.locator("text=general")).toBeVisible();
+    await expect(adminPage.locator("text=help-forum")).toBeVisible();
+    await expect(adminPage.locator("text=private-support")).toBeVisible();
   });
 
-  test("channel type icons display", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+  test("channels table has correct columns", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Look for channel type icons (text and forum)
-    const textIcon = adminPage.locator(
-      '[data-channel-type="text"], .text-channel-icon, svg[aria-label*="text"]'
-    );
-    const forumIcon = adminPage.locator(
-      '[data-channel-type="forum"], .forum-channel-icon, svg[aria-label*="forum"]'
-    );
-
-    // At least one channel type icon should be visible if channels exist
-    const channelRows = adminPage.locator('tr, [data-testid="channel-item"]');
-    if ((await channelRows.count()) > 0) {
-      await expect(textIcon.or(forumIcon).first()).toBeVisible();
-    }
+    // Table headers should be visible
+    await expect(adminPage.locator("th:has-text('Channel')")).toBeVisible();
+    await expect(adminPage.locator("th:has-text('Enabled')")).toBeVisible();
+    await expect(
+      adminPage.locator("th:has-text('Require @mention')")
+    ).toBeVisible();
+    await expect(
+      adminPage.locator("th:has-text('Thread Only Mode')")
+    ).toBeVisible();
+    await expect(
+      adminPage.locator("th:has-text('Agent Override')")
+    ).toBeVisible();
   });
 
   test("channel enabled toggle updates state", async ({
     adminPage,
-    seededGuild,
+    mockRegisteredGuild,
   }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Find first channel's enabled toggle
-    const enabledToggle = adminPage
-      .locator('[data-testid="channel-enabled"], input[type="checkbox"]')
-      .first();
+    // Find the row for "general" channel
+    const generalRow = adminPage.locator("tr").filter({
+      hasText: "general",
+    });
 
-    if (await enabledToggle.isVisible()) {
-      const initialState = await enabledToggle.isChecked();
-      await enabledToggle.click();
+    // Find the first switch in that row (Enabled toggle)
+    const enabledToggle = generalRow.locator('[role="switch"]').first();
+    await expect(enabledToggle).toBeVisible({ timeout: 10000 });
 
-      // State should update immediately (optimistic update)
-      await expect(enabledToggle).toBeChecked({ checked: !initialState });
+    // Get initial state
+    const initialState = await enabledToggle.getAttribute("aria-checked");
 
-      // Toggle back to restore state
-      await enabledToggle.click();
-      await expect(enabledToggle).toBeChecked({ checked: initialState });
+    // Click to toggle
+    await enabledToggle.click();
+
+    // State should change (local state update)
+    await expect(enabledToggle).toHaveAttribute(
+      "aria-checked",
+      initialState === "true" ? "false" : "true"
+    );
+  });
+
+  test("channel require mention toggle works", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Find the row for "general" channel
+    const generalRow = adminPage.locator("tr").filter({
+      hasText: "general",
+    });
+
+    // Find switches - second one should be "require @mention"
+    const switches = generalRow.locator('[role="switch"]');
+    const requireMentionToggle = switches.nth(1);
+
+    await expect(requireMentionToggle).toBeVisible({ timeout: 10000 });
+
+    // Get initial state
+    const initialState =
+      await requireMentionToggle.getAttribute("aria-checked");
+
+    // Click to toggle
+    await requireMentionToggle.click();
+
+    // State should change
+    await expect(requireMentionToggle).toHaveAttribute(
+      "aria-checked",
+      initialState === "true" ? "false" : "true"
+    );
+  });
+
+  test("channel thread only mode toggle works for text channels", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Find the row for "general" channel (text type)
+    const generalRow = adminPage.locator("tr").filter({
+      hasText: "general",
+    });
+
+    // Find switches - third one should be "thread only mode"
+    const switches = generalRow.locator('[role="switch"]');
+    const threadOnlyToggle = switches.nth(2);
+
+    await expect(threadOnlyToggle).toBeVisible({ timeout: 10000 });
+
+    // Toggle should be clickable for text channels
+    await threadOnlyToggle.click();
+
+    // Verify it changed
+    const newState = await threadOnlyToggle.getAttribute("aria-checked");
+    expect(newState).toBe("true");
+  });
+
+  test("forum channels do not show thread only toggle", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Find the row for "help-forum" channel (forum type)
+    const forumRow = adminPage.locator("tr").filter({
+      hasText: "help-forum",
+    });
+
+    // Forum channels should only have 2 switches (Enabled, Require @mention)
+    // Thread Only Mode is not applicable to forums
+    const switches = forumRow.locator('[role="switch"]');
+    const count = await switches.count();
+
+    // Should have fewer switches than text channels (2 vs 3)
+    expect(count).toBe(2);
+  });
+
+  test("enable all button works", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Click "Enable All" button
+    const enableAllButton = adminPage.locator('button:has-text("Enable All")');
+    await expect(enableAllButton).toBeVisible({ timeout: 10000 });
+    await enableAllButton.click();
+
+    // Wait for UI to update
+    await adminPage.waitForTimeout(300);
+
+    // First toggle in each row should be enabled
+    const rows = adminPage.locator("tbody tr");
+    const rowCount = await rows.count();
+
+    for (let i = 0; i < rowCount; i++) {
+      const toggle = rows.nth(i).locator('[role="switch"]').first();
+      if (await toggle.isVisible()) {
+        await expect(toggle).toHaveAttribute("aria-checked", "true");
+      }
     }
   });
 
-  test("channel search filter works", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
-    await adminPage.waitForLoadState("networkidle");
+  test("disable all button works", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    const searchInput = adminPage.locator(
-      'input[type="search"], input[placeholder*="search"], input[name="filter"]'
+    // Click "Disable All" button
+    const disableAllButton = adminPage.locator(
+      'button:has-text("Disable All")'
     );
+    await expect(disableAllButton).toBeVisible({ timeout: 10000 });
+    await disableAllButton.click();
 
-    if (await searchInput.isVisible()) {
-      // Get initial count of visible channels
-      const channelRows = adminPage.locator(
-        'tr[data-channel-id], [data-testid="channel-item"]'
-      );
-      const initialCount = await channelRows.count();
+    // Wait for UI to update
+    await adminPage.waitForTimeout(300);
 
-      // Search for something that likely won't match
-      await searchInput.fill("xyznonexistent123");
-      await adminPage.waitForTimeout(300);
+    // First toggle in each row should be disabled
+    const rows = adminPage.locator("tbody tr");
+    const rowCount = await rows.count();
 
-      // Should have fewer (or zero) results
-      const filteredCount = await channelRows.count();
-      expect(filteredCount).toBeLessThanOrEqual(initialCount);
-
-      // Clear search
-      await searchInput.clear();
+    for (let i = 0; i < rowCount; i++) {
+      const toggle = rows.nth(i).locator('[role="switch"]').first();
+      if (await toggle.isVisible()) {
+        await expect(toggle).toHaveAttribute("aria-checked", "false");
+      }
     }
+  });
+
+  test("unsaved changes indicator appears", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Initially no unsaved changes indicator
+    const unsavedMessage = adminPage.locator("text=You have unsaved changes");
+    await expect(unsavedMessage).not.toBeVisible();
+
+    // Make a change
+    const generalRow = adminPage.locator("tr").filter({
+      hasText: "general",
+    });
+    const enabledToggle = generalRow.locator('[role="switch"]').first();
+    await enabledToggle.click();
+
+    // Unsaved changes indicator should appear
+    await expect(unsavedMessage).toBeVisible({ timeout: 5000 });
   });
 });

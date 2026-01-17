@@ -1,102 +1,99 @@
 /**
  * E2E tests for Discord bot configuration page.
+ *
+ * Tests the bot token configuration card which allows admins to:
+ * - Enter and save a Discord bot token
+ * - View configuration status (Configured/Not Configured badge)
+ * - Delete the bot token configuration
  */
 
-import { test, expect } from "./fixtures";
+import { test, expect, gotoDiscordBotPage } from "./fixtures";
 
 test.describe("Bot Configuration Page", () => {
   test("bot config page loads", async ({ adminPage }) => {
-    await adminPage.goto("/admin/discord-bot");
+    await gotoDiscordBotPage(adminPage);
 
     // Page should load without errors
     await expect(adminPage).toHaveURL(/\/admin\/discord-bot/);
-    await expect(adminPage.locator("h1, h2, h3")).toContainText(/discord/i);
+    // Page title should contain "Discord"
+    await expect(adminPage.locator("text=Discord Bots")).toBeVisible();
   });
 
-  test("bot config empty state", async ({ adminPage }) => {
-    await adminPage.goto("/admin/discord-bot");
+  test("bot config shows token input when not configured", async ({
+    adminPage,
+  }) => {
+    await gotoDiscordBotPage(adminPage);
 
-    // Should show setup instructions when no bot configured
-    // Look for empty state elements
-    const emptyState = adminPage.locator('[data-testid="empty-state"]');
-    const configButton = adminPage.locator(
-      'button:has-text("Configure"), button:has-text("Setup")'
-    );
+    // When not configured, should show:
+    // - "Not Configured" badge OR
+    // - Token input field with "Save Token" button
+    const notConfiguredBadge = adminPage.locator("text=Not Configured");
+    const tokenInput = adminPage.locator('input[placeholder*="token" i]');
+    const saveTokenButton = adminPage.locator('button:has-text("Save Token")');
 
-    // Either empty state or config button should be visible
+    // Either not configured state with input, or already configured
+    const configuredBadge = adminPage.locator("text=Configured").first();
+
     await expect(
-      emptyState.or(configButton).or(adminPage.locator("text=Configure"))
-    ).toBeVisible();
-  });
+      notConfiguredBadge.or(tokenInput).or(configuredBadge)
+    ).toBeVisible({ timeout: 10000 });
 
-  test("bot config create flow", async ({ adminPage }) => {
-    await adminPage.goto("/admin/discord-bot");
-
-    // Click configure button if available
-    const configButton = adminPage.locator(
-      'button:has-text("Configure"), button:has-text("Add")'
-    );
-
-    if (await configButton.isVisible()) {
-      await configButton.click();
-
-      // Should show modal or form for entering token
-      const tokenInput = adminPage.locator(
-        'input[type="password"], input[name="token"], input[placeholder*="token"]'
-      );
+    // If not configured, the save token button should be visible
+    if (await notConfiguredBadge.isVisible().catch(() => false)) {
       await expect(tokenInput).toBeVisible();
+      await expect(saveTokenButton).toBeVisible();
     }
   });
 
-  test("bot config shows connection status", async ({ adminPage }) => {
-    await adminPage.goto("/admin/discord-bot");
+  test("bot config save token validation", async ({ adminPage }) => {
+    await gotoDiscordBotPage(adminPage);
 
-    // Look for connection status indicator
-    const statusIndicator = adminPage.locator(
-      '[data-testid="connection-status"], .status-indicator, text=/connected|disconnected/i'
-    );
+    const tokenInput = adminPage.locator('input[placeholder*="token" i]');
+    const saveTokenButton = adminPage.locator('button:has-text("Save Token")');
 
-    // Should have some status visible or config state
-    await expect(
-      statusIndicator.or(adminPage.locator("text=/configure|setup/i"))
-    ).toBeVisible();
+    // Only run if token input is visible (not already configured)
+    if (await tokenInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+      // Save button should be disabled when input is empty
+      await expect(saveTokenButton).toBeDisabled();
+
+      // Enter a token
+      await tokenInput.fill("test_bot_token_12345");
+
+      // Save button should now be enabled
+      await expect(saveTokenButton).toBeEnabled();
+    }
   });
 
-  test("bot config delete confirmation", async ({ adminPage }) => {
-    await adminPage.goto("/admin/discord-bot");
+  test("bot config shows configured state", async ({
+    adminPage,
+    mockBotConfigured,
+  }) => {
+    await gotoDiscordBotPage(adminPage);
 
-    // Find delete button
+    // With mockBotConfigured, should show configured state
+    const configuredBadge = adminPage.locator("text=Configured").first();
     const deleteButton = adminPage.locator(
-      'button:has-text("Delete"), button[aria-label="Delete"]'
+      'button:has-text("Delete Discord Token")'
     );
 
-    if (await deleteButton.isVisible()) {
-      await deleteButton.click();
+    // Should show configured badge
+    await expect(configuredBadge).toBeVisible({ timeout: 10000 });
 
-      // Should show confirmation modal
-      const modal = adminPage.locator(
-        '[role="dialog"], .modal, [data-testid="confirm-modal"]'
-      );
-      await expect(modal).toBeVisible();
-    }
+    // Should show delete button when configured
+    await expect(deleteButton).toBeVisible();
   });
 
-  test.skip("bot config disabled in cloud", async ({ adminPage }) => {
-    // This test requires cloud mode environment which is not available in e2e tests.
-    // Cloud mode behavior is verified in integration tests instead.
-    await adminPage.goto("/admin/discord-bot");
+  test("bot config shows server configurations section", async ({
+    adminPage,
+  }) => {
+    await gotoDiscordBotPage(adminPage);
 
-    // In cloud mode, config should be disabled or show env var notice
-    const envNotice = adminPage.locator("text=/environment|env|managed/i");
-    const configureButton = adminPage.locator(
-      'button:has-text("Configure"), button:has-text("Add")'
-    );
+    // Should show Server Configurations section
+    const serverConfigSection = adminPage.locator("text=Server Configurations");
+    await expect(serverConfigSection).toBeVisible({ timeout: 10000 });
 
-    // In cloud mode: either env notice visible OR configure button should NOT be visible
-    const isEnvNoticeVisible = await envNotice.isVisible();
-    const isConfigButtonVisible = await configureButton.isVisible();
-
-    // At least one condition should be true for cloud mode
-    expect(isEnvNoticeVisible || !isConfigButtonVisible).toBe(true);
+    // Should show Add Server button
+    const addServerButton = adminPage.locator('button:has-text("Add Server")');
+    await expect(addServerButton).toBeVisible();
   });
 });

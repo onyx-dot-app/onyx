@@ -11,6 +11,9 @@ import pytest
 import requests
 
 from onyx.configs.constants import AuthType
+from onyx.db.discord_bot import get_guild_config_by_registration_key
+from onyx.db.discord_bot import register_guild
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import UserRole
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.onyxbot.discord.constants import REGISTRATION_KEY_PREFIX
@@ -158,7 +161,8 @@ class TestGuildDataIsolation:
     def test_guild_list_returns_only_own_tenant(self, reset_multitenant: None) -> None:
         """List guilds returns exactly the guilds for that tenant.
 
-        Creates guilds in both tenants and verifies each tenant only sees their own.
+        Creates 1 guild in each tenant, registers them with different data,
+        and verifies each tenant only sees their own guild.
         """
         unique = uuid4().hex
 
@@ -170,67 +174,158 @@ class TestGuildDataIsolation:
             email=f"discord_list2+{unique}@example.com",
         )
 
-        # Create guilds in tenant 1
-        guild_ids_tenant1 = []
-        for i in range(2):
-            response = requests.post(
-                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
-                headers=admin_user1.headers,
-            )
-            if response.status_code == 404:
-                pytest.skip("Discord bot feature not enabled")
-            assert response.ok, f"Failed to create guild {i} in tenant 1"
-            guild_ids_tenant1.append(response.json()["id"])
+        # Create 1 guild in tenant 1
+        response1 = requests.post(
+            f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+            headers=admin_user1.headers,
+        )
+        if response1.status_code == 404:
+            pytest.skip("Discord bot feature not enabled")
+        assert response1.ok, f"Failed to create guild in tenant 1: {response1.text}"
+        guild1_data = response1.json()
+        guild1_id = guild1_data["id"]
+        registration_key1 = guild1_data["registration_key"]
+        tenant1_id = parse_discord_registration_key(registration_key1)
 
-        # Create guilds in tenant 2
-        guild_ids_tenant2 = []
-        for i in range(2):
-            response = requests.post(
-                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
-                headers=admin_user2.headers,
+        # Create 1 guild in tenant 2
+        response2 = requests.post(
+            f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
+            headers=admin_user2.headers,
+        )
+        assert response2.ok, f"Failed to create guild in tenant 2: {response2.text}"
+        guild2_data = response2.json()
+        guild2_id = guild2_data["id"]
+        registration_key2 = guild2_data["registration_key"]
+        tenant2_id = parse_discord_registration_key(registration_key2)
+
+        # Verify tenant IDs are different
+        assert (
+            tenant1_id != tenant2_id
+        ), "Tenant 1 and tenant 2 should have different tenant IDs"
+
+        # Register guild 1 with tenant 1's context - populate with different data
+        with get_session_with_tenant(tenant_id=tenant1_id) as db_session:
+            config1 = get_guild_config_by_registration_key(
+                db_session, registration_key1
             )
-            assert response.ok, f"Failed to create guild {i} in tenant 2"
-            guild_ids_tenant2.append(response.json()["id"])
+            assert config1 is not None, "Guild config 1 should exist"
+            register_guild(
+                db_session=db_session,
+                config=config1,
+                guild_id=111111111111111111,  # Different Discord guild ID
+                guild_name="Tenant 1 Server",  # Different guild name
+            )
+            db_session.commit()
+
+        # Register guild 2 with tenant 2's context - populate with different data
+        with get_session_with_tenant(tenant_id=tenant2_id) as db_session:
+            config2 = get_guild_config_by_registration_key(
+                db_session, registration_key2
+            )
+            assert config2 is not None, "Guild config 2 should exist"
+            register_guild(
+                db_session=db_session,
+                config=config2,
+                guild_id=222222222222222222,  # Different Discord guild ID
+                guild_name="Tenant 2 Server",  # Different guild name
+            )
+            db_session.commit()
 
         try:
-            # Verify tenant 1 sees only their guilds
+            # Verify tenant 1 sees only their guild
             list_response1 = requests.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user1.headers,
             )
             assert list_response1.ok
-            visible_ids_1 = {g["id"] for g in list_response1.json()}
+            tenant1_guilds = list_response1.json()
 
-            for gid in guild_ids_tenant1:
-                assert gid in visible_ids_1, f"Tenant 1 should see guild {gid}"
-            for gid in guild_ids_tenant2:
-                assert gid not in visible_ids_1, f"Tenant 1 should NOT see guild {gid}"
+            # Tenant 1 should see exactly 1 guild
+            assert (
+                len(tenant1_guilds) == 1
+            ), f"Tenant 1 should see 1 guild, got {len(tenant1_guilds)}"
 
-            # Verify tenant 2 sees only their guilds
+            # Verify tenant 1's guild has the correct data
+            tenant1_guild = tenant1_guilds[0]
+            assert (
+                tenant1_guild["id"] == guild1_id
+            ), "Tenant 1 should see their own guild"
+            assert tenant1_guild["guild_id"] == 111111111111111111, (
+                f"Tenant 1's guild should have guild_id 111111111111111111, "
+                f"got {tenant1_guild['guild_id']}"
+            )
+            assert tenant1_guild["guild_name"] == "Tenant 1 Server", (
+                f"Tenant 1's guild should have name 'Tenant 1 Server', "
+                f"got {tenant1_guild['guild_name']}"
+            )
+            assert (
+                tenant1_guild["registered_at"] is not None
+            ), "Tenant 1's guild should be registered"
+
+            # Tenant 1 should NOT see tenant 2's guild
+            assert (
+                tenant1_guild["guild_id"] != 222222222222222222
+            ), "Tenant 1 should not see tenant 2's guild_id"
+            assert (
+                tenant1_guild["guild_name"] != "Tenant 2 Server"
+            ), "Tenant 1 should not see tenant 2's guild_name"
+
+            # Verify tenant 2 sees only their guild
             list_response2 = requests.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user2.headers,
             )
             assert list_response2.ok
-            visible_ids_2 = {g["id"] for g in list_response2.json()}
+            tenant2_guilds = list_response2.json()
 
-            for gid in guild_ids_tenant2:
-                assert gid in visible_ids_2, f"Tenant 2 should see guild {gid}"
-            for gid in guild_ids_tenant1:
-                assert gid not in visible_ids_2, f"Tenant 2 should NOT see guild {gid}"
+            # Tenant 2 should see exactly 1 guild
+            assert (
+                len(tenant2_guilds) == 1
+            ), f"Tenant 2 should see 1 guild, got {len(tenant2_guilds)}"
+
+            # Verify tenant 2's guild has the correct data
+            tenant2_guild = tenant2_guilds[0]
+            assert (
+                tenant2_guild["id"] == guild2_id
+            ), "Tenant 2 should see their own guild"
+            assert tenant2_guild["guild_id"] == 222222222222222222, (
+                f"Tenant 2's guild should have guild_id 222222222222222222, "
+                f"got {tenant2_guild['guild_id']}"
+            )
+            assert tenant2_guild["guild_name"] == "Tenant 2 Server", (
+                f"Tenant 2's guild should have name 'Tenant 2 Server', "
+                f"got {tenant2_guild['guild_name']}"
+            )
+            assert (
+                tenant2_guild["registered_at"] is not None
+            ), "Tenant 2's guild should be registered"
+
+            # Tenant 2 should NOT see tenant 1's guild
+            assert (
+                tenant2_guild["guild_id"] != 111111111111111111
+            ), "Tenant 2 should not see tenant 1's guild_id"
+            assert (
+                tenant2_guild["guild_name"] != "Tenant 1 Server"
+            ), "Tenant 2 should not see tenant 1's guild_name"
+
+            # Verify the guilds are different (different data)
+            assert (
+                tenant1_guild["guild_id"] != tenant2_guild["guild_id"]
+            ), "Guilds should have different Discord guild IDs"
+            assert (
+                tenant1_guild["guild_name"] != tenant2_guild["guild_name"]
+            ), "Guilds should have different names"
 
         finally:
             # Cleanup
-            for gid in guild_ids_tenant1:
-                requests.delete(
-                    f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{gid}",
-                    headers=admin_user1.headers,
-                )
-            for gid in guild_ids_tenant2:
-                requests.delete(
-                    f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{gid}",
-                    headers=admin_user2.headers,
-                )
+            requests.delete(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
+                headers=admin_user1.headers,
+            )
+            requests.delete(
+                f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild2_id}",
+                headers=admin_user2.headers,
+            )
 
 
 class TestGuildAccessIsolation:

@@ -109,11 +109,18 @@ class DiscordBotManager:
         default_persona_id: int | None = None,
     ) -> dict:
         """Update a guild config."""
-        body: dict = {}
-        if enabled is not None:
-            body["enabled"] = enabled
-        if default_persona_id is not None:
-            body["default_persona_id"] = default_persona_id
+        # Fetch current guild config to get existing values
+        current_guild = DiscordBotManager.get_guild(config_id, user_performing_action)
+
+        # Build request body with required fields
+        body: dict = {
+            "enabled": enabled if enabled is not None else current_guild["enabled"],
+            "default_persona_id": (
+                default_persona_id
+                if default_persona_id is not None
+                else current_guild.get("default_persona_id")
+            ),
+        }
 
         response = requests.patch(
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",

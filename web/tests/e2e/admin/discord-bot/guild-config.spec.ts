@@ -1,65 +1,116 @@
 /**
  * E2E tests for Discord guild detail/config page.
+ *
+ * Tests the guild configuration page which shows:
+ * - Guild enabled/disabled toggle
+ * - Default Agent (persona) selector
+ * - Channel Configuration section
  */
 
-import { test, expect } from "./fixtures";
+import { test, expect, gotoGuildDetailPage } from "./fixtures";
 
 test.describe("Guild Configuration Page", () => {
-  test("guild detail page loads", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+  test("guild detail page loads", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
     // Page should load with guild info
     await expect(adminPage).toHaveURL(
-      new RegExp(`/admin/bots/discord/guilds/${seededGuild.id}`)
+      new RegExp(`/admin/discord-bot/${mockRegisteredGuild.id}`)
     );
+
+    // Should show the guild name in the header
+    await expect(
+      adminPage.locator(`text=${mockRegisteredGuild.name}`)
+    ).toBeVisible();
+  });
+
+  test("guild enabled toggle visible", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Find the enabled toggle in the header area
+    const enabledLabel = adminPage.locator("text=Enabled");
+    await expect(enabledLabel).toBeVisible({ timeout: 10000 });
+
+    // The switch should be next to the label
+    const enabledToggle = adminPage.locator('[role="switch"]').first();
+    await expect(enabledToggle).toBeVisible();
+
+    // Should be enabled (checked) for our mock guild
+    await expect(enabledToggle).toHaveAttribute("aria-checked", "true");
   });
 
   test("guild enabled toggle updates state", async ({
     adminPage,
-    seededGuild,
+    mockRegisteredGuild,
   }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
     // Find enabled toggle
-    const enabledToggle = adminPage
-      .locator(
-        '[data-testid="guild-enabled-toggle"], input[type="checkbox"][name="enabled"], [role="switch"]'
-      )
-      .first();
+    const enabledToggle = adminPage.locator('[role="switch"]').first();
+    await expect(enabledToggle).toBeVisible({ timeout: 10000 });
 
-    if (await enabledToggle.isVisible()) {
-      // Toggle should update and persist
-      const initialState = await enabledToggle.isChecked();
-      await enabledToggle.click();
+    // Get initial state
+    const initialState = await enabledToggle.getAttribute("aria-checked");
 
-      // State should change
-      await expect(enabledToggle).toBeChecked({ checked: !initialState });
+    // Click to toggle
+    await enabledToggle.click();
 
-      // Toggle back to restore state
-      await enabledToggle.click();
-      await expect(enabledToggle).toBeChecked({ checked: initialState });
+    // State should change (optimistic update)
+    await expect(enabledToggle).toHaveAttribute(
+      "aria-checked",
+      initialState === "true" ? "false" : "true"
+    );
+  });
+
+  test("guild default agent dropdown shows options", async ({
+    adminPage,
+    mockRegisteredGuild,
+  }) => {
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
+
+    // Should show "Default Agent" section
+    await expect(adminPage.locator("text=Default Agent")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Find the persona/agent dropdown (InputSelect)
+    const agentDropdown = adminPage.locator(
+      'button:has-text("Default Assistant")'
+    );
+
+    if (await agentDropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await agentDropdown.click();
+
+      // Dropdown should show available options
+      const options = adminPage.locator('[role="option"]');
+      await expect(options.first()).toBeVisible({ timeout: 5000 });
     }
   });
 
-  test("guild persona dropdown shows options", async ({
+  test("guild shows channel configuration section", async ({
     adminPage,
-    seededGuild,
+    mockRegisteredGuild,
   }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Find persona dropdown
-    const personaSelect = adminPage.locator(
-      'select[name="persona"], [data-testid="persona-select"], button:has-text("Select Persona")'
-    );
+    // Should show Channel Configuration section
+    await expect(adminPage.locator("text=Channel Configuration")).toBeVisible({
+      timeout: 10000,
+    });
 
-    if (await personaSelect.isVisible()) {
-      await personaSelect.click();
-
-      // Dropdown should show available personas
-      const options = adminPage.locator(
-        '[role="option"], option, [role="listbox"] li'
-      );
-      await expect(options.first()).toBeVisible();
-    }
+    // Should show action buttons
+    await expect(
+      adminPage.locator('button:has-text("Enable All")')
+    ).toBeVisible();
+    await expect(
+      adminPage.locator('button:has-text("Disable All")')
+    ).toBeVisible();
+    await expect(adminPage.locator('button:has-text("Update")')).toBeVisible();
   });
 });
