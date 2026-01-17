@@ -480,7 +480,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             indexed_result, crawled_result = run_functions_tuples_in_parallel(
                 [
                     (_retrieve_indexed_with_filters, (all_requests,)),
-                    (self._fetch_web_content, (urls, override_kwargs.url_summary_map)),
+                    (self._fetch_web_content, (urls, override_kwargs.url_snippet_map)),
                 ],
                 allow_failures=True,
             )
@@ -774,7 +774,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         return merged_sections
 
     def _fetch_web_content(
-        self, urls: list[str], snippet_map: dict[str, str]
+        self, urls: list[str], url_snippet_map: dict[str, str]
     ) -> tuple[list[InferenceSection], list[str]]:
         if not urls:
             return [], []
@@ -807,7 +807,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             ):
                 sections.append(
                     inference_section_from_internet_page_scrape(
-                        content, snippet_map.get(content.link, "")
+                        content, url_snippet_map.get(content.link, "")
                     )
                 )
             else:

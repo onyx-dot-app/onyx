@@ -46,7 +46,7 @@ def _normalize_and_match(content: str, snippet: str) -> SnippetMatchResult:
     Normalizes the snippet & content, then performs a direct string match.
     """
     normalized_content, content_map = _normalize_text_with_mapping(content)
-    normalized_snippet, snippet_map = _normalize_text_with_mapping(snippet)
+    normalized_snippet, url_snippet_map = _normalize_text_with_mapping(snippet)
 
     if not normalized_content or not normalized_snippet:
         return NegativeSnippetMatchResult
@@ -57,8 +57,8 @@ def _normalize_and_match(content: str, snippet: str) -> SnippetMatchResult:
 
         # Account for leading characters stripped from snippet during normalization
         # (e.g., leading punctuation like "[![]![]]" that was removed)
-        if snippet_map:
-            first_snippet_orig_pos = snippet_map[0]
+        if url_snippet_map:
+            first_snippet_orig_pos = url_snippet_map[0]
             if first_snippet_orig_pos > 0:
                 # There were leading characters stripped from snippet
                 # Extend start position backwards to include them from content
@@ -76,8 +76,8 @@ def _normalize_and_match(content: str, snippet: str) -> SnippetMatchResult:
 
         # Account for trailing characters stripped from snippet during normalization
         # (e.g., trailing punctuation like "\n[" that was removed)
-        if snippet_map:
-            last_snippet_orig_pos = snippet_map[-1]
+        if url_snippet_map:
+            last_snippet_orig_pos = url_snippet_map[-1]
             trailing_stripped = len(snippet) - last_snippet_orig_pos - 1
             if trailing_stripped > 0:
                 # Extend end position to include trailing characters from content
