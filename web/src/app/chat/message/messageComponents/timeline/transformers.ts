@@ -1,14 +1,7 @@
-import { JSX } from "react";
 import { GroupedPacket } from "../packetProcessor";
-import {
-  getIconForPackets,
-  getNameForPackets,
-  getIconTypeForPackets,
-  IconType,
-} from "./iconRegistry";
 
 /**
- * Transformed step data ready for AgentStep rendering
+ * Transformed step data ready for rendering
  */
 export interface TransformedStep {
   /** Unique key for React rendering */
@@ -17,12 +10,6 @@ export interface TransformedStep {
   turnIndex: number;
   /** Tab index for parallel tools */
   tabIndex: number;
-  /** Icon element for the step */
-  icon: JSX.Element;
-  /** Icon state (loading, complete, error) */
-  iconType: IconType;
-  /** Display name for the step header */
-  name: string;
   /** Raw packets for content rendering */
   packets: GroupedPacket["packets"];
 }
@@ -45,9 +32,6 @@ export function transformPacketGroup(group: GroupedPacket): TransformedStep {
     key: `${group.turn_index}-${group.tab_index}`,
     turnIndex: group.turn_index,
     tabIndex: group.tab_index,
-    icon: getIconForPackets(group.packets),
-    iconType: getIconTypeForPackets(group.packets),
-    name: getNameForPackets(group.packets),
     packets: group.packets,
   };
 }

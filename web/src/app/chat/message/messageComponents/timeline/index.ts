@@ -14,14 +14,6 @@ export {
   type TimelineRendererResult,
 } from "./TimelineRendererComponent";
 
-// Registries
-export {
-  getIconForPackets,
-  getNameForPackets,
-  getIconTypeForPackets,
-  type IconType,
-} from "./iconRegistry";
-
 // Transformers
 export {
   transformPacketGroup,
