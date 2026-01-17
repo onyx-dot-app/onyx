@@ -4,6 +4,7 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
@@ -25,9 +26,12 @@ from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import UserMessage
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
-from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
+
+
+if TYPE_CHECKING:
+    from onyx.server.manage.llm.models import LLMProviderView
 
 
 logger = setup_logger()
