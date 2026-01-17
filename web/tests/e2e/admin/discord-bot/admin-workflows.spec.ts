@@ -12,6 +12,9 @@ import {
   gotoGuildDetailPage,
 } from "./fixtures";
 
+// Disable retries for Discord bot tests - attempt once at most
+test.describe.configure({ retries: 0 });
+
 test.describe("Admin Workflow E2E Flows", () => {
   test("complete setup and configuration flow", async ({
     adminPage,

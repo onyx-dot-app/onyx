@@ -14,6 +14,9 @@
 
 import { test, expect, gotoGuildDetailPage } from "./fixtures";
 
+// Disable retries for Discord bot tests - attempt once at most
+test.describe.configure({ retries: 0 });
+
 test.describe("Guild Detail Page & Channel Configuration", () => {
   test("guild detail page loads", async ({
     adminPage,
