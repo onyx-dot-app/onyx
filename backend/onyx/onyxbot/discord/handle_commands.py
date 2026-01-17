@@ -62,7 +62,8 @@ async def handle_registration_command(
     if not content.startswith(f"{DISCORD_BOT_INVOKE_CHAR}{REGISTER_COMMAND}"):
         return False
 
-    logger.info(f"Handling registration command for guild {message.guild.id}")
+    guild_name = message.guild.name
+    logger.info(f"Registration command received: {guild_name}")
 
     # Parse the registration key
     parts = content.split(maxsplit=1)
@@ -88,34 +89,39 @@ async def handle_registration_command(
     # Process registration
     try:
         await _register_guild(message, registration_key, cache)
+        logger.info(f"Registration successful: {guild_name}")
         await message.reply(
             ":white_check_mark: **Successfully registered!**\n\n"
             "This server is now connected to Onyx. "
-            "I'll respond to messages based on your channel settings."
+            "I'll respond to messages based on your server and channel settings set in Onyx."
         )
     except InvalidRegistrationKeyError:
+        logger.debug(f"Registration failed - invalid key: {guild_name}")
         await message.reply(
             ":x: **Invalid registration key format.**\n\n"
             "Please check the key and try again."
         )
     except RegistrationKeyNotFoundError:
+        logger.debug(f"Registration failed - key not found: {guild_name}")
         await message.reply(
             ":x: **Registration key not found.**\n\n"
             "The key may have expired or been deleted. "
             "Please generate a new one from the Onyx admin panel."
         )
     except RegistrationKeyAlreadyUsedError:
+        logger.debug(f"Registration failed - key already used: {guild_name}")
         await message.reply(
             ":x: **This registration key has already been used.**\n\n"
             "Each key can only be used once. "
             "Please generate a new key from the Onyx admin panel."
         )
     except RegistrationError as e:
+        logger.warning(f"Registration failed: {guild_name}, error={e}")
         await message.reply(
             f":x: **Registration failed: {e}**\n\n" "Please try again later."
         )
-    except Exception as e:
-        logger.exception(f"Registration failed: {e}")
+    except Exception:
+        logger.exception(f"Registration failed unexpectedly: {guild_name}")
         await message.reply(
             ":x: **Registration failed.**\n\n"
             "An unexpected error occurred. Please try again later."
@@ -134,7 +140,7 @@ async def _register_guild(
         # mypy, even though we already know that message.guild is not None
         raise RegistrationError("This command can only be used in a server.")
 
-    logger.info(f"Guild {message.guild.id} attempting to register Discord bot")
+    logger.info(f"Guild '{message.guild.name}' attempting to register Discord bot")
     registration_key = registration_key.strip()
 
     # Parse tenant_id from registration key
@@ -154,7 +160,7 @@ async def _register_guild(
 
         # Collect all text channels from the guild
         channels = get_text_channels(guild)
-        logger.info(f"Found {len(channels)} text channels in guild {guild_id}")
+        logger.info(f"Found {len(channels)} text channels in guild '{guild_name}'")
 
         # Validate and update in database
         def _sync_register() -> int:
@@ -183,14 +189,13 @@ async def _register_guild(
                 db.commit()
                 return config.id
 
-        guild_config_id = await asyncio.to_thread(_sync_register)
+        await asyncio.to_thread(_sync_register)
 
         # Refresh cache for this guild
         await cache.refresh_guild(guild_id, tenant_id)
 
         logger.info(
-            f"Guild {guild_id} ({guild_name}) registered to tenant {tenant_id} "
-            f"with {len(channels)} channel configs (guild_config_id={guild_config_id})"
+            f"Guild '{guild_name}' registered with {len(channels)} channel configs"
         )
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
@@ -207,7 +212,7 @@ def get_text_channels(guild: discord.Guild) -> list[DiscordChannelView]:
             is_private = not everyone_perms.view_channel
 
             logger.debug(
-                f"Found channel: name={channel.name}, id={channel.id}, "
+                f"Found channel: #{channel.name}, "
                 f"type={channel.type.name}, is_private={is_private}"
             )
 
@@ -220,9 +225,7 @@ def get_text_channels(guild: discord.Guild) -> list[DiscordChannelView]:
                 )
             )
 
-    logger.debug(
-        f"Retrieved {len(channels)} channels from guild {guild.id} ({guild.name})"
-    )
+    logger.debug(f"Retrieved {len(channels)} channels from guild '{guild.name}'")
     return channels
 
 
@@ -245,11 +248,10 @@ async def handle_sync_channels_command(
 
         # Check for !sync-channels command
         if not content.startswith(f"{DISCORD_BOT_INVOKE_CHAR}{SYNC_CHANNELS_COMMAND}"):
-            raise SyncChannelsError(
-                "Invalid command format. Please check the command and try again."
-            )
+            return False
 
-        logger.info(f"Handling sync-channels command for guild {message.guild.id}")
+        guild_name = message.guild.name
+        logger.info(f"Sync-channels command received: {guild_name}")
 
         # Must be registered
         if not tenant_id:
@@ -290,6 +292,10 @@ async def handle_sync_channels_command(
         added, removed, updated = await sync_guild_channels(
             guild_config_id, tenant_id, bot
         )
+        logger.info(
+            f"Sync-channels successful: {guild_name}, "
+            f"added={added}, removed={removed}, updated={updated}"
+        )
         await message.reply(
             f":white_check_mark: **Channel sync complete!**\n\n"
             f"* **{added}** new channel(s) added\n"
@@ -307,11 +313,16 @@ async def handle_sync_channels_command(
             "This server is not registered. Please register it first."
         )
     except SyncChannelsError:
+        logger.warning(
+            f"Sync-channels failed: {message.guild.name if message.guild else 'unknown'}"
+        )
         await message.reply(
             ":x: **Channel sync failed.**\n\nPlease try again later :sweat_smile:"
         )
-    except Exception as e:
-        logger.exception(f"Channel sync failed: {e}")
+    except Exception:
+        logger.exception(
+            f"Sync-channels failed unexpectedly: {message.guild.name if message.guild else 'unknown'}"
+        )
         await message.reply(
             ":x: **Channel sync failed.**\n\nYou may want to contact Onyx for support :sweat_smile:"
         )
@@ -366,10 +377,7 @@ async def sync_guild_channels(
 
         # Get current channels from Discord
         channels = get_text_channels(guild)
-        logger.info(
-            f"Syncing {len(channels)} channels for guild {guild_id} "
-            f"(config_id={guild_config_id})"
-        )
+        logger.info(f"Syncing {len(channels)} channels for guild '{guild.name}'")
 
         # Sync with database
         def _sync() -> tuple[int, int, int]:
@@ -383,7 +391,7 @@ async def sync_guild_channels(
         added, removed, updated = await asyncio.to_thread(_sync)
 
         logger.info(
-            f"Channel sync complete for guild {guild_id}: "
+            f"Channel sync complete for guild '{guild.name}': "
             f"added={added}, removed={removed}, updated={updated}"
         )
 
