@@ -152,6 +152,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
           apiBase: payload.apiBase,
           apiVersion: payload.apiVersion,
           deploymentName: payload.deploymentName,
+          customConfig: payload.customConfig,
         });
 
         if (!result.ok) {
@@ -169,6 +170,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
           });
         } else {
           await createImageGenerationConfig({
@@ -178,6 +180,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
             isDefault: true,
           });
         }
@@ -194,6 +197,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
           });
 
           if (!result.ok) {
@@ -213,6 +217,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
             apiKeyChanged,
           });
         } else {
@@ -224,6 +229,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
             isDefault: true,
           });
         }

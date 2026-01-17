@@ -90,7 +90,7 @@ export function Citation({
                          hover:bg-background-tint-04 shadow-sm"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
-              <Text figureSmallValue as="span" className="truncate">
+              <Text figureSmallValue className="truncate">
                 {citationText}
               </Text>
             </span>

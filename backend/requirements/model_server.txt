@@ -342,7 +342,7 @@ psutil==7.1.3
     # via accelerate
 py==1.11.0
     # via retry
-pyasn1==0.6.1
+pyasn1==0.6.2
     # via
     #   pyasn1-modules
     #   rsa
