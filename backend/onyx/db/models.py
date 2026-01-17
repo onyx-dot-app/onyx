@@ -3043,19 +3043,17 @@ class DiscordBotConfig(Base):
     """Global Discord bot configuration (one per tenant).
 
     Stores the bot token when not provided via DISCORD_BOT_TOKEN env var.
-    Uses singleton_guard with unique constraint to enforce only one row per tenant.
+    Uses a fixed ID with check constraint to enforce only one row per tenant.
     """
 
     __tablename__ = "discord_bot_config"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, server_default=text("'SINGLETON'")
+    )
     bot_token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    # Singleton guard: always TRUE, unique constraint ensures only one row
-    singleton_guard: Mapped[bool] = mapped_column(
-        Boolean, server_default=text("true"), unique=True, nullable=False
     )
 
 
