@@ -23,7 +23,7 @@ class OAuthTokenStatus(BaseModel):
 @router.get("/status")
 def get_user_oauth_token_status(
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> list[OAuthTokenStatus]:
     """
     Get the OAuth token status for the current user across all OAuth configs.

@@ -12,6 +12,7 @@ from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_gro
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
@@ -116,7 +117,7 @@ def _get_access_for_documents(
     return access_map
 
 
-def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:
+def _get_acl_for_user(user: User, db_session: Session) -> set[str]:
     """Returns a list of ACL entries that the user has access to. This is meant to be
     used downstream to filter out documents that the user does not have access to. The
     user should have access to a document if at least one entry in the document's ACL
@@ -124,13 +125,16 @@ def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:
 
     NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
     DO NOT REMOVE."""
-    db_user_groups = fetch_user_groups_for_user(db_session, user.id) if user else []
+    is_anonymous = str(user.id) == ANONYMOUS_USER_UUID
+    db_user_groups = (
+        [] if is_anonymous else fetch_user_groups_for_user(db_session, user.id)
+    )
     prefixed_user_groups = [
         prefix_user_group(db_user_group.name) for db_user_group in db_user_groups
     ]
 
     db_external_groups = (
-        fetch_external_groups_for_user(db_session, user.id) if user else []
+        [] if is_anonymous else fetch_external_groups_for_user(db_session, user.id)
     )
     prefixed_external_groups = [
         prefix_external_group(db_external_group.external_user_group_id)

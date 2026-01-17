@@ -36,7 +36,7 @@ class FeatureFlagProvider(abc.ABC):
         raise NotImplementedError
 
     def feature_enabled_for_user_tenant(
-        self, flag_key: str, user: User | None, tenant_id: str
+        self, flag_key: str, user: User, tenant_id: str
     ) -> bool:
         """
         Check if a feature flag is enabled for a user.

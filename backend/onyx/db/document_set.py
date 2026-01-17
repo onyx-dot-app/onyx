@@ -13,6 +13,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
@@ -36,10 +37,8 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 logger = setup_logger()
 
 
-def _add_user_filters(
-    stmt: Select, user: User | None, get_editable: bool = True
-) -> Select:
-    if user and user.role == UserRole.ADMIN:
+def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
+    if user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()
@@ -64,8 +63,8 @@ def _add_user_filters(
     for (as well as public DocumentSets)
     """
 
-    # If user is None, this is an anonymous user and we should only show public DocumentSets
-    if user is None:
+    # Anonymous users only see public DocumentSets
+    if str(user.id) == ANONYMOUS_USER_UUID:
         where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
         return stmt.where(where_clause)
 
@@ -121,7 +120,7 @@ def delete_document_set_privacy__no_commit(
 def get_document_set_by_id_for_user(
     db_session: Session,
     document_set_id: int,
-    user: User | None,
+    user: User,
     get_editable: bool = True,
 ) -> DocumentSetDBModel | None:
     stmt = (
@@ -299,7 +298,7 @@ def insert_document_set(
 def update_document_set(
     db_session: Session,
     document_set_update_request: DocumentSetUpdateRequest,
-    user: User | None = None,
+    user: User,
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
     """If successful, this sets document_set_row.is_up_to_date = False.
     That will be processed via Celery in check_for_vespa_sync_task
@@ -422,7 +421,7 @@ def delete_document_set(
 def mark_document_set_as_to_be_deleted(
     db_session: Session,
     document_set_id: int,
-    user: User | None = None,
+    user: User,
 ) -> None:
     """Cleans up all document_set -> cc_pair relationships and marks the document set
     as needing an update. The actual document set row will be deleted by the background
@@ -548,7 +547,7 @@ def fetch_document_sets(
 
 def fetch_all_document_sets_for_user(
     db_session: Session,
-    user: User | None,
+    user: User,
     get_editable: bool = True,
 ) -> Sequence[DocumentSetDBModel]:
     stmt = (

@@ -36,7 +36,7 @@ logger = setup_logger()
 @log_function_time(print_only=True)
 def _build_index_filters(
     user_provided_filters: BaseFilters | None,
-    user: User | None,  # Used for ACLs
+    user: User,  # Used for ACLs
     project_id: int | None,
     user_file_ids: list[UUID] | None,
     persona_document_sets: list[str] | None,
@@ -243,7 +243,7 @@ def search_pipeline(
     # Note that federated sources will also be used (not related to this arg)
     document_index: DocumentIndex,
     # Used for ACLs and federated search
-    user: User | None,
+    user: User,
     # Used for default filters and settings
     persona: Persona | None,
     db_session: Session,
@@ -293,7 +293,7 @@ def search_pipeline(
 
     retrieved_chunks = search_chunks(
         query_request=query_request,
-        user_id=user.id if user else None,
+        user_id=user.id,
         document_index=document_index,
         db_session=db_session,
     )

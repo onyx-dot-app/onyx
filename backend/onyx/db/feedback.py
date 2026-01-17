@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
@@ -42,10 +43,8 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
     return doc
 
 
-def _add_user_filters(
-    stmt: Select, user: User | None, get_editable: bool = True
-) -> Select:
-    if user and user.role == UserRole.ADMIN:
+def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
+    if user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()
@@ -83,8 +82,8 @@ def _add_user_filters(
     for (as well as public objects as well)
     """
 
-    # If user is None, this is an anonymous user and we should only show public documents
-    if user is None:
+    # Anonymous users only see public documents
+    if str(user.id) == ANONYMOUS_USER_UUID:
         where_clause = CCPair.access_type == AccessType.PUBLIC
         return stmt.where(where_clause)
 
@@ -107,7 +106,7 @@ def _add_user_filters(
 
 def fetch_docs_ranked_by_boost_for_user(
     db_session: Session,
-    user: User | None,
+    user: User,
     ascending: bool = False,
     limit: int = 100,
 ) -> list[DbDocument]:
@@ -130,7 +129,7 @@ def update_document_boost_for_user(
     db_session: Session,
     document_id: str,
     boost: int,
-    user: User | None,
+    user: User,
 ) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
@@ -152,7 +151,7 @@ def update_document_hidden_for_user(
     db_session: Session,
     document_id: str,
     hidden: bool,
-    user: User | None,
+    user: User,
 ) -> None:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     stmt = _add_user_filters(stmt, user, get_editable=True)

@@ -344,7 +344,7 @@ class MCPOauthState(BaseModel):
 async def connect_admin_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPUserOAuthConnectResponse:
     """Connect OAuth flow for admin MCP server authentication"""
     if not user:
@@ -359,7 +359,7 @@ async def connect_admin_oauth(
 async def connect_user_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> MCPUserOAuthConnectResponse:
     if not user:
         raise HTTPException(
@@ -573,7 +573,7 @@ async def _connect_oauth(
 async def process_oauth_callback(
     request: Request,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> MCPOAuthCallbackResponse:
     """Complete OAuth flow by exchanging code for tokens and storing them.
 
@@ -659,7 +659,7 @@ async def process_oauth_callback(
 def save_user_credentials(
     request: MCPUserCredentialsRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> MCPApiKeyResponse:
     """Save user credentials for template-based MCP server authentication"""
 
@@ -804,9 +804,9 @@ class ServerToolsResponse(BaseModel):
     tools: list[MCPToolDescription]
 
 
-def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User | None) -> None:
+def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User) -> None:
     logger.info(
-        f"Ensuring MCP server owner or admin: {server.name} {user} {user.role if user else None} server.owner={server.owner}"
+        f"Ensuring MCP server owner or admin: {server.name} {user} {user.role} server.owner={server.owner}"
     )
     if not user or user.role == UserRole.ADMIN:
         return
@@ -972,7 +972,7 @@ def _db_mcp_server_to_api_mcp_server(
 def get_mcp_servers_for_assistant(
     assistant_id: str,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> MCPServersResponse:
     """Get MCP servers for an assistant"""
 
@@ -1017,7 +1017,7 @@ def get_mcp_servers_for_user(
 
 
 def _get_connection_config(
-    mcp_server: DbMCPServer, is_admin: bool, user: User | None, db_session: Session
+    mcp_server: DbMCPServer, is_admin: bool, user: User, db_session: Session
 ) -> MCPConnectionConfig | None:
     """
     Get the connection config for an MCP server.
@@ -1055,7 +1055,7 @@ def _get_connection_config(
 def admin_list_mcp_tools_by_id(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPToolListResponse:
     return _list_mcp_tools_by_id(server_id, db, True, user)
 
@@ -1070,7 +1070,7 @@ def get_mcp_server_tools_snapshots(
     server_id: int,
     source: ToolSnapshotSource = ToolSnapshotSource.DB,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> list[ToolSnapshot]:
     """
     Get tools for an MCP server as ToolSnapshot objects.
@@ -1127,7 +1127,7 @@ def get_mcp_server_tools_snapshots(
 def user_list_mcp_tools_by_id(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> MCPToolListResponse:
     return _list_mcp_tools_by_id(server_id, db, False, user)
 
@@ -1185,7 +1185,7 @@ def _list_mcp_tools_by_id(
     server_id: int,
     db: Session,
     is_admin: bool,
-    user: User | None,
+    user: User,
 ) -> MCPToolListResponse:
     """List available tools from an existing MCP server"""
     logger.info(f"Listing tools for MCP server: {server_id}")
@@ -1308,7 +1308,7 @@ def _list_mcp_tools_by_id(
 def _upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session,
-    user: User | None,
+    user: User,
 ) -> DbMCPServer:
     """
     Creates a new or edits an existing MCP server. Returns the DB model
@@ -1553,7 +1553,7 @@ def _sync_tools_for_server(
 def get_mcp_server_detail(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPServer:
     """Return details for one MCP server if user has access"""
     try:
@@ -1580,7 +1580,7 @@ def get_mcp_server_detail(
 @admin_router.get("/tools")
 def get_all_mcp_tools(
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> list:
     """Get all tools associated with MCP servers, including both enabled and disabled tools"""
     from sqlalchemy import select
@@ -1600,7 +1600,7 @@ def update_mcp_server_status(
     server_id: int,
     status: MCPServerStatus,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> dict[str, str]:
     """Update the status of an MCP server"""
     logger.info(f"Updating MCP server {server_id} status to {status}")
@@ -1626,7 +1626,7 @@ def update_mcp_server_status(
 @admin_router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPServersResponse:
     """Get all MCP servers for admin display"""
 
@@ -1652,7 +1652,7 @@ def get_mcp_servers_for_admin(
 def get_mcp_server_db_tools(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> ServerToolsResponse:
     """Get existing database tools created for an MCP server"""
     logger.info(f"Getting database tools for MCP server: {server_id}")
@@ -1697,7 +1697,7 @@ def get_mcp_server_db_tools(
 def upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server (no tools yet)"""
 
@@ -1759,7 +1759,7 @@ def upsert_mcp_server(
 def update_mcp_server_with_tools(
     request: MCPToolUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPServerUpdateResponse:
     """Update an MCP server and associated tools"""
 
@@ -1811,7 +1811,7 @@ def update_mcp_server_with_tools(
 def create_mcp_server_simple(
     request: MCPServerSimpleCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
@@ -1851,7 +1851,7 @@ def update_mcp_server_simple(
     server_id: int,
     request: MCPServerSimpleUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> MCPServer:
     """Update MCP server basic information (name, description, URL)"""
 
@@ -1889,7 +1889,7 @@ def update_mcp_server_simple(
 def delete_mcp_server_admin(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
 ) -> dict:
     """Delete an MCP server and cascading related objects (tools, configs)."""
     try:

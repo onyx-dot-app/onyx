@@ -11,6 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatMessageFeedback
@@ -334,11 +335,10 @@ def fetch_assistant_unique_users_total(
 # Users can view assistant stats if they created the persona,
 # or if they are an admin
 def user_can_view_assistant_stats(
-    db_session: Session, user: User | None, assistant_id: int
+    db_session: Session, user: User, assistant_id: int
 ) -> bool:
-    # If user is None and auth is disabled, assume the user is an admin
-
-    if user is None or user.role == UserRole.ADMIN:
+    # Anonymous users and admins can view all stats
+    if str(user.id) == ANONYMOUS_USER_UUID or user.role == UserRole.ADMIN:
         return True
 
     # Check if the user created the persona

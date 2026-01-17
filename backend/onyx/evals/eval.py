@@ -497,7 +497,7 @@ def _get_multi_turn_answer_with_tools(
                 else None
             )
             # Cache user_id to avoid SQLAlchemy expiration issues
-            user_id = user.id if user else None
+            user_id = user.id
 
             # Create a single chat session for all turns
             chat_session = create_chat_session(

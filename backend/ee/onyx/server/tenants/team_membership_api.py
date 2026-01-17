@@ -24,7 +24,7 @@ router = APIRouter(prefix="/tenants")
 @router.post("/leave-team")
 async def leave_organization(
     user_email: UserByEmail,
-    current_user: User | None = Depends(current_admin_user),
+    current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     tenant_id = get_current_tenant_id()

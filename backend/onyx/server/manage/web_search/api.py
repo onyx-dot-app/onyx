@@ -52,7 +52,7 @@ admin_router = APIRouter(prefix="/admin/web-search")
 
 @admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
 def list_search_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[WebSearchProviderView]:
     providers = fetch_web_search_providers(db_session)
@@ -72,7 +72,7 @@ def list_search_providers(
 @admin_router.post("/search-providers", response_model=WebSearchProviderView)
 def upsert_search_provider_endpoint(
     request: WebSearchProviderUpsertRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebSearchProviderView:
     existing_by_name = fetch_web_search_provider_by_name(request.name, db_session)
@@ -135,7 +135,7 @@ def upsert_search_provider_endpoint(
 )
 def delete_search_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     delete_web_search_provider(provider_id, db_session)
@@ -145,7 +145,7 @@ def delete_search_provider(
 @admin_router.post("/search-providers/{provider_id}/activate")
 def activate_search_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebSearchProviderView:
     provider = set_active_web_search_provider(
@@ -165,7 +165,7 @@ def activate_search_provider(
 @admin_router.post("/search-providers/{provider_id}/deactivate")
 def deactivate_search_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     deactivate_web_search_provider(provider_id=provider_id, db_session=db_session)
@@ -176,7 +176,7 @@ def deactivate_search_provider(
 @admin_router.post("/search-providers/test")
 def test_search_provider(
     request: WebSearchProviderTestRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     provider_requires_api_key = request.provider_type != WebSearchProviderType.SEARXNG
@@ -225,7 +225,7 @@ def test_search_provider(
 
 @admin_router.get("/content-providers", response_model=list[WebContentProviderView])
 def list_content_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[WebContentProviderView]:
     providers = fetch_web_content_providers(db_session)
@@ -245,7 +245,7 @@ def list_content_providers(
 @admin_router.post("/content-providers", response_model=WebContentProviderView)
 def upsert_content_provider_endpoint(
     request: WebContentProviderUpsertRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebContentProviderView:
     existing_by_name = fetch_web_content_provider_by_name(request.name, db_session)
@@ -308,7 +308,7 @@ def upsert_content_provider_endpoint(
 )
 def delete_content_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     delete_web_content_provider(provider_id, db_session)
@@ -318,7 +318,7 @@ def delete_content_provider(
 @admin_router.post("/content-providers/{provider_id}/activate")
 def activate_content_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebContentProviderView:
     provider = set_active_web_content_provider(
@@ -337,7 +337,7 @@ def activate_content_provider(
 
 @admin_router.post("/content-providers/reset-default")
 def reset_content_provider_default(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     providers = fetch_web_content_providers(db_session)
@@ -353,7 +353,7 @@ def reset_content_provider_default(
 @admin_router.post("/content-providers/{provider_id}/deactivate")
 def deactivate_content_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     deactivate_web_content_provider(provider_id=provider_id, db_session=db_session)
@@ -364,7 +364,7 @@ def deactivate_content_provider(
 @admin_router.post("/content-providers/test")
 def test_content_provider(
     request: WebContentProviderTestRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     # Determine which API key to use

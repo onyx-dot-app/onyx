@@ -31,8 +31,18 @@ NO_AUTH_PLACEHOLDER_USER_EMAIL = "no-auth-placeholder@onyx.app"
 def upgrade() -> None:
     """
     Create a placeholder user and assign all NULL user_id records to it.
+    Only runs if no real users exist (true AUTH_TYPE=disabled deployment).
     """
     connection = op.get_bind()
+
+    # Check if any real users exist in the database
+    # If users exist, this deployment was NOT using AUTH_TYPE=disabled
+    # and user_id=NULL data is likely from anonymous users - don't migrate
+    result = connection.execute(sa.text('SELECT 1 FROM "user" LIMIT 1'))
+    if result.fetchone():
+        print("Existing users found. This deployment was not using AUTH_TYPE=disabled.")
+        print("Skipping migration - user_id=NULL data is likely from anonymous users.")
+        return
 
     # Check if there are any NULL user_id records that need migration
     tables_to_check = [

@@ -64,7 +64,7 @@ def insert_input_prompt(
 
 
 def update_input_prompt(
-    user: User | None,
+    user: User,
     input_prompt_id: int,
     prompt: str,
     content: str,
@@ -102,17 +102,20 @@ def validate_user_prompt_authorization(
     """
     Check if the user is authorized to modify the given input prompt.
     Returns True only if the user owns the prompt.
-    Returns False for public prompts (only admins can modify those),
-    unless auth is disabled (then anyone can manage public prompts).
+    Public prompts cannot be modified via the user API (only admins via admin endpoints).
     """
     prompt = InputPromptSnapshot.from_model(input_prompt=input_prompt)
 
-    # Public prompts cannot be modified via the user API (unless auth is disabled)
+    # Public prompts cannot be modified via the user API
     if prompt.is_public or prompt.user_id is None:
-        return AUTH_TYPE == AuthType.DISABLED
+        return False
 
-    # User must be logged in
+    # User must be provided
     if user is None:
+        return False
+
+    # Anonymous users cannot modify user-owned prompts
+    if user.is_anonymous:
         return False
 
     # User must own the prompt
@@ -136,7 +139,7 @@ def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> Non
 
 
 def remove_input_prompt(
-    user: User | None,
+    user: User,
     input_prompt_id: int,
     db_session: Session,
     delete_public: bool = False,

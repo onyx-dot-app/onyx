@@ -12,6 +12,7 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
@@ -28,9 +29,9 @@ from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_glob
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
-def _check_token_rate_limits(user: User | None) -> None:
-    if user is None:
-        # Unauthenticated users are only rate limited by global settings
+def _check_token_rate_limits(user: User) -> None:
+    # Anonymous users are only rate limited by global settings
+    if str(user.id) == ANONYMOUS_USER_UUID:
         _user_is_rate_limited_by_global()
 
     elif is_api_key_email_address(user.email):

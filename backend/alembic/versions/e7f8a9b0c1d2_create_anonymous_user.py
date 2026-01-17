@@ -1,0 +1,138 @@
+"""create_anonymous_user
+
+This migration creates a permanent anonymous user in the database.
+When anonymous access is enabled, unauthenticated requests will use this user
+instead of returning user_id=NULL.
+
+Revision ID: e7f8a9b0c1d2
+Revises: f7ca3e2f45d9
+Create Date: 2026-01-15 14:00:00.000000
+
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision = "e7f8a9b0c1d2"
+down_revision = "f7ca3e2f45d9"
+branch_labels = None
+depends_on = None
+
+# Must match constants in onyx/configs/constants.py file
+ANONYMOUS_USER_UUID = "00000000-0000-0000-0000-000000000002"
+ANONYMOUS_USER_EMAIL = "anonymous@onyx.app"
+
+
+def upgrade() -> None:
+    """
+    Create the anonymous user for anonymous access feature.
+    Also migrates any remaining user_id=NULL records to the anonymous user.
+    """
+    connection = op.get_bind()
+
+    # Check if anonymous user already exists
+    result = connection.execute(
+        sa.text('SELECT id FROM "user" WHERE id = :user_id'),
+        {"user_id": ANONYMOUS_USER_UUID},
+    )
+    if result.fetchone():
+        print("Anonymous user already exists. Skipping creation.")
+    else:
+        # Create the anonymous user
+        connection.execute(
+            sa.text(
+                """
+                INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
+                VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
+                """
+            ),
+            {
+                "id": ANONYMOUS_USER_UUID,
+                "email": ANONYMOUS_USER_EMAIL,
+                "hashed_password": "",  # Empty password - user cannot log in directly
+                "is_active": True,  # Active so it can be used for anonymous access
+                "is_superuser": False,
+                "is_verified": True,  # Verified since no email verification needed
+                "role": "BASIC",  # Anonymous users have basic role
+            },
+        )
+        print(f"Created anonymous user: {ANONYMOUS_USER_EMAIL}")
+
+    # Migrate any remaining user_id=NULL records to anonymous user
+    tables_to_check = [
+        "chat_session",
+        "credential",
+        "document_set",
+        "persona",
+        "tool",
+        "notification",
+        "inputprompt",
+        "agent__search_metrics",
+    ]
+
+    for table in tables_to_check:
+        try:
+            # Exclude public credential (id=0) which must remain user_id=NULL
+            # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
+            if table == "credential":
+                condition = "user_id IS NULL AND id != 0"
+            elif table == "tool":
+                condition = "user_id IS NULL AND in_code_tool_id IS NULL"
+            else:
+                condition = "user_id IS NULL"
+            result = connection.execute(
+                sa.text(
+                    f"""
+                    UPDATE "{table}"
+                    SET user_id = :user_id
+                    WHERE {condition}
+                    """
+                ),
+                {"user_id": ANONYMOUS_USER_UUID},
+            )
+            if result.rowcount > 0:
+                print(f"Updated {result.rowcount} rows in {table} to anonymous user")
+        except Exception as e:
+            print(f"Skipping {table}: {e}")
+
+
+def downgrade() -> None:
+    """
+    Set anonymous user's records back to NULL and delete the anonymous user.
+    """
+    connection = op.get_bind()
+
+    tables_to_update = [
+        "chat_session",
+        "credential",
+        "document_set",
+        "persona",
+        "tool",
+        "notification",
+        "inputprompt",
+        "agent__search_metrics",
+    ]
+
+    # Set records back to NULL
+    for table in tables_to_update:
+        try:
+            connection.execute(
+                sa.text(
+                    f"""
+                    UPDATE "{table}"
+                    SET user_id = NULL
+                    WHERE user_id = :user_id
+                    """
+                ),
+                {"user_id": ANONYMOUS_USER_UUID},
+            )
+        except Exception:
+            pass
+
+    # Delete the anonymous user
+    connection.execute(
+        sa.text('DELETE FROM "user" WHERE id = :user_id'),
+        {"user_id": ANONYMOUS_USER_UUID},
+    )

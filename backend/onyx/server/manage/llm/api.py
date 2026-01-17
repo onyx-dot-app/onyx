@@ -123,7 +123,7 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
 
 @admin_router.get("/built-in/options")
 def fetch_llm_options(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> list[WellKnownLLMProviderDescriptor]:
     return fetch_available_well_known_llms()
 
@@ -131,7 +131,7 @@ def fetch_llm_options(
 @admin_router.get("/built-in/options/{provider_name}")
 def fetch_llm_provider_options(
     provider_name: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> WellKnownLLMProviderDescriptor:
     well_known_llms = fetch_available_well_known_llms()
     for well_known_llm in well_known_llms:
@@ -143,7 +143,7 @@ def fetch_llm_provider_options(
 @admin_router.post("/test")
 def test_llm_configuration(
     test_llm_request: TestLLMRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test LLM configuration settings"""
@@ -185,7 +185,7 @@ def test_llm_configuration(
 
 @admin_router.post("/test/default")
 def test_default_provider(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> None:
     try:
         llm = get_default_llm()
@@ -201,7 +201,7 @@ def test_default_provider(
 @admin_router.get("/provider")
 def list_llm_providers(
     include_image_gen: bool = Query(False),
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
@@ -236,7 +236,7 @@ def put_llm_provider(
         False,
         description="True if creating a new one, False if updating an existing provider",
     ),
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
@@ -334,7 +334,7 @@ def put_llm_provider(
 @admin_router.delete("/provider/{provider_id}")
 def delete_llm_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -346,7 +346,7 @@ def delete_llm_provider(
 @admin_router.post("/provider/{provider_id}/default")
 def set_provider_as_default(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_provider(provider_id=provider_id, db_session=db_session)
@@ -358,7 +358,7 @@ def set_provider_as_default_vision(
     vision_model: str | None = Query(
         None, description="The default vision model to use"
     ),
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_vision_provider(
@@ -368,7 +368,7 @@ def set_provider_as_default_vision(
 
 @admin_router.get("/auto-config")
 def get_auto_config(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> dict:
     """Get the current Auto mode configuration from GitHub.
 
@@ -386,7 +386,7 @@ def get_auto_config(
 
 @admin_router.get("/vision-providers")
 def get_vision_capable_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
@@ -432,7 +432,7 @@ def get_vision_capable_providers(
 
 @basic_router.get("/provider")
 def list_llm_provider_basics(
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
     """Get LLM providers accessible to the current user.
@@ -476,7 +476,7 @@ def list_llm_provider_basics(
 
 def get_valid_model_names_for_persona(
     persona_id: int,
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> list[str]:
     """Get all valid model names that a user can access for this persona.
@@ -510,7 +510,7 @@ def get_valid_model_names_for_persona(
 @basic_router.get("/persona/{persona_id}/providers")
 def list_llm_providers_for_persona(
     persona_id: int,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
     """Get LLM providers for a specific persona.
@@ -562,7 +562,7 @@ def list_llm_providers_for_persona(
 
 @admin_router.get("/provider-contextual-cost")
 def get_provider_contextual_cost(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMCost]:
     """
@@ -607,7 +607,7 @@ def get_provider_contextual_cost(
 @admin_router.post("/bedrock/available-models")
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[BedrockFinalModelResponse]:
     """Fetch available Bedrock models for a specific region and credentials.
@@ -787,7 +787,7 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
 @admin_router.post("/ollama/available-models")
 def get_ollama_available_models(
     request: OllamaModelsRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[OllamaFinalModelResponse]:
     """Fetch the list of available models from an Ollama server."""
@@ -913,7 +913,7 @@ def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
 @admin_router.post("/openrouter/available-models")
 def get_openrouter_available_models(
     request: OpenRouterModelsRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[OpenRouterFinalModelResponse]:
     """Fetch available models from OpenRouter `/models` endpoint.

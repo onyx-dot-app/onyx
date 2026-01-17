@@ -322,7 +322,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         tool_id: int,
         emitter: Emitter,
         document_index: DocumentIndex,
-        user: User | None,
+        user: User,
         content_provider: WebContentProvider | None = None,
     ) -> None:
         """Initialize the OpenURLTool.

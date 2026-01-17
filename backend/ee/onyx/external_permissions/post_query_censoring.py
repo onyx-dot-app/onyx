@@ -1,6 +1,7 @@
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.external_permissions.sync_params import get_all_censoring_enabled_sources
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.pipeline import InferenceChunk
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -34,15 +35,15 @@ def _get_all_censoring_enabled_sources() -> set[DocumentSource]:
 # NOTE: This is only called if ee is enabled.
 def _post_query_chunk_censoring(
     chunks: list[InferenceChunk],
-    user: User | None,
+    user: User,
 ) -> list[InferenceChunk]:
     """
     This function checks all chunks to see if they need to be sent to a censoring
     function. If they do, it sends them to the censoring function and returns the
     censored chunks. If they don't, it returns the original chunks.
     """
-    if user is None:
-        # if user is None, permissions are not enforced
+    # Anonymous users skip permission enforcement
+    if str(user.id) == ANONYMOUS_USER_UUID:
         return chunks
 
     final_chunk_dict: dict[str, InferenceChunk] = {}

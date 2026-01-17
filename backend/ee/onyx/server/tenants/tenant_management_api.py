@@ -26,7 +26,7 @@ FORBIDDEN_COMMON_EMAIL_SUBSTRINGS = [
 
 @router.get("/existing-team-by-domain")
 def get_existing_tenant_by_domain(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> TenantByDomainResponse | None:
     if not user:
         return None

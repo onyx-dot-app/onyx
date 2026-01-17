@@ -48,7 +48,7 @@ admin_router = APIRouter(prefix="/admin/kg")
 
 
 @admin_router.get("/exposed")
-def get_kg_exposed(_: User | None = Depends(current_admin_user)) -> bool:
+def get_kg_exposed(_: User = Depends(current_admin_user)) -> bool:
     kg_config_settings = get_kg_config_settings()
     return kg_config_settings.KG_EXPOSED
 
@@ -58,7 +58,7 @@ def get_kg_exposed(_: User | None = Depends(current_admin_user)) -> bool:
 
 @admin_router.put("/reset")
 def reset_kg(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> SourceAndEntityTypeView:
     reset_full_kg_index__commit(db_session)
@@ -70,7 +70,7 @@ def reset_kg(
 
 
 @admin_router.get("/config")
-def get_kg_config(_: User | None = Depends(current_admin_user)) -> KGConfig:
+def get_kg_config(_: User = Depends(current_admin_user)) -> KGConfig:
     config = get_kg_config_settings()
     return KGConfigAPIModel.from_kg_config_settings(config)
 
@@ -78,7 +78,7 @@ def get_kg_config(_: User | None = Depends(current_admin_user)) -> KGConfig:
 @admin_router.put("/config")
 def enable_or_disable_kg(
     req: EnableKGConfigRequest | DisableKGConfigRequest,
-    user: User | None = Depends(current_admin_user),
+    user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     if isinstance(req, DisableKGConfigRequest):
@@ -171,7 +171,7 @@ def enable_or_disable_kg(
 
 @admin_router.get("/entity-types")
 def get_kg_entity_types(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> SourceAndEntityTypeView:
     # when using for the first time, populate with default entity types
@@ -202,7 +202,7 @@ def get_kg_entity_types(
 @admin_router.put("/entity-types")
 def update_kg_entity_types(
     updates: list[EntityType],
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_entity_types_and_related_connectors__commit(

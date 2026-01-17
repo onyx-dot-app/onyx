@@ -226,7 +226,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         db_session: Session,
         emitter: Emitter,
         # Used for ACLs and federated search
-        user: User | None,
+        user: User,
         # Used for filter settings
         persona: Persona,
         llm: LLM,

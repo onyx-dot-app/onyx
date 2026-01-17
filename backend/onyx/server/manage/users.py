@@ -19,17 +19,16 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.anonymous_user import fetch_anonymous_user_info
 from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
-from onyx.auth.noauth_user import fetch_no_auth_user
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
-from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -38,6 +37,7 @@ from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
@@ -166,7 +166,7 @@ def list_accepted_users(
     page_size: int = Query(10, ge=1, le=1000),
     roles: list[UserRole] = Query(default=[]),
     is_active: bool | None = Query(default=None),
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
     filtered_accepted_users = get_page_of_filtered_users(
@@ -202,7 +202,7 @@ def list_accepted_users(
 
 @router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)
 def list_invited_users(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[InvitedUserSnapshot]:
     invited_emails = get_invited_users()
@@ -223,7 +223,7 @@ def list_all_users(
     slack_users_page: int | None = None,
     invited_page: int | None = None,
     include_api_keys: bool = False,
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
     users = [
@@ -320,7 +320,7 @@ def list_all_users(
 
 @router.get("/manage/users/download")
 def download_users_csv(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     """Download all users as a CSV file."""
@@ -358,7 +358,7 @@ def download_users_csv(
 @router.put("/manage/admin/users", tags=PUBLIC_API_TAGS)
 def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
-    current_user: User | None = Depends(current_admin_user),
+    current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> int:
     """emails are string validated. If any email fails validation, no emails are
@@ -450,7 +450,7 @@ def bulk_invite_users(
 @router.patch("/manage/admin/remove-invited-user", tags=PUBLIC_API_TAGS)
 def remove_invited_user(
     user_email: UserByEmail,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
@@ -478,7 +478,7 @@ def remove_invited_user(
 @router.patch("/manage/admin/deactivate-user", tags=PUBLIC_API_TAGS)
 def deactivate_user_api(
     user_email: UserByEmail,
-    current_user: User | None = Depends(current_admin_user),
+    current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     if current_user is None:
@@ -510,7 +510,7 @@ def deactivate_user_api(
 @router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
 async def delete_user(
     user_email: UserByEmail,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_delete = get_user_by_email(
@@ -552,7 +552,7 @@ async def delete_user(
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
 def activate_user_api(
     user_email: UserByEmail,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_activate = get_user_by_email(
@@ -582,7 +582,7 @@ def activate_user_api(
 
 @router.get("/manage/admin/valid-domains")
 def get_valid_domains(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> list[str]:
     return VALID_EMAIL_DOMAINS
 
@@ -592,7 +592,7 @@ def get_valid_domains(
 
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     users = get_all_users(db_session)
@@ -607,7 +607,7 @@ async def get_user_role(user: User = Depends(current_user)) -> UserRoleResponse:
 
 
 def get_current_auth_token_creation_redis(
-    user: User | None, request: Request
+    user: User, request: Request
 ) -> datetime | None:
     """Calculate the token creation time from Redis TTL information.
 
@@ -615,7 +615,8 @@ def get_current_auth_token_creation_redis(
     checks its TTL in Redis, and calculates when the token was created.
     Despite the function name, it returns the token creation time, not the expiration time.
     """
-    if user is None:
+    # Anonymous users don't have auth tokens
+    if str(user.id) == ANONYMOUS_USER_UUID:
         return None
     try:
         # Get the token from the request
@@ -648,10 +649,9 @@ def get_current_auth_token_creation_redis(
         return None
 
 
-def get_current_token_creation(
-    user: User | None, db_session: Session
-) -> datetime | None:
-    if user is None:
+def get_current_token_creation(user: User, db_session: Session) -> datetime | None:
+    # Anonymous users don't have auth tokens
+    if str(user.id) == ANONYMOUS_USER_UUID:
         return None
 
     access_token = get_latest_access_token_for_user(user.id, db_session)
@@ -665,19 +665,13 @@ def get_current_token_creation(
 @router.get("/me", tags=PUBLIC_API_TAGS)
 def verify_user_logged_in(
     request: Request,
-    user: User | None = Depends(optional_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
-    tenant_id = get_current_tenant_id()
-
-    # NOTE: this does not use `current_user` / `current_admin_user` because we don't want
-    # to enforce user verification here - the frontend always wants to get the info about
-    # the current user regardless of if they are currently verified
-    if user is None:
-        if anonymous_user_enabled(tenant_id=tenant_id):
-            store = get_kv_store()
-            return fetch_no_auth_user(store, anonymous_user_enabled=True)
-        raise BasicAuthenticationError(detail="User Not Authenticated")
+    # If anonymous user, return the fake UserInfo (maintains backward compatibility)
+    if str(user.id) == ANONYMOUS_USER_UUID:
+        store = get_kv_store()
+        return fetch_anonymous_user_info(store, anonymous_user_enabled=True)
 
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
         raise BasicAuthenticationError(
@@ -927,10 +921,10 @@ def update_assistant_preferences_for_user_api(
 
 @router.get("/user/files/recent")
 def get_recent_files(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     user_files = (
         db_session.query(UserFile)
         .filter(UserFile.user_id == user_id)

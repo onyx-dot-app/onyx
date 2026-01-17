@@ -99,6 +99,9 @@ from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
 from onyx.context.search.enums import RecencyBiasSetting
 
+# TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL
+# and update Mapped[User | None] relationships to Mapped[User] where needed.
+
 
 logger = setup_logger()
 

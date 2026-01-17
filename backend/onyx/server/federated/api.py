@@ -64,7 +64,7 @@ def _get_federated_connector_instance(
 @router.post("")
 def create_federated_connector(
     federated_connector_data: FederatedConnectorRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> FederatedConnectorResponse:
     """Create a new federated connector"""

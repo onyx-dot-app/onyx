@@ -92,6 +92,8 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
@@ -1427,11 +1429,25 @@ async def optional_user(
     return user
 
 
+def get_anonymous_user() -> User:
+    """Create anonymous user object."""
+    user = User(
+        id=uuid.UUID(ANONYMOUS_USER_UUID),
+        email=ANONYMOUS_USER_EMAIL,
+        hashed_password="",
+        is_active=True,
+        is_verified=True,
+        is_superuser=False,
+        role=UserRole.BASIC,
+    )
+    return user
+
+
 async def double_check_user(
     user: User | None,
     include_expired: bool = False,
     allow_anonymous_access: bool = False,
-) -> User | None:
+) -> User:
     if user is not None:
         # If user attempted to authenticate, verify them, do not default
         # to anonymous access if it fails.
@@ -1452,7 +1468,7 @@ async def double_check_user(
         return user
 
     if allow_anonymous_access:
-        return None
+        return get_anonymous_user()
 
     raise BasicAuthenticationError(
         detail="Access denied. User is not authenticated.",
@@ -1461,19 +1477,19 @@ async def double_check_user(
 
 async def current_user_with_expired_token(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     return await double_check_user(user, include_expired=True)
 
 
 async def current_limited_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     return await double_check_user(user)
 
 
 async def current_chat_accessible_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     tenant_id = get_current_tenant_id()
 
     return await double_check_user(
@@ -1483,10 +1499,8 @@ async def current_chat_accessible_user(
 
 async def current_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     user = await double_check_user(user)
-    if not user:
-        return None
 
     if user.role == UserRole.LIMITED:
         raise BasicAuthenticationError(
@@ -1496,11 +1510,11 @@ async def current_user(
 
 
 async def current_curator_or_admin_user(
-    user: User | None = Depends(current_user),
-) -> User | None:
-    if not user or not hasattr(user, "role"):
+    user: User = Depends(current_user),
+) -> User:
+    if not hasattr(user, "role"):
         raise BasicAuthenticationError(
-            detail="Access denied. User is not authenticated or lacks role information.",
+            detail="Access denied. User lacks role information.",
         )
 
     allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
@@ -1512,8 +1526,8 @@ async def current_curator_or_admin_user(
     return user
 
 
-async def current_admin_user(user: User | None = Depends(current_user)) -> User | None:
-    if not user or not hasattr(user, "role") or user.role != UserRole.ADMIN:
+async def current_admin_user(user: User = Depends(current_user)) -> User:
+    if not hasattr(user, "role") or user.role != UserRole.ADMIN:
         raise BasicAuthenticationError(
             detail="Access denied. User must be an admin to perform this action.",
         )
