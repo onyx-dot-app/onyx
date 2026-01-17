@@ -5,6 +5,7 @@ from datetime import timezone
 
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
@@ -49,9 +50,9 @@ def create_discord_bot_config(
 
 def delete_discord_bot_config(db_session: Session) -> bool:
     """Delete the Discord bot config. Returns True if deleted."""
-    result = db_session.execute(delete(DiscordBotConfig))
+    result: CursorResult = db_session.execute(delete(DiscordBotConfig))
     db_session.flush()
-    return result.rowcount > 0  # type: ignore[attr-defined]
+    return result.rowcount > 0
 
 
 # === DiscordGuildConfig ===
@@ -143,7 +144,7 @@ def delete_guild_config(
     internal_id: int,
 ) -> bool:
     """Delete guild config (cascades to channel configs). Returns True if deleted."""
-    result = db_session.execute(
+    result: CursorResult = db_session.execute(
         delete(DiscordGuildConfig).where(DiscordGuildConfig.id == internal_id)
     )
     db_session.flush()
@@ -222,7 +223,7 @@ def delete_discord_channel_config(
     channel_config_id: int,
 ) -> bool:
     """Delete a channel config. Returns True if deleted."""
-    result = db_session.execute(
+    result: CursorResult = db_session.execute(
         delete(DiscordChannelConfig).where(
             DiscordChannelConfig.guild_config_id == guild_config_id,
             DiscordChannelConfig.id == channel_config_id,
