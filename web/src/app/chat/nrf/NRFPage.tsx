@@ -328,6 +328,7 @@ export default function NRFPage({
             rightIcon={SvgExternalLink}
             onClick={handleOpenInOnyx}
             className="nrf-header-button"
+            tabIndex={-1}
           >
             Open in Onyx
           </Button>
@@ -337,6 +338,7 @@ export default function NRFPage({
             tertiary
             tooltip="Open settings"
             className="nrf-header-button"
+            tabIndex={-1}
           />
         </div>
       )}
@@ -408,6 +410,7 @@ export default function NRFPage({
                         !llmManager.isLoadingProviders &&
                         !llmManager.hasAnyProvider
                       }
+                      tabIndex={!isSidePanel ? 1 : undefined}
                     />
                   </div>
                 </div>
@@ -456,6 +459,7 @@ export default function NRFPage({
                   disabled={
                     !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                   }
+                  tabIndex={!isSidePanel ? 1 : undefined}
                 />
               </div>
             )}
