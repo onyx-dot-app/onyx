@@ -51,13 +51,18 @@ def _normalize_and_match(content: str, snippet: str) -> SnippetMatchResult:
     if not normalized_content or not normalized_snippet:
         return NegativeSnippetMatchResult
 
-    print("")
-    print("normalised_content")
-    print(normalized_content)
-
     pos = normalized_content.find(normalized_snippet)
     if pos != -1:
         original_start = content_map[pos]
+
+        # Account for leading characters stripped from snippet during normalization
+        # (e.g., leading punctuation like "[![]![]]" that was removed)
+        if snippet_map:
+            first_snippet_orig_pos = snippet_map[0]
+            if first_snippet_orig_pos > 0:
+                # There were leading characters stripped from snippet
+                # Extend start position backwards to include them from content
+                original_start = max(original_start - first_snippet_orig_pos, 0)
 
         # Determine end position, including any trailing characters that were
         # normalized away (e.g., punctuation)
@@ -158,6 +163,7 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
 
     html_entities = {
         "&nbsp;": " ",
+        "&#160;": " ",  # numeric entity for non-breaking space
         "&amp;": "&",
         "&lt;": "<",
         "&gt;": ">",
@@ -170,6 +176,7 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
         "&hellip;": "...",
         "&#xB0;": "°",
         "&#xBA;": "°",
+        "&zwj;": "",  # zero-width joiner - strip it
     }
     for entity, replacement in html_entities.items():
         new_text = []

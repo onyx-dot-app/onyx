@@ -293,8 +293,105 @@
 					],
 					"expected_result": {
 						"snippet_located": true,
-						"expected_start_idx": 141,
-						"expected_end_idx": 193
+						"expected_start_idx": 140,
+						"expected_end_idx": 362
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "bad_ampersand",
+					"content": [
+						"duals focus only on the price returns of the index, dividends play an important role in overall investment returns.",
+						"# S&amp;P 500 Total Returns by Year",
+						"|Year|Total Return|",
+						"2026|1.23%|",
+						"2025|17.88%|",
+						"2024|25.02%|",
+						"2023|26.29%|",
+						"2022|-18.11%",
+						"2021|28.71%|",
+						"2020|18.40%|",
+						"2019|31.49%|",
+						"2018|-4.38%|",
+						"2017|21.83%|",
+						"2016|11.96%|",
+						"2015|1.38%|",
+						"2014|13.69%|",
+						"2013|32.39%|",
+						"2012|16.00%|",
+						"2011|2.11%|",
+						"2010|15.06%|",
+						"2009|26.46%|",
+						"2008|-37.00%",
+						"2007|5.49%|",
+						"2006|15.79%|",
+						"2005|4.91%|",
+						"2004|10.88%|",
+						"2003|28.68%|",
+						"2002|-22.10%",
+						"2001|-11.89%",
+						"2000|-9.10%|",
+						"1999|21.04%|",
+						"1998|28.58%|",
+						"1997|33.36%|",
+						"1996|22.96%|",
+						"1995|37.58%|",
+						"1994|1.32%|",
+						"1993|10.08%|",
+						"1992|7.62%|",
+						"1991|30."
+					],
+					"snippet": [
+						"# S&P 500 Total Returns by Year",
+						"|Year|Total Return|",
+						"2026|1.23%|",
+						"2025|17.88%|",
+						"2024|25.02%|",
+						"2023|26.29%|",
+						"2022|-18.11%|",
+						"2021|28.71%|"
+					],
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 116,
+						"expected_end_idx": 247
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "more_random_code_entities",
+					"content": [
+						"* [See more FAQs] ",
+						"* [Find routing and account numbers] ",
+						"## Popular FAQs",
+						"* [How do I find my routing and account numbers?] ",
+						"* [Is there a fee for Zelle®?] ",
+						"* [How do I report suspected fraud?] ",
+						"* [See more FAQs] ",
+						"# Current mortgage and refinance rates",
+						"&zwj;",
+						"## Mortgage interest rates today",
+						"&#160;",
+						"![] ",
+						"## Get a customized rate and payment",
+						"See how much you could qualify to borrow and what your estimated rate and payment would be. It takes just a few minutes and won’t affect your credit score.",
+						"[Estimate your rate] ",
+						"&zwj;",
+						"## Common question"
+					],
+					"snippet": [
+						"* [See more FAQs] ",
+						"# Current mortgage and refinance rates",
+						"‍",
+						"## Mortgage interest rates today",
+						" ",
+						"![] ",
+						"## Get a customized rate and payment"
+					],
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 194,
+						"expected_end_idx": 338
 					},
 					"allow_buffer": false
 				}
