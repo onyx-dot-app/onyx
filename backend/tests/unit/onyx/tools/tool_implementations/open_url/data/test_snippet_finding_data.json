@@ -1,0 +1,421 @@
+{
+	"categories": [
+		{
+			"category": "find_snippet_simple",
+			"tests": [
+				{
+					"name": "exact_match",
+					"content": "The quick brown fox jumps over the lazy dog.",
+					"snippet": "The quick brown fox jumps over the lazy dog.",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 0,
+						"expected_end_idx": 43
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "match_at_start",
+					"content": "The weather in Sydney is sunny today.",
+					"snippet": "weather in Sydney",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 4,
+						"expected_end_idx": 20
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "match_at_end",
+					"content": "There are multiple things to consider about AI models including how they are trained. That can impact the fine-tuning results.",
+					"snippet": "impact the fine-tuning results.",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 95,
+						"expected_end_idx": 125
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "match_in_middle",
+					"content": "the total fertility rate was highest in countries in Africa and central Asia, where most countries had a total fertility rate between 3 to 7 births per woman, and lowest in countries in East Asia, where most countries had a total",
+					"snippet": "total fertility rate was highest in countries in Africa and central Asia",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 4,
+						"expected_end_idx": 75
+					},
+					"allow_buffer": false
+				},
+				{
+					"_comment": "We expect the first match to be returned",
+					"name": "multiple_matches_in_content",
+					"content": "What's the go? Hey there mate. How are you doing? Hey there mate",
+					"snippet": "Hey there mate",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 15,
+						"expected_end_idx": 28
+					},
+					"allow_buffer": false
+				}
+			]
+		},
+		{
+			"category": "find_snippet_normalized",
+			"tests": [
+				{
+					"name": "normalized_exact_match",
+					"content": "The quick  brown  fox, jumps  over the lazy   dog!",
+					"snippet": "The quick brown fox jumps over the lazy dog",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 0,
+						"expected_end_idx": 49
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "normalized_match_with_html_entities",
+					"content": "You&apos;re our first priority.\nEvery time.\nWe believe everyone should be able to make financial decisions with\nconfidence.",
+					"snippet": "everyone should be able to make financial decisions",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 55,
+						"expected_end_idx": 105
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "multiple_html_entities",
+					"content": "Guess&apos;what&hellip;&#39;is up?",
+					"snippet": "Guess'what...'is up?",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 0,
+						"expected_end_idx": 33
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "html_entity_in_snippet",
+					"content":"Guess'what...'is up?",
+					"snippet": "Guess&apos;what&hellip;&#39;is up?",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 0,
+						"expected_end_idx": 19
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "multiple_whitespace",
+					"content": "Hello  there",
+					"snippet": "Hello there",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 0,
+						"expected_end_idx": 11
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "lots_of_punctuation",
+					"content": "Like OMG!!! this, is, crazy!!! right? he said 'i dont even know' but  I do know that...",
+					"snippet": "this is crazy",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 12,
+						"expected_end_idx": 26
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "lots_of_punctuation_again",
+					"content": "Like OMG!!! this, is, crazy!!! right? he said 'i don't even know' but  I do know that...",
+					"snippet": "i don't even know",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 47,
+						"expected_end_idx": 63
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "case_insensitive_match",
+					"content": "HelLo There",
+					"snippet": "hello",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 0,
+						"expected_end_idx": 4
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "curly_apostrophe_normalization",
+					"content": "It’s a test",
+					"snippet": "it's a test",
+					"expected_result": {
+					  "snippet_located": true,
+					  "expected_start_idx": 0,
+					  "expected_end_idx": 10
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "unicode_dash_normalization",
+					"content": "pages 3–5 are included",
+					"snippet": "3-5",
+					"expected_result": {
+					  "snippet_located": true,
+					  "expected_start_idx": 6,
+					  "expected_end_idx": 8
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "nbsp_and_tab_whitespace",
+					"content": "A\u00A0B\tC",
+					"snippet": "A B C",
+					"expected_result": {
+					  "snippet_located": true,
+					  "expected_start_idx": 0,
+					  "expected_end_idx": 4
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "zero_width_space_inside_word",
+					"content": "he\u200Bllo world",
+					"snippet": "hello",
+					"expected_result": {
+					  "snippet_located": true,
+					  "expected_start_idx": 0,
+					  "expected_end_idx": 5
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "unicode_combining_accent_normalization",
+					"content": "Cafe\u0301 is open",
+					"snippet": "Café",
+					"expected_result": {
+					  "snippet_located": true,
+					  "expected_start_idx": 0,
+					  "expected_end_idx": 4
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "amp_and_nbsp_entities",
+					"content": "Tom &amp; Jerry&nbsp;Show",
+					"snippet": "Tom & Jerry Show",
+					"expected_result": {
+					  "snippet_located": true,
+					  "expected_start_idx": 0,
+					  "expected_end_idx": 24
+					},
+					"allow_buffer": false
+				},
+				{
+					"_comment": "We expect to pick the first normalised occurrence",
+					"name": "multiple_occurrences_pick_first",
+					"content": "foo  bar... foo bar",
+					"snippet": "foo bar",
+					"expected_result": {
+					  "snippet_located": true,
+					  "expected_start_idx": 0,
+					  "expected_end_idx": 7
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "match_on_unicode_character",
+					"content": "Sunrise\nSunrise\nSunset\nSunset\n## Hourly Weather\n[Next 48 Hours] \n## Don&#x27;t Miss\n[\n![] \n## A Rare Southern Snowstorm: What You Need To Know\n] [\n![] \n## Multiple Systems To Bring Snow To Great Lakes, Northeast",
+					"snippet": "Sunset\nSunset\n## Hourly Weather\n[Next 48 Hours] \n## Don't Miss\n[",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 16,
+						"expected_end_idx": 84
+					},
+					"allow_buffer": false
+				},
+				{
+					"name": "complex_normalisation",
+					"content": [
+						"* [Press Releases] ",
+						"* [Careers] ",
+						"* [Solutions] ",
+						"* * [WeatherBug] ",
+						"* [Consumer] ",
+						"* [Corporate] ",
+						"* [WeatherBug] ",
+						"* [Consumer] ",
+						"* [Corporate] ",
+						"[![]![]] [![Responsive menu icon]] ",
+						"* [Now] ",
+						"* [Hourly] ",
+						"* [10 Day] ",
+						"* * # Today&#x27;s Weather - Sydney, AUS",
+						"December 8, 2025",
+						"1:01 AM",
+						"SYDNEY INTL AIRP",
+						"68&#xB0;",
+						"Feels Like68&#xB0;",
+						"Hi--Lo65&#xB0;F",
+						"![30% Chance of Light Rain] ",
+						"30% Chance of Light Rain",
+						"* [",
+						"Live Radar",
+						"] ",
+						"* * Weather Details",
+						"* Windchill68&#xBA;FDaily Rain0&quot;",
+						"* Dewpoint54&#xBA;FMonthly Rain--",
+						"* Humidity60%Avg. WindENE 9mph",
+						"* Pressure29.97&quot;Wind Gust9mph",
+						"* Sunrise5:37 AMMoonWaning Gibbous",
+						"* "
+					],
+					"snippet": [
+						"[![]![]] [![Responsive menu icon]] ",
+						"* [Now] ",
+						"* [Hourly] ",
+						"* [10 Day] ",
+						"* * # Today's Weather - Sydney, AUS",
+						"December 8, 2025",
+						"1:01 AM",
+						"SYDNEY INTL AIRP",
+						"68°",
+						"Feels Like68°",
+						"Hi--Lo65°F",
+						"![30% Chance of Light Rain]"
+					],
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 141,
+						"expected_end_idx": 193
+					},
+					"allow_buffer": false
+				}
+			]
+		},
+		{
+			"category": "token_matching",
+			"tests": [
+				{
+					"name": "match_on_different_numbers",
+					"content": [
+						"°C",
+						"",
+						"28Sun.",
+						"",
+						"21°13 °C",
+						"",
+						"29Mon.",
+						"",
+						"20°12 °C",
+						"",
+						"30Tue.",
+						"",
+						"20°13 °C",
+						"",
+						"### SeptemberWeather Overview",
+						"",
+						"| | |",
+						"| --- | --- |",
+						"| Sunny | 13 |",
+						"| Cloudy | 3 |",
+						"| Rainy | 13 |",
+						"| Snowy | 0 |",
+						"",
+						"#### No. of days:",
+						"",
+						"Sunny",
+						"",
+						"13",
+						"",
+						"Cloudy",
+						"",
+						"3",
+						"",
+						"Rainy",
+						"",
+						"13",
+						"",
+						"Snowy",
+						"",
+						"0",
+						"",
+						"The monthly weather averages in Sydney consist of 13 sunny days, 3 cloudy days, 13 rainy days, and 0 snowy days.",
+						"",
+						"## Sydney's Locations Weather Conditions",
+						"",
+						"Locations",
+						"",
+						"Temp",
+						"",
+						"Condition",
+						"",
+						"Humi.",
+						"",
+						"UV",
+						"",
+						"Wind Speed & Direction",
+						"",
+						"[Cook And Phillip Sydney East] ",
+						"",
+						"13 °C",
+						"",
+						"Moderate rain",
+						"",
+						"100%",
+						"",
+						"0",
+						"",
+						"27.7 kmph /  NW",
+						"",
+						"[Day Street] ",
+						"",
+						"13 °C",
+						"",
+						"Moderate rain",
+						"",
+						"100%",
+						"",
+						"0",
+						"",
+						"22.3 kmph /  NW",
+						"",
+						"[Earlwood Sydney East"
+					],
+					"snippet": [
+						"The monthly weather averages in Sydney consist of 9 sunny days, 1 cloudy days, 20 rainy days, and 0 snowy days.",
+						"",
+						"## Sydney - Weather Conditions australia",
+						"",
+						"Locations",
+						"",
+						"Temp",
+						"",
+						"Condition",
+						"",
+						"Humi.",
+						"",
+						"UV",
+						"",
+						"Wind Speed & Direction",
+						""
+					],
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 235,
+						"expected_end_idx": 448
+					},
+					"allow_buffer": true
+				}
+			]
+
+		}
+	]
+}

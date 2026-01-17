@@ -283,6 +283,17 @@ def _create_project_files_message(
     )
 
 
+def _extract_url_summary_map(documents: list[SearchDoc]) -> dict[str, str]:
+    """
+    Given a list of SearchDocs, this will extract the url -> summary map.
+    """
+    url_summary_map: dict[str, str] = {}
+    for document in documents:
+        if document.source_type == DocumentSource.WEB and document.link:
+            url_summary_map[document.link] = document.blurb
+    return url_summary_map
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -523,6 +534,7 @@ def run_llm_loop(
                 next_citation_num=citation_processor.get_next_citation_number(),
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
+                url_summary_map=_extract_url_summary_map(gathered_documents),
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
