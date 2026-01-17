@@ -29,8 +29,7 @@ def create_discord_bot_config(
 ) -> DiscordBotConfig:
     """Create the Discord bot config. Raises ValueError if already exists.
 
-    The singleton_guard unique constraint ensures only one config per tenant,
-    even under concurrent requests.
+    The check constraint on id='SINGLETON' ensures only one config per tenant.
     """
     existing = get_discord_bot_config(db_session)
     if existing:

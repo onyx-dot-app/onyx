@@ -20,7 +20,12 @@ def upgrade() -> None:
     # DiscordBotConfig (singleton table - one per tenant)
     op.create_table(
         "discord_bot_config",
-        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column(
+            "id",
+            sa.String(),
+            primary_key=True,
+            server_default=sa.text("'SINGLETON'"),
+        ),
         sa.Column("bot_token", sa.LargeBinary(), nullable=False),  # EncryptedString
         sa.Column(
             "created_at",
@@ -28,14 +33,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-        # Singleton guard: always TRUE, unique constraint ensures only one row
-        sa.Column(
-            "singleton_guard",
-            sa.Boolean(),
-            server_default=sa.text("true"),
-            unique=True,
-            nullable=False,
-        ),
+        sa.CheckConstraint("id = 'SINGLETON'", name="ck_discord_bot_config_singleton"),
     )
 
     # DiscordGuildConfig
