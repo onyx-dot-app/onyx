@@ -14,7 +14,6 @@ SUCCESS_EMOJI: str = "✅"  # U+2705 - White Heavy Check Mark
 ERROR_EMOJI: str = "❌"  # U+274C - Cross Mark
 
 # Command prefix
-COMMAND_PREFIX: str = "!"
 REGISTER_COMMAND: str = "register"
 SYNC_CHANNELS_COMMAND: str = "sync-channels"
 

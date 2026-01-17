@@ -48,7 +48,7 @@ class OnyxAPIClient:
             timeout: Request timeout in seconds.
         """
         # Helm chart uses API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS to set the base URL
-        # TODO: Ideally, this override is only used when someone is launching an Onyx serice indepdent from the rest of the stack
+        # TODO: Ideally, this override is only used when someone is launching an Onyx service indepdent from the rest of the stack
         self._base_url = build_api_server_url_for_http_requests(
             respect_env_override_if_set=True
         ).rstrip("/")
@@ -101,7 +101,6 @@ class OnyxAPIClient:
 
         Args:
             message: The user's message to process.
-            tenant_id: The tenant ID for multi-tenant routing.
             api_key: The API key for authentication.
             persona_id: Optional persona ID to use for the response.
 

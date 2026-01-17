@@ -268,7 +268,7 @@ async def process_chat_message(
 
     except APIError as e:
         logger.error(f"API error processing message: {e}")
-        await send_error_response(message, bot_user, str(e))
+        await send_error_response(message, bot_user)
     except Exception as e:
         logger.exception(f"Error processing chat message: {e}")
         await send_error_response(message, bot_user)
@@ -478,17 +478,17 @@ def split_message(content: str) -> list[str]:
 async def send_error_response(
     message: discord.Message,
     bot_user: discord.User,
-    error: str | None = None,
 ) -> None:
-    """Send error response in a thread and update reaction."""
+    """Send error response in a thread and update reaction.
+
+    Note: Error details are logged server-side but not exposed to users.
+    """
     try:
         await message.remove_reaction(THINKING_EMOJI, bot_user)
     except discord.DiscordException:
         pass
 
-    error_msg = "Sorry, I encountered an error processing your message."
-    if error:
-        error_msg += f"\n\n*Error: {error}*"
+    error_msg = "Sorry, I encountered an error processing your message. You may want to contact Onyx for support :sweat_smile:"
 
     try:
         # Respond in thread (create one if needed)
