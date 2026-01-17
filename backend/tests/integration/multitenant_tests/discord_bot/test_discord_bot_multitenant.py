@@ -96,8 +96,8 @@ class TestGuildDataIsolation:
         Creates guilds in current tenant, then queries with get_guild_configs
         to verify only guilds for current tenant are returned.
         """
-        from onyx.db.discord_bot import get_guild_config_by_guild_id
-        from onyx.db.discord_bot import update_guild_config
+        from onyx.db.discord_bot import get_guild_config_by_discord_id
+        from onyx.db.discord_bot import register_guild
 
         # Create two guilds in current tenant
         reg_key1 = generate_discord_registration_key("public")
@@ -108,21 +108,9 @@ class TestGuildDataIsolation:
 
         try:
             # Register guild1 with Discord guild ID
-            update_guild_config(
-                db_session,
-                guild_config_id=guild1.id,
-                guild_id=111111111,
-                guild_name="Guild 1",
-                enabled=True,
-            )
+            register_guild(db_session, guild1, 111111111, "Guild 1")
             # Register guild2 with different Discord guild ID
-            update_guild_config(
-                db_session,
-                guild_config_id=guild2.id,
-                guild_id=222222222,
-                guild_name="Guild 2",
-                enabled=True,
-            )
+            register_guild(db_session, guild2, 222222222, "Guild 2")
             db_session.commit()
 
             # Query all guilds - should return both
@@ -132,7 +120,7 @@ class TestGuildDataIsolation:
             assert 222222222 in guild_ids
 
             # Query for a guild that doesn't exist in this tenant
-            nonexistent = get_guild_config_by_guild_id(db_session, 999999999)
+            nonexistent = get_guild_config_by_discord_id(db_session, 999999999)
             assert nonexistent is None
 
         finally:
@@ -147,7 +135,7 @@ class TestGuildDataIsolation:
         Creates multiple guilds and verifies get_guild_configs returns
         only those guilds created in the current tenant context.
         """
-        from onyx.db.discord_bot import update_guild_config
+        from onyx.db.discord_bot import register_guild
 
         # Create three guilds in current tenant
         guilds = []
@@ -160,13 +148,7 @@ class TestGuildDataIsolation:
         try:
             # Register each guild with unique Discord guild ID
             for i, guild in enumerate(guilds):
-                update_guild_config(
-                    db_session,
-                    guild_config_id=guild.id,
-                    guild_id=100000000 + i,
-                    guild_name=f"Test Guild {i}",
-                    enabled=True,
-                )
+                register_guild(db_session, guild, 100000000 + i, f"Test Guild {i}")
             db_session.commit()
 
             # Get all guilds for this tenant
@@ -203,15 +185,9 @@ class TestChannelDataIsolation:
 
         try:
             # Register the guild with a Discord guild ID
-            from onyx.db.discord_bot import update_guild_config
+            from onyx.db.discord_bot import register_guild
 
-            update_guild_config(
-                db_session,
-                guild_config_id=guild.id,
-                guild_id=tenant1_guild_id,
-                guild_name="Tenant1 Guild",
-                enabled=True,
-            )
+            register_guild(db_session, guild, tenant1_guild_id, "Tenant1 Guild")
             db_session.commit()
 
             # Create a channel config for this guild
