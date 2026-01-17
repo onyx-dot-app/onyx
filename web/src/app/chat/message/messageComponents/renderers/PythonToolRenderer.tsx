@@ -14,6 +14,7 @@ import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
 import { SvgCode } from "@opal/icons";
+import FadeDiv from "@/components/FadeDiv";
 
 // Register Python language for highlighting
 hljs.registerLanguage("python", python);
@@ -91,112 +92,23 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   }, [isComplete, onComplete]);
 
   const status = useMemo(() => {
-    if (isComplete) {
-      if (hasError) {
-        return "Python execution failed";
-      }
-      return "Python execution completed";
-    }
     if (isExecuting) {
       return "Executing Python code...";
     }
-    return null;
+    if (hasError) {
+      return "Python execution failed";
+    }
+    if (isComplete) {
+      return "Python execution completed";
+    }
+    return "Python execution";
   }, [isComplete, isExecuting, hasError]);
 
-  // Render based on renderType
-  if (renderType === RenderType.FULL) {
-    // Loading state - when executing
-    if (isExecuting) {
-      return children({
-        icon: SvgCode,
-        status: "Executing Python code...",
-        content: (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="flex gap-0.5">
-              <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
-              <div
-                className="w-1 h-1 bg-current rounded-full animate-pulse"
-                style={{ animationDelay: "0.1s" }}
-              ></div>
-              <div
-                className="w-1 h-1 bg-current rounded-full animate-pulse"
-                style={{ animationDelay: "0.2s" }}
-              ></div>
-            </div>
-            <span>Running code...</span>
-          </div>
-        ),
-      });
-    }
-
-    // Complete state - show output
-    if (isComplete) {
-      return children({
-        icon: SvgCode,
-        status: hasError
-          ? "Python execution failed"
-          : "Python execution completed",
-        content: (
-          <div className="flex flex-col my-1 space-y-2">
-            {code && (
-              <div className="prose max-w-full">
-                {/* NOTE: note that we need to trim since otherwise there's a huge
-                "space" at the start of the code block */}
-                <CodeBlock className="language-python" codeText={code.trim()}>
-                  <HighlightedPythonCode code={code.trim()} />
-                </CodeBlock>
-              </div>
-            )}
-            {stdout && (
-              <div className="rounded-md bg-gray-100 dark:bg-gray-800 p-3">
-                <div className="text-xs font-semibold mb-1 text-gray-600 dark:text-gray-400">
-                  Output:
-                </div>
-                <pre className="text-sm whitespace-pre-wrap font-mono text-gray-900 dark:text-gray-100">
-                  {stdout}
-                </pre>
-              </div>
-            )}
-            {stderr && (
-              <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 border border-red-200 dark:border-red-800">
-                <div className="text-xs font-semibold mb-1 text-red-600 dark:text-red-400">
-                  Error:
-                </div>
-                <pre className="text-sm whitespace-pre-wrap font-mono text-red-900 dark:text-red-100">
-                  {stderr}
-                </pre>
-              </div>
-            )}
-            {fileIds.length > 0 && (
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Generated {fileIds.length} file{fileIds.length !== 1 ? "s" : ""}
-              </div>
-            )}
-            {!stdout && !stderr && (
-              <div className="py-2 text-center text-gray-500 dark:text-gray-400">
-                <SvgCode className="w-4 h-4 mx-auto mb-1 opacity-50" />
-                <p className="text-xs">No output</p>
-              </div>
-            )}
-          </div>
-        ),
-      });
-    }
-
-    // Fallback
-    return children({
-      icon: SvgCode,
-      status: status,
-      content: <div></div>,
-    });
-  }
-
-  // Highlight/Short rendering
-  if (isExecuting) {
-    return children({
-      icon: SvgCode,
-      status: "Executing Python code...",
-      content: (
+  // Shared content for all states - used by both FULL and compact modes
+  const content = (
+    <div className="flex flex-col mb-1 space-y-2">
+      {/* Loading indicator when executing */}
+      {isExecuting && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <div className="flex gap-0.5">
             <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
@@ -211,43 +123,75 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
           </div>
           <span>Running code...</span>
         </div>
-      ),
-    });
-  }
+      )}
 
-  if (hasError) {
+      {/* Code block */}
+      {code && (
+        <div className="prose max-w-full">
+          <CodeBlock className="language-python" codeText={code.trim()}>
+            <HighlightedPythonCode code={code.trim()} />
+          </CodeBlock>
+        </div>
+      )}
+
+      {/* Output */}
+      {stdout && (
+        <div className="rounded-md bg-gray-100 dark:bg-gray-800 p-3">
+          <div className="text-xs font-semibold mb-1 text-gray-600 dark:text-gray-400">
+            Output:
+          </div>
+          <pre className="text-sm whitespace-pre-wrap font-mono text-gray-900 dark:text-gray-100">
+            {stdout}
+          </pre>
+        </div>
+      )}
+
+      {/* Error */}
+      {stderr && (
+        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 border border-red-200 dark:border-red-800">
+          <div className="text-xs font-semibold mb-1 text-red-600 dark:text-red-400">
+            Error:
+          </div>
+          <pre className="text-sm whitespace-pre-wrap font-mono text-red-900 dark:text-red-100">
+            {stderr}
+          </pre>
+        </div>
+      )}
+
+      {/* File count */}
+      {fileIds.length > 0 && (
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          Generated {fileIds.length} file{fileIds.length !== 1 ? "s" : ""}
+        </div>
+      )}
+
+      {/* No output fallback - only when complete with no output */}
+      {isComplete && !stdout && !stderr && (
+        <div className="py-2 text-center text-gray-500 dark:text-gray-400">
+          <SvgCode className="w-4 h-4 mx-auto mb-1 opacity-50" />
+          <p className="text-xs">No output</p>
+        </div>
+      )}
+    </div>
+  );
+
+  // FULL mode: render content directly
+  if (renderType === RenderType.FULL) {
     return children({
       icon: SvgCode,
-      status: "Python execution failed",
-      content: (
-        <div className="text-sm text-red-600 dark:text-red-400">
-          Execution failed
-        </div>
-      ),
+      status,
+      content,
     });
   }
 
-  if (isComplete) {
-    return children({
-      icon: SvgCode,
-      status: "Python execution completed",
-      content: (
-        <div className="text-sm text-muted-foreground">
-          Execution completed
-          {fileIds.length > 0 &&
-            ` - ${fileIds.length} file${
-              fileIds.length !== 1 ? "s" : ""
-            } generated`}
-        </div>
-      ),
-    });
-  }
-
+  // Compact mode: wrap content in FadeDiv
   return children({
     icon: SvgCode,
-    status: "Python execution",
+    status,
     content: (
-      <div className="text-sm text-muted-foreground">Python execution</div>
+      <FadeDiv direction="bottom" height={80}>
+        {content}
+      </FadeDiv>
     ),
   });
 };
