@@ -107,9 +107,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
 
         {(displayDocuments || displayUrls) && (
           <>
-            <Text as="p" mainUiMuted text03>
-              Reading results:
-            </Text>
+            {!isCompact && (
+              <Text as="p" mainUiMuted text03>
+                Reading results:
+              </Text>
+            )}
             {displayDocuments ? (
               <SearchChipList
                 items={documents}

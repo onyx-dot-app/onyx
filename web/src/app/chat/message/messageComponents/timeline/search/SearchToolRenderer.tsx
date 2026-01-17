@@ -94,9 +94,11 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
 
         {(results.length > 0 || queries.length > 0) && (
           <>
-            <Text as="p" mainUiMuted text03>
-              Reading results:
-            </Text>
+            {!isCompact && (
+              <Text as="p" mainUiMuted text03>
+                Reading results:
+              </Text>
+            )}
             <SearchChipList
               items={results}
               initialCount={INITIAL_RESULTS_TO_SHOW}

@@ -201,9 +201,7 @@ export function StepContainer({
         {StepIconComponent && (
           <StepIconComponent className="size-4 stroke-text-02" />
         )}
-        {isExpanded && !isLastStep && (
-          <div className="w-px flex-1 bg-border-01" />
-        )}
+        {!isLastStep && <div className="w-px flex-1 bg-border-01" />}
       </div>
 
       <div
@@ -240,7 +238,7 @@ export function StepContainer({
           </div>
         )}
 
-        {isExpanded && <div className="px-2 pb-2">{children}</div>}
+        <div className="px-2 pb-2">{children}</div>
       </div>
     </div>
   );
