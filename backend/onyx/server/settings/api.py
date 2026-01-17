@@ -23,6 +23,9 @@ from onyx.server.settings.models import UserSettings
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 
 logger = setup_logger()
 
@@ -35,6 +38,15 @@ def admin_put_settings(
     settings: Settings, _: User | None = Depends(current_admin_user)
 ) -> None:
     store_settings(settings)
+
+
+def apply_license_status_to_settings(settings: Settings) -> Settings:
+    """MIT version: no-op, just returns settings unchanged.
+
+    EE version overrides this to check license status and update
+    application_status accordingly for self-hosted deployments.
+    """
+    return settings
 
 
 @basic_router.get("")
@@ -52,6 +64,14 @@ def fetch_settings(
         needs_reindexing = cast(bool, kv_store.load(KV_REINDEX_KEY))
     except KvKeyNotFoundError:
         needs_reindexing = False
+
+    # Apply license-aware status adjustments (EE overrides this)
+    apply_fn = fetch_versioned_implementation_with_fallback(
+        "onyx.server.settings.api",
+        "apply_license_status_to_settings",
+        apply_license_status_to_settings,
+    )
+    general_settings = apply_fn(general_settings)
 
     return UserSettings(
         **general_settings.model_dump(),

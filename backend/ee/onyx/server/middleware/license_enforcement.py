@@ -24,6 +24,7 @@ ALLOWED_PATH_PREFIXES = {
     "/license",  # License management (fetch, upload, status)
     "/tenants/billing",  # Billing management
     "/settings",  # Need to see status
+    "/enterprise-settings",  # Need to see enterprise status/branding
     "/me",  # Basic user info
     "/metrics",  # Prometheus metrics
     "/docs",  # Swagger UI
@@ -39,6 +40,8 @@ def _is_path_allowed(path: str) -> bool:
 def add_license_enforcement_middleware(
     app: FastAPI, logger: logging.LoggerAdapter
 ) -> None:
+    logger.info("License enforcement middleware registered")
+
     @app.middleware("http")
     async def enforce_license(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -55,6 +58,7 @@ def add_license_enforcement_middleware(
             path = path[4:]
 
         if _is_path_allowed(path):
+            logger.debug(f"License enforcement: allowing {path} (allowlisted)")
             return await call_next(request)
 
         # Check license status
@@ -65,6 +69,9 @@ def add_license_enforcement_middleware(
             # Multi-tenant: check Redis gated tenants set
             try:
                 is_gated = is_tenant_gated(tenant_id)
+                logger.debug(
+                    f"License enforcement: tenant={tenant_id}, is_gated={is_gated}"
+                )
             except Exception as e:
                 logger.warning(f"Failed to check tenant gating status: {e}")
                 # Fail open - don't block on Redis errors
@@ -75,7 +82,19 @@ def add_license_enforcement_middleware(
                 from ee.onyx.db.license import get_cached_license_metadata
 
                 metadata = get_cached_license_metadata(tenant_id)
-                if metadata and metadata.status == ApplicationStatus.GATED_ACCESS:
+                if metadata:
+                    logger.debug(
+                        f"License enforcement: tenant={tenant_id}, "
+                        f"status={metadata.status}, path={path}"
+                    )
+                    if metadata.status == ApplicationStatus.GATED_ACCESS:
+                        is_gated = True
+                else:
+                    # No license = gated (can't bypass by deleting license)
+                    logger.debug(
+                        f"License enforcement: tenant={tenant_id}, "
+                        f"no license found - blocking, path={path}"
+                    )
                     is_gated = True
             except Exception as e:
                 logger.warning(f"Failed to check license metadata: {e}")
@@ -83,7 +102,7 @@ def add_license_enforcement_middleware(
                 is_gated = False
 
         if is_gated:
-            logger.info(f"Blocking request for gated tenant: {tenant_id}")
+            logger.info(f"Blocking request for gated tenant: {tenant_id}, path={path}")
             return JSONResponse(
                 status_code=402,
                 content={
