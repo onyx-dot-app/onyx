@@ -13,6 +13,7 @@ import { IconProps } from "@opal/types";
 import { TimelineRendererComponent } from "./TimelineRendererComponent";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineHeader } from "./useTimelineHeader";
+import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
 
 export interface AgentTimelineProps {
   /** Turn groups from usePacketProcessor */
@@ -124,35 +125,48 @@ export function AgentTimeline({
       {isExpanded && (
         <div className="w-full">
           {turnGroups.map((turnGroup, turnIdx) =>
-            turnGroup.steps.map((step, stepIdx) => (
-              <TimelineRendererComponent
-                key={step.key}
-                packets={step.packets}
+            turnGroup.isParallel ? (
+              <ParallelTimelineTabs
+                key={turnGroup.turnIndex}
+                turnGroup={turnGroup}
                 chatState={chatState}
-                onComplete={() => {}}
-                animate={!stopPacketSeen}
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
-                defaultExpanded={true}
-              >
-                {({ icon, status, content, isExpanded, onToggle }) => (
-                  <StepContainer
-                    stepIcon={icon as FunctionComponent<IconProps> | undefined}
-                    header={status}
-                    isExpanded={isExpanded}
-                    onToggle={onToggle}
-                    collapsible={true}
-                    isLastStep={
-                      turnIdx === turnGroups.length - 1 &&
-                      stepIdx === turnGroup.steps.length - 1
-                    }
-                    packetLength={step.packets.length}
-                  >
-                    {content}
-                  </StepContainer>
-                )}
-              </TimelineRendererComponent>
-            ))
+                isLastTurnGroup={turnIdx === turnGroups.length - 1}
+              />
+            ) : (
+              turnGroup.steps.map((step, stepIdx) => (
+                <TimelineRendererComponent
+                  key={step.key}
+                  packets={step.packets}
+                  chatState={chatState}
+                  onComplete={() => {}}
+                  animate={!stopPacketSeen}
+                  stopPacketSeen={stopPacketSeen}
+                  stopReason={stopReason}
+                  defaultExpanded={true}
+                >
+                  {({ icon, status, content, isExpanded, onToggle }) => (
+                    <StepContainer
+                      stepIcon={
+                        icon as FunctionComponent<IconProps> | undefined
+                      }
+                      header={status}
+                      isExpanded={isExpanded}
+                      onToggle={onToggle}
+                      collapsible={true}
+                      isLastStep={
+                        turnIdx === turnGroups.length - 1 &&
+                        stepIdx === turnGroup.steps.length - 1
+                      }
+                      packetLength={step.packets.length}
+                    >
+                      {content}
+                    </StepContainer>
+                  )}
+                </TimelineRendererComponent>
+              ))
+            )
           )}
         </div>
       )}

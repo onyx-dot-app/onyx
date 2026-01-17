@@ -24,6 +24,7 @@ export { default as SvgBookOpen } from "@opal/icons/book-open";
 export { default as SvgBooksLineSmall } from "@opal/icons/books-line-small";
 export { default as SvgBooksStackSmall } from "@opal/icons/books-stack-small";
 export { default as SvgBracketCurly } from "@opal/icons/bracket-curly";
+export { default as SvgBranch } from "@opal/icons/branch";
 export { default as SvgBubbleText } from "@opal/icons/bubble-text";
 export { default as SvgCalendar } from "@opal/icons/calendar";
 export { default as SvgCheck } from "@opal/icons/check";

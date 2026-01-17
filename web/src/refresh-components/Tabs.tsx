@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useRef, useState, useEffect } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -50,13 +50,32 @@ const TabsRoot = React.forwardRef<
 TabsRoot.displayName = TabsPrimitive.Root.displayName;
 
 /**
+ * Tabs List Props
+ */
+interface TabsListProps
+  extends WithoutStyles<
+    React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
+  > {
+  /** Visual variant of the tabs list
+   * - 'contained': Grid layout with background (default)
+   * - 'pill': Flex layout with bottom line indicator
+   */
+  variant?: "contained" | "pill";
+  /** Content to render on the right side of the tab list (pill variant only) */
+  rightContent?: React.ReactNode;
+}
+
+/**
  * Tabs List Component
  *
  * Container for tab triggers. Renders as a horizontal list with pill-style background.
  * Automatically manages keyboard navigation (arrow keys) and accessibility attributes.
  *
+ * @param variant - Visual variant: 'contained' (default) or 'pill'
+ *
  * @example
  * ```tsx
+ * // Contained variant (default)
  * <Tabs defaultValue="overview">
  *   <Tabs.List>
  *     <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
@@ -64,32 +83,127 @@ TabsRoot.displayName = TabsPrimitive.Root.displayName;
  *     <Tabs.Trigger value="settings">Settings</Tabs.Trigger>
  *   </Tabs.List>
  *   <Tabs.Content value="overview">...</Tabs.Content>
- *   <Tabs.Content value="analytics">...</Tabs.Content>
- *   <Tabs.Content value="settings">...</Tabs.Content>
+ * </Tabs>
+ *
+ * // Pill variant
+ * <Tabs defaultValue="search">
+ *   <Tabs.List variant="pill">
+ *     <Tabs.Trigger value="search" variant="pill">Search</Tabs.Trigger>
+ *     <Tabs.Trigger value="browse" variant="pill">Browse</Tabs.Trigger>
+ *   </Tabs.List>
  * </Tabs>
  * ```
  *
  * @remarks
- * - Default styling: rounded pill background with padding
- * - Height: 2.5rem (h-10)
+ * - Contained: rounded pill background with grid layout
+ * - Pill: transparent background with bottom line indicator
  * - Supports keyboard navigation (Left/Right arrows, Home/End keys)
- * - Custom className can be added for additional styling if needed
  */
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
-  WithoutStyles<React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>>
->((props, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className="grid w-full rounded-08 bg-background-tint-03"
-    style={{
-      gridTemplateColumns: `repeat(${React.Children.count(
-        props.children
-      )}, 1fr)`,
-    }}
-    {...props}
-  />
-));
+  TabsListProps
+>(({ variant = "contained", rightContent, children, ...props }, ref) => {
+  const internalRef = useRef<HTMLDivElement>(null);
+  const [indicatorStyle, setIndicatorStyle] = useState({
+    left: 0,
+    width: 0,
+    opacity: 0,
+  });
+
+  // Update indicator position when active tab changes (pill variant only)
+  useEffect(() => {
+    if (variant !== "pill") return;
+
+    const updateIndicator = () => {
+      const list = internalRef.current;
+      if (!list) return;
+
+      const activeTab = list.querySelector<HTMLElement>(
+        '[data-state="active"]'
+      );
+      if (activeTab) {
+        const listRect = list.getBoundingClientRect();
+        const tabRect = activeTab.getBoundingClientRect();
+        setIndicatorStyle({
+          left: tabRect.left - listRect.left,
+          width: tabRect.width,
+          opacity: 1,
+        });
+      }
+    };
+
+    updateIndicator();
+
+    // Use MutationObserver to detect tab changes
+    const observer = new MutationObserver(updateIndicator);
+    if (internalRef.current) {
+      observer.observe(internalRef.current, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ["data-state"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, [variant]);
+
+  return (
+    <TabsPrimitive.List
+      ref={(node) => {
+        internalRef.current = node;
+        if (typeof ref === "function") ref(node);
+        else if (ref) ref.current = node;
+      }}
+      className={cn(
+        // Contained variant (default)
+        variant === "contained" &&
+          "grid w-full rounded-08 bg-background-tint-03",
+        // Pill variant
+        variant === "pill" &&
+          "relative flex items-center pb-[4px] bg-background-tint-00"
+      )}
+      style={
+        variant === "contained"
+          ? {
+              gridTemplateColumns: `repeat(${React.Children.count(
+                children
+              )}, 1fr)`,
+            }
+          : undefined
+      }
+      {...props}
+    >
+      {/* Tabs container */}
+      {variant === "pill" ? (
+        <div className="flex items-center gap-2">{children}</div>
+      ) : (
+        children
+      )}
+
+      {/* Right action slot for pill variant */}
+      {variant === "pill" && rightContent && (
+        <div className="ml-auto pl-2">{rightContent}</div>
+      )}
+
+      {/* Full-width subtle line for pill variant */}
+      {variant === "pill" && (
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-border-02 pointer-events-none" />
+      )}
+
+      {/* Sliding active indicator for pill variant */}
+      {variant === "pill" && (
+        <div
+          className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 transition-all duration-200 ease-out pointer-events-none"
+          style={{
+            left: indicatorStyle.left,
+            width: indicatorStyle.width,
+            opacity: indicatorStyle.opacity,
+          }}
+        />
+      )}
+    </TabsPrimitive.List>
+  );
+});
 TabsList.displayName = TabsPrimitive.List.displayName;
 
 /**
@@ -102,13 +216,19 @@ interface TabsTriggerProps
       "children"
     >
   > {
+  /** Visual variant of the tab trigger (should match parent TabsList variant)
+   * - 'contained': Background-based active state (default)
+   * - 'pill': Dark pill with bottom line indicator
+   */
+  variant?: "contained" | "pill";
   /** Optional tooltip text to display on hover */
   tooltip?: string;
   /** Side where tooltip appears. Default: "top" */
   tooltipSide?: "top" | "bottom" | "left" | "right";
 
   icon?: React.FunctionComponent<IconProps>;
-  children?: string;
+  /** Tab label - can be string or ReactNode (for custom content like icon + text) */
+  children?: React.ReactNode;
   /** Show loading spinner after label */
   isLoading?: boolean;
 }
@@ -164,6 +284,7 @@ const TabsTrigger = React.forwardRef<
 >(
   (
     {
+      variant = "contained",
       tooltip,
       tooltipSide = "top",
       icon: Icon,
@@ -176,8 +297,16 @@ const TabsTrigger = React.forwardRef<
   ) => {
     const inner = (
       <>
-        {Icon && <Icon size={16} className="stroke-text-03" />}
-        <Text>{children}</Text>
+        {Icon && (
+          <Icon
+            size={14}
+            className={cn(
+              variant === "contained" && "stroke-text-03",
+              variant === "pill" && "stroke-current"
+            )}
+          />
+        )}
+        {typeof children === "string" ? <Text>{children}</Text> : children}
         {isLoading && (
           <span
             className="inline-block w-3 h-3 border-2 border-text-03 border-t-transparent rounded-full animate-spin"
@@ -192,11 +321,22 @@ const TabsTrigger = React.forwardRef<
         ref={ref}
         disabled={disabled}
         className={cn(
-          "inline-flex items-center justify-center whitespace-nowrap rounded-08 p-2 gap-2",
+          "inline-flex items-center justify-center whitespace-nowrap rounded-08",
 
-          // active/inactive states:
-          "data-[state=active]:bg-background-neutral-00 data-[state=active]:text-text-04 data-[state=active]:shadow-01 data-[state=active]:border",
-          "data-[state=inactive]:text-text-03 data-[state=inactive]:bg-transparent data-[state=inactive]:border data-[state=inactive]:border-transparent"
+          // Contained variant (default)
+          variant === "contained" && [
+            "p-2 gap-2",
+            "data-[state=active]:bg-background-neutral-00 data-[state=active]:text-text-04 data-[state=active]:shadow-01 data-[state=active]:border",
+            "data-[state=inactive]:text-text-03 data-[state=inactive]:bg-transparent data-[state=inactive]:border data-[state=inactive]:border-transparent",
+          ],
+
+          // Pill variant - 12px text, smooth transitions
+          variant === "pill" && [
+            "p-1.5 font-secondary-action",
+            "transition-all duration-200 ease-out",
+            "data-[state=active]:bg-background-tint-inverted-03 data-[state=active]:text-text-inverted-05",
+            "data-[state=inactive]:bg-transparent data-[state=inactive]:text-text-03",
+          ]
         )}
         {...props}
       >
