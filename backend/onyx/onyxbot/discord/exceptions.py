@@ -29,6 +29,10 @@ class RegistrationPermissionError(RegistrationError):
     """User does not have permission to register the bot."""
 
 
+class GuildAlreadyRegisteredError(RegistrationError):
+    """Guild is already registered to another tenant."""
+
+
 class SyncChannelsError(DiscordBotError):
     """Error during channel sync."""
 
