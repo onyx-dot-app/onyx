@@ -35,12 +35,18 @@ class ShouldRespondContext(BaseModel):
 async def should_respond(
     message: discord.Message,
     tenant_id: str,
-    bot_user: discord.User,
+    bot_user: discord.ClientUser,
 ) -> ShouldRespondContext:
     """Determine if bot should respond and which persona to use.
 
     Returns: ShouldRespondContext with should_respond, persona_id, thread_only_mode
     """
+    if not message.guild:
+        logger.warning("Received a message that isn't in a server.")
+        return ShouldRespondContext(
+            should_respond=False, persona_id=None, thread_only_mode=False
+        )
+
     guild_id = message.guild.id
     channel_id = message.channel.id
     bot_mentioned = bot_user in message.mentions
@@ -99,7 +105,7 @@ async def should_respond(
 
 async def check_implicit_invocation(
     message: discord.Message,
-    bot_user: discord.User,
+    bot_user: discord.ClientUser,
 ) -> bool:
     """Check if the bot should respond without explicit mention.
 
@@ -178,7 +184,7 @@ async def process_chat_message(
     persona_id: int | None,
     thread_only_mode: bool,
     api_client: OnyxAPIClient,
-    bot_user: discord.User,
+    bot_user: discord.ClientUser,
 ) -> None:
     """Process a message and send response."""
     # Add thinking reaction
@@ -281,7 +287,7 @@ async def process_chat_message(
 
 async def build_thread_context(
     message: discord.Message,
-    bot_user: discord.User,
+    bot_user: discord.ClientUser,
 ) -> str | None:
     """Build conversation context from thread history."""
     if not isinstance(message.channel, discord.Thread):
@@ -477,7 +483,7 @@ def split_message(content: str) -> list[str]:
 
 async def send_error_response(
     message: discord.Message,
-    bot_user: discord.User,
+    bot_user: discord.ClientUser,
 ) -> None:
     """Send error response in a thread and update reaction.
 

@@ -25,6 +25,22 @@ class RegistrationKeyNotFoundError(RegistrationError):
     """Registration key was not found in the database."""
 
 
+class RegistrationPermissionError(RegistrationError):
+    """User does not have permission to register the bot."""
+
+
+class SyncChannelsError(DiscordBotError):
+    """Error during channel sync."""
+
+
+class SyncChannelsPermissionError(SyncChannelsError):
+    """User does not have permission to sync channels."""
+
+
+class SyncChannelsServerNotFoundError(SyncChannelsError):
+    """Server was not found in the database."""
+
+
 class APIError(DiscordBotError):
     """Base API error."""
 

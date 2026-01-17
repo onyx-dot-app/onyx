@@ -142,7 +142,7 @@ def delete_discord_service_api_key(db_session: Session, tenant_id: str) -> bool:
 
     # Also delete the associated user
     api_key_user = db_session.scalar(
-        select(User).where(User.id == existing_key.user_id)
+        select(User).where(User.id == existing_key.user_id)  # type: ignore[arg-type]
     )
 
     db_session.delete(existing_key)
