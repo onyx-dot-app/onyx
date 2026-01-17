@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
@@ -60,7 +61,7 @@ def add_license_enforcement_middleware(
         if MULTI_TENANT:
             try:
                 is_gated = is_tenant_gated(tenant_id)
-            except Exception as e:
+            except RedisError as e:
                 logger.warning(f"Failed to check tenant gating status: {e}")
                 is_gated = False
         else:
@@ -73,7 +74,7 @@ def add_license_enforcement_middleware(
                         is_gated = True
                 else:
                     is_gated = True
-            except Exception as e:
+            except RedisError as e:
                 logger.warning(f"Failed to check license metadata: {e}")
                 is_gated = False
 

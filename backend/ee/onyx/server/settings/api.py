@@ -1,5 +1,7 @@
 """EE Settings API - provides license-aware settings override."""
 
+from redis.exceptions import RedisError
+
 from ee.onyx.db.license import get_cached_license_metadata
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Settings
@@ -27,7 +29,7 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                 settings.application_status = ApplicationStatus.PAYMENT_REMINDER
         else:
             settings.application_status = ApplicationStatus.GATED_ACCESS
-    except Exception as e:
+    except RedisError as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
 
     return settings
