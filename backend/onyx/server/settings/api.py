@@ -41,11 +41,7 @@ def admin_put_settings(
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
-    """MIT version: no-op, just returns settings unchanged.
-
-    EE version overrides this to check license status and update
-    application_status accordingly for self-hosted deployments.
-    """
+    """MIT version: no-op, returns settings unchanged."""
     return settings
 
 
@@ -65,7 +61,6 @@ def fetch_settings(
     except KvKeyNotFoundError:
         needs_reindexing = False
 
-    # Apply license-aware status adjustments (EE overrides this)
     apply_fn = fetch_versioned_implementation_with_fallback(
         "onyx.server.settings.api",
         "apply_license_status_to_settings",
