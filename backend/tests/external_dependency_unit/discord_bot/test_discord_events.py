@@ -10,8 +10,6 @@ from unittest.mock import patch
 import discord
 import pytest
 
-from onyx.onyxbot.discord.exceptions import RegistrationError
-from onyx.onyxbot.discord.exceptions import RegistrationPermissionError
 from onyx.onyxbot.discord.handle_commands import get_text_channels
 from onyx.onyxbot.discord.handle_commands import handle_dm
 from onyx.onyxbot.discord.handle_commands import handle_registration_command
@@ -73,7 +71,7 @@ class TestGuildRegistrationCommand:
         mock_discord_message: MagicMock,
         mock_cache_manager: MagicMock,
     ) -> None:
-        """Malformed key raises InvalidRegistrationKeyError."""
+        """Malformed key DMs user and deletes message."""
         mock_discord_message.content = "!register abc"  # Malformed
 
         with patch(
@@ -85,9 +83,11 @@ class TestGuildRegistrationCommand:
             )
 
         assert result is True
-        mock_discord_message.reply.assert_called()
-        call_args = mock_discord_message.reply.call_args
+        # On failure: DM the author and delete the message
+        mock_discord_message.author.send.assert_called()
+        call_args = mock_discord_message.author.send.call_args
         assert "Invalid" in str(call_args)
+        mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
     async def test_register_key_not_found(
@@ -95,7 +95,7 @@ class TestGuildRegistrationCommand:
         mock_discord_message: MagicMock,
         mock_cache_manager: MagicMock,
     ) -> None:
-        """Key not in database raises RegistrationKeyNotFoundError."""
+        """Key not in database DMs user and deletes message."""
         mock_discord_message.content = "!register discord_public.notexist"
 
         with (
@@ -122,9 +122,11 @@ class TestGuildRegistrationCommand:
             )
 
         assert result is True
-        mock_discord_message.reply.assert_called()
-        call_args = mock_discord_message.reply.call_args
+        # On failure: DM the author and delete the message
+        mock_discord_message.author.send.assert_called()
+        call_args = mock_discord_message.author.send.call_args
         assert "not found" in str(call_args).lower()
+        mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
     async def test_register_key_already_used(
@@ -132,7 +134,7 @@ class TestGuildRegistrationCommand:
         mock_discord_message: MagicMock,
         mock_cache_manager: MagicMock,
     ) -> None:
-        """Previously used key raises RegistrationKeyAlreadyUsedError."""
+        """Previously used key DMs user and deletes message."""
         mock_discord_message.content = "!register discord_public.used_key"
 
         with (
@@ -163,9 +165,11 @@ class TestGuildRegistrationCommand:
             )
 
         assert result is True
-        mock_discord_message.reply.assert_called()
-        call_args = mock_discord_message.reply.call_args
+        # On failure: DM the author and delete the message
+        mock_discord_message.author.send.assert_called()
+        call_args = mock_discord_message.author.send.call_args
         assert "already" in str(call_args).lower()
+        mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
     async def test_register_guild_already_registered(
@@ -173,7 +177,7 @@ class TestGuildRegistrationCommand:
         mock_discord_message: MagicMock,
         mock_cache_manager: MagicMock,
     ) -> None:
-        """Guild already in cache raises GuildAlreadyRegisteredError."""
+        """Guild already in cache DMs user and deletes message."""
         mock_discord_message.content = "!register discord_public.valid_token"
 
         with patch(
@@ -188,9 +192,11 @@ class TestGuildRegistrationCommand:
             )
 
         assert result is True
-        mock_discord_message.reply.assert_called()
-        call_args = mock_discord_message.reply.call_args
+        # On failure: DM the author and delete the message
+        mock_discord_message.author.send.assert_called()
+        call_args = mock_discord_message.author.send.call_args
         assert "already registered" in str(call_args).lower()
+        mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
     async def test_register_no_permission(
@@ -198,36 +204,40 @@ class TestGuildRegistrationCommand:
         mock_discord_message: MagicMock,
         mock_cache_manager: MagicMock,
     ) -> None:
-        """User without admin perms raises RegistrationPermissionError."""
+        """User without admin perms gets DM and message deleted."""
         mock_discord_message.content = "!register discord_public.valid_token"
         mock_discord_message.author.guild_permissions.administrator = False
         mock_discord_message.author.guild_permissions.manage_guild = False
 
-        with patch(
-            "onyx.onyxbot.discord.handle_commands.parse_discord_registration_key",
-            return_value="public",
-        ):
-            mock_cache_manager.get_tenant.return_value = None
+        result = await handle_registration_command(
+            mock_discord_message, mock_cache_manager
+        )
 
-            with pytest.raises(RegistrationPermissionError):
-                await handle_registration_command(
-                    mock_discord_message, mock_cache_manager
-                )
+        assert result is True
+        # On failure: DM the author and delete the message
+        mock_discord_message.author.send.assert_called()
+        call_args = mock_discord_message.author.send.call_args
+        assert "permission" in str(call_args).lower()
+        mock_discord_message.delete.assert_called()
 
     @pytest.mark.asyncio
     async def test_register_in_dm(
         self,
         mock_cache_manager: MagicMock,
     ) -> None:
-        """Registration in DM raises RegistrationError."""
+        """Registration in DM sends DM and returns True."""
         msg = MagicMock(spec=discord.Message)
         msg.guild = None  # DM
         msg.content = "!register discord_public.token"
+        msg.author = MagicMock()
+        msg.author.send = AsyncMock()
 
-        # Should raise RegistrationError for DM
-        with pytest.raises(RegistrationError) as exc_info:
-            await handle_registration_command(msg, mock_cache_manager)
-        assert "server" in str(exc_info.value).lower()
+        result = await handle_registration_command(msg, mock_cache_manager)
+
+        assert result is True
+        msg.author.send.assert_called()
+        call_args = msg.author.send.call_args
+        assert "server" in str(call_args).lower()
 
     @pytest.mark.asyncio
     async def test_register_syncs_forum_channels(
@@ -307,7 +317,7 @@ class TestSyncChannelsCommand:
         mock_discord_message: MagicMock,
         mock_discord_bot: MagicMock,
     ) -> None:
-        """User without admin perms gets permission error."""
+        """User without admin perms gets DM and reaction."""
         mock_discord_message.content = "!sync-channels"
         mock_discord_message.author.guild_permissions.administrator = False
         mock_discord_message.author.guild_permissions.manage_guild = False
@@ -317,9 +327,11 @@ class TestSyncChannelsCommand:
         )
 
         assert result is True
-        mock_discord_message.reply.assert_called()
-        call_args = mock_discord_message.reply.call_args
+        # On failure: DM the author and react with ❌
+        mock_discord_message.author.send.assert_called()
+        call_args = mock_discord_message.author.send.call_args
         assert "permission" in str(call_args).lower()
+        mock_discord_message.add_reaction.assert_called_with("❌")
 
     @pytest.mark.asyncio
     async def test_sync_channels_unregistered_guild(
@@ -327,7 +339,7 @@ class TestSyncChannelsCommand:
         mock_discord_message: MagicMock,
         mock_discord_bot: MagicMock,
     ) -> None:
-        """Sync in unregistered guild returns error."""
+        """Sync in unregistered guild gets DM and reaction."""
         mock_discord_message.content = "!sync-channels"
 
         # tenant_id is None = not registered
@@ -336,9 +348,11 @@ class TestSyncChannelsCommand:
         )
 
         assert result is True
-        mock_discord_message.reply.assert_called()
-        call_args = mock_discord_message.reply.call_args
+        # On failure: DM the author and react with ❌
+        mock_discord_message.author.send.assert_called()
+        call_args = mock_discord_message.author.send.call_args
         assert "not registered" in str(call_args).lower()
+        mock_discord_message.add_reaction.assert_called_with("❌")
 
 
 class TestMessageHandling:
