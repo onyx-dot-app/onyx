@@ -186,6 +186,9 @@ class TestGuildDataIsolation:
         guild1_id = guild1_data["id"]
         registration_key1 = guild1_data["registration_key"]
         tenant1_id = parse_discord_registration_key(registration_key1)
+        assert (
+            tenant1_id is not None
+        ), "Failed to parse tenant ID from registration key 1"
 
         # Create 1 guild in tenant 2
         response2 = requests.post(
@@ -197,6 +200,9 @@ class TestGuildDataIsolation:
         guild2_id = guild2_data["id"]
         registration_key2 = guild2_data["registration_key"]
         tenant2_id = parse_discord_registration_key(registration_key2)
+        assert (
+            tenant2_id is not None
+        ), "Failed to parse tenant ID from registration key 2"
 
         # Verify tenant IDs are different
         assert (
