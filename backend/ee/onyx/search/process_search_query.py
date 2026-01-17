@@ -3,17 +3,51 @@ from collections.abc import Generator
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.search import create_search_query
+from ee.onyx.secondary_llm_flows.query_expansion import expand_keywords
 from ee.onyx.server.query_and_chat.models import SearchDocWithContent
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from ee.onyx.server.query_and_chat.streaming_models import SearchDocsPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
 from onyx.db.models import User
 from onyx.document_index.factory import get_current_primary_default_document_index
+from onyx.document_index.interfaces import DocumentIndex
+from onyx.llm.factory import get_default_llm
+from onyx.tools.tool_implementations.search.search_utils import (
+    weighted_reciprocal_rank_fusion,
+)
+from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+
+logger = setup_logger()
+
+
+def _run_single_search(
+    query: str,
+    filters: BaseFilters | None,
+    document_index: DocumentIndex,
+    user: User | None,
+    db_session: Session,
+) -> list[InferenceChunk]:
+    """Execute a single search query and return chunks."""
+    chunk_search_request = ChunkSearchRequest(
+        query=query,
+        user_selected_filters=filters,
+    )
+
+    return search_pipeline(
+        chunk_search_request=chunk_search_request,
+        document_index=document_index,
+        user=user,
+        persona=None,  # No persona for direct search
+        db_session=db_session,
+    )
 
 
 def stream_search_query(
@@ -26,28 +60,93 @@ def stream_search_query(
     Used by both streaming and non-streaming endpoints.
     """
     # Check for not-yet-implemented features
-    if request.run_query_expansion:
-        raise NotImplementedError("Query expansion is not yet implemented")
     if request.num_docs_fed_to_llm_selection is not None:
         raise NotImplementedError("LLM document selection is not yet implemented")
 
     # Get document index
     document_index = get_current_primary_default_document_index(db_session)
 
-    # Build search request
-    chunk_search_request = ChunkSearchRequest(
-        query=request.search_query,
-        user_selected_filters=request.filters,
-    )
+    # Determine queries to execute
+    original_query = request.search_query
+    keyword_expansions: list[str] = []
 
-    # Execute search
-    chunks = search_pipeline(
-        chunk_search_request=chunk_search_request,
-        document_index=document_index,
-        user=user,
-        persona=None,  # No persona for direct search
-        db_session=db_session,
-    )
+    if request.run_query_expansion:
+        try:
+            llm = get_default_llm()
+            keyword_expansions = expand_keywords(
+                user_query=original_query,
+                llm=llm,
+            )
+            if keyword_expansions:
+                logger.debug(
+                    f"Query expansion generated {len(keyword_expansions)} keyword queries"
+                )
+        except Exception as e:
+            logger.warning(f"Query expansion failed: {e}; using original query only.")
+            keyword_expansions = []
+
+    # Build list of all executed queries for tracking
+    all_executed_queries = [original_query] + keyword_expansions
+
+    # Execute search(es)
+    if not keyword_expansions:
+        # Single query (original only) - no threading needed
+        chunks = _run_single_search(
+            query=original_query,
+            filters=request.filters,
+            document_index=document_index,
+            user=user,
+            db_session=db_session,
+        )
+    else:
+        # Multiple queries - run in parallel and merge with RRF
+        # First query is the original (semantic), rest are keyword expansions
+        search_functions = [
+            (
+                _run_single_search,
+                (query, request.filters, document_index, user, db_session),
+            )
+            for query in all_executed_queries
+        ]
+
+        # Run all searches in parallel
+        all_search_results: list[list[InferenceChunk]] = (
+            run_functions_tuples_in_parallel(
+                search_functions,
+                allow_failures=True,
+            )
+        )
+
+        # Separate original query results from keyword expansion results
+        # Note that in rare cases, the original query may have failed and so we may be
+        # just overweighting one set of keyword results, should be not a big deal though.
+        original_result = all_search_results[0] if all_search_results else []
+        keyword_results = all_search_results[1:] if len(all_search_results) > 1 else []
+
+        # Build valid results and weights
+        # Original query (semantic): weight 2.0
+        # Keyword expansions: weight 1.0 each
+        valid_results: list[list[InferenceChunk]] = []
+        weights: list[float] = []
+
+        if original_result:
+            valid_results.append(original_result)
+            weights.append(2.0)
+
+        for keyword_result in keyword_results:
+            if keyword_result:
+                valid_results.append(keyword_result)
+                weights.append(1.0)
+
+        if not valid_results:
+            logger.warning("All parallel searches returned empty results")
+            chunks = []
+        else:
+            chunks = weighted_reciprocal_rank_fusion(
+                ranked_results=valid_results,
+                weights=weights,
+                id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
+            )
 
     # Merge chunks into sections
     sections = merge_individual_chunks(chunks)
@@ -58,9 +157,6 @@ def stream_search_query(
         include_content=request.include_content,
         is_internet=False,
     )
-
-    # Track executed queries (just the original for now)
-    all_executed_queries = [request.search_query]
 
     # Yield queries packet
     yield SearchQueriesPacket(all_executed_queries=all_executed_queries)
@@ -74,7 +170,7 @@ def stream_search_query(
             db_session=db_session,
             user_id=user.id,
             query=request.search_query,
-            query_expansions=None,  # No expansions for now
+            query_expansions=keyword_expansions if keyword_expansions else None,
         )
 
 
