@@ -48,9 +48,12 @@ async def _try_dm_author(message: discord.Message, content: str) -> bool:
     try:
         await message.author.send(content)
         return True
-    except (discord.Forbidden, discord.HTTPException):
-        # User has DMs disabled or other error - fail silently
-        return False
+    except (discord.Forbidden, discord.HTTPException) as e:
+        # User has DMs disabled or other error
+        logger.warning(f"Failed to DM author {message.author.id}: {e}")
+    except Exception as e:
+        logger.exception(f"Unexpected error DMing author {message.author.id}: {e}")
+    return False
 
 
 async def _try_delete_message(message: discord.Message) -> bool:
@@ -59,9 +62,12 @@ async def _try_delete_message(message: discord.Message) -> bool:
     try:
         await message.delete()
         return True
-    except (discord.Forbidden, discord.HTTPException):
-        # Bot lacks permission or other error - fail silently
-        return False
+    except (discord.Forbidden, discord.HTTPException) as e:
+        # Bot lacks permission or other error
+        logger.warning(f"Failed to delete message {message.id}: {e}")
+    except Exception as e:
+        logger.exception(f"Unexpected error deleting message {message.id}: {e}")
+    return False
 
 
 async def _try_react_x(message: discord.Message) -> bool:
@@ -69,9 +75,12 @@ async def _try_react_x(message: discord.Message) -> bool:
     try:
         await message.add_reaction("❌")
         return True
-    except (discord.Forbidden, discord.HTTPException):
-        # Bot lacks permission or other error - fail silently
-        return False
+    except (discord.Forbidden, discord.HTTPException) as e:
+        # Bot lacks permission or other error
+        logger.warning(f"Failed to react to message {message.id}: {e}")
+    except Exception as e:
+        logger.exception(f"Unexpected error reacting to message {message.id}: {e}")
+    return False
 
 
 # -------------------------------------------------------------------------
