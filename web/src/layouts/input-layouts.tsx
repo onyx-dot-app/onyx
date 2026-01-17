@@ -1,13 +1,11 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
 
 interface OrientationLayoutProps extends LabelLayoutProps {
-  name?: string;
   children?: React.ReactNode;
 }
 
@@ -39,7 +37,6 @@ export interface VerticalLayoutProps extends OrientationLayoutProps {
 function VerticalInputLayout({
   children,
   subDescription,
-
   name,
   ...fieldLabelProps
 }: VerticalLayoutProps) {
@@ -100,50 +97,31 @@ function VerticalInputLayout({
  * ```
  */
 export interface HorizontalLayoutProps extends OrientationLayoutProps {
-  /** Align input to the start (top) of the label/description */
-  start?: boolean;
   /** Align input to the center (middle) of the label/description */
   center?: boolean;
 }
 function HorizontalInputLayout({
   children,
-
-  start,
   center,
-
   name,
   ...fieldLabelProps
 }: HorizontalLayoutProps) {
-  // Determine alignment:
-  // - If `center` is explicitly true, use center alignment
-  // - If `start` is explicitly true, use start alignment
-  // - Otherwise, use default behavior: start if description exists, center if not
-  const alignment = center
-    ? "items-center"
-    : start
-      ? "items-start"
-      : fieldLabelProps.description
-        ? "items-start"
-        : "items-center";
-
   return (
-    <Section gap={0.25} alignItems="stretch">
-      <label
-        htmlFor={name}
-        className={cn(
-          "flex flex-row justify-between gap-4 cursor-pointer",
-          alignment
-        )}
-      >
-        <div className="flex-[2]">
-          <LabelLayout {...fieldLabelProps} />
-        </div>
-        <div className="flex-1">
-          <Section alignItems="end">{children}</Section>
-        </div>
-      </label>
-      {name && <ErrorLayout name={name} />}
-    </Section>
+    <label htmlFor={name} className="cursor-pointer w-full">
+      <Section gap={0.25} alignItems="start">
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems={center ? "center" : "start"}
+        >
+          <div className="flex-1">
+            <LabelLayout {...fieldLabelProps} />
+          </div>
+          <div className="flex-shrink-0">{children}</div>
+        </Section>
+        {name && <ErrorLayout name={name} />}
+      </Section>
+    </label>
   );
 }
 
@@ -175,52 +153,50 @@ function HorizontalInputLayout({
  */
 export interface LabelLayoutProps {
   name?: string;
-  label?: string;
-  optional?: boolean;
+  title: string;
   description?: string;
-  start?: boolean;
+  optional?: boolean;
   center?: boolean;
 }
 function LabelLayout({
   name,
-  label,
+  title: title,
   optional,
   description,
-  start,
   center,
 }: LabelLayoutProps) {
-  const alignment = start
-    ? "items-start"
-    : center
-      ? "items-center"
-      : "items-start";
-  const className = cn("flex flex-col w-full", alignment);
-  const content = label ? (
-    <>
-      <Section flexDirection="row" justifyContent="start" gap={0}>
-        <Text as="p" mainContentEmphasis text04>
-          {label}
+  const content = (
+    <Section gap={0}>
+      <Section
+        flexDirection="row"
+        justifyContent={center ? "center" : "start"}
+        gap={0}
+      >
+        <Text mainContentEmphasis text04>
+          {title}
         </Text>
         {optional && (
-          <Text text03 mainContentMuted as="span">
+          <Text text03 mainContentMuted>
             {" (Optional)"}
           </Text>
         )}
       </Section>
-      {description && (
-        <Text as="p" secondaryBody text03>
-          {description}
-        </Text>
-      )}
-    </>
-  ) : null;
 
-  return name ? (
-    <label htmlFor={name} className={className}>
+      {description && (
+        <Section alignItems={center ? "center" : "start"}>
+          <Text secondaryBody text03>
+            {description}
+          </Text>
+        </Section>
+      )}
+    </Section>
+  );
+
+  if (!name) return content;
+  return (
+    <label htmlFor={name} className="w-full">
       {content}
     </label>
-  ) : (
-    <div className={className}>{content}</div>
   );
 }
 
@@ -267,32 +243,6 @@ function ErrorLayout({ name }: FieldErrorLayoutProps) {
   else return null;
 }
 
-/**
- * ErrorTextLayout - A styled text component for displaying error or warning messages
- *
- * Renders a message with an appropriate icon and color based on the type.
- * Use this for standalone error/warning messages outside of Formik context.
- *
- * Exported as `ErrorTextLayout` for direct usage.
- *
- * @param children - The error or warning message text
- * @param type - The message type: "error" (red) or "warning" (yellow). Defaults to "error"
- *
- * @example
- * ```tsx
- * import { ErrorTextLayout } from "@/layouts/input-layouts";
- *
- * // Error message
- * <ErrorTextLayout type="error">
- *   This field is required
- * </ErrorTextLayout>
- *
- * // Warning message
- * <ErrorTextLayout type="warning">
- *   This action cannot be undone
- * </ErrorTextLayout>
- * ```
- */
 export type ErrorTextType = "error" | "warning";
 interface ErrorTextLayoutProps {
   children?: string;

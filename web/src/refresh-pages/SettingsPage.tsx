@@ -114,12 +114,12 @@ function PATModal({
       <Section gap={1}>
         {/* Token Creation*/}
         {!!createdToken?.token ? (
-          <InputLayouts.Vertical label="Token Value">
+          <InputLayouts.Vertical title="Token Value">
             <Code>{createdToken.token}</Code>
           </InputLayouts.Vertical>
         ) : (
           <>
-            <InputLayouts.Vertical label="Token Name">
+            <InputLayouts.Vertical title="Token Name">
               <InputTypeIn
                 placeholder="Name your token"
                 value={newTokenName}
@@ -129,7 +129,7 @@ function PATModal({
               />
             </InputLayouts.Vertical>
             <InputLayouts.Vertical
-              label="Expires in"
+              title="Expires in"
               description="Expires at end of day (23:59 UTC)."
             >
               <InputSelect
@@ -252,10 +252,10 @@ function GeneralSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Label label="Profile" />
+          <InputLayouts.Label title="Profile" />
           <Card>
             <InputLayouts.Horizontal
-              label="Full Name"
+              title="Full Name"
               description="We'll display this name in the app."
               center
             >
@@ -278,7 +278,7 @@ function GeneralSettings() {
               />
             </InputLayouts.Horizontal>
             <InputLayouts.Horizontal
-              label="Work Role"
+              title="Work Role"
               description="Share your role to better tailor responses."
               center
             >
@@ -301,10 +301,10 @@ function GeneralSettings() {
         </Section>
 
         <Section gap={0.75}>
-          <InputLayouts.Label label="Appearance" />
+          <InputLayouts.Label title="Appearance" />
           <Card>
             <InputLayouts.Horizontal
-              label="Color Mode"
+              title="Color Mode"
               description="Select your preferred color mode for the UI."
               center
             >
@@ -356,10 +356,10 @@ function GeneralSettings() {
         <Separator noPadding />
 
         <Section gap={0.75}>
-          <InputLayouts.Label label="Danger Zone" />
+          <InputLayouts.Label title="Danger Zone" />
           <Card>
             <InputLayouts.Horizontal
-              label="Delete All Chats"
+              title="Delete All Chats"
               description="Permanently delete all your chat sessions."
               center
             >
@@ -842,10 +842,10 @@ function ChatPreferencesSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75}>
-        <InputLayouts.Label label="Chats" />
+        <InputLayouts.Label title="Chats" />
         <Card>
           <InputLayouts.Horizontal
-            label="Default Model"
+            title="Default Model"
             description="This model will be used by Onyx by default in your chats."
           >
             <LLMPopover
@@ -870,7 +870,7 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           <InputLayouts.Horizontal
-            label="Chat Auto-scroll"
+            title="Chat Auto-scroll"
             description="Automatically scroll to new content as chat generates response."
           >
             <Switch
@@ -882,7 +882,7 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           <InputLayouts.Horizontal
-            label="Temperature override"
+            title="Temperature override"
             description="Set the temperature for the LLM."
           >
             <Switch
@@ -896,10 +896,10 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Label label="Prompt Shortcuts" />
+        <InputLayouts.Label title="Prompt Shortcuts" />
         <Card>
           <InputLayouts.Horizontal
-            label="Use Prompt Shortcuts"
+            title="Use Prompt Shortcuts"
             description="Enable shortcuts to quickly insert common prompts."
           >
             <Switch
@@ -915,10 +915,10 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Label label="Personalization" />
+        <InputLayouts.Label title="Personalization" />
         <Card>
           <InputLayouts.Horizontal
-            label="Reference Stored Memories"
+            title="Reference Stored Memories"
             description="Let Onyx reference stored memories in chats."
           >
             <Switch
@@ -1197,7 +1197,7 @@ function AccountsAccessSettings() {
                 }}
               >
                 <Section gap={1}>
-                  <InputLayouts.Vertical label="Current Password">
+                  <InputLayouts.Vertical title="Current Password">
                     <InputTypeIn
                       name="currentPassword"
                       type="password"
@@ -1205,7 +1205,7 @@ function AccountsAccessSettings() {
                       onChange={handleChange}
                     />
                   </InputLayouts.Vertical>
-                  <InputLayouts.Vertical label="New Password">
+                  <InputLayouts.Vertical title="New Password">
                     <InputTypeIn
                       name="newPassword"
                       type="password"
@@ -1213,7 +1213,7 @@ function AccountsAccessSettings() {
                       onChange={handleChange}
                     />
                   </InputLayouts.Vertical>
-                  <InputLayouts.Vertical label="Confirm New Password">
+                  <InputLayouts.Vertical title="Confirm New Password">
                     <InputTypeIn
                       name="confirmPassword"
                       type="password"
@@ -1230,10 +1230,10 @@ function AccountsAccessSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Label label="Accounts" />
+          <InputLayouts.Label title="Accounts" />
           <Card>
             <InputLayouts.Horizontal
-              label="Email"
+              title="Email"
               description="Your account email address."
               center
             >
@@ -1242,7 +1242,7 @@ function AccountsAccessSettings() {
 
             {showPasswordSection && (
               <InputLayouts.Horizontal
-                label="Password"
+                title="Password"
                 description="Update your account password."
                 center
               >
@@ -1261,7 +1261,7 @@ function AccountsAccessSettings() {
 
         {showTokensSection && (
           <Section gap={0.75}>
-            <InputLayouts.Label label="Access Tokens" />
+            <InputLayouts.Label title="Access Tokens" />
             <Card padding={0.25}>
               <Section gap={0}>
                 {/* Header with search/empty state and create button */}
@@ -1434,7 +1434,7 @@ function ConnectorsSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Label label="Connectors" />
+          <InputLayouts.Label title="Connectors" />
           {hasConnectors ? (
             <Card>
               <LineItemLayout

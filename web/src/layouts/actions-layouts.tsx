@@ -67,11 +67,14 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
-import Text from "@/refresh-components/texts/Text";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
-import { Section, SectionProps } from "@/layouts/general-layouts";
+import {
+  LineItemLayout,
+  Section,
+  SectionProps,
+} from "@/layouts/general-layouts";
+import { Card } from "@/refresh-components/cards";
 
 const ActionsLayoutContext = createContext<
   ActionsLayoutContextValue | undefined
@@ -256,27 +259,13 @@ function ActionsHeader({
         shouldFullyRound ? "rounded-16" : "rounded-t-16"
       )}
     >
-      <label
-        className="flex items-start justify-between gap-2 cursor-pointer px-4"
-        htmlFor={name}
-      >
-        {/* Left: Icon, Title, Description */}
-        <Section alignItems="start" gap={0} fit>
-          <Section flexDirection="row" gap={0.5}>
-            <div className="min-w-[18px]">
-              <Icon className="stroke-text-04" size={18} />
-            </div>
-            <Truncated mainContentEmphasis text04>
-              {title}
-            </Truncated>
-          </Section>
-          <Truncated secondaryBody text03 className="pl-7">
-            {description}
-          </Truncated>
-        </Section>
-
-        {/* Right: Actions */}
-        <Section fit>{rightChildren}</Section>
+      <label className="px-4" htmlFor={name}>
+        <LineItemLayout
+          icon={Icon}
+          title={title}
+          description={description}
+          rightChildren={rightChildren}
+        />
       </label>
       <div {...props} className="px-2" />
     </div>
@@ -393,41 +382,23 @@ function ActionsTool({
   name,
   title,
   description,
-  icon: Icon,
-  disabled,
+  icon,
   rightChildren,
+  disabled,
 }: ActionsToolProps) {
   return (
-    <label
-      className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00 cursor-pointer"
-      htmlFor={name}
-    >
-      {/* Left Section: Icon and Content */}
-      <div className="flex flex-col gap-1 items-start">
-        {/* Icon Container */}
-        <div className={cn("flex items-center justify-center gap-1")}>
-          <Icon size={18} className="stroke-text-04" />
-          <Truncated
-            mainUiAction
-            text04
-            className={cn("truncate", disabled && "line-through")}
-          >
-            {title}
-          </Truncated>
-        </div>
-        <Text
-          as="p"
-          text03
-          secondaryBody
-          className="whitespace-pre-wrap line-clamp-2 pl-6"
-        >
-          {description}
-        </Text>
-      </div>
-
-      {/* Right Section */}
-      {rightChildren}
-    </label>
+    <Card padding={0.75}>
+      <label className="w-full cursor-pointer" htmlFor={name}>
+        <LineItemLayout
+          icon={icon}
+          title={title}
+          description={description}
+          rightChildren={rightChildren}
+          strikethrough={disabled}
+          compact
+        />
+      </label>
+    </Card>
   );
 }
 
@@ -455,32 +426,21 @@ function ActionsTool({
  * ```
  */
 function ActionsToolSkeleton() {
-  return (
-    <>
-      {Array.from({ length: 3 }).map((_, index) => (
-        <div
-          key={index}
-          className="flex items-start justify-between w-full p-3 rounded-12 border gap-2 bg-background-tint-00"
-        >
-          {/* Left Section: Icon and Content */}
-          <div className="flex flex-col gap-1 items-start flex-1">
-            {/* Icon and Title */}
-            <div className="flex items-center gap-1 w-full">
-              <div className="h-[18px] w-[18px] bg-background-neutral-02 rounded-04 animate-pulse" />
-              <div className="h-4 bg-background-neutral-02 rounded-04 w-1/3 animate-pulse" />
-            </div>
-            {/* Description */}
-            <div className="pl-6 w-full">
-              <div className="h-3 bg-background-neutral-02 rounded-04 w-2/3 animate-pulse" />
-            </div>
-          </div>
-
-          {/* Right Section: Switch skeleton */}
-          <div className="h-5 w-10 bg-background-neutral-02 rounded-full animate-pulse" />
-        </div>
-      ))}
-    </>
-  );
+  return Array.from({ length: 3 }).map((_, index) => (
+    <div
+      key={index}
+      className="w-full p-3 rounded-12 border bg-background-tint-00"
+    >
+      <LineItemLayout
+        // We provide dummy values here.
+        // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
+        title="..."
+        description="..."
+        rightChildren={<></>}
+        loading
+      />
+    </div>
+  ));
 }
 
 export {

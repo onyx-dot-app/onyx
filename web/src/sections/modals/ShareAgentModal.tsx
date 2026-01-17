@@ -222,7 +222,7 @@ function ShareAgentFormContent({
 
             <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
               <InputLayouts.Horizontal
-                label="Publish This Agent"
+                title="Publish This Agent"
                 description="Make this agent available to everyone in your organization."
               >
                 <SwitchField name="isPublic" />

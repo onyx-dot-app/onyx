@@ -1,12 +1,15 @@
 import { cn } from "@/lib/utils";
+import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
+import { IconProps } from "@opal/types";
 import React, { forwardRef } from "react";
 
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
 export type AlignItems = "start" | "center" | "end" | "stretch";
+export type Length = "auto" | "fit" | "full";
 
-const directionClassMap: Record<FlexDirection, string> = {
+const flexDirectionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
   column: "flex-col",
 };
@@ -21,6 +24,16 @@ const alignClassMap: Record<AlignItems, string> = {
   center: "items-center",
   end: "items-end",
   stretch: "items-stretch",
+};
+const widthClassmap: Record<Length, string> = {
+  auto: "w-auto",
+  fit: "w-fit",
+  full: "w-full",
+};
+const heightClassmap: Record<Length, string> = {
+  auto: "h-auto",
+  fit: "h-fit",
+  full: "h-full",
 };
 
 /**
@@ -77,38 +90,46 @@ export interface SectionProps
   flexDirection?: FlexDirection;
   justifyContent?: JustifyContent;
   alignItems?: AlignItems;
+  width?: Length;
+  height?: Length;
+
   gap?: number;
   padding?: number;
-  fit?: boolean;
   wrap?: boolean;
-}
 
+  // Debugging utilities
+  dbg?: boolean;
+}
 const Section = forwardRef<HTMLDivElement, SectionProps>(
   (
     {
       flexDirection = "column",
       justifyContent = "center",
       alignItems = "center",
+      width = "full",
+      height = "full",
       gap = 1,
       padding = 0,
-      fit,
       wrap,
+      dbg,
       ...rest
     },
     ref
   ) => {
-    const width = fit ? "w-fit" : "w-full";
-
     return (
       <div
         ref={ref}
         className={cn(
-          "flex h-full",
-          wrap && "flex-wrap",
+          "flex",
+
+          flexDirectionClassMap[flexDirection],
           justifyClassMap[justifyContent],
           alignClassMap[alignItems],
-          width,
-          directionClassMap[flexDirection]
+          widthClassmap[width],
+          heightClassmap[height],
+
+          wrap && "flex-wrap",
+          dbg && "dbg-red"
         )}
         style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
         {...rest}
@@ -118,4 +139,95 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(
 );
 Section.displayName = "Section";
 
-export { Section };
+export interface LineItemLayoutProps {
+  icon?: React.FunctionComponent<IconProps>;
+  title: string;
+  description?: string;
+  rightChildren?: React.ReactNode;
+
+  compact?: boolean;
+  strikethrough?: boolean;
+  secondary?: boolean;
+  loading?: boolean;
+}
+/**
+ * LineItemLayout - A layout for icon + title + description rows
+ *
+ * Structure:
+ *   Flexbox Row [
+ *     Grid [
+ *       [Icon] [Title      ]
+ *       [    ] [Description]
+ *     ],
+ *     rightChildren
+ *   ]
+ *
+ * - Icon column auto-sizes to icon width
+ * - Icon vertically centers with title
+ * - Description aligns with title's left edge (both in grid column 2)
+ * - rightChildren is outside the grid, in the outer flexbox
+ */
+function LineItemLayout({
+  icon: Icon,
+  title,
+  description,
+  rightChildren,
+  compact,
+  strikethrough,
+  secondary,
+  loading,
+}: LineItemLayoutProps) {
+  return (
+    <Section flexDirection="row" justifyContent="between" alignItems="start">
+      <div
+        className="grid flex-1"
+        style={{
+          gridTemplateColumns: Icon ? "auto 1fr" : "1fr",
+          columnGap: "0.5rem",
+          rowGap: loading ? "0.25rem" : undefined,
+        }}
+      >
+        {/* Row 1: Icon, Title */}
+        {Icon && (
+          <Icon
+            size={compact ? 16 : 20}
+            className={cn(
+              "self-center",
+              secondary ? "stroke-text-03" : "stroke-text-04"
+            )}
+          />
+        )}
+        {loading ? (
+          <div className="h-4 bg-background-neutral-01 rounded-08 w-1/3 animate-pulse" />
+        ) : (
+          <Text
+            mainContentEmphasis={!secondary}
+            text03={secondary}
+            className={cn(strikethrough && "line-through")}
+          >
+            {title}
+          </Text>
+        )}
+
+        {/* Row 2: Description (column 2, or column 1 if no icon) */}
+        {loading && description ? (
+          <div className="h-6 bg-background-neutral-01 rounded-08 w-2/3 animate-pulse" />
+        ) : description ? (
+          <div className={cn("leading-none", Icon && "col-start-2")}>
+            <Text secondaryBody text03>
+              {description}
+            </Text>
+          </div>
+        ) : undefined}
+      </div>
+
+      {loading && rightChildren ? (
+        <div className="h-5 w-10 bg-background-neutral-01 rounded-full animate-pulse" />
+      ) : rightChildren ? (
+        <div className="flex-shrink-0">{rightChildren}</div>
+      ) : undefined}
+    </Section>
+  );
+}
+
+export { Section, LineItemLayout };
