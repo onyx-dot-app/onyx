@@ -57,7 +57,6 @@ export function useToolTiming({
   const completeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const completionHandledRef = useRef(false);
 
-  // Cleanup helper
   const clearAllTimeouts = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -69,7 +68,6 @@ export function useToolTiming({
     }
   }, []);
 
-  // Track when tool starts
   useEffect(() => {
     if (hasStarted && startTime === null) {
       setStartTime(Date.now());
@@ -77,12 +75,10 @@ export function useToolTiming({
     }
   }, [hasStarted, startTime]);
 
-  // Handle completion with minimum duration
   useEffect(() => {
     if (isComplete && startTime !== null && !completionHandledRef.current) {
       completionHandledRef.current = true;
 
-      // If stopped, skip intermediate states and complete immediately
       if (stopPacketSeen) {
         clearAllTimeouts();
         setShouldShowAsActive(false);
@@ -106,10 +102,8 @@ export function useToolTiming({
       };
 
       if (elapsedTime >= minimumActiveDuration) {
-        // Enough time has passed, transition immediately
         handleActiveToComplete();
       } else {
-        // Delay the transition
         const remainingTime = minimumActiveDuration - elapsedTime;
         timeoutRef.current = setTimeout(handleActiveToComplete, remainingTime);
       }
@@ -125,7 +119,6 @@ export function useToolTiming({
     completeDurationMs,
   ]);
 
-  // Cleanup timeouts when stopped
   useEffect(() => {
     if (stopPacketSeen) {
       clearAllTimeouts();
@@ -134,7 +127,6 @@ export function useToolTiming({
     }
   }, [stopPacketSeen, clearAllTimeouts]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       clearAllTimeouts();

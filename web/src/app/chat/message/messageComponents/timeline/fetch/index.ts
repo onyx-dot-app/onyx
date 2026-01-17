@@ -1,7 +1,5 @@
-// Main renderer
 export { FetchToolRenderer } from "./FetchToolRenderer";
 
-// State utilities
 export {
   constructCurrentFetchState,
   type FetchState,

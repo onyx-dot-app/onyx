@@ -1,7 +1,5 @@
-// Main renderer
 export { SearchToolRenderer } from "./SearchToolRenderer";
 
-// State utilities (used by iconRegistry)
 export {
   constructCurrentSearchState,
   type SearchState,
@@ -13,14 +11,12 @@ export {
   getMetadataTags,
 } from "./searchStateUtils";
 
-// Hooks (for potential reuse)
 export {
   useToolTiming,
   type UseToolTimingOptions,
   type UseToolTimingResult,
 } from "./useToolTiming";
 
-// Components (for potential reuse)
 export {
   SearchChipList,
   type SearchChipListProps,

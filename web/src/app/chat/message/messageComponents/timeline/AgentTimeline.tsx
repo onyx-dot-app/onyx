@@ -93,7 +93,6 @@ export function AgentTimeline({
         <div className="flex justify-center items-center size-9">
           <AgentAvatar agent={chatState.assistant} size={24} />
         </div>
-        {/* Header row */}
         <div
           className={cn(
             "flex w-full h-full items-center bg-background-tint-00 justify-between rounded-t-12 px-2",
@@ -104,7 +103,6 @@ export function AgentTimeline({
             {headerText}
           </Text>
 
-          {/* Button */}
           {collapsible &&
             (buttonTitle ? (
               <Button
@@ -123,7 +121,6 @@ export function AgentTimeline({
             ))}
         </div>
       </div>
-      {/* Children (collapsible) */}
       {isExpanded && (
         <div className="w-full">
           {turnGroups.map((turnGroup, turnIdx) =>
@@ -198,8 +195,6 @@ export function StepContainer({
   className,
   packetLength,
 }: StepContainerProps) {
-  // Fully controlled by props - no local state
-
   return (
     <div className={cn("flex w-full", className)}>
       <div className="flex flex-col items-center w-9 pt-2">
@@ -211,24 +206,20 @@ export function StepContainer({
         )}
       </div>
 
-      {/* Right column: Content box (with bg + rounded) */}
       <div
         className={cn(
           "w-full bg-background-tint-00",
           isLastStep && "rounded-b-12"
         )}
       >
-        {/* Header row */}
         {packetLength && packetLength > 1 && (
           <div className="flex items-center justify-between px-2">
-            {/* Header text */}
             {header && (
               <Text as="p" mainUiMuted text03>
                 {header}
               </Text>
             )}
 
-            {/* Button */}
             {collapsible &&
               onToggle &&
               (buttonTitle ? (
@@ -249,7 +240,6 @@ export function StepContainer({
           </div>
         )}
 
-        {/* Children (collapsible) */}
         {isExpanded && <div className="px-2 pb-2">{children}</div>}
       </div>
     </div>

@@ -1,7 +1,3 @@
-// Timeline Components - New UI architecture for AgentMessage
-// These components provide a timeline-based view for displaying agent actions
-
-// Core Components
 export {
   AgentTimeline,
   StepContainer,
@@ -14,7 +10,6 @@ export {
   type TimelineRendererResult,
 } from "./TimelineRendererComponent";
 
-// Transformers
 export {
   transformPacketGroup,
   transformPacketGroups,

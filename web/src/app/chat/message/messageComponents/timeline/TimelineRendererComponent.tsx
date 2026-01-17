@@ -44,15 +44,10 @@ export function TimelineRendererComponent({
   defaultExpanded = true,
   children,
 }: TimelineRendererComponentProps) {
-  // Collapse state lifted here
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const handleToggle = () => setIsExpanded((prev) => !prev);
-
-  // Find appropriate renderer
   const RendererFn = findRenderer({ packets });
-
-  // Determine render type based on expanded state
-  const renderType = isExpanded ? RenderType.FULL : RenderType.HIGHLIGHT;
+  const renderType = isExpanded ? RenderType.FULL : RenderType.COMPACT;
 
   if (!RendererFn) {
     return children({

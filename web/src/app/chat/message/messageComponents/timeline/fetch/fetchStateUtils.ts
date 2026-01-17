@@ -6,11 +6,8 @@ import {
 } from "@/app/chat/services/streamingModels";
 import { OnyxDocument } from "@/lib/search/interfaces";
 
-// Expansion constants
 export const INITIAL_URLS_TO_SHOW = 3;
 export const URLS_PER_EXPANSION = 5;
-
-// Timing constants
 export const READING_MIN_DURATION_MS = 1000;
 export const READ_MIN_DURATION_MS = 1000;
 
@@ -22,14 +19,10 @@ export interface FetchState {
   isComplete: boolean;
 }
 
-/**
- * Constructs the current fetch state from a list of fetch tool packets.
- * This is a pure function with no side effects.
- */
+/** Constructs the current fetch state from fetch tool packets. */
 export const constructCurrentFetchState = (
   packets: FetchToolPacket[]
 ): FetchState => {
-  // Check for fetch tool packets in the 3-stage sequence
   const startPacket = packets.find(
     (packet) => packet.obj.type === PacketType.FETCH_TOOL_START
   );
