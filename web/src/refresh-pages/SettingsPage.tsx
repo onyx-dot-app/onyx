@@ -11,8 +11,6 @@ import { LineItemLayout, Section } from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
-  SvgActions,
-  SvgExternalLink,
   SvgKey,
   SvgLock,
   SvgMinusCircle,
@@ -20,6 +18,7 @@ import {
   SvgSliders,
   SvgTrash,
 } from "@opal/icons";
+import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -44,7 +43,6 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
-import { getSourceMetadata } from "@/lib/sources";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -1317,33 +1315,6 @@ function AccountsAccessSettings() {
   );
 }
 
-interface ConnectorCardProps {
-  title: string;
-  description: string;
-  rightChildren?: React.ReactNode;
-}
-
-function ConnectorCard({
-  title,
-  description,
-  rightChildren,
-}: ConnectorCardProps) {
-  const { Provider } = useActionsLayout();
-
-  return (
-    <Provider>
-      <ActionsLayouts.Root>
-        <ActionsLayouts.Header
-          title={title}
-          description={description}
-          icon={SvgPlug}
-          rightChildren={rightChildren}
-        />
-      </ActionsLayouts.Root>
-    </Provider>
-  );
-}
-
 function ConnectorsSettings() {
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -1433,28 +1404,32 @@ function ConnectorsSettings() {
       {popup}
 
       <Section gap={2}>
-        <Section gap={0.75}>
+        <Section gap={0.75} justifyContent="start">
           <InputLayouts.Label title="Connectors" />
           {hasConnectors ? (
-            <Card>
-              <LineItemLayout
-                icon={SvgActions}
-                title="asdf"
-                description="asdf"
-              />
-            </Card>
+            Object.values(groupedConnectors).map((connector) => {
+              const sourceMetadata = getSourceMetadata(connector.source);
+              return (
+                <Card key={connector.source} padding={0.75}>
+                  <LineItemLayout
+                    icon={sourceMetadata.icon}
+                    title={sourceMetadata.displayName}
+                    description={
+                      connector.count > 1
+                        ? `${connector.count} connectors active`
+                        : "Connected"
+                    }
+                  />
+                </Card>
+              );
+            })
           ) : (
             // <Section gap={0.5}>
             //   {/* Indexed Connectors */}
             //   {Object.values(groupedConnectors).map((group) => (
             //     <ConnectorCard
             //       key={group.source}
-            //       title={formatSourceName(group.source)}
-            //       description={
-            //         group.count > 1
-            //           ? `${group.count} connectors active`
-            //           : "Connected"
-            //       }
+            //
             //       rightChildren={
             //         <Text as="span" text03 secondaryBody>
             //           Active
