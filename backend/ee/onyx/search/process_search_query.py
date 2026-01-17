@@ -177,7 +177,7 @@ def stream_search_query(
     #   - List of doc IDs if LLM selection succeeded
     run_llm_selection = (
         request.num_docs_fed_to_llm_selection is not None
-        and request.num_docs_fed_to_llm_selection > 1
+        and request.num_docs_fed_to_llm_selection >= 1
     )
     llm_selected_doc_ids: list[str] | None = None
     llm_selection_failed = False
@@ -203,6 +203,7 @@ def stream_search_query(
                 f"selected {len(selected_sections)} sections with doc IDs: {llm_selected_doc_ids}"
             )
         except Exception as e:
+            # Allowing a blanket exception here as this step is not critical and the rest of the results are still valid
             logger.warning(f"LLM document selection failed: {e}")
             llm_selection_failed = True
     elif run_llm_selection and not sections:
