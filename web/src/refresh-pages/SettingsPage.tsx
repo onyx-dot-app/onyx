@@ -643,7 +643,7 @@ function PromptShortcuts() {
                   icon={SvgMinusCircle}
                   onClick={() => void handleRemoveShortcut(index)}
                   tertiary
-                  disabled={shortcut.isNew && isEmpty}
+                  disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
                   aria-label="Remove shortcut"
                 />
               </Section>
