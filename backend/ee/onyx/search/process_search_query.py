@@ -7,6 +7,7 @@ from ee.onyx.secondary_llm_flows.query_expansion import expand_keywords
 from ee.onyx.server.query_and_chat.models import SearchDocWithContent
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
+from ee.onyx.server.query_and_chat.streaming_models import LLMSelectedDocsPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchDocsPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
@@ -19,6 +20,7 @@ from onyx.db.models import User
 from onyx.document_index.factory import get_current_primary_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
+from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
@@ -26,6 +28,12 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
+
+
+# This is just a heuristic that also happens to work well for the UI/UX
+# Users would not find it useful to see a huge list of suggested docs
+# but more than 1 is also likely good as many questions may target more than 1 doc.
+TARGET_NUM_SECTIONS_FOR_LLM_SELECTION = 3
 
 
 def _run_single_search(
@@ -54,15 +62,15 @@ def stream_search_query(
     request: SendSearchQueryRequest,
     user: User | None,
     db_session: Session,
-) -> Generator[SearchQueriesPacket | SearchDocsPacket | SearchErrorPacket, None, None]:
+) -> Generator[
+    SearchQueriesPacket | SearchDocsPacket | LLMSelectedDocsPacket | SearchErrorPacket,
+    None,
+    None,
+]:
     """
     Core search function that yields streaming packets.
     Used by both streaming and non-streaming endpoints.
     """
-    # Check for not-yet-implemented features
-    if request.num_docs_fed_to_llm_selection is not None:
-        raise NotImplementedError("LLM document selection is not yet implemented")
-
     # Get document index
     document_index = get_current_primary_default_document_index(db_session)
 
@@ -87,6 +95,15 @@ def stream_search_query(
 
     # Build list of all executed queries for tracking
     all_executed_queries = [original_query] + keyword_expansions
+
+    # Save search query to DB (only if user is authenticated)
+    if user is not None:
+        create_search_query(
+            db_session=db_session,
+            user_id=user.id,
+            query=request.search_query,
+            query_expansions=keyword_expansions if keyword_expansions else None,
+        )
 
     # Execute search(es)
     if not keyword_expansions:
@@ -151,6 +168,47 @@ def stream_search_query(
     # Merge chunks into sections
     sections = merge_individual_chunks(chunks)
 
+    # Apply LLM document selection if requested
+    # num_docs_fed_to_llm_selection specifies how many sections to feed to the LLM for selection
+    # The LLM will always try to select TARGET_NUM_SECTIONS_FOR_LLM_SELECTION sections from those fed to it
+    # llm_selected_doc_ids will be:
+    #   - None if LLM selection was not requested or failed
+    #   - Empty list if LLM selection ran but selected nothing
+    #   - List of doc IDs if LLM selection succeeded
+    run_llm_selection = (
+        request.num_docs_fed_to_llm_selection is not None
+        and request.num_docs_fed_to_llm_selection > 1
+    )
+    llm_selected_doc_ids: list[str] | None = None
+    llm_selection_failed = False
+    if run_llm_selection and sections:
+        try:
+            llm = get_default_llm()
+            sections_to_evaluate = sections[: request.num_docs_fed_to_llm_selection]
+            selected_sections, _ = select_sections_for_expansion(
+                sections=sections_to_evaluate,
+                user_query=original_query,
+                llm=llm,
+                max_sections=TARGET_NUM_SECTIONS_FOR_LLM_SELECTION,
+                try_to_fill_to_max=True,
+            )
+            # Extract unique document IDs from selected sections (may be empty)
+            llm_selected_doc_ids = list(
+                dict.fromkeys(
+                    section.center_chunk.document_id for section in selected_sections
+                )
+            )
+            logger.debug(
+                f"LLM document selection evaluated {len(sections_to_evaluate)} sections, "
+                f"selected {len(selected_sections)} sections with doc IDs: {llm_selected_doc_ids}"
+            )
+        except Exception as e:
+            logger.warning(f"LLM document selection failed: {e}")
+            llm_selection_failed = True
+    elif run_llm_selection and not sections:
+        # LLM selection requested but no sections to evaluate
+        llm_selected_doc_ids = []
+
     # Convert to SearchDocWithContent list, optionally including content
     search_docs = SearchDocWithContent.from_inference_sections(
         sections,
@@ -164,19 +222,24 @@ def stream_search_query(
     # Yield docs packet
     yield SearchDocsPacket(search_docs=search_docs)
 
-    # Save search query to DB (only if user is authenticated)
-    if user is not None:
-        create_search_query(
-            db_session=db_session,
-            user_id=user.id,
-            query=request.search_query,
-            query_expansions=keyword_expansions if keyword_expansions else None,
+    # Yield LLM selected docs packet if LLM selection was requested
+    # - llm_selected_doc_ids is None if selection failed
+    # - llm_selected_doc_ids is empty list if no docs were selected
+    # - llm_selected_doc_ids is list of IDs if docs were selected
+    if run_llm_selection:
+        yield LLMSelectedDocsPacket(
+            llm_selected_doc_ids=None if llm_selection_failed else llm_selected_doc_ids
         )
 
 
 def gather_search_stream(
     packets: Generator[
-        SearchQueriesPacket | SearchDocsPacket | SearchErrorPacket, None, None
+        SearchQueriesPacket
+        | SearchDocsPacket
+        | LLMSelectedDocsPacket
+        | SearchErrorPacket,
+        None,
+        None,
     ],
 ) -> SearchFullResponse:
     """
@@ -184,6 +247,7 @@ def gather_search_stream(
     """
     all_executed_queries: list[str] = []
     search_docs: list[SearchDocWithContent] = []
+    llm_selected_doc_ids: list[str] | None = None
     error: str | None = None
 
     for packet in packets:
@@ -191,6 +255,8 @@ def gather_search_stream(
             all_executed_queries = packet.all_executed_queries
         elif isinstance(packet, SearchDocsPacket):
             search_docs = packet.search_docs
+        elif isinstance(packet, LLMSelectedDocsPacket):
+            llm_selected_doc_ids = packet.llm_selected_doc_ids
         elif isinstance(packet, SearchErrorPacket):
             error = packet.error
 
@@ -198,6 +264,6 @@ def gather_search_stream(
         all_executed_queries=all_executed_queries,
         search_docs=search_docs,
         doc_selection_reasoning=None,
-        llm_selected_doc_ids=None,
+        llm_selected_doc_ids=llm_selected_doc_ids,
         error=error,
     )

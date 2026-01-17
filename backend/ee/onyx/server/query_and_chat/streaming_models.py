@@ -25,3 +25,11 @@ class SearchErrorPacket(BaseModel):
 
     type: Literal["search_error"] = "search_error"
     error: str
+
+
+class LLMSelectedDocsPacket(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["llm_selected_docs"] = "llm_selected_docs"
+    # None if LLM selection failed, empty list if no docs selected, list of IDs otherwise
+    llm_selected_doc_ids: list[str] | None

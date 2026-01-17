@@ -100,7 +100,7 @@ Here are some memories about the user:
 # If a document is by far the best and is a very obvious inclusion, add a ! after the section_id to indicate that it should \
 # be included in full. Example output: [8, 2!, 5].
 DOCUMENT_SELECTION_PROMPT = """
-Select the most relevant document sections for the user's query (maximum {max_sections}). \
+Select the most relevant document sections for the user's query (maximum {max_sections}).{extra_instructions}
 
 # Document Sections
 ```
@@ -126,6 +126,10 @@ Return ONLY section_ids as a comma-separated list, ordered by relevance:
 
 Section IDs:
 """.strip()
+
+TRY_TO_FILL_TO_MAX_INSTRUCTIONS = """
+Try to fill the list to the maximum number of sections if possible without including non-relevant or misleading sections.
+"""
 
 
 # Some models are trained heavily to reason in the actual output so we allow some flexibility in the prompt.
