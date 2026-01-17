@@ -18,7 +18,10 @@ test.describe("Guilds List Page", () => {
     await gotoDiscordBotPage(adminPage);
 
     // Should show Server Configurations section
-    const serverConfigSection = adminPage.locator("text=Server Configurations");
+    // Use .first() to avoid strict mode violation if it appears in multiple places
+    const serverConfigSection = adminPage
+      .locator("text=Server Configurations")
+      .first();
     await expect(serverConfigSection).toBeVisible({ timeout: 10000 });
   });
 
@@ -50,12 +53,17 @@ test.describe("Guilds List Page", () => {
     const guildName = adminPage.locator(`text=${mockRegisteredGuild.name}`);
     await expect(guildName).toBeVisible({ timeout: 10000 });
 
-    // Should show Registered badge
-    const registeredBadge = adminPage.locator("text=Registered");
+    // Find the table row containing the guild to scope badges
+    const tableRow = adminPage.locator("tr").filter({
+      hasText: mockRegisteredGuild.name,
+    });
+
+    // Should show Registered badge in the guild's row
+    const registeredBadge = tableRow.locator("text=Registered");
     await expect(registeredBadge).toBeVisible();
 
-    // Should show Enabled badge
-    const enabledBadge = adminPage.locator("text=Enabled");
+    // Should show Enabled badge in the guild's row
+    const enabledBadge = tableRow.locator("text=Enabled");
     await expect(enabledBadge).toBeVisible();
   });
 
@@ -74,10 +82,10 @@ test.describe("Guilds List Page", () => {
         await expect(modal).toBeVisible({ timeout: 10000 });
 
         // Modal should show "Registration Key" title
-        await expect(adminPage.locator("text=Registration Key")).toBeVisible();
+        await expect(modal.getByText("Registration Key")).toBeVisible();
 
-        // Should show the !register command
-        await expect(adminPage.locator("text=!register")).toBeVisible();
+        // Should show the !register command (scoped to modal)
+        await expect(modal.getByText("!register")).toBeVisible();
 
         // Find and click copy button
         const copyButton = adminPage.locator("button").filter({
@@ -156,7 +164,10 @@ test.describe("Guilds List Page", () => {
     );
 
     // Verify detail page loaded correctly
-    await expect(adminPage.locator("text=Channel Configuration")).toBeVisible();
+    // "Channel Configuration" is in a LineItemLayout in the body content, not the page title
+    await expect(
+      adminPage.locator("text=Channel Configuration").first()
+    ).toBeVisible();
   });
 
   test("loading state shows loader", async ({ adminPage }) => {
@@ -173,15 +184,20 @@ test.describe("Guilds List Page", () => {
 
     // Should show loading indicator (ThreeDotsLoader)
     // The loader should appear while data is being fetched
-    const loader = adminPage.locator(".loading, .loader, svg");
+    // ThreeDotsLoader uses react-loader-spinner's ThreeDots with ariaLabel="grid-loading"
+    const loader = adminPage.locator('[aria-label="grid-loading"]');
     // Give it a moment to appear
-    await adminPage.waitForTimeout(100);
+    await expect(loader).toBeVisible({ timeout: 5000 });
 
     // Wait for page to finish loading
     await adminPage.waitForLoadState("networkidle");
 
     // After loading, page title should be visible
-    await expect(adminPage.locator("text=Discord Bots")).toBeVisible();
+    await expect(
+      adminPage
+        .locator('[aria-label="admin-page-title"]')
+        .getByText("Discord Bots")
+    ).toBeVisible();
   });
 
   test("error state shows error message", async ({ adminPage }) => {
