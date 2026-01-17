@@ -6,15 +6,15 @@ import { test, expect } from "./fixtures";
 
 test.describe("Bot Configuration Page", () => {
   test("bot config page loads", async ({ adminPage }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Page should load without errors
-    await expect(adminPage).toHaveURL(/\/admin\/bots\/discord/);
+    await expect(adminPage).toHaveURL(/\/admin\/discord-bot/);
     await expect(adminPage.locator("h1, h2, h3")).toContainText(/discord/i);
   });
 
   test("bot config empty state", async ({ adminPage }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Should show setup instructions when no bot configured
     // Look for empty state elements
@@ -30,7 +30,7 @@ test.describe("Bot Configuration Page", () => {
   });
 
   test("bot config create flow", async ({ adminPage }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Click configure button if available
     const configButton = adminPage.locator(
@@ -49,7 +49,7 @@ test.describe("Bot Configuration Page", () => {
   });
 
   test("bot config shows connection status", async ({ adminPage }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Look for connection status indicator
     const statusIndicator = adminPage.locator(
@@ -63,7 +63,7 @@ test.describe("Bot Configuration Page", () => {
   });
 
   test("bot config delete confirmation", async ({ adminPage }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Find delete button
     const deleteButton = adminPage.locator(
@@ -84,7 +84,7 @@ test.describe("Bot Configuration Page", () => {
   test.skip("bot config disabled in cloud", async ({ adminPage }) => {
     // This test requires cloud mode environment which is not available in e2e tests.
     // Cloud mode behavior is verified in integration tests instead.
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // In cloud mode, config should be disabled or show env var notice
     const envNotice = adminPage.locator("text=/environment|env|managed/i");

@@ -9,7 +9,7 @@ import { test, expect } from "./fixtures";
 test.describe("Admin Workflow E2E Flows", () => {
   test("full setup flow", async ({ adminPage }) => {
     // Navigate to Discord bot admin page
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Step 1: Check if bot is already configured
     const configureButton = adminPage.locator(
@@ -75,7 +75,7 @@ test.describe("Admin Workflow E2E Flows", () => {
 
   test("channel configuration flow", async ({ adminPage, seededGuild }) => {
     // Navigate to guild detail page
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     // Wait for page to load
     await adminPage.waitForLoadState("networkidle");
@@ -131,7 +131,7 @@ test.describe("Admin Workflow E2E Flows", () => {
   });
 
   test("disable and reenable guild", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     // Find guild enabled toggle
     const guildToggle = adminPage
@@ -164,7 +164,7 @@ test.describe("Admin Workflow E2E Flows", () => {
   });
 
   test("bulk channel operations flow", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     // Wait for channels to load
     await adminPage.waitForLoadState("networkidle");
@@ -196,7 +196,7 @@ test.describe("Admin Workflow E2E Flows", () => {
   });
 
   test("sync channels flow", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     // Find sync channels button
     const syncButton = adminPage.locator(
@@ -215,7 +215,7 @@ test.describe("Admin Workflow E2E Flows", () => {
   });
 
   test("delete guild flow", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Find the guild's delete button
     const deleteButton = adminPage.locator(

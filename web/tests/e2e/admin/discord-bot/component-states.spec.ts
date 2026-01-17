@@ -15,7 +15,7 @@ test.describe("Component States", () => {
       }
     );
 
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Should show loading skeleton or spinner during load
     const loading = adminPage.locator(
@@ -34,7 +34,7 @@ test.describe("Component States", () => {
       });
     });
 
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Should show error message
     const errorMessage = adminPage.locator(
@@ -46,7 +46,7 @@ test.describe("Component States", () => {
   });
 
   test("save pending state", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     // Intercept API to delay save
     await adminPage.route(
@@ -73,7 +73,7 @@ test.describe("Component States", () => {
   });
 
   test("save success toast", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     // Trigger a save action
     const toggle = adminPage.locator('[role="switch"]').first();
@@ -104,7 +104,7 @@ test.describe("Component States", () => {
       }
     );
 
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     const toggle = adminPage.locator('[role="switch"]').first();
     if (await toggle.isVisible()) {
@@ -119,7 +119,7 @@ test.describe("Component States", () => {
   });
 
   test("toggle optimistic update", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto(`/admin/bots/discord/guilds/${seededGuild.id}`);
+    await adminPage.goto(`/admin/discord-bot/${seededGuild.id}`);
 
     const toggle = adminPage.locator('[role="switch"]').first();
 
@@ -137,7 +137,7 @@ test.describe("Component States", () => {
   });
 
   test("form validation empty token", async ({ adminPage }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     const configButton = adminPage.locator(
       'button:has-text("Configure"), button:has-text("Add")'
@@ -163,7 +163,7 @@ test.describe("Component States", () => {
   });
 
   test("confirmation modal cancel", async ({ adminPage, seededGuild }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Find delete button
     const deleteButton = adminPage.locator('button:has-text("Delete")').first();
@@ -185,7 +185,7 @@ test.describe("Component States", () => {
   });
 
   test("keyboard navigation", async ({ adminPage }) => {
-    await adminPage.goto("/admin/bots/discord");
+    await adminPage.goto("/admin/discord-bot");
 
     // Tab through controls
     await adminPage.keyboard.press("Tab");
