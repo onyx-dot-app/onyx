@@ -41,12 +41,18 @@ test.describe("Bot Configuration Page", () => {
     // Either not configured state with input, or already configured
     const configuredBadge = adminPage.locator("text=Configured").first();
 
-    await expect(
-      notConfiguredBadge.or(tokenInput).or(configuredBadge)
-    ).toBeVisible({ timeout: 10000 });
+    // Check that at least one of the states is visible
+    // Check configured state first, then fall back to not configured state
+    const isConfigured = await configuredBadge
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
 
-    // If not configured, the save token button should be visible
-    if (await notConfiguredBadge.isVisible().catch(() => false)) {
+    if (isConfigured) {
+      // Bot is configured - verify configured badge is visible
+      await expect(configuredBadge).toBeVisible();
+    } else {
+      // Bot is not configured - verify not configured badge and input are visible
+      await expect(notConfiguredBadge).toBeVisible({ timeout: 10000 });
       await expect(tokenInput).toBeVisible();
       await expect(saveTokenButton).toBeVisible();
     }

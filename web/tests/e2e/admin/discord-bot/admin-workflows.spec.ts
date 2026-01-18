@@ -19,6 +19,7 @@ test.describe("Admin Workflow E2E Flows", () => {
   test("complete setup and configuration flow", async ({
     adminPage,
     mockRegisteredGuild,
+    mockBotConfigured: _mockBotConfigured,
   }) => {
     // Start at list page
     await gotoDiscordBotPage(adminPage);

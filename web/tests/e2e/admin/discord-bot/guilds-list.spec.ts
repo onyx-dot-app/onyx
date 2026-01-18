@@ -38,9 +38,19 @@ test.describe("Guilds List Page", () => {
     const addButton = adminPage.locator('button:has-text("Add Server")');
     const serverTable = adminPage.locator("table");
 
-    await expect(emptyState.or(addButton).or(serverTable)).toBeVisible({
-      timeout: 10000,
-    });
+    // Check each state separately to avoid strict mode violation
+    // (empty state and add button can both be visible when bot not configured)
+    const hasEmptyState = await emptyState
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    const hasAddButton = await addButton
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+    const hasTable = await serverTable
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+
+    expect(hasEmptyState || hasAddButton || hasTable).toBe(true);
   });
 
   test("guilds page shows mock registered guild", async ({
@@ -111,6 +121,7 @@ test.describe("Guilds List Page", () => {
   test("guilds page delete shows confirmation", async ({
     adminPage,
     mockRegisteredGuild,
+    mockBotConfigured: _mockBotConfigured,
   }) => {
     await gotoDiscordBotPage(adminPage);
 
@@ -160,17 +171,19 @@ test.describe("Guilds List Page", () => {
   test("guilds page navigate to guild detail", async ({
     adminPage,
     mockRegisteredGuild,
-    mockBotConfigured,
+    mockBotConfigured: _mockBotConfigured,
   }) => {
-    await gotoDiscordBotPage(adminPage);
-
     // Wait for bot config API to complete to ensure Card is enabled
     // The Card is disabled when bot is not configured
-    await adminPage.waitForResponse(
+    // Set up the wait BEFORE navigation so we can catch the response
+    const configResponsePromise = adminPage.waitForResponse(
       (response) =>
         response.url().includes("/api/manage/admin/discord-bot/config") &&
         response.request().method() === "GET"
     );
+
+    await gotoDiscordBotPage(adminPage);
+    await configResponsePromise;
 
     // Wait for table to load with mock guild
     const guildButton = adminPage.locator(
