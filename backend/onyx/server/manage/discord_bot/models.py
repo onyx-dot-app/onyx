@@ -50,6 +50,7 @@ class DiscordGuildConfigUpdateRequest(BaseModel):
 
 class DiscordChannelConfigResponse(BaseModel):
     id: int
+    guild_config_id: int
     channel_id: int
     channel_name: str
     channel_type: str
