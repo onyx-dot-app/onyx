@@ -52,6 +52,9 @@ logger = setup_logger()
 
 URLS_FIELD = "urls"
 
+# 2 minute timeout for parallel URL fetching to prevent indefinite hangs
+OPEN_URL_TIMEOUT_SECONDS = 2 * 60
+
 
 class IndexedDocumentRequest(BaseModel):
     document_id: str
@@ -483,6 +486,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     (self._fetch_web_content, (urls,)),
                 ],
                 allow_failures=True,
+                timeout=OPEN_URL_TIMEOUT_SECONDS,
             )
 
             indexed_result = indexed_result or IndexedRetrievalResult(

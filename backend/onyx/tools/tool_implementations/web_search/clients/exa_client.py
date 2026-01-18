@@ -16,8 +16,12 @@ from onyx.tools.tool_implementations.web_search.models import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
+
+# 1 minute timeout for Exa API requests to prevent indefinite hangs
+EXA_REQUEST_TIMEOUT_SECONDS = 60
 
 
 def _extract_site_operators(query: str) -> tuple[str, list[str]]:
@@ -47,7 +51,9 @@ class ExaClient(WebSearchProvider, WebContentProvider):
     def _search_exa(
         self, query: str, include_domains: list[str] | None = None
     ) -> list[WebSearchResult]:
-        response = self.exa.search_and_contents(
+        response = run_with_timeout(
+            EXA_REQUEST_TIMEOUT_SECONDS,
+            self.exa.search_and_contents,
             query,
             type="auto",
             highlights=HighlightsContentsOptions(
@@ -124,7 +130,9 @@ class ExaClient(WebSearchProvider, WebContentProvider):
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def contents(self, urls: Sequence[str]) -> list[WebContent]:
-        response = self.exa.get_contents(
+        response = run_with_timeout(
+            EXA_REQUEST_TIMEOUT_SECONDS,
+            self.exa.get_contents,
             urls=list(urls),
             text=True,
             livecrawl="preferred",
