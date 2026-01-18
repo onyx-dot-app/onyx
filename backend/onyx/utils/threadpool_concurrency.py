@@ -199,7 +199,9 @@ def run_functions_tuples_in_parallel(
         timeout: Optional wall-clock timeout in seconds. If any function hasn't completed
             within this time, it will be considered timed out. When timeout is set, threads
             that exceed the timeout will continue running in the background but their results
-            will not be awaited.
+            will not be awaited. IMPORTANT: because the thread continues to run in the background,
+            it can continue to consume resources and updated shared state objects even though the caller
+            has moved on.
         timeout_callback: Optional callback for handling timeouts. Called with (index, func, args)
             for each timed-out function. If provided, its return value is used as the result.
             If not provided and allow_failures is False, TimeoutError is raised.

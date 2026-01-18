@@ -478,7 +478,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 """Wrapper for parallel execution with pre-built filters."""
                 return self._retrieve_indexed_documents_with_filters(requests, filters)
 
-            # Track if timeout occurred
+            # Track if timeout occurred for error reporting
             timeout_occurred = [False]  # Using list for mutability in closure
 
             def _timeout_handler(index: int, func: Any, args: tuple[Any, ...]) -> None:
@@ -487,6 +487,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
             # Run indexed retrieval and crawling in parallel for all URLs
             # This allows us to compare results and pick the best representation
+            # Note: allow_failures=True ensures we get partial results even if one
+            # task times out or fails - the other task's results will still be used
             indexed_result, crawled_result = run_functions_tuples_in_parallel(
                 [
                     (_retrieve_indexed_with_filters, (all_requests,)),
@@ -497,16 +499,22 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 timeout_callback=_timeout_handler,
             )
 
-            if timeout_occurred[0]:
-                return ToolResponse(
-                    rich_response=None,
-                    llm_facing_response="The call to open_url timed out",
-                )
-
             indexed_result = indexed_result or IndexedRetrievalResult(
                 sections=[], missing_document_ids=[]
             )
             crawled_sections, failed_web_urls = crawled_result or ([], [])
+
+            # If timeout occurred and we have no successful results from either path,
+            # return a timeout-specific error message
+            if (
+                timeout_occurred[0]
+                and not indexed_result.sections
+                and not crawled_sections
+            ):
+                return ToolResponse(
+                    rich_response=None,
+                    llm_facing_response="The call to open_url timed out",
+                )
 
             # Last-resort: attempt link-based lookup for URLs that failed both
             # document-ID resolution and crawling.
