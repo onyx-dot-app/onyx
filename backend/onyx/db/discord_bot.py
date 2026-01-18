@@ -9,10 +9,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.auth.api_key import build_displayable_api_key
+from onyx.auth.api_key import generate_api_key
+from onyx.auth.api_key import hash_api_key
+from onyx.auth.schemas import UserRole
+from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
+from onyx.db.api_key import insert_api_key
+from onyx.db.models import ApiKey
 from onyx.db.models import DiscordBotConfig
 from onyx.db.models import DiscordChannelConfig
 from onyx.db.models import DiscordGuildConfig
+from onyx.db.models import User
 from onyx.db.utils import DiscordChannelView
+from onyx.server.api_key.models import APIKeyArgs
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 # === DiscordBotConfig ===
@@ -51,6 +63,103 @@ def delete_discord_bot_config(db_session: Session) -> bool:
     result = db_session.execute(delete(DiscordBotConfig))
     db_session.flush()
     return result.rowcount > 0  # type: ignore[attr-defined]
+
+
+# === Discord Service API Key ===
+
+
+def get_discord_service_api_key(db_session: Session) -> ApiKey | None:
+    """Get the Discord service API key if it exists."""
+    return db_session.scalar(
+        select(ApiKey).where(ApiKey.name == DISCORD_SERVICE_API_KEY_NAME)
+    )
+
+
+def get_or_create_discord_service_api_key(
+    db_session: Session,
+    tenant_id: str,
+) -> str:
+    """Get existing Discord service API key or create one.
+
+    The API key is used by the Discord bot to authenticate with the
+    Onyx API pods when sending chat requests.
+
+    Args:
+        db_session: Database session for the tenant.
+        tenant_id: The tenant ID (used for logging/context).
+
+    Returns:
+        The raw API key string (not hashed).
+
+    Raises:
+        RuntimeError: If API key creation fails.
+    """
+    # Check for existing key
+    existing = get_discord_service_api_key(db_session)
+    if existing:
+        # Database only stores the hash, so we must regenerate to get the raw key.
+        # This is safe since the Discord bot is the only consumer of this key.
+        logger.debug(
+            f"Found existing Discord service API key for tenant {tenant_id} that isn't in cache, "
+            "regenerating to update cache"
+        )
+        new_api_key = generate_api_key(tenant_id)
+        existing.hashed_api_key = hash_api_key(new_api_key)
+        existing.api_key_display = build_displayable_api_key(new_api_key)
+        db_session.flush()
+        return new_api_key
+
+    # Create new API key
+    logger.info(f"Creating Discord service API key for tenant {tenant_id}")
+    api_key_args = APIKeyArgs(
+        name=DISCORD_SERVICE_API_KEY_NAME,
+        role=UserRole.LIMITED,  # Limited role is sufficient for chat requests
+    )
+    api_key_descriptor = insert_api_key(
+        db_session=db_session,
+        api_key_args=api_key_args,
+        user_id=None,  # Service account, no owner
+    )
+
+    if not api_key_descriptor.api_key:
+        raise RuntimeError(
+            f"Failed to create Discord service API key for tenant {tenant_id}"
+        )
+
+    return api_key_descriptor.api_key
+
+
+def delete_discord_service_api_key(db_session: Session, tenant_id: str) -> bool:
+    """Delete the Discord service API key for a tenant.
+
+    Called when:
+    - Bot config is deleted (self-hosted)
+    - All guild configs are deleted (Cloud)
+
+    Args:
+        db_session: Database session for the tenant.
+        tenant_id: The tenant ID (used for logging).
+
+    Returns:
+        True if the key was deleted, False if it didn't exist.
+    """
+    existing_key = get_discord_service_api_key(db_session)
+    if not existing_key:
+        logger.debug(f"No Discord service API key found for tenant {tenant_id}")
+        return False
+
+    # Also delete the associated user
+    api_key_user = db_session.scalar(
+        select(User).where(User.id == existing_key.user_id)  # type: ignore[arg-type]
+    )
+
+    db_session.delete(existing_key)
+    if api_key_user:
+        db_session.delete(api_key_user)
+
+    db_session.flush()
+    logger.info(f"Deleted Discord service API key for tenant {tenant_id}")
+    return True
 
 
 # === DiscordGuildConfig ===

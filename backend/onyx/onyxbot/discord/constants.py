@@ -18,6 +18,4 @@ ERROR_EMOJI: str = "❌"  # U+274C - Cross Mark
 REGISTER_COMMAND: str = "register"
 SYNC_CHANNELS_COMMAND: str = "sync-channels"
 
-# Discord bot service API key name
-DISCORD_SERVICE_API_KEY_NAME: str = "discord-bot-service"
 REGISTRATION_KEY_PREFIX: str = "discord_"
