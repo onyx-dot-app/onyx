@@ -13,12 +13,15 @@ from onyx.db.discord_bot import bulk_create_channel_configs
 from onyx.db.discord_bot import create_discord_bot_config
 from onyx.db.discord_bot import create_guild_config
 from onyx.db.discord_bot import delete_discord_bot_config
+from onyx.db.discord_bot import delete_discord_service_api_key
 from onyx.db.discord_bot import delete_guild_config
 from onyx.db.discord_bot import get_channel_configs
 from onyx.db.discord_bot import get_discord_bot_config
+from onyx.db.discord_bot import get_discord_service_api_key
 from onyx.db.discord_bot import get_guild_config_by_internal_id
 from onyx.db.discord_bot import get_guild_config_by_registration_key
 from onyx.db.discord_bot import get_guild_configs
+from onyx.db.discord_bot import get_or_create_discord_service_api_key
 from onyx.db.discord_bot import sync_channel_configs
 from onyx.db.discord_bot import update_discord_channel_config
 from onyx.db.discord_bot import update_guild_config
@@ -575,6 +578,81 @@ class TestPersonaConfigurationAPI:
         # Cleanup
         delete_guild_config(db_session, guild.id)
         db_session.commit()
+
+
+class TestServiceApiKeyAPI:
+    """Tests for Discord service API key operations."""
+
+    def test_create_service_api_key(self, db_session: Session) -> None:
+        """Create service API key returns valid key."""
+        # Clean up any existing key first
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+        api_key = get_or_create_discord_service_api_key(db_session, "public")
+        db_session.commit()
+
+        assert api_key is not None
+        assert len(api_key) > 0
+
+        # Verify key was stored in database
+        stored_key = get_discord_service_api_key(db_session)
+        assert stored_key is not None
+
+        # Cleanup
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+    def test_get_or_create_returns_existing(self, db_session: Session) -> None:
+        """get_or_create_discord_service_api_key regenerates key if exists."""
+        # Clean up any existing key first
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+        # Create first key
+        key1 = get_or_create_discord_service_api_key(db_session, "public")
+        db_session.commit()
+
+        # Call again - should regenerate (per implementation, it regenerates to update cache)
+        key2 = get_or_create_discord_service_api_key(db_session, "public")
+        db_session.commit()
+
+        # Keys should be different since it regenerates
+        assert key1 != key2
+
+        # But there should still be only one key in the database
+        stored_key = get_discord_service_api_key(db_session)
+        assert stored_key is not None
+
+        # Cleanup
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+    def test_delete_service_api_key(self, db_session: Session) -> None:
+        """Delete service API key removes it from DB."""
+        # Clean up any existing key first
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+        # Create a key
+        get_or_create_discord_service_api_key(db_session, "public")
+        db_session.commit()
+
+        # Delete it
+        deleted = delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+        assert deleted is True
+        assert get_discord_service_api_key(db_session) is None
+
+    def test_delete_service_api_key_not_found(self, db_session: Session) -> None:
+        """Delete when no key exists returns False."""
+        # Ensure no key exists
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+        deleted = delete_discord_service_api_key(db_session)
+        assert deleted is False
 
 
 # Pytest fixture for db_session

@@ -6,6 +6,9 @@ These tests hit actual API endpoints via HTTP requests.
 import pytest
 import requests
 
+from onyx.db.discord_bot import get_discord_service_api_key
+from onyx.db.discord_bot import get_or_create_discord_service_api_key
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from tests.integration.common_utils.managers.discord_bot import DiscordBotManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -232,3 +235,34 @@ class TestGuildConfigEndpoints:
         # Cleanup
         for guild in guilds:
             DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
+
+
+class TestServiceApiKeyCleanup:
+    """Tests for service API key cleanup when bot/guild configs are deleted."""
+
+    def test_delete_bot_config_also_deletes_service_api_key(self, reset: None) -> None:
+        """DELETE /config also deletes the service API key (self-hosted flow)."""
+        admin_user: DATestUser = UserManager.create(name="admin_user")
+
+        # Setup: create bot config via API
+        DiscordBotManager.delete_bot_config_if_exists(admin_user)
+        DiscordBotManager.create_bot_config(
+            bot_token="test_token",
+            user_performing_action=admin_user,
+        )
+
+        # Create service API key directly in DB (simulating bot registration)
+        with get_session_with_current_tenant() as db_session:
+            get_or_create_discord_service_api_key(db_session, "public")
+            db_session.commit()
+
+            # Verify it exists
+            assert get_discord_service_api_key(db_session) is not None
+
+        # Delete bot config via API
+        result = DiscordBotManager.delete_bot_config(admin_user)
+        assert result["deleted"] is True
+
+        # Verify service API key was also deleted
+        with get_session_with_current_tenant() as db_session:
+            assert get_discord_service_api_key(db_session) is None
