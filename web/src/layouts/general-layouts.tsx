@@ -42,14 +42,15 @@ const heightClassmap: Record<Length, string> = {
  * Provides a standardized layout container with configurable direction and spacing.
  * Uses flexbox layout with customizable gap between children. Defaults to column layout.
  *
- * @param flexDirection - Flex direction. Default: column.
- * @param justifyContent - Justify content along the main axis. Default: center.
- * @param alignItems - Align items along the cross axis. Default: center.
+ * @param flexDirection - Flex direction. Default: "column".
+ * @param justifyContent - Justify content along the main axis. Default: "center".
+ * @param alignItems - Align items along the cross axis. Default: "center".
+ * @param width - Width of the container: "auto", "fit", or "full". Default: "full".
+ * @param height - Height of the container: "auto", "fit", or "full". Default: "full".
  * @param gap - Gap in REM units between children. Default: 1 (translates to gap-4 in Tailwind)
  * @param padding - Padding in REM units. Default: 0
- * @param fit - If true, uses w-fit instead of w-full. Default: false
  * @param wrap - If true, enables flex-wrap. Default: false
- * @param children - React children to render inside the section
+ * @param dbg - If true, adds a debug red border for visual debugging. Default: false
  *
  * @example
  * ```tsx
@@ -77,11 +78,16 @@ const heightClassmap: Record<Length, string> = {
  * <GeneralLayouts.Section flexDirection="row" justifyContent="center" alignItems="center">
  *   <Text>Centered content</Text>
  * </GeneralLayouts.Section>
+ *
+ * // Section with fit width
+ * <GeneralLayouts.Section width="fit">
+ *   <Button>Fit to content</Button>
+ * </GeneralLayouts.Section>
  * ```
  *
  * @remarks
  * - The component defaults to column layout when no direction is specified
- * - Full width by default (w-full) unless fit is true
+ * - Full width and height by default
  * - Prevents style overrides (className and style props are not available)
  * - Import using namespace import for consistent usage: `import * as GeneralLayouts from "@/layouts/general-layouts"`
  */
@@ -149,6 +155,7 @@ export interface LineItemLayoutProps {
   strikethrough?: boolean;
   secondary?: boolean;
   loading?: boolean;
+  center?: boolean;
 }
 /**
  * LineItemLayout - A layout for icon + title + description rows
@@ -166,6 +173,16 @@ export interface LineItemLayoutProps {
  * - Icon vertically centers with title
  * - Description aligns with title's left edge (both in grid column 2)
  * - rightChildren is outside the grid, in the outer flexbox
+ *
+ * @param icon - Optional icon component to display on the left
+ * @param title - The main title text (required)
+ * @param description - Optional description text below the title
+ * @param rightChildren - Optional content to render on the right side
+ * @param compact - If true, uses smaller icon size (16px vs 20px). Default: false
+ * @param strikethrough - If true, applies line-through style to title. Default: false
+ * @param secondary - If true, uses secondary text styling (text-03). Default: false
+ * @param loading - If true, renders skeleton placeholders instead of content. Default: false
+ * @param center - If true, vertically centers items; otherwise aligns to start. Default: false
  */
 function LineItemLayout({
   icon: Icon,
@@ -176,9 +193,14 @@ function LineItemLayout({
   strikethrough,
   secondary,
   loading,
+  center,
 }: LineItemLayoutProps) {
   return (
-    <Section flexDirection="row" justifyContent="between" alignItems="start">
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      alignItems={center ? "center" : "start"}
+    >
       <div
         className="grid flex-1"
         style={{
