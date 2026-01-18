@@ -56,12 +56,18 @@ class DiscordCacheManager:
                         if not guild_ids:
                             logger.debug(f"No guilds found for tenant {tenant_id}")
                             continue
+
+                        if not api_key:
+                            logger.warning(
+                                "Discord service API key missing for tenant that has registered guilds. "
+                                f"{tenant_id} will not be handled in this refresh cycle."
+                            )
+                            continue
+
                         for guild_id in guild_ids:
                             new_guild_tenants[guild_id] = tenant_id
-                        # Use cached key if available, otherwise use newly provisioned one
-                        new_api_keys[tenant_id] = api_key or self._api_keys.get(
-                            tenant_id, ""
-                        )
+
+                        new_api_keys[tenant_id] = api_key
                     except Exception as e:
                         logger.warning(f"Failed to refresh tenant {tenant_id}: {e}")
                     finally:
@@ -99,9 +105,10 @@ class DiscordCacheManager:
         """Load guild IDs and provision API key if needed.
 
         Returns:
-            (active_guild_ids, api_key) - api_key is None if already cached.
+            (active_guild_ids, api_key) - api_key is the cached key if available,
+            otherwise a newly created key. Returns None if no guilds found.
         """
-        needs_key = tenant_id not in self._api_keys
+        cached_key = self._api_keys.get(tenant_id)
 
         def _sync() -> tuple[list[int], str | None]:
             with get_session_with_tenant(tenant_id=tenant_id) as db:
@@ -115,12 +122,12 @@ class DiscordCacheManager:
                 if not guild_ids:
                     return [], None
 
-                api_key = None
-                if needs_key:
-                    api_key = get_or_create_discord_service_api_key(db, tenant_id)
+                if not cached_key:
+                    new_key = get_or_create_discord_service_api_key(db, tenant_id)
                     db.commit()
+                    return guild_ids, new_key
 
-                return guild_ids, api_key
+                return guild_ids, cached_key
 
         return await asyncio.to_thread(_sync)
 

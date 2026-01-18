@@ -363,6 +363,8 @@ class TestAPIKeyProvisioning:
 
         # Should NOT call create because key is already cached
         mock_create.assert_not_called()
+        # Cached key should be preserved after refresh
+        assert cache.get_api_key("tenant1") == "cached_key"
 
 
 class TestGatedTenantHandling:
@@ -414,8 +416,9 @@ class TestGatedTenantHandling:
             await cache.refresh_all()
 
         # Only tenant1 should be loaded (tenant2 is gated)
-        assert "tenant1" in cache._api_keys or 111111 in cache._guild_tenants
+        assert "tenant1" in cache._api_keys and 111111 in cache._guild_tenants
         # tenant2's guilds should NOT be in cache
+        assert "tenant2" not in cache._api_keys and 222222 not in cache._guild_tenants
 
     @pytest.mark.asyncio
     async def test_gated_check_calls_ee_function(self) -> None:
