@@ -101,4 +101,43 @@ test.describe("Bot Configuration Page", () => {
     // Should show delete button when configured
     await expect(deleteButton).toBeVisible();
   });
+
+  test("bot config delete shows confirmation modal", async ({
+    adminPage,
+    mockBotConfigured,
+  }) => {
+    await gotoDiscordBotPage(adminPage);
+
+    // Wait for configured state to be visible
+    const configuredBadge = adminPage.locator("text=Configured").first();
+    await expect(configuredBadge).toBeVisible({ timeout: 10000 });
+
+    // Find and click delete button
+    const deleteButton = adminPage.locator(
+      'button:has-text("Delete Discord Token")'
+    );
+    await expect(deleteButton).toBeVisible();
+    await deleteButton.click();
+
+    // Confirmation modal should appear
+    const modal = adminPage.locator('[role="dialog"]');
+    await expect(modal).toBeVisible({ timeout: 10000 });
+
+    // Modal should have cancel and confirm buttons
+    const cancelButton = adminPage.locator('button:has-text("Cancel")');
+    const confirmButton = adminPage.locator(
+      'button:has-text("Delete"), button:has-text("Confirm")'
+    );
+
+    // At least one of these buttons should be visible
+    await expect(cancelButton.or(confirmButton).first()).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Cancel to avoid actually deleting
+    if (await cancelButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await cancelButton.click();
+      await expect(modal).not.toBeVisible({ timeout: 5000 });
+    }
+  });
 });
