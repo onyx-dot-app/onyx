@@ -160,14 +160,27 @@ test.describe("Guilds List Page", () => {
   test("guilds page navigate to guild detail", async ({
     adminPage,
     mockRegisteredGuild,
+    mockBotConfigured,
   }) => {
     await gotoDiscordBotPage(adminPage);
+
+    // Wait for bot config API to complete to ensure Card is enabled
+    // The Card is disabled when bot is not configured
+    await adminPage.waitForResponse(
+      (response) =>
+        response.url().includes("/api/manage/admin/discord-bot/config") &&
+        response.request().method() === "GET"
+    );
 
     // Wait for table to load with mock guild
     const guildButton = adminPage.locator(
       `button:has-text("${mockRegisteredGuild.name}")`
     );
     await expect(guildButton).toBeVisible({ timeout: 10000 });
+
+    // Ensure button is enabled (it's disabled if bot not configured or guild not registered)
+    // mockBotConfigured ensures bot is configured, mockRegisteredGuild ensures guild is registered
+    await expect(guildButton).toBeEnabled();
 
     // Click on the guild name to navigate to detail page
     await guildButton.click();
@@ -228,7 +241,9 @@ test.describe("Guilds List Page", () => {
     await adminPage.waitForLoadState("networkidle");
 
     // Should show error message from ErrorCallout
-    const errorMessage = adminPage.locator("text=/failed|error/i");
+    // ErrorCallout shows both title ("Failed to load Discord servers") and detail ("Internal Server Error")
+    // Use .first() to get the first matching element (the title)
+    const errorMessage = adminPage.locator("text=/failed|error/i").first();
     await expect(errorMessage).toBeVisible({ timeout: 10000 });
   });
 });
