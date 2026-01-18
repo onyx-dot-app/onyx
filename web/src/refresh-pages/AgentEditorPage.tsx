@@ -1362,7 +1362,13 @@ export default function AgentEditorPage({
                             tooltip={imageGenerationDisabledTooltip}
                             side="left"
                           >
-                            <Card disabled={!isImageGenerationAvailable}>
+                            <Card
+                              variant={
+                                isImageGenerationAvailable
+                                  ? undefined
+                                  : "disabled"
+                              }
+                            >
                               <InputLayouts.Horizontal
                                 name="image_generation"
                                 title="Image Generation"
@@ -1402,7 +1408,11 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card disabled={!codeInterpreterTool}>
+                          <Card
+                            variant={
+                              codeInterpreterTool ? undefined : "disabled"
+                            }
+                          >
                             <InputLayouts.Horizontal
                               name="code_interpreter"
                               title="Code Interpreter"

@@ -38,24 +38,33 @@
 
 import { Section, SectionProps } from "@/layouts/general-layouts";
 
+type CardVariant =
+  // The main card variant.
+  | "primary"
+  // A background-colorless card variant.
+  | "secondary"
+  // A background-colorless card variant with a dashed border.
+  | "tertiary"
+  // A dimmed version of the primary variant (indicates that this card is unavailable).
+  | "disabled"
+  // A borderless version of the primary variant.
+  | "borderless";
+
 export interface CardProps extends SectionProps {
   // card variants
-  translucent?: boolean;
+  variant?: CardVariant;
   borderless?: boolean;
-  disabled?: boolean;
+
   ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Card({
-  translucent,
+  variant = "primary",
   borderless,
-  disabled,
   padding = 1,
   ref,
   ...props
 }: CardProps) {
-  const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
-
   return (
     <div
       ref={ref}
