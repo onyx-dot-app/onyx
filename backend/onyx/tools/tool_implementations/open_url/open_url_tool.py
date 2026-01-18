@@ -478,6 +478,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 """Wrapper for parallel execution with pre-built filters."""
                 return self._retrieve_indexed_documents_with_filters(requests, filters)
 
+            # Track if timeout occurred
+            timeout_occurred = [False]  # Using list for mutability in closure
+
+            def _timeout_handler(index: int, func: Any, args: tuple[Any, ...]) -> None:
+                timeout_occurred[0] = True
+                return None
+
             # Run indexed retrieval and crawling in parallel for all URLs
             # This allows us to compare results and pick the best representation
             indexed_result, crawled_result = run_functions_tuples_in_parallel(
@@ -487,7 +494,14 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 ],
                 allow_failures=True,
                 timeout=OPEN_URL_TIMEOUT_SECONDS,
+                timeout_callback=_timeout_handler,
             )
+
+            if timeout_occurred[0]:
+                return ToolResponse(
+                    rich_response=None,
+                    llm_facing_response="The call to open_url timed out",
+                )
 
             indexed_result = indexed_result or IndexedRetrievalResult(
                 sections=[], missing_document_ids=[]
