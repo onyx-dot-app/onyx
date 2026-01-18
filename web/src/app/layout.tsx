@@ -145,6 +145,13 @@ export default async function RootLayout({
     );
   }
 
+  // When gated, wrap children in GatedContentWrapper which checks the path
+  // client-side and shows AccessRestrictedPage for non-billing paths.
+  //
+  // Trade-off: Server components still render and attempt API calls before the
+  // client-side check runs. This is safe because the backend license enforcement
+  // middleware returns 402 for all non-allowlisted API calls, preventing data
+  // leakage. The user sees a brief loading state before being redirected.
   const content =
     productGating === ApplicationStatus.GATED_ACCESS ? (
       <GatedContentWrapper>{children}</GatedContentWrapper>

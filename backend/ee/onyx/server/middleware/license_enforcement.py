@@ -11,12 +11,20 @@ from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
+from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.server.settings.models import ApplicationStatus
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
-
+# Paths that are ALWAYS accessible, even when license is expired/gated.
+# These enable users to:
+#   /auth - Log in/out (users can't fix billing if locked out of auth)
+#   /license - Fetch, upload, or check license status
+#   /health - Health checks for load balancers/orchestrators
+#   /me - Basic user info needed for UI rendering
+#   /settings, /enterprise-settings - View app status and branding
+#   /tenants/billing-* - Manage subscription to resolve gating
 ALLOWED_PATH_PREFIXES = {
     "/auth",
     "/license",
@@ -63,19 +71,20 @@ def add_license_enforcement_middleware(
                 is_gated = is_tenant_gated(tenant_id)
             except RedisError as e:
                 logger.warning(f"Failed to check tenant gating status: {e}")
+                # Fail open - don't block users due to Redis connectivity issues
                 is_gated = False
         else:
             try:
-                from ee.onyx.db.license import get_cached_license_metadata
-
                 metadata = get_cached_license_metadata(tenant_id)
                 if metadata:
                     if metadata.status == ApplicationStatus.GATED_ACCESS:
                         is_gated = True
                 else:
+                    # No license metadata = gated for self-hosted EE
                     is_gated = True
             except RedisError as e:
                 logger.warning(f"Failed to check license metadata: {e}")
+                # Fail open - don't block users due to Redis connectivity issues
                 is_gated = False
 
         if is_gated:

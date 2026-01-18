@@ -11,23 +11,35 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+# Statuses that indicate a billing/license problem - propagate these to settings
+_GATED_STATUSES = frozenset(
+    {
+        ApplicationStatus.GATED_ACCESS,
+        ApplicationStatus.GRACE_PERIOD,
+        ApplicationStatus.PAYMENT_REMINDER,
+    }
+)
+
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
-    """EE version: checks license status for self-hosted deployments."""
+    """EE version: checks license status for self-hosted deployments.
+
+    For self-hosted, looks up license metadata and overrides application_status
+    if the license is missing or indicates a problem (expired, grace period, etc.).
+
+    For multi-tenant (cloud), the settings already have the correct status
+    from the control plane, so no override is needed.
+    """
     if MULTI_TENANT:
         return settings
 
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
-        if metadata:
-            if metadata.status == ApplicationStatus.GATED_ACCESS:
-                settings.application_status = ApplicationStatus.GATED_ACCESS
-            elif metadata.status == ApplicationStatus.GRACE_PERIOD:
-                settings.application_status = ApplicationStatus.GRACE_PERIOD
-            elif metadata.status == ApplicationStatus.PAYMENT_REMINDER:
-                settings.application_status = ApplicationStatus.PAYMENT_REMINDER
-        else:
+        if metadata and metadata.status in _GATED_STATUSES:
+            settings.application_status = metadata.status
+        elif not metadata:
+            # No license = gated access for self-hosted EE
             settings.application_status = ApplicationStatus.GATED_ACCESS
     except RedisError as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
