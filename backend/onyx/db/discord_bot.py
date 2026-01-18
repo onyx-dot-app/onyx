@@ -129,7 +129,7 @@ def get_or_create_discord_service_api_key(
     return api_key_descriptor.api_key
 
 
-def delete_discord_service_api_key(db_session: Session, tenant_id: str) -> bool:
+def delete_discord_service_api_key(db_session: Session) -> bool:
     """Delete the Discord service API key for a tenant.
 
     Called when:
@@ -138,14 +138,12 @@ def delete_discord_service_api_key(db_session: Session, tenant_id: str) -> bool:
 
     Args:
         db_session: Database session for the tenant.
-        tenant_id: The tenant ID (used for logging).
 
     Returns:
         True if the key was deleted, False if it didn't exist.
     """
     existing_key = get_discord_service_api_key(db_session)
     if not existing_key:
-        logger.debug(f"No Discord service API key found for tenant {tenant_id}")
         return False
 
     # Also delete the associated user
@@ -158,7 +156,7 @@ def delete_discord_service_api_key(db_session: Session, tenant_id: str) -> bool:
         db_session.delete(api_key_user)
 
     db_session.flush()
-    logger.info(f"Deleted Discord service API key for tenant {tenant_id}")
+    logger.info("Deleted Discord service API key")
     return True
 
 
