@@ -8,10 +8,10 @@ Tests for:
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from onyx.onyxbot.discord.constants import REGISTRATION_KEY_PREFIX
 from onyx.onyxbot.discord.utils import get_bot_token
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
+from onyx.server.manage.discord_bot.utils import REGISTRATION_KEY_PREFIX
 
 
 class TestGetBotToken:

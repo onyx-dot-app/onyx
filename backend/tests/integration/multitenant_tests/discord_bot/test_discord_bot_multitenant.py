@@ -16,9 +16,9 @@ from onyx.db.discord_bot import register_guild
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import UserRole
 from onyx.onyxbot.discord.cache import DiscordCacheManager
-from onyx.onyxbot.discord.constants import REGISTRATION_KEY_PREFIX
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
+from onyx.server.manage.discord_bot.utils import REGISTRATION_KEY_PREFIX
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
