@@ -135,7 +135,7 @@ export default function FederatedOAuthModal() {
             );
 
             return (
-              <Card>
+              <Card key={connector.federated_connector_id}>
                 <LineItemLayout
                   icon={sourceMetadata.icon}
                   title={sourceMetadata.displayName}
