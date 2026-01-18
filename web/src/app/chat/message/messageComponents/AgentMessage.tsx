@@ -1,4 +1,4 @@
-import React, { useRef, RefObject } from "react";
+import React, { useRef, RefObject, useMemo } from "react";
 import { Packet, StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
 import { FeedbackType } from "@/app/chat/interfaces";
@@ -100,13 +100,27 @@ const AgentMessage = React.memo(function AgentMessage({
 
   // Create a chatState that uses streaming citations for immediate rendering
   // This merges the prop citations with streaming citations, preferring streaming ones
-  const effectiveChatState: FullChatState = {
-    ...chatState,
-    citations: {
-      ...chatState.citations,
-      ...citationMap,
-    },
-  };
+  // Memoized with granular dependencies to prevent cascading re-renders
+  // Note: chatState object is recreated upstream on every render, so we depend on
+  // individual fields instead of the whole object for proper memoization
+  const effectiveChatState = useMemo<FullChatState>(
+    () => ({
+      ...chatState,
+      citations: {
+        ...chatState.citations,
+        ...citationMap,
+      },
+    }),
+    [
+      chatState.assistant,
+      chatState.docs,
+      chatState.citations,
+      chatState.setPresentingDocument,
+      chatState.overriddenModel,
+      chatState.researchType,
+      citationMap,
+    ]
+  );
 
   // Message switching logic
   const {

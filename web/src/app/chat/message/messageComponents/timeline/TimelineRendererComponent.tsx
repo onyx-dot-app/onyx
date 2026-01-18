@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, JSX } from "react";
+import React, { useState, JSX } from "react";
 import { Packet, StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState, RenderType, RendererResult } from "../interfaces";
 import { findRenderer } from "../renderMessageComponent";
@@ -38,57 +38,77 @@ export interface TimelineRendererComponentProps {
   children: (result: TimelineRendererResult) => JSX.Element;
 }
 
-export function TimelineRendererComponent({
-  packets,
-  chatState,
-  onComplete,
-  animate,
-  stopPacketSeen,
-  stopReason,
-  defaultExpanded = true,
-  isLastStep,
-  children,
-}: TimelineRendererComponentProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const handleToggle = () => setIsExpanded((prev) => !prev);
-  const RendererFn = findRenderer({ packets });
-  const renderType = isExpanded ? RenderType.FULL : RenderType.COMPACT;
-
-  if (!RendererFn) {
-    return children({
-      icon: null,
-      status: null,
-      content: <></>,
-      isExpanded,
-      onToggle: handleToggle,
-      renderType,
-      isLastStep: isLastStep ?? true,
-    });
-  }
-
+// Custom comparison function to prevent unnecessary re-renders
+// Only re-render if meaningful changes occur
+function arePropsEqual(
+  prev: TimelineRendererComponentProps,
+  next: TimelineRendererComponentProps
+): boolean {
   return (
-    <RendererFn
-      packets={packets as any}
-      state={chatState}
-      onComplete={onComplete}
-      animate={animate}
-      renderType={renderType}
-      stopPacketSeen={stopPacketSeen}
-      stopReason={stopReason}
-      isLastStep={isLastStep}
-    >
-      {({ icon, status, content, expandedText }) =>
-        children({
-          icon,
-          status,
-          content,
-          expandedText,
-          isExpanded,
-          onToggle: handleToggle,
-          renderType,
-          isLastStep: isLastStep ?? true,
-        })
-      }
-    </RendererFn>
+    prev.packets.length === next.packets.length &&
+    prev.stopPacketSeen === next.stopPacketSeen &&
+    prev.stopReason === next.stopReason &&
+    prev.animate === next.animate &&
+    prev.isLastStep === next.isLastStep &&
+    prev.defaultExpanded === next.defaultExpanded
+    // Skipping chatState (memoized upstream), onComplete (stable callback), children (render prop)
   );
 }
+
+export const TimelineRendererComponent = React.memo(
+  function TimelineRendererComponent({
+    packets,
+    chatState,
+    onComplete,
+    animate,
+    stopPacketSeen,
+    stopReason,
+    defaultExpanded = true,
+    isLastStep,
+    children,
+  }: TimelineRendererComponentProps) {
+    const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+    const handleToggle = () => setIsExpanded((prev) => !prev);
+    const RendererFn = findRenderer({ packets });
+    const renderType = isExpanded ? RenderType.FULL : RenderType.COMPACT;
+
+    if (!RendererFn) {
+      return children({
+        icon: null,
+        status: null,
+        content: <></>,
+        isExpanded,
+        onToggle: handleToggle,
+        renderType,
+        isLastStep: isLastStep ?? true,
+      });
+    }
+
+    return (
+      <RendererFn
+        packets={packets as any}
+        state={chatState}
+        onComplete={onComplete}
+        animate={animate}
+        renderType={renderType}
+        stopPacketSeen={stopPacketSeen}
+        stopReason={stopReason}
+        isLastStep={isLastStep}
+      >
+        {({ icon, status, content, expandedText }) =>
+          children({
+            icon,
+            status,
+            content,
+            expandedText,
+            isExpanded,
+            onToggle: handleToggle,
+            renderType,
+            isLastStep: isLastStep ?? true,
+          })
+        }
+      </RendererFn>
+    );
+  },
+  arePropsEqual
+);

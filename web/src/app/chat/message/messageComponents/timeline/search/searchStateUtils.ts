@@ -61,9 +61,15 @@ export const constructCurrentSearchState = (
       packet.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
+  // Deduplicate queries using Set for O(n) instead of indexOf which is O(n²)
+  const seenQueries = new Set<string>();
   const queries = queryDeltas
     .flatMap((delta) => delta?.queries || [])
-    .filter((query, index, arr) => arr.indexOf(query) === index);
+    .filter((query) => {
+      if (seenQueries.has(query)) return false;
+      seenQueries.add(query);
+      return true;
+    });
 
   const seenDocIds = new Set<string>();
   const results = documentDeltas

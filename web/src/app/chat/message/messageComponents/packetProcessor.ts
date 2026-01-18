@@ -136,7 +136,7 @@ function injectSectionEnd(state: ProcessorState, groupKey: string): void {
 /**
  * Content packet types that indicate a group has meaningful content to display
  */
-const CONTENT_PACKET_TYPES = [
+const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
   PacketType.SEARCH_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_START,
@@ -146,11 +146,11 @@ const CONTENT_PACKET_TYPES = [
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
-];
+]);
 
 function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) =>
-    CONTENT_PACKET_TYPES.includes(packet.obj.type as PacketType)
+    CONTENT_PACKET_TYPES_SET.has(packet.obj.type as PacketType)
   );
 }
 
@@ -188,14 +188,14 @@ function getToolNameFromPacket(packet: Packet): string | null {
 /**
  * Packet types that indicate final answer content is coming
  */
-const FINAL_ANSWER_PACKET_TYPES = [
+const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
   PacketType.MESSAGE_DELTA,
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
   PacketType.PYTHON_TOOL_START,
   PacketType.PYTHON_TOOL_DELTA,
-];
+]);
 
 // ============================================================================
 // Packet Handlers
@@ -276,7 +276,7 @@ function handleStreamingStatusPacket(
   packet: Packet
 ): void {
   // Check if final answer is coming
-  if (FINAL_ANSWER_PACKET_TYPES.includes(packet.obj.type as PacketType)) {
+  if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
   }
 }
