@@ -512,7 +512,418 @@
 					"allow_buffer": true
 				}
 			]
-
+		},
+		{
+			"category": "no_match",
+			"tests": [
+				{
+					"name": "chicago_difference",
+					"snippet": "In Chicago, how much snow falls each winter can vary dramatically. According to the National Weather Service, seasonal snowfall totals from 1900 to today have ranged from a low of **9.8 inches (1920–1921)** to a high of **89.7 inches",
+					"content": [
+						"While Chicago’s known as the [Windy City], that lake breeze isn’t the only weather phenomenon that might take your breath away when you’re visiting our city. Does it snow in Chicago? Indeed, it does! Although the first measurable snowfall comes later than usual in some years, it definitely does snow in Chicago. If you’re visiting in the winter, take a moment to brush up on when it will snow in Chicago and how much snow will fall each month.",
+						"",
+						"[Upcoming Events] ",
+						"",
+						"[Plan Your Visit] ",
+						"",
+						"## When Will it Snow in Chicago?",
+						"",
+						"If you live here, you already know that in Chicago, how much snow falls each month can vary widely from year to year! Sometimes the first snow arrives in October, while other years see hardly a flurry through December. So how do meteorologists answer the question of when does it snow in Chicago? Generally, they predict snowfall off and on from November through March, with April getting the occasional dusting. Whenever it does snow in Chicago, be sure to take advantage of the Chicago snow on the area’s many great sledding hills!",
+						"",
+						"## Chicago Snow Totals by Year",
+						"",
+						"In Chicago, how much snow falls now compared to previous years? With records going back to 1900, the National Weather Service has tracked how much snow falls in Chicago. Seasonally in the years from 1900-present, the average inches of snow in Chicago have annually ranged from 9.8 inches in 1920 – 1921 to 89.7 inches in 1978 – 1979. That’s quite a range of inches of snow in Chicago! Winter 2020 – 2021 got a total of 48.8, with the year prior getting quite a bit less, just 34.8 inches. Take a look at the annual inches of snow in Chicago over the last decade:",
+						"",
+						"- 2021 – 2022—32.8 in",
+						"- 2020 – 2021—48.8 in",
+						"- 2019 – 2020—34.8 in",
+						"- 2018 – 2019—49.5 in",
+						"- 2017 – 2018—36. in",
+						"- 2016 – 2017—26.1 in",
+						"- 2015 – 2016—31.2 in",
+						"- 2014 – 2015—50.7 in",
+						"- 2013 – 2014—82.0 in",
+						"- 2012 – 2013—30.1 in",
+						"",
+						"Here are the winter monthly snowfall ranges for winter 2020-2021:",
+						"",
+						"- November—0.7 inches of snowfall (normal = 1.8 inches)",
+						"- December—2.8 inches of snowfall (normal = 7.6 inches)",
+						"- January—21.9 inches of snowfall (normal = 11.3 inches)",
+						"- February—21.6 inches of snowfall (normal = 10.7 inches)",
+						"- March—1.8 inches of snowfall (normal = 5.5 inches)",
+						"- April—none (normal = 1.3 inches)",
+						"",
+						"## Enjoy Winter Weather in Chicago!",
+						"",
+						"Now that you know about the typical Chicago snow totals and when it will snow in Chicago, you can pack your parka and boots and prepare to witness the magic of Chicagoland in wintertime! Schedule a [visit to the Skydeck] this winter to see Chicago blanketed in snow from the [most unique vantage point] available. We’re here to help you plan your visit—contact us for details about [dining on The Ledge], [Skydeck engagement parties], and other special event options!"
+					],
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"name": "sport-game-change",
+					"snippet": [
+						"## [MiamiHeatvsBostonCeltics] ",
+						"LIVE[Dec 19, 2025] ·7:00 PM EST·TD GardenBoston, MA",
+						"```",
+						"10:49 [91-98] [MIA] MISS S. Fontecchio 8' driving Layup",
+						"10:48 [91-98] [BOS] H. González REBOUND (Off:1 Def:5)"
+					],
+					"content": [
+						"Spoiler-Free NBA Scores, Recaps & Game Ratings",
+						"[Wikihoops] ",
+						"# Spoiler-Free NBA Scores, Recaps & Game Ratings",
+						"[Open Menu] [Close menu] ",
+						"[![Logo]] ",
+						"[] [] ",
+						"## NBA ·2025-26 Regular Season",
+						"### 5 Games on Thursday[December 4, 2025] ",
+						"## [BostonCelticsvsWashingtonWizards] ",
+						"FINAL[Dec 4, 2025] ·7:00 PM EST·Capital One ArenaWashington, DC",
+						"```",
+						"No play-by-play available",
+						"```",
+						"1/10",
+						"Rating-99%[Vote up] 1[Vote down] 10",
+						"* [Show Ratings] ",
+						"* [Add bookmark] [Edit bookmark] ",
+						"* [Save game] [Remove from saved games] ",
+						"## [Golden StateWarriorsvsPhiladelphiaSixers] ",
+						"FINAL[Dec 4, 2025] ·7:00 PM EST·Xfinity Mobile ArenaPhiladelphia, PANBA TV",
+						"```",
+						"No play-by-play available",
+						"```",
+						"8/10",
+						"Rating2493%[Vote up] 26[Vote down] 2",
+						"* [Show Ratings] ",
+						"* [Add bookmark] [Edit bookmark] ",
+						"* [Save game] [Remove from saved games] ",
+						"## [Los AngelesLakersvsTorontoRaptors] ",
+						"FINAL[Dec 4, 2025] ·7:30 PM EST·Scotiabank ArenaToronto, ON",
+						"```",
+						"No play-by-play available",
+						"```",
+						"9/10",
+						"Rating2894%[Vote up] 30[Vote down] 2",
+						"* [Show Ratings] ",
+						"* [Add bookmark] [Edit bookmark] ",
+						"* [Save game] [Remove from saved games] ",
+						"## [UtahJazzvsBrooklynNets] ",
+						"FINAL[Dec 4, 2025] ·7:30 PM EST·Barclays CenterBrooklyn, NY",
+						"```",
+						"No play-by-play available",
+						"```",
+						"4/10",
+						"Rating-333%[Vote up] 3[Vote down] 6",
+						"* [Show Ratings] ",
+						"* [Add bookmark] [Edit bookmark] ",
+						"* [Save game] [Remove from saved games] ",
+						"## [MinnesotaWolvesvsNew OrleansPelicans] ",
+						"FINAL[Dec 4, 2025] ·8:00 PM EST·Smoothie King CenterNew Orleans, LA",
+						"```",
+						"No play-by-play available",
+						"```",
+						"6/10",
+						"Rating157%[Vote up] 4[Vote down] 3",
+						"* [Show Ratings] ",
+						"* [Add bookmark] [Edit bookmark] ",
+						"* [Save game] [Remove from saved games] ",
+						"### Homeis where the![W] is",
+						"Add the Wikihoops web app to your home screen. No app store download required.",
+						"Install Web AppHow to install Progressive Web Apps (PWAs)",
+						"* **On Android**, Firefox, Chrome, Edge, Opera, and Samsung Internet Browser all support installing PWAs",
+						"* **On iOS**, PWAs may or[may not be supported] ",
+						"* Chrome and Edge support installing PWAs on**Linux, Windows, macOS, and Chromebooks**",
+						"* **[Google Chrome Help on PWAs] **",
+						"* **[Use Web Apps with Firefox for Android] **",
+						"### Spoiler Alert",
+						"Close",
+						"This action may reveal spoilers such as scores and season records.",
+						"ContinueCancel"
+					],
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"name": "facebook-premier-league",
+					"snippet": "Meta © 2025",
+					"content": [
+						"Fabrizio Romano - 🥹🇵🇹Cristiano's 950 career goals in...",
+						"**",
+						"Facebook",
+						"[",
+						"Log In",
+						"] ",
+						"## Fabrizio Romano&#x27;s Post",
+						"[",
+						"] ",
+						"### [**Fabrizio Romano**] Verified account",
+						"[October 25, 2025] ·Shared with Public",
+						"![🥹]![🇵🇹] Cristiano's 950 career goals in details…",
+						"Real Madrid –450 goals",
+						"Manchester United –145 goals",
+						"Portugal –143 goals",
+						"Al-Nassr –106 goals",
+						"Juventus –101 goals",
+						"Sporting CP –5 goals",
+						"Greatest![🐐] ",
+						"[",
+						"![May be an image of soccer, football and text that says &#x27;NUNASSK ማGEAB KAFD FD κAF&#x27;] ",
+						"] ",
+						"All reactions:",
+						"91K",
+						"1.7K comments",
+						"494 shares",
+						"**",
+						"Like",
+						"**",
+						"Comment",
+						"Most relevant",
+						"**",
+						"![] Top fan",
+						"Debajyoti Nag",
+						"I noticed one thing that Fabrizio never added a![🐐] emonji when telling about Ronaldo and messi . But today he just written &quot;Greatest![🐐] &quot; . He knows who&#x27;s the goat![🐐] ",
+						"* [11w] ",
+						"50",
+						"View all 6 replies",
+						"Edel Queen",
+						"Bring his assists as well you calculating his goals too, Man is with over 300+ assists",
+						"* [11w] ",
+						"9",
+						"View all 6 replies",
+						"[",
+						"] ",
+						"![] Top fan",
+						"[Gunna Thèé Gēé] ",
+						"\u201cIf Chelsea had won I would have won some money, But I'm happy they lost. Because",
+						"money can&#x27;t buy happiness",
+						"![😜]![😜]![😜] ",
+						"* [11w] ",
+						"29",
+						"View all 2 replies",
+						"[",
+						"] ",
+						"![] Top fan",
+						"[Shafi Mazid] ",
+						"Higher than the highest Sky Scrapper. Beyond the debate.![🦿] machine![🦾] ",
+						"* [11w] ",
+						"6",
+						"View 1 reply",
+						"[",
+						"] ",
+						"![] Top fan",
+						"[Sicelo Thabethe] ",
+						"Road to 200 penalties![🙌🏿]![🙌🏿] ",
+						"* [11w] ",
+						"3",
+						"View all 9 replies",
+						"[",
+						"] ",
+						"[Samtex Ventures] ",
+						"Chelsea ordered Garnacho while United gave them Gachagua![🤣]![🤣] ",
+						"* [11w] ",
+						"17",
+						"View all 3 replies",
+						"[",
+						"] ",
+						"![] Top fan",
+						"[Anawo Destiny] ",
+						"Spanish league conquered",
+						"EPL conquered",
+						"Own country conquered",
+						"Camels league conquered",
+						"Seria A conquered",
+						"Portugal's league. Started from there!!",
+						"6 leagues felt the greatness of the football goat.",
+						"But messi went to ligue 1 and was chased out![😂]![😂] ",
+						"Went to Hollywood fashion league and has been fighting Tyler Perry and Jason statam on the pitch and was still beating![😂]![😂] ",
+						"Know your goat![🐐] ",
+						"* [11w] ",
+						"3",
+						"View 1 reply",
+						"![] Top fan",
+						"Sïrr Ñicølas",
+						"Maturing is realizing tht Ronaldo should have had 990 goals if it wasn&#x27;t because of wht happened when he was 37![😭]![😭] ",
+						"* [11w] ",
+						"[",
+						"] ",
+						"[Ziya&#x27;ulhaq Sa&#x27;adan El-dia] ",
+						"Did Fabrizio say greatest? He also acknowledges the![🐐] ",
+						"* [11w] ",
+						"[",
+						"] ",
+						"[Jona Lalremsanga] ",
+						"Now, People who never score Ronaldo&#x27;s Goals for sporting CP (5 goals) will comment and Judge him![🤣] ",
+						"* [11w]",
+						"https://www.census.gov/quickfacts/fact/table/newyorkcitynewyork/PST045224"
+					],
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Similar sentence structure but key words substituted",
+					"name": "word_substitution_boundary",
+					"content": "The quick brown fox jumps over the lazy dog in the sunny meadow today.",
+					"snippet": "The slow grey wolf leaps over the tired cat in the rainy forest today.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Same words but completely different order",
+					"name": "word_order_scrambled",
+					"content": "Machine learning models require large datasets for training and validation.",
+					"snippet": "Training and validation require large models for machine learning datasets.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Similar numbers in statistics context but different subject",
+					"name": "similar_statistics_different_values",
+					"content": "In 2024, the corporation disclosed earnings of $45.2 million with 12,500 staff across 28 regions.",
+					"snippet": "In 2019, the startup announced losses of $8.7 billion with 350 contractors across 3 cities.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Similar product names but different",
+					"name": "similar_product_names",
+					"content": "The new iPhone 15 Pro Max features an A17 Bionic chip with enhanced neural engine.",
+					"snippet": "The new Galaxy S24 Ultra features a Snapdragon 8 Gen 3 chip with enhanced AI engine.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Overlapping topic but different phrasing",
+					"name": "overlapping_phrases_different_context",
+					"content": "Meteorologists predict heavy rain will drench northern areas beginning at dawn tomorrow.",
+					"snippet": "The traffic report indicates severe congestion on southern highways clearing by midnight tonight.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Similar location-based content",
+					"name": "similar_locations_different_details",
+					"content": [
+						"## Sydney Weather Report",
+						"Temperature: 28°C",
+						"Humidity: 65%",
+						"Wind: NE 15 km/h",
+						"Conditions: Partly cloudy with afternoon thunderstorms expected"
+					],
+					"snippet": [
+						"## Melbourne Weather Report",
+						"Temperature: 22°C",
+						"Humidity: 78%",
+						"Wind: SW 20 km/h",
+						"Conditions: Mostly overcast with morning showers expected"
+					],
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Similar topic with different wording and entities",
+					"name": "antonym_substitution",
+					"content": "Wall Street rallied sharply as traders demonstrated renewed optimism about semiconductor companies.",
+					"snippet": "Bond markets tumbled dramatically while analysts expressed growing pessimism regarding retail corporations.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Similar list items but different specifics",
+					"name": "similar_list_different_items",
+					"content": [
+						"Top 5 Programming Languages in 2025:",
+						"1. Python - 28.5%",
+						"2. JavaScript - 22.1%",
+						"3. Java - 15.3%",
+						"4. TypeScript - 12.8%",
+						"5. C++ - 9.4%"
+					],
+					"snippet": [
+						"Top 5 Programming Languages in 2024:",
+						"1. JavaScript - 31.2%",
+						"2. Python - 24.7%",
+						"3. TypeScript - 18.6%",
+						"4. Java - 11.2%",
+						"5. Rust - 7.8%"
+					],
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Same template different entities",
+					"name": "same_template_different_entities",
+					"content": "John Smith, CEO of TechCorp Inc., announced the acquisition of DataFlow Systems for $2.3 billion.",
+					"snippet": "Jane Doe, CFO of InnovateCo Ltd., announced the merger with CloudSync Solutions for $1.8 billion.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Sports score with similar format but different teams and scores",
+					"name": "similar_sports_scores",
+					"content": [
+						"NBA Finals Game 5 Results:",
+						"Los Angeles Lakers 112 - Boston Celtics 108",
+						"Top Scorer: LeBron James (34 pts)",
+						"MVP: Anthony Davis"
+					],
+					"snippet": [
+						"NBA Finals Game 7 Results:",
+						"Golden State Warriors 118 - Miami Heat 115",
+						"Top Scorer: Stephen Curry (42 pts)",
+						"MVP: Draymond Green"
+					],
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Near match with critical word difference",
+					"name": "critical_negation_difference",
+					"content": "The FDA has approved the new vaccine for emergency use in adults over 18 years old.",
+					"snippet": "The FDA has not approved the new vaccine for emergency use in adults over 18 years old.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				},
+				{
+					"_comment": "Token matcher boundary: Completely different recipe with similar structure",
+					"name": "similar_recipe_different_ingredients",
+					"content": "Combine 2 cups flour, 1 cup sugar, 3 eggs, and 1/2 cup butter in a bowl. Bake at 350°F for 25 minutes.",
+					"snippet": "Blend 4 bananas, 2 avocados, 1 cup honey, and a splash of almond milk until smooth. Chill for 2 hours.",
+					"expected_result": {
+						"snippet_located": false
+					},
+					"allow_buffer": true
+				}
+			]
 		}
 	]
 }

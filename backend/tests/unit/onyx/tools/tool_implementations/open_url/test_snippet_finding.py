@@ -139,9 +139,6 @@ def test_snippet_finding(test_data: TestSchema) -> None:
         f"got {result.snippet_located}"
     )
 
-    print("snippet is")
-    print(test_data.content[result.start_idx : result.end_idx])
-
     # If buffer is allowed, we let the start and end indices be within 10 characters of where we expect
     BUFFER_SIZE = 10 if test_data.allow_buffer else 0
 

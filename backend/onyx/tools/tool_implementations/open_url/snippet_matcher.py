@@ -237,6 +237,8 @@ def _token_based_match(
 ) -> SnippetMatchResult:
     """
     Performs a token based fuzzy search for the snippet in the content.
+
+    min_threshold exists in the range [0, 1]
     """
     # Preprocess content & snippet
     processed_content = utils.default_process(content)
@@ -257,7 +259,7 @@ def _token_based_match(
     if len(content_words) < window_size:
         return NegativeSnippetMatchResult
 
-    best_score = 0
+    best_score = 0.0
     best_word_pos = -1
 
     # Sliding window through content words
@@ -276,7 +278,7 @@ def _token_based_match(
 
     content_word_positions = _get_word_positions(content, processed_content)
 
-    if best_score >= min_threshold:
+    if best_score >= (min_threshold * 100):
         original_start = content_word_positions[best_word_pos][0]
         original_end = content_word_positions[best_word_pos + window_size - 1][1]
 
