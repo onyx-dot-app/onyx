@@ -10,7 +10,7 @@ import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { SvgFold, SvgExpand, SvgCheckCircle } from "@opal/icons";
+import { SvgFold, SvgExpand, SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { IconProps } from "@opal/types";
@@ -242,7 +242,7 @@ export function AgentTimeline({
 
   // Calculate total steps across all turn groups to determine if we should hide StepContainer header
   const totalSteps = turnGroups.reduce((acc, tg) => acc + tg.steps.length, 0);
-  const isSingleStep = totalSteps === 1;
+  const isSingleStep = totalSteps === 1 && !userStopped;
 
   // Use pre-computed unique tools from packet processor (performance optimization)
   const uniqueTools = useMemo(
@@ -255,11 +255,20 @@ export function AgentTimeline({
     [uniqueToolNames]
   );
 
+  // Check if last step is a research agent (which handles its own Done)
+  const lastTurnGroup = turnGroups[turnGroups.length - 1];
+  const lastStep = lastTurnGroup?.steps[lastTurnGroup.steps.length - 1];
+  const lastStepIsResearchAgent = lastStep
+    ? isResearchAgentPackets(lastStep.packets)
+    : false;
+
   // Show "Done" indicator when:
   // 1. stopPacketSeen is true (timeline is complete)
   // 2. isExpanded is true (user can see the timeline)
   // 3. NOT userStopped (user didn't cancel)
-  const showDoneIndicator = stopPacketSeen && isExpanded && !userStopped;
+  // 4. Last step is NOT a research agent (they handle their own Done)
+  const showDoneIndicator =
+    stopPacketSeen && isExpanded && !userStopped && !lastStepIsResearchAgent;
 
   // Determine which header to render based on state
   const renderHeader = () => {
@@ -374,7 +383,8 @@ export function AgentTimeline({
                 const stepIsLast =
                   turnIdx === turnGroups.length - 1 &&
                   stepIdx === turnGroup.steps.length - 1 &&
-                  !showDoneIndicator;
+                  !showDoneIndicator &&
+                  !userStopped;
                 const stepIsFirst = turnIdx === 0 && stepIdx === 0;
 
                 return (
@@ -423,10 +433,22 @@ export function AgentTimeline({
           )}
 
           {/* Done indicator at bottom of expanded timeline */}
-          {showDoneIndicator && (
+          {stopPacketSeen && isExpanded && !userStopped && (
             <StepContainer
               stepIcon={SvgCheckCircle}
               header="Done"
+              isLastStep={true}
+              isFirstStep={false}
+            >
+              {null}
+            </StepContainer>
+          )}
+
+          {/* Stopped indicator when user cancelled */}
+          {stopPacketSeen && isExpanded && userStopped && (
+            <StepContainer
+              stepIcon={SvgStopCircle}
+              header="Stopped"
               isLastStep={true}
               isFirstStep={false}
             >

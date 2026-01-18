@@ -129,7 +129,6 @@ export const ResearchAgentRenderer: MessageRenderer<
           isLastStep={
             nestedToolGroups.length === 0 && !fullReportContent && !isComplete
           }
-          hideHeader={true}
         >
           <div className="text-text-600 text-sm">{researchTask}</div>
         </StepContainer>

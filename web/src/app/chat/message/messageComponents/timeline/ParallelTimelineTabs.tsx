@@ -52,7 +52,7 @@ export function ParallelTimelineTabs({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <div className="flex flex-col w-full">
+      <div className="flex flex-col w-full gap-1">
         <div className="flex w-full">
           {/* Left column: Icon + connector line */}
           <div className="flex flex-col items-center w-9 pt-2">
