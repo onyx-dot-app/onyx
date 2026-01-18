@@ -9,7 +9,6 @@ import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
-import Switch from "@/refresh-components/inputs/Switch";
 import { Callout } from "@/components/ui/callout";
 import Message from "@/refresh-components/messages/Message";
 import Button from "@/refresh-components/buttons/Button";
@@ -35,23 +34,127 @@ interface Props {
 function GuildDetailContent({
   guildId,
   personas,
+  localChannels,
+  onChannelUpdate,
+  handleEnableAll,
+  handleDisableAll,
+  disabled,
 }: {
   guildId: number;
   personas: Persona[];
+  localChannels: DiscordChannelConfig[];
+  onChannelUpdate: (
+    channelId: number,
+    field:
+      | "enabled"
+      | "require_bot_invocation"
+      | "thread_only_mode"
+      | "persona_override_id",
+    value: boolean | number | null
+  ) => void;
+  handleEnableAll: () => void;
+  handleDisableAll: () => void;
+  disabled: boolean;
 }) {
-  const { popup, setPopup } = usePopup();
   const {
     data: guild,
     isLoading: guildLoading,
     error: guildError,
   } = useDiscordGuild(guildId);
+  const { isLoading: channelsLoading, error: channelsError } =
+    useDiscordChannels(guildId);
+
+  if (guildLoading) {
+    return <ThreeDotsLoader />;
+  }
+
+  if (guildError || !guild) {
+    return (
+      <ErrorCallout
+        errorTitle="Failed to load server"
+        errorMsg={guildError?.info?.detail || "Server not found"}
+      />
+    );
+  }
+
+  const isRegistered = !!guild.guild_id;
+
+  return (
+    <>
+      {!isRegistered && (
+        <Callout type="notice" title="Waiting for Registration">
+          Use the !register command in your Discord server with the registration
+          key to complete setup.
+        </Callout>
+      )}
+
+      <Card disabled={disabled}>
+        <LineItemLayout
+          title="Channel Configuration"
+          description="Run !sync-channels in Discord to update the channel list."
+          rightChildren={
+            isRegistered && !channelsLoading && !channelsError ? (
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                alignItems="center"
+                width="fit"
+                gap={0.5}
+              >
+                <Button onClick={handleEnableAll} disabled={disabled} secondary>
+                  Enable All
+                </Button>
+                <Button
+                  onClick={handleDisableAll}
+                  disabled={disabled}
+                  secondary
+                >
+                  Disable All
+                </Button>
+              </Section>
+            ) : undefined
+          }
+        />
+
+        {!isRegistered ? (
+          <Text text03 secondaryBody>
+            Channel configuration will be available after the server is
+            registered.
+          </Text>
+        ) : channelsLoading ? (
+          <ThreeDotsLoader />
+        ) : channelsError ? (
+          <ErrorCallout
+            errorTitle="Failed to load channels"
+            errorMsg={channelsError?.info?.detail || "Could not load channels"}
+          />
+        ) : (
+          <DiscordChannelsTable
+            channels={localChannels}
+            personas={personas}
+            onChannelUpdate={onChannelUpdate}
+            disabled={disabled}
+          />
+        )}
+      </Card>
+    </>
+  );
+}
+
+export default function Page({ params }: Props) {
+  const unwrappedParams = use(params);
+  const guildId = Number(unwrappedParams["guild-id"]);
+  const { popup, setPopup } = usePopup();
+  const { data: guild, refreshGuild } = useDiscordGuild(guildId);
   const {
     data: channels,
     isLoading: channelsLoading,
     error: channelsError,
     refreshChannels,
   } = useDiscordChannels(guildId);
-
+  const { personas, isLoading: personasLoading } = useAdminPersonas({
+    includeDefault: true,
+  });
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Local state for channel configurations
@@ -193,145 +296,6 @@ function GuildDetailContent({
     }
   };
 
-  if (guildLoading) {
-    return <ThreeDotsLoader />;
-  }
-
-  if (guildError || !guild) {
-    return (
-      <ErrorCallout
-        errorTitle="Failed to load server"
-        errorMsg={guildError?.info?.detail || "Server not found"}
-      />
-    );
-  }
-
-  const isRegistered = !!guild.guild_id;
-
-  return (
-    <>
-      {popup}
-
-      {!isRegistered && (
-        <Callout type="notice" title="Waiting for Registration">
-          Use the !register command in your Discord server with the registration
-          key to complete setup.
-        </Callout>
-      )}
-
-      <Card disabled={!guild.enabled}>
-        <LineItemLayout
-          title="Channel Configuration"
-          description="Run !sync-channels in Discord to update the channel list."
-          rightChildren={
-            isRegistered && !channelsLoading && !channelsError ? (
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                alignItems="center"
-                width="fit"
-                gap={0.5}
-              >
-                <Button
-                  onClick={handleEnableAll}
-                  disabled={!guild.enabled}
-                  secondary
-                >
-                  Enable All
-                </Button>
-                <Button
-                  onClick={handleDisableAll}
-                  disabled={!guild.enabled}
-                  secondary
-                >
-                  Disable All
-                </Button>
-                <Button
-                  onClick={handleSaveChanges}
-                  disabled={!hasUnsavedChanges || !guild.enabled}
-                >
-                  Update
-                </Button>
-              </Section>
-            ) : undefined
-          }
-        />
-
-        {!isRegistered ? (
-          <Text text03 secondaryBody>
-            Channel configuration will be available after the server is
-            registered.
-          </Text>
-        ) : channelsLoading ? (
-          <ThreeDotsLoader />
-        ) : channelsError ? (
-          <ErrorCallout
-            errorTitle="Failed to load channels"
-            errorMsg={channelsError?.info?.detail || "Could not load channels"}
-          />
-        ) : (
-          <DiscordChannelsTable
-            channels={localChannels}
-            personas={personas}
-            onChannelUpdate={handleChannelUpdate}
-            disabled={!guild.enabled}
-          />
-        )}
-      </Card>
-
-      {/* Unsaved changes indicator - sticky at bottom, centered in content area */}
-      <div
-        className={cn(
-          "sticky z-toast bottom-4 w-fit mx-auto transition-all duration-300 ease-in-out",
-          hasUnsavedChanges && isRegistered && !channelsLoading && guild.enabled
-            ? "opacity-100 translate-y-0"
-            : "opacity-0 translate-y-4 pointer-events-none"
-        )}
-      >
-        <Message
-          warning
-          text="You have unsaved changes"
-          description="Click Update to save them."
-          close={false}
-        />
-      </div>
-    </>
-  );
-}
-
-export default function Page({ params }: Props) {
-  const unwrappedParams = use(params);
-  const guildId = Number(unwrappedParams["guild-id"]);
-  const { popup, setPopup } = usePopup();
-  const { data: guild, refreshGuild } = useDiscordGuild(guildId);
-  const { personas, isLoading: personasLoading } = useAdminPersonas({
-    includeDefault: true,
-  });
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const handleToggleEnabled = async () => {
-    if (!guild) return;
-    setIsUpdating(true);
-    try {
-      await updateGuildConfig(guildId, {
-        enabled: !guild.enabled,
-        default_persona_id: guild.default_persona_id,
-      });
-      refreshGuild();
-      setPopup({
-        type: "success",
-        message: `Server ${!guild.enabled ? "enabled" : "disabled"}`,
-      });
-    } catch (err) {
-      setPopup({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to update server",
-      });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
   const handleDefaultPersonaChange = async (personaId: number | null) => {
     if (!guild) return;
     setIsUpdating(true);
@@ -362,6 +326,15 @@ export default function Page({ params }: Props) {
     ? `Registered: ${new Date(guild.registered_at).toLocaleString()}`
     : "Pending registration";
 
+  const isRegistered = !!guild?.guild_id;
+  const isUpdateDisabled =
+    !isRegistered ||
+    channelsLoading ||
+    !!channelsError ||
+    !hasUnsavedChanges ||
+    !guild?.enabled ||
+    isUpdating;
+
   return (
     <SettingsLayouts.Root>
       {popup}
@@ -371,22 +344,9 @@ export default function Page({ params }: Props) {
         description={registeredText}
         backButton
         rightChildren={
-          <Section
-            flexDirection="row"
-            justifyContent="end"
-            alignItems="center"
-            width="fit"
-            gap={0.5}
-          >
-            <Text secondaryBody text03>
-              Enabled
-            </Text>
-            <Switch
-              checked={guild?.enabled ?? false}
-              onCheckedChange={handleToggleEnabled}
-              disabled={isUpdating || !guild}
-            />
-          </Section>
+          <Button onClick={handleSaveChanges} disabled={isUpdateDisabled}>
+            Update Configuration
+          </Button>
         }
       />
       <SettingsLayouts.Body>
@@ -425,7 +385,35 @@ export default function Page({ params }: Props) {
           />
         </Card>
 
-        <GuildDetailContent guildId={guildId} personas={personas} />
+        <GuildDetailContent
+          guildId={guildId}
+          personas={personas}
+          localChannels={localChannels}
+          onChannelUpdate={handleChannelUpdate}
+          handleEnableAll={handleEnableAll}
+          handleDisableAll={handleDisableAll}
+          disabled={!guild?.enabled}
+        />
+
+        {/* Unsaved changes indicator - sticky at bottom, centered in content area */}
+        <div
+          className={cn(
+            "sticky z-toast bottom-4 w-fit mx-auto transition-all duration-300 ease-in-out",
+            hasUnsavedChanges &&
+              isRegistered &&
+              !channelsLoading &&
+              guild?.enabled
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-4 pointer-events-none"
+          )}
+        >
+          <Message
+            warning
+            text="You have unsaved changes"
+            description="Click Update to save them."
+            close={false}
+          />
+        </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

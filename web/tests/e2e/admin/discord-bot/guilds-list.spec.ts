@@ -72,9 +72,56 @@ test.describe("Guilds List Page", () => {
     const registeredBadge = tableRow.locator("text=Registered");
     await expect(registeredBadge).toBeVisible();
 
-    // Should show Enabled badge in the guild's row
-    const enabledBadge = tableRow.locator("text=Enabled");
-    await expect(enabledBadge).toBeVisible();
+    // Should show enabled toggle switch in the guild's row (in Enabled column)
+    const enabledSwitch = tableRow.locator('[role="switch"]').first();
+    await expect(enabledSwitch).toBeVisible();
+    await expect(enabledSwitch).toHaveAttribute("aria-checked", "true");
+  });
+
+  test("guild enabled toggle works in table", async ({
+    adminPage,
+    mockRegisteredGuild,
+    mockBotConfigured: _mockBotConfigured,
+  }) => {
+    await gotoDiscordBotPage(adminPage);
+
+    // Find the table row containing the guild
+    const tableRow = adminPage.locator("tr").filter({
+      hasText: mockRegisteredGuild.name,
+    });
+    await expect(tableRow).toBeVisible({ timeout: 10000 });
+
+    // Find the enabled toggle switch in that row
+    const enabledSwitch = tableRow.locator('[role="switch"]').first();
+    await expect(enabledSwitch).toBeVisible({ timeout: 10000 });
+    await expect(enabledSwitch).toHaveAttribute("aria-checked", "true");
+    await expect(enabledSwitch).toBeEnabled();
+
+    const initialState = await enabledSwitch.getAttribute("aria-checked");
+    const expectedState = initialState === "true" ? "false" : "true";
+    const guildUrl = `/api/manage/admin/discord-bot/guilds/${mockRegisteredGuild.id}`;
+
+    // Set up response waiters before clicking
+    const patchPromise = adminPage.waitForResponse(
+      (response) =>
+        response.url().includes(guildUrl) &&
+        response.request().method() === "PATCH"
+    );
+
+    const getPromise = adminPage.waitForResponse(
+      (response) =>
+        response.url().includes(guildUrl) &&
+        response.request().method() === "GET"
+    );
+
+    await enabledSwitch.click();
+
+    // Wait for PATCH then GET (refreshGuilds) to complete
+    await patchPromise;
+    await getPromise;
+
+    // Verify the toggle state changed
+    await expect(enabledSwitch).toHaveAttribute("aria-checked", expectedState);
   });
 
   test("guilds page add server modal and copy key", async ({ adminPage }) => {

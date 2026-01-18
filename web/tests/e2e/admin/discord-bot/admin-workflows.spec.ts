@@ -70,7 +70,13 @@ test.describe("Admin Workflow E2E Flows", () => {
     ).toBeVisible({ timeout: 5000 });
 
     // Save changes - wait for the bulk update API call
-    const updateButton = adminPage.locator('button:has-text("Update")');
+    // Update button is now in the header
+    const updateButton = adminPage.locator(
+      'button:has-text("Update Configuration")'
+    );
+    // Verify button is visible and enabled before clicking
+    await expect(updateButton).toBeEnabled({ timeout: 5000 });
+
     const bulkUpdatePromise = adminPage.waitForResponse(
       (response) =>
         response

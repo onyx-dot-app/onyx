@@ -35,44 +35,6 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
     ).toBeVisible();
   });
 
-  test("guild enabled toggle works", async ({
-    adminPage,
-    mockRegisteredGuild,
-  }) => {
-    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
-
-    const headerSwitch = adminPage.locator('[role="switch"]').first();
-    await expect(headerSwitch).toBeVisible({ timeout: 10000 });
-    await expect(headerSwitch).toHaveAttribute("aria-checked", "true");
-    await expect(headerSwitch).toBeEnabled();
-
-    const initialState = await headerSwitch.getAttribute("aria-checked");
-    const expectedState = initialState === "true" ? "false" : "true";
-    const guildUrl = `/api/manage/admin/discord-bot/guilds/${mockRegisteredGuild.id}`;
-
-    // Set up response waiters before clicking
-    const patchPromise = adminPage.waitForResponse(
-      (response) =>
-        response.url().includes(guildUrl) &&
-        response.request().method() === "PATCH"
-    );
-
-    const getPromise = adminPage.waitForResponse(
-      (response) =>
-        response.url().includes(guildUrl) &&
-        response.request().method() === "GET"
-    );
-
-    await headerSwitch.click();
-
-    // Wait for PATCH then GET (refreshGuild) to complete
-    // Switch is controlled, so it only updates after refreshGuild updates guild state
-    await patchPromise;
-    await getPromise;
-
-    await expect(headerSwitch).toHaveAttribute("aria-checked", expectedState);
-  });
-
   test("guild default agent dropdown shows options", async ({
     adminPage,
     mockRegisteredGuild,
@@ -122,7 +84,10 @@ test.describe("Channel Configuration", () => {
     await expect(
       adminPage.locator('button:has-text("Disable All")')
     ).toBeVisible();
-    await expect(adminPage.locator('button:has-text("Update")')).toBeVisible();
+    // Update button is now in the header, not in the channel config section
+    await expect(
+      adminPage.locator('button:has-text("Update Configuration")')
+    ).toBeVisible();
   });
 
   test("channels table has correct columns", async ({

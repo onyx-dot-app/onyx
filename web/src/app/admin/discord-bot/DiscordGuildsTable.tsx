@@ -13,10 +13,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/DeleteButton";
 import Button from "@/refresh-components/buttons/Button";
+import Switch from "@/refresh-components/inputs/Switch";
 import { SvgEdit, SvgServer } from "@opal/icons";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { DiscordGuildConfig } from "@/app/admin/discord-bot/types";
-import { deleteGuildConfig } from "@/app/admin/discord-bot/lib";
+import {
+  deleteGuildConfig,
+  updateGuildConfig,
+} from "@/app/admin/discord-bot/lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
@@ -30,6 +34,9 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
   const router = useRouter();
   const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
     null
+  );
+  const [updatingGuildIds, setUpdatingGuildIds] = useState<Set<number>>(
+    new Set()
   );
 
   const handleDelete = async (guildId: number) => {
@@ -45,6 +52,40 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
       });
     } finally {
       setGuildToDelete(null);
+    }
+  };
+
+  const handleToggleEnabled = async (guild: DiscordGuildConfig) => {
+    if (!guild.guild_id) {
+      setPopup({
+        type: "error",
+        message: "Server must be registered before it can be enabled",
+      });
+      return;
+    }
+
+    setUpdatingGuildIds((prev) => new Set(prev).add(guild.id));
+    try {
+      await updateGuildConfig(guild.id, {
+        enabled: !guild.enabled,
+        default_persona_id: guild.default_persona_id,
+      });
+      onRefresh();
+      setPopup({
+        type: "success",
+        message: `Server ${!guild.enabled ? "enabled" : "disabled"}`,
+      });
+    } catch (err) {
+      setPopup({
+        type: "error",
+        message: err instanceof Error ? err.message : "Failed to update server",
+      });
+    } finally {
+      setUpdatingGuildIds((prev) => {
+        const next = new Set(prev);
+        next.delete(guild.id);
+        return next;
+      });
     }
   };
 
@@ -108,10 +149,12 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
               <TableCell>
                 {!guild.guild_id ? (
                   "-"
-                ) : guild.enabled ? (
-                  <Badge variant="success">Enabled</Badge>
                 ) : (
-                  <Badge variant="destructive">Disabled</Badge>
+                  <Switch
+                    checked={guild.enabled}
+                    onCheckedChange={() => handleToggleEnabled(guild)}
+                    disabled={updatingGuildIds.has(guild.id)}
+                  />
                 )}
               </TableCell>
               <TableCell>
