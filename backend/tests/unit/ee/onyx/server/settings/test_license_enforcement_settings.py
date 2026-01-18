@@ -14,12 +14,8 @@ from onyx.server.settings.models import Settings
 def base_settings() -> Settings:
     """Create base settings for testing."""
     return Settings(
-        chat_page_enabled=True,
-        search_page_enabled=True,
-        default_page="chat",
         maximum_chat_retention_days=None,
         gpu_enabled=False,
-        product_gating=None,
         application_status=ApplicationStatus.ACTIVE,
     )
 
