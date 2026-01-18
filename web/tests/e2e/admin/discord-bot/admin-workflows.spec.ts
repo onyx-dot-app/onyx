@@ -60,9 +60,19 @@ test.describe("Admin Workflow E2E Flows", () => {
       adminPage.locator("text=You have unsaved changes")
     ).toBeVisible({ timeout: 5000 });
 
-    // Save changes
+    // Save changes - wait for the bulk update API call
     const updateButton = adminPage.locator('button:has-text("Update")');
+    const bulkUpdatePromise = adminPage.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(
+            `/api/manage/admin/discord-bot/guilds/${mockRegisteredGuild.id}/channels`
+          ) && response.request().method() === "PATCH"
+    );
+
     await updateButton.click();
+    await bulkUpdatePromise;
 
     // Verify success toast
     const successToast = adminPage.locator("text=/updated/i");

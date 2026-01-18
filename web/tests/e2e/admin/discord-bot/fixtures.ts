@@ -179,7 +179,8 @@ export const test = base.extend<{
   mockRegisteredGuild: async ({ page }, use) => {
     await authenticateAdmin(page);
 
-    const mockGuild = createMockRegisteredGuild(MOCK_GUILD_ID);
+    // Use a mutable object so we can update it when PATCH requests come in
+    let mockGuild = createMockRegisteredGuild(MOCK_GUILD_ID);
     const mockChannels = createMockChannels();
 
     // Mock the guild list endpoint
@@ -207,10 +208,10 @@ export const test = base.extend<{
         if (method === "GET") {
           await route.fulfill(jsonResponse(mockGuild));
         } else if (method === "PATCH") {
-          // Handle updates - merge with current state
+          // Handle updates - merge with current state and update mockGuild
           const body = (await route.request().postDataJSON()) || {};
-          const updatedGuild = { ...mockGuild, ...body };
-          await route.fulfill(jsonResponse(updatedGuild));
+          mockGuild = { ...mockGuild, ...body };
+          await route.fulfill(jsonResponse(mockGuild));
         } else if (method === "DELETE") {
           await route.fulfill({ status: 204, body: "" });
         } else {

@@ -41,29 +41,36 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
   }) => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Find the enabled toggle in the header area
-    // The first switch is in the header (guild enabled toggle)
     const headerSwitch = adminPage.locator('[role="switch"]').first();
     await expect(headerSwitch).toBeVisible({ timeout: 10000 });
-
-    // Find the "Enabled" label in the header area (not the table column header)
-    // The header appears before the table in DOM, so the first "Enabled" text is in the header
-    // We can also verify it's not in a table header by checking it's near the switch
-    const enabledLabel = adminPage.getByText("Enabled").first();
-    await expect(enabledLabel).toBeVisible({ timeout: 10000 });
-
-    // Should be enabled (checked) for our mock guild
     await expect(headerSwitch).toHaveAttribute("aria-checked", "true");
+    await expect(headerSwitch).toBeEnabled();
 
-    // Get initial state and toggle
     const initialState = await headerSwitch.getAttribute("aria-checked");
+    const expectedState = initialState === "true" ? "false" : "true";
+    const guildUrl = `/api/manage/admin/discord-bot/guilds/${mockRegisteredGuild.id}`;
+
+    // Set up response waiters before clicking
+    const patchPromise = adminPage.waitForResponse(
+      (response) =>
+        response.url().includes(guildUrl) &&
+        response.request().method() === "PATCH"
+    );
+
+    const getPromise = adminPage.waitForResponse(
+      (response) =>
+        response.url().includes(guildUrl) &&
+        response.request().method() === "GET"
+    );
+
     await headerSwitch.click();
 
-    // State should change (optimistic update)
-    await expect(headerSwitch).toHaveAttribute(
-      "aria-checked",
-      initialState === "true" ? "false" : "true"
-    );
+    // Wait for PATCH then GET (refreshGuild) to complete
+    // Switch is controlled, so it only updates after refreshGuild updates guild state
+    await patchPromise;
+    await getPromise;
+
+    await expect(headerSwitch).toHaveAttribute("aria-checked", expectedState);
   });
 
   test("guild default agent dropdown shows options", async ({
@@ -248,15 +255,11 @@ test.describe("Channel Configuration", () => {
   }) => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Click "Enable All" button
     const enableAllButton = adminPage.locator('button:has-text("Enable All")');
     await expect(enableAllButton).toBeVisible({ timeout: 10000 });
     await enableAllButton.click();
 
-    // Wait for UI to update
-    await adminPage.waitForTimeout(300);
-
-    // First toggle in each row should be enabled
+    // Wait for UI to update - all enabled toggles should be checked
     const rows = adminPage.locator("tbody tr");
     const rowCount = await rows.count();
 
@@ -274,17 +277,13 @@ test.describe("Channel Configuration", () => {
   }) => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Click "Disable All" button
     const disableAllButton = adminPage.locator(
       'button:has-text("Disable All")'
     );
     await expect(disableAllButton).toBeVisible({ timeout: 10000 });
     await disableAllButton.click();
 
-    // Wait for UI to update
-    await adminPage.waitForTimeout(300);
-
-    // First toggle in each row should be disabled
+    // Wait for UI to update - all enabled toggles should be unchecked
     const rows = adminPage.locator("tbody tr");
     const rowCount = await rows.count();
 
@@ -302,9 +301,16 @@ test.describe("Channel Configuration", () => {
   }) => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
-    // Initially no unsaved changes indicator
+    // Find the unsaved changes message container (always in DOM, hidden with opacity-0)
     const unsavedMessage = adminPage.locator("text=You have unsaved changes");
-    await expect(unsavedMessage).not.toBeVisible();
+    // The container div has class "sticky" and controls visibility via opacity
+    const messageContainer = adminPage
+      .locator("div.sticky")
+      .filter({ has: unsavedMessage })
+      .first();
+
+    // Initially hidden (opacity-0)
+    await expect(messageContainer).toHaveCSS("opacity", "0");
 
     // Make a change
     const generalRow = adminPage.locator("tr").filter({
@@ -313,7 +319,8 @@ test.describe("Channel Configuration", () => {
     const enabledToggle = generalRow.locator('[role="switch"]').first();
     await enabledToggle.click();
 
-    // Unsaved changes indicator should appear
+    // Unsaved changes indicator should appear (opacity-100)
+    await expect(messageContainer).toHaveCSS("opacity", "1", { timeout: 5000 });
     await expect(unsavedMessage).toBeVisible({ timeout: 5000 });
   });
 
