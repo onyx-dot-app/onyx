@@ -74,7 +74,12 @@ export function AgentTimeline({
             <AgentAvatar agent={chatState.assistant} size={24} />
           </div>
           <div className="flex w-full h-full items-center px-2">
-            <Text as="p" mainUiAction text03 className="animate-pulse">
+            <Text
+              as="p"
+              mainUiAction
+              text03
+              className="animate-shimmer bg-[length:200%_100%] bg-[linear-gradient(90deg,var(--shimmer-base)_10%,var(--shimmer-highlight)_40%,var(--shimmer-base)_70%)] bg-clip-text text-transparent"
+            >
               {headerText}
             </Text>
           </div>
@@ -107,7 +112,12 @@ export function AgentTimeline({
             !isExpanded && "rounded-b-12"
           )}
         >
-          <Text as="p" mainUiAction text03>
+          <Text
+            as="p"
+            mainUiAction
+            text03
+            className="animate-shimmer bg-[length:200%_100%] bg-[linear-gradient(90deg,var(--shimmer-base)_10%,var(--shimmer-highlight)_40%,var(--shimmer-base)_70%)] bg-clip-text text-transparent"
+          >
             {headerText}
           </Text>
 

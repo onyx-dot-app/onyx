@@ -26,23 +26,23 @@ export function useTimelineHeader(
     const userStopped = stopReason === StopReason.USER_CANCELLED;
 
     if (!hasPackets) {
-      return { headerText: "Thinking", hasPackets, userStopped };
+      return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
     // Get the last (current) turn group
     const currentTurn = turnGroups[turnGroups.length - 1];
     if (!currentTurn) {
-      return { headerText: "Thinking", hasPackets, userStopped };
+      return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
     const currentStep = currentTurn.steps[0];
     if (!currentStep?.packets?.length) {
-      return { headerText: "Thinking", hasPackets, userStopped };
+      return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
     const firstPacket = currentStep.packets[0];
     if (!firstPacket) {
-      return { headerText: "Thinking", hasPackets, userStopped };
+      return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
     const packetType = firstPacket.obj.type;
@@ -62,6 +62,6 @@ export function useTimelineHeader(
       return { headerText: "Searching web", hasPackets, userStopped };
     }
 
-    return { headerText: "Thinking", hasPackets, userStopped };
+    return { headerText: "Thinking...", hasPackets, userStopped };
   }, [turnGroups, stopReason]);
 }
