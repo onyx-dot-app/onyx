@@ -412,6 +412,7 @@ class OnyxRedisLocks:
     SLACK_BOT_LOCK = "da_lock:slack_bot"
     SLACK_BOT_HEARTBEAT_PREFIX = "da_heartbeat:slack_bot"
     ANONYMOUS_USER_ENABLED = "anonymous_user_enabled"
+    AUTO_SCROLL = "auto_scroll"
 
     CLOUD_BEAT_TASK_GENERATOR_LOCK = "da_lock:cloud_beat_task_generator"
     CLOUD_CHECK_ALEMBIC_BEAT_LOCK = "da_lock:cloud_check_alembic"
