@@ -131,7 +131,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
         for result in response.results:
             title = (result.title or "").strip()
             # library type stub issue
-            snippet = (result.highlights[0] if result.highlights else "").strip()  # type: ignore[attr-defined]
+            snippet = (result.highlights[0] if result.highlights else "").strip()
             results.append(
                 WebSearchResult(
                     title=title,
