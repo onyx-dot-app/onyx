@@ -13,6 +13,8 @@ export interface TimelineRendererResult extends RendererResult {
   onToggle: () => void;
   /** Current render type */
   renderType: RenderType;
+  /** Whether this is the last step (passed through from props) */
+  isLastStep: boolean;
 }
 
 export interface TimelineRendererComponentProps {
@@ -30,6 +32,8 @@ export interface TimelineRendererComponentProps {
   stopReason?: StopReason;
   /** Initial expanded state */
   defaultExpanded?: boolean;
+  /** Whether this is the last step in the timeline (for connector line decisions) */
+  isLastStep?: boolean;
   /** Children render function - receives extended result with collapse state */
   children: (result: TimelineRendererResult) => JSX.Element;
 }
@@ -42,6 +46,7 @@ export function TimelineRendererComponent({
   stopPacketSeen,
   stopReason,
   defaultExpanded = true,
+  isLastStep,
   children,
 }: TimelineRendererComponentProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -57,6 +62,7 @@ export function TimelineRendererComponent({
       isExpanded,
       onToggle: handleToggle,
       renderType,
+      isLastStep: isLastStep ?? true,
     });
   }
 
@@ -69,6 +75,7 @@ export function TimelineRendererComponent({
       renderType={renderType}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
+      isLastStep={isLastStep}
     >
       {({ icon, status, content, expandedText }) =>
         children({
@@ -79,6 +86,7 @@ export function TimelineRendererComponent({
           isExpanded,
           onToggle: handleToggle,
           renderType,
+          isLastStep: isLastStep ?? true,
         })
       }
     </RendererFn>

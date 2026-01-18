@@ -86,8 +86,9 @@ export function ParallelTimelineTabs({
             stopPacketSeen={stopPacketSeen}
             stopReason={stopReason}
             defaultExpanded={true}
+            isLastStep={isLastTurnGroup}
           >
-            {({ icon, status, content, isExpanded, onToggle }) =>
+            {({ icon, status, content, isExpanded, onToggle, isLastStep }) =>
               isResearchAgentPackets(activeStep?.packets ?? []) ? (
                 // ResearchAgentRenderer has its own StepContainer layout
                 content
@@ -98,8 +99,8 @@ export function ParallelTimelineTabs({
                   isExpanded={isExpanded}
                   onToggle={onToggle}
                   collapsible={true}
-                  isLastStep={isLastTurnGroup}
-                  packetLength={activeStep?.packets.length ?? 0}
+                  isLastStep={isLastStep}
+                  isFirstStep={false}
                 >
                   {content}
                 </StepContainer>

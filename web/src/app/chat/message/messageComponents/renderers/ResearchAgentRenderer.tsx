@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, FunctionComponent } from "react";
 import { FiTarget } from "react-icons/fi";
-import { SvgCircle } from "@opal/icons";
+import { SvgCircle, SvgCheckCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 
 import {
@@ -32,7 +32,14 @@ interface NestedToolGroup {
 export const ResearchAgentRenderer: MessageRenderer<
   ResearchAgentPacket,
   FullChatState
-> = ({ packets, state, onComplete, stopPacketSeen, children }) => {
+> = ({
+  packets,
+  state,
+  onComplete,
+  stopPacketSeen,
+  isLastStep = true,
+  children,
+}) => {
   // Extract the research task from the start packet
   const startPacket = packets.find(
     (p) => p.obj.type === PacketType.RESEARCH_AGENT_START
@@ -119,8 +126,10 @@ export const ResearchAgentRenderer: MessageRenderer<
           stepIcon={FiTarget as FunctionComponent<IconProps>}
           header="Research Task"
           collapsible={true}
-          isLastStep={nestedToolGroups.length === 0 && !fullReportContent}
-          packetLength={1}
+          isLastStep={
+            nestedToolGroups.length === 0 && !fullReportContent && !isComplete
+          }
+          hideHeader={true}
         >
           <div className="text-text-600 text-sm">{researchTask}</div>
         </StepContainer>
@@ -145,9 +154,11 @@ export const ResearchAgentRenderer: MessageRenderer<
               onToggle={onToggle}
               collapsible={true}
               isLastStep={
-                index === nestedToolGroups.length - 1 && !fullReportContent
+                index === nestedToolGroups.length - 1 &&
+                !fullReportContent &&
+                !isComplete
               }
-              packetLength={group.packets.length}
+              isFirstStep={!researchTask && index === 0}
             >
               {content}
             </StepContainer>
@@ -160,6 +171,8 @@ export const ResearchAgentRenderer: MessageRenderer<
         <StepContainer
           stepIcon={SvgCircle as FunctionComponent<IconProps>}
           header="Research Report"
+          isLastStep={!isComplete}
+          isFirstStep={!researchTask && nestedToolGroups.length === 0}
         >
           <ExpandableTextDisplay
             title="Research Report"
@@ -168,6 +181,16 @@ export const ResearchAgentRenderer: MessageRenderer<
             renderContent={() => renderedContent}
           />
         </StepContainer>
+      )}
+
+      {/* Done indicator at end of research agent */}
+      {isComplete && !isLastStep && (
+        <StepContainer
+          stepIcon={SvgCheckCircle}
+          header="Done"
+          isLastStep={isLastStep}
+          isFirstStep={false}
+        />
       )}
     </div>
   );

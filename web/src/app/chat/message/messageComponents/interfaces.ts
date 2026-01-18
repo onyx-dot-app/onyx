@@ -49,5 +49,7 @@ export type MessageRenderer<
   animate: boolean;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
+  /** Whether this is the last step in the timeline (for connector line decisions) */
+  isLastStep?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }>;

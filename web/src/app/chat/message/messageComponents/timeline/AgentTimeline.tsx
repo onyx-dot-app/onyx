@@ -10,7 +10,7 @@ import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { SvgFold, SvgExpand } from "@opal/icons";
+import { SvgFold, SvgExpand, SvgCheckCircle } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { IconProps } from "@opal/types";
@@ -255,6 +255,12 @@ export function AgentTimeline({
     [uniqueToolNames]
   );
 
+  // Show "Done" indicator when:
+  // 1. stopPacketSeen is true (timeline is complete)
+  // 2. isExpanded is true (user can see the timeline)
+  // 3. NOT userStopped (user didn't cancel)
+  const showDoneIndicator = stopPacketSeen && isExpanded && !userStopped;
+
   // Determine which header to render based on state
   const renderHeader = () => {
     // STATE 1: Streaming - show shimmer text with current activity
@@ -364,43 +370,68 @@ export function AgentTimeline({
                 isLastTurnGroup={turnIdx === turnGroups.length - 1}
               />
             ) : (
-              turnGroup.steps.map((step, stepIdx) => (
-                <TimelineRendererComponent
-                  key={step.key}
-                  packets={step.packets}
-                  chatState={chatState}
-                  onComplete={() => {}}
-                  animate={!stopPacketSeen}
-                  stopPacketSeen={stopPacketSeen}
-                  stopReason={stopReason}
-                  defaultExpanded={true}
-                >
-                  {({ icon, status, content, isExpanded, onToggle }) =>
-                    isResearchAgentPackets(step.packets) ? (
-                      content
-                    ) : (
-                      <StepContainer
-                        stepIcon={
-                          icon as FunctionComponent<IconProps> | undefined
-                        }
-                        header={status}
-                        isExpanded={isExpanded}
-                        onToggle={onToggle}
-                        collapsible={true}
-                        isLastStep={
-                          turnIdx === turnGroups.length - 1 &&
-                          stepIdx === turnGroup.steps.length - 1
-                        }
-                        packetLength={step.packets.length}
-                        hideHeader={isSingleStep}
-                      >
-                        {content}
-                      </StepContainer>
-                    )
-                  }
-                </TimelineRendererComponent>
-              ))
+              turnGroup.steps.map((step, stepIdx) => {
+                const stepIsLast =
+                  turnIdx === turnGroups.length - 1 &&
+                  stepIdx === turnGroup.steps.length - 1 &&
+                  !showDoneIndicator;
+                const stepIsFirst = turnIdx === 0 && stepIdx === 0;
+
+                return (
+                  <TimelineRendererComponent
+                    key={step.key}
+                    packets={step.packets}
+                    chatState={chatState}
+                    onComplete={() => {}}
+                    animate={!stopPacketSeen}
+                    stopPacketSeen={stopPacketSeen}
+                    stopReason={stopReason}
+                    defaultExpanded={true}
+                    isLastStep={stepIsLast}
+                  >
+                    {({
+                      icon,
+                      status,
+                      content,
+                      isExpanded,
+                      onToggle,
+                      isLastStep,
+                    }) =>
+                      isResearchAgentPackets(step.packets) ? (
+                        content
+                      ) : (
+                        <StepContainer
+                          stepIcon={
+                            icon as FunctionComponent<IconProps> | undefined
+                          }
+                          header={status}
+                          isExpanded={isExpanded}
+                          onToggle={onToggle}
+                          collapsible={true}
+                          isLastStep={isLastStep}
+                          isFirstStep={stepIsFirst}
+                          hideHeader={isSingleStep}
+                        >
+                          {content}
+                        </StepContainer>
+                      )
+                    }
+                  </TimelineRendererComponent>
+                );
+              })
             )
+          )}
+
+          {/* Done indicator at bottom of expanded timeline */}
+          {showDoneIndicator && (
+            <StepContainer
+              stepIcon={SvgCheckCircle}
+              header="Done"
+              isLastStep={true}
+              isFirstStep={false}
+            >
+              {null}
+            </StepContainer>
           )}
         </div>
       )}
@@ -410,7 +441,7 @@ export function AgentTimeline({
 
 export interface StepContainerProps {
   /** Main content */
-  children: React.ReactNode;
+  children?: React.ReactNode;
   /** Step icon component */
   stepIcon?: FunctionComponent<IconProps>;
   /** Header left slot - accepts any component */
@@ -427,8 +458,8 @@ export interface StepContainerProps {
   className?: string;
   /** Whether this is the last step */
   isLastStep?: boolean;
-  /** Number of packets in the step */
-  packetLength?: number;
+  /** Whether this is the first step (no top connector, uses pt-2 instead) */
+  isFirstStep?: boolean;
   /** Whether to hide the header (for single-step timelines) */
   hideHeader?: boolean;
 }
@@ -442,16 +473,23 @@ export function StepContainer({
   onToggle,
   collapsible = true,
   isLastStep = false,
+  isFirstStep = false,
   className,
-  packetLength,
   hideHeader = false,
 }: StepContainerProps) {
   return (
     <div className={cn("flex w-full", className)}>
-      <div className="flex flex-col items-center w-9 pt-2">
+      <div
+        className={cn("flex flex-col items-center w-9", isFirstStep && "pt-2")}
+      >
+        {/* Icon at TOP */}
         {!hideHeader && StepIconComponent && (
-          <StepIconComponent className="size-4 stroke-text-02" />
+          <div className="py-1">
+            <StepIconComponent className="size-4 stroke-text-02" />
+          </div>
         )}
+
+        {/* Connector below icon - fills remaining space */}
         {!isLastStep && <div className="w-px flex-1 bg-border-01" />}
       </div>
 
@@ -461,7 +499,7 @@ export function StepContainer({
           isLastStep && "rounded-b-12"
         )}
       >
-        {!hideHeader && packetLength && packetLength > 1 && (
+        {!hideHeader && (
           <div className="flex items-center justify-between px-2">
             {header && (
               <Text as="p" mainUiMuted text03>
