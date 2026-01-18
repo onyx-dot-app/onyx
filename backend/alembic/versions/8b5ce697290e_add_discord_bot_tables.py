@@ -1,7 +1,7 @@
 """Add Discord bot tables
 
 Revision ID: 8b5ce697290e
-Revises: 73e9983e5091
+Revises: a1b2c3d4e5f7
 Create Date: 2025-01-14
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "8b5ce697290e"
-down_revision = "73e9983e5091"
+down_revision = "a1b2c3d4e5f7"
 branch_labels: None = None
 depends_on: None = None
 
