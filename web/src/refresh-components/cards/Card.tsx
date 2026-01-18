@@ -36,36 +36,34 @@
  * ```
  */
 
-import { cn } from "@/lib/utils";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section, SectionProps } from "@/layouts/general-layouts";
 
-const classNames = {
-  main: ["bg-background-tint-00 border"],
-  translucent: ["bg-transparent border border-dashed"],
-  disabled: [
-    "cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50",
-  ],
-} as const;
-
-export interface CardProps extends GeneralLayouts.SectionProps {
+export interface CardProps extends SectionProps {
   // card variants
   translucent?: boolean;
+  borderless?: boolean;
   disabled?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Card({
   translucent,
+  borderless,
   disabled,
-
   padding = 1,
-
+  ref,
   ...props
 }: CardProps) {
   const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
 
   return (
-    <div className={cn("rounded-16 w-full h-full", classNames[variant])}>
-      <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
+    <div
+      ref={ref}
+      className="card"
+      data-variant={variant}
+      data-borderless={borderless || undefined}
+    >
+      <Section alignItems="start" padding={padding} height="fit" {...props} />
     </div>
   );
 }

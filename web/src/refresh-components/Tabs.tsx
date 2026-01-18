@@ -356,7 +356,7 @@ const TabsTrigger = React.forwardRef<
     if (tooltip && disabled) {
       return (
         <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
-          <span className="inline-flex align-middle justify-center">
+          <span className="flex-1 inline-flex align-middle justify-center">
             {trigger}
           </span>
         </SimpleTooltip>

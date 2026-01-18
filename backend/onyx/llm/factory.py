@@ -96,6 +96,7 @@ def get_llm_config_for_persona(
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
         deployment_name=llm_provider.deployment_name,
+        custom_config=llm_provider.custom_config,
         max_input_tokens=max_input_tokens,
     )
 

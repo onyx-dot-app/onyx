@@ -51,6 +51,7 @@ from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_bac
 from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import llm_response_to_string
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
@@ -492,7 +493,7 @@ def add_document_summaries(
     # So we just pass the full prompt without caching
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
     doc_summary = llm_response_to_string(
-        llm.invoke(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+        llm.invoke(UserMessage(content=summary_prompt), max_tokens=MAX_CONTEXT_TOKENS)
     )
 
     for chunk in chunks_by_doc:
@@ -534,7 +535,9 @@ def add_chunk_summaries(
         # In this case we compute a doc summary using the LLM
         doc_info = llm_response_to_string(
             llm.invoke(
-                DOCUMENT_SUMMARY_PROMPT.format(document=doc_content),
+                UserMessage(
+                    content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
+                ),
                 max_tokens=MAX_CONTEXT_TOKENS,
             )
         )
@@ -550,8 +553,8 @@ def add_chunk_summaries(
             # For string inputs with continuation=True, the result will be a concatenated string
             processed_prompt, _ = process_with_prompt_cache(
                 llm_config=llm.config,
-                cacheable_prefix=context_prompt1,
-                suffix=context_prompt2,
+                cacheable_prefix=UserMessage(content=context_prompt1),
+                suffix=UserMessage(content=context_prompt2),
                 continuation=True,  # Append chunk to the document context
             )
 

@@ -63,7 +63,7 @@ export default function CreateRateLimitModal({
 
   return (
     <Modal open={isOpen} onOpenChange={() => setIsOpen(false)}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgSettings}
           title="Create a Token Rate Limit"

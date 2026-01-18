@@ -314,7 +314,7 @@ export default function OpenAPIAuthenticationModal({
         }
       }}
     >
-      <Modal.Content tall skipOverlay={skipOverlay}>
+      <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgArrowExchange}
           title={title}

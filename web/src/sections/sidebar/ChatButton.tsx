@@ -424,7 +424,7 @@ const ChatButton = memo(
             />
           </div>
         </Popover.Trigger>
-        <Popover.Content side="right" align="start">
+        <Popover.Content side="right" align="start" md>
           <PopoverMenu>{popoverItems}</PopoverMenu>
         </Popover.Content>
       </>

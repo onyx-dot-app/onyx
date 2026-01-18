@@ -5,8 +5,9 @@ import UserGroupCreationForm from "./UserGroupCreationForm";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { useConnectorStatus, useUserGroups, useUsers } from "@/lib/hooks";
+import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { AdminPageTitle } from "@/components/admin/Title";
+import useUsers from "@/hooks/useUsers";
 
 import { useUser } from "@/components/user/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";

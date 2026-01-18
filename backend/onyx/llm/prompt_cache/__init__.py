@@ -16,7 +16,6 @@ from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
 from onyx.llm.prompt_cache.providers.openai import OpenAIPromptCacheProvider
 from onyx.llm.prompt_cache.providers.vertex import VertexAIPromptCacheProvider
 from onyx.llm.prompt_cache.utils import combine_messages_with_continuation
-from onyx.llm.prompt_cache.utils import normalize_language_model_input
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
 
 __all__ = [
@@ -26,7 +25,6 @@ __all__ = [
     "combine_messages_with_continuation",
     "generate_cache_key_hash",
     "get_provider_adapter",
-    "normalize_language_model_input",
     "NoOpPromptCacheProvider",
     "OpenAIPromptCacheProvider",
     "prepare_messages_with_cacheable_transform",

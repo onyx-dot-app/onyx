@@ -104,4 +104,4 @@ class ToolMessage(CacheableMessage):
 # Union type for all OpenAI Chat Completions messages
 ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 # Allows for passing in a string directly. This is provided for convenience and is wrapped as a UserMessage.
-LanguageModelInput = list[ChatCompletionMessage] | str
+LanguageModelInput = list[ChatCompletionMessage] | ChatCompletionMessage

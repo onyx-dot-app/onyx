@@ -19,6 +19,7 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import delete_connector
@@ -65,7 +66,6 @@ from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.documents.models import PermissionSyncAttemptSnapshot
 from onyx.server.models import StatusResponse
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id

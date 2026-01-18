@@ -5,11 +5,15 @@ TOOL_SECTION_HEADER = "\n\n# Tools\n"
 
 # This section is included if there are search type tools, currently internal_search and web_search
 TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
-For questions that can be answered from existing knowledge, answer the user directly without using any tools. If you suspect your knowledge is outdated or for topics where things are rapidly changing, use search tools to get more context.
+For questions that can be answered from existing knowledge, answer the user directly without using any tools. \
+If you suspect your knowledge is outdated or for topics where things are rapidly changing, use search tools to get more context. \
+For statements that may be describing or referring to a document, run a search for the document. \
+In ambiguous cases, favor searching to get more context.
 
 When using any search type tool, do not make any assumptions and stay as faithful to the user's query as possible. \
 Between internal and web search (if both are available), think about if the user's query is likely better answered by team internal sources or online web pages. \
-When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. Do not repeat the same or very similar queries if it already has been run in the chat history.
+When searching for information, if the initial results cannot fully answer the user's query, try again with different tools or arguments. \
+Do not repeat the same or very similar queries if it already has been run in the chat history.
 
 If it is unclear which tool to use, consider using multiple in parallel to be efficient with time.
 """

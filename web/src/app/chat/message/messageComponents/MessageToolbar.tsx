@@ -25,11 +25,11 @@ import { Message } from "@/app/chat/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { RegenerationFactory } from "./AgentMessage";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFeedbackController } from "@/app/chat/hooks/useFeedbackController";
+import useFeedbackController from "@/hooks/useFeedbackController";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
-} from "@/app/chat/components/modal/FeedbackModal";
+} from "@/sections/modals/FeedbackModal";
 
 export interface MessageToolbarProps {
   // Message identification

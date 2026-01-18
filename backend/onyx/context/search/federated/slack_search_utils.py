@@ -13,6 +13,7 @@ from onyx.context.search.federated.models import ChannelMetadata
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.prompts.federated_search import SLACK_DATE_EXTRACTION_PROMPT
@@ -190,7 +191,7 @@ def extract_date_range_from_query(
 
     try:
         prompt = SLACK_DATE_EXTRACTION_PROMPT.format(query=query)
-        response = llm_response_to_string(llm.invoke(prompt))
+        response = llm_response_to_string(llm.invoke(UserMessage(content=prompt)))
 
         response_clean = _parse_llm_code_block_response(response)
 
@@ -576,8 +577,10 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
     Returns:
         List of rephrased query strings (up to MAX_SLACK_QUERY_EXPANSIONS)
     """
-    prompt = SLACK_QUERY_EXPANSION_PROMPT.format(
-        query=query_text, max_queries=MAX_SLACK_QUERY_EXPANSIONS
+    prompt = UserMessage(
+        content=SLACK_QUERY_EXPANSION_PROMPT.format(
+            query=query_text, max_queries=MAX_SLACK_QUERY_EXPANSIONS
+        )
     )
 
     try:

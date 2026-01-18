@@ -32,14 +32,20 @@ export async function navigateToAssistantInHistorySidebar(
 }
 
 export async function sendMessage(page: Page, message: string) {
+  // Count existing AI messages before sending
+  const existingMessageCount = await page
+    .locator('[data-testid="onyx-ai-message"]')
+    .count();
+
   await page.locator("#onyx-chat-input-textarea").click();
   await page.locator("#onyx-chat-input-textarea").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
-  await page.waitForSelector('[data-testid="onyx-ai-message"]');
-  // Wait for the copy button to appear, which indicates the message is fully rendered
-  await page.waitForSelector('[data-testid="AIMessage/copy-button"]', {
-    timeout: 30000,
-  });
+
+  // Wait for a NEW AI message to appear (count should increase)
+  await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(
+    existingMessageCount + 1,
+    { timeout: 30000 }
+  );
 
   // Wait for up to 10 seconds for the URL to contain 'chatId='
   await page.waitForFunction(
@@ -47,6 +53,9 @@ export async function sendMessage(page: Page, message: string) {
     null,
     { timeout: 10000 }
   );
+
+  // wait for stream to complete
+  await page.waitForLoadState("networkidle");
 }
 
 export async function verifyCurrentModel(page: Page, modelName: string) {

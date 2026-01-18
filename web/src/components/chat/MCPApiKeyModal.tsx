@@ -153,7 +153,7 @@ export default function MCPApiKeyModal({
   const credsType = isTemplateMode ? "Credentials" : "API Key";
   return (
     <Modal open={isOpen} onOpenChange={handleClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgKey}
           title={isAuthenticated ? `Manage ${credsType}` : `Enter ${credsType}`}

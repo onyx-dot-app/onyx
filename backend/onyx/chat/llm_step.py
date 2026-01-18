@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
@@ -136,12 +137,11 @@ def _format_message_history_for_logging(
 
     separator = "================================================"
 
-    # Handle string input
-    if isinstance(message_history, str):
-        formatted_lines.append("Message [string]:")
-        formatted_lines.append(separator)
-        formatted_lines.append(f"{message_history}")
-        return "\n".join(formatted_lines)
+    # Handle single ChatCompletionMessage - wrap in list for uniform processing
+    if isinstance(
+        message_history, (SystemMessage, UserMessage, AssistantMessage, ToolMessage)
+    ):
+        message_history = [message_history]
 
     # Handle sequence of messages
     for i, msg in enumerate(message_history):
@@ -211,7 +211,8 @@ def _update_tool_call_with_delta(
 
     if index not in tool_calls_in_progress:
         tool_calls_in_progress[index] = {
-            "id": None,
+            # Fallback ID in case the provider never sends one via deltas.
+            "id": f"fallback_{uuid.uuid4().hex}",
             "name": None,
             "arguments": "",
         }
@@ -581,6 +582,18 @@ def run_llm_step_pkt_generator(
                 }
                 # Note: LLM cost tracking is now handled in multi_llm.py
             delta = packet.choice.delta
+
+            # Weird behavior from some model providers, just log and ignore for now
+            if (
+                delta.content is None
+                and delta.reasoning_content is None
+                and delta.tool_calls is None
+            ):
+                logger.warning(
+                    f"LLM packet is empty (no contents, reasoning or tool calls). Skipping: {packet}"
+                )
+                continue
+
             if not first_action_recorded and _delta_has_action(delta):
                 span_generation.span_data.time_to_first_action_seconds = (
                     time.monotonic() - stream_start_time
@@ -840,14 +853,14 @@ def run_llm_step_pkt_generator(
         logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
         logger.debug(f"Accumulated answer: {accumulated_answer}")
 
-    if tool_calls:
-        tool_calls_str = "\n".join(
-            f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
-            for tc in tool_calls
-        )
-        logger.debug(f"Tool calls:\n{tool_calls_str}")
-    else:
-        logger.debug("Tool calls: []")
+        if tool_calls:
+            tool_calls_str = "\n".join(
+                f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
+                for tc in tool_calls
+            )
+            logger.debug(f"Tool calls:\n{tool_calls_str}")
+        else:
+            logger.debug("Tool calls: []")
 
     return (
         LlmStepResult(

@@ -26,8 +26,10 @@ export async function waitForUnifiedGreeting(page: Page): Promise<string> {
 
 // Ensure the Action Management popover is open
 export async function openActionManagement(page: Page): Promise<void> {
-  await page.click(TOOL_IDS.actionToggle);
-  await page.waitForSelector(TOOL_IDS.options, { timeout: 5000 });
+  const actionToggle = page.locator(TOOL_IDS.actionToggle);
+  await actionToggle.waitFor({ timeout: 5000 });
+  await actionToggle.click();
+  await page.locator(TOOL_IDS.options).waitFor({ timeout: 5000 });
 }
 
 // Check presence of the Action Management toggle

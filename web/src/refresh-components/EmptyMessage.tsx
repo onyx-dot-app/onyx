@@ -30,10 +30,8 @@
 
 import { SvgEmpty } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
-import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
+import { LineItemLayout } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
-import { cn } from "@/lib/utils";
 
 export interface EmptyMessageProps {
   icon?: React.FunctionComponent<IconProps>;
@@ -48,24 +46,13 @@ export default function EmptyMessage({
 }: EmptyMessageProps) {
   return (
     <Card translucent>
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        alignItems={!!description ? "start" : "center"}
-        gap={0.5}
-      >
-        <div className={cn(description && "mt-0.5")}>
-          <Icon size={16} className="stroke-text-03" />
-        </div>
-        <Section alignItems="start" gap={0}>
-          <Text text03>{title}</Text>
-          {description && (
-            <Text text03 secondaryBody>
-              {description}
-            </Text>
-          )}
-        </Section>
-      </Section>
+      <LineItemLayout
+        icon={Icon}
+        title={title}
+        description={description}
+        compact
+        secondary
+      />
     </Card>
   );
 }

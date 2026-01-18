@@ -10,7 +10,6 @@ import MessageToolbar from "@/app/chat/message/messageComponents/MessageToolbar"
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/chat/interfaces";
 import Text from "@/refresh-components/texts/Text";
-import { useTripleClickSelect } from "@/hooks/useTripleClickSelect";
 import { AgentTimeline } from "@/app/chat/message/messageComponents/timeline";
 
 // Type for the regeneration factory function passed from ChatUI
@@ -79,7 +78,6 @@ const AgentMessage = React.memo(function AgentMessage({
 }: AgentMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
-  const handleTripleClick = useTripleClickSelect(markdownRef);
 
   // Process streaming packets: returns data and callbacks
   // Hook handles all state internally, exposes clean API
@@ -154,7 +152,6 @@ const AgentMessage = React.memo(function AgentMessage({
       <div
         ref={markdownRef}
         className="overflow-x-visible focus:outline-none select-text cursor-text px-3"
-        onMouseDown={handleTripleClick}
         onCopy={(e) => {
           if (markdownRef.current) {
             handleCopy(e, markdownRef as RefObject<HTMLDivElement>);

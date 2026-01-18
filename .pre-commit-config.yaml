@@ -146,6 +146,22 @@ repos:
         pass_filenames: false
         files: \.tf$
 
+      - id: npm-install
+        name: npm install
+        description: "Automatically run 'npm install' after a checkout, pull or rebase"
+        language: system
+        entry: bash -c 'cd web && npm install --no-save'
+        pass_filenames: false
+        files: ^web/package(-lock)?\.json$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: npm-install-check
+        name: npm install --package-lock-only
+        description: "Check the 'web/package-lock.json' is updated"
+        language: system
+        entry: bash -c 'cd web && npm install --package-lock-only'
+        pass_filenames: false
+        files: ^web/package(-lock)?\.json$
+
       # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
       # This is a preview package - if it breaks:
       #   1. Try updating: cd web && npm update @typescript/native-preview

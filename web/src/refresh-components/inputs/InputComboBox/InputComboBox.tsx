@@ -113,6 +113,7 @@ import { ComboBoxDropdown } from "./components/ComboBoxDropdown";
 // Types
 import { InputComboBoxProps, ComboBoxOption } from "./types";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
+import { WithoutStyles } from "@/types";
 
 const InputComboBox = ({
   value,
@@ -128,9 +129,8 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
-  className,
   ...rest
-}: InputComboBoxProps) => {
+}: WithoutStyles<InputComboBoxProps>) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fieldContext = useContext(FieldContext);
@@ -363,7 +363,7 @@ const InputComboBox = ({
   }, [isOpen, inputValue, value, options, hasOptions]);
 
   return (
-    <div ref={refs.setReference} className={cn("relative w-full", className)}>
+    <div ref={refs.setReference} className="relative w-full">
       <>
         <InputTypeIn
           ref={inputRef}

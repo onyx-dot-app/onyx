@@ -20,7 +20,7 @@ export default function ModelSelectionConfirmationModal({
 }: ModelSelectionConfirmationModalProps) {
   return (
     <Modal open onOpenChange={onCancel}>
-      <Modal.Content tall>
+      <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgServer}
           title="Update Embedding Model"
