@@ -3,8 +3,12 @@
 import requests
 
 from onyx.db.discord_bot import create_channel_config
+from onyx.db.discord_bot import create_guild_config
+from onyx.db.discord_bot import register_guild
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.utils import DiscordChannelView
+from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
+from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestDiscordChannelConfig
 from tests.integration.common_utils.test_models import DATestDiscordGuildConfig
@@ -170,21 +174,22 @@ class DiscordBotManager:
         guild_config_id: int,
         channel_config_id: int,
         user_performing_action: DATestUser,
-        enabled: bool | None = None,
-        thread_only_mode: bool | None = None,
-        require_bot_invocation: bool | None = None,
+        enabled: bool = False,
+        thread_only_mode: bool = False,
+        require_bot_invocation: bool = True,
         persona_override_id: int | None = None,
     ) -> DATestDiscordChannelConfig:
-        """Update a channel config."""
-        body: dict = {}
-        if enabled is not None:
-            body["enabled"] = enabled
-        if thread_only_mode is not None:
-            body["thread_only_mode"] = thread_only_mode
-        if require_bot_invocation is not None:
-            body["require_bot_invocation"] = require_bot_invocation
-        if persona_override_id is not None:
-            body["persona_override_id"] = persona_override_id
+        """Update a channel config.
+
+        All fields are required by the API. Default values match the channel
+        config defaults from create_channel_config.
+        """
+        body: dict = {
+            "enabled": enabled,
+            "thread_only_mode": thread_only_mode,
+            "require_bot_invocation": require_bot_invocation,
+            "persona_override_id": persona_override_id,
+        }
 
         response = requests.patch(
             url=f"{DISCORD_BOT_API_URL}/guilds/{guild_config_id}/channels/{channel_config_id}",
@@ -196,6 +201,29 @@ class DiscordBotManager:
         return DATestDiscordChannelConfig(**response.json())
 
     # === Utility methods for testing ===
+
+    @staticmethod
+    def create_registered_guild_in_db(
+        guild_id: int,
+        guild_name: str,
+    ) -> DATestDiscordGuildConfig:
+        """Create a registered guild config directly in the database.
+
+        This creates a guild that has already completed registration,
+        with guild_id and guild_name set. Use this for testing channel
+        endpoints which require a registered guild.
+        """
+        with get_session_with_current_tenant() as db_session:
+            tenant_id = get_current_tenant_id()
+            registration_key = generate_discord_registration_key(tenant_id)
+            config = create_guild_config(db_session, registration_key)
+            config = register_guild(db_session, config, guild_id, guild_name)
+            db_session.commit()
+
+            return DATestDiscordGuildConfig(
+                id=config.id,
+                registration_key=registration_key,
+            )
 
     @staticmethod
     def get_guild_or_none(

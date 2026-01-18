@@ -244,7 +244,11 @@ class TestChannelConfigEndpoints:
         """GET /guilds/{id}/channels returns empty list when no channels exist."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
 
-        guild = DiscordBotManager.create_guild(admin_user)
+        # Create a registered guild (has guild_id set)
+        guild = DiscordBotManager.create_registered_guild_in_db(
+            guild_id=111111111,
+            guild_name="Test Guild",
+        )
 
         channels = DiscordBotManager.list_channels(guild.id, admin_user)
 
@@ -257,7 +261,11 @@ class TestChannelConfigEndpoints:
         """GET /guilds/{id}/channels returns channel configs."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
 
-        guild = DiscordBotManager.create_guild(admin_user)
+        # Create a registered guild (has guild_id set)
+        guild = DiscordBotManager.create_registered_guild_in_db(
+            guild_id=222222222,
+            guild_name="Test Guild",
+        )
 
         # Create test channels directly in DB
         channel1 = DiscordBotManager.create_test_channel_in_db(
@@ -286,7 +294,11 @@ class TestChannelConfigEndpoints:
         """PATCH /guilds/{id}/channels/{id} updates enabled status."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
 
-        guild = DiscordBotManager.create_guild(admin_user)
+        # Create a registered guild (has guild_id set)
+        guild = DiscordBotManager.create_registered_guild_in_db(
+            guild_id=333333333,
+            guild_name="Test Guild",
+        )
         channel = DiscordBotManager.create_test_channel_in_db(
             guild_config_id=guild.id,
             channel_id=123456789,
@@ -318,7 +330,11 @@ class TestChannelConfigEndpoints:
         """PATCH /guilds/{id}/channels/{id} updates thread_only_mode."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
 
-        guild = DiscordBotManager.create_guild(admin_user)
+        # Create a registered guild (has guild_id set)
+        guild = DiscordBotManager.create_registered_guild_in_db(
+            guild_id=444444444,
+            guild_name="Test Guild",
+        )
         channel = DiscordBotManager.create_test_channel_in_db(
             guild_config_id=guild.id,
             channel_id=123456789,
@@ -345,7 +361,11 @@ class TestChannelConfigEndpoints:
         """PATCH /guilds/{id}/channels/{id} updates require_bot_invocation."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
 
-        guild = DiscordBotManager.create_guild(admin_user)
+        # Create a registered guild (has guild_id set)
+        guild = DiscordBotManager.create_registered_guild_in_db(
+            guild_id=555555555,
+            guild_name="Test Guild",
+        )
         channel = DiscordBotManager.create_test_channel_in_db(
             guild_config_id=guild.id,
             channel_id=123456789,
@@ -372,7 +392,11 @@ class TestChannelConfigEndpoints:
         """PATCH /guilds/{id}/channels/{id} returns 404 for non-existent channel."""
         admin_user: DATestUser = UserManager.create(name="admin_user")
 
-        guild = DiscordBotManager.create_guild(admin_user)
+        # Create a registered guild (has guild_id set)
+        guild = DiscordBotManager.create_registered_guild_in_db(
+            guild_id=666666666,
+            guild_name="Test Guild",
+        )
 
         with pytest.raises(requests.HTTPError) as exc_info:
             DiscordBotManager.update_channel(
