@@ -13,6 +13,7 @@ from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import create_discord_bot_config
 from onyx.db.discord_bot import create_guild_config
 from onyx.db.discord_bot import delete_discord_bot_config
+from onyx.db.discord_bot import delete_discord_service_api_key
 from onyx.db.discord_bot import delete_guild_config
 from onyx.db.discord_bot import get_channel_config_by_internal_ids
 from onyx.db.discord_bot import get_channel_configs
@@ -110,10 +111,40 @@ def delete_bot_config_endpoint(
     __: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict:
-    """Delete Discord bot config."""
+    """Delete Discord bot config.
+
+    Also deletes the Discord service API key since the bot is being removed.
+    """
     deleted = delete_discord_bot_config(db_session)
     if not deleted:
         raise HTTPException(status_code=404, detail="Bot config not found")
+
+    # Also delete the service API key used by the Discord bot
+    delete_discord_service_api_key(db_session)
+
+    db_session.commit()
+    return {"deleted": True}
+
+
+# === Service API Key ===
+
+
+@router.delete("/service-api-key")
+def delete_service_api_key_endpoint(
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> dict:
+    """Delete the Discord service API key.
+
+    This endpoint allows manual deletion of the service API key used by the
+    Discord bot to authenticate with the Onyx API. The key is also automatically
+    deleted when:
+    - Bot config is deleted (self-hosted)
+    - All guild configs are deleted (Cloud)
+    """
+    deleted = delete_discord_service_api_key(db_session)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Service API key not found")
     db_session.commit()
     return {"deleted": True}
 
@@ -191,10 +222,20 @@ def delete_guild_request(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict:
-    """Delete guild config (invalidates registration key)."""
+    """Delete guild config (invalidates registration key).
+
+    On Cloud, if this was the last guild config, also deletes the service API key.
+    """
     deleted = delete_guild_config(db_session, config_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Guild config not found")
+
+    # On Cloud, delete service API key when all guilds are removed
+    if AUTH_TYPE == AuthType.CLOUD:
+        remaining_guilds = get_guild_configs(db_session)
+        if not remaining_guilds:
+            delete_discord_service_api_key(db_session)
+
     db_session.commit()
     return {"deleted": True}
 
