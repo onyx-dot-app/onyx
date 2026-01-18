@@ -65,12 +65,7 @@ export default function ExpandableContentWrapper({
     >
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
         <div className="flex justify-between items-center">
-          <Text
-            as="span"
-            className="text-ellipsis line-clamp-1"
-            text03
-            mainUiAction
-          >
+          <Text className="text-ellipsis line-clamp-1" text03 mainUiAction>
             {fileDescriptor.name || "Untitled"}
           </Text>
           <div className="flex flex-row items-center justify-end gap-1">

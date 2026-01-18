@@ -353,7 +353,7 @@ export default function InlineFileManagement({
 
       {/* Confirmation Modal */}
       <Modal open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
-        <Modal.Content mini>
+        <Modal.Content width="sm">
           <Modal.Header
             icon={SvgFolderPlus}
             title="Confirm File Changes"

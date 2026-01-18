@@ -308,7 +308,7 @@ export function SettingsForm() {
       )}
       {showConfirmModal && (
         <Modal open onOpenChange={() => setShowConfirmModal(false)}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgAlertTriangle}
               title="Enable Anonymous Users"

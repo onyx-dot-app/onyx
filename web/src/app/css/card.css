@@ -1,0 +1,19 @@
+.card {
+  @apply rounded-16 w-full;
+}
+
+.card[data-variant="main"] {
+  @apply bg-background-tint-00 border;
+}
+
+.card[data-variant="translucent"] {
+  @apply bg-transparent border border-dashed;
+}
+
+.card[data-variant="disabled"] {
+  @apply cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50;
+}
+
+.card[data-borderless] {
+  @apply border-none;
+}

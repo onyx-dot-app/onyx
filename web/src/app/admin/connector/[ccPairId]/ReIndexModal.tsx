@@ -128,7 +128,7 @@ export default function ReIndexModal({
 
   return (
     <Modal open onOpenChange={hide}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header icon={SvgRefreshCw} title="Run Indexing" onClose={hide} />
         <Modal.Body>
           <Text as="p">

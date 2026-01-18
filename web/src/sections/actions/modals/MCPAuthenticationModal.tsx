@@ -317,7 +317,7 @@ export default function MCPAuthenticationModal({
 
   return (
     <Modal open={isOpen} onOpenChange={toggle}>
-      <Modal.Content tall skipOverlay={skipOverlay}>
+      <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgArrowExchange}
           title={`Authenticate ${mcpServer?.name || "MCP Server"}`}

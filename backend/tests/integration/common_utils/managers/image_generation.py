@@ -1,4 +1,6 @@
+import json
 import os
+from typing import Any
 from uuid import uuid4
 
 import requests
@@ -7,6 +9,18 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestUser
+
+
+def _serialize_custom_config(
+    custom_config: dict[str, Any] | None,
+) -> dict[str, str] | None:
+    """Convert custom_config values to strings (API expects dict[str, str])."""
+    if custom_config is None:
+        return None
+    return {
+        key: json.dumps(value) if not isinstance(value, str) else value
+        for key, value in custom_config.items()
+    }
 
 
 class ImageGenerationConfigManager:
@@ -19,6 +33,7 @@ class ImageGenerationConfigManager:
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
+        custom_config: dict[str, Any] | None = None,
         is_default: bool = False,
         user_performing_action: DATestUser | None = None,
     ) -> DATestImageGenerationConfig:
@@ -35,6 +50,7 @@ class ImageGenerationConfigManager:
                 "api_base": api_base,
                 "api_version": api_version,
                 "deployment_name": deployment_name,
+                "custom_config": _serialize_custom_config(custom_config),
                 "is_default": is_default,
             },
             headers=(

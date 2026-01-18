@@ -4,7 +4,6 @@ These tests assume OpenSearch is running and test all implemented methods
 using real schemas, pipelines, and search queries from the codebase.
 """
 
-import json
 import re
 import uuid
 from collections.abc import Generator
@@ -72,7 +71,7 @@ def _create_test_document_chunk(
         content=content,
         content_vector=content_vector,
         source_type="test_source",
-        metadata=json.dumps({}),
+        metadata_list=None,
         last_updated=now,
         public=public,
         access_control_list=[],
@@ -85,7 +84,7 @@ def _create_test_document_chunk(
         doc_summary="Test doc summary",
         chunk_context="Test chunk context",
         document_sets=None,
-        project_ids=None,
+        user_projects=None,
         primary_owners=None,
         secondary_owners=None,
         tenant_id=tenant_state,

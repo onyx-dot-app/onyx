@@ -119,11 +119,11 @@ export function PerUserAuthConfig({
         <FormField.Description>
           Format headers for each user to fill in their individual credentials.
           Use placeholders like{" "}
-          <Text text03 secondaryMono className="inline" as="span">
+          <Text text03 secondaryMono className="inline">
             {"{api_key}"}
           </Text>{" "}
           or{" "}
-          <Text text03 secondaryMono className="inline" as="span">
+          <Text text03 secondaryMono className="inline">
             {"{user_email}"}
           </Text>
           . Users will be prompted to provide values for placeholders (except

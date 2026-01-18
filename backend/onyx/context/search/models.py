@@ -184,6 +184,8 @@ class InferenceChunk(BaseChunk):
     hidden: bool
     is_relevant: bool | None = None
     relevance_explanation: str | None = None
+    # TODO(andrei): Ideally we could improve this to where each value is just a
+    # list of strings.
     metadata: dict[str, str | list[str]]
     # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:

@@ -4,7 +4,6 @@
  * Tests the complete user journey for managing prompt shortcuts.
  * This tests the full workflow: fetch → create → edit → delete
  */
-import React from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import InputPrompts from "./InputPrompts";
 
@@ -86,6 +85,19 @@ describe("Input Prompts CRUD Workflow", () => {
       }),
     } as Response);
 
+    // Mock GET /api/input_prompt (refetch after create - returns new prompt)
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 3,
+          prompt: "Review",
+          content: "Review this code for potential improvements.",
+          is_public: false,
+        },
+      ],
+    } as Response);
+
     render(<InputPrompts />);
 
     await waitFor(() => {
@@ -161,6 +173,19 @@ describe("Input Prompts CRUD Workflow", () => {
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
+    } as Response);
+
+    // Mock GET /api/input_prompt (refetch after edit)
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          id: 1,
+          prompt: "Summarize",
+          content: "Summarize the document and provide key insights.",
+          is_public: false,
+        },
+      ],
     } as Response);
 
     render(<InputPrompts />);
@@ -243,6 +268,12 @@ describe("Input Prompts CRUD Workflow", () => {
       json: async () => ({}),
     } as Response);
 
+    // Mock GET /api/input_prompt (refetch after delete - returns empty)
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    } as Response);
+
     render(<InputPrompts />);
 
     await waitFor(() => {
@@ -297,6 +328,12 @@ describe("Input Prompts CRUD Workflow", () => {
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
+    } as Response);
+
+    // Mock GET /api/input_prompt (refetch after hide - returns empty)
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
     } as Response);
 
     render(<InputPrompts />);

@@ -29,6 +29,7 @@ from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.formatting_utils import make_relationship_type_id
 from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
 from onyx.llm.factory import get_default_llm
+from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
@@ -417,7 +418,9 @@ def kg_classify_document(
     # classify with LLM
     llm = get_default_llm()
     try:
-        raw_classification_result = llm_response_to_string(llm.invoke(prompt))
+        raw_classification_result = llm_response_to_string(
+            llm.invoke(UserMessage(content=prompt))
+        )
         classification_result = (
             raw_classification_result.replace("```json", "").replace("```", "").strip()
         )
@@ -481,7 +484,9 @@ def kg_deep_extract_chunks(
     # extract with LLM
     llm = get_default_llm()
     try:
-        raw_extraction_result = llm_response_to_string(llm.invoke(prompt))
+        raw_extraction_result = llm_response_to_string(
+            llm.invoke(UserMessage(content=prompt))
+        )
         cleaned_response = (
             raw_extraction_result.replace("{{", "{")
             .replace("}}", "}")

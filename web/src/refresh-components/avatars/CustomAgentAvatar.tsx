@@ -139,9 +139,7 @@ export default function CustomAgentAvatar({
   if (validFirstLetter) {
     return (
       <SvgOctagonWrapper size={size}>
-        <Text as="span" style={{ fontSize: size * 0.5 }}>
-          {firstLetter}
-        </Text>
+        <Text style={{ fontSize: size * 0.5 }}>{firstLetter}</Text>
       </SvgOctagonWrapper>
     );
   }

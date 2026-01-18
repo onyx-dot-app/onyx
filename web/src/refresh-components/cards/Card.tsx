@@ -36,18 +36,9 @@
  * ```
  */
 
-import { cn } from "@/lib/utils";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { Section, SectionProps } from "@/layouts/general-layouts";
 
-const classNames = {
-  main: ["bg-background-tint-00 border"],
-  translucent: ["bg-transparent border border-dashed"],
-  disabled: [
-    "cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50",
-  ],
-} as const;
-
-export interface CardProps extends GeneralLayouts.SectionProps {
+export interface CardProps extends SectionProps {
   // card variants
   translucent?: boolean;
   borderless?: boolean;
@@ -68,13 +59,11 @@ export default function Card({
   return (
     <div
       ref={ref}
-      className={cn(
-        "rounded-16 w-full h-full",
-        classNames[variant],
-        borderless && "border-none"
-      )}
+      className="card"
+      data-variant={variant}
+      data-borderless={borderless || undefined}
     >
-      <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
+      <Section alignItems="start" padding={padding} height="fit" {...props} />
     </div>
   );
 }

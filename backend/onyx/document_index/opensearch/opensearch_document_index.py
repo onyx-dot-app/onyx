@@ -7,6 +7,7 @@ from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
+from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -43,7 +44,7 @@ from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
-from onyx.document_index.opensearch.schema import PROJECT_IDS_FIELD_NAME
+from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
     MIN_MAX_NORMALIZATION_PIPELINE_CONFIG,
@@ -92,8 +93,15 @@ def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
     return InferenceChunkUncleaned(
         chunk_id=chunk.chunk_index,
         blurb=chunk.blurb,
+        # Includes extra content prepended/appended during indexing.
         content=chunk.content,
-        source_links=json.loads(chunk.source_links) if chunk.source_links else None,
+        # When we read a string and turn it into a dict the keys will be
+        # strings, but in this case they need to be ints.
+        source_links=(
+            {int(k): v for k, v in json.loads(chunk.source_links).items()}
+            if chunk.source_links
+            else None
+        ),
         image_file_id=chunk.image_file_id,
         # Deprecated. Fill in some reasonable default.
         section_continuation=False,
@@ -104,7 +112,11 @@ def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
         boost=chunk.global_boost,
         score=score,
         hidden=chunk.hidden,
-        metadata=json.loads(chunk.metadata),
+        metadata=(
+            convert_metadata_list_of_strings_to_dict(chunk.metadata_list)
+            if chunk.metadata_list
+            else {}
+        ),
         # Extract highlighted snippets from the content field, if available. In
         # the future we may want to match on other fields too, currently we only
         # use the content field.
@@ -112,16 +124,13 @@ def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
         # TODO(andrei) Consider storing a chunk content index instead of a full
         # string when working on chunk content augmentation.
         doc_summary=chunk.doc_summary,
-        # TODO(andrei) Same thing as contx ret above, LLM gens context for each
-        # chunk.
+        # TODO(andrei) Same thing as above.
         chunk_context=chunk.chunk_context,
         updated_at=chunk.last_updated,
         primary_owners=chunk.primary_owners,
         secondary_owners=chunk.secondary_owners,
-        # TODO(andrei): This is the suffix appended to the end of the chunk
-        # content to assist querying. There are better ways we can do this, for
-        # ex. keeping an index of where to string split from.
-        metadata_suffix=None,
+        # TODO(andrei) Same thing as chunk_context above.
+        metadata_suffix=chunk.metadata_suffix,
     )
 
 
@@ -136,7 +145,8 @@ def _convert_onyx_chunk_to_opensearch_document(
         content=generate_enriched_content_for_chunk(chunk),
         content_vector=chunk.embeddings.full_embedding,
         source_type=chunk.source_document.source.value,
-        metadata=json.dumps(chunk.source_document.metadata),
+        metadata_list=chunk.source_document.get_metadata_str_attributes(),
+        metadata_suffix=chunk.metadata_suffix_keyword,
         last_updated=chunk.source_document.doc_updated_at,
         public=chunk.access.is_public,
         # TODO(andrei): When going over ACL look very carefully at
@@ -146,12 +156,21 @@ def _convert_onyx_chunk_to_opensearch_document(
         global_boost=chunk.boost,
         semantic_identifier=chunk.source_document.semantic_identifier,
         image_file_id=chunk.image_file_id,
+        # Small optimization, if this list is empty we can supply None to
+        # OpenSearch and it will not store any data at all for this field, which
+        # is different from supplying an empty list.
         source_links=json.dumps(chunk.source_links) if chunk.source_links else None,
         blurb=chunk.blurb,
         doc_summary=chunk.doc_summary,
         chunk_context=chunk.chunk_context,
+        # Small optimization, if this list is empty we can supply None to
+        # OpenSearch and it will not store any data at all for this field, which
+        # is different from supplying an empty list.
         document_sets=list(chunk.document_sets) if chunk.document_sets else None,
-        project_ids=list(chunk.user_project) if chunk.user_project else None,
+        # Small optimization, if this list is empty we can supply None to
+        # OpenSearch and it will not store any data at all for this field, which
+        # is different from supplying an empty list.
+        user_projects=chunk.user_project or None,
         primary_owners=get_experts_stores_representations(
             chunk.source_document.primary_owners
         ),
@@ -540,7 +559,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.hidden is not None:
                 properties_to_update[HIDDEN_FIELD_NAME] = update_request.hidden
             if update_request.project_ids is not None:
-                properties_to_update[PROJECT_IDS_FIELD_NAME] = list(
+                properties_to_update[USER_PROJECTS_FIELD_NAME] = list(
                     update_request.project_ids
                 )
 

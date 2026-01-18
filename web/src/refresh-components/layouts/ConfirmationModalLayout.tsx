@@ -32,7 +32,7 @@ export default function ConfirmationModalLayout({
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && onClose?.()}>
-      <Modal.Content mini>
+      <Modal.Content width="sm">
         <Modal.Header
           icon={icon}
           title={title}

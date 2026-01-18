@@ -61,7 +61,7 @@ export default function FeedbackModal({
       {popup}
 
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-        <Modal.Content mini>
+        <Modal.Content width="sm">
           <Modal.Header
             icon={feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown}
             title="Feedback"
@@ -82,7 +82,7 @@ export default function FeedbackModal({
                 <Modal.Body>
                   <InputLayouts.Vertical
                     name="additional_feedback"
-                    label="Provide Additional Details"
+                    title="Provide Additional Details"
                     optional={feedbackType === "like"}
                   >
                     <InputTextAreaField

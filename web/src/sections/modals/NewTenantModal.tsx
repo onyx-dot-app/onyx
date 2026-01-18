@@ -140,7 +140,7 @@ export default function NewTenantModal({
 
   return (
     <Modal open>
-      <Modal.Content small preventAccidentalClose={false}>
+      <Modal.Content width="sm" height="sm" preventAccidentalClose={false}>
         <Modal.Header icon={SvgUsers} title={title} onClose={onClose} />
 
         <Modal.Body>

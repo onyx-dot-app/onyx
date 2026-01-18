@@ -6,6 +6,7 @@ import requests
 
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.configs.app_configs import DEV_MODE
 from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
 from onyx.server.usage_limits import NO_LIMIT
 from onyx.utils.logger import setup_logger
@@ -111,6 +112,10 @@ def get_tenant_usage_limit_overrides(
     Returns:
         TenantUsageLimitOverrides if the tenant has overrides, None otherwise.
     """
+
+    if DEV_MODE:  # in dev mode, we return unlimited limits for all tenants
+        return unlimited(tenant_id)
+
     global _tenant_usage_limit_overrides
     time_since = time.time() - _last_fetch_time
     if (
@@ -122,7 +127,7 @@ def get_tenant_usage_limit_overrides(
 
         load_usage_limit_overrides()
 
-    # If we have failed to fetch from the control plane, don't usage limit everyone.
-    if _tenant_usage_limit_overrides is None:
+    # If we have failed to fetch from the control plane or we're in dev mode, don't usage limit anyone.
+    if _tenant_usage_limit_overrides is None or DEV_MODE:
         return unlimited(tenant_id)
     return _tenant_usage_limit_overrides.get(tenant_id)

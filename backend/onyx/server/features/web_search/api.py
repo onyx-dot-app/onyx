@@ -20,6 +20,12 @@ from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_HTML_SIZE_BYTES,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_PDF_SIZE_BYTES,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     OnyxWebCrawler,
 )
 from onyx.tools.tool_implementations.open_url.utils import (
@@ -97,7 +103,10 @@ def _get_active_content_provider(
         # NOTE: the OnyxWebCrawler is not stored in the content provider table,
         # so we need to return it directly.
 
-        return None, OnyxWebCrawler()
+        return None, OnyxWebCrawler(
+            max_pdf_size_bytes=DEFAULT_MAX_PDF_SIZE_BYTES,
+            max_html_size_bytes=DEFAULT_MAX_HTML_SIZE_BYTES,
+        )
 
     if provider_model.api_key is None:
         # TODO - this is not a great error, in fact, this key should not be nullable.

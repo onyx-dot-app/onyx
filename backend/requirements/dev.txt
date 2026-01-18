@@ -383,7 +383,7 @@ pure-eval==0.2.3
     # via stack-data
 py==1.11.0
     # via retry
-pyasn1==0.6.1
+pyasn1==0.6.2
     # via
     #   pyasn1-modules
     #   rsa
