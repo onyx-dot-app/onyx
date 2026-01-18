@@ -8,6 +8,8 @@ import {
   FetchToolDocuments,
   TopLevelBranching,
   Stop,
+  SearchToolStart,
+  CustomToolStart,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -47,6 +49,9 @@ export interface ProcessorState {
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
+  // Unique tool names tracking (populated during packet processing)
+  uniqueToolNames: Set<string>;
+
   // Streaming status
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
@@ -70,6 +75,8 @@ export interface ProcessorResult {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
   expectedBranchesPerTurn: Map<number, number>;
+  // Unique tool names used
+  uniqueToolNames: string[];
 }
 
 // ============================================================================
@@ -90,6 +97,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     expectedBranches: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
+    uniqueToolNames: new Set(),
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
@@ -144,6 +152,37 @@ function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) =>
     CONTENT_PACKET_TYPES.includes(packet.obj.type as PacketType)
   );
+}
+
+/**
+ * Extract tool name from a packet for unique tool tracking.
+ * Returns null for non-tool packets.
+ */
+function getToolNameFromPacket(packet: Packet): string | null {
+  switch (packet.obj.type) {
+    case PacketType.SEARCH_TOOL_START: {
+      const searchPacket = packet.obj as SearchToolStart;
+      return searchPacket.is_internet_search ? "Web Search" : "Internal Search";
+    }
+    case PacketType.PYTHON_TOOL_START:
+      return "Code Interpreter";
+    case PacketType.FETCH_TOOL_START:
+      return "Open URLs";
+    case PacketType.CUSTOM_TOOL_START: {
+      const customPacket = packet.obj as CustomToolStart;
+      return customPacket.tool_name || "Custom Tool";
+    }
+    case PacketType.IMAGE_GENERATION_TOOL_START:
+      return "Generate Image";
+    case PacketType.DEEP_RESEARCH_PLAN_START:
+      return "Generate plan";
+    case PacketType.RESEARCH_AGENT_START:
+      return "Research agent";
+    case PacketType.REASONING_START:
+      return "Thinking";
+    default:
+      return null;
+  }
 }
 
 /**
@@ -331,6 +370,11 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   if (isFirstPacket) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
+      // Track unique tool name
+      const toolName = getToolNameFromPacket(packet);
+      if (toolName) {
+        state.uniqueToolNames.add(toolName);
+      }
     }
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
@@ -413,5 +457,6 @@ export function getResult(state: ProcessorState): ProcessorResult {
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
     expectedBranchesPerTurn: state.expectedBranches,
+    uniqueToolNames: Array.from(state.uniqueToolNames),
   };
 }

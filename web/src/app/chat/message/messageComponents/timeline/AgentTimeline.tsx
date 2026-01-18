@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FunctionComponent, useState } from "react";
+import React, { FunctionComponent, useState, useMemo, useEffect } from "react";
 import {
   PacketType,
   StopReason,
@@ -18,9 +18,171 @@ import { TimelineRendererComponent } from "./TimelineRendererComponent";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineHeader } from "./useTimelineHeader";
 import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
+import { getToolIconByName } from "../toolDisplayHelpers";
 
 const isResearchAgentPackets = (packets: Packet[]) =>
   packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
+
+// =============================================================================
+// Header Sub-Components
+// =============================================================================
+
+interface StreamingHeaderProps {
+  headerText: string;
+  collapsible: boolean;
+  buttonTitle?: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+/** Header shown during streaming - shimmer text with current activity */
+function StreamingHeader({
+  headerText,
+  collapsible,
+  buttonTitle,
+  isExpanded,
+  onToggle,
+}: StreamingHeaderProps) {
+  return (
+    <>
+      <Text
+        as="p"
+        mainUiAction
+        text03
+        className="animate-shimmer bg-[length:200%_100%] bg-[linear-gradient(90deg,var(--shimmer-base)_10%,var(--shimmer-highlight)_40%,var(--shimmer-base)_70%)] bg-clip-text text-transparent"
+      >
+        {headerText}
+      </Text>
+      {collapsible &&
+        (buttonTitle ? (
+          <Button
+            tertiary
+            onClick={onToggle}
+            rightIcon={isExpanded ? SvgFold : SvgExpand}
+            aria-expanded={isExpanded}
+          >
+            {buttonTitle}
+          </Button>
+        ) : (
+          <IconButton
+            tertiary
+            onClick={onToggle}
+            icon={isExpanded ? SvgFold : SvgExpand}
+            aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
+            aria-expanded={isExpanded}
+          />
+        ))}
+    </>
+  );
+}
+
+interface CollapsedHeaderProps {
+  uniqueTools: Array<{ key: string; name: string; icon: React.JSX.Element }>;
+  totalSteps: number;
+  collapsible: boolean;
+  onToggle: () => void;
+}
+
+/** Header shown when completed + collapsed - tools summary + step count */
+function CollapsedHeader({
+  uniqueTools,
+  totalSteps,
+  collapsible,
+  onToggle,
+}: CollapsedHeaderProps) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        {uniqueTools.map((tool) => (
+          <div
+            key={tool.key}
+            className="inline-flex items-center gap-1 rounded-08 p-1 bg-background-tint-02"
+          >
+            {tool.icon}
+            <Text as="span" secondaryBody text04>
+              {tool.name}
+            </Text>
+          </div>
+        ))}
+      </div>
+      {collapsible && (
+        <Button
+          tertiary
+          onClick={onToggle}
+          rightIcon={SvgExpand}
+          aria-label="Expand timeline"
+          aria-expanded={false}
+        >
+          {totalSteps} {totalSteps === 1 ? "step" : "steps"}
+        </Button>
+      )}
+    </>
+  );
+}
+
+interface ExpandedHeaderProps {
+  collapsible: boolean;
+  onToggle: () => void;
+  // duration?: string; // For future: "Thought for X time"
+}
+
+/** Header shown when completed + expanded - "Thought for X time" */
+function ExpandedHeader({ collapsible, onToggle }: ExpandedHeaderProps) {
+  return (
+    <>
+      <Text as="p" mainUiAction text03>
+        Thought for some time
+      </Text>
+      {collapsible && (
+        <IconButton
+          tertiary
+          onClick={onToggle}
+          icon={SvgFold}
+          aria-label="Collapse timeline"
+          aria-expanded={true}
+        />
+      )}
+    </>
+  );
+}
+
+interface StoppedHeaderProps {
+  totalSteps: number;
+  collapsible: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+/** Header shown when user stopped/cancelled - "Stopped Thinking" + steps */
+function StoppedHeader({
+  totalSteps,
+  collapsible,
+  isExpanded,
+  onToggle,
+}: StoppedHeaderProps) {
+  return (
+    <>
+      <Text as="p" mainUiAction text03>
+        Stopped Thinking
+      </Text>
+      {collapsible && (
+        <Button
+          tertiary
+          onClick={onToggle}
+          rightIcon={isExpanded ? SvgFold : SvgExpand}
+          aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
+          aria-expanded={isExpanded}
+        >
+          {totalSteps} {totalSteps === 1 ? "step" : "steps"}
+        </Button>
+      )}
+    </>
+  );
+}
+
+// =============================================================================
+// Main Component
+// =============================================================================
 
 export interface AgentTimelineProps {
   /** Turn groups from usePacketProcessor */
@@ -45,6 +207,8 @@ export interface AgentTimelineProps {
   className?: string;
   /** Test ID for e2e testing */
   "data-testid"?: string;
+  /** Unique tool names used (pre-computed from packet processor for performance) */
+  uniqueToolNames?: string[];
 }
 
 export function AgentTimeline({
@@ -58,13 +222,81 @@ export function AgentTimeline({
   buttonTitle,
   className,
   "data-testid": testId,
+  uniqueToolNames = [],
 }: AgentTimelineProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(!stopPacketSeen);
   const handleToggle = () => setIsExpanded((prev) => !prev);
+
+  // Collapse when streaming completes (stopPacketSeen transitions to true)
+  // Note: Does not re-expand if stopPacketSeen changes back to false -
+  // user controls expansion after streaming completes
+  useEffect(() => {
+    if (stopPacketSeen) {
+      setIsExpanded(false);
+    }
+  }, [stopPacketSeen]);
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason
   );
+
+  // Calculate total steps across all turn groups to determine if we should hide StepContainer header
+  const totalSteps = turnGroups.reduce((acc, tg) => acc + tg.steps.length, 0);
+  const isSingleStep = totalSteps === 1;
+
+  // Use pre-computed unique tools from packet processor (performance optimization)
+  const uniqueTools = useMemo(
+    () =>
+      uniqueToolNames.map((name) => ({
+        key: name,
+        name,
+        icon: getToolIconByName(name),
+      })),
+    [uniqueToolNames]
+  );
+
+  // Determine which header to render based on state
+  const renderHeader = () => {
+    // STATE 1: Streaming - show shimmer text with current activity
+    if (!stopPacketSeen) {
+      return (
+        <StreamingHeader
+          headerText={headerText}
+          collapsible={collapsible}
+          buttonTitle={buttonTitle}
+          isExpanded={isExpanded}
+          onToggle={handleToggle}
+        />
+      );
+    }
+
+    // STATE 2: User Stopped - show "Stopped Thinking" + steps
+    if (userStopped) {
+      return (
+        <StoppedHeader
+          totalSteps={totalSteps}
+          collapsible={collapsible}
+          isExpanded={isExpanded}
+          onToggle={handleToggle}
+        />
+      );
+    }
+
+    // STATE 3: Completed + Collapsed - show tools summary
+    if (!isExpanded) {
+      return (
+        <CollapsedHeader
+          uniqueTools={uniqueTools}
+          totalSteps={totalSteps}
+          collapsible={collapsible}
+          onToggle={handleToggle}
+        />
+      );
+    }
+
+    // STATE 4: Completed + Expanded - show "Thought for X time"
+    return <ExpandedHeader collapsible={collapsible} onToggle={handleToggle} />;
+  };
 
   if (!hasPackets && !hasDisplayContent) {
     return (
@@ -108,35 +340,15 @@ export function AgentTimeline({
         </div>
         <div
           className={cn(
-            "flex w-full h-full items-center bg-background-tint-00 justify-between rounded-t-12 px-2",
+            "flex w-full h-full items-center justify-between px-2",
+            // Background for: streaming, user stopped, or expanded
+            (!stopPacketSeen || userStopped || isExpanded) &&
+              "bg-background-tint-00 rounded-t-12",
+            // Bottom rounded when not expanded
             !isExpanded && "rounded-b-12"
           )}
         >
-          <Text
-            as="p"
-            mainUiAction
-            text03
-            className="animate-shimmer bg-[length:200%_100%] bg-[linear-gradient(90deg,var(--shimmer-base)_10%,var(--shimmer-highlight)_40%,var(--shimmer-base)_70%)] bg-clip-text text-transparent"
-          >
-            {headerText}
-          </Text>
-
-          {collapsible &&
-            (buttonTitle ? (
-              <Button
-                tertiary
-                onClick={handleToggle}
-                rightIcon={isExpanded ? SvgFold : SvgExpand}
-              >
-                {buttonTitle}
-              </Button>
-            ) : (
-              <IconButton
-                tertiary
-                onClick={handleToggle}
-                icon={isExpanded ? SvgFold : SvgExpand}
-              />
-            ))}
+          {renderHeader()}
         </div>
       </div>
       {isExpanded && (
@@ -180,6 +392,7 @@ export function AgentTimeline({
                           stepIdx === turnGroup.steps.length - 1
                         }
                         packetLength={step.packets.length}
+                        hideHeader={isSingleStep}
                       >
                         {content}
                       </StepContainer>
@@ -214,8 +427,10 @@ export interface StepContainerProps {
   className?: string;
   /** Whether this is the last step */
   isLastStep?: boolean;
-
+  /** Number of packets in the step */
   packetLength?: number;
+  /** Whether to hide the header (for single-step timelines) */
+  hideHeader?: boolean;
 }
 
 export function StepContainer({
@@ -229,11 +444,12 @@ export function StepContainer({
   isLastStep = false,
   className,
   packetLength,
+  hideHeader = false,
 }: StepContainerProps) {
   return (
     <div className={cn("flex w-full", className)}>
       <div className="flex flex-col items-center w-9 pt-2">
-        {StepIconComponent && (
+        {!hideHeader && StepIconComponent && (
           <StepIconComponent className="size-4 stroke-text-02" />
         )}
         {!isLastStep && <div className="w-px flex-1 bg-border-01" />}
@@ -245,7 +461,7 @@ export function StepContainer({
           isLastStep && "rounded-b-12"
         )}
       >
-        {packetLength && packetLength > 1 && (
+        {!hideHeader && packetLength && packetLength > 1 && (
           <div className="flex items-center justify-between px-2">
             {header && (
               <Text as="p" mainUiMuted text03>

@@ -33,6 +33,7 @@ export interface UsePacketProcessorResult {
   stopReason: StopReason | undefined;
   hasSteps: boolean;
   expectedBranchesPerTurn: Map<number, number>;
+  uniqueToolNames: string[];
 
   // Completion: stopPacketSeen && renderComplete
   isComplete: boolean;
@@ -140,6 +141,7 @@ export function usePacketProcessor(
     stopReason: result.stopReason,
     hasSteps: toolTurnGroups.length > 0,
     expectedBranchesPerTurn: result.expectedBranchesPerTurn,
+    uniqueToolNames: result.uniqueToolNames,
 
     // Completion: stopPacketSeen && renderComplete
     isComplete: result.stopPacketSeen && renderComplete,

@@ -93,6 +93,7 @@ const AgentMessage = React.memo(function AgentMessage({
     hasSteps,
     stopPacketSeen,
     stopReason,
+    uniqueToolNames,
     isComplete,
     onRenderComplete,
   } = usePacketProcessor(rawPackets, nodeId);
@@ -132,6 +133,7 @@ const AgentMessage = React.memo(function AgentMessage({
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}
         hasDisplayContent={displayGroups.length > 0}
+        uniqueToolNames={uniqueToolNames}
       />
 
       {/* Row 2: Display content + MessageToolbar */}
