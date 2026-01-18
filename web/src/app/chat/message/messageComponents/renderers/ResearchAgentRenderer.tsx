@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, FunctionComponent } from "react";
 import { FiTarget } from "react-icons/fi";
+import { SvgCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 
 import {
@@ -156,14 +157,17 @@ export const ResearchAgentRenderer: MessageRenderer<
 
       {/* Intermediate report - using ExpandableTextDisplay */}
       {fullReportContent && (
-        <div className="mt-4">
+        <StepContainer
+          stepIcon={SvgCircle as FunctionComponent<IconProps>}
+          header="Research Report"
+        >
           <ExpandableTextDisplay
             title="Research Report"
             content={fullReportContent}
             maxLines={5}
             renderContent={() => renderedContent}
           />
-        </div>
+        </StepContainer>
       )}
     </div>
   );

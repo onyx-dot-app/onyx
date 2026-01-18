@@ -1,7 +1,11 @@
 "use client";
 
 import React, { FunctionComponent, useState } from "react";
-import { StopReason } from "@/app/chat/services/streamingModels";
+import {
+  PacketType,
+  StopReason,
+  Packet,
+} from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
@@ -14,6 +18,9 @@ import { TimelineRendererComponent } from "./TimelineRendererComponent";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineHeader } from "./useTimelineHeader";
 import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
+
+const isResearchAgentPackets = (packets: Packet[]) =>
+  packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 
 export interface AgentTimelineProps {
   /** Turn groups from usePacketProcessor */
@@ -146,24 +153,28 @@ export function AgentTimeline({
                   stopReason={stopReason}
                   defaultExpanded={true}
                 >
-                  {({ icon, status, content, isExpanded, onToggle }) => (
-                    <StepContainer
-                      stepIcon={
-                        icon as FunctionComponent<IconProps> | undefined
-                      }
-                      header={status}
-                      isExpanded={isExpanded}
-                      onToggle={onToggle}
-                      collapsible={true}
-                      isLastStep={
-                        turnIdx === turnGroups.length - 1 &&
-                        stepIdx === turnGroup.steps.length - 1
-                      }
-                      packetLength={step.packets.length}
-                    >
-                      {content}
-                    </StepContainer>
-                  )}
+                  {({ icon, status, content, isExpanded, onToggle }) =>
+                    isResearchAgentPackets(step.packets) ? (
+                      content
+                    ) : (
+                      <StepContainer
+                        stepIcon={
+                          icon as FunctionComponent<IconProps> | undefined
+                        }
+                        header={status}
+                        isExpanded={isExpanded}
+                        onToggle={onToggle}
+                        collapsible={true}
+                        isLastStep={
+                          turnIdx === turnGroups.length - 1 &&
+                          stepIdx === turnGroup.steps.length - 1
+                        }
+                        packetLength={step.packets.length}
+                      >
+                        {content}
+                      </StepContainer>
+                    )
+                  }
                 </TimelineRendererComponent>
               ))
             )
