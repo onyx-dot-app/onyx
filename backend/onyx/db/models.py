@@ -2045,7 +2045,7 @@ class ChatSession(Base):
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
     persona_id: Mapped[int | None] = mapped_column(
-        ForeignKey("persona.id"), nullable=True
+        ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # This chat created by OnyxBot
