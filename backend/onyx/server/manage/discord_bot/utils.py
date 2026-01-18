@@ -4,10 +4,11 @@ import secrets
 from urllib.parse import quote
 from urllib.parse import unquote
 
-from onyx.onyxbot.discord.constants import REGISTRATION_KEY_PREFIX
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+REGISTRATION_KEY_PREFIX: str = "discord_"
 
 
 def generate_discord_registration_key(tenant_id: str) -> str:

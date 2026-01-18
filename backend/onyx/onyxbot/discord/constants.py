@@ -17,5 +17,3 @@ ERROR_EMOJI: str = "❌"  # U+274C - Cross Mark
 # Command prefix
 REGISTER_COMMAND: str = "register"
 SYNC_CHANNELS_COMMAND: str = "sync-channels"
-
-REGISTRATION_KEY_PREFIX: str = "discord_"
