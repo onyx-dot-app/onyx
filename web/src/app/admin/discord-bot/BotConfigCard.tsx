@@ -15,6 +15,7 @@ import {
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 interface Props {
   setPopup: (popup: PopupSpec) => void;
@@ -31,6 +32,7 @@ export function BotConfigCard({ setPopup }: Props) {
 
   const [botToken, setBotToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Don't render anything if managed externally (Cloud or env var)
   if (isManaged) {
@@ -95,75 +97,91 @@ export function BotConfigCard({ setPopup }: Props) {
       });
     } finally {
       setIsSubmitting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
   return (
-    <Card>
-      <Section flexDirection="row" justifyContent="between">
-        <Section flexDirection="row" gap={0.5} width="fit">
-          <Text mainContentEmphasis text05>
-            Bot Token
-          </Text>
-          {isConfigured ? (
-            <Badge variant="success">Configured</Badge>
-          ) : (
-            <Badge variant="secondary">Not Configured</Badge>
+    <>
+      {showDeleteConfirm && (
+        <ConfirmEntityModal
+          danger
+          entityType="Discord bot token"
+          entityName="Discord Bot Token"
+          onClose={() => setShowDeleteConfirm(false)}
+          onSubmit={handleDeleteToken}
+          additionalDetails="This will disconnect your Discord bot. You will need to re-enter the token to use the bot again."
+        />
+      )}
+      <Card>
+        <Section flexDirection="row" justifyContent="between">
+          <Section flexDirection="row" gap={0.5} width="fit">
+            <Text mainContentEmphasis text05>
+              Bot Token
+            </Text>
+            {isConfigured ? (
+              <Badge variant="success">Configured</Badge>
+            ) : (
+              <Badge variant="secondary">Not Configured</Badge>
+            )}
+          </Section>
+          {isConfigured && (
+            <SimpleTooltip
+              tooltip={
+                hasServerConfigs ? "Delete server configs first" : undefined
+              }
+              disabled={!hasServerConfigs}
+            >
+              <Button
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isSubmitting || hasServerConfigs}
+                danger
+              >
+                Delete Discord Token
+              </Button>
+            </SimpleTooltip>
           )}
         </Section>
-        {isConfigured && (
-          <SimpleTooltip
-            tooltip={
-              hasServerConfigs ? "Delete server configs first" : undefined
-            }
-            disabled={!hasServerConfigs}
-          >
-            <Button
-              onClick={handleDeleteToken}
-              disabled={isSubmitting || hasServerConfigs}
-              danger
-            >
-              Delete Discord Token
-            </Button>
-          </SimpleTooltip>
-        )}
-      </Section>
 
-      {isConfigured ? (
-        <Section flexDirection="column" alignItems="start" gap={0.5}>
-          <Text text03 secondaryBody>
-            Your Discord bot token is configured.
-            {botConfig?.created_at && (
-              <> Added {new Date(botConfig.created_at).toLocaleDateString()}.</>
-            )}
-          </Text>
-          <Text text03 secondaryBody>
-            To change the token, delete the current one and add a new one.
-          </Text>
-        </Section>
-      ) : (
-        <Section flexDirection="column" alignItems="start" gap={0.75}>
-          <Text text03 secondaryBody>
-            Enter your Discord bot token to enable the bot. You can get this
-            from the Discord Developer Portal.
-          </Text>
-          <Section flexDirection="row" alignItems="end" gap={0.5}>
-            <PasswordInputTypeIn
-              value={botToken}
-              onChange={(e) => setBotToken(e.target.value)}
-              placeholder="Enter bot token..."
-              disabled={isSubmitting}
-              className="flex-1"
-            />
-            <Button
-              onClick={handleSaveToken}
-              disabled={isSubmitting || !botToken.trim()}
-            >
-              {isSubmitting ? "Saving..." : "Save Token"}
-            </Button>
+        {isConfigured ? (
+          <Section flexDirection="column" alignItems="start" gap={0.5}>
+            <Text text03 secondaryBody>
+              Your Discord bot token is configured.
+              {botConfig?.created_at && (
+                <>
+                  {" "}
+                  Added {new Date(botConfig.created_at).toLocaleDateString()}.
+                </>
+              )}
+            </Text>
+            <Text text03 secondaryBody>
+              To change the token, delete the current one and add a new one.
+            </Text>
           </Section>
-        </Section>
-      )}
-    </Card>
+        ) : (
+          <Section flexDirection="column" alignItems="start" gap={0.75}>
+            <Text text03 secondaryBody>
+              Enter your Discord bot token to enable the bot. You can get this
+              from the Discord Developer Portal.
+            </Text>
+            <Section flexDirection="row" alignItems="end" gap={0.5}>
+              <PasswordInputTypeIn
+                value={botToken}
+                onChange={(e) => setBotToken(e.target.value)}
+                placeholder="Enter bot token..."
+                disabled={isSubmitting}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleSaveToken}
+                disabled={isSubmitting || !botToken.trim()}
+              >
+                {isSubmitting ? "Saving..." : "Save Token"}
+              </Button>
+            </Section>
+          </Section>
+        )}
+      </Card>
+    </>
   );
 }

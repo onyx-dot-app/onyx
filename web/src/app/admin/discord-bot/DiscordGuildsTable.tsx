@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Table,
@@ -17,6 +18,7 @@ import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { DiscordGuildConfig } from "@/app/admin/discord-bot/types";
 import { deleteGuildConfig } from "@/app/admin/discord-bot/lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 interface Props {
   guilds: DiscordGuildConfig[];
@@ -26,6 +28,9 @@ interface Props {
 
 export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
   const router = useRouter();
+  const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
+    null
+  );
 
   const handleDelete = async (guildId: number) => {
     try {
@@ -38,6 +43,8 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
         message:
           err instanceof Error ? err.message : "Failed to delete server config",
       });
+    } finally {
+      setGuildToDelete(null);
     }
   };
 
@@ -52,56 +59,68 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Server</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Registered</TableHead>
-          <TableHead>Enabled</TableHead>
-          <TableHead>Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {guilds.map((guild) => (
-          <TableRow key={guild.id}>
-            <TableCell>
-              <Button
-                internal
-                disabled={!guild.guild_id}
-                onClick={() => router.push(`/admin/discord-bot/${guild.id}`)}
-                leftIcon={SvgEdit}
-              >
-                {guild.guild_name || `Server #${guild.id}`}
-              </Button>
-            </TableCell>
-            <TableCell>
-              {guild.guild_id ? (
-                <Badge variant="success">Registered</Badge>
-              ) : (
-                <Badge variant="secondary">Pending</Badge>
-              )}
-            </TableCell>
-            <TableCell>
-              {guild.registered_at
-                ? new Date(guild.registered_at).toLocaleDateString()
-                : "-"}
-            </TableCell>
-            <TableCell>
-              {!guild.guild_id ? (
-                "-"
-              ) : guild.enabled ? (
-                <Badge variant="success">Enabled</Badge>
-              ) : (
-                <Badge variant="destructive">Disabled</Badge>
-              )}
-            </TableCell>
-            <TableCell>
-              <DeleteButton onClick={() => handleDelete(guild.id)} />
-            </TableCell>
+    <>
+      {guildToDelete && (
+        <ConfirmEntityModal
+          danger
+          entityType="Discord server configuration"
+          entityName={guildToDelete.guild_name || `Server #${guildToDelete.id}`}
+          onClose={() => setGuildToDelete(null)}
+          onSubmit={() => handleDelete(guildToDelete.id)}
+          additionalDetails="This will remove all settings for this Discord server."
+        />
+      )}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Server</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Registered</TableHead>
+            <TableHead>Enabled</TableHead>
+            <TableHead>Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {guilds.map((guild) => (
+            <TableRow key={guild.id}>
+              <TableCell>
+                <Button
+                  internal
+                  disabled={!guild.guild_id}
+                  onClick={() => router.push(`/admin/discord-bot/${guild.id}`)}
+                  leftIcon={SvgEdit}
+                >
+                  {guild.guild_name || `Server #${guild.id}`}
+                </Button>
+              </TableCell>
+              <TableCell>
+                {guild.guild_id ? (
+                  <Badge variant="success">Registered</Badge>
+                ) : (
+                  <Badge variant="secondary">Pending</Badge>
+                )}
+              </TableCell>
+              <TableCell>
+                {guild.registered_at
+                  ? new Date(guild.registered_at).toLocaleDateString()
+                  : "-"}
+              </TableCell>
+              <TableCell>
+                {!guild.guild_id ? (
+                  "-"
+                ) : guild.enabled ? (
+                  <Badge variant="success">Enabled</Badge>
+                ) : (
+                  <Badge variant="destructive">Disabled</Badge>
+                )}
+              </TableCell>
+              <TableCell>
+                <DeleteButton onClick={() => setGuildToDelete(guild)} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </>
   );
 }
