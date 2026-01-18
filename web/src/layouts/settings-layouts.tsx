@@ -165,6 +165,7 @@ export interface SettingsHeaderProps {
   rightChildren?: React.ReactNode;
   backButton?: boolean;
   separator?: boolean;
+  iconSize?: number;
 }
 
 function SettingsHeader({
@@ -175,6 +176,7 @@ function SettingsHeader({
   rightChildren,
   backButton,
   separator,
+  iconSize = 28, // 1.75rem = 28px
 }: SettingsHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -216,7 +218,7 @@ function SettingsHeader({
       >
         <div className="flex flex-col">
           <div className="flex flex-row justify-between items-center gap-4">
-            <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
+            <Icon size={iconSize} className="stroke-text-04" />
             {rightChildren}
           </div>
           <div className="flex flex-col">
