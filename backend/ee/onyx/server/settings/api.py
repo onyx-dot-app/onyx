@@ -2,6 +2,7 @@
 
 from redis.exceptions import RedisError
 
+from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Settings
@@ -29,7 +30,13 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
 
     For multi-tenant (cloud), the settings already have the correct status
     from the control plane, so no override is needed.
+
+    If LICENSE_ENFORCEMENT_ENABLED is false, settings are returned unchanged,
+    allowing the product to function normally without license checks.
     """
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        return settings
+
     if MULTI_TENANT:
         return settings
 
