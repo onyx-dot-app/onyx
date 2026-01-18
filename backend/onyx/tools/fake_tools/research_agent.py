@@ -624,6 +624,9 @@ def run_research_agent_calls(
     research_agent_call_results = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=False,
+        # Note: This simply allows the main thread to continue with an error message
+        # It does not kill the background thread which may still write to the state objects passed to it
+        # This is because forcefully killing Python threads is very dangerous
         timeout=RESEARCH_AGENT_TIMEOUT_SECONDS,
         timeout_callback=_on_research_agent_timeout,
     )
