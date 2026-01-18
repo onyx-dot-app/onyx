@@ -8,51 +8,29 @@ from typing import Any
 
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import UserMessage
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
 
 
-def normalize_language_model_input(
-    input: LanguageModelInput,
-) -> Sequence[ChatCompletionMessage]:
-    """Normalize LanguageModelInput to Sequence[ChatCompletionMessage].
-
-    Args:
-        input: LanguageModelInput (str or Sequence[ChatCompletionMessage])
-
-    Returns:
-        Sequence of ChatCompletionMessage objects
-    """
-    if isinstance(input, str):
-        # Convert string to user message
-        return [UserMessage(role="user", content=input)]
-    return input
-
-
 def combine_messages_with_continuation(
     prefix_msgs: Sequence[ChatCompletionMessage],
     suffix_msgs: Sequence[ChatCompletionMessage],
     continuation: bool,
-    was_prefix_string: bool,
 ) -> list[ChatCompletionMessage]:
     """Combine prefix and suffix messages, handling continuation flag.
 
     Args:
         prefix_msgs: Normalized cacheable prefix messages
         suffix_msgs: Normalized suffix messages
-        continuation: If True and prefix is not a string, append suffix content
-            to the last message of prefix
-        was_prefix_string: Whether the original prefix was a string (strings
-            remain in their own content block even if continuation=True)
+        continuation: If True, append suffix content to the last message of prefix
+        was_prefix_string: Deprecated, no longer used
 
     Returns:
         Combined messages
     """
-    if not continuation or not prefix_msgs or was_prefix_string:
-        # Simple concatenation (or prefix was a string, so keep separate)
+    if not continuation or not prefix_msgs:
         return list(prefix_msgs) + list(suffix_msgs)
     # Append suffix content to last message of prefix
     result = list(prefix_msgs)
@@ -130,16 +108,15 @@ def prepare_messages_with_cacheable_transform(
     if cacheable_prefix is None:
         return suffix
 
-    prefix_msgs = normalize_language_model_input(cacheable_prefix)
-    suffix_msgs = normalize_language_model_input(suffix)
+    prefix_msgs = (
+        cacheable_prefix if isinstance(cacheable_prefix, list) else [cacheable_prefix]
+    )
+    suffix_msgs = suffix if isinstance(suffix, list) else [suffix]
 
     # Apply transformation to cacheable messages if provided
     if transform_cacheable is not None:
-        prefix_msgs = transform_cacheable(prefix_msgs)
-
-    # Handle continuation flag
-    was_prefix_string = isinstance(cacheable_prefix, str)
+        prefix_msgs = list(transform_cacheable(prefix_msgs))
 
     return combine_messages_with_continuation(
-        prefix_msgs, suffix_msgs, continuation, was_prefix_string
+        prefix_msgs=prefix_msgs, suffix_msgs=suffix_msgs, continuation=continuation
     )
