@@ -237,6 +237,157 @@ class TestGuildConfigEndpoints:
             DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
 
 
+class TestChannelConfigEndpoints:
+    """Tests for /manage/admin/discord-bot/guilds/{id}/channels endpoints."""
+
+    def test_list_channels_empty(self, reset: None) -> None:
+        """GET /guilds/{id}/channels returns empty list when no channels exist."""
+        admin_user: DATestUser = UserManager.create(name="admin_user")
+
+        guild = DiscordBotManager.create_guild(admin_user)
+
+        channels = DiscordBotManager.list_channels(guild.id, admin_user)
+
+        assert channels == []
+
+        # Cleanup
+        DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
+
+    def test_list_channels_with_data(self, reset: None) -> None:
+        """GET /guilds/{id}/channels returns channel configs."""
+        admin_user: DATestUser = UserManager.create(name="admin_user")
+
+        guild = DiscordBotManager.create_guild(admin_user)
+
+        # Create test channels directly in DB
+        channel1 = DiscordBotManager.create_test_channel_in_db(
+            guild_config_id=guild.id,
+            channel_id=123456789,
+            channel_name="general",
+        )
+        channel2 = DiscordBotManager.create_test_channel_in_db(
+            guild_config_id=guild.id,
+            channel_id=987654321,
+            channel_name="help",
+            channel_type="forum",
+        )
+
+        channels = DiscordBotManager.list_channels(guild.id, admin_user)
+
+        assert len(channels) == 2
+        channel_ids = [c.id for c in channels]
+        assert channel1.id in channel_ids
+        assert channel2.id in channel_ids
+
+        # Cleanup
+        DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
+
+    def test_update_channel_enabled(self, reset: None) -> None:
+        """PATCH /guilds/{id}/channels/{id} updates enabled status."""
+        admin_user: DATestUser = UserManager.create(name="admin_user")
+
+        guild = DiscordBotManager.create_guild(admin_user)
+        channel = DiscordBotManager.create_test_channel_in_db(
+            guild_config_id=guild.id,
+            channel_id=123456789,
+            channel_name="general",
+        )
+
+        # Default is disabled
+        assert channel.enabled is False
+
+        # Enable the channel
+        updated = DiscordBotManager.update_channel(
+            guild.id,
+            channel.id,
+            admin_user,
+            enabled=True,
+        )
+
+        assert updated.enabled is True
+
+        # Verify persistence
+        channels = DiscordBotManager.list_channels(guild.id, admin_user)
+        found = next(c for c in channels if c.id == channel.id)
+        assert found.enabled is True
+
+        # Cleanup
+        DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
+
+    def test_update_channel_thread_only_mode(self, reset: None) -> None:
+        """PATCH /guilds/{id}/channels/{id} updates thread_only_mode."""
+        admin_user: DATestUser = UserManager.create(name="admin_user")
+
+        guild = DiscordBotManager.create_guild(admin_user)
+        channel = DiscordBotManager.create_test_channel_in_db(
+            guild_config_id=guild.id,
+            channel_id=123456789,
+            channel_name="general",
+        )
+
+        # Default is False
+        assert channel.thread_only_mode is False
+
+        # Enable thread_only_mode
+        updated = DiscordBotManager.update_channel(
+            guild.id,
+            channel.id,
+            admin_user,
+            thread_only_mode=True,
+        )
+
+        assert updated.thread_only_mode is True
+
+        # Cleanup
+        DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
+
+    def test_update_channel_require_bot_invocation(self, reset: None) -> None:
+        """PATCH /guilds/{id}/channels/{id} updates require_bot_invocation."""
+        admin_user: DATestUser = UserManager.create(name="admin_user")
+
+        guild = DiscordBotManager.create_guild(admin_user)
+        channel = DiscordBotManager.create_test_channel_in_db(
+            guild_config_id=guild.id,
+            channel_id=123456789,
+            channel_name="general",
+        )
+
+        # Default is True
+        assert channel.require_bot_invocation is True
+
+        # Disable require_bot_invocation
+        updated = DiscordBotManager.update_channel(
+            guild.id,
+            channel.id,
+            admin_user,
+            require_bot_invocation=False,
+        )
+
+        assert updated.require_bot_invocation is False
+
+        # Cleanup
+        DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
+
+    def test_update_channel_not_found(self, reset: None) -> None:
+        """PATCH /guilds/{id}/channels/{id} returns 404 for non-existent channel."""
+        admin_user: DATestUser = UserManager.create(name="admin_user")
+
+        guild = DiscordBotManager.create_guild(admin_user)
+
+        with pytest.raises(requests.HTTPError) as exc_info:
+            DiscordBotManager.update_channel(
+                guild.id,
+                999999,
+                admin_user,
+                enabled=True,
+            )
+
+        assert exc_info.value.response.status_code == 404
+
+        # Cleanup
+        DiscordBotManager.delete_guild_if_exists(guild.id, admin_user)
+
+
 class TestServiceApiKeyCleanup:
     """Tests for service API key cleanup when bot/guild configs are deleted."""
 

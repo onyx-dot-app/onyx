@@ -2,7 +2,11 @@
 
 import requests
 
+from onyx.db.discord_bot import create_channel_config
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.utils import DiscordChannelView
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.test_models import DATestDiscordChannelConfig
 from tests.integration.common_utils.test_models import DATestDiscordGuildConfig
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -151,7 +155,7 @@ class DiscordBotManager:
     def list_channels(
         guild_config_id: int,
         user_performing_action: DATestUser,
-    ) -> list[dict]:
+    ) -> list[DATestDiscordChannelConfig]:
         """List all channel configs for a guild."""
         response = requests.get(
             url=f"{DISCORD_BOT_API_URL}/guilds/{guild_config_id}/channels",
@@ -159,7 +163,7 @@ class DiscordBotManager:
             cookies=user_performing_action.cookies,
         )
         response.raise_for_status()
-        return response.json()
+        return [DATestDiscordChannelConfig(**c) for c in response.json()]
 
     @staticmethod
     def update_channel(
@@ -170,7 +174,7 @@ class DiscordBotManager:
         thread_only_mode: bool | None = None,
         require_bot_invocation: bool | None = None,
         persona_override_id: int | None = None,
-    ) -> dict:
+    ) -> DATestDiscordChannelConfig:
         """Update a channel config."""
         body: dict = {}
         if enabled is not None:
@@ -189,7 +193,7 @@ class DiscordBotManager:
             json=body,
         )
         response.raise_for_status()
-        return response.json()
+        return DATestDiscordChannelConfig(**response.json())
 
     # === Utility methods for testing ===
 
@@ -239,3 +243,40 @@ class DiscordBotManager:
             return False
         response.raise_for_status()
         return True
+
+    @staticmethod
+    def create_test_channel_in_db(
+        guild_config_id: int,
+        channel_id: int,
+        channel_name: str,
+        channel_type: str = "text",
+        is_private: bool = False,
+    ) -> DATestDiscordChannelConfig:
+        """Create a test channel config directly in the database.
+
+        This is needed because channels are normally synced from Discord,
+        not created via API. For testing the channel API endpoints,
+        we need to populate test data directly.
+        """
+        with get_session_with_current_tenant() as db_session:
+            channel_view = DiscordChannelView(
+                channel_id=channel_id,
+                channel_name=channel_name,
+                channel_type=channel_type,
+                is_private=is_private,
+            )
+            config = create_channel_config(db_session, guild_config_id, channel_view)
+            db_session.commit()
+
+            return DATestDiscordChannelConfig(
+                id=config.id,
+                guild_config_id=config.guild_config_id,
+                channel_id=config.channel_id,
+                channel_name=config.channel_name,
+                channel_type=config.channel_type,
+                is_private=config.is_private,
+                enabled=config.enabled,
+                thread_only_mode=config.thread_only_mode,
+                require_bot_invocation=config.require_bot_invocation,
+                persona_override_id=config.persona_override_id,
+            )
