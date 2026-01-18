@@ -24,8 +24,14 @@ test.describe("Admin Workflow E2E Flows", () => {
     await gotoDiscordBotPage(adminPage);
 
     // Verify list page loads
-    await expect(adminPage.locator("text=Discord Bots")).toBeVisible();
-    await expect(adminPage.locator("text=Server Configurations")).toBeVisible();
+    await expect(
+      adminPage
+        .locator('[aria-label="admin-page-title"]')
+        .getByText("Discord Bots")
+    ).toBeVisible();
+    await expect(
+      adminPage.locator("text=Server Configurations").first()
+    ).toBeVisible();
 
     // Navigate to guild detail page
     const guildButton = adminPage.locator(
@@ -38,7 +44,9 @@ test.describe("Admin Workflow E2E Flows", () => {
     await expect(adminPage).toHaveURL(
       new RegExp(`/admin/discord-bot/${mockRegisteredGuild.id}`)
     );
-    await expect(adminPage.locator("text=Channel Configuration")).toBeVisible();
+    await expect(
+      adminPage.locator("text=Channel Configuration").first()
+    ).toBeVisible();
 
     // Configure a channel: toggle enabled, show unsaved changes, save
     const channelRow = adminPage.locator("tbody tr").first();

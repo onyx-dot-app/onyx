@@ -19,7 +19,11 @@ test.describe("Bot Configuration Page", () => {
     // Page should load without errors
     await expect(adminPage).toHaveURL(/\/admin\/discord-bot/);
     // Page title should contain "Discord"
-    await expect(adminPage.locator("text=Discord Bots")).toBeVisible();
+    await expect(
+      adminPage
+        .locator('[aria-label="admin-page-title"]')
+        .getByText("Discord Bots")
+    ).toBeVisible();
   });
 
   test("bot config shows token input when not configured", async ({
