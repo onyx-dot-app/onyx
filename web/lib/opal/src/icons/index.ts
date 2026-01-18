@@ -67,6 +67,7 @@ export { default as SvgFolderPlus } from "@opal/icons/folder-plus";
 export { default as SvgGlobe } from "@opal/icons/globe";
 export { default as SvgHardDrive } from "@opal/icons/hard-drive";
 export { default as SvgHashSmall } from "@opal/icons/hash-small";
+export { default as SvgHash } from "@opal/icons/hash";
 export { default as SvgHeadsetMic } from "@opal/icons/headset-mic";
 export { default as SvgHourglass } from "@opal/icons/hourglass";
 export { default as SvgImage } from "@opal/icons/image";

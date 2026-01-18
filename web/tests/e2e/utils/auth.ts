@@ -101,7 +101,7 @@ export async function loginAs(
     // Try to fetch current user info from the page context
     const me = await page.evaluate(async () => {
       try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const res = await fetch("/api/me", { credentials: "include" });
         return {
           ok: res.ok,
           status: res.status,
@@ -113,10 +113,10 @@ export async function loginAs(
       }
     });
     console.log(
-      `[loginAs] /api/auth/me => ok=${me.ok} status=${me.status} url=${me.url}`
+      `[loginAs] /api/me => ok=${me.ok} status=${me.status} url=${me.url}`
     );
   } catch (e) {
-    console.log(`[loginAs] Failed to query /api/auth/me: ${String(e)}`);
+    console.log(`[loginAs] Failed to query /api/me: ${String(e)}`);
   }
 }
 // Function to generate a random email and password
