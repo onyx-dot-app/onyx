@@ -49,6 +49,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import find_json_objects_in_text
 
 logger = setup_logger()
 
@@ -278,40 +279,6 @@ def _extract_tool_call_kickoffs(
     return tool_calls
 
 
-def _find_json_objects_in_text(text: str) -> list[dict[str, Any]]:
-    """Find all JSON objects in a text string.
-
-    Searches for JSON objects by looking for balanced braces and attempting to parse.
-    Returns a list of successfully parsed JSON objects.
-    """
-    json_objects: list[dict[str, Any]] = []
-    i = 0
-
-    while i < len(text):
-        if text[i] == "{":
-            # Try to find a matching closing brace
-            brace_count = 0
-            start = i
-            for j in range(i, len(text)):
-                if text[j] == "{":
-                    brace_count += 1
-                elif text[j] == "}":
-                    brace_count -= 1
-                    if brace_count == 0:
-                        # Found potential JSON object
-                        candidate = text[start : j + 1]
-                        try:
-                            parsed = json.loads(candidate)
-                            if isinstance(parsed, dict):
-                                json_objects.append(parsed)
-                        except json.JSONDecodeError:
-                            pass
-                        break
-        i += 1
-
-    return json_objects
-
-
 def extract_tool_calls_from_response_text(
     response_text: str | None,
     tool_definitions: list[dict],
@@ -347,7 +314,7 @@ def extract_tool_calls_from_response_text(
         return []
 
     # Find all JSON objects in the response text
-    json_objects = _find_json_objects_in_text(response_text)
+    json_objects = find_json_objects_in_text(response_text)
 
     tool_calls: list[ToolCallKickoff] = []
     tab_index = 0
@@ -370,10 +337,9 @@ def extract_tool_calls_from_response_text(
             )
             tab_index += 1
 
-    if tool_calls:
-        logger.info(
-            f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
-        )
+    logger.info(
+        f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
+    )
 
     return tool_calls
 
@@ -439,8 +405,8 @@ def _try_match_json_to_tool(
         if not properties:
             continue
 
-        # Check if all required parameters are present
-        if required and all(req in json_obj for req in required):
+        # Check if all required parameters are present (empty required = all optional)
+        if all(req in json_obj for req in required):
             # Check if any of the tool's properties are in the JSON object
             matching_props = [prop for prop in properties if prop in json_obj]
             if matching_props:
