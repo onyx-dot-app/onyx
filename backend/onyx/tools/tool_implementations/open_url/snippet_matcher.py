@@ -262,11 +262,7 @@ def _token_based_match(
     best_word_pos = -1
 
     # Sliding window through content words
-    stride = (
-        1  # max(1, window_size // 4) Optimisation if we need. Reduce speed by quarter.
-    )
-
-    for i in range(0, len(content_words) - window_size + 1, stride):
+    for i in range(0, len(content_words) - window_size + 1):
         window = " ".join(content_words[i : i + window_size])
 
         score = fuzz.ratio(processed_snippet, window)
@@ -279,7 +275,13 @@ def _token_based_match(
 
     if best_score >= (min_threshold * 100):
         original_start = content_word_positions[best_word_pos][0]
-        original_end = content_word_positions[best_word_pos + window_size - 1][1]
+
+        end_word_idx = best_word_pos + window_size - 1
+
+        if end_word_idx >= len(content_word_positions):
+            original_end = len(content) - 1
+        else:
+            original_end = content_word_positions[end_word_idx][1]
 
         return SnippetMatchResult(
             snippet_located=True,
