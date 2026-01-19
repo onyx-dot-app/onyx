@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgTerminalSmall, SvgLoader } from "@opal/icons";
-import { OutputPacket } from "@/hooks/useBuild";
+import { OutputPacket } from "@/app/build/hooks/useBuild";
 
 interface TerminalOutputProps {
   packets: OutputPacket[];
