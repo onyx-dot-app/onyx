@@ -63,8 +63,8 @@ Based on codebase exploration:
      │   ├── markdown/       # Generated markdown content
      │   └── graphs/         # Generated graph content
      ├── .venv/              # Python virtual environment (copied from template)
-     ├── CLAUDE.md           # Agent instructions file
-     └── .claude/
+     ├── AGENT.md            # Agent instructions file
+     └── .agent/
          └── skills/         # Agent skills directory
      ```
 
@@ -288,13 +288,13 @@ class DirectoryManager:
         outputs_template_path: Path,
         venv_template_path: Path,
         skills_path: Path,
-        claude_template_path: Path,
+        agent_instructions_template_path: Path,
     ) -> None:
         self._base_path = base_path
         self._outputs_template_path = outputs_template_path
         self._venv_template_path = venv_template_path
         self._skills_path = skills_path
-        self._claude_template_path = claude_template_path
+        self._agent_instructions_template_path = agent_instructions_template_path
 
     def create_sandbox_directory(self, session_id: str) -> Path:
         """
@@ -307,8 +307,8 @@ class DirectoryManager:
         │   ├── markdown/
         │   └── graphs/
         ├── .venv/              # Python virtual environment
-        ├── CLAUDE.md           # Agent instructions
-        └── .claude/
+        ├── AGENT.md            # Agent instructions
+        └── .agent/
             └── skills/         # Agent skills
         """
         sandbox_path = self._base_path / session_id
@@ -343,15 +343,15 @@ class DirectoryManager:
             shutil.copytree(self._venv_template_path, venv_path, symlinks=True)
         return venv_path
 
-    def setup_claude_md(self, sandbox_path: Path) -> None:
-        """Copy CLAUDE.md instructions template."""
-        claude_md_path = sandbox_path / "CLAUDE.md"
-        if not claude_md_path.exists():
-            shutil.copy(self._claude_template_path, claude_md_path)
+    def setup_agent_instructions(self, sandbox_path: Path) -> None:
+        """Copy AGENT.md instructions template."""
+        agent_md_path = sandbox_path / "AGENT.md"
+        if not agent_md_path.exists():
+            shutil.copy(self._agent_instructions_template_path, agent_md_path)
 
     def setup_skills(self, sandbox_path: Path) -> None:
-        """Copy skills directory to .claude/skills."""
-        skills_dest = sandbox_path / ".claude" / "skills"
+        """Copy skills directory to .agent/skills."""
+        skills_dest = sandbox_path / ".agent" / "skills"
         if self._skills_path.exists() and not skills_dest.exists():
             skills_dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(self._skills_path, skills_dest)
@@ -560,7 +560,7 @@ VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get("PERSISTENT_DOCUMENT_STORAGE_PATH", "/data/documents")
 
 # New configs for sandbox module:
-SANDBOX_AGENT_COMMAND = os.environ.get("SANDBOX_AGENT_COMMAND", "claude-code").split()
+SANDBOX_AGENT_COMMAND = os.environ.get("SANDBOX_AGENT_COMMAND", "opencode").split()
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "900"))
 SANDBOX_MAX_CONCURRENT_PER_ORG = int(os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10"))
 SANDBOX_SNAPSHOTS_BUCKET = os.environ.get("SANDBOX_SNAPSHOTS_BUCKET", "sandbox-snapshots")
@@ -856,14 +856,14 @@ class SandboxManager:
         # Paths for templates
         build_dir = Path(__file__).parent.parent  # /onyx/server/features/build/
         skills_path = build_dir / "skills"
-        claude_template_path = build_dir / "CLAUDE.template.md"
+        agent_instructions_template_path = build_dir / "AGENT.template.md"
 
         self._directory_manager = DirectoryManager(
             base_path=Path(SANDBOX_BASE_PATH),
             outputs_template_path=Path(OUTPUTS_TEMPLATE_PATH),
             venv_template_path=Path(VENV_TEMPLATE_PATH),
             skills_path=skills_path,
-            claude_template_path=claude_template_path,
+            agent_instructions_template_path=agent_instructions_template_path,
         )
         self._process_manager = ProcessManager()
         self._snapshot_manager = SnapshotManager(get_default_file_store())
@@ -907,7 +907,7 @@ class SandboxManager:
 
         1. Check concurrent sandbox limit for tenant
         2. Create sandbox directory structure
-        3. Setup files symlink, outputs, venv, CLAUDE.md, and skills
+        3. Setup files symlink, outputs, venv, AGENT.md, and skills
         4. If snapshot_id provided, restore outputs from snapshot
         5. Start Next.js dev server
         6. Store sandbox record in DB
@@ -942,9 +942,9 @@ class SandboxManager:
         else:
             self._directory_manager.setup_outputs_directory(sandbox_path)
 
-        # Setup venv, CLAUDE.md, and skills
+        # Setup venv, AGENT.md, and skills
         self._directory_manager.setup_venv(sandbox_path)
-        self._directory_manager.setup_claude_md(sandbox_path)
+        self._directory_manager.setup_agent_instructions(sandbox_path)
         self._directory_manager.setup_skills(sandbox_path)
 
         # Allocate port and start Next.js server
