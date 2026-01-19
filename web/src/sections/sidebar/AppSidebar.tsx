@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState } from "react";
+import { useCallback, memo, useMemo, useState, useEffect } from "react";
+import useSWR from "swr";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -70,6 +71,8 @@ import {
 import BuildModeIntroBackgroundAnimation from "@/app/build/components/BuildModeIntroBackgroundAnimation";
 import BuildModeIntroContent from "@/app/build/components/BuildModeIntroContent";
 import { motion, AnimatePresence } from "motion/react";
+import { Notification } from "@/app/admin/settings/interfaces";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -181,8 +184,41 @@ const MemoizedAppSidebarInner = memo(
     const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
       useState(false);
 
+    // Fetch notifications for build mode intro
+    const { data: notifications, mutate: mutateNotifications } = useSWR<
+      Notification[]
+    >("/api/notifications", errorHandlingFetcher);
+
+    // Find build_mode feature announcement notification
+    const buildModeNotification = notifications?.find(
+      (n) =>
+        n.notif_type === "feature_announcement" &&
+        n.additional_data?.feature === "build_mode" &&
+        !n.dismissed
+    );
+
     // State for intro animation overlay
     const [showIntroAnimation, setShowIntroAnimation] = useState(false);
+
+    // Show intro animation when build mode notification exists
+    useEffect(() => {
+      if (buildModeNotification && !showIntroAnimation) {
+        setShowIntroAnimation(true);
+      }
+    }, [buildModeNotification]);
+
+    // Dismiss the build mode notification
+    const dismissBuildModeNotification = useCallback(async () => {
+      if (!buildModeNotification) return;
+      try {
+        await fetch(`/api/notifications/${buildModeNotification.id}/dismiss`, {
+          method: "POST",
+        });
+        mutateNotifications();
+      } catch (error) {
+        console.error("Error dismissing notification:", error);
+      }
+    }, [buildModeNotification, mutateNotifications]);
 
     const [visibleAgents, currentAgentIsPinned] = useMemo(
       () => buildVisibleAgents(pinnedAgents, currentAgent),
@@ -513,8 +549,14 @@ const MemoizedAppSidebarInner = memo(
             >
               <BuildModeIntroBackgroundAnimation />
               <BuildModeIntroContent
-                onClose={() => setShowIntroAnimation(false)}
-                onTryBuildMode={() => router.push("/build")}
+                onClose={() => {
+                  setShowIntroAnimation(false);
+                  dismissBuildModeNotification();
+                }}
+                onTryBuildMode={() => {
+                  dismissBuildModeNotification();
+                  router.push("/build");
+                }}
               />
             </motion.div>
           )}

@@ -39,11 +39,11 @@ export default function BuildModeIntroBackgroundAnimation(
   props: BuildModeIntroBackgroundAnimationProps
 ) {
   const {
-    particleCount = 300,
+    particleCount = 400,
     particleSize = 2,
-    particleOpacity = 0.9,
+    particleOpacity = 1,
     glowIntensity = 20,
-    movementSpeed = 0.5,
+    movementSpeed = 0.75,
     mouseInfluence = 100,
     backgroundColor = "#000000",
     particleColor = "#FFFFFF",
@@ -58,7 +58,6 @@ export default function BuildModeIntroBackgroundAnimation(
   const animationRef = useRef<number | undefined>(undefined);
   const mouseRef = useRef({ x: 0, y: 0 });
   const particlesRef = useRef<Particle[]>([]);
-  const isStatic = false;
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -328,8 +327,6 @@ export default function BuildModeIntroBackgroundAnimation(
 
   // Effect to reinitialize particles when particle count changes
   useEffect(() => {
-    if (isStatic) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -337,12 +334,10 @@ export default function BuildModeIntroBackgroundAnimation(
       canvas.width || canvasSize.width,
       canvas.height || canvasSize.height
     );
-  }, [particleCount, initializeParticles, isStatic, canvasSize]);
+  }, [particleCount, initializeParticles, canvasSize]);
 
   // Effect to update particle properties when they change
   useEffect(() => {
-    if (isStatic) return;
-
     particlesRef.current.forEach((particle) => {
       particle.baseOpacity = particleOpacity;
       particle.opacity = particleOpacity;
@@ -356,11 +351,9 @@ export default function BuildModeIntroBackgroundAnimation(
         particle.vy *= ratio;
       }
     });
-  }, [particleOpacity, movementSpeed, isStatic]);
+  }, [particleOpacity, movementSpeed]);
 
   useEffect(() => {
-    if (isStatic) return;
-
     resizeCanvas();
 
     if (typeof window !== "undefined") {
@@ -390,11 +383,9 @@ export default function BuildModeIntroBackgroundAnimation(
         window.removeEventListener("resize", resizeCanvas);
       }
     };
-  }, [handleMouseMove, resizeCanvas, isStatic]);
+  }, [handleMouseMove, resizeCanvas]);
 
   useEffect(() => {
-    if (isStatic) return;
-
     animate();
 
     return () => {
@@ -402,38 +393,7 @@ export default function BuildModeIntroBackgroundAnimation(
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [animate, isStatic]);
-
-  if (isStatic) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          backgroundColor,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {Array.from({ length: Math.min(particleCount, 20) }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              width: `${particleSize}px`,
-              height: `${particleSize}px`,
-              backgroundColor: particleColor,
-              borderRadius: "50%",
-              opacity: particleOpacity,
-              boxShadow: `0 0 ${glowIntensity}px ${particleColor}`,
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
+  }, [animate]);
 
   return (
     <div

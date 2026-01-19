@@ -47,6 +47,7 @@ export enum NotificationType {
   TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending",
   ASSISTANT_FILES_READY = "assistant_files_ready",
   RELEASE_NOTES = "release_notes",
+  FEATURE_ANNOUNCEMENT = "feature_announcement",
 }
 
 export interface Notification {

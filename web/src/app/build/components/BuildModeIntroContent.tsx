@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
+import BigButton from "./BigButton";
 
 interface BuildModeIntroContentProps {
   onClose: () => void;
@@ -22,40 +23,44 @@ export default function BuildModeIntroContent({
       >
         <OnyxLogoTypeIcon size={200} className="text-white" />
       </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, delay: 0.8 }}
-      >
-        <Text headingH1 inverted className="!text-8xl">
-          Build Mode
-        </Text>
-      </motion.div>
-      <motion.div
-        className="flex gap-4 pointer-events-auto"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, delay: 1.1 }}
-      >
-        <button
-          className="px-6 py-3 border border-white text-white font-semibold rounded-lg hover:bg-white/10 transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
+      <div className="flex flex-col items-center gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.8 }}
         >
-          Return to Chat
-        </button>
-        <button
-          className="px-6 py-3 bg-white text-black font-semibold rounded-lg hover:bg-gray-200 transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            onTryBuildMode();
-          }}
+          <Text headingH1 inverted className="!text-8xl">
+            Build Mode
+          </Text>
+        </motion.div>
+        <motion.div
+          className="flex gap-4 pointer-events-auto"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 1.1 }}
         >
-          Try Build Mode
-        </button>
-      </motion.div>
+          <BigButton
+            secondary
+            inverted
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+          >
+            Return to Chat
+          </BigButton>
+          <BigButton
+            primary
+            inverted
+            onClick={(e) => {
+              e.stopPropagation();
+              onTryBuildMode();
+            }}
+          >
+            Try Build Mode
+          </BigButton>
+        </motion.div>
+      </div>
     </div>
   );
 }
