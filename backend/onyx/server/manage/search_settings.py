@@ -38,7 +38,10 @@ def set_new_search_settings(
     """
     # TODO(andrei): Re-enable.
     logger.error("Setting new search settings is temporarily disabled.")
-    raise NotImplementedError("Setting new search settings is temporarily disabled.")
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Setting new search settings is temporarily disabled.",
+    )
     # if search_settings_new.index_name:
     #     logger.warning("Index name was specified by request, this is not suggested")
 
@@ -134,7 +137,10 @@ def cancel_new_embedding(
 ) -> None:
     # TODO(andrei): Re-enable.
     logger.error("Cancelling new embedding is temporarily disabled.")
-    raise NotImplementedError("Cancelling new embedding is temporarily disabled.")
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Cancelling new embedding is temporarily disabled.",
+    )
     # secondary_search_settings = get_secondary_search_settings(db_session)
 
     # if secondary_search_settings:
