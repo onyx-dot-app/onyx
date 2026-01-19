@@ -15,7 +15,6 @@ import { MdOutlineCreditCard } from "react-icons/md";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
-  MonoDiscordIcon,
   SlackIconSkeleton,
   BrainIcon,
 } from "@/components/icons/icons";
@@ -44,6 +43,7 @@ import {
   SvgUsers,
   SvgZoomIn,
   SvgPaintBrush,
+  SvgDiscordMono,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 const connectors_items = () => [
@@ -98,7 +98,7 @@ const custom_assistants_items = (
       },
       {
         name: "Discord Bots",
-        icon: MonoDiscordIcon,
+        icon: SvgDiscordMono,
         link: "/admin/discord-bot",
       }
     );

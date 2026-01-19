@@ -34,7 +34,6 @@ import cohereIcon from "@public/Cohere.svg";
 import confluenceSVG from "@public/Confluence.svg";
 import deepseekSVG from "@public/Deepseek.svg";
 import discordIcon from "@public/discord.png";
-import discordMonoIcon from "@public/DiscordMono.svg";
 import discourseIcon from "@public/Discourse.png";
 import document360Icon from "@public/Document360.png";
 import dropboxIcon from "@public/Dropbox.png";
@@ -827,7 +826,6 @@ export const BookstackIcon = createIcon(SiBookstack);
 export const ClickupIcon = createLogoIcon(clickupIcon);
 export const CohereIcon = createLogoIcon(cohereIcon);
 export const ColorDiscordIcon = createLogoIcon(discordIcon);
-export const MonoDiscordIcon = createLogoIcon(discordMonoIcon);
 export const ColorSlackIcon = createLogoIcon(slackIcon);
 export const ConfluenceIcon = createLogoIcon(confluenceSVG, {
   sizeAdjustment: 4,

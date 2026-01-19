@@ -46,6 +46,7 @@ export { default as SvgCopy } from "@opal/icons/copy";
 export { default as SvgCornerRightUpDot } from "@opal/icons/corner-right-up-dot";
 export { default as SvgCpu } from "@opal/icons/cpu";
 export { default as SvgDevKit } from "@opal/icons/dev-kit";
+export { default as SvgDiscordMono } from "@opal/icons/DiscordMono";
 export { default as SvgDownloadCloud } from "@opal/icons/download-cloud";
 export { default as SvgEdit } from "@opal/icons/edit";
 export { default as SvgEditBig } from "@opal/icons/edit-big";
