@@ -9,8 +9,8 @@ from fastapi import Response
 from fastapi.responses import StreamingResponse
 
 from onyx.auth.users import current_user
-from onyx.configs.app_configs import BUILD_WEBAPP_URL
 from onyx.db.models import User
+from onyx.server.features.build.configs import BUILD_WEBAPP_URL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
