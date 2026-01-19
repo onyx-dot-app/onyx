@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
 import { IconProps } from "@opal/types";
-import React, { forwardRef } from "react";
+import React from "react";
 
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
@@ -105,45 +105,42 @@ export interface SectionProps
 
   // Debugging utilities
   dbg?: boolean;
+
+  ref?: React.Ref<HTMLDivElement>;
 }
-const Section = forwardRef<HTMLDivElement, SectionProps>(
-  (
-    {
-      flexDirection = "column",
-      justifyContent = "center",
-      alignItems = "center",
-      width = "full",
-      height = "full",
-      gap = 1,
-      padding = 0,
-      wrap,
-      dbg,
-      ...rest
-    },
-    ref
-  ) => {
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          "flex",
+function Section({
+  flexDirection = "column",
+  justifyContent = "center",
+  alignItems = "center",
+  width = "full",
+  height = "full",
+  gap = 1,
+  padding = 0,
+  wrap,
+  dbg,
+  ref,
+  ...rest
+}: SectionProps) {
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "flex",
 
-          flexDirectionClassMap[flexDirection],
-          justifyClassMap[justifyContent],
-          alignClassMap[alignItems],
-          widthClassmap[width],
-          heightClassmap[height],
+        flexDirectionClassMap[flexDirection],
+        justifyClassMap[justifyContent],
+        alignClassMap[alignItems],
+        widthClassmap[width],
+        heightClassmap[height],
 
-          wrap && "flex-wrap",
-          dbg && "dbg-red"
-        )}
-        style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
-        {...rest}
-      />
-    );
-  }
-);
-Section.displayName = "Section";
+        wrap && "flex-wrap",
+        dbg && "dbg-red"
+      )}
+      style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
+      {...rest}
+    />
+  );
+}
 
 /**
  * LineItemLayout - A layout for icon + title + description rows
