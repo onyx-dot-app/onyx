@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, memo, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -59,12 +59,17 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
+  SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
+  SvgPlayCircle,
   SvgSettings,
 } from "@opal/icons";
+import BuildModeIntroBackgroundAnimation from "@/app/build/components/BuildModeIntroBackgroundAnimation";
+import BuildModeIntroContent from "@/app/build/components/BuildModeIntroContent";
+import { motion, AnimatePresence } from "motion/react";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -133,6 +138,7 @@ interface AppSidebarInnerProps {
 const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const combinedSettings = useSettingsContext();
     const { popup, setPopup } = usePopup();
 
@@ -174,6 +180,9 @@ const MemoizedAppSidebarInner = memo(
     >(null);
     const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
       useState(false);
+
+    // State for intro animation overlay
+    const [showIntroAnimation, setShowIntroAnimation] = useState(false);
 
     const [visibleAgents, currentAgentIsPinned] = useMemo(
       () => buildVisibleAgents(pinnedAgents, currentAgent),
@@ -374,6 +383,32 @@ const MemoizedAppSidebarInner = memo(
         </div>
       );
     }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+
+    const buildButton = useMemo(
+      () => (
+        <div data-testid="AppSidebar/build">
+          <SidebarTab leftIcon={SvgDevKit} folded={folded} href="/build">
+            Build
+          </SidebarTab>
+        </div>
+      ),
+      [folded]
+    );
+
+    const playIntroButton = useMemo(
+      () => (
+        <div data-testid="AppSidebar/play-intro">
+          <SidebarTab
+            leftIcon={SvgPlayCircle}
+            folded={folded}
+            onClick={() => setShowIntroAnimation(true)}
+          >
+            Play intro animation
+          </SidebarTab>
+        </div>
+      ),
+      [folded]
+    );
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -466,11 +501,36 @@ const MemoizedAppSidebarInner = memo(
           />
         )}
 
+        {/* Intro animation overlay */}
+        <AnimatePresence>
+          {showIntroAnimation && (
+            <motion.div
+              className="fixed inset-0 z-[9999]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <BuildModeIntroBackgroundAnimation />
+              <BuildModeIntroContent
+                onClose={() => setShowIntroAnimation(false)}
+                onTryBuildMode={() => router.push("/build")}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
           <SidebarBody
             scrollKey="app-sidebar"
             footer={settingsButton}
-            actionButton={newSessionButton}
+            actionButtons={
+              <>
+                {newSessionButton}
+                {buildButton}
+                {playIntroButton}
+              </>
+            }
           >
             {/* When folded, show icons immediately without waiting for data */}
             {folded ? (
