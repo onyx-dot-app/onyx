@@ -1011,3 +1011,8 @@ INSTANCE_TYPE = (
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
     else "cloud" if AUTH_TYPE == AuthType.CLOUD else "self_hosted"
 )
+
+
+## Discord Bot Configuration
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
+DISCORD_BOT_INVOKE_CHAR = os.environ.get("DISCORD_BOT_INVOKE_CHAR", "!")

@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
 import { IconProps } from "@opal/types";
-import React, { forwardRef } from "react";
+import React from "react";
 
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
@@ -42,14 +42,15 @@ const heightClassmap: Record<Length, string> = {
  * Provides a standardized layout container with configurable direction and spacing.
  * Uses flexbox layout with customizable gap between children. Defaults to column layout.
  *
- * @param flexDirection - Flex direction. Default: column.
- * @param justifyContent - Justify content along the main axis. Default: center.
- * @param alignItems - Align items along the cross axis. Default: center.
+ * @param flexDirection - Flex direction. Default: "column".
+ * @param justifyContent - Justify content along the main axis. Default: "center".
+ * @param alignItems - Align items along the cross axis. Default: "center".
+ * @param width - Width of the container: "auto", "fit", or "full". Default: "full".
+ * @param height - Height of the container: "auto", "fit", or "full". Default: "full".
  * @param gap - Gap in REM units between children. Default: 1 (translates to gap-4 in Tailwind)
  * @param padding - Padding in REM units. Default: 0
- * @param fit - If true, uses w-fit instead of w-full. Default: false
  * @param wrap - If true, enables flex-wrap. Default: false
- * @param children - React children to render inside the section
+ * @param dbg - If true, adds a debug red border for visual debugging. Default: false
  *
  * @example
  * ```tsx
@@ -77,11 +78,16 @@ const heightClassmap: Record<Length, string> = {
  * <GeneralLayouts.Section flexDirection="row" justifyContent="center" alignItems="center">
  *   <Text>Centered content</Text>
  * </GeneralLayouts.Section>
+ *
+ * // Section with fit width
+ * <GeneralLayouts.Section width="fit">
+ *   <Button>Fit to content</Button>
+ * </GeneralLayouts.Section>
  * ```
  *
  * @remarks
  * - The component defaults to column layout when no direction is specified
- * - Full width by default (w-full) unless fit is true
+ * - Full width and height by default
  * - Prevents style overrides (className and style props are not available)
  * - Import using namespace import for consistent usage: `import * as GeneralLayouts from "@/layouts/general-layouts"`
  */
@@ -99,45 +105,42 @@ export interface SectionProps
 
   // Debugging utilities
   dbg?: boolean;
+
+  ref?: React.Ref<HTMLDivElement>;
 }
-const Section = forwardRef<HTMLDivElement, SectionProps>(
-  (
-    {
-      flexDirection = "column",
-      justifyContent = "center",
-      alignItems = "center",
-      width = "full",
-      height = "full",
-      gap = 1,
-      padding = 0,
-      wrap,
-      dbg,
-      ...rest
-    },
-    ref
-  ) => {
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          "flex",
+function Section({
+  flexDirection = "column",
+  justifyContent = "center",
+  alignItems = "center",
+  width = "full",
+  height = "full",
+  gap = 1,
+  padding = 0,
+  wrap,
+  dbg,
+  ref,
+  ...rest
+}: SectionProps) {
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "flex",
 
-          flexDirectionClassMap[flexDirection],
-          justifyClassMap[justifyContent],
-          alignClassMap[alignItems],
-          widthClassmap[width],
-          heightClassmap[height],
+        flexDirectionClassMap[flexDirection],
+        justifyClassMap[justifyContent],
+        alignClassMap[alignItems],
+        widthClassmap[width],
+        heightClassmap[height],
 
-          wrap && "flex-wrap",
-          dbg && "dbg-red"
-        )}
-        style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
-        {...rest}
-      />
-    );
-  }
-);
-Section.displayName = "Section";
+        wrap && "flex-wrap",
+        dbg && "dbg-red"
+      )}
+      style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
+      {...rest}
+    />
+  );
+}
 
 /**
  * LineItemLayout - A layout for icon + title + description rows
@@ -168,6 +171,7 @@ Section.displayName = "Section";
  * @param variant - Visual variant. Default: "primary"
  * @param strikethrough - If true, applies line-through style to title. Default: false
  * @param loading - If true, renders skeleton placeholders instead of content. Default: false
+ * @param center - If true, vertically centers items; otherwise aligns to start. Default: false
  */
 type LineItemLayoutVariant = "primary" | "secondary" | "tertiary";
 export interface LineItemLayoutProps {
@@ -179,6 +183,7 @@ export interface LineItemLayoutProps {
   variant?: LineItemLayoutVariant;
   strikethrough?: boolean;
   loading?: boolean;
+  center?: boolean;
   rightChildrenReducedPadding?: boolean;
 }
 function LineItemLayout({
@@ -190,6 +195,7 @@ function LineItemLayout({
   variant = "primary",
   strikethrough,
   loading,
+  center,
   rightChildrenReducedPadding,
 }: LineItemLayoutProps) {
   // Derive styling from variant
@@ -197,7 +203,11 @@ function LineItemLayout({
   const isMuted = variant === "tertiary";
 
   return (
-    <Section flexDirection="row" justifyContent="between" alignItems="start">
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      alignItems={center ? "center" : "start"}
+    >
       <div
         className="line-item-layout"
         data-variant={variant}

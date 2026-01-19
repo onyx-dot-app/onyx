@@ -23,7 +23,7 @@ interface OrientationLayoutProps extends LabelLayoutProps {
  *
  * <Vertical
  *   name="email"
- *   label="Email Address"
+ *   title="Email Address"
  *   description="We'll never share your email"
  *   optional
  * >
@@ -67,28 +67,19 @@ function VerticalInputLayout({
  * ```tsx
  * import { Horizontal } from "@/layouts/input-layouts";
  *
- * // Default behavior (center-aligned when no description, start-aligned when description exists)
+ * // Default behavior (top-aligned)
  * <Horizontal
  *   name="notifications"
- *   label="Enable Notifications"
+ *   title="Enable Notifications"
  *   description="Receive updates about your account"
  * >
  *   <Switch name="notifications" />
  * </Horizontal>
  *
- * // Force top alignment
+ * // Force center alignment (vertically centers input with label)
  * <Horizontal
  *   name="notifications"
- *   label="Enable Notifications"
- *   start
- * >
- *   <Switch name="notifications" />
- * </Horizontal>
- *
- * // Force center alignment (even with description)
- * <Horizontal
- *   name="notifications"
- *   label="Enable Notifications"
+ *   title="Enable Notifications"
  *   description="Receive updates about your account"
  *   center
  * >
@@ -134,10 +125,10 @@ function HorizontalInputLayout({
  * Exported as `Label` for convenient usage.
  *
  * @param name - The field name to associate the label with (renders as `<label>` if provided)
- * @param label - The main label text
+ * @param title - The main label text
+ * @param description - Additional helper text shown below the title
  * @param optional - Whether to show "(Optional)" indicator
- * @param description - Additional helper text shown below the label
- * @param className - Additional CSS classes
+ * @param center - If true, centers the title and description text. Default: false
  *
  * @example
  * ```tsx
@@ -145,7 +136,7 @@ function HorizontalInputLayout({
  *
  * <Label
  *   name="username"
- *   label="Username"
+ *   title="Username"
  *   description="Choose a unique username"
  *   optional
  * />
