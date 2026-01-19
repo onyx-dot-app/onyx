@@ -389,7 +389,7 @@ export default function LLMPopover({
           </SelectButton>
         </div>
       </Popover.Trigger>
-      <Popover.Content side="top" align="end" lg>
+      <Popover.Content side="top" align="end" width="xl">
         <Section gap={0.5}>
           {/* Search Input */}
           <InputTypeIn

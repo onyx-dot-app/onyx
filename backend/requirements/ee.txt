@@ -11,6 +11,7 @@ aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
     # via
     #   aiobotocore
+    #   discord-py
     #   litellm
     #   voyageai
 aioitertools==0.13.0
@@ -67,6 +68,8 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   tqdm
 decorator==5.2.1
     # via retry
+discord-py==2.4.0
+    # via onyx
 distro==1.9.0
     # via openai
 docstring-parser==0.17.0

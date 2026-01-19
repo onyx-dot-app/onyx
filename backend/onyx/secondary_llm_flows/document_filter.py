@@ -6,8 +6,10 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import UserMessage
 from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
+from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
 from onyx.tools.tool_implementations.search.constants import (
     MAX_CHUNKS_FOR_RELEVANCE,
 )
@@ -121,7 +123,10 @@ def classify_section_relevance(
 
     # Call LLM for classification
     try:
-        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
+        response = llm.invoke(
+            prompt=UserMessage(content=prompt_text),
+            reasoning_effort=ReasoningEffort.OFF,
+        )
         llm_response = response.choice.message.content
 
         if not llm_response:
@@ -169,9 +174,9 @@ def select_sections_for_expansion(
     sections: list[InferenceSection],
     user_query: str,
     llm: LLM,
-    # This is also what's in the prompt, just an oppinionated hyperparameter
     max_sections: int = 10,
     max_chunks_per_section: int | None = MAX_CHUNKS_FOR_RELEVANCE,
+    try_to_fill_to_max: bool = False,
 ) -> tuple[list[InferenceSection], list[str] | None]:
     """Use LLM to select the most relevant document sections for expansion.
 
@@ -183,7 +188,11 @@ def select_sections_for_expansion(
         max_chunks_per_section: Maximum chunks to consider per section (default: MAX_CHUNKS_FOR_RELEVANCE)
 
     Returns:
-        Filtered list of InferenceSection objects selected by the LLM
+        A tuple of:
+        - Filtered list of InferenceSection objects selected by the LLM
+        - List of document IDs for sections marked with "!" by the LLM, or None if none.
+          Note: The "!" marker support exists in parsing but is not currently used because
+          the prompt does not instruct the LLM to use it.
     """
     if not sections:
         return [], None
@@ -247,15 +256,21 @@ def select_sections_for_expansion(
         sections_dict.append(section_dict)
 
     # Build the prompt
-    prompt_text = DOCUMENT_SELECTION_PROMPT.format(
-        max_sections=max_sections,
-        formatted_doc_sections=json.dumps(sections_dict, indent=2),
-        user_query=user_query,
+    extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
+    prompt_text = UserMessage(
+        content=DOCUMENT_SELECTION_PROMPT.format(
+            max_sections=max_sections,
+            extra_instructions=extra_instructions,
+            formatted_doc_sections=json.dumps(sections_dict, indent=2),
+            user_query=user_query,
+        )
     )
 
     # Call LLM for selection
     try:
-        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
+        response = llm.invoke(
+            prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
+        )
         llm_response = response.choice.message.content
 
         if not llm_response:

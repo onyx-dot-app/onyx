@@ -64,9 +64,9 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     LiteLLM expects messages to be dictionaries (with .get() method),
     not Pydantic models. This function serializes the messages.
     """
-    if isinstance(prompt, str):
-        return [{"role": "user", "content": prompt}]
-    return [msg.model_dump(exclude_none=True) for msg in prompt]
+    if isinstance(prompt, list):
+        return [msg.model_dump(exclude_none=True) for msg in prompt]
+    return [prompt.model_dump(exclude_none=True)]
 
 
 def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:

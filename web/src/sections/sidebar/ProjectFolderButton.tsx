@@ -169,7 +169,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                   </div>
                 </Popover.Trigger>
 
-                <Popover.Content side="right" align="end">
+                <Popover.Content side="right" align="end" width="md">
                   <PopoverMenu>{popoverItems}</PopoverMenu>
                 </Popover.Content>
               </>

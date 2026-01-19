@@ -24,9 +24,6 @@ FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
 # Currently only applies to search flow not chat
 CONTEXT_CHUNKS_ABOVE = int(os.environ.get("CONTEXT_CHUNKS_ABOVE") or 1)
 CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
-DISABLE_LLM_QUERY_REPHRASE = (
-    os.environ.get("DISABLE_LLM_QUERY_REPHRASE", "").lower() == "true"
-)
 QA_TIMEOUT = int(os.environ.get("QA_TIMEOUT") or "60")  # 60 seconds
 # Weighting factor between Vector and Keyword Search, 1 for completely vector search
 HYBRID_ALPHA = max(0, min(1, float(os.environ.get("HYBRID_ALPHA") or 0.5)))
@@ -41,30 +38,6 @@ TITLE_CONTENT_RATIO = max(
     0, min(1, float(os.environ.get("TITLE_CONTENT_RATIO") or 0.10))
 )
 
-# A list of languages passed to the LLM to rephase the query
-# For example "English,French,Spanish", be sure to use the "," separator
-# TODO these are not used, should probably reintroduce these
-MULTILINGUAL_QUERY_EXPANSION = os.environ.get("MULTILINGUAL_QUERY_EXPANSION") or None
-LANGUAGE_HINT = "\n" + (
-    os.environ.get("LANGUAGE_HINT")
-    or "IMPORTANT: Respond in the same language as my query!"
-)
-LANGUAGE_CHAT_NAMING_HINT = (
-    os.environ.get("LANGUAGE_CHAT_NAMING_HINT")
-    or "The name of the conversation must be in the same language as the user query."
-)
-
-# Agentic search takes significantly more tokens and therefore has much higher cost.
-# This configuration allows users to get a search-only experience with instant results
-# and no involvement from the LLM.
-# Additionally, some LLM providers have strict rate limits which may prohibit
-# sending many API requests at once (as is done in agentic search).
-# Whether the LLM should evaluate all of the document chunks passed in for usefulness
-# in relation to the user query
-DISABLE_LLM_DOC_RELEVANCE = (
-    os.environ.get("DISABLE_LLM_DOC_RELEVANCE", "").lower() == "true"
-)
-
 # Stops streaming answers back to the UI if this pattern is seen:
 STOP_STREAM_PAT = os.environ.get("STOP_STREAM_PAT") or None
 
@@ -76,9 +49,6 @@ HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 # Internet Search
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
 NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)
-
-# Enable in-house model for detecting connector-based filtering in queries
-ENABLE_CONNECTOR_CLASSIFIER = os.environ.get("ENABLE_CONNECTOR_CLASSIFIER", False)
 
 VESPA_SEARCHER_THREADS = int(os.environ.get("VESPA_SEARCHER_THREADS") or 2)
 

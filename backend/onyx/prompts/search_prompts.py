@@ -1,5 +1,5 @@
 # How it works and rationale:
-# First - this works best emprically across multiple LLMs, some of this is back-explaining reasons based on results.
+# First - this works best empirically across multiple LLMs, some of this is back-explaining reasons based on results.
 #
 # The system prompt is kept simple and as similar to typical system prompts as possible to stay within training distribution.
 # The history is passed through as a list of messages, this should allow the LLM to more easily understand what is going on.
@@ -53,7 +53,7 @@ CRITICAL: ONLY provide the standalone query and nothing else.
 
 
 KEYWORD_REPHRASE_SYSTEM_PROMPT = """
-You are an assistant that reformulates the last user message into a set of standalong keyword queries suitable for a keyword \
+You are an assistant that reformulates the last user message into a set of standalone keyword queries suitable for a keyword \
 search engine. Your goal is to output keyword queries that optimize finding relevant documents to answer the user query. \
 When relevant, you bring in context from the history or knowledge about the user.
 
@@ -65,7 +65,7 @@ KEYWORD_REPHRASE_USER_PROMPT = """
 Given a chat history and a follow up user input, provide a set of keyword only queries that can help find relevant documents. \
 Provide a single query per line (where each query consists of one or more keywords). \
 The queries must be purely keywords and not contain any natural language. \
-The each query should have as few keywords as necessary to represent the user's search intent.
+Each query should have as few keywords as necessary to represent the user's search intent.
 
 Guidelines:
 - Do not provide more than 3 queries.
@@ -100,7 +100,7 @@ Here are some memories about the user:
 # If a document is by far the best and is a very obvious inclusion, add a ! after the section_id to indicate that it should \
 # be included in full. Example output: [8, 2!, 5].
 DOCUMENT_SELECTION_PROMPT = """
-Select the most relevant document sections for the user's query (maximum {max_sections}). \
+Select the most relevant document sections for the user's query (maximum {max_sections}).{extra_instructions}
 
 # Document Sections
 ```
@@ -126,6 +126,10 @@ Return ONLY section_ids as a comma-separated list, ordered by relevance:
 
 Section IDs:
 """.strip()
+
+TRY_TO_FILL_TO_MAX_INSTRUCTIONS = """
+Try to fill the list to the maximum number of sections if possible without including non-relevant or misleading sections.
+"""
 
 
 # Some models are trained heavily to reason in the actual output so we allow some flexibility in the prompt.

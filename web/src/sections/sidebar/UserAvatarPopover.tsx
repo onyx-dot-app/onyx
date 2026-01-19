@@ -212,8 +212,7 @@ export default function UserAvatarPopover({ folded }: SettingsProps) {
       <Popover.Content
         align="end"
         side="right"
-        lg={popupState === "Notifications"}
-        md={popupState === "Settings"}
+        width={popupState === "Notifications" ? "xl" : "md"}
       >
         {popupState === "Settings" && (
           <SettingsPopover

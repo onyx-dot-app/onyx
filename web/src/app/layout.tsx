@@ -29,7 +29,7 @@ import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
-import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
+import GatedContentWrapper from "@/components/GatedContentWrapper";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fetchAppSidebarMetadata } from "@/lib/appSidebarSS";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
@@ -139,15 +139,25 @@ export default async function RootLayout({
     </html>
   );
 
-  if (productGating === ApplicationStatus.GATED_ACCESS) {
-    return getPageContent(<AccessRestrictedPage />);
-  }
-
   if (!combinedSettings) {
     return getPageContent(
       NEXT_PUBLIC_CLOUD_ENABLED ? <CloudError /> : <Error />
     );
   }
+
+  // When gated, wrap children in GatedContentWrapper which checks the path
+  // client-side and shows AccessRestrictedPage for non-billing paths.
+  //
+  // Trade-off: Server components still render and attempt API calls before the
+  // client-side check runs. This is safe because the backend license enforcement
+  // middleware returns 402 for all non-allowlisted API calls, preventing data
+  // leakage. The user sees a brief loading state before being redirected.
+  const content =
+    productGating === ApplicationStatus.GATED_ACCESS ? (
+      <GatedContentWrapper>{children}</GatedContentWrapper>
+    ) : (
+      children
+    );
 
   return getPageContent(
     <AppProvider
@@ -160,7 +170,7 @@ export default async function RootLayout({
         <PostHogPageView />
       </Suspense>
       <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-        {children}
+        {content}
       </div>
       {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
       {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
