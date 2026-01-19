@@ -255,7 +255,7 @@ def _token_based_match(
 
     content_words = processed_content.split()
 
-    if len(content_words) < window_size:
+    if window_size > len(content_words):
         return NegativeSnippetMatchResult
 
     best_score = 0.0
