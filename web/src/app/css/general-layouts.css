@@ -5,6 +5,10 @@
   grid-template-columns: 1fr;
 }
 
+.line-item-layout[data-right-children-reduced-padding="true"] {
+  @apply p-2;
+}
+
 .line-item-layout[data-has-icon="true"] {
   grid-template-columns: auto 1fr;
 }

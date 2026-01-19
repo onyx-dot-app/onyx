@@ -179,6 +179,7 @@ export interface LineItemLayoutProps {
   variant?: LineItemLayoutVariant;
   strikethrough?: boolean;
   loading?: boolean;
+  rightChildrenReducedPadding?: boolean;
 }
 function LineItemLayout({
   icon: Icon,
@@ -189,6 +190,7 @@ function LineItemLayout({
   variant = "primary",
   strikethrough,
   loading,
+  rightChildrenReducedPadding,
 }: LineItemLayoutProps) {
   // Derive styling from variant
   const isCompact = variant === "secondary" || variant === "tertiary";
@@ -201,6 +203,9 @@ function LineItemLayout({
         data-variant={variant}
         data-has-icon={Icon ? "true" : undefined}
         data-loading={loading ? "true" : undefined}
+        data-right-children-reduced-padding={
+          rightChildrenReducedPadding ? "true" : undefined
+        }
       >
         {/* Row 1: Icon, Title */}
         {Icon && (
