@@ -1,4 +1,4 @@
-import { memo } from "react";
+import React from "react";
 import { STEP_CONFIG } from "@/refresh-components/onboarding/constants";
 import {
   OnboardingActions,
@@ -19,7 +19,7 @@ interface OnboardingHeaderProps {
   handleHideOnboarding: () => void;
   handleFinishOnboarding: () => void;
 }
-const OnboardingHeader = memo(
+const OnboardingHeader = React.memo(
   ({
     state: onboardingState,
     actions: onboardingActions,
@@ -34,13 +34,10 @@ const OnboardingHeader = memo(
     const isCompleteStep =
       onboardingState.currentStep === OnboardingStep.Complete;
 
-    const handleButtonClick = () => {
-      if (isCompleteStep) {
-        handleFinishOnboarding();
-      } else {
-        onboardingActions.nextStep();
-      }
-    };
+    function handleButtonClick() {
+      if (isCompleteStep) handleFinishOnboarding();
+      else onboardingActions.nextStep();
+    }
 
     return (
       <Card padding={0.5}>
@@ -67,7 +64,7 @@ const OnboardingHeader = memo(
               <IconButton internal icon={SvgX} onClick={handleHideOnboarding} />
             )
           }
-          variant="tertiary"
+          variant="tertiary-muted"
           rightChildrenReducedPadding
           center
         />

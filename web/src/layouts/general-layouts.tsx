@@ -162,7 +162,7 @@ function Section({
  * Variants:
  * - `primary`: Standard size (20px icon) with emphasized text. The default for prominent list items.
  * - `secondary`: Compact size (16px icon) with emphasized text. Use for denser lists or nested items.
- * - `tertiary`: Compact size (16px icon) with muted text styling. Use for de-emphasized or secondary information.
+ * - `tertiary-muted`: Compact size (16px icon) with muted text styling. Use for de-emphasized or secondary information.
  *
  * @param icon - Optional icon component to display on the left
  * @param title - The main title text (required)
@@ -173,7 +173,11 @@ function Section({
  * @param loading - If true, renders skeleton placeholders instead of content. Default: false
  * @param center - If true, vertically centers items; otherwise aligns to start. Default: false
  */
-type LineItemLayoutVariant = "primary" | "secondary" | "tertiary";
+type LineItemLayoutVariant =
+  | "primary"
+  | "secondary"
+  | "tertiary"
+  | "tertiary-muted";
 export interface LineItemLayoutProps {
   icon?: React.FunctionComponent<IconProps>;
   title: string;
@@ -199,8 +203,11 @@ function LineItemLayout({
   rightChildrenReducedPadding,
 }: LineItemLayoutProps) {
   // Derive styling from variant
-  const isCompact = variant === "secondary" || variant === "tertiary";
-  const isMuted = variant === "tertiary";
+  const isCompact =
+    variant === "secondary" ||
+    variant === "tertiary" ||
+    variant === "tertiary-muted";
+  const isMuted = variant === "tertiary-muted";
 
   return (
     <Section
@@ -225,7 +232,7 @@ function LineItemLayout({
           <div className="line-item-layout-skeleton-title" />
         ) : (
           <Text
-            mainContentEmphasis={!isMuted}
+            mainContentEmphasis={!isCompact}
             text03={isMuted}
             className={cn(strikethrough && "line-through")}
           >
