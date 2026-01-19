@@ -130,19 +130,18 @@ Each sandbox container mounts three volumes:
      │                │ 2. POST /sessions     │                        │
      │                │──────────────────────>│                        │
      │                │                       │                        │
+     │                │<──────────────────────│ Session Created        │
+     │<───────────────│ Show Chat UI          │ (status: initializing) │
+     │                │                       │                        │
      │                │                       │ 3. Provision Sandbox   │
-     │                │                       │    (internal module)   │
+     │                │                       │    (async, in background)
      │                │                       │    - Mount knowledge vol
      │                │                       │    - Mount outputs vol │
      │                │                       │    - Mount instructions│
      │                │                       │    - Start container   │
      │                │                       │───────────────────────>│
      │                │                       │                        │
-     │                │                       │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
-     │                │<──────────────────────│ Session Created        │
-     │<───────────────│ Show Chat UI          │                        │
-     │                │                       │                        │
-     │  4. Send       │                       │                        │
+     │  4. Send       │                       │    (provisioning...)   │
      │  "Build me a   │                       │                        │
      │   dashboard"   │                       │                        │
      │───────────────>│                       │                        │
@@ -152,6 +151,14 @@ Each sandbox container mounts three volumes:
      │                │                       │                        │
      │                │   6. Open SSE Stream  │                        │
      │                │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│                        │
+     │                │                       │                        │
+     │ Show           │  SSE: initializing    │                        │
+     │ "Initializing  │<──────────────────────│                        │
+     │  sandbox..."   │                       │                        │
+     │<───────────────│                       │                        │
+     │                │                       │                        │
+     │                │                       │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
+     │                │                       │   Sandbox Ready        │
      │                │                       │                        │
      │                │                       │ 7. Proxy to CLI Agent  │
      │                │                       │───────────────────────>│
@@ -234,8 +241,8 @@ Each sandbox container mounts three volumes:
 
 | Step | Action | Description |
 |------|--------|-------------|
-| 1-3 | **Session Init** | User opens chat → Backend sandbox module provisions container with volumes |
-| 4-7 | **Message Send** | User sends prompt → Backend opens SSE stream → Proxies to CLI agent |
+| 1-3 | **Session Init** | User starts chat → Session created immediately → Sandbox provisions async |
+| 4-7 | **Message Send** | User sends prompt → If sandbox not ready, shows "Initializing sandbox..." → Once ready, proxies to CLI agent |
 | 8-11 | **Agent Execution** | CLI agent processes request, streams steps, writes files to `/outputs` |
 | 12-13 | **Artifact Created** | Agent signals artifact creation → Backend persists metadata |
 | 14-15 | **Completion** | Agent sends final response and done signal |
@@ -259,6 +266,17 @@ Each sandbox container mounts three volumes:
 5. CLI agent streams steps/responses back
 6. Backend streams to frontend via SSE/WebSocket
 7. Frontend renders chat + any generated artifacts
+```
+
+### Message While Sandbox Initializing
+```
+1. User sends message before sandbox is ready
+2. Frontend displays "Initializing sandbox..." indicator
+3. Backend queues the message, waits for sandbox to be ready
+4. Once sandbox is running:
+   a. Backend proxies queued message to CLI agent
+   b. Streaming response proceeds as normal
+5. Frontend replaces "Initializing sandbox..." with actual response
 ```
 
 ### Follow-up Message Flow (Container Running)
@@ -296,28 +314,35 @@ Each sandbox container mounts three volumes:
 
 ### Sessions
 ```
-POST   /api/sessions                    # Create new session
-GET    /api/sessions/{id}               # Get session details
-DELETE /api/sessions/{id}               # End session (cleanup)
+POST   /api/build/sessions                    # Create new session       
+PUT    /api/build/sessions/{id}               # Get session details + wake it up
+GET    /api/build/sessions                    # List all sessions (with filters)
+DELETE /api/build/sessions/{id}               # End session (full cleanup)
 ```
 
 ### Messages
 ```
-POST   /api/sessions/{id}/messages      # Send message (streaming response)
-GET    /api/sessions/{id}/messages      # Get message history
+POST   /api/build/sessions/{id}/messages      # Send message (streaming response)
+GET    /api/build/sessions/{id}/messages      # Get message history (no pagination)
 ```
 
 ### Artifacts
 ```
-GET    /api/sessions/{id}/artifacts             # List artifacts
-GET    /api/sessions/{id}/artifacts/{artifact_id}  # Get artifact metadata
-GET    /api/sessions/{id}/artifacts/{artifact_id}/content  # Download/stream content
+GET    /api/build/sessions/{id}/artifacts             # List artifacts
+GET    /api/build/sessions/{id}/artifacts/{artifact_id}  # Get artifact metadata
+GET    /api/build/sessions/{id}/artifacts/{artifact_id}/content  # Download/stream content
 ```
 
 ### Filesystem (VM Explorer)
 ```
-GET    /api/sessions/{id}/fs?path=/outputs      # List directory
-GET    /api/sessions/{id}/fs/read?path=...      # Read file content
+POST   /api/build/sessions/{id}/fs/upload             # Upload file to sandbox, to /user-input directory (or similar)
+GET    /api/build/sessions/{id}/fs?path=/outputs      # List directory
+GET    /api/build/sessions/{id}/fs/read?path=...      # Read file content (maybe clicking on "external files" takes you directly to the source)
+```
+
+### Rate Limiting
+```
+GET   /api/build/limit   # unpaid gets 10 messages total, paid gets paid gets 50 messages / week
 ```
 
 ### Sandbox Module (Internal Functions)
