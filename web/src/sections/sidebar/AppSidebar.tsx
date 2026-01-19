@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, memo, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -133,7 +133,11 @@ interface AppSidebarInnerProps {
 const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
     const searchParams = useSearchParams();
+    const pathname = usePathname();
     const combinedSettings = useSettingsContext();
+
+    // Hide settings and admin panel buttons when in NRF (chrome extension) mode
+    const isNRFPage = pathname?.startsWith("/chat/nrf") ?? false;
     const { popup, setPopup } = usePopup();
 
     // Use SWR hooks for data fetching
@@ -409,21 +413,23 @@ const MemoizedAppSidebarInner = memo(
       [folded, createProjectModal.toggle, createProjectModal.isOpen]
     );
     const settingsButton = useMemo(
-      () => (
-        <div>
-          {(isAdmin || isCurator) && (
-            <SidebarTab
-              href="/admin/indexing/status"
-              leftIcon={SvgSettings}
-              folded={folded}
-            >
-              {isAdmin ? "Admin Panel" : "Curator Panel"}
-            </SidebarTab>
-          )}
-          <Settings folded={folded} />
-        </div>
-      ),
-      [folded, isAdmin, isCurator]
+      () =>
+        // Hide settings and admin panel buttons in NRF (chrome extension) mode
+        isNRFPage ? null : (
+          <div>
+            {(isAdmin || isCurator) && (
+              <SidebarTab
+                href="/admin/indexing/status"
+                leftIcon={SvgSettings}
+                folded={folded}
+              >
+                {isAdmin ? "Admin Panel" : "Curator Panel"}
+              </SidebarTab>
+            )}
+            <Settings folded={folded} />
+          </div>
+        ),
+      [folded, isAdmin, isCurator, isNRFPage]
     );
 
     return (
@@ -546,6 +552,12 @@ MemoizedAppSidebarInner.displayName = "AppSidebar";
 export default function AppSidebar() {
   const { folded, setFolded } = useAppSidebarContext();
   const { isMobile } = useScreenSize();
+  const pathname = usePathname();
+
+  // Hide entire sidebar on NRF side-panel page
+  if (pathname === "/chat/nrf/side-panel") {
+    return null;
+  }
 
   if (!isMobile)
     return (

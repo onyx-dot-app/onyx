@@ -8,7 +8,7 @@ import {
 } from "@/lib/extension/constants";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
+import { SvgX, SvgSettings, SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { ThemePreference } from "@/lib/types";
 
@@ -77,17 +77,12 @@ export const SettingsPanel = ({
 }) => {
   const {
     theme,
-    setTheme,
     defaultLightBackgroundUrl,
     setDefaultLightBackgroundUrl,
     defaultDarkBackgroundUrl,
     setDefaultDarkBackgroundUrl,
     useOnyxAsNewTab,
   } = useNRFPreferences();
-
-  const toggleTheme = (newTheme: ThemePreference) => {
-    setTheme(newTheme);
-  };
 
   const updateBackgroundUrl = (url: string) => {
     if (theme === ThemePreference.LIGHT) {
@@ -140,23 +135,6 @@ export const SettingsPanel = ({
               </Text>
             </div>
             <div className="nrf-settings-actions">
-              {/* Theme Toggle */}
-              <IconButton
-                icon={theme === ThemePreference.LIGHT ? SvgSun : SvgMoon}
-                onClick={() =>
-                  toggleTheme(
-                    theme === ThemePreference.LIGHT
-                      ? ThemePreference.DARK
-                      : ThemePreference.LIGHT
-                  )
-                }
-                tertiary
-                tooltip={`Switch to ${
-                  theme === ThemePreference.LIGHT
-                    ? ThemePreference.DARK
-                    : ThemePreference.LIGHT
-                } theme`}
-              />
               <IconButton
                 icon={SvgX}
                 onClick={toggleSettings}

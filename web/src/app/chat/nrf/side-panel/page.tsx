@@ -3,6 +3,7 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import NRFPage from "@/app/chat/nrf/NRFPage";
 import { NRFPreferencesProvider } from "@/components/context/NRFPreferencesContext";
 import * as AppLayouts from "@/layouts/app-layouts";
+import { NRFDisplayMode } from "@/app/chat/nrf/types";
 
 export default async function Page() {
   noStore();
@@ -11,7 +12,7 @@ export default async function Page() {
     <AppLayouts.Root>
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
-        <NRFPage isSidePanel />
+        <NRFPage displayMode={NRFDisplayMode.SIDE_PANEL} />
       </NRFPreferencesProvider>
     </AppLayouts.Root>
   );
