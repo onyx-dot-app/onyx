@@ -148,3 +148,72 @@ def test_snippet_provided_in_middle() -> None:
         ]
         + TRUNCATED_CONTENT_SUFFIX
     )
+
+
+def test_bad_snippet() -> None:
+    tartan_text = get_tartan_text()
+    web_content = create_web_content_object(tartan_text)
+
+    snippet = "This is a bad snippet"
+    # We expect the fallback (from top) to occur
+    section = inference_section_from_internet_page_scrape(web_content, snippet)
+
+    # Section will be of length min(MAX_NUM_CHARS_WEB_CONTENT, len(tartan_text))
+    assert len(section.combined_content) == MAX_NUM_CHARS_WEB_CONTENT + len(
+        TRUNCATED_CONTENT_SUFFIX
+    )
+
+    # Get the combined_content without the truncated suffix
+    combined_content_without_suffix = section.combined_content[
+        :MAX_NUM_CHARS_WEB_CONTENT
+    ]
+
+    # Check that we have the first 15000 characters of the tartan text
+    assert combined_content_without_suffix == tartan_text[:MAX_NUM_CHARS_WEB_CONTENT]
+    assert (
+        section.combined_content
+        == tartan_text[:MAX_NUM_CHARS_WEB_CONTENT] + TRUNCATED_CONTENT_SUFFIX
+    )
+
+
+def test_similar_snippet_in_middle_fuzzy_match() -> None:
+    tartan_text = get_tartan_text()
+    web_content = create_web_content_object(tartan_text)
+
+    # In the actual text, the word "English" is used instead of "British"
+    # This is very similar though, so we expect a fuzzy match to occur
+    snippet = (
+        "marketing as a district tartan for Ulster, Scottish weavers (and in two cases British, and "
+        "in another American)"
+    )
+
+    section = inference_section_from_internet_page_scrape(web_content, snippet)
+
+    assert len(section.combined_content) == len(
+        TRUNCATED_CONTENT_PREFIX
+    ) + MAX_NUM_CHARS_WEB_CONTENT + len(TRUNCATED_CONTENT_SUFFIX)
+
+    no_prefix = section.combined_content[len(TRUNCATED_CONTENT_PREFIX) :]
+    no_affix = no_prefix[:MAX_NUM_CHARS_WEB_CONTENT]
+
+    # expected start index of the snippet
+    expected_start_idx = 215398
+    expected_end_idx = expected_start_idx + len(snippet) - 1
+
+    top_padding = (MAX_NUM_CHARS_WEB_CONTENT - len(snippet)) // 2
+    bottom_padding = MAX_NUM_CHARS_WEB_CONTENT - len(snippet) - top_padding
+
+    assert (
+        no_affix
+        == tartan_text[
+            expected_start_idx - top_padding : expected_end_idx + bottom_padding + 1
+        ]
+    )
+
+    assert section.combined_content == (
+        TRUNCATED_CONTENT_PREFIX
+        + tartan_text[
+            expected_start_idx - top_padding : expected_end_idx + bottom_padding + 1
+        ]
+        + TRUNCATED_CONTENT_SUFFIX
+    )
