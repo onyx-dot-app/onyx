@@ -161,7 +161,8 @@ function Section({
  *
  * Variants:
  * - `primary`: Standard size (20px icon) with emphasized text. The default for prominent list items.
- * - `secondary`: Compact size (16px icon) with emphasized text. Use for denser lists or nested items.
+ * - `secondary`: Compact size (16px icon) with standard text. Use for denser lists or nested items.
+ * - `tertiary`: Compact size (16px icon) with standard text. Use for less prominent items in tight layouts.
  * - `tertiary-muted`: Compact size (16px icon) with muted text styling. Use for de-emphasized or secondary information.
  *
  * @param icon - Optional icon component to display on the left
