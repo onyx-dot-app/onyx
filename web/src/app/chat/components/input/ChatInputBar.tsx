@@ -110,6 +110,7 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
+  tabIndex?: number;
 }
 
 const ChatInputBar = React.memo(
@@ -136,6 +137,7 @@ const ChatInputBar = React.memo(
         toggleDeepResearch,
         setPresentingDocument,
         disabled,
+        tabIndex,
       },
       ref
     ) => {
@@ -511,6 +513,7 @@ const ChatInputBar = React.memo(
                 "pt-3"
               )}
               autoFocus
+              tabIndex={tabIndex}
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
