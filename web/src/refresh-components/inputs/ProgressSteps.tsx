@@ -28,7 +28,7 @@ export default function ProgressSteps({
   return (
     <div className={className}>
       {isComplete ? (
-        <SvgCheckCircle className="w-4 h-4 stroke-green-600" />
+        <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
       ) : (
         <svg
           width="16"
