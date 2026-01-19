@@ -28,6 +28,7 @@ export interface ButtonProps
   rightIcon?: React.FunctionComponent<IconProps>;
 
   href?: string;
+  target?: string;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -49,6 +50,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       rightIcon: RightIcon,
 
       href,
+      target,
       children,
       className,
       ...props
@@ -107,7 +109,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           )}
         >
           {typeof children === "string" ? (
-            <Text className={cn("whitespace-nowrap", textClass)} as="span">
+            <Text className={cn("whitespace-nowrap", textClass)}>
               {children}
             </Text>
           ) : (
@@ -123,7 +125,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     );
 
     if (!href) return content;
-    return <Link href={href as Route}>{content}</Link>;
+    return (
+      <Link href={href as Route} target={target}>
+        {content}
+      </Link>
+    );
   }
 );
 Button.displayName = "Button";

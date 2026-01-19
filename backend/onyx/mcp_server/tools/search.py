@@ -1,9 +1,12 @@
 """Search tools for MCP server - document and web search."""
 
+from datetime import datetime
 from typing import Any
 
+from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import get_http_client
+from onyx.mcp_server.utils import get_indexed_sources
 from onyx.mcp_server.utils import require_access_token
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
@@ -11,149 +14,161 @@ from onyx.utils.variable_functionality import build_api_server_url_for_http_requ
 logger = setup_logger()
 
 
-# @mcp_server.tool()
-# async def search_indexed_documents(
-#     query: str,
-#     source_types: list[str] | None = None,
-#     time_cutoff: str | None = None,
-#     limit: int = 10,
-# ) -> dict[str, Any]:
-#     """
-#     Search the user's knowledge base indexed in Onyx.
-#     Use this tool for information that is not public knowledge and specific to the user,
-#     their team, their work, or their organization/company.
+@mcp_server.tool()
+async def search_indexed_documents(
+    query: str,
+    source_types: list[str] | None = None,
+    time_cutoff: str | None = None,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """
+    Search the user's knowledge base indexed in Onyx.
+    Use this tool for information that is not public knowledge and specific to the user,
+    their team, their work, or their organization/company.
 
-#     To find a list of available sources, use the `indexed_sources` resource.
-#     Returns chunks of text as search results with snippets, scores, and metadata.
+    To find a list of available sources, use the `indexed_sources` resource.
+    Returns chunks of text as search results with snippets, scores, and metadata.
 
-#     Example usage:
-#     ```
-#     {
-#         "query": "What is the latest status of PROJ-1234 and what is the next development item?",
-#         "source_types": ["jira", "google_drive", "github"],
-#         "time_cutoff": "2025-11-24T00:00:00Z",
-#         "limit": 10,
-#     }
-#     ```
-#     """
-#     logger.info(
-#         f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
-#     )
+    Example usage:
+    ```
+    {
+        "query": "What is the latest status of PROJ-1234 and what is the next development item?",
+        "source_types": ["jira", "google_drive", "github"],
+        "time_cutoff": "2025-11-24T00:00:00Z",
+        "limit": 10,
+    }
+    ```
+    """
+    logger.info(
+        f"Onyx MCP Server: document search: query='{query}', sources={source_types}, limit={limit}"
+    )
 
-#     # Parse time_cutoff string to datetime if provided
-#     time_cutoff_dt: datetime | None = None
-#     if time_cutoff:
-#         try:
-#             time_cutoff_dt = datetime.fromisoformat(time_cutoff.replace("Z", "+00:00"))
-#         except ValueError as e:
-#             logger.warning(
-#                 f"Onyx MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. "
-#                 "Continuing without time filter."
-#             )
-#             # Continue with no time_cutoff instead of returning an error
-#             time_cutoff_dt = None
+    # Parse time_cutoff string to datetime if provided
+    time_cutoff_dt: datetime | None = None
+    if time_cutoff:
+        try:
+            time_cutoff_dt = datetime.fromisoformat(time_cutoff.replace("Z", "+00:00"))
+        except ValueError as e:
+            logger.warning(
+                f"Onyx MCP Server: Invalid time_cutoff format '{time_cutoff}': {e}. "
+                "Continuing without time filter."
+            )
+            # Continue with no time_cutoff instead of returning an error
+            time_cutoff_dt = None
 
-#     # Initialize source_type_enums early to avoid UnboundLocalError
-#     source_type_enums: list[DocumentSource] | None = None
+    # Initialize source_type_enums early to avoid UnboundLocalError
+    source_type_enums: list[DocumentSource] | None = None
 
-#     # Get authenticated user from FastMCP's access token
-#     access_token = require_access_token()
+    # Get authenticated user from FastMCP's access token
+    access_token = require_access_token()
 
-#     try:
-#         sources = await get_indexed_sources(access_token)
-#     except Exception as e:
-#         # Error fetching sources (network error, API failure, etc.)
-#         logger.error(
-#             "Onyx MCP Server: Error checking indexed sources: %s",
-#             e,
-#             exc_info=True,
-#         )
-#         return {
-#             "documents": [],
-#             "total_results": 0,
-#             "query": query,
-#             "error": (f"Failed to check indexed sources: {str(e)}. "),
-#         }
+    try:
+        sources = await get_indexed_sources(access_token)
+    except Exception as e:
+        # Error fetching sources (network error, API failure, etc.)
+        logger.error(
+            "Onyx MCP Server: Error checking indexed sources: %s",
+            e,
+            exc_info=True,
+        )
+        return {
+            "documents": [],
+            "total_results": 0,
+            "query": query,
+            "error": (f"Failed to check indexed sources: {str(e)}. "),
+        }
 
-#     if not sources:
-#         logger.info("Onyx MCP Server: No indexed sources available for tenant")
-#         return {
-#             "documents": [],
-#             "total_results": 0,
-#             "query": query,
-#             "message": (
-#                 "No document sources are indexed yet. Add connectors or upload data "
-#                 "through Onyx before calling onyx_search_documents."
-#             ),
-#         }
+    if not sources:
+        logger.info("Onyx MCP Server: No indexed sources available for tenant")
+        return {
+            "documents": [],
+            "total_results": 0,
+            "query": query,
+            "message": (
+                "No document sources are indexed yet. Add connectors or upload data "
+                "through Onyx before calling onyx_search_documents."
+            ),
+        }
 
-#     # Convert source_types strings to DocumentSource enums if provided
-#     # Invalid values will be handled by the API server
-#     if source_types is not None:
-#         source_type_enums = []
-#         for src in source_types:
-#             try:
-#                 source_type_enums.append(DocumentSource(src.lower()))
-#             except ValueError:
-#                 logger.warning(
-#                     f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
-#                 )
+    # Convert source_types strings to DocumentSource enums if provided
+    # Invalid values will be handled by the API server
+    if source_types is not None:
+        source_type_enums = []
+        for src in source_types:
+            try:
+                source_type_enums.append(DocumentSource(src.lower()))
+            except ValueError:
+                logger.warning(
+                    f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
+                )
 
-#     # TODO
-#     search_request = DocumentSearchRequest(
-#         message=query,
-#         search_type=SearchType.SEMANTIC,
-#         retrieval_options=RetrievalDetails(
-#             filters=IndexFilters(
-#                 source_type=source_type_enums,
-#                 time_cutoff=time_cutoff_dt,
-#                 access_control_list=None,  # Server handles ACL using the access token
-#             ),
-#             enable_auto_detect_filters=False,
-#             offset=0,
-#             limit=limit,
-#         ),
-#         evaluation_type=LLMEvaluationType.SKIP,
-#     )
+    # Build filters dict only with non-None values
+    filters: dict[str, Any] | None = None
+    if source_type_enums or time_cutoff_dt:
+        filters = {}
+        if source_type_enums:
+            filters["source_type"] = [src.value for src in source_type_enums]
+        if time_cutoff_dt:
+            filters["time_cutoff"] = time_cutoff_dt.isoformat()
 
-#     # Call the API server
-#     try:
-#         response = await get_http_client().post(
-#             f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/query/document-search",
-#             json=search_request.model_dump(mode="json"),
-#             headers={"Authorization": f"Bearer {access_token.token}"},
-#         )
-#         response.raise_for_status()
-#         result = response.json()
+    # Build the search request using the new SendSearchQueryRequest format
+    search_request = {
+        "search_query": query,
+        "filters": filters,
+        "num_docs_fed_to_llm_selection": limit,
+        "run_query_expansion": False,
+        "include_content": True,
+        "stream": False,
+    }
 
-#         # Return simplified format for MCP clients
-#         fields_to_return = [
-#             "semantic_identifier",
-#             "content",
-#             "source_type",
-#             "link",
-#             "score",
-#         ]
-#         documents = [
-#             {key: doc.get(key) for key in fields_to_return}
-#             for doc in result.get("top_documents", [])
-#         ]
+    # Call the API server using the new send-search-message route
+    try:
+        response = await get_http_client().post(
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search/send-search-message",
+            json=search_request,
+            headers={"Authorization": f"Bearer {access_token.token}"},
+        )
+        response.raise_for_status()
+        result = response.json()
 
-#         logger.info(
-#             f"Onyx MCP Server: Internal search returned {len(documents)} results"
-#         )
-#         return {
-#             "documents": documents,
-#             "total_results": len(documents),
-#             "query": query,
-#         }
-#     except Exception as e:
-#         logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
-#         return {
-#             "error": f"Document search failed: {str(e)}",
-#             "documents": [],
-#             "query": query,
-#         }
+        # Check for error in response
+        if result.get("error"):
+            return {
+                "documents": [],
+                "total_results": 0,
+                "query": query,
+                "error": result.get("error"),
+            }
+
+        # Return simplified format for MCP clients
+        fields_to_return = [
+            "semantic_identifier",
+            "content",
+            "source_type",
+            "link",
+            "score",
+        ]
+        documents = [
+            {key: doc.get(key) for key in fields_to_return}
+            for doc in result.get("search_docs", [])
+        ]
+
+        logger.info(
+            f"Onyx MCP Server: Internal search returned {len(documents)} results"
+        )
+        return {
+            "documents": documents,
+            "total_results": len(documents),
+            "query": query,
+            "executed_queries": result.get("all_executed_queries", [query]),
+        }
+    except Exception as e:
+        logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
+        return {
+            "error": f"Document search failed: {str(e)}",
+            "documents": [],
+            "query": query,
+        }
 
 
 @mcp_server.tool()

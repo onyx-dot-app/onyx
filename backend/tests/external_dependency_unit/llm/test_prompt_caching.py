@@ -474,9 +474,12 @@ def test_google_genai_prompt_caching_reduces_costs(
                 continuation=False,
             )
             # Debug: print processed messages structure
-            print(
-                f"Processed messages structure (first msg): {processed_messages1[0] if processed_messages1 else 'empty'}"
+            first_msg = (
+                processed_messages1[0]
+                if isinstance(processed_messages1, list) and processed_messages1
+                else processed_messages1
             )
+            print(f"Processed messages structure (first msg): {first_msg}")
 
             response1 = llm.invoke(prompt=processed_messages1)
             cost1 = completion_cost(

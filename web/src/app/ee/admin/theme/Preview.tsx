@@ -24,7 +24,7 @@ const previewMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text as="span" text03 figureSmallValue>
+        <Text text03 figureSmallValue>
           {children}
         </Text>
       </a>

@@ -88,3 +88,96 @@ def test_fetch_url_decodes_html_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert "caf\u00e9" in result.full_content
     assert result.scrape_successful is True
+
+
+def test_fetch_url_pdf_exceeds_size_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PDF content exceeding max_pdf_size_bytes should be rejected."""
+    crawler = OnyxWebCrawler(max_pdf_size_bytes=100)
+    response = FakeResponse(
+        status_code=200,
+        headers={"Content-Type": "application/pdf"},
+        content=b"%PDF-1.4 " + b"x" * 200,  # 209 bytes, exceeds 100 limit
+    )
+
+    monkeypatch.setattr(
+        crawler_module,
+        "ssrf_safe_get",
+        lambda *args, **kwargs: response,
+    )
+
+    result = crawler._fetch_url("https://example.com/large.pdf")
+
+    assert result.full_content == ""
+    assert result.scrape_successful is False
+    assert result.link == "https://example.com/large.pdf"
+
+
+def test_fetch_url_pdf_within_size_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PDF content within max_pdf_size_bytes should be processed normally."""
+    crawler = OnyxWebCrawler(max_pdf_size_bytes=500)
+    response = FakeResponse(
+        status_code=200,
+        headers={"Content-Type": "application/pdf"},
+        content=b"%PDF-1.4 mock",  # Small content
+    )
+
+    monkeypatch.setattr(
+        crawler_module,
+        "ssrf_safe_get",
+        lambda *args, **kwargs: response,
+    )
+    monkeypatch.setattr(
+        crawler_module,
+        "extract_pdf_text",
+        lambda *args, **kwargs: ("pdf text", {"Title": "Doc Title"}),
+    )
+
+    result = crawler._fetch_url("https://example.com/small.pdf")
+
+    assert result.full_content == "pdf text"
+    assert result.scrape_successful is True
+
+
+def test_fetch_url_html_exceeds_size_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTML content exceeding max_html_size_bytes should be rejected."""
+    crawler = OnyxWebCrawler(max_html_size_bytes=50)
+    html_bytes = b"<html><body>" + b"x" * 100 + b"</body></html>"  # Exceeds 50 limit
+    response = FakeResponse(
+        status_code=200,
+        headers={"Content-Type": "text/html"},
+        content=html_bytes,
+    )
+
+    monkeypatch.setattr(
+        crawler_module,
+        "ssrf_safe_get",
+        lambda *args, **kwargs: response,
+    )
+
+    result = crawler._fetch_url("https://example.com/large.html")
+
+    assert result.full_content == ""
+    assert result.scrape_successful is False
+    assert result.link == "https://example.com/large.html"
+
+
+def test_fetch_url_html_within_size_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTML content within max_html_size_bytes should be processed normally."""
+    crawler = OnyxWebCrawler(max_html_size_bytes=500)
+    html_bytes = b"<html><body>hello world</body></html>"
+    response = FakeResponse(
+        status_code=200,
+        headers={"Content-Type": "text/html"},
+        content=html_bytes,
+    )
+
+    monkeypatch.setattr(
+        crawler_module,
+        "ssrf_safe_get",
+        lambda *args, **kwargs: response,
+    )
+
+    result = crawler._fetch_url("https://example.com/small.html")
+
+    assert "hello world" in result.full_content
+    assert result.scrape_successful is True

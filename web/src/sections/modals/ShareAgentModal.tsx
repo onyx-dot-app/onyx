@@ -132,7 +132,7 @@ function ShareAgentFormContent({
       <Modal.Header icon={SvgShare} title="Share Agent" onClose={onClose} />
 
       <Modal.Body padding={0.5}>
-        <Card borderless padding={0.5}>
+        <Card variant="borderless" padding={0.5}>
           <Tabs
             defaultValue={
               values.isPublic ? YOUR_ORGANIZATION_TAB : USERS_AND_GROUPS_TAB
@@ -222,7 +222,7 @@ function ShareAgentFormContent({
 
             <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
               <InputLayouts.Horizontal
-                label="Publish This Agent"
+                title="Publish This Agent"
                 description="Make this agent available to everyone in your organization."
               >
                 <SwitchField name="isPublic" />

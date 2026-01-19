@@ -32,6 +32,9 @@ class TestImageGenerationRequest(BaseModel):
     # Option 2: Use API key from existing provider
     source_llm_provider_id: int | None = None
 
+    # Additional fields for custom config
+    custom_config: dict[str, str] | None = None
+
     # Additional fields for Azure
     api_base: str | None = None
     api_version: str | None = None
@@ -63,6 +66,7 @@ class ImageGenerationConfigCreate(BaseModel):
     api_base: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
+    custom_config: dict[str, str] | None = None
 
     is_default: bool = False
 
@@ -87,6 +91,7 @@ class ImageGenerationConfigUpdate(BaseModel):
     api_base: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
+    custom_config: dict[str, str] | None = None
 
     # If False and using new credentials mode, preserve existing API key from DB
     api_key_changed: bool = False

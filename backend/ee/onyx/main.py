@@ -16,6 +16,9 @@ from ee.onyx.server.enterprise_settings.api import (
 from ee.onyx.server.evals.api import router as evals_router
 from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
+from ee.onyx.server.middleware.license_enforcement import (
+    add_license_enforcement_middleware,
+)
 from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
@@ -82,6 +85,10 @@ def get_application() -> FastAPI:
 
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
+
+    # Add license enforcement middleware (runs after tenant tracking)
+    # This blocks access when license is expired/gated
+    add_license_enforcement_middleware(application, logger)
 
     if AUTH_TYPE == AuthType.CLOUD:
         # For Google OAuth, refresh tokens are requested by:

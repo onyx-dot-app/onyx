@@ -1,0 +1,23 @@
+.card {
+  @apply rounded-16 w-full;
+}
+
+.card[data-variant="primary"] {
+  @apply bg-background-tint-00 border;
+}
+
+.card[data-variant="secondary"] {
+  @apply bg-transparent border;
+}
+
+.card[data-variant="tertiary"] {
+  @apply bg-transparent border border-dashed;
+}
+
+.card[data-variant="disabled"] {
+  @apply cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50;
+}
+
+.card[data-variant="borderless"] {
+  @apply bg-background-tint-00;
+}

@@ -11,6 +11,7 @@ aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
     # via
     #   aiobotocore
+    #   discord-py
     #   litellm
     #   voyageai
 aioitertools==0.13.0
@@ -94,6 +95,8 @@ decorator==5.2.1
     # via
     #   ipython
     #   retry
+discord-py==2.4.0
+    # via onyx
 distlib==0.4.0
     # via virtualenv
 distro==1.9.0

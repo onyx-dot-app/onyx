@@ -82,7 +82,7 @@ export default function FeedbackModal({
                 <Modal.Body>
                   <InputLayouts.Vertical
                     name="additional_feedback"
-                    label="Provide Additional Details"
+                    title="Provide Additional Details"
                     optional={feedbackType === "like"}
                   >
                     <InputTextAreaField

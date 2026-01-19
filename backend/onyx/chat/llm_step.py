@@ -137,12 +137,11 @@ def _format_message_history_for_logging(
 
     separator = "================================================"
 
-    # Handle string input
-    if isinstance(message_history, str):
-        formatted_lines.append("Message [string]:")
-        formatted_lines.append(separator)
-        formatted_lines.append(f"{message_history}")
-        return "\n".join(formatted_lines)
+    # Handle single ChatCompletionMessage - wrap in list for uniform processing
+    if isinstance(
+        message_history, (SystemMessage, UserMessage, AssistantMessage, ToolMessage)
+    ):
+        message_history = [message_history]
 
     # Handle sequence of messages
     for i, msg in enumerate(message_history):

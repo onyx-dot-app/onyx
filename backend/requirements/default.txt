@@ -188,7 +188,7 @@ cryptography==46.0.3
     #   unstructured-client
 cyclopts==4.2.4
     # via fastmcp
-dask==2025.11.0
+dask==2026.1.1
     # via
     #   distributed
     #   onyx
@@ -212,7 +212,7 @@ discord-py==2.4.0
     # via onyx
 diskcache==5.6.3
     # via py-key-value-aio
-distributed==2025.11.0
+distributed==2026.1.1
     # via onyx
 distro==1.9.0
     # via
