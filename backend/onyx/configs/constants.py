@@ -240,6 +240,7 @@ class NotificationType(str, Enum):
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
+    FEATURE_ANNOUNCEMENT = "feature_announcement"
 
 
 class BlobType(str, Enum):

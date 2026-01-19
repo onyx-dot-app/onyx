@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, memo, useMemo, useState, useEffect } from "react";
+import useSWR from "swr";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -59,12 +60,19 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
+  SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
+  SvgPlayCircle,
   SvgSettings,
 } from "@opal/icons";
+import BuildModeIntroBackgroundAnimation from "@/app/build/components/BuildModeIntroBackgroundAnimation";
+import BuildModeIntroContent from "@/app/build/components/BuildModeIntroContent";
+import { motion, AnimatePresence } from "motion/react";
+import { Notification } from "@/app/admin/settings/interfaces";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -133,6 +141,7 @@ interface AppSidebarInnerProps {
 const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const combinedSettings = useSettingsContext();
     const { popup, setPopup } = usePopup();
 
@@ -174,6 +183,42 @@ const MemoizedAppSidebarInner = memo(
     >(null);
     const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
       useState(false);
+
+    // Fetch notifications for build mode intro
+    const { data: notifications, mutate: mutateNotifications } = useSWR<
+      Notification[]
+    >("/api/notifications", errorHandlingFetcher);
+
+    // Find build_mode feature announcement notification
+    const buildModeNotification = notifications?.find(
+      (n) =>
+        n.notif_type === "feature_announcement" &&
+        n.additional_data?.feature === "build_mode" &&
+        !n.dismissed
+    );
+
+    // State for intro animation overlay
+    const [showIntroAnimation, setShowIntroAnimation] = useState(false);
+
+    // Show intro animation when build mode notification exists
+    useEffect(() => {
+      if (buildModeNotification && !showIntroAnimation) {
+        setShowIntroAnimation(true);
+      }
+    }, [buildModeNotification]);
+
+    // Dismiss the build mode notification
+    const dismissBuildModeNotification = useCallback(async () => {
+      if (!buildModeNotification) return;
+      try {
+        await fetch(`/api/notifications/${buildModeNotification.id}/dismiss`, {
+          method: "POST",
+        });
+        mutateNotifications();
+      } catch (error) {
+        console.error("Error dismissing notification:", error);
+      }
+    }, [buildModeNotification, mutateNotifications]);
 
     const [visibleAgents, currentAgentIsPinned] = useMemo(
       () => buildVisibleAgents(pinnedAgents, currentAgent),
@@ -374,6 +419,32 @@ const MemoizedAppSidebarInner = memo(
         </div>
       );
     }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+
+    const buildButton = useMemo(
+      () => (
+        <div data-testid="AppSidebar/build">
+          <SidebarTab leftIcon={SvgDevKit} folded={folded} href="/build">
+            Build
+          </SidebarTab>
+        </div>
+      ),
+      [folded]
+    );
+
+    const playIntroButton = useMemo(
+      () => (
+        <div data-testid="AppSidebar/play-intro">
+          <SidebarTab
+            leftIcon={SvgPlayCircle}
+            folded={folded}
+            onClick={() => setShowIntroAnimation(true)}
+          >
+            Play intro animation
+          </SidebarTab>
+        </div>
+      ),
+      [folded]
+    );
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -466,11 +537,42 @@ const MemoizedAppSidebarInner = memo(
           />
         )}
 
+        {/* Intro animation overlay */}
+        <AnimatePresence>
+          {showIntroAnimation && (
+            <motion.div
+              className="fixed inset-0 z-[9999]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <BuildModeIntroBackgroundAnimation />
+              <BuildModeIntroContent
+                onClose={() => {
+                  setShowIntroAnimation(false);
+                  dismissBuildModeNotification();
+                }}
+                onTryBuildMode={() => {
+                  dismissBuildModeNotification();
+                  router.push("/build");
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
           <SidebarBody
             scrollKey="app-sidebar"
             footer={settingsButton}
-            actionButton={newSessionButton}
+            actionButtons={
+              <>
+                {newSessionButton}
+                {buildButton}
+                {playIntroButton}
+              </>
+            }
           >
             {/* When folded, show icons immediately without waiting for data */}
             {folded ? (
