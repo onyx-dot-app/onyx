@@ -222,7 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
           </InputAvatar>
         </Popover.Trigger>
         <Popover.Content>
-          <PopoverMenu md>
+          <PopoverMenu>
             {[
               <LineItem
                 key="upload-image"

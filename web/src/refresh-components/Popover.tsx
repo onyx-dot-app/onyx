@@ -82,7 +82,13 @@ const PopoverClose = PopoverPrimitive.Close;
  *
  * The main popover container with default styling.
  *
- * @param width - Width of the popover: "fit", "md", or "lg". Default: "fit"
+ * Widths:
+ * - `fit`: Fits content width (default)
+ * - `md`: Medium width (12rem)
+ * - `lg`: Large width (15rem)
+ * - `xl`: Extra large width (18rem)
+ *
+ * @param width - Width of the popover. Default: "fit"
  *
  * @example
  * ```tsx
@@ -95,23 +101,24 @@ const PopoverClose = PopoverPrimitive.Close;
  *   <div>Medium width content</div>
  * </Popover.Content>
  *
- * // Large width
- * <Popover.Content width="lg">
- *   <div>Large width content</div>
+ * // Extra large width
+ * <Popover.Content width="xl">
+ *   <div>Extra large width content</div>
  * </Popover.Content>
  * ```
  */
-type PopoverContentWidth = "fit" | "md" | "lg";
-const widthClasses: Record<PopoverContentWidth, string> = {
+type PopoverWidths = "fit" | "md" | "lg" | "xl";
+const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
   md: "w-[12rem]",
-  lg: "w-[18rem]",
+  lg: "w-[15rem]",
+  xl: "w-[18rem]",
 };
 interface PopoverContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
   > {
-  width?: PopoverContentWidth;
+  width?: PopoverWidths;
   ref?: React.Ref<React.ComponentRef<typeof PopoverPrimitive.Content>>;
 }
 function PopoverContent({
@@ -170,7 +177,7 @@ function SeparatorHelper() {
  *     <button>Options</button>
  *   </Popover.Trigger>
  *   <Popover.Content>
- *     <Popover.Menu small>
+ *     <Popover.Menu>
  *       <MenuItem>Option 1</MenuItem>
  *       <MenuItem>Option 2</MenuItem>
  *       {null}  {/* Separator line *\/}
@@ -181,7 +188,6 @@ function SeparatorHelper() {
  *
  * // With footer
  * <Popover.Menu
- *   medium
  *   footer={<Button>Apply</Button>}
  * >
  *   <MenuItem>Item 1</MenuItem>
@@ -189,17 +195,7 @@ function SeparatorHelper() {
  * </Popover.Menu>
  * ```
  */
-const sizeClasses = {
-  sm: "w-[10rem]",
-  md: "w-[16rem]",
-  full: "!w-full",
-};
 export interface PopoverMenuProps {
-  // size variants
-  sm?: boolean;
-  md?: boolean;
-  full?: boolean;
-
   children?: React.ReactNode[];
   footer?: React.ReactNode;
 
@@ -207,10 +203,6 @@ export interface PopoverMenuProps {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 export function PopoverMenu({
-  sm,
-  md,
-  full,
-
   children,
   footer,
   scrollContainerRef,
@@ -224,13 +216,12 @@ export function PopoverMenu({
     if (child !== null) return true;
     return index !== 0 && index !== definedChildren.length - 1;
   });
-  const size = full ? "full" : sm ? "sm" : md ? "md" : "full";
 
   return (
     <Section alignItems="stretch">
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
-        className={cn("flex flex-col gap-1 max-h-[20rem]", sizeClasses[size])}
+        className="flex flex-col gap-1 max-h-[20rem] w-full"
       >
         {filteredChildren.map((child, index) => (
           <div key={index}>

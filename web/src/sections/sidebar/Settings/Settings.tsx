@@ -216,7 +216,7 @@ export default function Settings({ folded }: SettingsProps) {
         <Popover.Content
           align="end"
           side="right"
-          width={popupState === "Notifications" ? "lg" : "md"}
+          width={popupState === "Notifications" ? "xl" : "md"}
         >
           {popupState === "Settings" && (
             <SettingsPopover
