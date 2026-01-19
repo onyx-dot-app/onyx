@@ -28,6 +28,8 @@ import { useAssistantController } from "@/app/chat/hooks/useAssistantController"
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
+  useChatSessionStore,
+  useDocumentSidebarVisible,
 } from "@/app/chat/stores/useChatSessionStore";
 import ChatUI from "@/sections/ChatUI";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -43,6 +45,9 @@ import {
 } from "@opal/icons";
 import { ThemePreference } from "@/lib/types";
 import { NRFDisplayMode } from "./types";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
+import TextView from "@/components/chat/TextView";
 
 interface NRFPageProps {
   displayMode?: NRFDisplayMode;
@@ -132,6 +137,19 @@ export default function NRFPage({
   // State
   const [message, setMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [presentingDocument, setPresentingDocument] =
+    useState<MinimalOnyxDocument | null>(null);
+
+  // Document sidebar state (from store)
+  const documentSidebarVisible = useDocumentSidebarVisible();
+  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
+    (state) => state.updateCurrentDocumentSidebarVisible
+  );
+
+  // Memoized callback for closing document sidebar
+  const handleDocumentSidebarClose = useCallback(() => {
+    updateCurrentDocumentSidebarVisible(false);
+  }, [updateCurrentDocumentSidebarVisible]);
 
   // Initialize message from URL input parameter (for Chrome extension)
   const initializedRef = useRef(false);
@@ -368,7 +386,7 @@ export default function NRFPage({
                         liveAssistant={resolvedAssistant}
                         llmManager={llmManager}
                         currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={() => {}}
+                        setPresentingDocument={setPresentingDocument}
                         onSubmit={onSubmit}
                         onMessageSelection={() => {}}
                         stopGenerating={stopGenerating}
@@ -467,6 +485,31 @@ export default function NRFPage({
           </div>
         )}
       </Dropzone>
+
+      {/* Document sidebar - shown when sources are clicked */}
+      <div
+        className={cn(
+          "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out absolute right-0 top-0 h-full z-20",
+          documentSidebarVisible ? "w-[25rem]" : "w-0"
+        )}
+      >
+        <div className="h-full w-[25rem]">
+          <DocumentsSidebar
+            setPresentingDocument={setPresentingDocument}
+            modal={false}
+            closeSidebar={handleDocumentSidebarClose}
+            selectedDocuments={[]}
+          />
+        </div>
+      </div>
+
+      {/* Text/document preview modal */}
+      {presentingDocument && (
+        <TextView
+          presentingDocument={presentingDocument}
+          onClose={() => setPresentingDocument(null)}
+        />
+      )}
 
       {/* Modals - only show when not in side panel mode */}
       {!isSidePanel && (
