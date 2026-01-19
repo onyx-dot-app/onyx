@@ -31,6 +31,8 @@ export class OnyxChatWidget extends LitElement {
   @property({ attribute: "agent-name" }) agentName?: string;
   @property({ attribute: "logo" }) logo?: string;
   @property() mode?: "launcher" | "inline";
+  @property({ attribute: "include-citations", type: Boolean })
+  includeCitations?: boolean;
 
   // Internal state
   @state() private isOpen = false;
@@ -91,6 +93,7 @@ export class OnyxChatWidget extends LitElement {
       agentName: this.agentName,
       logo: this.logo,
       mode: this.mode,
+      includeCitations: this.includeCitations,
     });
 
     // Apply custom colors
@@ -118,21 +121,28 @@ export class OnyxChatWidget extends LitElement {
   private applyCustomColors() {
     // Primary color (buttons, accents)
     if (this.config.primaryColor) {
-      this.style.setProperty("--onyx-primary", this.config.primaryColor);
+      this.style.setProperty("--theme-primary-05", this.config.primaryColor);
       this.style.setProperty(
-        "--onyx-primary-hover",
+        "--theme-primary-06",
         this.adjustBrightness(this.config.primaryColor, -10),
       );
     }
 
     // Background color
     if (this.config.backgroundColor) {
-      this.style.setProperty("--onyx-background", this.config.backgroundColor);
+      this.style.setProperty(
+        "--background-neutral-00",
+        this.config.backgroundColor,
+      );
+      this.style.setProperty(
+        "--background-neutral-03",
+        this.adjustBrightness(this.config.backgroundColor, -10),
+      );
     }
 
     // Text color
     if (this.config.textColor) {
-      this.style.setProperty("--onyx-text", this.config.textColor);
+      this.style.setProperty("--text-04", this.config.textColor);
     }
   }
 
@@ -246,6 +256,7 @@ export class OnyxChatWidget extends LitElement {
         chatSessionId: this.chatSessionId,
         parentMessageId,
         signal: this.abortController.signal,
+        includeCitations: this.config.includeCitations,
       })) {
         const result = processPacket(packet, currentMessage);
 

@@ -16,6 +16,7 @@ export function resolveConfig(attributes: Partial<WidgetConfig>): WidgetConfig {
     agentName: attributes.agentName || "Assistant",
     logo: attributes.logo,
     mode: attributes.mode || "launcher",
+    includeCitations: attributes.includeCitations ?? false,
   };
 
   if (!config.backendUrl || !config.apiKey) {

@@ -115,10 +115,11 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 | `agent-id`         | number | `undefined`   | Specific agent/persona to use            |
 | `agent-name`       | string | `"Assistant"` | Display name in header                   |
 | `logo`             | string | Onyx logo     | URL to custom logo image                 |
-| `primary-color`    | string | `#1c1c1c`     | Primary brand color (buttons, accents)   |
-| `background-color` | string | `#e9e9e9`     | Widget background color                  |
-| `text-color`       | string | `#000000bf`   | Text color (75% opacity black)           |
-| `mode`             | string | `"launcher"`  | Display mode: `"launcher"` or `"inline"` |
+| `primary-color`    | string  | `#1c1c1c`     | Primary brand color (buttons, accents)   |
+| `background-color` | string  | `#e9e9e9`     | Widget background color                  |
+| `text-color`       | string  | `#000000bf`   | Text color (75% opacity black)           |
+| `mode`             | string  | `"launcher"`  | Display mode: `"launcher"` or `"inline"` |
+| `include-citations`| boolean | `false`       | Include citation markers in responses    |
 
 **Note**: These attributes must be provided as HTML attributes. Only `backend-url` and `api-key` can optionally be set via environment variables for self-hosted builds.
 
@@ -346,15 +347,16 @@ Response: Server-Sent Events stream
 
 The widget uses CSS custom properties (CSS variables) for theming. All styles are scoped within Shadow DOM to prevent conflicts.
 
-**Default Colors:**
+**Default Colors (aligned with web/src/app/css/colors.css):**
 
 ```css
---onyx-primary: #1c1c1c; /* Buttons, accents */
---onyx-primary-hover: #000000; /* Hover state */
---onyx-background: #e9e9e9; /* Widget background */
---onyx-text: #000000bf; /* Text (75% opacity) */
---onyx-text-light: #ffffff; /* White text on dark */
---onyx-border: #00000033; /* Borders (20% opacity) */
+--theme-primary-05: #1c1c1c; /* Buttons, accents (onyx-ink-95) */
+--theme-primary-06: #000000; /* Hover state (onyx-ink-100) */
+--background-neutral-00: #ffffff; /* Widget background (grey-00) */
+--background-neutral-03: #e6e6e6; /* Background hover (grey-10) */
+--text-04: #000000bf; /* Text (alpha-grey-100-75) */
+--text-light-05: #ffffff; /* White text on dark (grey-00) */
+--border-01: #00000033; /* Borders (alpha-grey-100-20) */
 ```
 
 **Override via attributes:**

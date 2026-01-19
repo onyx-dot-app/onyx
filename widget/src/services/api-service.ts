@@ -55,13 +55,14 @@ export class ApiService {
     chatSessionId: string;
     parentMessageId?: number | null;
     signal?: AbortSignal;
+    includeCitations?: boolean;
   }): AsyncGenerator<Packet, void, unknown> {
     const request: SendMessageRequest = {
       message: params.message,
       chat_session_id: params.chatSessionId,
       parent_message_id: params.parentMessageId ?? null,
       origin: "widget",
-      include_citations: false, // Disable citations for widget (no citation markers in text)
+      include_citations: params.includeCitations ?? false,
     };
 
     const response = await this.fetchWithRetry(

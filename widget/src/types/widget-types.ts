@@ -19,6 +19,9 @@ export interface WidgetConfig {
 
   // Optional - Display
   mode?: "launcher" | "inline";
+
+  // Optional - Citations
+  includeCitations?: boolean;
 }
 
 export interface ChatState {

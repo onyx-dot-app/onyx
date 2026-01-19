@@ -261,7 +261,11 @@
     </div>
 
     <!-- Launcher widget instance -->
-    <onyx-chat-widget mode="launcher"></onyx-chat-widget>
+    <onyx-chat-widget
+      backend-url="http://localhost:8080"
+      api-key="your-api-key-here"
+      mode="launcher"
+    ></onyx-chat-widget>
 
     <!-- Load widget source via Vite for local development -->
     <script type="module" src="./dist/onyx-widget.js"></script>
