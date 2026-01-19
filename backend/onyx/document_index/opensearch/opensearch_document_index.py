@@ -421,6 +421,21 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def verify_and_create_index_if_necessary(
         self, embedding_dim: int, embedding_precision: EmbeddingPrecision
     ) -> None:
+        """Verifies and creates the index if necessary.
+
+        Also puts the desired search pipeline state, creating the pipelines if
+        they do not exist and updating them otherwise.
+
+        Args:
+            embedding_dim: Vector dimensionality for the vector similarity part
+                of the search.
+            embedding_precision: Precision of the values of the vectors for the
+                similarity part of the search.
+
+        Raises:
+            RuntimeError: There was an error verifying or creating the index or
+                search pipelines.
+        """
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
         )
@@ -494,6 +509,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def delete(self, document_id: str, chunk_count: int | None = None) -> int:
         """Deletes all chunks for a given document.
 
+        Does nothing if the specified document ID does not exist.
+
         TODO(andrei): Make this method require supplying source type.
         TODO(andrei): Consider implementing this method to delete on document
         chunk IDs vs querying for matching document chunks.
@@ -523,6 +540,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Updates some set of chunks.
 
+        NOTE: Will raise if the specified document chunks do not exist.
         NOTE: Requires document chunk count be known; will raise if it is not.
         NOTE: Each update request must have some field to update; if not it is
         assumed there is a bug in the caller and this will raise.

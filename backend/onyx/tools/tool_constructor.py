@@ -19,7 +19,6 @@ from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces import DocumentIndex
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -120,18 +119,9 @@ def construct_tools(
     if user and user.oauth_accounts:
         user_oauth_token = user.oauth_accounts[0].access_token
 
-    document_index_cache: DocumentIndex | None = None
-    search_settings_cache = None
-
-    def _get_document_index() -> DocumentIndex:
-        nonlocal document_index_cache, search_settings_cache
-        if document_index_cache is None:
-            if search_settings_cache is None:
-                search_settings_cache = get_current_search_settings(db_session)
-            document_index_cache = get_default_document_index(
-                search_settings_cache, None
-            )
-        return document_index_cache
+    search_settings = get_current_search_settings(db_session)
+    # This flow is for search so we do not get all indices.
+    document_index = get_default_document_index(search_settings, None)
 
     added_search_tool = False
     for db_tool_model in persona.tools:
@@ -174,7 +164,7 @@ def construct_tools(
                     user=user,
                     persona=persona,
                     llm=llm,
-                    document_index=_get_document_index(),
+                    document_index=document_index,
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
@@ -228,7 +218,7 @@ def construct_tools(
                         OpenURLTool(
                             tool_id=db_tool_model.id,
                             emitter=emitter,
-                            document_index=_get_document_index(),
+                            document_index=document_index,
                             user=user,
                         )
                     ]
@@ -386,9 +376,6 @@ def construct_tools(
         # Use the passed-in config if available, otherwise create a new one
         if not search_tool_config:
             search_tool_config = SearchToolConfig()
-
-        search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(search_settings, None)
 
         search_tool = SearchTool(
             tool_id=search_tool_db_model.id,

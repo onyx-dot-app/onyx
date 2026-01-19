@@ -17,7 +17,8 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
 from onyx.db.models import User
-from onyx.document_index.factory import get_current_primary_default_document_index
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
@@ -72,7 +73,9 @@ def stream_search_query(
     Used by both streaming and non-streaming endpoints.
     """
     # Get document index
-    document_index = get_current_primary_default_document_index(db_session)
+    search_settings = get_current_search_settings(db_session)
+    # This flow is for search so we do not get all indices.
+    document_index = get_default_document_index(search_settings, None)
 
     # Determine queries to execute
     original_query = request.search_query
