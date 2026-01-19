@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import InputTextarea from "@/refresh-components/inputs/InputTextArea";
+import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
@@ -39,7 +39,7 @@ export default function AddInstructionModal() {
           onClose={() => modal.toggle(false)}
         />
         <Modal.Body>
-          <InputTextarea
+          <InputTextArea
             value={instructionText}
             onChange={(event) => setInstructionText(event.target.value)}
             placeholder="Think step by step and show reasoning for complex problems. Use specific examples."
