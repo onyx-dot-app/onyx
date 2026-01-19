@@ -96,6 +96,15 @@ const AgentMessage = React.memo(function AgentMessage({
     onRenderComplete,
   } = usePacketProcessor(rawPackets, nodeId);
 
+  // Memoize merged citations separately to avoid creating new object when neither source changed
+  const mergedCitations = useMemo(
+    () => ({
+      ...chatState.citations,
+      ...citationMap,
+    }),
+    [chatState.citations, citationMap]
+  );
+
   // Create a chatState that uses streaming citations for immediate rendering
   // This merges the prop citations with streaming citations, preferring streaming ones
   // Memoized with granular dependencies to prevent cascading re-renders
@@ -104,19 +113,15 @@ const AgentMessage = React.memo(function AgentMessage({
   const effectiveChatState = useMemo<FullChatState>(
     () => ({
       ...chatState,
-      citations: {
-        ...chatState.citations,
-        ...citationMap,
-      },
+      citations: mergedCitations,
     }),
     [
       chatState.assistant,
       chatState.docs,
-      chatState.citations,
       chatState.setPresentingDocument,
       chatState.overriddenModel,
       chatState.researchType,
-      citationMap,
+      mergedCitations,
     ]
   );
 

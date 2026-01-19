@@ -11,7 +11,6 @@ import {
   GroupedPacket,
   createInitialState,
   processPackets,
-  getResult,
 } from "./packetProcessor";
 import {
   transformPacketGroups,
@@ -85,36 +84,37 @@ export function usePacketProcessor(
     setForceShowAnswer(false);
   }
 
-  // Process packets synchronously (incremental)
-  stateRef.current = processPackets(stateRef.current, rawPackets);
+  // Process packets synchronously (incremental) - only if new packets arrived
+  if (rawPackets.length > stateRef.current.lastProcessedIndex) {
+    stateRef.current = processPackets(stateRef.current, rawPackets);
+  }
 
   // Reset renderComplete on tool-after-message transition
   if (prevFinalAnswerComing && !stateRef.current.finalAnswerComing) {
     setRenderComplete(false);
   }
 
-  // Get derived result
-  const result = getResult(stateRef.current);
+  // Access state directly (result arrays are built in processPackets)
+  const state = stateRef.current;
 
   // Derive displayGroups (not state!)
-  const effectiveFinalAnswerComing =
-    result.finalAnswerComing || forceShowAnswer;
+  const effectiveFinalAnswerComing = state.finalAnswerComing || forceShowAnswer;
   const displayGroups = useMemo(() => {
-    if (effectiveFinalAnswerComing || result.toolGroups.length === 0) {
-      return result.potentialDisplayGroups;
+    if (effectiveFinalAnswerComing || state.toolGroups.length === 0) {
+      return state.potentialDisplayGroups;
     }
     return [];
   }, [
     effectiveFinalAnswerComing,
-    result.toolGroups.length,
-    result.potentialDisplayGroups,
+    state.toolGroups.length,
+    state.potentialDisplayGroups,
   ]);
 
   // Transform toolGroups to timeline format
   const toolTurnGroups = useMemo(() => {
-    const allSteps = transformPacketGroups(result.toolGroups);
+    const allSteps = transformPacketGroups(state.toolGroups);
     return groupStepsByTurn(allSteps);
-  }, [result.toolGroups]);
+  }, [state.toolGroups]);
 
   // Callback reads from ref: always current value, no ref needed in component
   const onRenderComplete = useCallback(() => {
@@ -129,22 +129,22 @@ export function usePacketProcessor(
 
   return {
     // Data
-    toolGroups: result.toolGroups,
+    toolGroups: state.toolGroups,
     displayGroups,
     toolTurnGroups,
-    citations: result.citations,
-    citationMap: result.citationMap,
-    documentMap: result.documentMap,
+    citations: state.citations,
+    citationMap: state.citationMap,
+    documentMap: state.documentMap,
 
     // Status (derived from packets)
-    stopPacketSeen: result.stopPacketSeen,
-    stopReason: result.stopReason,
+    stopPacketSeen: state.stopPacketSeen,
+    stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
-    expectedBranchesPerTurn: result.expectedBranchesPerTurn,
-    uniqueToolNames: result.uniqueToolNames,
+    expectedBranchesPerTurn: state.expectedBranches,
+    uniqueToolNames: state.uniqueToolNamesArray,
 
     // Completion: stopPacketSeen && renderComplete
-    isComplete: result.stopPacketSeen && renderComplete,
+    isComplete: state.stopPacketSeen && renderComplete,
 
     // Callbacks
     onRenderComplete,

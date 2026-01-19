@@ -9,6 +9,93 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import Spacer from "@/refresh-components/Spacer";
+import AgentMessage, {
+  RegenerationFactory,
+} from "@/app/chat/message/messageComponents/AgentMessage";
+import { FeedbackType } from "@/app/chat/interfaces";
+import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
+
+/**
+ * Memoized wrapper component for AgentMessage.
+ *
+ * WHY A SEPARATE COMPONENT (instead of useMemo inside MessageList.map):
+ * React hooks CANNOT be called inside loops or callbacks. This is invalid:
+ *   messages.map((message) => {
+ *     const chatState = useMemo(...); // INVALID - hooks can't be in map()
+ *     return <AgentMessage chatState={chatState} />;
+ *   });
+ *
+ * By extracting to a separate component, we CAN use hooks:
+ *   - useMemo creates a stable chatState that only changes when dependencies change
+ *   - React.memo() prevents re-renders when props are equal
+ *   - AgentMessage receives stable props, so its arePropsEqual works correctly
+ *
+ * Without this wrapper, chatState was created inline in the map(), producing a
+ * NEW object on every render, which broke AgentMessage's memoization entirely.
+ */
+interface AgentMessageWrapperProps {
+  message: Message;
+  liveAssistant: MinimalPersonaSnapshot;
+  emptyDocs: OnyxDocument[];
+  setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
+  overriddenModel: string | undefined;
+  llmManager: LlmManager;
+  parentMessage: Message | null | undefined;
+  emptyChildrenIds: number[];
+  onMessageSelection: (nodeId: number) => void;
+  createRegenerator: RegenerationFactory;
+}
+
+const AgentMessageWrapper = React.memo(function AgentMessageWrapper({
+  message,
+  liveAssistant,
+  emptyDocs,
+  setPresentingDocument,
+  overriddenModel,
+  llmManager,
+  parentMessage,
+  emptyChildrenIds,
+  onMessageSelection,
+  createRegenerator,
+}: AgentMessageWrapperProps) {
+  const chatState = useMemo<FullChatState>(
+    () => ({
+      assistant: liveAssistant,
+      docs: message.documents ?? emptyDocs,
+      citations: message.citations,
+      setPresentingDocument,
+      overriddenModel,
+      researchType: message.researchType,
+    }),
+    [
+      liveAssistant,
+      message.documents,
+      message.citations,
+      setPresentingDocument,
+      overriddenModel,
+      message.researchType,
+      emptyDocs,
+    ]
+  );
+
+  return (
+    <AgentMessage
+      rawPackets={message.packets}
+      packetCount={message.packets.length}
+      chatState={chatState}
+      nodeId={message.nodeId}
+      messageId={message.messageId}
+      currentFeedback={message.currentFeedback}
+      llmManager={llmManager}
+      otherMessagesCanSwitchTo={
+        parentMessage?.childrenNodeIds ?? emptyChildrenIds
+      }
+      onMessageSelection={onMessageSelection}
+      onRegenerate={createRegenerator}
+      parentMessage={parentMessage}
+    />
+  );
+});
 
 export interface MessageListProps {
   messages: Message[];
@@ -164,14 +251,6 @@ const MessageList = React.memo(
             }
 
             const previousMessage = i !== 0 ? messages[i - 1] : null;
-            const chatStateData = {
-              assistant: liveAssistant,
-              docs: message.documents ?? emptyDocs,
-              citations: message.citations,
-              setPresentingDocument,
-              overriddenModel: llmManager.currentLlm?.modelName,
-              researchType: message.researchType,
-            };
 
             return (
               <div
@@ -179,19 +258,17 @@ const MessageList = React.memo(
                 key={messageReactComponentKey}
                 data-anchor={isAnchor ? "true" : undefined}
               >
-                <AIMessage
-                  rawPackets={message.packets}
-                  chatState={chatStateData}
-                  nodeId={message.nodeId}
-                  messageId={message.messageId}
-                  currentFeedback={message.currentFeedback}
+                <AgentMessageWrapper
+                  message={message}
+                  liveAssistant={liveAssistant}
+                  emptyDocs={emptyDocs}
+                  setPresentingDocument={setPresentingDocument}
+                  overriddenModel={llmManager.currentLlm?.modelName}
                   llmManager={llmManager}
-                  otherMessagesCanSwitchTo={
-                    parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                  }
+                  parentMessage={parentMessage}
+                  emptyChildrenIds={emptyChildrenIds}
                   onMessageSelection={onMessageSelection}
-                  onRegenerate={createRegenerator}
-                  parentMessage={previousMessage}
+                  createRegenerator={createRegenerator}
                 />
               </div>
             );

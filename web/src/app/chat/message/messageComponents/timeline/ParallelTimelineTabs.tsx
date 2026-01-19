@@ -1,11 +1,19 @@
 "use client";
 
-import React, { useState, useMemo, FunctionComponent } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  FunctionComponent,
+} from "react";
 import { StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { getToolName, getToolIcon } from "../toolDisplayHelpers";
-import { TimelineRendererComponent } from "./TimelineRendererComponent";
+import {
+  TimelineRendererComponent,
+  TimelineRendererResult,
+} from "./TimelineRendererComponent";
 import Tabs from "@/refresh-components/Tabs";
 import { SvgBranch } from "@opal/icons";
 import { StepContainer } from "./StepContainer";
@@ -43,6 +51,35 @@ export function ParallelTimelineTabs({
     [turnGroup.steps, activeTab]
   );
 
+  // Stable callbacks to avoid creating new functions on every render
+  const noopComplete = useCallback(() => {}, []);
+  const renderTabContent = useCallback(
+    ({
+      icon,
+      status,
+      content,
+      isExpanded,
+      onToggle,
+      isLastStep,
+    }: TimelineRendererResult) =>
+      isResearchAgentPackets(activeStep?.packets ?? []) ? (
+        content
+      ) : (
+        <StepContainer
+          stepIcon={icon as FunctionComponent<IconProps> | undefined}
+          header={status}
+          isExpanded={isExpanded}
+          onToggle={onToggle}
+          collapsible={true}
+          isLastStep={isLastStep}
+          isFirstStep={false}
+        >
+          {content}
+        </StepContainer>
+      ),
+    [activeStep?.packets]
+  );
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <div className="flex flex-col w-full gap-1">
@@ -72,33 +109,17 @@ export function ParallelTimelineTabs({
         </div>
         <div className="w-full">
           <TimelineRendererComponent
+            key={activeTab}
             packets={activeStep?.packets ?? []}
             chatState={chatState}
-            onComplete={() => {}}
+            onComplete={noopComplete}
             animate={!stopPacketSeen}
             stopPacketSeen={stopPacketSeen}
             stopReason={stopReason}
             defaultExpanded={true}
             isLastStep={isLastTurnGroup}
           >
-            {({ icon, status, content, isExpanded, onToggle, isLastStep }) =>
-              isResearchAgentPackets(activeStep?.packets ?? []) ? (
-                // ResearchAgentRenderer has its own StepContainer layout
-                content
-              ) : (
-                <StepContainer
-                  stepIcon={icon as FunctionComponent<IconProps> | undefined}
-                  header={status}
-                  isExpanded={isExpanded}
-                  onToggle={onToggle}
-                  collapsible={true}
-                  isLastStep={isLastStep}
-                  isFirstStep={false}
-                >
-                  {content}
-                </StepContainer>
-              )
-            }
+            {renderTabContent}
           </TimelineRendererComponent>
         </div>
       </div>

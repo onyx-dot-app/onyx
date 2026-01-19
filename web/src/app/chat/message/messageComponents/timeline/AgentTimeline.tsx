@@ -1,14 +1,17 @@
 "use client";
 
-import React, { FunctionComponent, useMemo } from "react";
+import React, { FunctionComponent, useMemo, useCallback } from "react";
 import { StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
-import { TurnGroup } from "./transformers";
+import { TurnGroup, TransformedStep } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { TimelineRendererComponent } from "./TimelineRendererComponent";
+import {
+  TimelineRendererComponent,
+  TimelineRendererResult,
+} from "./TimelineRendererComponent";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineHeader } from "./useTimelineHeader";
 import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
@@ -22,6 +25,78 @@ import {
   StoppedHeader,
   ParallelStreamingHeader,
 } from "./headers";
+
+// =============================================================================
+// TimelineStep Component - Memoized to prevent re-renders
+// =============================================================================
+
+interface TimelineStepProps {
+  step: TransformedStep;
+  chatState: FullChatState;
+  stopPacketSeen: boolean;
+  stopReason?: StopReason;
+  isLastStep: boolean;
+  isFirstStep: boolean;
+  isSingleStep: boolean;
+}
+
+const noopCallback = () => {};
+
+const TimelineStep = React.memo(function TimelineStep({
+  step,
+  chatState,
+  stopPacketSeen,
+  stopReason,
+  isLastStep,
+  isFirstStep,
+  isSingleStep,
+}: TimelineStepProps) {
+  // Stable render callback - doesn't need to change between renders
+  const renderStep = useCallback(
+    ({
+      icon,
+      status,
+      content,
+      isExpanded,
+      onToggle,
+      isLastStep: rendererIsLastStep,
+      supportsCompact,
+    }: TimelineRendererResult) =>
+      isResearchAgentPackets(step.packets) ? (
+        content
+      ) : (
+        <StepContainer
+          stepIcon={icon as FunctionComponent<IconProps> | undefined}
+          header={status}
+          isExpanded={isExpanded}
+          onToggle={onToggle}
+          collapsible={true}
+          supportsCompact={supportsCompact}
+          isLastStep={rendererIsLastStep}
+          isFirstStep={isFirstStep}
+          hideHeader={isSingleStep}
+        >
+          {content}
+        </StepContainer>
+      ),
+    [step.packets, isFirstStep, isSingleStep]
+  );
+
+  return (
+    <TimelineRendererComponent
+      packets={step.packets}
+      chatState={chatState}
+      onComplete={noopCallback}
+      animate={!stopPacketSeen}
+      stopPacketSeen={stopPacketSeen}
+      stopReason={stopReason}
+      defaultExpanded={true}
+      isLastStep={isLastStep}
+    >
+      {renderStep}
+    </TimelineRendererComponent>
+  );
+});
 
 // =============================================================================
 // Main Component
@@ -87,6 +162,13 @@ export function AgentTimeline({
   // Expansion state management
   const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
     useTimelineExpansion(stopPacketSeen, lastTurnGroup);
+
+  // Stable callbacks to avoid creating new functions on every render
+  const noopComplete = useCallback(() => {}, []);
+  const renderContentOnly = useCallback(
+    ({ content }: TimelineRendererResult) => content,
+    []
+  );
 
   // Parallel step analysis for collapsed streaming view
   const parallelActiveStep = useMemo(() => {
@@ -247,14 +329,14 @@ export function AgentTimeline({
               key={`${lastStep.key}-compact`}
               packets={lastStep.packets}
               chatState={chatState}
-              onComplete={() => {}}
+              onComplete={noopComplete}
               animate={true}
               stopPacketSeen={false}
               stopReason={stopReason}
               defaultExpanded={false}
               isLastStep={true}
             >
-              {({ content }) => content}
+              {renderContentOnly}
             </TimelineRendererComponent>
           </div>
         </div>
@@ -269,14 +351,14 @@ export function AgentTimeline({
               key={`${parallelActiveStep.key}-compact`}
               packets={parallelActiveStep.packets}
               chatState={chatState}
-              onComplete={() => {}}
+              onComplete={noopComplete}
               animate={true}
               stopPacketSeen={false}
               stopReason={stopReason}
               defaultExpanded={false}
               isLastStep={true}
             >
-              {({ content }) => content}
+              {renderContentOnly}
             </TimelineRendererComponent>
           </div>
         </div>
@@ -305,47 +387,16 @@ export function AgentTimeline({
                 const stepIsFirst = turnIdx === 0 && stepIdx === 0;
 
                 return (
-                  <TimelineRendererComponent
+                  <TimelineStep
                     key={step.key}
-                    packets={step.packets}
+                    step={step}
                     chatState={chatState}
-                    onComplete={() => {}}
-                    animate={!stopPacketSeen}
                     stopPacketSeen={stopPacketSeen}
                     stopReason={stopReason}
-                    defaultExpanded={true}
                     isLastStep={stepIsLast}
-                  >
-                    {({
-                      icon,
-                      status,
-                      content,
-                      isExpanded,
-                      onToggle,
-                      isLastStep,
-                      supportsCompact,
-                    }) =>
-                      isResearchAgentPackets(step.packets) ? (
-                        content
-                      ) : (
-                        <StepContainer
-                          stepIcon={
-                            icon as FunctionComponent<IconProps> | undefined
-                          }
-                          header={status}
-                          isExpanded={isExpanded}
-                          onToggle={onToggle}
-                          collapsible={true}
-                          supportsCompact={supportsCompact}
-                          isLastStep={isLastStep}
-                          isFirstStep={stepIsFirst}
-                          hideHeader={isSingleStep}
-                        >
-                          {content}
-                        </StepContainer>
-                      )
-                    }
-                  </TimelineRendererComponent>
+                    isFirstStep={stepIsFirst}
+                    isSingleStep={isSingleStep}
+                  />
                 );
               })
             )

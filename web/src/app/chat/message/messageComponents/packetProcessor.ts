@@ -56,27 +56,17 @@ export interface ProcessorState {
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
+
+  // Result arrays (built at end of processPackets)
+  toolGroups: GroupedPacket[];
+  potentialDisplayGroups: GroupedPacket[];
+  uniqueToolNamesArray: string[];
 }
 
 export interface GroupedPacket {
   turn_index: number;
   tab_index: number;
   packets: Packet[];
-}
-
-export interface ProcessorResult {
-  citations: StreamingCitation[];
-  citationMap: CitationMap;
-  documentMap: Map<string, OnyxDocument>;
-  // Pre-categorized groups
-  toolGroups: GroupedPacket[];
-  potentialDisplayGroups: GroupedPacket[];
-  finalAnswerComing: boolean;
-  stopPacketSeen: boolean;
-  stopReason: StopReason | undefined;
-  expectedBranchesPerTurn: Map<number, number>;
-  // Unique tool names used
-  uniqueToolNames: string[];
 }
 
 // ============================================================================
@@ -101,6 +91,9 @@ export function createInitialState(nodeId: number): ProcessorState {
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
+    toolGroups: [],
+    potentialDisplayGroups: [],
+    uniqueToolNamesArray: [],
   };
 }
 
@@ -407,12 +400,17 @@ export function processPackets(
   }
 
   state.lastProcessedIndex = rawPackets.length;
+
+  // Build result arrays after processing
+  state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
+  state.potentialDisplayGroups = buildGroupsFromKeys(
+    state,
+    state.displayGroupKeys
+  );
+  state.uniqueToolNamesArray = Array.from(state.uniqueToolNames);
+
   return state;
 }
-
-// ============================================================================
-// Result Derivation
-// ============================================================================
 
 /**
  * Build GroupedPacket array from a set of group keys.
@@ -426,6 +424,7 @@ function buildGroupsFromKeys(
     .map((key) => {
       const { turn_index, tab_index } = parseToolKey(key);
       const packets = state.groupedPacketsMap.get(key);
+      // Spread to create new array reference - ensures React detects changes for re-renders
       return packets ? { turn_index, tab_index, packets: [...packets] } : null;
     })
     .filter(
@@ -437,26 +436,4 @@ function buildGroupsFromKeys(
       }
       return a.tab_index - b.tab_index;
     });
-}
-
-export function getResult(state: ProcessorState): ProcessorResult {
-  // Build pre-categorized groups from tracked keys
-  const toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
-  const potentialDisplayGroups = buildGroupsFromKeys(
-    state,
-    state.displayGroupKeys
-  );
-
-  return {
-    citations: state.citations,
-    citationMap: state.citationMap,
-    documentMap: state.documentMap,
-    toolGroups,
-    potentialDisplayGroups,
-    finalAnswerComing: state.finalAnswerComing,
-    stopPacketSeen: state.stopPacketSeen,
-    stopReason: state.stopReason,
-    expectedBranchesPerTurn: state.expectedBranches,
-    uniqueToolNames: Array.from(state.uniqueToolNames),
-  };
 }

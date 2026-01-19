@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, FunctionComponent } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+  FunctionComponent,
+} from "react";
 import { FiTarget } from "react-icons/fi";
 import { SvgCircle, SvgCheckCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
@@ -13,7 +19,10 @@ import {
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { getToolName } from "../toolDisplayHelpers";
 import { StepContainer } from "../timeline/StepContainer";
-import { TimelineRendererComponent } from "../timeline/TimelineRendererComponent";
+import {
+  TimelineRendererComponent,
+  TimelineRendererResult,
+} from "../timeline/TimelineRendererComponent";
 import ExpandableTextDisplay from "@/refresh-components/ExpandableTextDisplay";
 import { useMarkdownRenderer } from "../markdownUtils";
 
@@ -85,7 +94,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       });
 
     return { parentPackets: parent, nestedToolGroups: groups };
-  }, [packets, packets.length]);
+  }, [packets]);
 
   // Check completion from parent packets
   const isComplete = parentPackets.some(
@@ -117,6 +126,10 @@ export const ResearchAgentRenderer: MessageRenderer<
     "text-text-03 font-main-ui-body"
   );
 
+  // Stable callbacks to avoid creating new functions on every render
+  const noopComplete = useCallback(() => {}, []);
+  const renderReport = useCallback(() => renderedContent, [renderedContent]);
+
   // Build content using StepContainer pattern
   const researchAgentContent = (
     <div className="flex flex-col">
@@ -146,7 +159,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             key={group.sub_turn_index}
             packets={group.packets}
             chatState={state}
-            onComplete={() => {}}
+            onComplete={noopComplete}
             animate={!stopPacketSeen && !group.isComplete}
             stopPacketSeen={stopPacketSeen}
             defaultExpanded={true}
@@ -181,7 +194,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             title="Research Report"
             content={fullReportContent}
             maxLines={5}
-            renderContent={() => renderedContent}
+            renderContent={renderReport}
           />
         </StepContainer>
       )}
