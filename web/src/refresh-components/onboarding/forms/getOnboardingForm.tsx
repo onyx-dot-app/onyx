@@ -4,6 +4,7 @@ import {
   LLMProviderName,
 } from "@/app/admin/configuration/llm/interfaces";
 import { OnboardingActions, OnboardingState } from "../types";
+import { AgentGatewayOnboardingForm } from "./AgentGatewayOnboardingForm";
 import { OpenAIOnboardingForm } from "./OpenAIOnboardingForm";
 import { AnthropicOnboardingForm } from "./AnthropicOnboardingForm";
 import { OllamaOnboardingForm } from "./OllamaOnboardingForm";
@@ -36,6 +37,10 @@ const PROVIDER_DISPLAY_INFO: Record<
   [LLMProviderName.OPENROUTER]: {
     title: "OpenRouter",
     displayName: "OpenRouter",
+  },
+  [LLMProviderName.AGENT_GATEWAY]: {
+    title: "AgentGateway",
+    displayName: "AgentGateway",
   },
 };
 
@@ -151,6 +156,17 @@ export function getOnboardingForm({
     case LLMProviderName.OPENROUTER:
       return (
         <OpenRouterOnboardingForm
+          llmDescriptor={llmDescriptor}
+          onboardingState={onboardingState}
+          onboardingActions={onboardingActions}
+          open={open}
+          onOpenChange={onOpenChange}
+        />
+      );
+
+    case LLMProviderName.AGENT_GATEWAY:
+      return (
+        <AgentGatewayOnboardingForm
           llmDescriptor={llmDescriptor}
           onboardingState={onboardingState}
           onboardingActions={onboardingActions}

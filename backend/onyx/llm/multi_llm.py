@@ -301,6 +301,7 @@ class LitellmLLM(LLM):
         )
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
+        is_agent_gateway = self._model_provider == LlmProviderNames.AGENT_GATEWAY
 
         #########################
         # Build arguments
@@ -309,11 +310,13 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        model_provider = (
-            f"{self.config.model_provider}/responses"
-            if is_openai_model  # Uses litellm's completions -> responses bridge
-            else self.config.model_provider
-        )
+        # AgentGateway uses OpenAI-compatible API, so use 'openai' as the underlying provider
+        if is_agent_gateway:
+            model_provider = "openai"
+        elif is_openai_model:
+            model_provider = f"{self.config.model_provider}/responses"
+        else:
+            model_provider = self.config.model_provider
         model = (
             f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
         )

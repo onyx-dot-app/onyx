@@ -10,6 +10,8 @@ from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
+from onyx.llm.well_known_providers.constants import AGENT_GATEWAY_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import AGENT_GATEWAY_VISIBLE_MODEL_NAMES
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
@@ -38,6 +40,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+        AGENT_GATEWAY_PROVIDER_NAME: list(AGENT_GATEWAY_VISIBLE_MODEL_NAMES),
     }
 
 
@@ -284,6 +287,7 @@ def get_provider_display_name(provider_name: str) -> str:
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
+        AGENT_GATEWAY_PROVIDER_NAME: "AgentGateway",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:
