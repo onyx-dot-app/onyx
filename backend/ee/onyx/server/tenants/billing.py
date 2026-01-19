@@ -7,6 +7,7 @@ from ee.onyx.configs.app_configs import STRIPE_PRICE_ID
 from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import BillingInformation
+from ee.onyx.server.tenants.models import SeatUpdateResponse
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.utils.logger import setup_logger
@@ -94,3 +95,31 @@ def register_tenant_users(tenant_id: str, number_of_users: int) -> stripe.Subscr
         metadata={"tenant_id": str(tenant_id)},
     )
     return updated_subscription
+
+
+def update_seat_count(tenant_id: str, new_seat_count: int) -> SeatUpdateResponse:
+    """
+    Update the seat count for a tenant via the control plane.
+
+    The control plane handles Stripe proration and license regeneration.
+    """
+    token = generate_data_plane_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    url = f"{CONTROL_PLANE_API_BASE_URL}/seats/update"
+    payload = {
+        "tenant_id": tenant_id,
+        "new_seat_count": new_seat_count,
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+
+    data = response.json()
+    return SeatUpdateResponse(
+        success=data.get("success", False),
+        current_seats=data.get("current_seats", 0),
+        used_seats=data.get("used_seats", 0),
+        message=data.get("message"),
+    )

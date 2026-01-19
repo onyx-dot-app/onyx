@@ -9,10 +9,13 @@ from ee.onyx.server.tenants.access import control_plane_dep
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
 from ee.onyx.server.tenants.billing import fetch_tenant_stripe_information
+from ee.onyx.server.tenants.billing import update_seat_count
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import ProductGatingFullSyncRequest
 from ee.onyx.server.tenants.models import ProductGatingRequest
 from ee.onyx.server.tenants.models import ProductGatingResponse
+from ee.onyx.server.tenants.models import SeatUpdateRequest
+from ee.onyx.server.tenants.models import SeatUpdateResponse
 from ee.onyx.server.tenants.models import SubscriptionSessionResponse
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.product_gating import overwrite_full_gated_set
@@ -115,4 +118,19 @@ async def create_subscription_session(
 
     except Exception as e:
         logger.exception("Failed to create resubscription session")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/seats/update")
+async def update_seats(
+    request: SeatUpdateRequest,
+    _: User = Depends(current_admin_user),
+) -> SeatUpdateResponse:
+    """Update the seat count for the current tenant."""
+    tenant_id = get_current_tenant_id()
+
+    try:
+        return update_seat_count(tenant_id, request.new_seat_count)
+    except Exception as e:
+        logger.exception("Failed to update seats")
         raise HTTPException(status_code=500, detail=str(e))

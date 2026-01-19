@@ -98,3 +98,18 @@ class PendingUserSnapshot(BaseModel):
 
 class ApproveUserRequest(BaseModel):
     email: str
+
+
+class SeatUpdateRequest(BaseModel):
+    """Request to update seat count for a tenant."""
+
+    new_seat_count: int
+
+
+class SeatUpdateResponse(BaseModel):
+    """Response from seat update operation."""
+
+    success: bool
+    current_seats: int
+    used_seats: int
+    message: str | None = None
