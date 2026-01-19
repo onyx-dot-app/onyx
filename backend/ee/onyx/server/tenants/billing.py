@@ -113,7 +113,7 @@ def update_seat_count(tenant_id: str, new_seat_count: int) -> SeatUpdateResponse
         "tenant_id": tenant_id,
         "new_seat_count": new_seat_count,
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
     response.raise_for_status()
 
     data = response.json()

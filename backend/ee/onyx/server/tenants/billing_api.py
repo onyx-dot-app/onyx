@@ -131,6 +131,8 @@ async def update_seats(
 
     try:
         return update_seat_count(tenant_id, request.new_seat_count)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to update seats")
         raise HTTPException(status_code=500, detail=str(e))

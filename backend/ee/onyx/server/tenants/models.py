@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.server.settings.models import ApplicationStatus
 
@@ -103,7 +104,7 @@ class ApproveUserRequest(BaseModel):
 class SeatUpdateRequest(BaseModel):
     """Request to update seat count for a tenant."""
 
-    new_seat_count: int
+    new_seat_count: int = Field(gt=0)
 
 
 class SeatUpdateResponse(BaseModel):
