@@ -22,9 +22,6 @@ APP_PORT = 8080
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
-# URL for the build webapp proxy endpoint
-BUILD_WEBAPP_URL = os.environ.get("BUILD_WEBAPP_URL", "")
-
 # Whether to send user metadata (user_id/email and session_id) to the LLM provider.
 # Disabled by default.
 SEND_USER_METADATA_TO_LLM_PROVIDER = (
@@ -1004,16 +1001,4 @@ INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
     else "cloud" if AUTH_TYPE == AuthType.CLOUD else "self_hosted"
-)
-
-# Persistent Document Storage Configuration
-# When enabled, indexed documents are written to local filesystem with hierarchical structure
-PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
-    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
-)
-
-# Base directory path for persistent document storage (local filesystem)
-# Example: /var/onyx/indexed-docs or /app/indexed-docs
-PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
-    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/indexed-docs"
 )

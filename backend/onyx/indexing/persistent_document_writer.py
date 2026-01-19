@@ -134,7 +134,7 @@ class PersistentDocumentWriter:
 
 def get_persistent_document_writer() -> PersistentDocumentWriter:
     """Factory function to create a PersistentDocumentWriter with default configuration"""
-    from onyx.configs.app_configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+    from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 
     return PersistentDocumentWriter(
         base_path=PERSISTENT_DOCUMENT_STORAGE_PATH,

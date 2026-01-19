@@ -26,12 +26,12 @@ from claude_agent_sdk.types import ToolUseBlock
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
-from onyx.configs.app_configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
+from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.utils.logger import setup_logger
 
-SANDBOX_BASE_PATH = "/Users/chrisweaver/data/sandboxes"
-OUTPUTS_TEMPLATE_PATH = "/Users/chrisweaver/data/outputs_template/outputs"
-VENV_TEMPLATE_PATH = "/Users/chrisweaver/data/venv_template"
 OUTPUTS_DIR = "outputs"
 VENV_DIR = ".venv"
 
