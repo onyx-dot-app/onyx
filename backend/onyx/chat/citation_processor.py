@@ -178,6 +178,10 @@ class DynamicCitationProcessor:
         self.stop_stream = stop_stream
         self.citation_mode = citation_mode
 
+        # Code block tracking - count of triple backticks seen (odd = inside code block)
+        # This is tracked incrementally to avoid O(n) scans of the full output
+        self._code_block_count = 0
+
         # Citation tracking
         self.cited_documents_in_order: list[SearchDoc] = (
             []
@@ -199,6 +203,21 @@ class DynamicCitationProcessor:
         self.citation_pattern = re.compile(
             r"([\[【［]{2}\d+[\]】］]{2})|([\[【［]\d+(?:, ?\d+)*[\]】］])"
         )
+
+    def _is_in_code_block(self) -> bool:
+        """Check if we're currently inside a code block.
+
+        Uses the incrementally tracked count of triple backticks.
+        Odd count means we're inside a code block.
+        """
+        return self._code_block_count % 2 != 0
+
+    def _update_code_block_count(self, text: str) -> None:
+        """Update the code block count based on triple backticks in the text.
+
+        This is called incrementally as tokens arrive to avoid O(n) scans.
+        """
+        self._code_block_count += text.count(TRIPLE_BACKTICK)
 
     def update_citation_mapping(
         self,
@@ -294,6 +313,8 @@ class DynamicCitationProcessor:
 
         self.curr_segment += token
         self.llm_out += token
+        # Track code blocks incrementally to avoid O(n) scans
+        self._update_code_block_count(token)
 
         # Handle code blocks without language tags
         # If we see ``` followed by \n, add "plaintext" language specifier
@@ -304,7 +325,7 @@ class DynamicCitationProcessor:
                 parts = self.curr_segment.split("```")
                 if len(parts) > 1 and len(parts[1]) > 0:
                     piece_that_comes_after = parts[1][0]
-                    if piece_that_comes_after == "\n" and in_code_block(self.llm_out):
+                    if piece_that_comes_after == "\n" and self._is_in_code_block():
                         self.curr_segment = self.curr_segment.replace(
                             "```", "```plaintext"
                         )
@@ -316,7 +337,7 @@ class DynamicCitationProcessor:
         )
 
         result = ""
-        if citation_matches and not in_code_block(self.llm_out):
+        if citation_matches and not self._is_in_code_block():
             match_idx = 0
             for match in citation_matches:
                 match_span = match.span()
