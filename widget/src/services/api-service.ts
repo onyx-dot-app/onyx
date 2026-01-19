@@ -129,7 +129,10 @@ export class ApiService {
                 yield rawData as Packet;
               }
             } catch (e) {
-              console.error("Failed to parse packet:", line, e);
+              // Fail fast on malformed packets - don't hide backend issues
+              throw new Error(
+                `Failed to parse SSE packet: ${line}. Error: ${e}`,
+              );
             }
           }
         }
@@ -153,7 +156,10 @@ export class ApiService {
             yield rawData as Packet;
           }
         } catch (e) {
-          console.error("Failed to parse final packet:", buffer, e);
+          // Fail fast on malformed final buffer packets
+          throw new Error(
+            `Failed to parse final packet: ${buffer}. Error: ${e}`,
+          );
         }
       }
     } finally {

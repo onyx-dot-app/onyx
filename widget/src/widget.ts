@@ -169,10 +169,19 @@ export class OnyxChatWidget extends LitElement {
    * Public API: Reset conversation
    */
   public resetConversation() {
+    // Abort any active streaming request first
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = undefined;
+    }
+
     this.messages = [];
     this.chatSessionId = undefined;
     this.error = undefined;
     this.inputValue = "";
+    this.isStreaming = false;
+    this.isLoading = false;
+    this.streamingStatus = "";
     clearSession();
   }
 
@@ -240,11 +249,14 @@ export class OnyxChatWidget extends LitElement {
         this.isLoading = false;
       }
 
-      // Get parent message ID (last assistant message)
+      // Get parent message ID (last assistant message with a numeric ID from backend)
       const parentMessage = [...this.messages]
         .reverse()
         .find((m) => m.role === "assistant" && typeof m.id === "number");
-      const parentMessageId = parentMessage ? Number(parentMessage.id) : null;
+      const parentMessageId =
+        parentMessage && typeof parentMessage.id === "number"
+          ? parentMessage.id
+          : null;
 
       // Stream response
       this.abortController = new AbortController();

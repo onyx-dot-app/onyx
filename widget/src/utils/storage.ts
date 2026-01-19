@@ -68,5 +68,20 @@ export function clearSession(): void {
  * Check if a session exists
  */
 export function hasSession(): boolean {
-  return loadSession() !== null;
+  try {
+    const data = sessionStorage.getItem(SESSION_KEY);
+    if (!data) return false;
+
+    const session: StoredSession = JSON.parse(data);
+
+    // Check if session has expired
+    if (Date.now() - session.timestamp > SESSION_TTL) {
+      clearSession();
+      return false;
+    }
+
+    return true;
+  } catch (e) {
+    return false;
+  }
 }

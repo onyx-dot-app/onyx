@@ -29,10 +29,9 @@ export function processPacket(
   status?: string;
   messageIds?: MessageIDs;
 } {
-  // Safety check - skip if packet.obj is undefined
+  // Safety check - throw on malformed packets to fail fast
   if (!packet || !packet.obj) {
-    console.warn("Received malformed packet:", packet);
-    return { message: currentMessage };
+    throw new Error("Received malformed packet: packet.obj is missing");
   }
 
   const obj = packet.obj;
@@ -50,8 +49,7 @@ export function processPacket(
 
   // Type guard - ensure obj has a type field
   if (!("type" in obj)) {
-    console.warn("Packet missing type field:", obj);
-    return { message: currentMessage };
+    throw new Error("Packet missing type field");
   }
 
   switch (obj.type) {
@@ -206,9 +204,8 @@ export function processPacket(
       return { message: currentMessage };
 
     case "error":
-      // Error occurred during streaming
-      console.error("Stream error:", obj.exception);
-      return { message: currentMessage };
+      // Error occurred during streaming - throw to fail fast
+      throw new Error(`Stream error: ${obj.exception}`);
 
     default:
       // Unknown packet type

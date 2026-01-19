@@ -382,7 +382,8 @@ export const widgetStyles = css`
 
   .input:focus {
     border-color: var(--theme-primary-05);
-    box-shadow: 0 0 0 1px var(--background-neutral-00);
+    outline: 2px solid var(--theme-primary-05);
+    outline-offset: -2px;
   }
 
   .powered-by {
