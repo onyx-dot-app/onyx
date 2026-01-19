@@ -246,14 +246,14 @@ def setup_document_indices(
     If any document index setup fails, the function will return False. Otherwise
     returns True.
     """
-    for i, document_index in enumerate(document_indices):
+    for document_index in document_indices:
         # Document index startup is a bit slow, so give it a few seconds.
         WAIT_SECONDS = 5
         document_index_setup_success = False
         for x in range(num_attempts):
             try:
                 logger.notice(
-                    f"Setting up document index {i} (attempt {x+1}/{num_attempts})..."
+                    f"Setting up document index {document_index.__class__.__name__} (attempt {x+1}/{num_attempts})..."
                 )
                 document_index.ensure_indices_exist(
                     primary_embedding_dim=index_setting.final_embedding_dim,
@@ -270,19 +270,23 @@ def setup_document_indices(
                     ),
                 )
 
-                logger.notice(f"Document index {i} setup complete.")
+                logger.notice(
+                    f"Document index {document_index.__class__.__name__} setup complete."
+                )
                 document_index_setup_success = True
                 break
             except Exception:
                 logger.exception(
-                    f"Document index {i} setup did not succeed. The relevant service may not be ready yet. "
+                    f"Document index {document_index.__class__.__name__} setup did not succeed. "
+                    "The relevant service may not be ready yet. "
                     f"Retrying in {WAIT_SECONDS} seconds."
                 )
                 time.sleep(WAIT_SECONDS)
 
         if not document_index_setup_success:
             logger.error(
-                f"Document index {i} setup did not succeed. Attempt limit reached. ({num_attempts})"
+                f"Document index {document_index.__class__.__name__} setup did not succeed. "
+                f"Attempt limit reached. ({num_attempts})"
             )
             return False
 
