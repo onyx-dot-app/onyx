@@ -181,6 +181,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       icon: SvgTerminal,
       status,
       content,
+      supportsCompact: true,
     });
   }
 
@@ -188,6 +189,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   return children({
     icon: SvgTerminal,
     status,
+    supportsCompact: true,
     content: (
       <FadeDiv direction="bottom" height={80}>
         {content}

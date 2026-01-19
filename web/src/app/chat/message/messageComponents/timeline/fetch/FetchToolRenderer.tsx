@@ -65,6 +65,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       icon: FiLink,
       status: null,
       content: <div />,
+      supportsCompact: true,
     });
   }
 
@@ -74,6 +75,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   return children({
     icon: FiLink,
     status: "Opening URLs:",
+    supportsCompact: true,
     content: (
       <div className="flex flex-col">
         {!isCompact &&

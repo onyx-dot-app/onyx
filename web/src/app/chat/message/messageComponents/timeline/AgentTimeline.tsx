@@ -406,6 +406,7 @@ export function AgentTimeline({
                       isExpanded,
                       onToggle,
                       isLastStep,
+                      supportsCompact,
                     }) =>
                       isResearchAgentPackets(step.packets) ? (
                         content
@@ -418,6 +419,7 @@ export function AgentTimeline({
                           isExpanded={isExpanded}
                           onToggle={onToggle}
                           collapsible={true}
+                          supportsCompact={supportsCompact}
                           isLastStep={isLastStep}
                           isFirstStep={stepIsFirst}
                           hideHeader={isSingleStep}
@@ -476,6 +478,8 @@ export interface StepContainerProps {
   onToggle?: () => void;
   /** Whether collapsible control is shown */
   collapsible?: boolean;
+  /** Whether the renderer supports compact mode (collapse button only shown when true) */
+  supportsCompact?: boolean;
   /** Additional class names */
   className?: string;
   /** Whether this is the last step */
@@ -494,11 +498,14 @@ export function StepContainer({
   isExpanded = true,
   onToggle,
   collapsible = true,
+  supportsCompact = false,
   isLastStep = false,
   isFirstStep = false,
   className,
   hideHeader = false,
 }: StepContainerProps) {
+  // Only show collapse controls when renderer supports compact mode
+  const showCollapseControls = collapsible && supportsCompact && onToggle;
   return (
     <div className={cn("flex w-full", className)}>
       <div
@@ -529,8 +536,7 @@ export function StepContainer({
               </Text>
             )}
 
-            {collapsible &&
-              onToggle &&
+            {showCollapseControls &&
               (buttonTitle ? (
                 <Button
                   tertiary

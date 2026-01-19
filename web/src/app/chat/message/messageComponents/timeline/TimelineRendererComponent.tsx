@@ -77,6 +77,7 @@ export const TimelineRendererComponent = React.memo(
         icon: null,
         status: null,
         content: <></>,
+        supportsCompact: false,
         isExpanded,
         onToggle: handleToggle,
         renderType,
@@ -95,12 +96,13 @@ export const TimelineRendererComponent = React.memo(
         stopReason={stopReason}
         isLastStep={isLastStep}
       >
-        {({ icon, status, content, expandedText }) =>
+        {({ icon, status, content, expandedText, supportsCompact }) =>
           children({
             icon,
             status,
             content,
             expandedText,
+            supportsCompact,
             isExpanded,
             onToggle: handleToggle,
             renderType,

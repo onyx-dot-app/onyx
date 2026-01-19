@@ -36,6 +36,9 @@ export interface RendererResult {
   // used for things that should just show text w/o an icon or header
   // e.g. ReasoningRenderer
   expandedText?: JSX.Element;
+
+  // Whether this renderer supports compact mode (collapse button shown only when true)
+  supportsCompact?: boolean;
 }
 
 export type MessageRenderer<

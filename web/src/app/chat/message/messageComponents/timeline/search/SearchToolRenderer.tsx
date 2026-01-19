@@ -72,12 +72,14 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
       icon,
       status: null,
       content: <div />,
+      supportsCompact: true,
     });
   }
 
   return children({
     icon,
     status: queriesHeader,
+    supportsCompact: true,
     content: (
       <div className="flex flex-col">
         {!isCompact && (
