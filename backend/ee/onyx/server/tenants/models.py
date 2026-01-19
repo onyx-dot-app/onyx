@@ -73,6 +73,12 @@ class SubscriptionSessionResponse(BaseModel):
     sessionId: str
 
 
+class CreateSubscriptionSessionRequest(BaseModel):
+    """Request to create a subscription checkout session."""
+
+    billing_period: str = "monthly"  # "monthly" or "annual"
+
+
 class TenantByDomainResponse(BaseModel):
     tenant_id: str
     number_of_users: int

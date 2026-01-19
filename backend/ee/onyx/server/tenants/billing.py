@@ -16,15 +16,21 @@ stripe.api_key = STRIPE_SECRET_KEY
 logger = setup_logger()
 
 
-def fetch_stripe_checkout_session(tenant_id: str) -> str:
+def fetch_stripe_checkout_session(
+    tenant_id: str,
+    billing_period: str = "monthly",
+) -> str:
     token = generate_data_plane_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
     url = f"{CONTROL_PLANE_API_BASE_URL}/create-checkout-session"
-    params = {"tenant_id": tenant_id}
-    response = requests.post(url, headers=headers, params=params)
+    payload = {
+        "tenant_id": tenant_id,
+        "billing_period": billing_period,
+    }
+    response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.json()["sessionId"]
 
