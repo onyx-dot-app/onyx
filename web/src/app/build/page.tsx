@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useBuild, OutputPacket } from "@/hooks/useBuild";
+import { useBuild, OutputPacket } from "@/app/build/hooks/useBuild";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
@@ -10,7 +10,7 @@ import BuildInputBar, { BuildInputBarHandle } from "./components/BuildInputBar";
 import BuildMessage, { OutputItem } from "./components/BuildMessage";
 import UserMessage from "./components/UserMessage";
 import BuildSidePanel from "./components/BuildSidePanel";
-import { SvgSidebar, SvgX } from "@opal/icons";
+import { SvgSidebar } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
 interface ChatMessage {

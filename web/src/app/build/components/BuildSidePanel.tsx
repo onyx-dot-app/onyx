@@ -12,8 +12,8 @@ import {
   SvgX,
 } from "@opal/icons";
 import { getWebappUrl, ArtifactInfo } from "@/lib/build/client";
-import FileBrowser from "./FileBrowser";
-import ArtifactList from "./ArtifactList";
+import FileBrowser from "@/app/build/components/FileBrowser";
+import ArtifactList from "@/app/build/components/ArtifactList";
 
 type TabId = "preview" | "files" | "artifacts";
 
