@@ -51,17 +51,6 @@ CitationMapping: TypeAlias = dict[int, SearchDoc]
 
 
 # ============================================================================
-# Utility functions
-# ============================================================================
-
-
-def in_code_block(llm_text: str) -> bool:
-    """Check if we're currently inside a code block by counting triple backticks."""
-    count = llm_text.count(TRIPLE_BACKTICK)
-    return count % 2 != 0
-
-
-# ============================================================================
 # Main Citation Processor with Dynamic Mapping
 # ============================================================================
 
@@ -181,6 +170,9 @@ class DynamicCitationProcessor:
         # Code block tracking - count of triple backticks seen (odd = inside code block)
         # This is tracked incrementally to avoid O(n) scans of the full output
         self._code_block_count = 0
+        # Buffer for detecting triple backticks split across token boundaries
+        # Stores trailing backticks (max 2) from previous tokens
+        self._backtick_buffer = ""
 
         # Citation tracking
         self.cited_documents_in_order: list[SearchDoc] = (
@@ -216,8 +208,24 @@ class DynamicCitationProcessor:
         """Update the code block count based on triple backticks in the text.
 
         This is called incrementally as tokens arrive to avoid O(n) scans.
+        Handles triple backticks that may be split across token boundaries
+        by maintaining a buffer of trailing backticks.
         """
-        self._code_block_count += text.count(TRIPLE_BACKTICK)
+        # Combine buffer with new text to detect backticks split across tokens
+        combined = self._backtick_buffer + text
+        self._code_block_count += combined.count(TRIPLE_BACKTICK)
+
+        # Update buffer: keep trailing backticks from combined
+        # These could form part of a triple backtick with the next token
+        trailing = 0
+        for char in reversed(combined):
+            if char == "`":
+                trailing += 1
+            else:
+                break
+        # Use modulo 3 because complete triples have already been counted
+        # e.g., "```" -> 0 trailing, "````" -> 1, "`````" -> 2
+        self._backtick_buffer = "`" * (trailing % 3)
 
     def update_citation_mapping(
         self,
