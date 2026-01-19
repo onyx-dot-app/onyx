@@ -675,3 +675,9 @@ def run_deep_research_llm_loop(
                 obj=OverallStop(type="stop"),
             )
         )
+
+        # Clear accumulated state to release memory after processing is complete.
+        # The state_container holds the data needed for saving, and the completion_callback
+        # in run_chat_loop_with_state_containers will handle persistence.
+        citation_mapping.clear()
+        simple_chat_history.clear()

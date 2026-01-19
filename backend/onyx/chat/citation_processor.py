@@ -623,3 +623,20 @@ class DynamicCitationProcessor:
         if not self.citation_to_doc:
             return 1
         return max(self.citation_to_doc.keys()) + 1
+
+    def clear(self) -> None:
+        """Clear all accumulated state to release memory.
+
+        Call this after processing is complete and the citation data has been
+        used/saved. This allows garbage collection of SearchDoc instances and
+        the accumulated LLM output string.
+        """
+        self.citation_to_doc.clear()
+        self.seen_citations.clear()
+        self.cited_documents_in_order.clear()
+        self.cited_document_ids.clear()
+        self.recent_cited_documents.clear()
+        self.llm_out = ""
+        self.curr_segment = ""
+        self.hold = ""
+        self.non_citation_count = 0

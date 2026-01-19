@@ -91,6 +91,19 @@ class ChatStateContainer:
         with self._lock:
             return self.is_clarification
 
+    def clear(self) -> None:
+        """Clear all accumulated state to release memory.
+
+        Call this after the state has been saved to the database to allow
+        garbage collection of large objects like SearchDoc instances.
+        """
+        with self._lock:
+            self.tool_calls.clear()
+            self.reasoning_tokens = None
+            self.answer_tokens = None
+            self.citation_to_doc.clear()
+            self.is_clarification = False
+
 
 def run_chat_loop_with_state_containers(
     func: Callable[..., None],
@@ -206,3 +219,12 @@ def run_chat_loop_with_state_containers(
                     obj=PacketException(type="error", exception=e),
                 )
             )
+        finally:
+            # Clear state container to release memory after callback has saved data
+            state_container.clear()
+            # Drain any remaining packets from the queue to release references
+            while not emitter.bus.empty():
+                try:
+                    emitter.bus.get_nowait()
+                except Empty:
+                    break

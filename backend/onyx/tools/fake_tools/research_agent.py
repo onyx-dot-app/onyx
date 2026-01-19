@@ -386,9 +386,15 @@ def run_research_agent_call(
                         ),
                     )
                     span.span_data.output = final_report if final_report else None
+                    # Extract seen citations before clearing (copy to avoid clearing the reference)
+                    seen_citations = dict(citation_processor.get_seen_citations())
+                    # Clear accumulated state to release memory
+                    citation_processor.clear()
+                    msg_history.clear()
+                    citation_mapping.clear()
                     return ResearchAgentCallResult(
                         intermediate_report=final_report,
-                        citation_mapping=citation_processor.get_seen_citations(),
+                        citation_mapping=seen_citations,
                     )
                 elif special_tool_calls.think_tool_call:
                     think_tool_call = special_tool_calls.think_tool_call
@@ -548,9 +554,15 @@ def run_research_agent_call(
                 ),
             )
             span.span_data.output = final_report if final_report else None
+            # Extract seen citations before clearing (copy to avoid clearing the reference)
+            seen_citations = dict(citation_processor.get_seen_citations())
+            # Clear accumulated state to release memory
+            citation_processor.clear()
+            msg_history.clear()
+            citation_mapping.clear()
             return ResearchAgentCallResult(
                 intermediate_report=final_report,
-                citation_mapping=citation_processor.get_seen_citations(),
+                citation_mapping=seen_citations,
             )
 
         except Exception as e:
