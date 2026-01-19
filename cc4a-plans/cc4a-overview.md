@@ -1,0 +1,780 @@
+# CLI Agent Platform Architecture
+
+## Overview
+
+A platform enabling users to interact with CLI-based AI agents running in isolated containers through a chat interface. Agents can generate artifacts (Next.js apps, PowerPoints, markdown, charts) that are viewable and explorable within the UI.
+
+---
+
+## Core Services
+
+### 1. Frontend (Next.js)
+- Chat interface for user interaction
+- Slide-out panel for VM/filesystem exploration
+- Real-time artifact rendering and preview
+- Session management UI
+
+### 2. Backend (FastAPI)
+- Session lifecycle management
+- Artifact tracking and retrieval
+- Request proxying to CLI agents
+- Streaming response handling
+- **Sandbox Module** (integrated within Backend):
+  - Container provisioning and management
+  - Volume mounting and snapshot management
+  - CLI agent communication
+  - Idle timeout and cleanup
+
+### 3. PostgreSQL
+- Session metadata
+- Artifact registry
+- Sandbox state tracking
+- Organization/user data
+
+---
+
+## Data Models
+
+### Session
+```
+- id: UUID
+- org_id: UUID
+- user_id: UUID
+- sandbox_id: UUID (nullable)
+- status: enum (active, idle, archived)
+- created_at: timestamp
+- last_activity_at: timestamp
+```
+
+### Artifact
+```
+- id: UUID
+- session_id: UUID
+- type: enum (nextjs_app, pptx, markdown, chart)
+- path: string (relative to outputs/)
+- name: string
+- created_at: timestamp
+- updated_at: timestamp
+```
+
+### Sandbox
+```
+- id: UUID
+- session_id: UUID
+- container_id: string
+- status: enum (provisioning, running, idle, terminated)
+- created_at: timestamp
+- last_heartbeat: timestamp
+```
+
+### Snapshot
+```
+- id: UUID
+- session_id: UUID
+- storage_path: string
+- created_at: timestamp
+- size_bytes: bigint
+```
+
+---
+
+## Volume Architecture
+
+Each sandbox container mounts three volumes:
+
+### 1. Knowledge Volume (Read-Only)
+- **Source**: Organization's indexed file store
+- **Mount**: `/knowledge`
+- **Purpose**: Agent can reference org docs, code, data
+- **Details**: See persistant-file-store-indexing.md
+
+### 2. Outputs Volume (Read-Write)
+- **Source**: Pre-built template OR restored snapshot
+- **Mount**: `/outputs`
+- **Contents**:
+  ```
+  /outputs
+  ├── web/                    # Next.js skeleton app
+  │   ├── package.json
+  │   ├── src/
+  │   └── ...
+  ├── documents/              # Markdown outputs
+  ├── presentations/          # .pptx files
+  ├── charts/                 # Generated visualizations
+  │   └── venv/               # Python environment
+  └── manifest.json           # Artifact registry
+  ```
+
+### 3. Instructions Volume (Read-Only, Dynamic)
+- **Source**: Generated per-session
+- **Mount**: `/instructions`
+- **Contents**:
+  ```
+  /instructions
+  └── INSTRUCTIONS.md         # Agent system prompt + context
+  ```
+
+---
+
+## Sequence Diagram: Standard User Interaction
+
+```
+┌──────────┐     ┌──────────┐     ┌─────────────────────────┐     ┌──────────┐
+│  User    │     │ Frontend │     │   Backend (FastAPI)     │     │   CLI    │
+│ Browser  │     │ (Next.js)│     │   + Sandbox Module      │     │  Agent   │
+└────┬─────┘     └────┬─────┘     └───────────┬─────────────┘     └────┬─────┘
+     │                │                       │                        │
+     │  1. Start Chat │                       │                        │
+     │───────────────>│                       │                        │
+     │                │                       │                        │
+     │                │ 2. POST /sessions     │                        │
+     │                │──────────────────────>│                        │
+     │                │                       │                        │
+     │                │                       │ 3. Provision Sandbox   │
+     │                │                       │    (internal module)   │
+     │                │                       │    - Mount knowledge vol
+     │                │                       │    - Mount outputs vol │
+     │                │                       │    - Mount instructions│
+     │                │                       │    - Start container   │
+     │                │                       │───────────────────────>│
+     │                │                       │                        │
+     │                │                       │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
+     │                │<──────────────────────│ Session Created        │
+     │<───────────────│ Show Chat UI          │                        │
+     │                │                       │                        │
+     │  4. Send       │                       │                        │
+     │  "Build me a   │                       │                        │
+     │   dashboard"   │                       │                        │
+     │───────────────>│                       │                        │
+     │                │                       │                        │
+     │                │ 5. POST /sessions/{id}/messages                │
+     │                │──────────────────────>│                        │
+     │                │                       │                        │
+     │                │   6. Open SSE Stream  │                        │
+     │                │<─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│                        │
+     │                │                       │                        │
+     │                │                       │ 7. Proxy to CLI Agent  │
+     │                │                       │───────────────────────>│
+     │                │                       │                        │
+     │                │                       │               8. Agent │
+     │                │                       │                Executes│
+     │                │                       │                   │    │
+     │                │                       │  9. Stream: {"type":"step",
+     │                │                       │      "content":"Reading│
+     │                │                       │       requirements..."}│
+     │                │                       │<───────────────────────│
+     │                │                       │                        │
+     │                │ SSE: step             │                        │
+     │                │<──────────────────────│                        │
+     │ Show step      │                       │                        │
+     │<───────────────│                       │                        │
+     │                │                       │                        │
+     │                │                       │  10. Stream: {"type":"step",
+     │                │                       │      "content":"Creating
+     │                │                       │       components..."}  │
+     │                │                       │<───────────────────────│
+     │                │ SSE: step             │                        │
+     │                │<──────────────────────│                        │
+     │ Show step      │                       │                        │
+     │<───────────────│                       │                        │
+     │                │                       │                        │
+     │                │                       │            11. Agent   │
+     │                │                       │                writes  │
+     │                │                       │                files to│
+     │                │                       │            /outputs/web/
+     │                │                       │                        │
+     │                │                       │  12. Stream: {"type":"artifact",
+     │                │                       │      "artifact":{"type":
+     │                │                       │       "nextjs_app",...}}
+     │                │                       │<───────────────────────│
+     │                │                       │                        │
+     │                │                       │ 13. Save artifact      │
+     │                │                       │     to Postgres        │
+     │                │                       │                        │
+     │                │ SSE: artifact         │                        │
+     │                │<──────────────────────│                        │
+     │ Show artifact  │                       │                        │
+     │ preview        │                       │                        │
+     │<───────────────│                       │                        │
+     │                │                       │                        │
+     │                │                       │  14. Stream: {"type":"output",
+     │                │                       │      "content":"I've built
+     │                │                       │       your dashboard..."}
+     │                │                       │<───────────────────────│
+     │                │ SSE: output           │                        │
+     │                │<──────────────────────│                        │
+     │ Show response  │                       │                        │
+     │<───────────────│                       │                        │
+     │                │                       │                        │
+     │                │                       │  15. Stream: {"type":"done"}
+     │                │                       │<───────────────────────│
+     │                │ SSE: done             │                        │
+     │                │<──────────────────────│                        │
+     │ Enable input   │                       │                        │
+     │<───────────────│                       │                        │
+     │                │                       │                        │
+     │ 16. Click to   │                       │                        │
+     │ expand artifact│                       │                        │
+     │───────────────>│                       │                        │
+     │                │                       │                        │
+     │                │ 17. GET /sessions/{id}/artifacts/{id}/content  │
+     │                │──────────────────────>│                        │
+     │                │                       │                        │
+     │                │                       │ 18. Read from sandbox  │
+     │                │                       │     filesystem         │
+     │                │<──────────────────────│                        │
+     │ Render full    │                       │                        │
+     │ artifact view  │                       │                        │
+     │<───────────────│                       │                        │
+     │                │                       │                        │
+     ▼                ▼                       ▼                        ▼
+```
+
+### Flow Summary
+
+| Step | Action | Description |
+|------|--------|-------------|
+| 1-3 | **Session Init** | User opens chat → Backend sandbox module provisions container with volumes |
+| 4-7 | **Message Send** | User sends prompt → Backend opens SSE stream → Proxies to CLI agent |
+| 8-11 | **Agent Execution** | CLI agent processes request, streams steps, writes files to `/outputs` |
+| 12-13 | **Artifact Created** | Agent signals artifact creation → Backend persists metadata |
+| 14-15 | **Completion** | Agent sends final response and done signal |
+| 16-18 | **Artifact View** | User expands artifact → Backend fetches content from sandbox |
+
+---
+
+## Request Flow
+
+### New Session Flow
+```
+1. User sends first message
+2. Backend creates Session record
+3. Backend sandbox module provisions container:
+   a. Prepares knowledge volume (bind mount)
+   b. Copies outputs template to session-specific volume
+   c. Generates instructions file
+   d. Starts container with volumes mounted
+   e. Stores sandbox_id + connection info
+4. Backend proxies message to CLI agent
+5. CLI agent streams steps/responses back
+6. Backend streams to frontend via SSE/WebSocket
+7. Frontend renders chat + any generated artifacts
+```
+
+### Follow-up Message Flow (Container Running)
+```
+1. User sends follow-up message
+2. Backend checks Session → Sandbox is running
+3. Backend proxies message directly to CLI agent
+4. Streaming response as above
+```
+
+### Follow-up Message Flow (Container Terminated)
+```
+1. User sends follow-up message
+2. Backend checks Session → Sandbox terminated, has snapshot
+3. Backend sandbox module restores session:
+   a. Retrieves snapshot from file store
+   b. Extracts to new outputs volume
+   c. Spins up new container with restored state
+4. Continues as normal flow
+```
+
+### Idle Timeout Flow
+```
+1. Backend sandbox module monitors last_activity_at
+2. After IDLE_TIMEOUT (e.g., 15 minutes):
+   a. Snapshot outputs volume to file store
+   b. Create Snapshot record (linked to session_id)
+   c. Terminate container
+   d. Update Sandbox status
+```
+
+---
+
+## API Endpoints
+
+### Sessions
+```
+POST   /api/sessions                    # Create new session
+GET    /api/sessions/{id}               # Get session details
+DELETE /api/sessions/{id}               # End session (cleanup)
+```
+
+### Messages
+```
+POST   /api/sessions/{id}/messages      # Send message (streaming response)
+GET    /api/sessions/{id}/messages      # Get message history
+```
+
+### Artifacts
+```
+GET    /api/sessions/{id}/artifacts             # List artifacts
+GET    /api/sessions/{id}/artifacts/{artifact_id}  # Get artifact metadata
+GET    /api/sessions/{id}/artifacts/{artifact_id}/content  # Download/stream content
+```
+
+### Filesystem (VM Explorer)
+```
+GET    /api/sessions/{id}/fs?path=/outputs      # List directory
+GET    /api/sessions/{id}/fs/read?path=...      # Read file content
+```
+
+### Sandbox Module (Internal Functions)
+The sandbox module exposes internal functions (not HTTP endpoints) for container management:
+```python
+sandbox.provision(session_id, ...)      # Provision sandbox container
+sandbox.terminate(sandbox_id)           # Terminate sandbox container
+sandbox.create_snapshot(sandbox_id)     # Create snapshot of outputs volume
+sandbox.restore(session_id, snapshot_id)# Restore from snapshot
+sandbox.health_check(sandbox_id)        # Check container health
+```
+
+---
+
+## Streaming Protocol
+
+### Pydantic Models (Backend)
+
+```python
+from enum import Enum
+from typing import Annotated, Literal, Union
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+
+class StreamingType(Enum):
+    """Enum defining all streaming packet types. Single source of truth for type strings."""
+
+    # Control packets
+    DONE = "done"
+    ERROR = "error"
+
+    # Agent activity packets
+    STEP_START = "step_start"
+    STEP_DELTA = "step_delta"
+    STEP_END = "step_end"
+
+    # Output packets (final response)
+    OUTPUT_START = "output_start"
+    OUTPUT_DELTA = "output_delta"
+
+    # Artifact packets
+    ARTIFACT_CREATED = "artifact_created"
+    ARTIFACT_UPDATED = "artifact_updated"
+
+    # Tool usage packets
+    TOOL_START = "tool_start"
+    TOOL_OUTPUT = "tool_output"
+    TOOL_END = "tool_end"
+
+    # File operation packets
+    FILE_WRITE = "file_write"
+    FILE_DELETE = "file_delete"
+
+
+class BasePacket(BaseModel):
+    """Base class for all streaming packets."""
+    type: str = ""
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+################################################
+# Control Packets
+################################################
+class DonePacket(BasePacket):
+    """Signals completion of the agent's response."""
+    type: Literal["done"] = StreamingType.DONE.value
+    summary: str | None = None
+
+
+class ErrorPacket(BasePacket):
+    """Signals an error occurred during processing."""
+    type: Literal["error"] = StreamingType.ERROR.value
+    message: str
+    code: str | None = None  # e.g., "TIMEOUT", "SANDBOX_ERROR", "LLM_ERROR"
+    recoverable: bool = False
+
+
+################################################
+# Agent Step Packets (thinking/progress)
+################################################
+class StepStart(BasePacket):
+    """Signals the start of a new agent step/action."""
+    type: Literal["step_start"] = StreamingType.STEP_START.value
+    step_id: str  # Unique identifier for this step
+    title: str | None = None  # e.g., "Reading requirements", "Creating components"
+
+
+class StepDelta(BasePacket):
+    """Streaming content for an agent step."""
+    type: Literal["step_delta"] = StreamingType.STEP_DELTA.value
+    step_id: str
+    content: str  # Incremental text content
+
+
+class StepEnd(BasePacket):
+    """Signals completion of an agent step."""
+    type: Literal["step_end"] = StreamingType.STEP_END.value
+    step_id: str
+    status: Literal["success", "failed", "skipped"] = "success"
+
+
+################################################
+# Output Packets (final agent response)
+################################################
+class OutputStart(BasePacket):
+    """Signals the start of the agent's final output."""
+    type: Literal["output_start"] = StreamingType.OUTPUT_START.value
+
+
+class OutputDelta(BasePacket):
+    """Streaming content for the agent's final output."""
+    type: Literal["output_delta"] = StreamingType.OUTPUT_DELTA.value
+    content: str  # Incremental text content
+
+
+################################################
+# Artifact Packets
+################################################
+class ArtifactType(str, Enum):
+    NEXTJS_APP = "nextjs_app"
+    PPTX = "pptx"
+    MARKDOWN = "markdown"
+    CHART = "chart"
+    CSV = "csv"
+    IMAGE = "image"
+
+
+class ArtifactMetadata(BaseModel):
+    """Metadata for an artifact."""
+    id: str  # UUID
+    type: ArtifactType
+    name: str
+    path: str  # Relative path within /outputs
+    preview_url: str | None = None  # URL for inline preview if available
+
+
+class ArtifactCreated(BasePacket):
+    """Signals a new artifact has been created."""
+    type: Literal["artifact_created"] = StreamingType.ARTIFACT_CREATED.value
+    artifact: ArtifactMetadata
+
+
+class ArtifactUpdated(BasePacket):
+    """Signals an existing artifact has been updated."""
+    type: Literal["artifact_updated"] = StreamingType.ARTIFACT_UPDATED.value
+    artifact: ArtifactMetadata
+    changes: list[str] | None = None  # Description of what changed
+
+
+################################################
+# Tool Usage Packets
+################################################
+class ToolStart(BasePacket):
+    """Signals the agent is invoking a tool."""
+    type: Literal["tool_start"] = StreamingType.TOOL_START.value
+    tool_name: str  # e.g., "bash", "read_file", "write_file", "web_search"
+    tool_input: dict | str | None = None  # Input parameters
+
+
+class ToolOutput(BasePacket):
+    """Output from a tool invocation."""
+    type: Literal["tool_output"] = StreamingType.TOOL_OUTPUT.value
+    tool_name: str
+    output: str | None = None
+    is_error: bool = False
+
+
+class ToolEnd(BasePacket):
+    """Signals completion of a tool invocation."""
+    type: Literal["tool_end"] = StreamingType.TOOL_END.value
+    tool_name: str
+    status: Literal["success", "failed"] = "success"
+
+
+################################################
+# File Operation Packets
+################################################
+class FileWrite(BasePacket):
+    """Signals a file was written to the outputs volume."""
+    type: Literal["file_write"] = StreamingType.FILE_WRITE.value
+    path: str  # Relative path within /outputs
+    size_bytes: int | None = None
+
+
+class FileDelete(BasePacket):
+    """Signals a file was deleted from the outputs volume."""
+    type: Literal["file_delete"] = StreamingType.FILE_DELETE.value
+    path: str
+
+
+################################################
+# Packet Union
+################################################
+# Discriminated union of all possible packet types
+PacketObj = Union[
+    # Control packets
+    DonePacket,
+    ErrorPacket,
+    # Step packets
+    StepStart,
+    StepDelta,
+    StepEnd,
+    # Output packets
+    OutputStart,
+    OutputDelta,
+    # Artifact packets
+    ArtifactCreated,
+    ArtifactUpdated,
+    # Tool packets
+    ToolStart,
+    ToolOutput,
+    ToolEnd,
+    # File packets
+    FileWrite,
+    FileDelete,
+]
+
+
+class StreamPacket(BaseModel):
+    """Wrapper for streaming packets with session context."""
+    session_id: str
+    obj: Annotated[PacketObj, Field(discriminator="type")]
+```
+
+### SSE Event Format (Backend → Frontend)
+
+Each packet is sent as an SSE event with the packet JSON as data:
+
+```
+event: message
+data: {"type": "step_start", "step_id": "abc123", "title": "Reading requirements", "timestamp": "2024-01-15T10:30:00Z"}
+
+event: message
+data: {"type": "step_delta", "step_id": "abc123", "content": "Analyzing the file structure...", "timestamp": "2024-01-15T10:30:01Z"}
+
+event: message
+data: {"type": "tool_start", "tool_name": "write_file", "tool_input": {"path": "/outputs/web/src/App.tsx"}, "timestamp": "2024-01-15T10:30:02Z"}
+
+event: message
+data: {"type": "file_write", "path": "web/src/App.tsx", "size_bytes": 1523, "timestamp": "2024-01-15T10:30:03Z"}
+
+event: message
+data: {"type": "artifact_created", "artifact": {"id": "uuid-here", "type": "nextjs_app", "name": "Dashboard", "path": "web/"}, "timestamp": "2024-01-15T10:30:04Z"}
+
+event: message
+data: {"type": "output_start", "timestamp": "2024-01-15T10:30:05Z"}
+
+event: message
+data: {"type": "output_delta", "content": "I've built your dashboard with the following features...", "timestamp": "2024-01-15T10:30:05Z"}
+
+event: message
+data: {"type": "done", "summary": "Created a Next.js dashboard with 3 components", "timestamp": "2024-01-15T10:30:10Z"}
+```
+
+### TypeScript Types (Frontend)
+
+```typescript
+// Enum for packet types
+enum StreamingType {
+  DONE = "done",
+  ERROR = "error",
+  STEP_START = "step_start",
+  STEP_DELTA = "step_delta",
+  STEP_END = "step_end",
+  OUTPUT_START = "output_start",
+  OUTPUT_DELTA = "output_delta",
+  ARTIFACT_CREATED = "artifact_created",
+  ARTIFACT_UPDATED = "artifact_updated",
+  TOOL_START = "tool_start",
+  TOOL_OUTPUT = "tool_output",
+  TOOL_END = "tool_end",
+  FILE_WRITE = "file_write",
+  FILE_DELETE = "file_delete",
+}
+
+// Artifact types
+type ArtifactType = "nextjs_app" | "pptx" | "markdown" | "chart" | "csv" | "image";
+
+interface ArtifactMetadata {
+  id: string;
+  type: ArtifactType;
+  name: string;
+  path: string;
+  preview_url?: string;
+}
+
+// Base packet interface
+interface BasePacket {
+  type: string;
+  timestamp: string;
+}
+
+// Control packets
+interface DonePacket extends BasePacket {
+  type: "done";
+  summary?: string;
+}
+
+interface ErrorPacket extends BasePacket {
+  type: "error";
+  message: string;
+  code?: string;
+  recoverable: boolean;
+}
+
+// Step packets
+interface StepStart extends BasePacket {
+  type: "step_start";
+  step_id: string;
+  title?: string;
+}
+
+interface StepDelta extends BasePacket {
+  type: "step_delta";
+  step_id: string;
+  content: string;
+}
+
+interface StepEnd extends BasePacket {
+  type: "step_end";
+  step_id: string;
+  status: "success" | "failed" | "skipped";
+}
+
+// Output packets
+interface OutputStart extends BasePacket {
+  type: "output_start";
+}
+
+interface OutputDelta extends BasePacket {
+  type: "output_delta";
+  content: string;
+}
+
+// Artifact packets
+interface ArtifactCreated extends BasePacket {
+  type: "artifact_created";
+  artifact: ArtifactMetadata;
+}
+
+interface ArtifactUpdated extends BasePacket {
+  type: "artifact_updated";
+  artifact: ArtifactMetadata;
+  changes?: string[];
+}
+
+// Tool packets
+interface ToolStart extends BasePacket {
+  type: "tool_start";
+  tool_name: string;
+  tool_input?: Record<string, unknown> | string;
+}
+
+interface ToolOutput extends BasePacket {
+  type: "tool_output";
+  tool_name: string;
+  output?: string;
+  is_error: boolean;
+}
+
+interface ToolEnd extends BasePacket {
+  type: "tool_end";
+  tool_name: string;
+  status: "success" | "failed";
+}
+
+// File packets
+interface FileWrite extends BasePacket {
+  type: "file_write";
+  path: string;
+  size_bytes?: number;
+}
+
+interface FileDelete extends BasePacket {
+  type: "file_delete";
+  path: string;
+}
+
+// Discriminated union
+type StreamPacket =
+  | DonePacket
+  | ErrorPacket
+  | StepStart
+  | StepDelta
+  | StepEnd
+  | OutputStart
+  | OutputDelta
+  | ArtifactCreated
+  | ArtifactUpdated
+  | ToolStart
+  | ToolOutput
+  | ToolEnd
+  | FileWrite
+  | FileDelete;
+```
+
+---
+
+## Frontend Components
+
+### Chat Panel
+- Message input
+- Message history with agent steps
+- Artifact inline previews
+
+### VM Explorer (Slide-out)
+- File tree navigation
+- File content viewer
+- Artifact-specific renderers:
+  - Next.js: iframe preview + code view
+  - PPTX: slide viewer
+  - Markdown: rendered preview
+  - Charts: image/interactive view
+
+---
+
+## Configuration
+
+```yaml
+sandbox:
+  idle_timeout_seconds: 900          # 15 minutes
+  max_concurrent_per_org: 10
+  container_image: "cli-agent:latest"
+  resource_limits:
+    memory: "2Gi"
+    cpu: "1"
+  
+storage:
+  snapshots_bucket: "sandbox-snapshots"
+  outputs_template_path: "/templates/outputs"
+  
+knowledge:
+  base_path: "/mnt/knowledge"
+```
+
+---
+
+## Open Questions
+
+1. **Container orchestration**: Docker directly? Kubernetes? Firecracker?
+2. **CLI agent protocol**: How does it receive messages? stdin? HTTP? Socket?
+3. **Artifact detection**: How do we know when an artifact is created/updated? Filesystem watching? Agent reports it?
+4. **Knowledge volume**: Per-org? Per-user? How large can it get?
+5. **Snapshot storage**: S3? Local NFS? How long to retain?
+6. **Multi-turn context**: Does the CLI agent maintain conversation history, or do we replay?
+7. **Security**: Network isolation? What can the agent access?
+8. **Preview generation**: Who renders Next.js apps? Dev server in container? Separate preview service?
+
+---
+
+## Next Steps
+
+- [ ] Define CLI agent interface contract
+- [ ] Design container image contents
+- [ ] Detail snapshot/restore mechanics
+- [ ] Specify frontend state management
+- [ ] Define artifact type handlers
+- [ ] Security model and isolation
+- [ ] Monitoring and observability
