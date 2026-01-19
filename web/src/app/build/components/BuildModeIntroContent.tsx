@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
-import BigButton from "@/app/build/components/BigButton";
+import BigButton from "./BigButton";
 
 interface BuildModeIntroContentProps {
   onClose: () => void;
