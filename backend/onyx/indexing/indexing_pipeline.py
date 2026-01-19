@@ -791,9 +791,9 @@ def index_doc_batch(
                 )
             # We treat the first document index we got as the primary one used
             # for reporting the state of indexing.
-            if not primary_doc_idx_insertion_records:
+            if primary_doc_idx_insertion_records is None:
                 primary_doc_idx_insertion_records = insertion_records
-            if not primary_doc_idx_vector_db_write_failures:
+            if primary_doc_idx_vector_db_write_failures is None:
                 primary_doc_idx_vector_db_write_failures = vector_db_write_failures
 
         adapter.post_index(
