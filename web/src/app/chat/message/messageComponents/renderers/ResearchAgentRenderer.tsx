@@ -12,7 +12,7 @@ import {
 } from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { getToolName } from "../toolDisplayHelpers";
-import { StepContainer } from "../timeline/AgentTimeline";
+import { StepContainer } from "../timeline/StepContainer";
 import { TimelineRendererComponent } from "../timeline/TimelineRendererComponent";
 import ExpandableTextDisplay from "@/refresh-components/ExpandableTextDisplay";
 import { useMarkdownRenderer } from "../markdownUtils";
@@ -85,7 +85,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       });
 
     return { parentPackets: parent, nestedToolGroups: groups };
-  }, [packets]);
+  }, [packets, packets.length]);
 
   // Check completion from parent packets
   const isComplete = parentPackets.some(
@@ -135,35 +135,39 @@ export const ResearchAgentRenderer: MessageRenderer<
       )}
 
       {/* Nested tool calls - using TimelineRendererComponent + StepContainer */}
-      {nestedToolGroups.map((group, index) => (
-        <TimelineRendererComponent
-          key={group.sub_turn_index}
-          packets={group.packets}
-          chatState={state}
-          onComplete={() => {}}
-          animate={!stopPacketSeen && !group.isComplete}
-          stopPacketSeen={stopPacketSeen}
-          defaultExpanded={true}
-        >
-          {({ icon, status, content, isExpanded, onToggle }) => (
-            <StepContainer
-              stepIcon={icon as FunctionComponent<IconProps> | undefined}
-              header={status}
-              isExpanded={isExpanded}
-              onToggle={onToggle}
-              collapsible={true}
-              isLastStep={
-                index === nestedToolGroups.length - 1 &&
-                !fullReportContent &&
-                !isComplete
-              }
-              isFirstStep={!researchTask && index === 0}
-            >
-              {content}
-            </StepContainer>
-          )}
-        </TimelineRendererComponent>
-      ))}
+      {nestedToolGroups.map((group, index) => {
+        const isLastNestedStep =
+          index === nestedToolGroups.length - 1 &&
+          !fullReportContent &&
+          !isComplete;
+
+        return (
+          <TimelineRendererComponent
+            key={group.sub_turn_index}
+            packets={group.packets}
+            chatState={state}
+            onComplete={() => {}}
+            animate={!stopPacketSeen && !group.isComplete}
+            stopPacketSeen={stopPacketSeen}
+            defaultExpanded={true}
+            isLastStep={isLastNestedStep}
+          >
+            {({ icon, status, content, isExpanded, onToggle }) => (
+              <StepContainer
+                stepIcon={icon as FunctionComponent<IconProps> | undefined}
+                header={status}
+                isExpanded={isExpanded}
+                onToggle={onToggle}
+                collapsible={true}
+                isLastStep={isLastNestedStep}
+                isFirstStep={!researchTask && index === 0}
+              >
+                {content}
+              </StepContainer>
+            )}
+          </TimelineRendererComponent>
+        );
+      })}
 
       {/* Intermediate report - using ExpandableTextDisplay */}
       {fullReportContent && (

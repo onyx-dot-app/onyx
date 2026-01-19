@@ -1,23 +1,16 @@
 "use client";
 
 import React, { useState, useMemo, FunctionComponent } from "react";
-import {
-  StopReason,
-  PacketType,
-  Packet,
-} from "@/app/chat/services/streamingModels";
+import { StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { getToolName, getToolIcon } from "../toolDisplayHelpers";
 import { TimelineRendererComponent } from "./TimelineRendererComponent";
 import Tabs from "@/refresh-components/Tabs";
 import { SvgBranch } from "@opal/icons";
-import { StepContainer } from "./AgentTimeline";
+import { StepContainer } from "./StepContainer";
+import { isResearchAgentPackets } from "./utils";
 import { IconProps } from "@/components/icons/icons";
-
-/** Check if packets are for ResearchAgentRenderer (which has its own StepContainer layout) */
-const isResearchAgentPackets = (packets: Packet[]) =>
-  packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 
 export interface ParallelTimelineTabsProps {
   /** Turn group containing parallel steps */

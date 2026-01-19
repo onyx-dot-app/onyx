@@ -1,184 +1,27 @@
 "use client";
 
-import React, { FunctionComponent, useState, useMemo, useEffect } from "react";
-import {
-  PacketType,
-  StopReason,
-  Packet,
-} from "@/app/chat/services/streamingModels";
+import React, { FunctionComponent, useMemo } from "react";
+import { StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { SvgFold, SvgExpand, SvgCheckCircle, SvgStopCircle } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { TimelineRendererComponent } from "./TimelineRendererComponent";
 import Text from "@/refresh-components/texts/Text";
 import { useTimelineHeader } from "./useTimelineHeader";
 import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
-import { getToolIconByName } from "../toolDisplayHelpers";
-
-const isResearchAgentPackets = (packets: Packet[]) =>
-  packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
-
-// =============================================================================
-// Header Sub-Components
-// =============================================================================
-
-interface StreamingHeaderProps {
-  headerText: string;
-  collapsible: boolean;
-  buttonTitle?: string;
-  isExpanded: boolean;
-  onToggle: () => void;
-}
-
-/** Header shown during streaming - shimmer text with current activity */
-function StreamingHeader({
-  headerText,
-  collapsible,
-  buttonTitle,
-  isExpanded,
-  onToggle,
-}: StreamingHeaderProps) {
-  return (
-    <>
-      <Text
-        as="p"
-        mainUiAction
-        text03
-        className="animate-shimmer bg-[length:200%_100%] bg-[linear-gradient(90deg,var(--shimmer-base)_10%,var(--shimmer-highlight)_40%,var(--shimmer-base)_70%)] bg-clip-text text-transparent"
-      >
-        {headerText}
-      </Text>
-      {collapsible &&
-        (buttonTitle ? (
-          <Button
-            tertiary
-            onClick={onToggle}
-            rightIcon={isExpanded ? SvgFold : SvgExpand}
-            aria-expanded={isExpanded}
-          >
-            {buttonTitle}
-          </Button>
-        ) : (
-          <IconButton
-            tertiary
-            onClick={onToggle}
-            icon={isExpanded ? SvgFold : SvgExpand}
-            aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
-            aria-expanded={isExpanded}
-          />
-        ))}
-    </>
-  );
-}
-
-interface CollapsedHeaderProps {
-  uniqueTools: Array<{ key: string; name: string; icon: React.JSX.Element }>;
-  totalSteps: number;
-  collapsible: boolean;
-  onToggle: () => void;
-}
-
-/** Header shown when completed + collapsed - tools summary + step count */
-function CollapsedHeader({
-  uniqueTools,
-  totalSteps,
-  collapsible,
-  onToggle,
-}: CollapsedHeaderProps) {
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        {uniqueTools.map((tool) => (
-          <div
-            key={tool.key}
-            className="inline-flex items-center gap-1 rounded-08 p-1 bg-background-tint-02"
-          >
-            {tool.icon}
-            <Text as="span" secondaryBody text04>
-              {tool.name}
-            </Text>
-          </div>
-        ))}
-      </div>
-      {collapsible && (
-        <Button
-          tertiary
-          onClick={onToggle}
-          rightIcon={SvgExpand}
-          aria-label="Expand timeline"
-          aria-expanded={false}
-        >
-          {totalSteps} {totalSteps === 1 ? "step" : "steps"}
-        </Button>
-      )}
-    </>
-  );
-}
-
-interface ExpandedHeaderProps {
-  collapsible: boolean;
-  onToggle: () => void;
-  // duration?: string; // For future: "Thought for X time"
-}
-
-/** Header shown when completed + expanded - "Thought for X time" */
-function ExpandedHeader({ collapsible, onToggle }: ExpandedHeaderProps) {
-  return (
-    <>
-      <Text as="p" mainUiAction text03>
-        Thought for some time
-      </Text>
-      {collapsible && (
-        <IconButton
-          tertiary
-          onClick={onToggle}
-          icon={SvgFold}
-          aria-label="Collapse timeline"
-          aria-expanded={true}
-        />
-      )}
-    </>
-  );
-}
-
-interface StoppedHeaderProps {
-  totalSteps: number;
-  collapsible: boolean;
-  isExpanded: boolean;
-  onToggle: () => void;
-}
-
-/** Header shown when user stopped/cancelled - "Stopped Thinking" + steps */
-function StoppedHeader({
-  totalSteps,
-  collapsible,
-  isExpanded,
-  onToggle,
-}: StoppedHeaderProps) {
-  return (
-    <>
-      <Text as="p" mainUiAction text03>
-        Stopped Thinking
-      </Text>
-      {collapsible && (
-        <Button
-          tertiary
-          onClick={onToggle}
-          rightIcon={isExpanded ? SvgFold : SvgExpand}
-          aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
-          aria-expanded={isExpanded}
-        >
-          {totalSteps} {totalSteps === 1 ? "step" : "steps"}
-        </Button>
-      )}
-    </>
-  );
-}
+import { StepContainer } from "./StepContainer";
+import { useTimelineExpansion, useTimelineMetrics } from "./hooks";
+import { isResearchAgentPackets, stepSupportsCompact } from "./utils";
+import {
+  StreamingHeader,
+  CollapsedHeader,
+  ExpandedHeader,
+  StoppedHeader,
+  ParallelStreamingHeader,
+} from "./headers";
 
 // =============================================================================
 // Main Component
@@ -207,7 +50,7 @@ export interface AgentTimelineProps {
   className?: string;
   /** Test ID for e2e testing */
   "data-testid"?: string;
-  /** Unique tool names used (pre-computed from packet processor for performance) */
+  /** Unique tool names (pre-computed for performance) */
   uniqueToolNames?: string[];
 }
 
@@ -224,56 +67,83 @@ export function AgentTimeline({
   "data-testid": testId,
   uniqueToolNames = [],
 }: AgentTimelineProps) {
-  const [isExpanded, setIsExpanded] = useState(!stopPacketSeen);
-  const handleToggle = () => setIsExpanded((prev) => !prev);
-
-  // Collapse when streaming completes (stopPacketSeen transitions to true)
-  // Note: Does not re-expand if stopPacketSeen changes back to false -
-  // user controls expansion after streaming completes
-  useEffect(() => {
-    if (stopPacketSeen) {
-      setIsExpanded(false);
-    }
-  }, [stopPacketSeen]);
+  // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason
   );
 
-  // Calculate total steps across all turn groups to determine if we should hide StepContainer header
-  const totalSteps = turnGroups.reduce((acc, tg) => acc + tg.steps.length, 0);
-  const isSingleStep = totalSteps === 1 && !userStopped;
+  // Memoized metrics derived from turn groups
+  const {
+    totalSteps,
+    isSingleStep,
+    uniqueTools,
+    lastTurnGroup,
+    lastStep,
+    lastStepIsResearchAgent,
+    lastStepSupportsCompact,
+  } = useTimelineMetrics(turnGroups, uniqueToolNames, userStopped);
 
-  // Use pre-computed unique tools from packet processor (performance optimization)
-  const uniqueTools = useMemo(
-    () =>
-      uniqueToolNames.map((name) => ({
-        key: name,
-        name,
-        icon: getToolIconByName(name),
-      })),
-    [uniqueToolNames]
-  );
+  // Expansion state management
+  const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
+    useTimelineExpansion(stopPacketSeen, lastTurnGroup);
 
-  // Check if last step is a research agent (which handles its own Done)
-  const lastTurnGroup = turnGroups[turnGroups.length - 1];
-  const lastStep = lastTurnGroup?.steps[lastTurnGroup.steps.length - 1];
-  const lastStepIsResearchAgent = lastStep
-    ? isResearchAgentPackets(lastStep.packets)
-    : false;
+  // Parallel step analysis for collapsed streaming view
+  const parallelActiveStep = useMemo(() => {
+    if (!lastTurnGroup?.isParallel) return null;
+    return (
+      lastTurnGroup.steps.find((s) => s.key === parallelActiveTab) ??
+      lastTurnGroup.steps[0]
+    );
+  }, [lastTurnGroup, parallelActiveTab]);
 
-  // Show "Done" indicator when:
-  // 1. stopPacketSeen is true (timeline is complete)
-  // 2. isExpanded is true (user can see the timeline)
-  // 3. NOT userStopped (user didn't cancel)
-  // 4. Last step is NOT a research agent (they handle their own Done)
+  const parallelActiveStepSupportsCompact = useMemo(() => {
+    if (!parallelActiveStep) return false;
+    return (
+      stepSupportsCompact(parallelActiveStep.packets) &&
+      !isResearchAgentPackets(parallelActiveStep.packets)
+    );
+  }, [parallelActiveStep]);
+
+  // Collapsed streaming: show compact content below header
+  const showCollapsedCompact =
+    !stopPacketSeen &&
+    !isExpanded &&
+    lastStep &&
+    !lastTurnGroup?.isParallel &&
+    !lastStepIsResearchAgent &&
+    lastStepSupportsCompact;
+
+  // Parallel tabs in header only when collapsed (expanded view has tabs in content)
+  const showParallelTabs =
+    !stopPacketSeen &&
+    !isExpanded &&
+    lastTurnGroup?.isParallel &&
+    lastTurnGroup.steps.length > 0;
+
+  // Collapsed parallel compact content
+  const showCollapsedParallel =
+    showParallelTabs && !isExpanded && parallelActiveStepSupportsCompact;
+
+  // Done indicator conditions
   const showDoneIndicator =
     stopPacketSeen && isExpanded && !userStopped && !lastStepIsResearchAgent;
 
-  // Determine which header to render based on state
+  // Header selection based on state
   const renderHeader = () => {
-    // STATE 1: Streaming - show shimmer text with current activity
     if (!stopPacketSeen) {
+      if (showParallelTabs && lastTurnGroup) {
+        return (
+          <ParallelStreamingHeader
+            steps={lastTurnGroup.steps}
+            activeTab={parallelActiveTab}
+            onTabChange={setParallelActiveTab}
+            collapsible={collapsible}
+            isExpanded={isExpanded}
+            onToggle={handleToggle}
+          />
+        );
+      }
       return (
         <StreamingHeader
           headerText={headerText}
@@ -285,7 +155,6 @@ export function AgentTimeline({
       );
     }
 
-    // STATE 2: User Stopped - show "Stopped Thinking" + steps
     if (userStopped) {
       return (
         <StoppedHeader
@@ -297,7 +166,6 @@ export function AgentTimeline({
       );
     }
 
-    // STATE 3: Completed + Collapsed - show tools summary
     if (!isExpanded) {
       return (
         <CollapsedHeader
@@ -309,10 +177,10 @@ export function AgentTimeline({
       );
     }
 
-    // STATE 4: Completed + Expanded - show "Thought for X time"
     return <ExpandedHeader collapsible={collapsible} onToggle={handleToggle} />;
   };
 
+  // Empty state: no packets, still streaming
   if (!hasPackets && !hasDisplayContent) {
     return (
       <div className={cn("flex flex-col", className)}>
@@ -335,6 +203,7 @@ export function AgentTimeline({
     );
   }
 
+  // Display content only (no timeline steps)
   if (hasDisplayContent && !hasPackets) {
     return (
       <div className={cn("flex flex-col", className)}>
@@ -349,6 +218,7 @@ export function AgentTimeline({
 
   return (
     <div className={cn("flex flex-col", className)}>
+      {/* Header row */}
       <div className="flex w-full h-9">
         <div className="flex justify-center items-center size-9">
           <AgentAvatar agent={chatState.assistant} size={24} />
@@ -356,16 +226,63 @@ export function AgentTimeline({
         <div
           className={cn(
             "flex w-full h-full items-center justify-between px-2",
-            // Background for: streaming, user stopped, or expanded
             (!stopPacketSeen || userStopped || isExpanded) &&
               "bg-background-tint-00 rounded-t-12",
-            // Bottom rounded when not expanded
-            !isExpanded && "rounded-b-12"
+            !isExpanded &&
+              !showCollapsedCompact &&
+              !showCollapsedParallel &&
+              "rounded-b-12"
           )}
         >
           {renderHeader()}
         </div>
       </div>
+
+      {/* Collapsed streaming view - single step compact mode */}
+      {showCollapsedCompact && lastStep && (
+        <div className="flex w-full">
+          <div className="w-9" />
+          <div className="w-full bg-background-tint-00 rounded-b-12 px-2 pb-2">
+            <TimelineRendererComponent
+              key={`${lastStep.key}-compact`}
+              packets={lastStep.packets}
+              chatState={chatState}
+              onComplete={() => {}}
+              animate={true}
+              stopPacketSeen={false}
+              stopReason={stopReason}
+              defaultExpanded={false}
+              isLastStep={true}
+            >
+              {({ content }) => content}
+            </TimelineRendererComponent>
+          </div>
+        </div>
+      )}
+
+      {/* Collapsed streaming view - parallel tools compact mode */}
+      {showCollapsedParallel && parallelActiveStep && (
+        <div className="flex w-full">
+          <div className="w-9" />
+          <div className="w-full bg-background-tint-00 rounded-b-12 px-2 pb-2">
+            <TimelineRendererComponent
+              key={`${parallelActiveStep.key}-compact`}
+              packets={parallelActiveStep.packets}
+              chatState={chatState}
+              onComplete={() => {}}
+              animate={true}
+              stopPacketSeen={false}
+              stopReason={stopReason}
+              defaultExpanded={false}
+              isLastStep={true}
+            >
+              {({ content }) => content}
+            </TimelineRendererComponent>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded timeline view */}
       {isExpanded && (
         <div className="w-full">
           {turnGroups.map((turnGroup, turnIdx) =>
@@ -434,7 +351,7 @@ export function AgentTimeline({
             )
           )}
 
-          {/* Done indicator at bottom of expanded timeline */}
+          {/* Done indicator */}
           {stopPacketSeen && isExpanded && !userStopped && (
             <StepContainer
               stepIcon={SvgCheckCircle}
@@ -446,7 +363,7 @@ export function AgentTimeline({
             </StepContainer>
           )}
 
-          {/* Stopped indicator when user cancelled */}
+          {/* Stopped indicator */}
           {stopPacketSeen && isExpanded && userStopped && (
             <StepContainer
               stepIcon={SvgStopCircle}
@@ -459,104 +376,6 @@ export function AgentTimeline({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-export interface StepContainerProps {
-  /** Main content */
-  children?: React.ReactNode;
-  /** Step icon component */
-  stepIcon?: FunctionComponent<IconProps>;
-  /** Header left slot - accepts any component */
-  header?: React.ReactNode;
-  /** Time/duration string to display (e.g., "2.3s") */
-  buttonTitle?: string;
-  /** Controlled expanded state */
-  isExpanded?: boolean;
-  /** Toggle callback for controlled mode */
-  onToggle?: () => void;
-  /** Whether collapsible control is shown */
-  collapsible?: boolean;
-  /** Whether the renderer supports compact mode (collapse button only shown when true) */
-  supportsCompact?: boolean;
-  /** Additional class names */
-  className?: string;
-  /** Whether this is the last step */
-  isLastStep?: boolean;
-  /** Whether this is the first step (no top connector, uses pt-2 instead) */
-  isFirstStep?: boolean;
-  /** Whether to hide the header (for single-step timelines) */
-  hideHeader?: boolean;
-}
-
-export function StepContainer({
-  children,
-  stepIcon: StepIconComponent,
-  header,
-  buttonTitle,
-  isExpanded = true,
-  onToggle,
-  collapsible = true,
-  supportsCompact = false,
-  isLastStep = false,
-  isFirstStep = false,
-  className,
-  hideHeader = false,
-}: StepContainerProps) {
-  // Only show collapse controls when renderer supports compact mode
-  const showCollapseControls = collapsible && supportsCompact && onToggle;
-  return (
-    <div className={cn("flex w-full", className)}>
-      <div
-        className={cn("flex flex-col items-center w-9", isFirstStep && "pt-2")}
-      >
-        {/* Icon at TOP */}
-        {!hideHeader && StepIconComponent && (
-          <div className="py-1">
-            <StepIconComponent className="size-4 stroke-text-02" />
-          </div>
-        )}
-
-        {/* Connector below icon - fills remaining space */}
-        {!isLastStep && <div className="w-px flex-1 bg-border-01" />}
-      </div>
-
-      <div
-        className={cn(
-          "w-full bg-background-tint-00",
-          isLastStep && "rounded-b-12"
-        )}
-      >
-        {!hideHeader && (
-          <div className="flex items-center justify-between px-2">
-            {header && (
-              <Text as="p" mainUiMuted text03>
-                {header}
-              </Text>
-            )}
-
-            {showCollapseControls &&
-              (buttonTitle ? (
-                <Button
-                  tertiary
-                  onClick={onToggle}
-                  rightIcon={isExpanded ? SvgFold : SvgExpand}
-                >
-                  {buttonTitle}
-                </Button>
-              ) : (
-                <IconButton
-                  tertiary
-                  onClick={onToggle}
-                  icon={isExpanded ? SvgFold : SvgExpand}
-                />
-              ))}
-          </div>
-        )}
-
-        <div className="px-2 pb-2">{children}</div>
-      </div>
     </div>
   );
 }
