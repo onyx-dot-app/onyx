@@ -31,6 +31,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/chat/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
+import useChatSessions from "@/hooks/useChatSessions";
 import { AuthType } from "@/lib/constants";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -51,6 +52,7 @@ import ColorSwatch from "@/refresh-components/ColorSwatch";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
+import { cn } from "@/lib/utils";
 
 interface PAT {
   id: number;
@@ -157,6 +159,7 @@ function GeneralSettings() {
     useUser();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { popup, setPopup } = usePopup();
+  const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -166,7 +169,6 @@ function GeneralSettings() {
     personalizationValues,
     updatePersonalizationField,
     handleSavePersonalization,
-    isSavingPersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
     onSuccess: () =>
       setPopup({
@@ -199,9 +201,7 @@ function GeneralSettings() {
           message: "All your chat sessions have been deleted.",
           type: "success",
         });
-        if (pathname.includes("/chat")) {
-          router.push("/chat");
-        }
+        await refreshChatSessions();
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
@@ -214,7 +214,7 @@ function GeneralSettings() {
       setIsDeleting(false);
       setShowDeleteConfirmation(false);
     }
-  }, [pathname, router, setPopup]);
+  }, [pathname, router, setPopup, refreshChatSessions]);
 
   return (
     <>
@@ -262,12 +262,14 @@ function GeneralSettings() {
                 onChange={(e) =>
                   updatePersonalizationField("name", e.target.value)
                 }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  }
+                }}
                 onBlur={() => {
-                  // Only save if the value has changed and is not empty
-                  if (
-                    personalizationValues.name.trim() &&
-                    personalizationValues.name !== initialNameRef.current
-                  ) {
+                  // Only save if the value has changed
+                  if (personalizationValues.name !== initialNameRef.current) {
                     void handleSavePersonalization();
                     initialNameRef.current = personalizationValues.name;
                   }
@@ -285,6 +287,11 @@ function GeneralSettings() {
                 onChange={(e) =>
                   updatePersonalizationField("role", e.target.value)
                 }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  }
+                }}
                 onBlur={() => {
                   // Only save if the value has changed
                   if (personalizationValues.role !== initialRoleRef.current) {
@@ -598,7 +605,7 @@ function PromptShortcuts() {
       {popup}
 
       {shortcuts.length > 0 && (
-        <Section gap={0.5}>
+        <Section gap={1}>
           {shortcuts.map((shortcut, index) => {
             const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
             const isExisting = !shortcut.isNew;
@@ -611,42 +618,47 @@ function PromptShortcuts() {
             const showContentError = isExisting && !hasContent;
 
             return (
-              <Section
+              <div
                 key={shortcut.id}
-                flexDirection="row"
-                justifyContent="between"
-                gap={0.25}
+                className="w-full grid grid-cols-[1fr_min-content] gap-x-1 gap-y-1"
               >
-                <div className="flex-1">
-                  <InputTypeIn
-                    placeholder="/Shortcut"
-                    value={shortcut.prompt}
-                    onChange={(e) =>
-                      handleUpdateShortcut(index, "prompt", e.target.value)
-                    }
-                    onBlur={() => void handleBlurShortcut(index)}
-                    error={showPromptError}
-                  />
-                </div>
-                <div className="flex-[2]">
-                  <InputTypeIn
-                    placeholder="Full prompt"
-                    value={shortcut.content}
-                    onChange={(e) =>
-                      handleUpdateShortcut(index, "content", e.target.value)
-                    }
-                    onBlur={() => void handleBlurShortcut(index)}
-                    error={showContentError}
-                  />
-                </div>
-                <IconButton
-                  icon={SvgMinusCircle}
-                  onClick={() => void handleRemoveShortcut(index)}
-                  tertiary
-                  disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
-                  aria-label="Remove shortcut"
+                <InputTypeIn
+                  placeholder="/Shortcut"
+                  value={shortcut.prompt}
+                  onChange={(e) =>
+                    handleUpdateShortcut(index, "prompt", e.target.value)
+                  }
+                  onBlur={() => void handleBlurShortcut(index)}
+                  error={showPromptError}
+                  // disabled={shortcut.is_public}
                 />
-              </Section>
+                <Section>
+                  <IconButton
+                    icon={SvgMinusCircle}
+                    onClick={() => void handleRemoveShortcut(index)}
+                    tertiary
+                    disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
+                    aria-label="Remove shortcut"
+                    tooltip={
+                      shortcut.is_public
+                        ? "Cannot delete a public prompt-shortcut"
+                        : undefined
+                    }
+                  />
+                </Section>
+                <InputTextArea
+                  placeholder="Full prompt"
+                  value={shortcut.content}
+                  onChange={(e) =>
+                    handleUpdateShortcut(index, "content", e.target.value)
+                  }
+                  onBlur={() => void handleBlurShortcut(index)}
+                  error={showContentError}
+                  rows={3}
+                  // disabled={shortcut.is_public}
+                />
+                <div />
+              </div>
             );
           })}
         </Section>
@@ -831,7 +843,6 @@ function Memories({ memories, onSaveMemories }: MemoriesProps) {
 function ChatPreferencesSettings() {
   const {
     user,
-    updateUserTemperatureOverrideEnabled,
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
@@ -891,18 +902,6 @@ function ChatPreferencesSettings() {
               checked={user?.preferences.auto_scroll}
               onCheckedChange={(checked) => {
                 updateUserAutoScroll(checked);
-              }}
-            />
-          </InputLayouts.Horizontal>
-
-          <InputLayouts.Horizontal
-            title="Temperature override"
-            description="Set the temperature for the LLM."
-          >
-            <Switch
-              checked={user?.preferences.temperature_override_enabled}
-              onCheckedChange={(checked) => {
-                updateUserTemperatureOverrideEnabled(checked);
               }}
             />
           </InputLayouts.Horizontal>
@@ -1340,7 +1339,7 @@ function IndexedConnectorCard({ source, count }: IndexedConnectorCardProps) {
   const sourceMetadata = getSourceMetadata(source);
 
   return (
-    <Card padding={0.75}>
+    <Card>
       <LineItemLayout
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
@@ -1394,7 +1393,7 @@ function FederatedConnectorCard({
     <>
       {popup}
 
-      <Card padding={0.75}>
+      <Card padding={0.5}>
         <LineItemLayout
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
@@ -1420,6 +1419,7 @@ function FederatedConnectorCard({
               </Button>
             ) : undefined
           }
+          rightChildrenReducedPadding
         />
       </Card>
     </>

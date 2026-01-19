@@ -158,7 +158,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
           {...props}
         />
 
-        {showClearButton && value && (
+        {showClearButton && value && !disabled && (
           <IconButton
             icon={SvgX}
             disabled={disabled}
