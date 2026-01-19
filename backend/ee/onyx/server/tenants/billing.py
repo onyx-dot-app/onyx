@@ -4,7 +4,6 @@ from typing import Literal
 import requests
 import stripe
 
-from ee.onyx.configs.app_configs import STRIPE_PRICE_ID
 from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import BillingInformation
@@ -79,22 +78,24 @@ def fetch_billing_information(
 
 def register_tenant_users(tenant_id: str, number_of_users: int) -> stripe.Subscription:
     """
-    Send a request to the control service to register the number of users for a tenant.
+    Update the number of seats for a tenant's subscription.
+    Preserves the existing price (monthly, annual, or grandfathered).
     """
-
-    if not STRIPE_PRICE_ID:
-        raise Exception("STRIPE_PRICE_ID is not set")
-
     response = fetch_tenant_stripe_information(tenant_id)
     stripe_subscription_id = cast(str, response.get("stripe_subscription_id"))
 
     subscription = stripe.Subscription.retrieve(stripe_subscription_id)
+    subscription_item = subscription["items"]["data"][0]
+
+    # Use existing price to preserve the customer's current plan
+    current_price_id = subscription_item.price.id
+
     updated_subscription = stripe.Subscription.modify(
         stripe_subscription_id,
         items=[
             {
-                "id": subscription["items"]["data"][0].id,
-                "price": STRIPE_PRICE_ID,
+                "id": subscription_item.id,
+                "price": current_price_id,
                 "quantity": number_of_users,
             }
         ],
