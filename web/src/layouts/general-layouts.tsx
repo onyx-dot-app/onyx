@@ -156,11 +156,16 @@ Section.displayName = "Section";
  * - Description aligns with title's left edge (both in grid column 2)
  * - rightChildren is outside the grid, in the outer flexbox
  *
+ * Variants:
+ * - `primary`: Standard size (20px icon) with emphasized text. The default for prominent list items.
+ * - `secondary`: Compact size (16px icon) with emphasized text. Use for denser lists or nested items.
+ * - `tertiary`: Compact size (16px icon) with muted text styling. Use for de-emphasized or secondary information.
+ *
  * @param icon - Optional icon component to display on the left
  * @param title - The main title text (required)
  * @param description - Optional description text below the title
  * @param rightChildren - Optional content to render on the right side
- * @param variant - Visual variant: "primary" (default), "secondary" (compact), or "tertiary" (compact + muted)
+ * @param variant - Visual variant. Default: "primary"
  * @param strikethrough - If true, applies line-through style to title. Default: false
  * @param loading - If true, renders skeleton placeholders instead of content. Default: false
  */
