@@ -65,6 +65,7 @@ from onyx.db.enums import (
     MCPServerStatus,
     ThemePreference,
     SwitchoverType,
+    SandboxStatus,  # cc4a
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -4011,3 +4012,59 @@ class TenantUsage(Base):
         # Ensure only one row per window start (tenant_id is in the schema name)
         UniqueConstraint("window_start", name="uq_tenant_usage_window"),
     )
+
+
+"""
+CLI Agent Sandbox Tables (cc4a)
+"""
+
+
+class Sandbox(Base):  # cc4a
+    """Represents a CLI agent sandbox instance with directory-based isolation."""
+
+    __tablename__ = "sandbox"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), unique=True, nullable=False
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    directory_path: Mapped[str] = mapped_column(String, nullable=False)
+    agent_pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    nextjs_pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[SandboxStatus] = mapped_column(
+        Enum(SandboxStatus, native_enum=False), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    terminated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (Index("ix_sandbox_tenant_status", "tenant_id", "status"),)
+
+
+class SandboxSnapshot(Base):  # cc4a
+    """Represents a point-in-time snapshot of a sandbox's outputs directory."""
+
+    __tablename__ = "sandbox_snapshot"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    storage_path: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)

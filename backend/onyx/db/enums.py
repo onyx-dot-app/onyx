@@ -194,3 +194,21 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
+
+
+class SandboxStatus(str, PyEnum):  # cc4a
+    """Status enum for CLI agent sandbox lifecycle."""
+
+    PROVISIONING = "provisioning"
+    RUNNING = "running"
+    IDLE = "idle"
+    TERMINATED = "terminated"
+    FAILED = "failed"
+
+    def is_active(self) -> bool:
+        """Check if sandbox is in an active state (running or idle)."""
+        return self in (SandboxStatus.RUNNING, SandboxStatus.IDLE)
+
+    def is_terminal(self) -> bool:
+        """Check if sandbox is in a terminal state."""
+        return self in (SandboxStatus.TERMINATED, SandboxStatus.FAILED)
