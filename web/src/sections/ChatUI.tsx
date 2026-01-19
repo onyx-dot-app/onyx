@@ -49,6 +49,7 @@ export interface ChatUIProps {
   stopGenerating: () => void;
   handleResubmitLastMessage: () => void;
   onScrollButtonVisibilityChange?: (visible: boolean) => void;
+  applyBottomMargin?: boolean;
 }
 
 const ChatUI = React.memo(
@@ -65,6 +66,7 @@ const ChatUI = React.memo(
         stopGenerating,
         handleResubmitLastMessage,
         onScrollButtonVisibilityChange,
+        applyBottomMargin = true,
       }: ChatUIProps,
       ref: ForwardedRef<ChatUIHandle>
     ) => {
@@ -110,6 +112,7 @@ const ChatUI = React.memo(
           autoScroll={autoScrollEnabled}
           isStreaming={isStreaming}
           onScrollButtonVisibilityChange={onScrollButtonVisibilityChange}
+          applyBottomMargin={applyBottomMargin}
         >
           <MessageList
             messages={messages}
