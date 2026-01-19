@@ -263,10 +263,10 @@
     <!-- Launcher widget instance -->
     <onyx-chat-widget mode="launcher"></onyx-chat-widget>
 
-    <!-- Load widget source via Vite -->
-    <script
-      type="module"
-      src="https://cdn.onyx.app/widget/1.0/dist/onyx-widget.js"
-    ></script>
+    <!-- Load widget source via Vite for local development -->
+    <script type="module" src="./dist/onyx-widget.js"></script>
+
+    <!-- Load widget source via CDN for production -->
+    <!-- <script type="module" src="https://cdn.onyx.app/widget/1.0/dist/onyx-widget.js"></script> -->
   </body>
 </html>
