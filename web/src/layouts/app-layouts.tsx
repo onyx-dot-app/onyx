@@ -313,14 +313,12 @@ function AppHeader() {
           <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
             {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
             <div className="flex-1">
-              {!isNRFSidePanel && (
-                <IconButton
-                  icon={SvgSidebar}
-                  onClick={() => setFolded(false)}
-                  className={cn(!isMobile && "invisible")}
-                  internal
-                />
-              )}
+              <IconButton
+                icon={SvgSidebar}
+                onClick={() => setFolded(false)}
+                className={cn(!isMobile && "invisible")}
+                internal
+              />
             </div>
 
             {/* Center - contains the custom-header-content */}
