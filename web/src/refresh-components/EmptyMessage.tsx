@@ -45,13 +45,12 @@ export default function EmptyMessage({
   description,
 }: EmptyMessageProps) {
   return (
-    <Card translucent>
+    <Card variant="tertiary">
       <LineItemLayout
         icon={Icon}
         title={title}
         description={description}
-        compact
-        secondary
+        variant="tertiary-muted"
       />
     </Card>
   );
