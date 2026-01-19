@@ -68,8 +68,8 @@ import {
   SvgPlayCircle,
   SvgSettings,
 } from "@opal/icons";
-import BuildModeIntroBackgroundAnimation from "@/app/build/components/BuildModeIntroBackgroundAnimation";
-import BuildModeIntroContent from "@/app/build/components/BuildModeIntroContent";
+import BuildModeIntroBackgroundAnimation from "@/app/build/components/IntroBackground";
+import BuildModeIntroContent from "@/app/build/components/IntroContent";
 import { motion, AnimatePresence } from "motion/react";
 import { Notification } from "@/app/admin/settings/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
