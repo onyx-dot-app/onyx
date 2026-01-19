@@ -183,6 +183,11 @@ export class ApiService {
 
       return response;
     } catch (error) {
+      // Don't retry if the request was aborted by the caller
+      if (error instanceof Error && error.name === "AbortError") {
+        throw error;
+      }
+
       // Retry on network errors
       if (retries < this.maxRetries) {
         const delay = this.retryDelay * Math.pow(2, retries);
