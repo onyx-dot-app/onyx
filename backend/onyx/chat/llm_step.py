@@ -49,6 +49,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import find_json_objects_in_text
 
 logger = setup_logger()
 
@@ -276,6 +277,144 @@ def _extract_tool_call_kickoffs(
             )
             tab_index_calculated += 1
     return tool_calls
+
+
+def extract_tool_calls_from_response_text(
+    response_text: str | None,
+    tool_definitions: list[dict],
+    placement: Placement,
+) -> list[ToolCallKickoff]:
+    """Extract tool calls from LLM response text by matching JSON against tool definitions.
+
+    This is a fallback mechanism for when the LLM was expected to return tool calls
+    but didn't use the proper tool call format. It searches for JSON objects in the
+    response text that match the structure of available tools.
+
+    Args:
+        response_text: The LLM's text response to search for tool calls
+        tool_definitions: List of tool definitions to match against
+        placement: Placement information for the tool calls
+
+    Returns:
+        List of ToolCallKickoff objects for any matched tool calls
+    """
+    if not response_text or not tool_definitions:
+        return []
+
+    # Build a map of tool names to their definitions
+    tool_name_to_def: dict[str, dict] = {}
+    for tool_def in tool_definitions:
+        if tool_def.get("type") == "function" and "function" in tool_def:
+            func_def = tool_def["function"]
+            tool_name = func_def.get("name")
+            if tool_name:
+                tool_name_to_def[tool_name] = func_def
+
+    if not tool_name_to_def:
+        return []
+
+    # Find all JSON objects in the response text
+    json_objects = find_json_objects_in_text(response_text)
+
+    tool_calls: list[ToolCallKickoff] = []
+    tab_index = 0
+
+    for json_obj in json_objects:
+        matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
+        if matched_tool_call:
+            tool_name, tool_args = matched_tool_call
+            tool_calls.append(
+                ToolCallKickoff(
+                    tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    placement=Placement(
+                        turn_index=placement.turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=placement.sub_turn_index,
+                    ),
+                )
+            )
+            tab_index += 1
+
+    logger.info(
+        f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
+    )
+
+    return tool_calls
+
+
+def _try_match_json_to_tool(
+    json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> tuple[str, dict[str, Any]] | None:
+    """Try to match a JSON object to a tool definition.
+
+    Supports several formats:
+    1. Direct tool call format: {"name": "tool_name", "arguments": {...}}
+    2. Function call format: {"function": {"name": "tool_name", "arguments": {...}}}
+    3. Tool name as key: {"tool_name": {...arguments...}}
+    4. Arguments matching a tool's parameter schema
+
+    Args:
+        json_obj: The JSON object to match
+        tool_name_to_def: Map of tool names to their function definitions
+
+    Returns:
+        Tuple of (tool_name, tool_args) if matched, None otherwise
+    """
+    # Format 1: Direct tool call format {"name": "...", "arguments": {...}}
+    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
+        tool_name = json_obj["name"]
+        arguments = json_obj.get("arguments", json_obj.get("parameters", {}))
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                arguments = {}
+        if isinstance(arguments, dict):
+            return (tool_name, arguments)
+
+    # Format 2: Function call format {"function": {"name": "...", "arguments": {...}}}
+    if "function" in json_obj and isinstance(json_obj["function"], dict):
+        func_obj = json_obj["function"]
+        if "name" in func_obj and func_obj["name"] in tool_name_to_def:
+            tool_name = func_obj["name"]
+            arguments = func_obj.get("arguments", func_obj.get("parameters", {}))
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    arguments = {}
+            if isinstance(arguments, dict):
+                return (tool_name, arguments)
+
+    # Format 3: Tool name as key {"tool_name": {...arguments...}}
+    for tool_name in tool_name_to_def:
+        if tool_name in json_obj:
+            arguments = json_obj[tool_name]
+            if isinstance(arguments, dict):
+                return (tool_name, arguments)
+
+    # Format 4: Check if the JSON object matches a tool's parameter schema
+    for tool_name, func_def in tool_name_to_def.items():
+        params = func_def.get("parameters", {})
+        properties = params.get("properties", {})
+        required = params.get("required", [])
+
+        if not properties:
+            continue
+
+        # Check if all required parameters are present (empty required = all optional)
+        if all(req in json_obj for req in required):
+            # Check if any of the tool's properties are in the JSON object
+            matching_props = [prop for prop in properties if prop in json_obj]
+            if matching_props:
+                # Filter to only include known properties
+                filtered_args = {k: v for k, v in json_obj.items() if k in properties}
+                return (tool_name, filtered_args)
+
+    return None
 
 
 def translate_history_to_llm_format(
