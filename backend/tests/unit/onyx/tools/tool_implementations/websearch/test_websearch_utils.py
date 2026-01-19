@@ -1,12 +1,3 @@
-"""
-I want to a few things:
-
-1. No snippet provided = Top down search
-2. Snippet provided it the top bit makes it a top down search
-3. Snippet provided in the bottom bit makes it a bottom up search
-4. Snippet provided in the middle is hit
-"""
-
 from pathlib import Path
 
 from onyx.tools.tool_implementations.open_url.models import WebContent
