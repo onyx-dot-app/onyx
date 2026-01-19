@@ -1382,7 +1382,9 @@ export default function AgentEditorPage({
                             </Card>
                           </SimpleTooltip>
 
-                          <Card>
+                          <Card
+                            variant={!!webSearchTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="web_search"
                               title="Web Search"
@@ -1395,7 +1397,9 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card>
+                          <Card
+                            variant={!!openURLTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="open_url"
                               title="Open URL"
@@ -1410,7 +1414,7 @@ export default function AgentEditorPage({
 
                           <Card
                             variant={
-                              codeInterpreterTool ? undefined : "disabled"
+                              !!codeInterpreterTool ? undefined : "disabled"
                             }
                           >
                             <InputLayouts.Horizontal
