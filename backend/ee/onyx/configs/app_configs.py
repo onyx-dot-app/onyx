@@ -129,3 +129,8 @@ MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
 
 GATED_TENANTS_KEY = "gated_tenants"
+
+# License enforcement - when True, blocks API access for gated/expired licenses
+LICENSE_ENFORCEMENT_ENABLED = (
+    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "").lower() == "true"
+)
