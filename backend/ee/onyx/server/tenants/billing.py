@@ -1,4 +1,5 @@
 from typing import cast
+from typing import Literal
 
 import requests
 import stripe
@@ -18,7 +19,7 @@ logger = setup_logger()
 
 def fetch_stripe_checkout_session(
     tenant_id: str,
-    billing_period: str = "monthly",
+    billing_period: Literal["monthly", "annual"] = "monthly",
 ) -> str:
     token = generate_data_plane_token()
     headers = {
