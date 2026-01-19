@@ -26,14 +26,13 @@ export default function CreateProjectModal() {
     try {
       const newProject = await createProject(name);
       route({ projectId: newProject.id });
+      modal.toggle(false);
     } catch (e) {
       setPopup({
         type: "error",
         message: `Failed to create the project ${name}`,
       });
     }
-
-    modal.toggle(false);
   }
 
   useKeyPress(handleSubmit, "Enter");
