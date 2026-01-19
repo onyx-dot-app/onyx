@@ -101,133 +101,132 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
         tuple: (normalized_text, position_map)
         - position_map[i] gives the original position for normalized position i
     """
+    if not text:
+        return "", []
+
     original_text = text
 
-    # Unicode normalization will produce most compact form
-    text = unicodedata.normalize("NFC", text)
+    # Step 1: NFC normalization with position mapping
+    nfc_text = unicodedata.normalize("NFC", text)
 
-    # Build mapping from normalized positions back to original positions
-    # NFC can merge combining characters (e.g., e + combining accent -> é)
-    position_map = []
+    # Build mapping from NFC positions to original start positions
+    nfc_to_orig: list[int] = []
     orig_idx = 0
-    for norm_idx in range(len(text)):
-        # Find the original position that corresponds to this normalized position
-        # by checking when normalizing prefixes matches
-        while orig_idx < len(original_text):
-            prefix_normalized = unicodedata.normalize(
-                "NFC", original_text[: orig_idx + 1]
-            )
-            if len(prefix_normalized) > norm_idx:
-                # This original position contributes to the current normalized position
-                position_map.append(orig_idx)
+    for nfc_char in nfc_text:
+        nfc_to_orig.append(orig_idx)
+        # Find how many original chars contributed to this NFC char
+        for length in range(1, len(original_text) - orig_idx + 1):
+            substr = original_text[orig_idx : orig_idx + length]
+            if unicodedata.normalize("NFC", substr) == nfc_char:
+                orig_idx += length
                 break
-            orig_idx += 1
         else:
-            # Fallback: shouldn't happen, but map to last original position
-            position_map.append(len(original_text) - 1)
+            orig_idx += 1  # Fallback
 
-    # Normalize curly quotes to straight quotes
+    # Work with NFC text from here
+    text = nfc_text
+
+    # Define all transformations upfront
     curly_to_straight = {
-        "\u2019": "'",  # U+2019 right single quotation mark
-        "\u2018": "'",  # U+2018 left single quotation mark
-        "\u201c": '"',  # U+201C left double quotation mark
-        "\u201d": '"',  # U+201D right double quotation mark
+        "\u2019": "'",
+        "\u2018": "'",
+        "\u201c": '"',
+        "\u201d": '"',
     }
-    new_text = []
-    new_map = []
-    for i, char in enumerate(text):
-        if char in curly_to_straight:
-            new_text.append(curly_to_straight[char])
-        else:
-            new_text.append(char)
-        new_map.append(position_map[i])
-    text = "".join(new_text)
-    position_map = new_map
 
-    # Remove zero-width characters (invisible characters that can appear in text)
     zero_width_chars = {
-        "\u200b",  # Zero Width Space
-        "\u200c",  # Zero Width Non-Joiner
-        "\u200d",  # Zero Width Joiner
-        "\ufeff",  # Zero Width No-Break Space (BOM)
-        "\u2060",  # Word Joiner
+        "\u200b",
+        "\u200c",
+        "\u200d",
+        "\ufeff",
+        "\u2060",
     }
-    new_text = []
-    new_map = []
-    for i, char in enumerate(text):
-        if char not in zero_width_chars:
-            new_text.append(char)
-            new_map.append(position_map[i])
-    text = "".join(new_text)
-    position_map = new_map
 
     html_entities = {
         "&nbsp;": " ",
-        "&#160;": " ",  # numeric entity for non-breaking space
+        "&#160;": " ",
         "&amp;": "&",
         "&lt;": "<",
         "&gt;": ">",
         "&quot;": '"',
         "&apos;": "'",
         "&#39;": "'",
-        "&#x27;": "'",  # hex entity for apostrophe
+        "&#x27;": "'",
         "&ndash;": "-",
         "&mdash;": "-",
         "&hellip;": "...",
         "&#xB0;": "°",
         "&#xBA;": "°",
-        "&zwj;": "",  # zero-width joiner - strip it
+        "&zwj;": "",
     }
-    for entity, replacement in html_entities.items():
-        new_text = []
-        new_map = []
-        i = 0
-        while i < len(text):
-            if text[i : i + len(entity)] == entity:
-                # Replace w/ single char
-                for char in replacement:
-                    new_text.append(char)
-                    new_map.append(position_map[i])
-                i += len(entity)
-            else:
-                new_text.append(text[i])
-                new_map.append(position_map[i])
-                i += 1
-        text = "".join(new_text)
-        position_map = new_map
 
-    # Normalize whitespace & remove punctuation
-    result_chars: list[str] = []
-    result_map: list[int] = []
+    # Sort entities by length (longest first) for greedy matching
+    sorted_entities = sorted(html_entities.keys(), key=len, reverse=True)
 
-    # First pass: handle whitespace & punctuation
-    for i, char in enumerate(text):
-        if char.isspace():
-            # Collapse multiple spaces into one
-            if not result_chars or not result_chars[-1].isspace():
-                result_chars.append(" ")
-                result_map.append(position_map[i])
-        elif re.match(r"[^\w\s\']", char):
-            # Remove punctuation (expect apostrophes)
-            # Add space if needed to prevent word merging
-            if result_chars and not result_chars[-1].isspace():
-                result_chars.append(" ")
-                result_map.append(position_map[i])
+    result_chars = []
+    result_map = []
+    i = 0
+    last_was_space = True  # Track to avoid leading spaces
+
+    def normalize_char(c: str) -> str:
+        """Normalize a single character (curly quotes, whitespace, punctuation)."""
+        if c in curly_to_straight:
+            c = curly_to_straight[c]
+        if c.isspace():
+            return " "
+        elif re.match(r"[^\w\s\']", c):
+            return " "
         else:
-            result_chars.append(char.lower())
-            result_map.append(position_map[i])
+            return c.lower()
 
-    # Clean up leading/trailing spaces
-    text = "".join(result_chars).strip()
-    # Adjust map for strip
-    start_strip = len(result_chars) - len("".join(result_chars).lstrip())
-    end_strip = len(result_chars) - len("".join(result_chars).rstrip())
-    if end_strip > 0:
-        result_map = result_map[start_strip:-end_strip]
-    else:
-        result_map = result_map[start_strip:]
+    while i < len(text):
+        # Convert NFC position to original position
+        orig_pos = nfc_to_orig[i] if i < len(nfc_to_orig) else len(original_text) - 1
+        char = text[i]
+        output = None
+        step = 1
 
-    return text, result_map
+        # Check for HTML entities first (greedy match)
+        for entity in sorted_entities:
+            if text[i : i + len(entity)] == entity:
+                output = html_entities[entity]
+                step = len(entity)
+                break
+
+        # If no entity matched, process single character
+        if output is None:
+            # Skip zero-width characters
+            if char in zero_width_chars:
+                i += 1
+                continue
+
+            output = normalize_char(char)
+
+        # Add output to result, normalizing each character from entity output
+        if output:
+            for out_char in output:
+                # Normalize entity output the same way as regular chars
+                normalized = normalize_char(out_char)
+
+                # Handle whitespace collapsing
+                if normalized == " ":
+                    if not last_was_space:
+                        result_chars.append(" ")
+                        result_map.append(orig_pos)
+                        last_was_space = True
+                else:
+                    result_chars.append(normalized)
+                    result_map.append(orig_pos)
+                    last_was_space = False
+
+        i += step
+
+    # Remove trailing space if present
+    if result_chars and result_chars[-1] == " ":
+        result_chars.pop()
+        result_map.pop()
+
+    return "".join(result_chars), result_map
 
 
 def _token_based_match(

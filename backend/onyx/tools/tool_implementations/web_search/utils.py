@@ -9,6 +9,10 @@ from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 
 
+TRUNCATED_CONTENT_SUFFIX = " [...truncated]"
+TRUNCATED_CONTENT_PREFIX = "[...truncated] "
+
+
 def filter_web_search_results_with_no_title_or_snippet(
     results: list[WebSearchResult],
 ) -> list[WebSearchResult]:
@@ -29,7 +33,7 @@ def truncate_search_result_content(content: str, max_chars: int = 15000) -> str:
     """Truncate search result content to a maximum number of characters"""
     if len(content) <= max_chars:
         return content
-    return content[:max_chars] + " [...truncated]"
+    return content[:max_chars] + TRUNCATED_CONTENT_SUFFIX
 
 
 def _truncate_content_around_snippet(
@@ -52,7 +56,16 @@ def _truncate_content_around_snippet(
         start_idx, end_idx + 1, len(content), max_chars
     )
 
-    return content[new_start:new_end]
+    truncated_content = content[new_start:new_end]
+
+    # Add the AFFIX to the start and end of truncated content
+    if new_start > 0:
+        truncated_content = TRUNCATED_CONTENT_PREFIX + truncated_content
+
+    if new_end < len(content):
+        truncated_content = truncated_content + TRUNCATED_CONTENT_SUFFIX
+
+    return truncated_content
 
 
 def _expand_range_centered(
