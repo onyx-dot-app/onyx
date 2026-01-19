@@ -107,7 +107,7 @@ execnet==2.1.2
     # via pytest-xdist
 executing==2.2.1
     # via stack-data
-faker==37.1.0
+faker==40.1.0
     # via onyx
 fastapi==0.116.1
     # via
