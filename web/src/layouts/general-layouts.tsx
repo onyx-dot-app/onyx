@@ -197,25 +197,17 @@ function LineItemLayout({
   return (
     <Section flexDirection="row" justifyContent="between" alignItems="start">
       <div
-        className="grid flex-1"
-        style={{
-          gridTemplateColumns: Icon ? "auto 1fr" : "1fr",
-          columnGap: "0.5rem",
-          rowGap: loading ? "0.25rem" : undefined,
-        }}
+        className="line-item-layout"
+        data-variant={variant}
+        data-has-icon={Icon ? "true" : undefined}
+        data-loading={loading ? "true" : undefined}
       >
         {/* Row 1: Icon, Title */}
         {Icon && (
-          <Icon
-            size={isCompact ? 16 : 20}
-            className={cn(
-              "self-center",
-              isMuted ? "stroke-text-03" : "stroke-text-04"
-            )}
-          />
+          <Icon size={isCompact ? 16 : 20} className="line-item-layout-icon" />
         )}
         {loading ? (
-          <div className="h-4 bg-background-neutral-01 rounded-08 w-1/3 animate-pulse" />
+          <div className="line-item-layout-skeleton-title" />
         ) : (
           <Text
             mainContentEmphasis={!isMuted}
@@ -228,9 +220,9 @@ function LineItemLayout({
 
         {/* Row 2: Description (column 2, or column 1 if no icon) */}
         {loading && description ? (
-          <div className="h-6 bg-background-neutral-01 rounded-08 w-2/3 animate-pulse" />
+          <div className="line-item-layout-skeleton-description" />
         ) : description ? (
-          <div className={cn("leading-none", Icon && "col-start-2")}>
+          <div className="line-item-layout-description">
             <Text secondaryBody text03>
               {description}
             </Text>
@@ -239,7 +231,7 @@ function LineItemLayout({
       </div>
 
       {loading && rightChildren ? (
-        <div className="h-5 w-10 bg-background-neutral-01 rounded-full animate-pulse" />
+        <div className="line-item-layout-skeleton-right" />
       ) : rightChildren ? (
         <div className="flex-shrink-0">{rightChildren}</div>
       ) : undefined}
