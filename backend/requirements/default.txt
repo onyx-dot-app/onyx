@@ -23,7 +23,7 @@ aiolimiter==1.2.1
     # via voyageai
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.10.4
+alembic==1.18.0
     # via onyx
 amqp==5.3.1
     # via kombu

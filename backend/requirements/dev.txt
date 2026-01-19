@@ -20,7 +20,7 @@ aiolimiter==1.2.1
     # via voyageai
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.10.4
+alembic==1.18.0
     # via pytest-alembic
 annotated-types==0.7.0
     # via pydantic
