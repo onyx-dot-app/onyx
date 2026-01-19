@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { SvgCheckCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 
@@ -28,7 +29,10 @@ export default function ProgressSteps({
   return (
     <div className={className}>
       {isComplete ? (
-        <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
+        <SvgCheckCircle
+          className={cn(className, "!stroke-status-success-05")}
+          {...props}
+        />
       ) : (
         <svg
           width="16"
