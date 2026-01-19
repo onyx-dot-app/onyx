@@ -273,3 +273,30 @@ class DATestTool(BaseModel):
     description: str
     display_name: str
     in_code_tool_id: str | None
+
+
+# Discord Bot Models
+class DATestDiscordGuildConfig(BaseModel):
+    """Discord guild config model for testing."""
+
+    id: int
+    registration_key: str | None = None  # Only present on creation
+    guild_id: int | None = None
+    guild_name: str | None = None
+    enabled: bool = True
+    default_persona_id: int | None = None
+
+
+class DATestDiscordChannelConfig(BaseModel):
+    """Discord channel config model for testing."""
+
+    id: int
+    guild_config_id: int
+    channel_id: int
+    channel_name: str
+    channel_type: str
+    is_private: bool
+    enabled: bool = False
+    thread_only_mode: bool = False
+    require_bot_invocation: bool = True
+    persona_override_id: int | None = None
