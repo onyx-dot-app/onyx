@@ -46,6 +46,9 @@ export interface ChatScrollContainerProps {
 
   /** Session ID - resets scroll state when changed */
   sessionId?: string;
+
+  /** Whether to apply bottom margin for input bar clearance (default: true) */
+  applyBottomMargin?: boolean;
 }
 
 const FadeOverlay = React.memo(
@@ -79,6 +82,7 @@ const ChatScrollContainer = React.memo(
         isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
+        applyBottomMargin = true,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -385,7 +389,11 @@ const ChatScrollContainer = React.memo(
       ]);
 
       return (
-        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-[7.5rem]">
+        <div
+          className={`flex flex-col flex-1 min-h-0 w-full relative overflow-hidden ${
+            applyBottomMargin ? "mb-[7.5rem]" : ""
+          }`}
+        >
           <FadeOverlay show={hasContentAbove} position="top" />
           <FadeOverlay show={hasContentBelow} position="bottom" />
 

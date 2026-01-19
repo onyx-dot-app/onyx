@@ -374,6 +374,7 @@ export default function NRFPage({
                         stopGenerating={stopGenerating}
                         handleResubmitLastMessage={handleResubmitLastMessage}
                         deepResearchEnabled={deepResearchEnabled}
+                        applyBottomMargin={false}
                       />
                     </div>
                   </div>
