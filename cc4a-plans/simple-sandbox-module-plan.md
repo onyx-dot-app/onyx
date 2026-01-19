@@ -560,7 +560,7 @@ VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get("PERSISTENT_DOCUMENT_STORAGE_PATH", "/data/documents")
 
 # New configs for sandbox module:
-SANDBOX_AGENT_COMMAND = os.environ.get("SANDBOX_AGENT_COMMAND", "opencode").split()
+OPENCODE_PATH = os.environ.get("OPENCODE_PATH", None)  # Auto-detected if not set
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "900"))
 SANDBOX_MAX_CONCURRENT_PER_ORG = int(os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10"))
 SANDBOX_SNAPSHOTS_BUCKET = os.environ.get("SANDBOX_SNAPSHOTS_BUCKET", "sandbox-snapshots")
@@ -656,120 +656,128 @@ class SnapshotManager:
 
 #### 4.1 Implement `sandbox/internal/agent_client.py`
 
-**AgentClient class** (subprocess stdin/stdout based):
+**ACPAgentClient class** - Uses ACP (Agent Client Protocol), a JSON-RPC 2.0 based protocol for communicating with coding agents. See: https://agentclientprotocol.com
 
+The implementation manages the full lifecycle of an `opencode acp` subprocess and provides typed streaming events.
+
+**Key Components:**
+
+1. **ACP Protocol Types** (from `acp.schema` package):
+   - `AgentMessageChunk` - Text/image content from agent
+   - `AgentThoughtChunk` - Agent's internal reasoning
+   - `ToolCallStart` - Tool invocation started
+   - `ToolCallProgress` - Tool execution progress/result
+   - `AgentPlanUpdate` - Agent's execution plan
+   - `CurrentModeUpdate` - Agent mode change
+   - `PromptResponse` - Agent finished (contains stop_reason)
+   - `Error` - An error occurred
+
+2. **Internal State Classes:**
+   ```python
+   @dataclass
+   class ACPSession:
+       """Represents an active ACP session."""
+       session_id: str
+       cwd: str
+
+   @dataclass
+   class ACPClientState:
+       """Internal state for the ACP client."""
+       initialized: bool = False
+       current_session: ACPSession | None = None
+       next_request_id: int = 0
+       agent_capabilities: dict[str, Any] = field(default_factory=dict)
+       agent_info: dict[str, Any] = field(default_factory=dict)
+   ```
+
+3. **ACPAgentClient Class:**
+   ```python
+   class ACPAgentClient:
+       """ACP client for communication with CLI agents.
+
+       Implements JSON-RPC 2.0 over stdin/stdout as specified by ACP.
+       Manages the agent subprocess lifecycle internally.
+
+       Usage:
+           # With context manager (recommended)
+           with ACPAgentClient(cwd="/path/to/project") as client:
+               for event in client.send_message("Hello"):
+                   print(event)
+
+           # Manual lifecycle
+           client = ACPAgentClient()
+           client.start(cwd="/path/to/project")
+           try:
+               for event in client.send_message("Hello"):
+                   print(event)
+           finally:
+               client.stop()
+       """
+
+       def __init__(
+           self,
+           cwd: str | None = None,
+           opencode_path: str | None = None,
+           client_info: dict[str, Any] | None = None,
+           client_capabilities: dict[str, Any] | None = None,
+           auto_start: bool = True,
+       ) -> None: ...
+
+       def start(
+           self,
+           cwd: str | None = None,
+           mcp_servers: list[dict[str, Any]] | None = None,
+           timeout: float = 30.0,
+       ) -> str:
+           """Start agent process and initialize session. Returns session_id."""
+           ...
+
+       def stop(self) -> None:
+           """Stop the agent process and clean up resources."""
+           ...
+
+       def send_message(
+           self,
+           message: str,
+           timeout: float = 300.0,
+       ) -> Generator[ACPEvent, None, None]:
+           """Send message and stream typed ACP events."""
+           ...
+
+       def cancel(self) -> None:
+           """Cancel the current operation."""
+           ...
+
+       @property
+       def is_running(self) -> bool: ...
+
+       @property
+       def session_id(self) -> str | None: ...
+
+       @property
+       def agent_info(self) -> dict[str, Any]: ...
+
+       @property
+       def agent_capabilities(self) -> dict[str, Any]: ...
+   ```
+
+4. **ACP Protocol Flow:**
+   - `initialize` - Handshake with protocol version and capabilities
+   - `session/new` - Create a new session with cwd and optional MCP servers
+   - `session/prompt` - Send user message, receive streaming `session/update` notifications
+   - `session/cancel` - Cancel current operation
+
+5. **Dependencies:**
+   - `acp` package (provides schema types)
+   - `opencode` binary (auto-detected via PATH or common install locations)
+
+**Configuration** (add to `build/configs.py`):
 ```python
-import json
-import subprocess
-from typing import Generator
-from pathlib import Path
-
-class AgentClient:
-    """Handles communication with CLI agent subprocess."""
-
-    def send_message(
-        self,
-        process: subprocess.Popen,
-        message: str,
-        conversation_history: list[dict] | None = None,
-    ) -> Generator[dict, None, None]:
-        """
-        Send message to agent and stream response.
-
-        Protocol:
-        - Write JSON request to stdin (newline-terminated)
-        - Read JSON-lines responses from stdout
-        - Each line is a StreamPacket
-        """
-        request = {
-            "type": "message",
-            "content": message,
-            "history": conversation_history or [],
-        }
-
-        # Send request
-        process.stdin.write(json.dumps(request) + "\n")
-        process.stdin.flush()
-
-        # Stream response
-        for line in process.stdout:
-            line = line.strip()
-            if not line:
-                continue
-
-            try:
-                packet = json.loads(line)
-                yield packet
-
-                # Check for end of response
-                if packet.get("type") == "done":
-                    break
-            except json.JSONDecodeError:
-                # Log and continue
-                continue
-
-    def health_check(self, process: subprocess.Popen) -> bool:
-        """
-        Check if agent is responsive.
-
-        Send a ping request and wait for pong response.
-        """
-        try:
-            request = {"type": "ping"}
-            process.stdin.write(json.dumps(request) + "\n")
-            process.stdin.flush()
-
-            # Read with timeout
-            import select
-            if select.select([process.stdout], [], [], 5.0)[0]:
-                response = process.stdout.readline()
-                data = json.loads(response)
-                return data.get("type") == "pong"
-            return False
-        except Exception:
-            return False
+# Path to opencode binary (auto-detected if not set)
+OPENCODE_PATH = os.environ.get("OPENCODE_PATH", None)
 ```
 
-**Alternative: HTTP-based AgentClient** (for better streaming support):
-
-```python
-import httpx
-from typing import Generator
-
-class HttpAgentClient:
-    """HTTP-based communication with CLI agent."""
-
-    def send_message(
-        self,
-        agent_port: int,
-        message: str,
-        conversation_history: list[dict] | None = None,
-    ) -> Generator[dict, None, None]:
-        """
-        Send message to agent HTTP server and stream response.
-        """
-        url = f"http://127.0.0.1:{agent_port}/message"
-        payload = {
-            "content": message,
-            "history": conversation_history or [],
-        }
-
-        with httpx.stream("POST", url, json=payload, timeout=300.0) as response:
-            for line in response.iter_lines():
-                if line:
-                    yield json.loads(line)
-
-    def health_check(self, agent_port: int) -> bool:
-        """Check agent health via HTTP endpoint."""
-        try:
-            response = httpx.get(
-                f"http://127.0.0.1:{agent_port}/health",
-                timeout=5.0
-            )
-            return response.status_code == 200
-        except Exception:
-            return False
-```
+**Note:** The HTTP-based alternative is no longer needed since ACP provides full streaming support over stdin/stdout with typed events.
 
 ---
 
@@ -822,7 +830,7 @@ from pathlib import Path
 from onyx.server.features.build.sandbox.internal.directory_manager import DirectoryManager
 from onyx.server.features.build.sandbox.internal.process_manager import ProcessManager
 from onyx.server.features.build.sandbox.internal.snapshot_manager import SnapshotManager
-from onyx.server.features.build.sandbox.internal.agent_client import AgentClient
+from onyx.server.features.build.sandbox.internal.agent_client import ACPAgentClient, ACPEvent
 from onyx.server.features.build.sandbox.models import SandboxInfo, SnapshotInfo, FilesystemEntry
 
 
@@ -867,10 +875,9 @@ class SandboxManager:
         )
         self._process_manager = ProcessManager()
         self._snapshot_manager = SnapshotManager(get_default_file_store())
-        self._agent_client = AgentClient()
 
-        # Track processes in memory: sandbox_id -> (agent_process, nextjs_process)
-        self._agent_processes: dict[str, subprocess.Popen] = {}
+        # Track ACP clients and Next.js processes in memory
+        self._acp_clients: dict[str, ACPAgentClient] = {}  # sandbox_id -> ACPAgentClient
         self._nextjs_processes: dict[str, subprocess.Popen] = {}
 
         # Port allocation tracking
@@ -989,7 +996,7 @@ class SandboxManager:
         """
         Terminate a sandbox.
 
-        1. Terminate agent process (if running)
+        1. Stop ACP client (terminates agent subprocess)
         2. Terminate Next.js server
         3. Release allocated port
         4. Cleanup sandbox directory
@@ -1002,10 +1009,10 @@ class SandboxManager:
         if not sandbox:
             return
 
-        # Terminate agent process
-        if sandbox.agent_pid:
-            self._process_manager.terminate_process(sandbox.agent_pid)
-        self._agent_processes.pop(sandbox_id, None)
+        # Stop ACP client (this terminates the opencode subprocess)
+        client = self._acp_clients.pop(sandbox_id, None)
+        if client:
+            client.stop()
 
         # Terminate Next.js server
         if sandbox.nextjs_pid:
@@ -1083,41 +1090,50 @@ class SandboxManager:
         self,
         sandbox_id: str,
         message: str,
-        conversation_history: list[dict] | None = None,
         db_session: Session,
-    ) -> Generator[dict, None, None]:
-        """Send a message to the CLI agent and stream the response."""
+    ) -> Generator[ACPEvent, None, None]:
+        """Send a message to the CLI agent and stream typed ACP events.
+
+        Yields ACPEvent objects:
+        - AgentMessageChunk: Text/image content from agent
+        - AgentThoughtChunk: Agent's internal reasoning
+        - ToolCallStart: Tool invocation started
+        - ToolCallProgress: Tool execution progress/result
+        - AgentPlanUpdate: Agent's execution plan
+        - CurrentModeUpdate: Agent mode change
+        - PromptResponse: Agent finished (has stop_reason)
+        - Error: An error occurred
+        """
         from pathlib import Path
         from onyx.server.features.build.db.sandbox import (
             get_sandbox_by_id,
             update_sandbox_heartbeat,
             update_sandbox_agent_pid,
         )
-        from onyx.server.features.build.configs import SANDBOX_AGENT_COMMAND
+        from onyx.server.features.build.sandbox.internal.agent_client import ACPAgentClient
 
         sandbox = get_sandbox_by_id(db_session, sandbox_id)
         if not sandbox:
             raise ValueError(f"Sandbox {sandbox_id} not found")
 
-        # Start agent process if not already running
-        process = self._agent_processes.get(sandbox_id)
-        if not process or process.poll() is not None:
+        # Get or create ACP client for this sandbox
+        client = self._acp_clients.get(sandbox_id)
+        if client is None or not client.is_running:
             sandbox_path = Path(sandbox.directory_path)
-            venv_path = self._directory_manager.get_venv_path(sandbox_path)
 
-            process = self._process_manager.start_agent_process(
-                sandbox_path=sandbox_path,
-                agent_command=SANDBOX_AGENT_COMMAND,
-                venv_path=venv_path if venv_path.exists() else None,
-            )
-            self._agent_processes[sandbox_id] = process
-            update_sandbox_agent_pid(db_session, sandbox.id, process.pid)
+            # Create and start ACP client
+            client = ACPAgentClient(cwd=str(sandbox_path))
+            self._acp_clients[sandbox_id] = client
+
+            # Track the agent PID (from the opencode subprocess)
+            if client._process:
+                update_sandbox_agent_pid(db_session, sandbox.id, client._process.pid)
 
         # Update heartbeat on message send
         update_sandbox_heartbeat(db_session, sandbox_id)
 
-        for packet in self._agent_client.send_message(process, message, conversation_history):
-            yield packet
+        for event in client.send_message(message):
+            yield event
             # Update heartbeat on activity
             update_sandbox_heartbeat(db_session, sandbox_id)
 
@@ -1345,10 +1361,14 @@ backend/
 
 ## Dependencies
 
-Add to `requirements.txt`:
+Add to `requirements.txt` / `pyproject.toml`:
 ```
+acp              # Agent Client Protocol schema types (for typed ACP events)
 psutil>=5.9.0    # Process monitoring (optional, for detailed process info)
 ```
+
+**External Dependency:**
+- `opencode` binary - The CLI agent that implements ACP. Auto-detected via PATH or common install locations (`~/.opencode/bin/opencode`, `/usr/local/bin/opencode`).
 
 Note: No Docker SDK needed for the simple filesystem-based approach.
 
@@ -1382,7 +1402,7 @@ When ready to upgrade to full container isolation:
 
 ## Open Items for Follow-up
 
-1. **CLI Agent Protocol**: Define exact stdin/stdout JSON-lines protocol for subprocess communication
+1. ~~**CLI Agent Protocol**: Define exact stdin/stdout JSON-lines protocol for subprocess communication~~ **RESOLVED**: Using ACP (Agent Client Protocol) - JSON-RPC 2.0 over stdin/stdout with typed events from `acp.schema`
 2. **Knowledge Volume Setup**: Decide between copy vs symlink for knowledge files
 3. **Frontend Integration**: Need frontend plan for VM Explorer and artifact rendering
 4. **Production Hardening**: When to migrate to Docker-based approach

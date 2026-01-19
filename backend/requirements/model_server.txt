@@ -2,6 +2,8 @@
 #    uv export --no-emit-project --no-default-groups --no-hashes --extra model_server -o backend/requirements/model_server.txt
 accelerate==1.6.0
     # via onyx
+agent-client-protocol==0.7.1
+    # via onyx
 aioboto3==15.1.0
     # via onyx
 aiobotocore==2.24.0
@@ -364,6 +366,7 @@ pycparser==2.23 ; implementation_name != 'PyPy' and platform_python_implementati
     # via cffi
 pydantic==2.11.7
     # via
+    #   agent-client-protocol
     #   cohere
     #   fastapi
     #   google-cloud-aiplatform
