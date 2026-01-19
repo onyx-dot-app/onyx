@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import PERSISTENT_DOCUMENT_STORAGE_ENABLED
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -24,6 +23,7 @@ from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
+from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_ENABLED
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
