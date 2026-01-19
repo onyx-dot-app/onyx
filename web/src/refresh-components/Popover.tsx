@@ -82,19 +82,27 @@ const PopoverClose = PopoverPrimitive.Close;
  *
  * The main popover container with default styling.
  *
+ * @param width - Width of the popover: "fit", "md", or "lg". Default: "fit"
+ *
  * @example
  * ```tsx
  * <Popover.Content align="start" sideOffset={8}>
  *   <div>Popover content here</div>
  * </Popover.Content>
  *
- * // Custom styling
- * <Popover.Content className="w-[20rem]">
- *   <div>Custom sized content</div>
+ * // Medium width
+ * <Popover.Content width="md">
+ *   <div>Medium width content</div>
+ * </Popover.Content>
+ *
+ * // Large width
+ * <Popover.Content width="lg">
+ *   <div>Large width content</div>
  * </Popover.Content>
  * ```
  */
-const widthClasses = {
+type PopoverContentWidth = "fit" | "md" | "lg";
+const widthClasses: Record<PopoverContentWidth, string> = {
   fit: "w-fit",
   md: "w-[12rem]",
   lg: "w-[18rem]",
@@ -103,15 +111,16 @@ interface PopoverContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
   > {
-  fit?: boolean;
-  md?: boolean;
-  lg?: boolean;
+  width?: PopoverContentWidth;
+  ref?: React.Ref<React.ComponentRef<typeof PopoverPrimitive.Content>>;
 }
-const PopoverContent = React.forwardRef<
-  React.ComponentRef<typeof PopoverPrimitive.Content>,
-  PopoverContentProps
->(({ fit, md, lg, align = "center", sideOffset = 4, ...props }, ref) => {
-  const width = fit ? "fit" : md ? "md" : lg ? "lg" : "fit";
+function PopoverContent({
+  width = "fit",
+  align = "center",
+  sideOffset = 4,
+  ref,
+  ...props
+}: PopoverContentProps) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -126,14 +135,6 @@ const PopoverContent = React.forwardRef<
       />
     </PopoverPrimitive.Portal>
   );
-});
-PopoverContent.displayName = PopoverPrimitive.Content.displayName;
-
-/**
- * Internal helper for rendering separator lines
- */
-function SeparatorHelper() {
-  return <Separator className="py-0 px-2" />;
 }
 
 export default Object.assign(PopoverRoot, {
@@ -147,6 +148,10 @@ export default Object.assign(PopoverRoot, {
 // ============================================================================
 // Common Layouts
 // ============================================================================
+
+function SeparatorHelper() {
+  return <Separator className="py-0 px-2" />;
+}
 
 /**
  * Popover Menu Component
