@@ -76,10 +76,16 @@ def upgrade() -> None:
         try:
             # Exclude public credential (id=0) which must remain user_id=NULL
             # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
+            # Exclude builtin personas (builtin_persona=True) which must remain user_id=NULL
+            # Exclude system input prompts (is_public=True with user_id=NULL) which must remain user_id=NULL
             if table == "credential":
                 condition = "user_id IS NULL AND id != 0"
             elif table == "tool":
                 condition = "user_id IS NULL AND in_code_tool_id IS NULL"
+            elif table == "persona":
+                condition = "user_id IS NULL AND builtin_persona = false"
+            elif table == "inputprompt":
+                condition = "user_id IS NULL AND is_public = false"
             else:
                 condition = "user_id IS NULL"
             result = connection.execute(

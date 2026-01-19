@@ -107,7 +107,7 @@ def _get_acl_for_user(user: User, db_session: Session) -> set[str]:
     return {PUBLIC_DOC_PAT}
 
 
-def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
+def get_acl_for_user(user: User | None, db_session: Session | None = None) -> set[str]:
     versioned_acl_for_user_fn = fetch_versioned_implementation(
         "onyx.access.access", "_get_acl_for_user"
     )

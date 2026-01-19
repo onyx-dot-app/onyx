@@ -176,7 +176,7 @@ def get_best_persona_id_for_user(
 
 
 def _get_persona_by_name(
-    persona_name: str, user: User, db_session: Session
+    persona_name: str, user: User | None, db_session: Session
 ) -> Persona | None:
     """Admins can see all, regular users can only fetch their own.
     If user is None, assume the user is an admin or auth is disabled."""
@@ -324,7 +324,7 @@ def create_update_persona(
 
 def update_persona_shared(
     persona_id: int,
-    user_ids: list[UUID],
+    user_ids: list[UUID] | None,
     user: User,
     db_session: Session,
     group_ids: list[int] | None = None,
@@ -793,7 +793,7 @@ def update_personas_display_priority(
 
 
 def upsert_persona(
-    user: User,
+    user: User | None,
     name: str,
     description: str,
     num_chunks: float,
@@ -848,9 +848,10 @@ def upsert_persona(
                 f"Assistant with name '{name}' already exists. Please rename your assistant."
             )
 
-    if existing_persona:
+    if existing_persona and user:
         # this checks if the user has permission to edit the persona
         # will raise an Exception if the user does not have permission
+        # Skip check if user is None (system/admin operation)
         existing_persona = fetch_persona_by_id_for_user(
             db_session=db_session,
             persona_id=existing_persona.id,
@@ -977,7 +978,7 @@ def upsert_persona(
         # Create new persona - prompt configuration will be set separately if needed
         new_persona = Persona(
             id=persona_id,
-            user_id=user.id,
+            user_id=user.id if user else None,
             is_public=is_public,
             name=name,
             description=description,
@@ -1092,7 +1093,7 @@ def validate_persona_tools(tools: list[Tool], db_session: Session) -> None:
 # a direct mapping indicating whether a user has access to a specific persona?
 def get_persona_by_id(
     persona_id: int,
-    user: User,
+    user: User | None,
     db_session: Session,
     include_deleted: bool = False,
     is_for_edit: bool = True,  # NOTE: assume true for safety

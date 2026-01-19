@@ -90,9 +90,7 @@ def get_notifications(
     notif_type: NotificationType | None = None,
     include_dismissed: bool = True,
 ) -> list[Notification]:
-    query = select(Notification).where(
-        Notification.user_id == user.id if user else Notification.user_id.is_(None)
-    )
+    query = select(Notification).where(Notification.user_id == user.id)
     if not include_dismissed:
         query = query.where(Notification.dismissed.is_(False))
     if notif_type:

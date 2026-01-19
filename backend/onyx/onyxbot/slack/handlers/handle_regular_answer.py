@@ -179,8 +179,8 @@ def handle_regular_answer(
     def _get_slack_answer(
         new_message_request: SendMessageRequest,
         slack_context_str: str | None,
-        # passing in anonymous user to make the answer based on public documents only
-        onyx_user: User,
+        # pass in `None` to make the answer based on public documents only
+        onyx_user: User | None,
     ) -> ChatBasicResponse:
         with get_session_with_current_tenant() as db_session:
             packets = handle_stream_message_objects(

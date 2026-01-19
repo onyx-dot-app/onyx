@@ -6,9 +6,9 @@ from onyx.db.models import Memory
 from onyx.db.models import User
 
 
-def get_memories(user: User, db_session: Session) -> list[str]:
-    # Anonymous users don't have memories
-    if str(user.id) == ANONYMOUS_USER_UUID:
+def get_memories(user: User | None, db_session: Session) -> list[str]:
+    # Anonymous users and None users don't have memories
+    if not user or str(user.id) == ANONYMOUS_USER_UUID:
         return []
 
     if not user.use_memories:

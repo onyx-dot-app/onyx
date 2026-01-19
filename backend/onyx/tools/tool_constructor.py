@@ -95,7 +95,7 @@ def construct_tools(
     persona: Persona,
     db_session: Session,
     emitter: Emitter,
-    user: User,
+    user: User | None,
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,

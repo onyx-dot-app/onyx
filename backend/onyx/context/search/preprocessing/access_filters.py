@@ -5,7 +5,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.db.models import User
 
 
-def build_access_filters_for_user(user: User, session: Session) -> list[str]:
+def build_access_filters_for_user(user: User | None, session: Session) -> list[str]:
     user_acl = get_acl_for_user(user, session)
     return list(user_acl)
 
