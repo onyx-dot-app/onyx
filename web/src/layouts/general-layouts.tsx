@@ -139,17 +139,6 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(
 );
 Section.displayName = "Section";
 
-export interface LineItemLayoutProps {
-  icon?: React.FunctionComponent<IconProps>;
-  title: string;
-  description?: string;
-  rightChildren?: React.ReactNode;
-
-  compact?: boolean;
-  strikethrough?: boolean;
-  secondary?: boolean;
-  loading?: boolean;
-}
 /**
  * LineItemLayout - A layout for icon + title + description rows
  *
@@ -166,17 +155,40 @@ export interface LineItemLayoutProps {
  * - Icon vertically centers with title
  * - Description aligns with title's left edge (both in grid column 2)
  * - rightChildren is outside the grid, in the outer flexbox
+ *
+ * @param icon - Optional icon component to display on the left
+ * @param title - The main title text (required)
+ * @param description - Optional description text below the title
+ * @param rightChildren - Optional content to render on the right side
+ * @param variant - Visual variant: "primary" (default), "secondary" (compact), or "tertiary" (compact + muted)
+ * @param strikethrough - If true, applies line-through style to title. Default: false
+ * @param loading - If true, renders skeleton placeholders instead of content. Default: false
  */
+type LineItemLayoutVariant = "primary" | "secondary" | "tertiary";
+export interface LineItemLayoutProps {
+  icon?: React.FunctionComponent<IconProps>;
+  title: string;
+  description?: string;
+  rightChildren?: React.ReactNode;
+
+  variant?: LineItemLayoutVariant;
+  strikethrough?: boolean;
+  loading?: boolean;
+}
 function LineItemLayout({
   icon: Icon,
   title,
   description,
   rightChildren,
-  compact,
+
+  variant = "primary",
   strikethrough,
-  secondary,
   loading,
 }: LineItemLayoutProps) {
+  // Derive styling from variant
+  const isCompact = variant === "secondary" || variant === "tertiary";
+  const isMuted = variant === "tertiary";
+
   return (
     <Section flexDirection="row" justifyContent="between" alignItems="start">
       <div
@@ -190,10 +202,10 @@ function LineItemLayout({
         {/* Row 1: Icon, Title */}
         {Icon && (
           <Icon
-            size={compact ? 16 : 20}
+            size={isCompact ? 16 : 20}
             className={cn(
               "self-center",
-              secondary ? "stroke-text-03" : "stroke-text-04"
+              isMuted ? "stroke-text-03" : "stroke-text-04"
             )}
           />
         )}
@@ -201,8 +213,8 @@ function LineItemLayout({
           <div className="h-4 bg-background-neutral-01 rounded-08 w-1/3 animate-pulse" />
         ) : (
           <Text
-            mainContentEmphasis={!secondary}
-            text03={secondary}
+            mainContentEmphasis={!isMuted}
+            text03={isMuted}
             className={cn(strikethrough && "line-through")}
           >
             {title}

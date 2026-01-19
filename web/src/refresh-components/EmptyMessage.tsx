@@ -50,8 +50,7 @@ export default function EmptyMessage({
         icon={Icon}
         title={title}
         description={description}
-        compact
-        secondary
+        variant="tertiary"
       />
     </Card>
   );

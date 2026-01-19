@@ -51,27 +51,20 @@ type CardVariant =
   | "borderless";
 
 export interface CardProps extends SectionProps {
-  // card variants
+  // variants
   variant?: CardVariant;
-  borderless?: boolean;
 
   ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Card({
   variant = "primary",
-  borderless,
   padding = 1,
   ref,
   ...props
 }: CardProps) {
   return (
-    <div
-      ref={ref}
-      className="card"
-      data-variant={variant}
-      data-borderless={borderless || undefined}
-    >
+    <div ref={ref} className="card" data-variant={variant}>
       <Section alignItems="start" padding={padding} height="fit" {...props} />
     </div>
   );
