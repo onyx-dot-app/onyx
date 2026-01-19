@@ -62,9 +62,11 @@ VERTEXAI_VISIBLE_MODEL_NAMES = {
 }
 
 # AgentGateway - Custom LLM gateway for routing requests through a proxy
+# The proxy service (agentgateway_proxy) handles URL translation and streaming conversion
+# Users should set AGENTGATEWAY_URL in .env to point to their AgentGateway instance
 AGENT_GATEWAY_PROVIDER_NAME = "agent_gateway"
 AGENT_GATEWAY_DEFAULT_MODEL = "gemini-2.5-flash"
-AGENT_GATEWAY_DEFAULT_API_BASE = "http://52.147.214.252:8080/gemini"
+AGENT_GATEWAY_DEFAULT_API_BASE = "http://agentgateway_proxy:8888"
 # Models available through the AgentGateway
 AGENT_GATEWAY_VISIBLE_MODEL_NAMES = {
     "gemini-2.5-flash",

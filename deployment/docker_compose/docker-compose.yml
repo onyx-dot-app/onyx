@@ -468,6 +468,54 @@ services:
     # uncomment below + comment out the above to use the `docker-in-docker` execution mode
     # privileged: true
 
+  # AgentGateway Proxy - bridges LiteLLM's OpenAI-compatible API to AgentGateway
+  # This proxy is required when using AgentGateway as an LLM provider because:
+  # 1. LiteLLM sends requests to /chat/completions but AgentGateway expects /gemini
+  # 2. AgentGateway returns non-streaming responses but Onyx expects SSE streaming
+  # To enable: Set AGENTGATEWAY_ENABLED=true and AGENTGATEWAY_URL in your .env file
+  agentgateway_proxy:
+    build:
+      context: ./agentgateway_proxy
+      dockerfile: Dockerfile
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+      if [ \"$${AGENTGATEWAY_ENABLED}\" = \"True\" ] || [ \"$${AGENTGATEWAY_ENABLED}\" = \"true\" ]; then
+        exec python proxy.py;
+      else
+        echo 'AgentGateway proxy is disabled (AGENTGATEWAY_ENABLED=false), skipping...';
+        exec tail -f /dev/null;
+      fi
+      "
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    environment:
+      - AGENTGATEWAY_URL=${AGENTGATEWAY_URL:-}
+      - AGENTGATEWAY_ENABLED=${AGENTGATEWAY_ENABLED:-false}
+      - PROXY_PORT=8888
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8888/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # PRODUCTION: Uncomment the following certbot service for SSL certificate management
   # certbot:
   #   image: certbot/certbot
