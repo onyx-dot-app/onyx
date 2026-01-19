@@ -222,7 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
           </InputAvatar>
         </Popover.Trigger>
         <Popover.Content>
-          <PopoverMenu md>
+          <PopoverMenu>
             {[
               <LineItem
                 key="upload-image"
@@ -1362,7 +1362,13 @@ export default function AgentEditorPage({
                             tooltip={imageGenerationDisabledTooltip}
                             side="left"
                           >
-                            <Card disabled={!isImageGenerationAvailable}>
+                            <Card
+                              variant={
+                                isImageGenerationAvailable
+                                  ? undefined
+                                  : "disabled"
+                              }
+                            >
                               <InputLayouts.Horizontal
                                 name="image_generation"
                                 title="Image Generation"
@@ -1376,7 +1382,9 @@ export default function AgentEditorPage({
                             </Card>
                           </SimpleTooltip>
 
-                          <Card>
+                          <Card
+                            variant={!!webSearchTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="web_search"
                               title="Web Search"
@@ -1389,7 +1397,9 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card>
+                          <Card
+                            variant={!!openURLTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="open_url"
                               title="Open URL"
@@ -1402,7 +1412,11 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card disabled={!codeInterpreterTool}>
+                          <Card
+                            variant={
+                              !!codeInterpreterTool ? undefined : "disabled"
+                            }
+                          >
                             <InputLayouts.Horizontal
                               name="code_interpreter"
                               title="Code Interpreter"

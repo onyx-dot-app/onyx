@@ -474,7 +474,7 @@ export default function AgentsNavigationPage() {
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start">
-                <PopoverMenu md>
+                <PopoverMenu>
                   {[
                     <InputTypeIn
                       key="created-by"
@@ -551,7 +551,7 @@ export default function AgentsNavigationPage() {
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start">
-                <PopoverMenu md>
+                <PopoverMenu>
                   {[
                     <InputTypeIn
                       key="actions"
