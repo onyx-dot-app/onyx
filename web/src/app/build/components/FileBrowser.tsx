@@ -24,7 +24,7 @@ import {
   getArtifactUrl,
   FileSystemEntry,
 } from "@/lib/build/client";
-import FilePreviewModal from "./FilePreviewModal";
+import FilePreviewModal from "@/app/build/components/FilePreviewModal";
 
 interface FileBrowserProps {
   sessionId: string;
