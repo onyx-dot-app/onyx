@@ -22,7 +22,7 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
@@ -103,8 +103,10 @@ def upsert_ingestion_doc(
 
     # Need to index for both the primary and secondary index if possible
     active_search_settings = get_active_search_settings(db_session)
-    curr_doc_index = get_default_document_index(
+    # This flow is for indexing so we get all indices.
+    document_indices = get_all_document_indices(
         active_search_settings.primary,
+        None,
         None,
     )
 
@@ -128,7 +130,7 @@ def upsert_ingestion_doc(
 
     indexing_pipeline_result = run_indexing_pipeline(
         embedder=index_embedding_model,
-        document_index=curr_doc_index,
+        document_indices=document_indices,
         ignore_time_skip=True,
         db_session=db_session,
         tenant_id=tenant_id,
@@ -151,13 +153,14 @@ def upsert_ingestion_doc(
             search_settings=sec_search_settings
         )
 
-        sec_doc_index = get_default_document_index(
-            active_search_settings.secondary, None
+        # This flow is for indexing so we get all indices.
+        sec_document_indices = get_all_document_indices(
+            active_search_settings.secondary, None, None
         )
 
         run_indexing_pipeline(
             embedder=new_index_embedding_model,
-            document_index=sec_doc_index,
+            document_indices=sec_document_indices,
             ignore_time_skip=True,
             db_session=db_session,
             tenant_id=tenant_id,
@@ -192,15 +195,18 @@ def delete_ingestion_doc(
         )
 
     active_search_settings = get_active_search_settings(db_session)
-    doc_index = get_default_document_index(
+    # This flow is for deletion so we get all indices.
+    document_indices = get_all_document_indices(
         active_search_settings.primary,
         active_search_settings.secondary,
+        None,
     )
-    doc_index.delete_single(
-        doc_id=document_id,
-        tenant_id=tenant_id,
-        chunk_count=document.chunk_count,
-    )
+    for document_index in document_indices:
+        document_index.delete_single(
+            doc_id=document_id,
+            tenant_id=tenant_id,
+            chunk_count=document.chunk_count,
+        )
 
     # Delete from database
     delete_documents_complete__no_commit(db_session, [document_id])

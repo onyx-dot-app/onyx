@@ -208,8 +208,19 @@ OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 920
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
 
-ENABLE_OPENSEARCH_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_FOR_ONYX", "").lower() == "true"
+# This is the "base" config for now, the idea is that at least for our dev
+# environments we always want to be dual indexing into both OpenSearch and Vespa
+# to stress test the new codepaths. Only enable this if there is some instance
+# of OpenSearch running for the relevant Onyx instance.
+ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
+    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "").lower() == "true"
+)
+# Given that the "base" config above is true, this enables whether we want to
+# retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
+# in the event we see issues with OpenSearch retrieval in our dev environments.
+ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
 )
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
