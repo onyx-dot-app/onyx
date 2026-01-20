@@ -1,4 +1,5 @@
 import { LLMProviderName, LLMProviderView } from "../interfaces";
+import { AgentGatewayForm } from "./AgentGatewayForm";
 import { AnthropicForm } from "./AnthropicForm";
 import { OpenAIForm } from "./OpenAIForm";
 import { OllamaForm } from "./OllamaForm";
@@ -38,6 +39,8 @@ export const getFormForExistingProvider = (provider: LLMProviderView) => {
       return <BedrockForm existingLlmProvider={provider} />;
     case LLMProviderName.OPENROUTER:
       return <OpenRouterForm existingLlmProvider={provider} />;
+    case LLMProviderName.AGENT_GATEWAY:
+      return <AgentGatewayForm existingLlmProvider={provider} />;
     default:
       return <CustomForm existingLlmProvider={provider} />;
   }

@@ -51,6 +51,19 @@
           "display_name": "Kimi K2 0905"
         }
       ]
+    },
+    "agent_gateway": {
+      "default_model": "gemini-2.5-flash",
+      "additional_visible_models": [
+        {
+          "name": "gemini-2.5-flash",
+          "display_name": "Gemini 2.5 Flash"
+        },
+        {
+          "name": "gemini-2.5-pro",
+          "display_name": "Gemini 2.5 Pro"
+        }
+      ]
     }
   }
 }

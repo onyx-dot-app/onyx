@@ -24,6 +24,7 @@ class LlmProviderNames(str, Enum):
     OLLAMA_CHAT = "ollama_chat"
     MISTRAL = "mistral"
     LITELLM_PROXY = "litellm_proxy"
+    AGENT_GATEWAY = "agent_gateway"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -41,6 +42,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENROUTER,
     LlmProviderNames.AZURE,
     LlmProviderNames.OLLAMA_CHAT,
+    LlmProviderNames.AGENT_GATEWAY,
 ]
 
 
@@ -56,6 +58,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.AZURE: "Azure",
     "ollama": "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
+    LlmProviderNames.AGENT_GATEWAY: "AgentGateway",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",

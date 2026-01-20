@@ -6,6 +6,7 @@ export enum LLMProviderName {
   OPENROUTER = "openrouter",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
+  AGENT_GATEWAY = "agent_gateway",
   CUSTOM = "custom",
 }
 

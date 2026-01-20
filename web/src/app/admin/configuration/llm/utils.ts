@@ -69,6 +69,8 @@ export const getProviderIcon = (
     bedrock_converse: SvgAws,
     openrouter: SvgOpenrouter,
     vertex_ai: GeminiIcon,
+    // AgentGateway - uses Gemini icon since it routes Gemini models
+    agent_gateway: GeminiIcon,
   };
 
   const lowerProviderName = providerName.toLowerCase();
