@@ -173,3 +173,47 @@ def get_webapp_path(
 ) -> StreamingResponse | Response:
     """Proxy any subpath of the webapp (static assets, etc.) for a specific session."""
     return _proxy_request(path, request, session_id, db_session)
+
+
+# Separate router for Next.js static assets at /_next/*
+# This is needed because Next.js apps may reference assets with root-relative paths
+# that don't get rewritten. The session_id is extracted from the Referer header.
+nextjs_assets_router = APIRouter()
+
+
+def _extract_session_from_referer(request: Request) -> UUID | None:
+    """Extract session_id from the Referer header.
+
+    Expects Referer to contain /api/build/sessions/{session_id}/webapp
+    """
+    import re
+
+    referer = request.headers.get("referer", "")
+    match = re.search(r"/api/build/sessions/([a-f0-9-]+)/webapp", referer)
+    if match:
+        try:
+            return UUID(match.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+@nextjs_assets_router.get("/_next/{path:path}", response_model=None)
+def get_nextjs_assets(
+    path: str,
+    request: Request,
+    _: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse | Response:
+    """Proxy Next.js static assets requested at root /_next/ path.
+
+    The session_id is extracted from the Referer header since these requests
+    come from within the iframe context.
+    """
+    session_id = _extract_session_from_referer(request)
+    if not session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not determine session from request context",
+        )
+    return _proxy_request(f"_next/{path}", request, session_id, db_session)

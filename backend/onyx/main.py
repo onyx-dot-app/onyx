@@ -385,7 +385,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, build_session_router)
     include_router_with_global_prefix_prepended(application, build_v1_router)
-    include_router_with_global_prefix_prepended(application, nextjs_assets_router)
+    # Mount nextjs_assets_router at root level (not /api) to catch /_next/* requests
+    application.include_router(nextjs_assets_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(
