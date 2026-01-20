@@ -123,6 +123,26 @@ class TracingProcessor(abc.ABC):
             - May block while processing completes
         """
 
+    def score_trace(
+        self, trace_id: str, score: float, comment: str | None = None
+    ) -> None:
+        """Score a trace with a numeric value.
+
+        This method is optional - processors that don't support scoring can
+        simply not override this method (it has a default no-op implementation).
+
+        Args:
+            trace_id: The trace ID to score
+            score: The score value (typically 0.0 to 1.0, but can be any float)
+            comment: Optional comment explaining the score
+
+        Notes:
+            - Called asynchronously after trace completion (e.g., from user feedback)
+            - Should handle errors gracefully and not raise exceptions
+            - Processors that don't support scoring can ignore this method
+        """
+        # Default no-op implementation - processors can override if they support scoring
+
 
 class TracingExporter(abc.ABC):
     """Exports traces and spans. For example, could log them or send them to a backend."""

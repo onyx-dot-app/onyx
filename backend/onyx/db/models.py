@@ -2157,6 +2157,8 @@ class ChatMessage(Base):
     )
     # True if this assistant message is a clarification question (deep research flow)
     is_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Trace ID for linking to Langfuse/OpenTelemetry traces
+    trace_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")

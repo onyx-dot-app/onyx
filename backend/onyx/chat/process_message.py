@@ -654,6 +654,7 @@ def handle_stream_message_objects(
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
                 include_citations=new_msg_req.include_citations,
+                assistant_message=assistant_response,
             )
 
     except ValueError as e:

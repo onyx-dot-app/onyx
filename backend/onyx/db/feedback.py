@@ -263,6 +263,30 @@ def create_chat_message_feedback(
     db_session.add(message_feedback)
     db_session.commit()
 
+    # Refresh the chat_message to ensure we have the latest trace_id
+    db_session.refresh(chat_message)
+
+    # Update trace score if feedback is positive or negative and trace_id exists
+    if is_positive is not None:
+        if chat_message.trace_id:
+            logger.debug(
+                f"Updating trace score for message {chat_message_id}, "
+                f"trace_id: {chat_message.trace_id}, is_positive: {is_positive}, "
+                f"feedback_text: {feedback_text}"
+            )
+            score_value = 1.0 if is_positive else 0.0
+            from onyx.tracing.framework import score_trace
+
+            score_trace(
+                trace_id=chat_message.trace_id,
+                score=score_value,
+                comment=feedback_text,
+            )
+        else:
+            logger.debug(
+                f"No trace_id found for message {chat_message_id}, skipping score update"
+            )
+
 
 def remove_chat_message_feedback(
     chat_message_id: int,

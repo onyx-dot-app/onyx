@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -373,15 +374,38 @@ def run_llm_loop(
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
     include_citations: bool = True,
+    assistant_message: Any | None = None,
 ) -> None:
+    # Get the user's input message (last user message in history)
+    user_input = None
+    for msg in reversed(simple_chat_history):
+        if msg.message_type == MessageType.USER:
+            user_input = msg.message
+            break
+
+    trace_metadata = {
+        "tenant_id": get_current_tenant_id(),
+        "chat_session_id": chat_session_id,
+    }
+    if user_identity:
+        trace_metadata["user_id"] = str(user_identity.user_id)
+    if user_input:
+        trace_metadata["user_input"] = user_input
+
     with trace(
         "run_llm_loop",
         group_id=chat_session_id,
-        metadata={
-            "tenant_id": get_current_tenant_id(),
-            "chat_session_id": chat_session_id,
-        },
-    ):
+        metadata=trace_metadata,
+    ) as current_trace:
+        # Set trace_id directly on assistant_message while trace is active
+        if assistant_message:
+            assistant_message.trace_id = current_trace.trace_id
+            logger.debug(
+                f"Set trace_id {current_trace.trace_id} on assistant_message {assistant_message.id}"
+            )
+        else:
+            logger.warning("assistant_message is None, cannot set trace_id")
+
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
             initialize_litellm,

@@ -14,6 +14,7 @@ from onyx.db.tools import create_tool_call_no_commit
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.tools.models import ToolCallInfo
+from onyx.tracing.framework.create import get_current_trace
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -191,6 +192,20 @@ def save_chat_turn(
     assistant_message.message = message_text
     assistant_message.reasoning_tokens = reasoning_tokens
     assistant_message.is_clarification = is_clarification
+    # trace_id should already be set on assistant_message in run_llm_loop
+    # If not set, try to get it from current trace as fallback
+    if not assistant_message.trace_id:
+        current_trace = get_current_trace()
+        if current_trace:
+            assistant_message.trace_id = current_trace.trace_id
+        else:
+            logger.warning(
+                f"trace_id not set on assistant_message {assistant_message.id} and no active trace available"
+            )
+    else:
+        logger.debug(
+            f"trace_id {assistant_message.trace_id} set on assistant_message {assistant_message.id}"
+        )
 
     # Calculate token count using default tokenizer, when storing, this should not use the LLM
     # specific one so we use a system default tokenizer here.
