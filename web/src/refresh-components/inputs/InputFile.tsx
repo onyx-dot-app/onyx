@@ -51,8 +51,13 @@ export default function InputFile({
   const [isFileMode, setIsFileMode] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Derive disabled/readOnly state from either the boolean props or the variant
+  const isDisabled = disabled || variant === "disabled";
+  const isReadOnly = variant === "readOnly";
+  const isNonEditable = isDisabled || isReadOnly;
+
   function openFilePicker() {
-    if (disabled) return;
+    if (isNonEditable) return;
     fileInputRef.current?.click();
   }
 
@@ -108,6 +113,8 @@ export default function InputFile({
   }
 
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    // Don't allow paste when non-editable
+    if (isNonEditable) return;
     // Switch to editable mode and use pasted text as the value
     const pastedText = e.clipboardData.getData("text");
     if (!pastedText) return;
@@ -122,7 +129,7 @@ export default function InputFile({
   const rightSection = (
     <IconButton
       icon={SvgPaperclip}
-      disabled={disabled}
+      disabled={isNonEditable}
       onClick={noProp(openFilePicker)}
       type="button"
       internal
@@ -140,18 +147,18 @@ export default function InputFile({
         aria-hidden
         className="hidden"
         tabIndex={-1}
-        disabled={disabled}
+        disabled={isNonEditable}
       />
       <InputTypeIn
         {...rest}
         className={className}
         placeholder={placeholder}
-        variant={disabled ? "disabled" : error ? "error" : variant}
+        variant={isDisabled ? "disabled" : error ? "error" : variant}
         value={displayValue}
         onChange={handleChangeWhenTyping}
         onPaste={handlePaste}
         onClear={handleClear}
-        readOnly={isFileMode}
+        readOnly={isFileMode || isReadOnly}
         rightSection={rightSection}
       />
     </>

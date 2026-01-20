@@ -12,8 +12,8 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
+from onyx.setup import setup_document_indices
 from onyx.setup import setup_postgres
-from onyx.setup import setup_vespa
 from shared_configs import configs as shared_configs_module
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -73,8 +73,8 @@ def ensure_full_deployment_setup(
             document_index = get_default_document_index(
                 active.primary, active.secondary
             )
-            ok = setup_vespa(
-                document_index=document_index,
+            ok = setup_document_indices(
+                document_indices=[document_index],
                 index_setting=IndexingSetting.from_db_model(active.primary),
                 secondary_index_setting=(
                     IndexingSetting.from_db_model(active.secondary)
