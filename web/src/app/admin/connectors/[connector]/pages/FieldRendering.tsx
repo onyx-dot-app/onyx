@@ -249,7 +249,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           />
         )
       ) : field.type === "string_tab" ? (
-        <GeneralLayouts.Section alignItems="center">
+        <GeneralLayouts.Section>
           <Text text03 secondaryBody>
             {description}
           </Text>
