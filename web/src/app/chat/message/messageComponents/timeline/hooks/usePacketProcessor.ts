@@ -16,7 +16,7 @@ import {
   transformPacketGroups,
   groupStepsByTurn,
   TurnGroup,
-} from "./timeline/transformers";
+} from "../transformers";
 
 export interface UsePacketProcessorResult {
   // Data

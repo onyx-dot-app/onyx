@@ -1,4 +1,4 @@
-import { GroupedPacket } from "../packetProcessor";
+import { GroupedPacket } from "./hooks/packetProcessor";
 
 /**
  * Transformed step data ready for rendering
