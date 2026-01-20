@@ -11,12 +11,12 @@ import {
   GroupedPacket,
   createInitialState,
   processPackets,
-} from "./packetProcessor";
+} from "@/app/chat/message/messageComponents/timeline/hooks/packetProcessor";
 import {
   transformPacketGroups,
   groupStepsByTurn,
   TurnGroup,
-} from "../transformers";
+} from "@/app/chat/message/messageComponents/timeline/transformers";
 
 export interface UsePacketProcessorResult {
   // Data
