@@ -18,6 +18,36 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def check_prompt_is_unique(
+    prompt: str,
+    user_id: UUID | None,
+    db_session: Session,
+    exclude_id: int | None = None,
+) -> bool:
+    """
+    Check if a prompt shortcut is unique for the given user.
+    Returns True if unique, False if a duplicate exists.
+
+    Args:
+        prompt: The prompt shortcut text to check
+        user_id: The user's ID (None for public prompts)
+        db_session: Database session
+        exclude_id: Optional ID to exclude from the check (for updates)
+    """
+    query = select(InputPrompt).where(InputPrompt.prompt == prompt)
+
+    if user_id is not None:
+        query = query.where(InputPrompt.user_id == user_id)
+    else:
+        query = query.where(InputPrompt.user_id.is_(None))
+
+    if exclude_id is not None:
+        query = query.where(InputPrompt.id != exclude_id)
+
+    existing = db_session.scalar(query)
+    return existing is None
+
+
 def insert_input_prompt_if_not_exists(
     user: User | None,
     input_prompt_id: int | None,
@@ -64,12 +94,21 @@ def insert_input_prompt(
     user: User | None,
     db_session: Session,
 ) -> InputPrompt:
+    user_id = user.id if user is not None else None
+
+    # Check for duplicate prompt shortcut
+    if not check_prompt_is_unique(prompt, user_id, db_session):
+        raise HTTPException(
+            status_code=409,
+            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        )
+
     input_prompt = InputPrompt(
         prompt=prompt,
         content=content,
         active=True,
         is_public=is_public,
-        user_id=user.id if user is not None else None,
+        user_id=user_id,
     )
     db_session.add(input_prompt)
     db_session.commit()
@@ -94,6 +133,17 @@ def update_input_prompt(
     if not validate_user_prompt_authorization(user, input_prompt):
         raise HTTPException(status_code=401, detail="You don't own this prompt")
 
+    # Check for duplicate if the prompt shortcut name is being changed
+    if prompt != input_prompt.prompt:
+        user_id = user.id if user is not None else None
+        if not check_prompt_is_unique(
+            prompt, user_id, db_session, exclude_id=input_prompt_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A prompt shortcut with the name '{prompt}' already exists",
+            )
+
     input_prompt.prompt = prompt
     input_prompt.content = content
     input_prompt.active = active
@@ -105,16 +155,24 @@ def update_input_prompt(
 def validate_user_prompt_authorization(
     user: User | None, input_prompt: InputPrompt
 ) -> bool:
+    """
+    Check if the user is authorized to modify the given input prompt.
+    Returns True only if the user owns the prompt.
+    Returns False for public prompts (only admins can modify those).
+    """
     prompt = InputPromptSnapshot.from_model(input_prompt=input_prompt)
 
-    if prompt.user_id is not None:
-        if user is None:
-            return False
+    # Public prompts cannot be modified via the user API
+    if prompt.is_public or prompt.user_id is None:
+        return False
 
-        user_details = UserInfo.from_model(user)
-        if str(user_details.id) != str(prompt.user_id):
-            return False
-    return True
+    # User must be logged in
+    if user is None:
+        return False
+
+    # User must own the prompt
+    user_details = UserInfo.from_model(user)
+    return str(user_details.id) == str(prompt.user_id)
 
 
 def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> None:
