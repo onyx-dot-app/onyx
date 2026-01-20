@@ -109,6 +109,9 @@ def test_snippet_provided_in_middle() -> None:
         "marketing as a district tartan for Ulster, Scottish weavers (and in two cases English, and "
         "in another American)"
     )
+
+    SNIPPET_START_LOCATION_IN_TEXT = 215398
+
     section = inference_section_from_internet_page_scrape(web_content, snippet)
 
     assert len(section.combined_content) == len(
@@ -119,7 +122,7 @@ def test_snippet_provided_in_middle() -> None:
     no_affix = no_prefix[:MAX_NUM_CHARS_WEB_CONTENT]
 
     # expected start index of the snippet
-    expected_start_idx = 215398
+    expected_start_idx = SNIPPET_START_LOCATION_IN_TEXT
     expected_end_idx = expected_start_idx + len(snippet) - 1
 
     top_padding = (MAX_NUM_CHARS_WEB_CONTENT - len(snippet)) // 2
@@ -178,6 +181,8 @@ def test_similar_snippet_in_middle_fuzzy_match() -> None:
         "in another American)"
     )
 
+    SNIPPET_START_LOCATION_IN_TEXT = 215398
+
     section = inference_section_from_internet_page_scrape(web_content, snippet)
 
     assert len(section.combined_content) == len(
@@ -188,7 +193,7 @@ def test_similar_snippet_in_middle_fuzzy_match() -> None:
     no_affix = no_prefix[:MAX_NUM_CHARS_WEB_CONTENT]
 
     # expected start index of the snippet
-    expected_start_idx = 215398
+    expected_start_idx = SNIPPET_START_LOCATION_IN_TEXT
     expected_end_idx = expected_start_idx + len(snippet) - 1
 
     top_padding = (MAX_NUM_CHARS_WEB_CONTENT - len(snippet)) // 2

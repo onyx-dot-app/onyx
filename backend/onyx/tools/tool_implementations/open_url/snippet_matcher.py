@@ -1,9 +1,11 @@
-import re
 import unicodedata
 
 from pydantic import BaseModel
 from rapidfuzz import fuzz
 from rapidfuzz import utils
+
+from onyx.utils.text_processing import is_zero_width_char
+from onyx.utils.text_processing import normalize_char
 
 
 class SnippetMatchResult(BaseModel):
@@ -126,22 +128,6 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
     # Work with NFC text from here
     text = nfc_text
 
-    # Define all transformations upfront
-    curly_to_straight = {
-        "\u2019": "'",
-        "\u2018": "'",
-        "\u201c": '"',
-        "\u201d": '"',
-    }
-
-    zero_width_chars = {
-        "\u200b",
-        "\u200c",
-        "\u200d",
-        "\ufeff",
-        "\u2060",
-    }
-
     html_entities = {
         "&nbsp;": " ",
         "&#160;": " ",
@@ -168,17 +154,6 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
     i = 0
     last_was_space = True  # Track to avoid leading spaces
 
-    def normalize_char(c: str) -> str:
-        """Normalize a single character (curly quotes, whitespace, punctuation)."""
-        if c in curly_to_straight:
-            c = curly_to_straight[c]
-        if c.isspace():
-            return " "
-        elif re.match(r"[^\w\s\']", c):
-            return " "
-        else:
-            return c.lower()
-
     while i < len(text):
         # Convert NFC position to original position
         orig_pos = nfc_to_orig[i] if i < len(nfc_to_orig) else len(original_text) - 1
@@ -196,7 +171,7 @@ def _normalize_text_with_mapping(text: str) -> tuple[str, list[int]]:
         # If no entity matched, process single character
         if output is None:
             # Skip zero-width characters
-            if char in zero_width_chars:
+            if is_zero_width_char(char):
                 i += 1
                 continue
 
@@ -246,83 +221,21 @@ def _token_based_match(
     if not processed_content or not processed_snippet:
         return NegativeSnippetMatchResult
 
-    # Determine window size
-    snippet_words = processed_snippet.split()
-    window_size = len(snippet_words)
+    res = fuzz.partial_ratio_alignment(processed_content, processed_snippet)
 
-    if window_size == 0:
+    if not res:
         return NegativeSnippetMatchResult
 
-    content_words = processed_content.split()
+    score = res.score
 
-    if window_size > len(content_words):
-        return NegativeSnippetMatchResult
-
-    best_score = 0.0
-    best_word_pos = -1
-
-    # Sliding window through content words
-    for i in range(0, len(content_words) - window_size + 1):
-        window = " ".join(content_words[i : i + window_size])
-
-        score = fuzz.ratio(processed_snippet, window)
-
-        if score > best_score:
-            best_score = score
-            best_word_pos = i
-
-    content_word_positions = _get_word_positions(content, processed_content)
-
-    if best_score >= (min_threshold * 100):
-        original_start = content_word_positions[best_word_pos][0]
-
-        end_word_idx = best_word_pos + window_size - 1
-
-        if end_word_idx >= len(content_word_positions):
-            original_end = len(content) - 1
-        else:
-            original_end = content_word_positions[end_word_idx][1]
+    if score >= (min_threshold * 100):
+        start_idx = res.src_start
+        end_idx = res.src_end
 
         return SnippetMatchResult(
             snippet_located=True,
-            start_idx=original_start,
-            end_idx=original_end,
+            start_idx=start_idx,
+            end_idx=end_idx,
         )
 
     return NegativeSnippetMatchResult
-
-
-def _get_word_positions(original: str, processed: str) -> list[tuple[int, int]]:
-    """
-    Returns a list where index i gives (start, end) char positions
-    in the original string for word i in the processed string.
-    """
-    processed_words = processed.split()
-    word_positions: list[tuple[int, int]] = []
-
-    search_start = 0
-    for word in processed_words:
-        # Find this word in the original (case-insensitive, allowing for punctuation)
-        # We search character by character for alphanumeric sequences
-        while search_start < len(original):
-            # Skip non-alphanumeric chars
-            while search_start < len(original) and not original[search_start].isalnum():
-                search_start += 1
-
-            if search_start >= len(original):
-                break
-
-            # Extract the next "word" from original
-            word_start = search_start
-            while search_start < len(original) and original[search_start].isalnum():
-                search_start += 1
-            word_end = search_start
-
-            original_word = original[word_start:word_end].lower()
-
-            # Check if this matches the processed word
-            if original_word == word:
-                word_positions.append((word_start, word_end))
-                break
-
-    return word_positions

@@ -510,6 +510,18 @@
 						"expected_end_idx": 448
 					},
 					"allow_buffer": true
+				},
+				{
+					"_comment": "token_match_boundary_but_different_length",
+					"name": "critical_negation_difference",
+					"content": "The FDA has approved the new vaccine for emergency use in adults over 18 years old.",
+					"snippet": "The FDA has not approved the new vaccine for emergency use in adults over 18 years old.",
+					"expected_result": {
+						"snippet_located": true,
+						"expected_start_idx": 0,
+						"expected_end_idx": 82
+					},
+					"allow_buffer": true
 				}
 			]
 		},
@@ -898,16 +910,6 @@
 						"Top Scorer: Stephen Curry (42 pts)",
 						"MVP: Draymond Green"
 					],
-					"expected_result": {
-						"snippet_located": false
-					},
-					"allow_buffer": true
-				},
-				{
-					"_comment": "Token matcher boundary: Near match with critical word difference",
-					"name": "critical_negation_difference",
-					"content": "The FDA has approved the new vaccine for emergency use in adults over 18 years old.",
-					"snippet": "The FDA has not approved the new vaccine for emergency use in adults over 18 years old.",
 					"expected_result": {
 						"snippet_located": false
 					},
