@@ -20,53 +20,21 @@ from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import StreamingChoice
 
 
-class IMockLLM(LLM):
+class MockLLMController(abc.ABC):
     @abc.abstractmethod
     def set_response(self, response_tokens: list[str]) -> None:
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def forward(self, n: int) -> None:
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def forward_till_end(self) -> None:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def config(self) -> LLMConfig:
-        pass
-
-    def invoke(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
-        user_identity: LLMUserIdentity | None = None,
-    ) -> ModelResponse:
-        raise NotImplementedError("We only care about streaming atm")
-
-    @abc.abstractmethod
-    def stream(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
-        user_identity: LLMUserIdentity | None = None,
-    ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError
 
 
-class MockLLM(IMockLLM):
+class MockLLM(LLM, MockLLMController):
     def __init__(self):
         self.stream_controller: SyncStreamController | None = None
 
@@ -93,6 +61,19 @@ class MockLLM(IMockLLM):
             temperature=1.0,
             max_input_tokens=1000000000,
         )
+
+    def invoke(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        raise NotImplementedError("We only care about streaming atm")
 
     def stream(
         self,
@@ -157,7 +138,6 @@ class SyncStreamController:
         while not self.is_done:
             if self.pending:
                 token_idx = self.pending.pop(0)
-                print(f"Yielding token {token_idx}")
                 if not self.pending:
                     self._has_pending.clear()
                 return self.tokens[token_idx]
@@ -175,7 +155,7 @@ class SyncStreamController:
 
 
 @contextmanager
-def use_mock_llm() -> Generator[IMockLLM, None, None]:
+def use_mock_llm() -> Generator[MockLLMController, None, None]:
     mock_llm = MockLLM()
 
     with patch("onyx.chat.process_message.get_llm_for_persona", return_value=mock_llm):
