@@ -303,6 +303,7 @@ class LitellmLLM(LLM):
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
         # Vertex Anthropic Opus 4.5 rejects output_config (LiteLLM maps reasoning_effort).
+        # Keep this guard until LiteLLM/Vertex accept the field for this model.
         is_vertex_opus_4_5 = (
             is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
         )
