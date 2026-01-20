@@ -365,11 +365,6 @@ def bulk_invite_users(
     invited and an exception is raised."""
     tenant_id = get_current_tenant_id()
 
-    if current_user is None:
-        raise HTTPException(
-            status_code=400, detail="Auth is disabled, cannot invite users"
-        )
-
     new_invited_emails = []
     email: str
 
@@ -481,11 +476,6 @@ def deactivate_user_api(
     current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if current_user is None:
-        raise HTTPException(
-            status_code=400, detail="Auth is disabled, cannot deactivate user"
-        )
-
     if current_user.email == user_email.user_email:
         raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
 
