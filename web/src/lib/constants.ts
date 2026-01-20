@@ -93,8 +93,20 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
 
+// Stripe Publishable Key Configuration
+// -------------------------------------
+// The publishable key (pk_live_*) is safe to hardcode in client-side code.
+// Unlike secret keys, publishable keys are designed to be public - they can only:
+// - Initialize Stripe.js/Elements on the client
+// - Tokenize payment information
+// They CANNOT make charges, access customer data, or perform sensitive operations.
+//
+// We hardcode the production key so self-hosted deployments can access Stripe
+// billing without requiring manual configuration. The environment variable
+// override is provided for testing purposes (e.g., using pk_test_* keys).
 export const NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+  "pk_live_51NwZq2HlhTYqRZibaZqWXx6aeMOEwLEZaY8Hhx7CQzAsQY9QUfi3QQiI6WXViMYcBnl9uNCAXiyG3vFF5n8Qo39y00zerlmx58";
 
 // Restrict markdown links to safe protocols
 export const ALLOWED_URL_PROTOCOLS = ["http:", "https:", "mailto:"] as const;
