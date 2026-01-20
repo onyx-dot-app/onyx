@@ -663,7 +663,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
             >
               {/* Semi-transparent overlay for readability when background is set */}
               {hasBackground && (
-                <div className="absolute inset-0 bg-background/80 dark:bg-background/85 pointer-events-none" />
+                <div className="absolute inset-0 bg-background/80 pointer-events-none" />
               )}
 
               {/* ProjectUI */}
