@@ -52,23 +52,24 @@ export interface InputTextAreaProps
   variant?: Variants;
 }
 const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
-  ({ variant = "primary", className, rows = 4, ...props }, ref) => {
+  ({ variant = "primary", className, rows = 4, readOnly, ...props }, ref) => {
     const disabled = variant === "disabled";
-    const isReadOnly = variant === "readOnly";
+    const isReadOnlyVariant = variant === "readOnly";
+    const isReadOnly = isReadOnlyVariant || readOnly;
 
     return (
       <div
         className={cn(
           wrapperClasses[variant],
           "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 relative",
-          !isReadOnly && "bg-background-neutral-00",
+          !isReadOnlyVariant && "bg-background-neutral-00",
           className
         )}
       >
         <textarea
           ref={ref}
           disabled={disabled}
-          readOnly={isReadOnly || props.readOnly}
+          readOnly={isReadOnly}
           className={cn(
             "w-full min-h-[3rem] bg-transparent focus:outline-none resize-y p-0.5",
             innerClasses[variant],
