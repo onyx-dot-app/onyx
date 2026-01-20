@@ -109,6 +109,13 @@ export default function ConfigureConnectorModal({
     refreshCredentials();
   };
 
+  const handleCredentialDeleted = (credId: number) => {
+    if (selectedCredential?.id === credId) {
+      setSelectedCredential(null);
+    }
+    refreshCredentials();
+  };
+
   const handleOAuthRedirect = () => {
     // Save state before OAuth redirect
     sessionStorage.setItem(
@@ -211,7 +218,7 @@ export default function ConfigureConnectorModal({
 
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <Modal.Content width="md" height="fit">
+      <Modal.Content width="sm" height="fit">
         <Modal.Header
           icon={SvgPlug}
           title={stepTitle}
@@ -226,6 +233,7 @@ export default function ConfigureConnectorModal({
               selectedCredential={selectedCredential}
               onSelectCredential={setSelectedCredential}
               onCredentialCreated={handleCredentialCreated}
+              onCredentialDeleted={handleCredentialDeleted}
               onContinue={handleContinue}
               onOAuthRedirect={handleOAuthRedirect}
             />
