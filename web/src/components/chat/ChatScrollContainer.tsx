@@ -156,11 +156,8 @@ const ChatScrollContainer = React.memo(
         setHasContentAbove(state.hasContentAbove);
         setHasContentBelow(state.hasContentBelow);
 
-        // Compute button visibility: hide when at bottom, or during streaming with auto-scroll
-        const shouldShowButton =
-          !state.isAtBottom &&
-          !(autoScrollRef.current && isStreamingRef.current);
-        onScrollButtonVisibilityChangeRef.current?.(shouldShowButton);
+        // Show button when user is not at bottom (e.g., scrolled up)
+        onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
       }, [getScrollState]);
 
       // Scroll to bottom of content
@@ -200,11 +197,10 @@ const ChatScrollContainer = React.memo(
       // Expose scrollToBottom via ref
       useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
 
-      // Re-evaluate button visibility when streaming state changes
+      // Re-evaluate button visibility when at-bottom state changes
       useEffect(() => {
-        const shouldShowButton = !isAtBottom && !(autoScroll && isStreaming);
-        onScrollButtonVisibilityChangeRef.current?.(shouldShowButton);
-      }, [isAtBottom, autoScroll, isStreaming]);
+        onScrollButtonVisibilityChangeRef.current?.(!isAtBottom);
+      }, [isAtBottom]);
 
       // Handle scroll events (user scrolls)
       const handleScroll = useCallback(() => {
@@ -228,10 +224,7 @@ const ChatScrollContainer = React.memo(
           setHasContentAbove(state.hasContentAbove);
           setHasContentBelow(state.hasContentBelow);
           // Update button visibility based on actual position
-          const shouldShowButton =
-            !state.isAtBottom &&
-            !(autoScrollRef.current && isStreamingRef.current);
-          onScrollButtonVisibilityChangeRef.current?.(shouldShowButton);
+          onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
         }
 
         // Recalculate spacer for non-auto-scroll mode during user scroll
