@@ -17,6 +17,8 @@ from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -297,6 +299,7 @@ def run_tool_calls(
             SearchToolOverrideKwargs
             | WebSearchToolOverrideKwargs
             | OpenURLToolOverrideKwargs
+            | MemoryToolOverrideKwargs
             | None
         ) = None
 
@@ -329,6 +332,19 @@ def run_tool_calls(
                 citation_mapping=url_to_citation,
             )
             starting_citation_num += 100
+
+        elif isinstance(tool, MemoryTool):
+            fake_memories = [
+                "User prefers dark mode",
+                "User's favorite frontend framework is React",
+            ]
+            override_kwargs = MemoryToolOverrideKwargs(
+                user_name="Yuhong Sun",
+                user_email="yuhong@onyx.app",
+                user_role="engineer",
+                existing_memories=fake_memories,
+                chat_history=minimal_history,
+            )
 
         tool_run_params.append((tool, tool_call, override_kwargs))
 

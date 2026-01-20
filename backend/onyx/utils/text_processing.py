@@ -182,6 +182,44 @@ def clean_up_code_blocks(model_out_raw: str) -> str:
     return model_out_raw.strip().strip("```").strip().replace("\\xa0", "")
 
 
+def extract_json_from_text(content: str) -> dict | None:
+    """Extract JSON from text, handling markdown code blocks commonly used by LLMs.
+
+    Tries extraction in order:
+    1. JSON inside markdown code block (```json ... ``` or ``` ... ```)
+    2. Parse entire content as JSON
+    3. Find any JSON object in the content (first { to last })
+
+    Returns:
+        Parsed JSON dict if found, None otherwise.
+    """
+    # Try to find JSON in markdown code block first
+    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Try to parse the entire content as JSON
+    try:
+        result = json.loads(content)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Try to find any JSON object in the content
+    json_match = re.search(r"\{.*\}", content, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 def clean_model_quote(quote: str, trim_length: int) -> str:
     quote_clean = quote.strip()
     if quote_clean[0] == '"':
