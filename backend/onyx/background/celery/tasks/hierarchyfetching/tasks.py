@@ -24,10 +24,14 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.connectors.factory import instantiate_connector
+from onyx.connectors.interfaces import HierarchyConnector
+from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.connector import mark_cc_pair_as_hierarchy_fetched
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
@@ -35,7 +39,10 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.models import ConnectorCredentialPair
+from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
+from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -211,6 +218,90 @@ def check_for_hierarchy_fetching(self: Task, *, tenant_id: str) -> int | None:
     return tasks_created
 
 
+# Batch size for hierarchy node processing
+HIERARCHY_NODE_BATCH_SIZE = 100
+
+
+def _run_hierarchy_extraction(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    source: DocumentSource,
+    tenant_id: str,
+) -> int:
+    """
+    Run the hierarchy extraction for a connector.
+
+    Instantiates the connector and calls load_hierarchy() if the connector
+    implements HierarchyConnector.
+
+    Returns the total number of hierarchy nodes extracted.
+    """
+    connector = cc_pair.connector
+    credential = cc_pair.credential
+
+    # Instantiate the connector using its configured input type
+    runnable_connector = instantiate_connector(
+        db_session=db_session,
+        source=source,
+        input_type=connector.input_type,
+        connector_specific_config=connector.connector_specific_config,
+        credential=credential,
+    )
+
+    # Check if the connector supports hierarchy fetching
+    if not isinstance(runnable_connector, HierarchyConnector):
+        task_logger.debug(
+            f"Connector {source} does not implement HierarchyConnector, skipping"
+        )
+        return 0
+
+    # Determine time range: start from last hierarchy fetch, end at now
+    last_fetch = cc_pair.last_time_hierarchy_fetch
+    start_time = last_fetch.timestamp() if last_fetch else 0
+    end_time = datetime.now(timezone.utc).timestamp()
+
+    total_nodes = 0
+    node_batch: list[PydanticHierarchyNode] = []
+    redis_client = get_redis_client(tenant_id=tenant_id)
+
+    def _process_batch() -> int:
+        """Process accumulated hierarchy nodes batch."""
+        if not node_batch:
+            return 0
+
+        upserted_nodes = upsert_hierarchy_nodes_batch(
+            db_session=db_session,
+            nodes=node_batch,
+            source=source,
+            commit=True,
+        )
+
+        # Cache in Redis for fast ancestor resolution
+        cache_entries = [
+            HierarchyNodeCacheEntry.from_db_model(node) for node in upserted_nodes
+        ]
+        cache_hierarchy_nodes_batch(
+            redis_client=redis_client,
+            source=source,
+            entries=cache_entries,
+        )
+
+        count = len(node_batch)
+        node_batch.clear()
+        return count
+
+    # Fetch hierarchy nodes from the connector
+    for node in runnable_connector.load_hierarchy(start=start_time, end=end_time):
+        node_batch.append(node)
+        if len(node_batch) >= HIERARCHY_NODE_BATCH_SIZE:
+            total_nodes += _process_batch()
+
+    # Process any remaining nodes
+    total_nodes += _process_batch()
+
+    return total_nodes
+
+
 @shared_task(
     name=OnyxCeleryTask.CONNECTOR_HIERARCHY_FETCHING_TASK,
     soft_time_limit=3600,  # 1 hour soft limit
@@ -253,15 +344,17 @@ def connector_hierarchy_fetching_task(
                 )
                 return
 
-            # TODO: Implement the actual hierarchy fetching logic
-            # This will involve:
-            # 1. Instantiating the connector
-            # 2. Calling a hierarchy-specific method on the connector
-            # 3. Upserting the hierarchy nodes to the database
+            source = cc_pair.connector.source
+            total_nodes = _run_hierarchy_extraction(
+                db_session=db_session,
+                cc_pair=cc_pair,
+                source=source,
+                tenant_id=tenant_id,
+            )
 
             task_logger.info(
                 f"connector_hierarchy_fetching_task: "
-                f"Hierarchy fetching not yet implemented for cc_pair={cc_pair_id}"
+                f"Extracted {total_nodes} hierarchy nodes for cc_pair={cc_pair_id}"
             )
 
             # Update the last fetch time to prevent re-running until next interval
