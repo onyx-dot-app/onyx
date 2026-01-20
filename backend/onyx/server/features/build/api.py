@@ -11,11 +11,17 @@ from fastapi.responses import StreamingResponse
 from onyx.auth.users import current_user
 from onyx.db.models import User
 from onyx.server.features.build.configs import BUILD_WEBAPP_URL
+from onyx.server.features.build.messages_api import router as messages_router
+from onyx.server.features.build.sessions_api import router as sessions_router
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 router = APIRouter(prefix="/build")
+
+# Include sub-routers for sessions and messages
+router.include_router(sessions_router, tags=["build"])
+router.include_router(messages_router, tags=["build"])
 
 # Separate router for Next.js static assets at /_next/*
 # This is needed because Next.js apps reference assets with root-relative paths

@@ -6,9 +6,11 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Artifact
+from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
@@ -268,5 +270,41 @@ def get_session_snapshots(
         db_session.query(Snapshot)
         .filter(Snapshot.session_id == session_id)
         .order_by(desc(Snapshot.created_at))
+        .all()
+    )
+
+
+# Message operations
+def create_message(
+    session_id: UUID,
+    message_type: MessageType,
+    content: str,
+    db_session: Session,
+) -> BuildMessage:
+    """Create a new message in a build session."""
+    message = BuildMessage(
+        session_id=session_id,
+        type=message_type,
+        content=content,
+    )
+    db_session.add(message)
+    db_session.commit()
+    db_session.refresh(message)
+
+    logger.info(
+        f"Created {message_type.value} message {message.id} for session {session_id}"
+    )
+    return message
+
+
+def get_session_messages(
+    session_id: UUID,
+    db_session: Session,
+) -> list[BuildMessage]:
+    """Get all messages for a session, ordered by creation time."""
+    return (
+        db_session.query(BuildMessage)
+        .filter(BuildMessage.session_id == session_id)
+        .order_by(BuildMessage.created_at)
         .all()
     )

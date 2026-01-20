@@ -4174,6 +4174,9 @@ class BuildSession(Base):
     snapshots: Mapped[list["Snapshot"]] = relationship(
         "Snapshot", back_populates="session", cascade="all, delete-orphan"
     )
+    messages: Mapped[list["BuildMessage"]] = relationship(
+        "BuildMessage", back_populates="session", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_build_session_user_created", "user_id", desc("created_at")),
@@ -4285,4 +4288,35 @@ class Snapshot(Base):
 
     __table_args__ = (
         Index("ix_snapshot_session_created", "session_id", desc("created_at")),
+    )
+
+
+class BuildMessage(Base):
+    """Stores messages exchanged in build sessions."""
+
+    __tablename__ = "build_message"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    type: Mapped[MessageType] = mapped_column(
+        Enum(MessageType, native_enum=False, name="messagetype"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    session: Mapped[BuildSession] = relationship(
+        "BuildSession", back_populates="messages"
+    )
+
+    __table_args__ = (
+        Index("ix_build_message_session_created", "session_id", desc("created_at")),
     )
