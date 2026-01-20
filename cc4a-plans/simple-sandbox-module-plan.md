@@ -63,7 +63,7 @@ Based on codebase exploration:
      │   ├── markdown/       # Generated markdown content
      │   └── graphs/         # Generated graph content
      ├── .venv/              # Python virtual environment (copied from template)
-     ├── AGENT.md            # Agent instructions file
+     ├── AGENTS.md            # Agent instructions file
      └── .agent/
          └── skills/         # Agent skills directory
      ```
@@ -307,7 +307,7 @@ class DirectoryManager:
         │   ├── markdown/
         │   └── graphs/
         ├── .venv/              # Python virtual environment
-        ├── AGENT.md            # Agent instructions
+        ├── AGENTS.md            # Agent instructions
         └── .agent/
             └── skills/         # Agent skills
         """
@@ -344,8 +344,8 @@ class DirectoryManager:
         return venv_path
 
     def setup_agent_instructions(self, sandbox_path: Path) -> None:
-        """Copy AGENT.md instructions template."""
-        agent_md_path = sandbox_path / "AGENT.md"
+        """Copy AGENTS.md instructions template."""
+        agent_md_path = sandbox_path / "AGENTS.md"
         if not agent_md_path.exists():
             shutil.copy(self._agent_instructions_template_path, agent_md_path)
 
@@ -864,7 +864,7 @@ class SandboxManager:
         # Paths for templates
         build_dir = Path(__file__).parent.parent  # /onyx/server/features/build/
         skills_path = build_dir / "skills"
-        agent_instructions_template_path = build_dir / "AGENT.template.md"
+        agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         self._directory_manager = DirectoryManager(
             base_path=Path(SANDBOX_BASE_PATH),
@@ -914,7 +914,7 @@ class SandboxManager:
 
         1. Check concurrent sandbox limit for tenant
         2. Create sandbox directory structure
-        3. Setup files symlink, outputs, venv, AGENT.md, and skills
+        3. Setup files symlink, outputs, venv, AGENTS.md, and skills
         4. If snapshot_id provided, restore outputs from snapshot
         5. Start Next.js dev server
         6. Store sandbox record in DB
@@ -949,7 +949,7 @@ class SandboxManager:
         else:
             self._directory_manager.setup_outputs_directory(sandbox_path)
 
-        # Setup venv, AGENT.md, and skills
+        # Setup venv, AGENTS.md, and skills
         self._directory_manager.setup_venv(sandbox_path)
         self._directory_manager.setup_agent_instructions(sandbox_path)
         self._directory_manager.setup_skills(sandbox_path)

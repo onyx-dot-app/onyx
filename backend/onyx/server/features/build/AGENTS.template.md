@@ -1,6 +1,6 @@
-# AGENT.md
+# AGENTS.md
 
-This file provides guidance for AI coding agents when working with files in this sandbox.
+This file provides guidance for AI agents when working in this sandbox.
 
 ## Structure
 

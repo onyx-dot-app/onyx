@@ -4,11 +4,48 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgTerminalSmall, SvgLoader } from "@opal/icons";
-import { OutputPacket } from "@/app/build/hooks/useBuild";
+import { OutputPacket, OutputPacketType } from "@/app/build/hooks/useBuild";
 
 interface TerminalOutputProps {
   packets: OutputPacket[];
   isStreaming: boolean;
+}
+
+/**
+ * Get CSS classes for a packet type
+ */
+function getPacketClasses(type: OutputPacketType): string {
+  switch (type) {
+    case "message":
+      return "text-text-inverted-05";
+    case "thought":
+      return "text-theme-blue-05 italic";
+    case "tool_start":
+      return "text-theme-purple-05";
+    case "tool_progress":
+      return "text-text-inverted-03";
+    case "stderr":
+      return "text-status-error-05";
+    case "stdout":
+    default:
+      return "text-text-inverted-05";
+  }
+}
+
+/**
+ * Get prefix label for a packet type
+ */
+function getPacketPrefix(packet: OutputPacket): string {
+  switch (packet.type) {
+    case "thought":
+      return "[Thinking] ";
+    case "tool_start":
+      return `[Tool: ${packet.toolName || "Unknown"}] `;
+    case "tool_progress":
+      return "[Result] ";
+    default:
+      return "";
+  }
 }
 
 export default function TerminalOutput({
@@ -58,9 +95,10 @@ export default function TerminalOutput({
                 key={index}
                 className={cn(
                   "whitespace-pre-wrap break-words m-0",
-                  packet.type === "stderr" && "text-status-error-05"
+                  getPacketClasses(packet.type)
                 )}
               >
+                {getPacketPrefix(packet)}
                 {packet.content}
               </pre>
             ))}

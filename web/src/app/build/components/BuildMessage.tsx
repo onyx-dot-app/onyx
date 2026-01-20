@@ -24,7 +24,14 @@ import {
 import { useState } from "react";
 
 export interface OutputItem {
-  type: "text" | "tool_call" | "tool_output" | "status" | "error";
+  type:
+    | "text"
+    | "tool_call"
+    | "tool_output"
+    | "tool_result"
+    | "thinking"
+    | "status"
+    | "error";
   content: string;
   toolName?: string;
   toolType?: string;
@@ -147,6 +154,77 @@ function TextItem({ content }: TextItemProps) {
   );
 }
 
+interface ThinkingItemProps {
+  content: string;
+}
+
+function ThinkingItem({ content }: ThinkingItemProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          className={cn(
+            "inline-flex flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-full",
+            "border border-theme-blue-02 bg-theme-blue-01 hover:bg-theme-blue-02",
+            "transition-all text-left"
+          )}
+        >
+          <span className="text-xs font-medium text-theme-blue-05">
+            Thinking
+          </span>
+          <span className="text-xs text-theme-blue-04 truncate max-w-[200px]">
+            {content.slice(0, 50)}
+            {content.length > 50 ? "..." : ""}
+          </span>
+          {isOpen ? (
+            <SvgChevronDown className="size-3 stroke-theme-blue-05 shrink-0" />
+          ) : (
+            <SvgChevronRight className="size-3 stroke-theme-blue-05 shrink-0" />
+          )}
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div
+          className={cn(
+            "mt-2 p-3 rounded-08 border border-theme-blue-02",
+            "bg-theme-blue-01 text-theme-blue-05",
+            "text-xs overflow-x-auto max-h-48 overflow-y-auto italic"
+          )}
+        >
+          <p className="whitespace-pre-wrap break-words m-0">{content}</p>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+interface ToolResultItemProps {
+  content: string;
+}
+
+function ToolResultItem({ content }: ToolResultItemProps) {
+  // Truncate very long results
+  const displayContent =
+    content.length > 500 ? content.slice(0, 500) + "..." : content;
+
+  return (
+    <div
+      className={cn(
+        "p-2 rounded-08 border border-border-01",
+        "bg-background-neutral-01 text-text-03",
+        "text-xs overflow-x-auto max-h-32 overflow-y-auto"
+      )}
+      style={{ fontFamily: "var(--font-dm-mono)" }}
+    >
+      <pre className="whitespace-pre-wrap break-words m-0">
+        {displayContent}
+      </pre>
+    </div>
+  );
+}
+
 interface StatusItemProps {
   content: string;
   isError?: boolean;
@@ -198,6 +276,8 @@ export default function BuildMessage({
             switch (item.type) {
               case "text":
                 return <TextItem key={index} content={item.content} />;
+              case "thinking":
+                return <ThinkingItem key={index} content={item.content} />;
               case "tool_call":
               case "tool_output":
                 return (
@@ -207,6 +287,8 @@ export default function BuildMessage({
                     isStreaming={isStreaming}
                   />
                 );
+              case "tool_result":
+                return <ToolResultItem key={index} content={item.content} />;
               case "status":
                 return <StatusItem key={index} content={item.content} />;
               case "error":

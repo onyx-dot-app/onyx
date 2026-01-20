@@ -1,28 +1,32 @@
 import json
 import mimetypes
 import os
-import queue
-import threading
 from collections.abc import Generator
-from dataclasses import asdict
 from pathlib import Path
+from uuid import UUID
+from uuid import uuid4
 
-from claude_agent_sdk import AssistantMessage
-from claude_agent_sdk import Message
-from claude_agent_sdk import ResultMessage
-from claude_agent_sdk.types import ContentBlock
-from claude_agent_sdk.types import TextBlock
-from claude_agent_sdk.types import ThinkingBlock
-from claude_agent_sdk.types import ToolResultBlock
-from claude_agent_sdk.types import ToolUseBlock
+from acp.schema import AgentMessageChunk
+from acp.schema import AgentPlanUpdate
+from acp.schema import AgentThoughtChunk
+from acp.schema import CurrentModeUpdate
+from acp.schema import Error as ACPError
+from acp.schema import PromptResponse
+from acp.schema import ToolCallProgress
+from acp.schema import ToolCallStart
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
+from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.models import ArtifactInfo
 from onyx.server.features.build.models import CreateSessionRequest
 from onyx.server.features.build.models import CreateSessionResponse
@@ -30,7 +34,8 @@ from onyx.server.features.build.models import DirectoryListing
 from onyx.server.features.build.models import ExecuteRequest
 from onyx.server.features.build.models import FileSystemEntry
 from onyx.server.features.build.models import SessionStatus
-from onyx.server.features.build.session_manager import get_session_manager
+from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
+from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -44,70 +49,64 @@ session_router = APIRouter(prefix="/build")
 # =============================================================================
 
 
-def _content_block_to_sse_event(block: ContentBlock) -> dict:
-    """Convert a content block to an SSE event payload."""
-    if isinstance(block, TextBlock):
-        return {
-            "type": "output",
-            "data": {"stream": "stdout", "data": block.text},
-        }
-    elif isinstance(block, ThinkingBlock):
-        return {
-            "type": "output",
-            "data": {"stream": "stdout", "data": f"[Thinking] {block.thinking}"},
-        }
-    elif isinstance(block, ToolUseBlock):
-        return {
-            "type": "output",
-            "data": {
-                "stream": "stdout",
-                "data": f"[Tool: {block.name}] {json.dumps(block.input)}",
-            },
-        }
-    elif isinstance(block, ToolResultBlock):
-        content = block.content
-        if isinstance(content, str) and len(content) > 500:
-            content = content[:500] + "... (truncated)"
-        return {
-            "type": "output",
-            "data": {
-                "stream": "stderr" if block.is_error else "stdout",
-                "data": f"[Tool Result] {content}",
-            },
-        }
+def _get_acp_event_type(event: ACPEvent) -> str:
+    """Get the SSE event type from an ACP event.
+
+    Maps ACP schema types to their sessionUpdate field value.
+    """
+    if isinstance(event, AgentMessageChunk):
+        return "agent_message_chunk"
+    elif isinstance(event, AgentThoughtChunk):
+        return "agent_thought_chunk"
+    elif isinstance(event, ToolCallStart):
+        return "tool_call"
+    elif isinstance(event, ToolCallProgress):
+        return "tool_call_update"
+    elif isinstance(event, AgentPlanUpdate):
+        return "plan"
+    elif isinstance(event, CurrentModeUpdate):
+        return "current_mode_update"
+    elif isinstance(event, PromptResponse):
+        return "prompt_response"
+    elif isinstance(event, ACPError):
+        return "error"
     else:
-        return {
-            "type": "output",
-            "data": {"stream": "stdout", "data": str(asdict(block))},
-        }
+        return "unknown"
 
 
-def _message_to_sse_events(message: Message) -> list[dict]:
-    """Convert an SDK message to SSE event payloads."""
-    events = []
+def _format_sse_event(event_type: str, data: str) -> str:
+    """Format an event as SSE.
 
-    if isinstance(message, AssistantMessage):
-        for block in message.content:
-            events.append(_content_block_to_sse_event(block))
+    Args:
+        event_type: The SSE event type name
+        data: JSON string data (already serialized)
 
-    elif isinstance(message, ResultMessage):
-        status = "completed" if not message.is_error else "failed"
-        status_message = message.result or ""
-        if message.total_cost_usd is not None:
-            status_message += f" (Cost: ${message.total_cost_usd:.4f})"
-        events.append(
-            {
-                "type": "status",
-                "data": {"status": status, "message": status_message},
-            }
-        )
-
-    return events
+    Returns:
+        Formatted SSE event string
+    """
+    return f"event: {event_type}\ndata: {data}\n\n"
 
 
-def _format_sse_event(event_type: str, data: dict) -> str:
-    """Format an event as SSE."""
-    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+def _format_status_event(status: str, message: str) -> str:
+    """Format a status event as SSE."""
+    data = json.dumps({"status": status, "message": message})
+    return f"event: status\ndata: {data}\n\n"
+
+
+def _status_to_string(status: SandboxStatus) -> str:
+    """Convert SandboxStatus enum to string for API response."""
+    if status == SandboxStatus.PROVISIONING:
+        return "idle"
+    elif status == SandboxStatus.RUNNING:
+        return "running"
+    elif status == SandboxStatus.IDLE:
+        return "idle"
+    elif status == SandboxStatus.TERMINATED:
+        return "completed"
+    elif status == SandboxStatus.FAILED:
+        return "failed"
+    else:
+        return "idle"
 
 
 # =============================================================================
@@ -119,22 +118,31 @@ def _format_sse_event(event_type: str, data: dict) -> str:
 def create_session(
     request: CreateSessionRequest,
     user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> CreateSessionResponse:
     """
     Create a new build session.
 
     Creates a sandbox with the necessary file structure and returns a session ID.
+    Uses SandboxManager for database-backed sandbox provisioning.
     """
-    manager = get_session_manager()
-
-    user_id = str(user.id) if user else None
+    session_id = str(uuid4())
     tenant_id = get_current_tenant_id()
+    sandbox_manager = SandboxManager()
 
-    session_id = manager.create_session(
-        task=request.task,
-        user_id=user_id,
-        tenant_id=tenant_id,
-    )
+    try:
+        sandbox_manager.provision(
+            session_id=session_id,
+            tenant_id=tenant_id,
+            file_system_path=PERSISTENT_DOCUMENT_STORAGE_PATH or "/tmp/onyx-files",
+            db_session=db_session,
+        )
+    except ValueError as e:
+        # Max concurrent sandboxes reached
+        raise HTTPException(status_code=429, detail=str(e))
+    except RuntimeError as e:
+        logger.error(f"Failed to provision sandbox: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create session")
 
     return CreateSessionResponse(session_id=session_id)
 
@@ -143,21 +151,26 @@ def create_session(
 def get_session_status(
     session_id: str,
     user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> SessionStatus:
     """Get the status of a build session."""
-    manager = get_session_manager()
-    session = manager.get_session(session_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if session is None:
+    sandbox = get_sandbox_by_session_id(db_session, session_uuid)
+    if sandbox is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # Determine webapp URL based on status
     webapp_url = None
-    if session.sandbox and session.status in ("running", "completed"):
+    if sandbox.status.is_active() and sandbox.nextjs_port:
         webapp_url = "/api/build/webapp"
 
     return SessionStatus(
         session_id=session_id,
-        status=session.status,
+        status=_status_to_string(sandbox.status),
         webapp_url=webapp_url,
     )
 
@@ -166,15 +179,22 @@ def get_session_status(
 def delete_session(
     session_id: str,
     user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> None:
     """
     Delete a build session and cleanup its sandbox.
     """
-    manager = get_session_manager()
-    deleted = manager.delete_session(session_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if not deleted:
+    sandbox = get_sandbox_by_session_id(db_session, session_uuid)
+    if sandbox is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    sandbox_manager = SandboxManager()
+    sandbox_manager.terminate(str(sandbox.id), db_session)
 
 
 @session_router.post("/sessions/{session_id}/execute")
@@ -182,103 +202,84 @@ def execute_task(
     session_id: str,
     request: ExecuteRequest,
     user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     """
     Execute a task in the build session.
 
-    Returns an SSE stream with output, status, and artifact events.
+    Returns an SSE stream with ACP events directly from the agent:
+    - agent_message_chunk: Text/image content from agent
+    - agent_thought_chunk: Agent's internal reasoning
+    - tool_call: Tool invocation started
+    - tool_call_update: Tool execution progress/result
+    - plan: Agent's execution plan
+    - current_mode_update: Agent mode change
+    - prompt_response: Agent finished (contains stop_reason)
+    - error: An error occurred
+    - status: Internal status updates
     """
-    manager = get_session_manager()
-    session = manager.get_session(session_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if session is None:
+    sandbox = get_sandbox_by_session_id(db_session, session_uuid)
+    if sandbox is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Update session status
-    manager.update_session(session_id, status="running")
-
-    # Create a queue for message passing between threads
-    message_queue: queue.Queue[Message | None] = queue.Queue()
-
-    def message_emitter(message: Message) -> None:
-        """Emitter callback that puts messages into the queue."""
-        message_queue.put(message)
-
-    def run_agent_thread() -> None:
-        """Run the agent in a background thread."""
-        try:
-            client = manager.client
-            # Pass the existing sandbox so we don't recreate it
-            existing_sandbox = session.sandbox
-            sandbox = client.run_cli_agent(
-                sandbox_id=session_id,
-                task=request.task,
-                emitter=message_emitter,
-                sandbox=existing_sandbox,
-            )
-            # Update sandbox in session (may have new nextjs_process)
-            manager.update_session(session_id, sandbox=sandbox)
-        except Exception as e:
-            logger.error(f"Agent thread error: {e}")
-            # Put error as a special message
-            message_queue.put(None)
-            raise
-        finally:
-            # Signal completion
-            message_queue.put(None)
+    sandbox_manager = SandboxManager()
 
     def event_generator() -> Generator[str, None, None]:
         try:
-            yield _format_sse_event(
-                "status", {"status": "running", "message": "Starting build..."}
-            )
+            yield _format_status_event("running", "Starting agent...")
 
-            # Start the agent in a background thread
-            agent_thread = threading.Thread(target=run_agent_thread, daemon=True)
-            agent_thread.start()
+            # Stream ACP events directly from SandboxManager.send_message()
+            for acp_event in sandbox_manager.send_message(
+                str(sandbox.id), request.task, db_session
+            ):
+                event_type = _get_acp_event_type(acp_event)
+                # Use pydantic model's JSON serialization
+                event_data = acp_event.model_dump_json()
+                yield _format_sse_event(event_type, event_data)
 
-            yield _format_sse_event(
-                "status", {"status": "running", "message": "Running agent..."}
-            )
+                # Check for completion/error in prompt_response
+                if isinstance(acp_event, PromptResponse):
+                    stop_reason = getattr(acp_event, "stop_reason", None)
+                    if stop_reason:
+                        yield _format_status_event(
+                            "completed", f"Agent stopped: {stop_reason}"
+                        )
+                    else:
+                        yield _format_status_event("completed", "Task completed")
 
-            # Stream messages from the queue
-            while True:
-                message = message_queue.get()
-                if message is None:
-                    break
-                events = _message_to_sse_events(message)
-                for event in events:
-                    event_type = event.get("type", "output")
-                    data = event.get("data", event)
-                    yield _format_sse_event(event_type, data)
+                elif isinstance(acp_event, ACPError):
+                    yield _format_status_event("failed", acp_event.message)
 
-            # Wait for the thread to finish
-            agent_thread.join(timeout=5.0)
+            # Check for webapp artifact
+            sandbox_path = Path(sandbox.directory_path)
+            web_dir = sandbox_path / "outputs" / "web"
+            if web_dir.exists():
+                artifact_data = json.dumps(
+                    {
+                        "artifact_type": "webapp",
+                        "path": str(web_dir),
+                        "filename": "webapp",
+                    }
+                )
+                yield _format_sse_event("artifact", artifact_data)
 
-            # Get the sandbox from session to check for webapp
-            session = manager.get_session(session_id)
-            if session and session.sandbox:
-                web_dir = session.sandbox.path / "outputs" / "web"
-                if web_dir.exists():
-                    yield _format_sse_event(
-                        "artifact",
-                        {
-                            "artifact_type": "webapp",
-                            "path": str(web_dir),
-                            "filename": "webapp",
-                        },
-                    )
-
-            manager.update_session(session_id, status="completed")
-            yield _format_sse_event(
-                "status", {"status": "completed", "message": "Task completed"}
-            )
-
-        except Exception as e:
+        except ValueError as e:
             logger.error(f"Error executing task: {e}")
-            manager.update_session(session_id, status="failed")
-            yield _format_sse_event("error", {"message": str(e)})
-            yield _format_sse_event("status", {"status": "failed", "message": str(e)})
+            yield _format_sse_event("error", json.dumps({"message": str(e)}))
+            yield _format_status_event("failed", str(e))
+        except RuntimeError as e:
+            logger.error(f"Agent communication error: {e}")
+            yield _format_sse_event("error", json.dumps({"message": str(e)}))
+            yield _format_status_event("failed", str(e))
+        except Exception as e:
+            logger.error(f"Unexpected error executing task: {e}")
+            yield _format_sse_event("error", json.dumps({"message": str(e)}))
+            yield _format_status_event("failed", str(e))
 
     return StreamingResponse(
         event_generator(),
@@ -299,14 +300,19 @@ def execute_task(
 def list_artifacts(
     session_id: str,
     user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> list[ArtifactInfo]:
     """List artifacts generated in the session."""
-    manager = get_session_manager()
-    sandbox_path = manager.get_sandbox_path(session_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if sandbox_path is None:
-        raise HTTPException(status_code=404, detail="Session not found or not started")
+    sandbox = get_sandbox_by_session_id(db_session, session_uuid)
+    if sandbox is None:
+        raise HTTPException(status_code=404, detail="Session not found")
 
+    sandbox_path = Path(sandbox.directory_path)
     artifacts: list[ArtifactInfo] = []
     output_dir = sandbox_path / "outputs"
 
@@ -378,6 +384,7 @@ def list_directory(
     session_id: str,
     path: str = "",
     user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> DirectoryListing:
     """
     List files and directories in the sandbox.
@@ -389,11 +396,16 @@ def list_directory(
     Returns:
         DirectoryListing with sorted entries (directories first, then files)
     """
-    manager = get_session_manager()
-    sandbox_path = manager.get_sandbox_path(session_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if sandbox_path is None:
-        raise HTTPException(status_code=404, detail="Session not found or not started")
+    sandbox = get_sandbox_by_session_id(db_session, session_uuid)
+    if sandbox is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    sandbox_path = Path(sandbox.directory_path)
 
     # Construct the target directory path
     target_dir = sandbox_path / path if path else sandbox_path
@@ -449,14 +461,19 @@ def download_artifact(
     session_id: str,
     path: str,
     user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> Response:
     """Download a specific artifact file."""
-    manager = get_session_manager()
-    sandbox_path = manager.get_sandbox_path(session_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if sandbox_path is None:
-        raise HTTPException(status_code=404, detail="Session not found or not started")
+    sandbox = get_sandbox_by_session_id(db_session, session_uuid)
+    if sandbox is None:
+        raise HTTPException(status_code=404, detail="Session not found")
 
+    sandbox_path = Path(sandbox.directory_path)
     file_path = sandbox_path / path
 
     # Security check: ensure path doesn't escape sandbox
@@ -465,6 +482,8 @@ def download_artifact(
         sandbox_path_resolved = sandbox_path.resolve()
         if not str(file_path).startswith(str(sandbox_path_resolved)):
             raise HTTPException(status_code=403, detail="Access denied")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid path")
 

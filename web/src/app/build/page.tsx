@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useBuild, OutputPacket } from "@/app/build/hooks/useBuild";
+import { useBuild, OutputPacket, PlanItem } from "@/app/build/hooks/useBuild";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
@@ -21,74 +21,142 @@ interface ChatMessage {
   timestamp: number;
 }
 
+/**
+ * Convert OutputPackets from the hook into OutputItems for display.
+ * Handles both new ACP event types and legacy packet types.
+ * Consolidates consecutive text/thinking chunks into single items.
+ */
 function parseOutputPackets(packets: OutputPacket[]): OutputItem[] {
   const items: OutputItem[] = [];
 
-  // Combine all packet content first
-  const fullContent = packets.map((p) => p.content).join("");
+  for (const packet of packets) {
+    switch (packet.type) {
+      case "message":
+        // Agent text output - append to last text item if exists, otherwise create new
+        if (packet.content) {
+          const lastItem = items[items.length - 1];
+          if (lastItem && lastItem.type === "text") {
+            // Append to existing text item
+            lastItem.content += packet.content;
+          } else {
+            items.push({
+              type: "text",
+              content: packet.content,
+              timestamp: packet.timestamp,
+            });
+          }
+        }
+        break;
 
-  // Regex to match tool calls inline: [Tool: ToolName] {json}
-  // This handles JSON with nested braces by matching balanced braces
-  const toolPattern =
-    /\[Tool:\s*(\w+)\]\s*(\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})/g;
+      case "thought":
+        // Agent reasoning - append to last thinking item if exists
+        if (packet.content) {
+          const lastItem = items[items.length - 1];
+          if (lastItem && lastItem.type === "thinking") {
+            lastItem.content += packet.content;
+          } else {
+            items.push({
+              type: "thinking",
+              content: packet.content,
+              timestamp: packet.timestamp,
+            });
+          }
+        }
+        break;
 
-  let lastIndex = 0;
-  let match;
+      case "tool_start":
+        // Tool invocation started
+        {
+          let description = "";
+          if (packet.content) {
+            try {
+              const json = JSON.parse(packet.content);
+              description =
+                json.description ||
+                json.command ||
+                json.file_path ||
+                json.content ||
+                "";
+              if (description.length > 100) {
+                description = description.substring(0, 100) + "...";
+              }
+            } catch {
+              description =
+                packet.content.length > 50
+                  ? packet.content.substring(0, 50) + "..."
+                  : packet.content;
+            }
+          }
 
-  while ((match = toolPattern.exec(fullContent)) !== null) {
-    // Add any text before this tool call
-    const textBefore = fullContent.slice(lastIndex, match.index).trim();
-    if (textBefore) {
-      items.push({
-        type: "text",
-        content: textBefore,
-        timestamp: Date.now(),
-      });
+          items.push({
+            type: "tool_call",
+            content: packet.content || "",
+            toolType: packet.toolName || "Tool",
+            description: description,
+            isComplete: false,
+            timestamp: packet.timestamp,
+          });
+        }
+        break;
+
+      case "tool_progress":
+        // Tool execution progress - add as tool result or update
+        if (packet.content) {
+          items.push({
+            type: "tool_result",
+            content: packet.content,
+            timestamp: packet.timestamp,
+          });
+        }
+        break;
+
+      // Legacy packet types (for backwards compatibility)
+      case "stdout":
+      case "stderr":
+        if (packet.content) {
+          // Try to parse legacy format: [Tool: ToolName] {json}
+          const toolMatch = packet.content.match(
+            /^\[Tool:\s*(\w+)\]\s*(\{[\s\S]+\})$/
+          );
+          if (toolMatch && toolMatch[1] && toolMatch[2]) {
+            const toolType = toolMatch[1];
+            const jsonStr = toolMatch[2];
+            let description = "";
+            try {
+              const json = JSON.parse(jsonStr);
+              description =
+                json.description ||
+                json.command ||
+                json.file_path ||
+                json.content ||
+                "";
+              if (description.length > 100) {
+                description = description.substring(0, 100) + "...";
+              }
+            } catch {
+              description =
+                jsonStr.length > 50
+                  ? jsonStr.substring(0, 50) + "..."
+                  : jsonStr;
+            }
+            items.push({
+              type: "tool_call",
+              content: jsonStr,
+              toolType: toolType,
+              description: description,
+              isComplete: true,
+              timestamp: packet.timestamp,
+            });
+          } else {
+            items.push({
+              type: "text",
+              content: packet.content,
+              timestamp: packet.timestamp,
+            });
+          }
+        }
+        break;
     }
-
-    const toolType = match[1] || "Tool";
-    const jsonStr = match[2] || "{}";
-    let description = "";
-
-    // Try to parse JSON for description
-    try {
-      const json = JSON.parse(jsonStr);
-      description =
-        json.description ||
-        json.command ||
-        json.file_path ||
-        json.content ||
-        "";
-      // Truncate long descriptions
-      if (description.length > 100) {
-        description = description.substring(0, 100) + "...";
-      }
-    } catch {
-      // If JSON parsing fails, use a portion of the raw string
-      description =
-        jsonStr.length > 50 ? jsonStr.substring(0, 50) + "..." : jsonStr;
-    }
-
-    items.push({
-      type: "tool_call",
-      content: jsonStr,
-      toolType: toolType,
-      description: description,
-      isComplete: true,
-      timestamp: Date.now(),
-    });
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Add any remaining text after the last tool call
-  const remainingText = fullContent.slice(lastIndex).trim();
-  if (remainingText) {
-    items.push({
-      type: "text",
-      content: remainingText,
-      timestamp: Date.now(),
-    });
   }
 
   return items;

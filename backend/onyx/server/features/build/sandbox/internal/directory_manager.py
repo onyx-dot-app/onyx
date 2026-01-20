@@ -1,5 +1,6 @@
 """Directory management for sandbox lifecycle."""
 
+import json
 import shutil
 from pathlib import Path
 
@@ -10,7 +11,7 @@ class DirectoryManager:
     Responsible for:
     - Creating sandbox directory structure
     - Setting up symlinks to knowledge files
-    - Copying templates (outputs, venv, skills, AGENT.md)
+    - Copying templates (outputs, venv, skills, AGENTS.md)
     - Cleaning up sandbox directories on termination
     """
 
@@ -29,7 +30,7 @@ class DirectoryManager:
             outputs_template_path: Path to outputs template directory
             venv_template_path: Path to Python virtual environment template
             skills_path: Path to agent skills directory
-            agent_instructions_template_path: Path to AGENT.md template file
+            agent_instructions_template_path: Path to AGENTS.md template file
         """
         self._base_path = base_path
         self._outputs_template_path = outputs_template_path
@@ -49,7 +50,7 @@ class DirectoryManager:
         │   ├── markdown/
         │   └── graphs/
         ├── .venv/              # Python virtual environment
-        ├── AGENT.md            # Agent instructions
+        ├── AGENTS.md            # Agent instructions
         └── .agent/
             └── skills/         # Agent skills
 
@@ -114,12 +115,12 @@ class DirectoryManager:
         return venv_path
 
     def setup_agent_instructions(self, sandbox_path: Path) -> None:
-        """Copy AGENT.md instructions template.
+        """Copy AGENTS.md instructions template.
 
         Args:
             sandbox_path: Path to the sandbox directory
         """
-        agent_md_path = sandbox_path / "AGENT.md"
+        agent_md_path = sandbox_path / "AGENTS.md"
         if (
             not agent_md_path.exists()
             and self._agent_instructions_template_path.exists()
@@ -136,6 +137,53 @@ class DirectoryManager:
         if self._skills_path.exists() and not skills_dest.exists():
             skills_dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(self._skills_path, skills_dest)
+
+    def setup_opencode_config(
+        self,
+        sandbox_path: Path,
+        provider: str,
+        model_name: str,
+        api_key: str | None = None,
+        api_base: str | None = None,
+        disabled_tools: list[str] | None = None,
+    ) -> None:
+        """Create opencode.json configuration file for the agent.
+
+        Configures the opencode CLI agent with the LLM provider settings
+        from Onyx's configured LLM provider.
+
+        Args:
+            sandbox_path: Path to the sandbox directory
+            provider: LLM provider type (e.g., "openai", "anthropic")
+            model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
+            api_key: Optional API key for the provider
+            api_base: Optional custom API base URL
+            disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
+        """
+        config_path = sandbox_path / "opencode.json"
+        if config_path.exists():
+            return
+
+        # Build opencode model string: provider/model-name
+        opencode_model = f"{provider}/{model_name}"
+
+        # Build configuration
+        config: dict[str, any] = {
+            "model": opencode_model,
+        }
+
+        # Add provider-specific configuration if API key provided
+        if api_key:
+            provider_config: dict[str, any] = {"options": {"apiKey": api_key}}
+            if api_base:
+                provider_config["api"] = api_base
+            config["provider"] = {provider: provider_config}
+
+        # Disable specified tools via permissions
+        if disabled_tools:
+            config["permission"] = {tool: "deny" for tool in disabled_tools}
+
+        config_path.write_text(json.dumps(config, indent=2))
 
     def cleanup_sandbox_directory(self, sandbox_path: Path) -> None:
         """Remove sandbox directory and all contents.

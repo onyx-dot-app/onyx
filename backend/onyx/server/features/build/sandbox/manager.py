@@ -14,7 +14,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
+from onyx.db.llm import fetch_default_provider
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
@@ -70,7 +72,7 @@ class SandboxManager:
         # Paths for templates
         build_dir = Path(__file__).parent.parent  # /onyx/server/features/build/
         skills_path = build_dir / "skills"
-        agent_instructions_template_path = build_dir / "AGENT.template.md"
+        agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         self._directory_manager = DirectoryManager(
             base_path=Path(SANDBOX_BASE_PATH),
@@ -119,7 +121,7 @@ class SandboxManager:
 
         1. Check concurrent sandbox limit for tenant
         2. Create sandbox directory structure
-        3. Setup files symlink, outputs, venv, AGENT.md, and skills
+        3. Setup files symlink, outputs, venv, AGENTS.md, and skills
         4. If snapshot_id provided, restore outputs from snapshot
         5. Start Next.js dev server
         6. Store sandbox record in DB
@@ -170,10 +172,26 @@ class SandboxManager:
             else:
                 self._directory_manager.setup_outputs_directory(sandbox_path)
 
-            # Setup venv, AGENT.md, and skills
+            # Setup venv, AGENTS.md, and skills
             self._directory_manager.setup_venv(sandbox_path)
             self._directory_manager.setup_agent_instructions(sandbox_path)
             self._directory_manager.setup_skills(sandbox_path)
+
+            # Setup opencode.json with LLM provider configuration
+            llm_provider = fetch_default_provider(db_session)
+            if not llm_provider:
+                raise RuntimeError(
+                    "No default LLM provider configured. "
+                    "Please configure an LLM provider in admin settings."
+                )
+            self._directory_manager.setup_opencode_config(
+                sandbox_path=sandbox_path,
+                provider=llm_provider.provider,
+                model_name=llm_provider.default_model_name,
+                api_key=llm_provider.api_key,
+                api_base=llm_provider.api_base,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+            )
 
             # Allocate port and start Next.js server
             nextjs_port = self._allocate_port()

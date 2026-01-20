@@ -20,6 +20,15 @@ VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 # Sandbox agent configuration
 SANDBOX_AGENT_COMMAND = os.environ.get("SANDBOX_AGENT_COMMAND", "opencode").split()
 
+# OpenCode disabled tools (comma-separated list)
+# Available tools: bash, edit, write, read, grep, glob, list, lsp, patch,
+#                  skill, todowrite, todoread, webfetch, question
+# Example: "question,webfetch" to disable user questions and web fetching
+_disabled_tools_str = os.environ.get("OPENCODE_DISABLED_TOOLS", "question")
+OPENCODE_DISABLED_TOOLS: list[str] = [
+    t.strip() for t in _disabled_tools_str.split(",") if t.strip()
+]
+
 # Sandbox lifecycle configuration
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "900")
