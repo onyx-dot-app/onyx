@@ -16,6 +16,8 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.api_key import get_api_key_email_pattern
 from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
@@ -47,8 +49,18 @@ def _add_live_user_count_where_clause(
     """
     Builds a SQL column expression that can be used to filter out
     users who should not be included in the live user count.
+
+    Excludes:
+    - API key users (by email pattern)
+    - System users (anonymous user, no-auth placeholder)
+    - External permission users (unless only_admin_users is True)
     """
     select_stmt = select_stmt.where(~User.email.endswith(get_api_key_email_pattern()))  # type: ignore
+
+    # Exclude system users (anonymous user, no-auth placeholder)
+    select_stmt = select_stmt.where(User.email != ANONYMOUS_USER_EMAIL)
+    select_stmt = select_stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)
+
     if only_admin_users:
         return select_stmt.where(User.role == UserRole.ADMIN)
 
