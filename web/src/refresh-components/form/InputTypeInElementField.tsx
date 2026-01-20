@@ -39,7 +39,7 @@ export default function InputTypeInElementField({
         value={field.value ?? ""}
         onChange={onChange}
         onBlur={onBlur}
-        error={!!hasError}
+        variant={hasError ? "error" : inputProps.variant}
         showClearButton={false}
       />
       <IconButton

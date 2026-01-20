@@ -121,7 +121,7 @@ function PATModal({
                 placeholder="Name your token"
                 value={newTokenName}
                 onChange={(e) => setNewTokenName(e.target.value)}
-                disabled={isCreating}
+                variant={isCreating ? "disabled" : undefined}
                 autoComplete="new-password"
               />
             </InputLayouts.Vertical>
@@ -642,9 +642,18 @@ function PromptShortcuts() {
                   onChange={(e) =>
                     handleUpdateShortcut(index, "prompt", e.target.value)
                   }
-                  onBlur={() => void handleBlurShortcut(index)}
-                  error={showPromptError}
-                  // disabled={shortcut.is_public}
+                  onBlur={
+                    shortcut.is_public
+                      ? undefined
+                      : () => void handleBlurShortcut(index)
+                  }
+                  variant={
+                    shortcut.is_public
+                      ? "readOnly"
+                      : showPromptError
+                        ? "error"
+                        : undefined
+                  }
                 />
                 <Section>
                   <IconButton
@@ -666,10 +675,19 @@ function PromptShortcuts() {
                   onChange={(e) =>
                     handleUpdateShortcut(index, "content", e.target.value)
                   }
-                  onBlur={() => void handleBlurShortcut(index)}
-                  error={showContentError}
+                  onBlur={
+                    shortcut.is_public
+                      ? undefined
+                      : () => void handleBlurShortcut(index)
+                  }
+                  variant={
+                    shortcut.is_public
+                      ? "readOnly"
+                      : showContentError
+                        ? "error"
+                        : undefined
+                  }
                   rows={3}
-                  // disabled={shortcut.is_public}
                 />
                 <div />
               </div>
@@ -1306,7 +1324,7 @@ function AccountsAccessSettings() {
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       leftSearchIcon
-                      internal
+                      variant="internal"
                     />
                   )}
                   <CreateButton
