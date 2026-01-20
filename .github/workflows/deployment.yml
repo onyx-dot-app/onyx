@@ -8,7 +8,8 @@ on:
 
 # Set restrictive default permissions for all jobs. Jobs that need more permissions
 # should explicitly declare them.
-permissions: {}
+permissions:
+  id-token: write  # Required for OIDC authentication with AWS
 
 env:
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
