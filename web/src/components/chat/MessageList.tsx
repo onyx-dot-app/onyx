@@ -9,10 +9,14 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import Spacer from "@/refresh-components/Spacer";
+import {
+  useCurrentMessageHistory,
+  useCurrentMessageTree,
+  useLoadingError,
+  useUncaughtError,
+} from "@/app/chat/stores/useChatSessionStore";
 
 export interface MessageListProps {
-  messages: Message[];
-  messageTree: Map<number, Message> | undefined;
   liveAssistant: MinimalPersonaSnapshot;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
@@ -36,9 +40,6 @@ export interface MessageListProps {
   deepResearchEnabled: boolean;
   currentMessageFiles: any[];
 
-  // Error state
-  error: string | null;
-  loadError: string | null;
   onResubmit: () => void;
 
   /**
@@ -50,8 +51,6 @@ export interface MessageListProps {
 
 const MessageList = React.memo(
   ({
-    messages,
-    messageTree,
     liveAssistant,
     llmManager,
     setPresentingDocument,
@@ -60,11 +59,14 @@ const MessageList = React.memo(
     onSubmit,
     deepResearchEnabled,
     currentMessageFiles,
-    error,
-    loadError,
     onResubmit,
     anchorNodeId,
   }: MessageListProps) => {
+    // Get messages and error state from store
+    const messages = useCurrentMessageHistory();
+    const messageTree = useCurrentMessageTree();
+    const error = useUncaughtError();
+    const loadError = useLoadingError();
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
@@ -111,7 +113,7 @@ const MessageList = React.memo(
     );
 
     return (
-      <>
+      <div className="w-[min(50rem,100%)] px-4">
         <Spacer />
         {messages.map((message, i) => {
           const messageReactComponentKey = `message-${message.nodeId}`;
@@ -216,7 +218,7 @@ const MessageList = React.memo(
             />
           </div>
         )}
-      </>
+      </div>
     );
   }
 );
