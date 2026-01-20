@@ -1,7 +1,7 @@
 """create_build_session_table
 
 Revision ID: 96086064c5db
-Revises: bdc0488b855e
+Revises: 8b5ce697290e
 Create Date: 2026-01-19 14:47:38.156803
 
 """
