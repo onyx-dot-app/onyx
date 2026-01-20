@@ -328,6 +328,7 @@ class FileOrigin(str, Enum):
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
+    SANDBOX_SNAPSHOT = "sandbox_snapshot"
     USER_FILE = "user_file"
 
 

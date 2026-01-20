@@ -14,6 +14,84 @@ export interface ArtifactInfo {
   mime_type?: string;
 }
 
+// =============================================================================
+// ACP Event Types (from Agent Client Protocol)
+// =============================================================================
+
+/** Text or image content from the agent */
+export interface AgentMessageChunkEvent {
+  sessionUpdate: "agent_message_chunk";
+  content: Array<{
+    type: "text" | "image";
+    text?: string;
+    image?: string;
+    mimeType?: string;
+  }>;
+}
+
+/** Agent's internal reasoning/thinking */
+export interface AgentThoughtChunkEvent {
+  sessionUpdate: "agent_thought_chunk";
+  thought: string;
+}
+
+/** Tool invocation started */
+export interface ToolCallStartEvent {
+  sessionUpdate: "tool_call";
+  toolCallId: string;
+  toolName: string;
+  toolInput?: Record<string, unknown>;
+}
+
+/** Tool execution progress/result */
+export interface ToolCallProgressEvent {
+  sessionUpdate: "tool_call_update";
+  toolCallId: string;
+  content?: Array<{
+    type: "text" | "image";
+    text?: string;
+    image?: string;
+    mimeType?: string;
+  }>;
+  error?: string;
+  isComplete?: boolean;
+}
+
+/** Agent's execution plan */
+export interface AgentPlanUpdateEvent {
+  sessionUpdate: "plan";
+  plan: Array<{
+    id: string;
+    description: string;
+    status: "pending" | "in_progress" | "completed" | "failed";
+  }>;
+}
+
+/** Agent mode change */
+export interface CurrentModeUpdateEvent {
+  sessionUpdate: "current_mode_update";
+  mode: string;
+}
+
+/** Agent finished processing prompt */
+export interface PromptResponseEvent {
+  stopReason?: string;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+}
+
+/** ACP error event */
+export interface ACPErrorEvent {
+  code: number;
+  message: string;
+}
+
+// =============================================================================
+// Legacy Event Types (kept for backwards compatibility)
+// =============================================================================
+
 export interface OutputEvent {
   stream: "stdout" | "stderr";
   data: string;
@@ -47,11 +125,25 @@ export interface DirectoryListing {
   entries: FileSystemEntry[];
 }
 
-export type BuildEvent =
-  | { type: "output"; data: OutputEvent }
+// =============================================================================
+// Union Types
+// =============================================================================
+
+/** All possible ACP events from the agent */
+export type ACPEvent =
+  | { type: "agent_message_chunk"; data: AgentMessageChunkEvent }
+  | { type: "agent_thought_chunk"; data: AgentThoughtChunkEvent }
+  | { type: "tool_call"; data: ToolCallStartEvent }
+  | { type: "tool_call_update"; data: ToolCallProgressEvent }
+  | { type: "plan"; data: AgentPlanUpdateEvent }
+  | { type: "current_mode_update"; data: CurrentModeUpdateEvent }
+  | { type: "prompt_response"; data: PromptResponseEvent }
+  | { type: "error"; data: ACPErrorEvent }
   | { type: "status"; data: StatusEvent }
-  | { type: "artifact"; data: ArtifactEvent }
-  | { type: "error"; data: ErrorEvent };
+  | { type: "artifact"; data: ArtifactEvent };
+
+/** Legacy BuildEvent type - alias for ACPEvent */
+export type BuildEvent = ACPEvent;
 
 export async function createSession(
   request: CreateSessionRequest

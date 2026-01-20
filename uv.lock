@@ -39,6 +39,18 @@ wheels = [
 ]
 
 [[package]]
+name = "agent-client-protocol"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/7c/12da39be4f73026fd9b02144df5f64d803488cf1439aa221b0edb7c305e3/agent_client_protocol-0.7.1.tar.gz", hash = "sha256:8d7031209e14c3f2f987e3b95e7d9c3286158e7b2af1bf43d6aae5b8a429249f", size = 66226, upload-time = "2025-12-28T13:58:57.012Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/48/48d2fb454f911147432cd779f548e188274e1700f1cbe0a258e78158331a/agent_client_protocol-0.7.1-py3-none-any.whl", hash = "sha256:4ffe999488f2b23db26f09becdfaa2aaae6529f0847a52bca61bc2c628001c0f", size = 53771, upload-time = "2025-12-28T13:58:55.967Z" },
+]
+
+[[package]]
 name = "aioboto3"
 version = "15.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4550,6 +4562,7 @@ name = "onyx"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "agent-client-protocol" },
     { name = "aioboto3" },
     { name = "brotli" },
     { name = "claude-agent-sdk" },
@@ -4724,6 +4737,7 @@ model-server = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'model-server'", specifier = "==1.6.0" },
+    { name = "agent-client-protocol", specifier = ">=0.7.1" },
     { name = "aioboto3", specifier = "==15.1.0" },
     { name = "aiohttp", marker = "extra == 'backend'", specifier = "==3.13.3" },
     { name = "alembic", marker = "extra == 'backend'", specifier = "==1.10.4" },

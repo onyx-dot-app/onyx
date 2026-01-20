@@ -54,7 +54,7 @@ export default function FilePreviewModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && onClose()}>
-      <Modal.Content large>
+      <Modal.Content>
         <Modal.Header
           icon={isImage ? SvgImage : SvgFileText}
           title={entry.name}

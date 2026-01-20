@@ -23,8 +23,9 @@ dependencies = [
     "uvicorn==0.35.0",
     "voyageai==0.2.3",
     "brotli>=1.2.0",
-    "discord-py==2.4.0",
     "claude-agent-sdk>=0.1.19",
+    "agent-client-protocol>=0.7.1",
+    "discord-py==2.4.0",
 ]
 
 [project.optional-dependencies]
