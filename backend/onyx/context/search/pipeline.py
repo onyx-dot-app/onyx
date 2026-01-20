@@ -19,6 +19,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.interfaces import LLM
+from onyx.natural_language_processing.english_stopwords import strip_stopwords
 from onyx.secondary_llm_flows.source_filter import extract_source_filter
 from onyx.secondary_llm_flows.time_filter import extract_time_filter
 from onyx.utils.logger import setup_logger
@@ -278,12 +279,16 @@ def search_pipeline(
         bypass_acl=chunk_search_request.bypass_acl,
     )
 
+    query_keywords = strip_stopwords(chunk_search_request.query)
+
     query_request = ChunkIndexRequest(
         query=chunk_search_request.query,
         hybrid_alpha=chunk_search_request.hybrid_alpha,
         recency_bias_multiplier=chunk_search_request.recency_bias_multiplier,
-        query_keywords=chunk_search_request.query_keywords,
+        query_keywords=query_keywords,
         filters=filters,
+        limit=chunk_search_request.limit,
+        offset=chunk_search_request.offset,
     )
 
     retrieved_chunks = search_chunks(

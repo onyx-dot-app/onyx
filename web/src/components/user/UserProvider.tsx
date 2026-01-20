@@ -43,6 +43,7 @@ interface UserContextType {
   updateUserThemePreference: (
     themePreference: ThemePreference
   ) => Promise<void>;
+  updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -364,6 +365,39 @@ export function UserProvider({
     }
   };
 
+  const updateUserChatBackground = async (chatBackground: string | null) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              chat_background: chatBackground,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/user/chat-background`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ chat_background: chatBackground }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update chat background");
+      }
+    } catch (error) {
+      console.error("Error updating chat background:", error);
+      throw error;
+    }
+  };
+
   const refreshUser = async () => {
     await fetchUser();
   };
@@ -379,6 +413,7 @@ export function UserProvider({
         updateUserTemperatureOverrideEnabled,
         updateUserPersonalization,
         updateUserThemePreference,
+        updateUserChatBackground,
         toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator

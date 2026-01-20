@@ -303,7 +303,11 @@ function AttachmentItemLayout({
         title={title}
         description={description}
         middleText={middleText}
-        rightChildren={<div className="px-1">{rightChildren}</div>}
+        rightChildren={
+          rightChildren ? (
+            <div className="px-1">{rightChildren}</div>
+          ) : undefined
+        }
         center
         variant="secondary"
       />

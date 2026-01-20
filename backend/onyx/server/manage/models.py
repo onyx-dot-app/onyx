@@ -65,6 +65,7 @@ class UserPreferences(BaseModel):
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
     theme_preference: ThemePreference | None = None
+    chat_background: str | None = None
 
     # controls which tools are enabled for the user for a specific assistant
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
@@ -136,6 +137,7 @@ class UserInfo(BaseModel):
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
                     theme_preference=user.theme_preference,
+                    chat_background=user.chat_background,
                     assistant_specific_configs=assistant_specific_configs,
                 )
             ),
@@ -197,6 +199,10 @@ class AutoScrollRequest(BaseModel):
 
 class ThemePreferenceRequest(BaseModel):
     theme_preference: ThemePreference
+
+
+class ChatBackgroundRequest(BaseModel):
+    chat_background: str | None
 
 
 class PersonalizationUpdateRequest(BaseModel):

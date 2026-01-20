@@ -608,9 +608,7 @@ mypy-extensions==1.0.0
 nest-asyncio==1.6.0
     # via onyx
 nltk==3.9.1
-    # via
-    #   onyx
-    #   unstructured
+    # via unstructured
 numpy==2.4.1
     # via
     #   magika

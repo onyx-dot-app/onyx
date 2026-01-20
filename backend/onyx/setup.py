@@ -14,9 +14,6 @@ from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
-from onyx.context.search.retrieval.search_runner import (
-    download_nltk_data,
-)
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import create_initial_default_connector
 from onyx.db.connector_credential_pair import associate_default_cc_pair
@@ -115,9 +112,6 @@ def setup_onyx(
             logger.notice(
                 f"Multilingual query expansion is enabled with {search_settings.multilingual_expansion}."
             )
-
-    logger.notice("Verifying query preprocessing (NLTK) data is downloaded")
-    download_nltk_data()
 
     # setup Postgres with default credential, llm providers, etc.
     setup_postgres(db_session)

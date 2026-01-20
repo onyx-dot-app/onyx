@@ -188,6 +188,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=True,
         default=None,
     )
+    chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
     # personalization fields are exposed via the chat user settings "Personalization" tab
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)

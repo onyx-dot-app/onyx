@@ -74,6 +74,10 @@ import ChatHeader from "@/app/chat/components/ChatHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+import {
+  CHAT_BACKGROUND_NONE,
+  getBackgroundById,
+} from "@/lib/constants/chatBackgrounds";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -575,6 +579,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     );
   }
 
+  // Chat background logic
+  const chatBackgroundId = user?.preferences?.chat_background;
+  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
+  const hasBackground =
+    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+
   if (!isReady) return <OnyxInitializingLoader />;
 
   return (
@@ -640,9 +650,22 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full flex flex-col items-center outline-none relative"
+              className={cn(
+                "h-full w-full flex flex-col items-center outline-none relative",
+                hasBackground && "bg-cover bg-center bg-fixed"
+              )}
+              style={
+                hasBackground
+                  ? { backgroundImage: `url(${chatBackground.url})` }
+                  : undefined
+              }
               {...getRootProps({ tabIndex: -1 })}
             >
+              {/* Semi-transparent overlay for readability when background is set */}
+              {hasBackground && (
+                <div className="absolute inset-0 bg-background/80 pointer-events-none" />
+              )}
+
               {/* ProjectUI */}
               {!!currentProjectId && projectPanelVisible && (
                 <ProjectContextPanel
@@ -661,6 +684,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
                   onScrollButtonVisibilityChange={setShowScrollButton}
+                  disableFadeOverlay={hasBackground}
                 >
                   <AppLayouts.StickyHeader>
                     <ChatHeader />

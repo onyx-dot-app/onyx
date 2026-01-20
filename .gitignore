@@ -1,5 +1,8 @@
 # editors
 .vscode
+!/.vscode/env_template.txt
+!/.vscode/launch.json
+!/.vscode/tasks.template.jsonc
 .zed
 .cursor
 
