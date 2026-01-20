@@ -13,7 +13,7 @@ import { IconProps } from "@/components/icons/icons";
 export interface SourceInfo {
   id: string;
   title: string;
-  sourceType: ValidSources | "web";
+  sourceType: ValidSources;
   sourceUrl?: string;
   description?: string;
   metadata?: {
