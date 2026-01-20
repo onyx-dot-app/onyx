@@ -16,6 +16,8 @@ Create Date: 2026-01-15 12:49:53.802741
 from alembic import op
 import sqlalchemy as sa
 
+from shared_configs.configs import MULTI_TENANT
+
 
 # revision identifiers, used by Alembic.
 revision = "f7ca3e2f45d9"
@@ -125,7 +127,14 @@ def upgrade() -> None:
     Create a placeholder user and assign all NULL user_id records to it.
     Install a trigger that migrates data to the first real user and self-destructs.
     Only runs if no real users exist (true AUTH_TYPE=disabled deployment).
+
+    Skipped in multi-tenant mode - each tenant starts fresh with no legacy data.
     """
+    # Skip in multi-tenant mode - this migration handles single-tenant
+    # AUTH_TYPE=disabled -> auth transitions only
+    if MULTI_TENANT:
+        return
+
     connection = op.get_bind()
 
     # Check if any real users exist in the database
@@ -162,7 +171,6 @@ def upgrade() -> None:
             pass
 
     if not has_null_records:
-        print("No NULL user_id records found. Skipping placeholder user creation.")
         return
 
     # Check if placeholder user already exists
@@ -192,7 +200,6 @@ def upgrade() -> None:
                 "role": "BASIC",
             },
         )
-        print(f"Created placeholder user: {NO_AUTH_PLACEHOLDER_USER_EMAIL}")
 
     # Assign NULL user_id records to the placeholder user
     for table in tables_to_check:
