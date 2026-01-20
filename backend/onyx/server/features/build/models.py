@@ -12,7 +12,13 @@ from onyx.db.enums import SandboxStatus
 class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
-    pass  # No fields required - session is created empty
+    name: str | None = None  # Optional session name
+
+
+class SessionUpdateRequest(BaseModel):
+    """Request to update a build session."""
+
+    name: str | None = None
 
 
 class SandboxResponse(BaseModel):
@@ -64,6 +70,7 @@ class SessionResponse(BaseModel):
 
     id: str
     user_id: str | None
+    name: str | None
     status: BuildSessionStatus
     created_at: datetime
     last_activity_at: datetime
@@ -76,6 +83,7 @@ class SessionResponse(BaseModel):
         return cls(
             id=str(session.id),
             user_id=str(session.user_id) if session.user_id else None,
+            name=session.name,
             status=session.status,
             created_at=session.created_at,
             last_activity_at=session.last_activity_at,

@@ -253,7 +253,7 @@ class SandboxManager:
             logger.debug("Opencode config ready")
 
             # Allocate Next.js port and start server
-            nextjs_port = allocate_nextjs_port()
+            nextjs_port = allocate_nextjs_port(db_session)
             web_dir = self._directory_manager.get_web_path(sandbox_path)
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 

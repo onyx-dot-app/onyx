@@ -88,6 +88,13 @@ export interface ACPErrorEvent {
   message: string;
 }
 
+/** File write event (custom Onyx extension) */
+export interface FileWriteEvent {
+  path: string;
+  size_bytes?: number;
+  operation?: "create" | "update" | "delete";
+}
+
 // =============================================================================
 // Legacy Event Types (kept for backwards compatibility)
 // =============================================================================
@@ -140,7 +147,8 @@ export type ACPEvent =
   | { type: "prompt_response"; data: PromptResponseEvent }
   | { type: "error"; data: ACPErrorEvent }
   | { type: "status"; data: StatusEvent }
-  | { type: "artifact"; data: ArtifactEvent };
+  | { type: "artifact"; data: ArtifactEvent }
+  | { type: "file_write"; data: FileWriteEvent };
 
 /** Legacy BuildEvent type - alias for ACPEvent */
 export type BuildEvent = ACPEvent;
@@ -228,6 +236,100 @@ export async function executeTask(
   } catch (error) {
     onError(error instanceof Error ? error : new Error(String(error)));
   }
+}
+
+/**
+ * Send a message to the build session using the new messages API endpoint.
+ * This endpoint streams SSE events with message-prefixed packet types.
+ */
+export async function sendMessage(
+  sessionId: string,
+  message: string,
+  onEvent: (event: BuildEvent) => void,
+  onError: (error: Error) => void,
+  onComplete: () => void
+): Promise<void> {
+  try {
+    const response = await fetch(`/api/build/sessions/${sessionId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({ content: message }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `HTTP ${response.status}: ${errorText || response.statusText}`
+      );
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          // Skip event type line (all events are "message")
+          continue;
+        } else if (line.startsWith("data:")) {
+          const data = line.slice(5).trim();
+          if (data) {
+            try {
+              const parsed = JSON.parse(data);
+              // Map frontend packet types to BuildEvent types
+              const eventType = mapMessagePacketToEventType(parsed.type);
+              if (eventType) {
+                onEvent({ type: eventType, data: parsed } as BuildEvent);
+              }
+            } catch (err) {
+              console.error("Failed to parse SSE data:", err);
+            }
+          }
+        }
+      }
+    }
+
+    onComplete();
+  } catch (error) {
+    onError(error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
+/**
+ * Map message API packet types to BuildEvent types.
+ * Uses direct ACP event names from the backend, plus custom Onyx packet types.
+ */
+function mapMessagePacketToEventType(packetType: string): string | null {
+  const mapping: Record<string, string> = {
+    // Direct ACP event types
+    agent_message_chunk: "agent_message_chunk",
+    agent_thought_chunk: "agent_thought_chunk",
+    tool_call_start: "tool_call",
+    tool_call_progress: "tool_call_update",
+    agent_plan_update: "plan",
+    current_mode_update: "current_mode_update",
+    prompt_response: "prompt_response",
+    error: "error",
+    // Custom Onyx packet types (extensions to ACP)
+    artifact_created: "artifact",
+    file_write: "file_write",
+  };
+  return mapping[packetType] || null;
 }
 
 export async function listArtifacts(

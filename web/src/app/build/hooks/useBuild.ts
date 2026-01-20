@@ -5,6 +5,7 @@ import {
   createSession,
   deleteSession,
   executeTask,
+  sendMessage,
   BuildEvent,
   ArtifactInfo,
   AgentMessageChunkEvent,
@@ -157,151 +158,155 @@ export function useBuild(): UseBuildReturn {
       setSessionId(session_id);
       setStatus("running");
 
-      await executeTask(
+      // Use the new sendMessage API endpoint
+      await sendMessage(
         session_id,
         task,
-        context,
         (event: BuildEvent) => {
           const timestamp = Date.now();
 
           switch (event.type) {
-            // New ACP event types
+            // ACP event types (direct from backend)
             case "agent_message_chunk": {
-              const text = extractTextFromMessageChunk(
-                event.data as AgentMessageChunkEvent
-              );
-              if (text) {
+              // ACP format: content is an object with type and text
+              const data = event.data as any;
+              let content = "";
+              // Handle ACP content structure
+              if (data.content) {
+                if (data.content.type === "text" && data.content.text) {
+                  content = data.content.text;
+                } else if (Array.isArray(data.content)) {
+                  content = data.content
+                    .filter((c: any) => c.type === "text" && c.text)
+                    .map((c: any) => c.text)
+                    .join("");
+                }
+              }
+              if (content) {
                 setPackets((prev) => [
                   ...prev,
-                  { type: "message", content: text, timestamp },
+                  { type: "message", content, timestamp },
                 ]);
               }
               break;
             }
 
             case "agent_thought_chunk": {
-              const data = event.data as AgentThoughtChunkEvent;
-              if (data.thought) {
+              // ACP format: content is an object with type and text
+              const data = event.data as any;
+              let content = "";
+              if (data.content) {
+                if (data.content.type === "text" && data.content.text) {
+                  content = data.content.text;
+                }
+              }
+              if (content) {
                 setPackets((prev) => [
                   ...prev,
-                  { type: "thought", content: data.thought, timestamp },
+                  { type: "thought", content, timestamp },
                 ]);
               }
               break;
             }
 
             case "tool_call": {
-              // Backend uses snake_case: tool_call_id, title/kind, raw_input
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const rawData = event.data as any;
-              const toolCallId = rawData.toolCallId || rawData.tool_call_id;
-              const toolName =
-                rawData.toolName || rawData.title || rawData.kind;
-              const toolInput = rawData.toolInput || rawData.raw_input;
-              const inputStr = toolInput ? JSON.stringify(toolInput) : "";
+              // ACP format: kind (tool type), title, tool_call_id
+              const data = event.data as any;
+              const toolName = data.kind || data.tool_name || "unknown";
+              const title = data.title || "";
               setPackets((prev) => [
                 ...prev,
                 {
                   type: "tool_start",
-                  content: inputStr,
+                  content: title,
                   timestamp,
                   toolName: toolName,
-                  toolCallId: toolCallId,
+                  toolCallId: data.tool_call_id,
                 },
               ]);
               break;
             }
 
             case "tool_call_update": {
-              // Backend uses snake_case: tool_call_id, and status instead of isComplete
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const rawData = event.data as any;
-              const text = extractTextFromToolProgress(rawData);
-              const isComplete =
-                rawData.isComplete || rawData.status === "completed";
-              const toolCallId = rawData.toolCallId || rawData.tool_call_id;
-              const toolInput = rawData.toolInput || rawData.raw_input;
-
-              setPackets((prev) => {
-                const newPackets = [...prev];
-
-                // If we have updated raw_input, update the corresponding tool_start packet
-                if (
-                  toolInput &&
-                  typeof toolInput === "object" &&
-                  Object.keys(toolInput).length > 0
-                ) {
-                  const toolStartIndex = newPackets.findIndex(
-                    (p) =>
-                      p.type === "tool_start" && p.toolCallId === toolCallId
-                  );
-                  if (toolStartIndex !== -1) {
-                    const existingPacket = newPackets[toolStartIndex]!;
-                    newPackets[toolStartIndex] = {
-                      type: existingPacket.type,
-                      timestamp: existingPacket.timestamp,
-                      content: JSON.stringify(toolInput),
-                      toolName: existingPacket.toolName,
-                      toolCallId: existingPacket.toolCallId,
-                    };
-                  }
-                }
-
-                // Add progress packet if there's content or completion
-                if (text || isComplete) {
-                  newPackets.push({
-                    type: "tool_progress",
-                    content: text || (isComplete ? "[completed]" : ""),
-                    timestamp,
-                    toolCallId: toolCallId,
-                  });
-                }
-
-                return newPackets;
-              });
+              // ACP format: kind, status, title, tool_call_id
+              const data = event.data as any;
+              const toolName = data.kind || data.tool_name || "";
+              const status = data.status || "completed";
+              const title = data.title || "";
+              setPackets((prev) => [
+                ...prev,
+                {
+                  type: "tool_progress",
+                  content: title || `[${status}]`,
+                  timestamp,
+                  toolName: toolName,
+                  toolCallId: data.tool_call_id,
+                },
+              ]);
               break;
             }
 
             case "plan": {
-              const data = event.data as AgentPlanUpdateEvent;
-              setPlan(data.plan);
+              // ACP format: plan.entries array
+              const data = event.data as any;
+              if (data.plan && data.plan.entries) {
+                setPlan(data.plan.entries);
+              } else if (data.plan) {
+                setPlan(data.plan);
+              }
               break;
             }
 
             case "current_mode_update": {
-              setCurrentMode(event.data.mode);
+              const data = event.data as any;
+              if (data.mode) {
+                setCurrentMode(data.mode);
+              }
               break;
             }
 
             case "prompt_response": {
-              // Agent finished - status event should follow
+              // Agent finished
+              setStatus("completed");
               break;
             }
 
-            // Status and artifact events (unchanged)
-            case "status":
-              if (event.data.status === "completed") {
-                setStatus("completed");
-              } else if (event.data.status === "failed") {
-                setStatus("failed");
-                setError(event.data.message || "Task failed");
+            case "artifact": {
+              // Messages API format: artifact object with id, type, name, path
+              const data = event.data as any;
+              if (data.artifact) {
+                const artifact = data.artifact;
+                setArtifacts((prev) => [
+                  ...prev,
+                  {
+                    artifact_type:
+                      artifact.type as ArtifactInfo["artifact_type"],
+                    path: artifact.path,
+                    filename: artifact.name,
+                  },
+                ]);
               }
               break;
-            case "artifact":
-              setArtifacts((prev) => [
-                ...prev,
-                {
-                  artifact_type: event.data
-                    .artifact_type as ArtifactInfo["artifact_type"],
-                  path: event.data.path,
-                  filename: event.data.filename,
-                },
-              ]);
+            }
+
+            case "file_write": {
+              // Custom Onyx packet: file was written
+              const data = event.data as any;
+              console.debug(
+                "[Build] File written:",
+                data.path,
+                data.size_bytes
+              );
+              // Could track file writes in state if needed
               break;
-            case "error":
+            }
+
+            case "error": {
+              const data = event.data as any;
               setStatus("failed");
-              setError(event.data.message);
+              setError(data.message || "An error occurred");
               break;
+            }
           }
         },
         (err) => {
@@ -309,7 +314,10 @@ export function useBuild(): UseBuildReturn {
           setError(err.message);
         },
         () => {
-          // Stream complete - status should already be set by status event
+          // Stream complete - if not already set to failed, mark as completed
+          setStatus((current) =>
+            current === "failed" ? "failed" : "completed"
+          );
         }
       );
     } catch (err) {

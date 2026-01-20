@@ -4,9 +4,11 @@ import { useCallback, useMemo } from "react";
 
 import {
   Artifact,
-  OutputDeltaPacket,
+  ArtifactType,
   ArtifactCreatedPacket,
   ErrorPacket,
+  ToolCall,
+  ToolCallStatus,
 } from "@/app/build/services/buildStreamingModels";
 
 import {
@@ -31,6 +33,15 @@ export function useBuildStreaming() {
   );
   const addArtifactToSession = useBuildSessionStore(
     (state) => state.addArtifactToSession
+  );
+  const addToolCallToSession = useBuildSessionStore(
+    (state) => state.addToolCallToSession
+  );
+  const updateToolCallInSession = useBuildSessionStore(
+    (state) => state.updateToolCallInSession
+  );
+  const clearToolCallsInSession = useBuildSessionStore(
+    (state) => state.clearToolCallsInSession
   );
   const setAbortController = useBuildSessionStore(
     (state) => state.setAbortController
@@ -59,8 +70,9 @@ export function useBuildStreaming() {
       const controller = new AbortController();
       setAbortController(sessionId, controller);
 
-      // Set status to running
+      // Set status to running and clear previous tool calls
       updateSessionData(sessionId, { status: "running" });
+      clearToolCallsInSession(sessionId);
 
       // Add placeholder assistant message using session-specific method
       // to avoid race condition when currentSessionId changes during navigation
@@ -81,21 +93,115 @@ export function useBuildStreaming() {
         let assistantContent = "";
 
         await processSSEStream(response, (packet) => {
+          const packetData = packet as any;
+
+          // Log all incoming packets for debugging
+          console.log("[Build] SSE Packet received:", packet.type, packet);
+
+          // Helper to extract text from ACP content structure
+          const extractText = (content: any): string => {
+            if (!content) return "";
+            if (content.type === "text" && content.text) return content.text;
+            if (Array.isArray(content)) {
+              return content
+                .filter((c: any) => c.type === "text" && c.text)
+                .map((c: any) => c.text)
+                .join("");
+            }
+            return "";
+          };
+
           switch (packet.type) {
-            case "output_delta":
-              assistantContent += (packet as OutputDeltaPacket).content;
-              updateLastMessageInSession(sessionId, assistantContent);
+            // ACP: Agent message content
+            case "agent_message_chunk": {
+              const text = extractText(packetData.content);
+              if (text) {
+                assistantContent += text;
+                updateLastMessageInSession(sessionId, assistantContent);
+              }
+              break;
+            }
+
+            // ACP: Agent's internal reasoning
+            case "agent_thought_chunk":
+              console.debug(
+                "[Build] Thought:",
+                extractText(packetData.content)
+              );
               break;
 
+            // ACP: Tool invocation started
+            case "tool_call_start": {
+              const toolCall: ToolCall = {
+                id: packetData.tool_call_id || `tc-${Date.now()}`,
+                kind: packetData.kind || "other",
+                name: packetData.title || packetData.kind || "unknown",
+                title:
+                  packetData.title || `Running ${packetData.kind || "tool"}...`,
+                status: "in_progress",
+                input: packetData.input,
+                startedAt: new Date(),
+              };
+              console.log("[Build] Tool started:", toolCall);
+              addToolCallToSession(sessionId, toolCall);
+              break;
+            }
+
+            // ACP: Tool execution progress
+            case "tool_call_progress": {
+              const toolCallId = packetData.tool_call_id;
+              const status = packetData.status as ToolCallStatus;
+              const isFinished =
+                status === "completed" ||
+                status === "failed" ||
+                status === "cancelled";
+
+              console.log("[Build] Tool progress:", packetData.kind, status);
+
+              if (toolCallId) {
+                updateToolCallInSession(sessionId, toolCallId, {
+                  status,
+                  ...(isFinished && { finishedAt: new Date() }),
+                  ...(status === "failed" && {
+                    error: packetData.error || "Tool execution failed",
+                  }),
+                });
+              }
+              break;
+            }
+
+            // ACP: Agent's execution plan
+            case "agent_plan_update":
+              console.debug(
+                "[Build] Plan updated:",
+                packetData.plan?.entries?.length,
+                "entries"
+              );
+              break;
+
+            // ACP: Agent mode change
+            case "current_mode_update":
+              console.debug(
+                "[Build] Mode updated:",
+                packetData.current_mode_id
+              );
+              break;
+
+            // File operations
+            case "file_write":
+              console.debug("[Build] File written:", packet);
+              break;
+
+            // Artifacts - add to session
             case "artifact_created": {
               const artPacket = packet as ArtifactCreatedPacket;
               const newArtifact: Artifact = {
                 id: artPacket.artifact.id,
                 session_id: sessionId,
-                type: artPacket.artifact.type,
+                type: artPacket.artifact.type as ArtifactType,
                 name: artPacket.artifact.name,
                 path: artPacket.artifact.path,
-                preview_url: artPacket.artifact.preview_url,
+                preview_url: artPacket.artifact.preview_url || null,
                 created_at: new Date(),
                 updated_at: new Date(),
               };
@@ -103,18 +209,29 @@ export function useBuildStreaming() {
               break;
             }
 
-            case "done":
+            // ACP: Agent finished
+            case "prompt_response":
               updateSessionData(sessionId, { status: "completed" });
               break;
 
+            // Error
             case "error": {
               const errPacket = packet as ErrorPacket;
               updateSessionData(sessionId, {
                 status: "failed",
-                error: errPacket.message,
+                error: errPacket.message || packetData.message,
               });
               break;
             }
+
+            // Unknown packet types - log for debugging
+            default:
+              console.debug(
+                "[Build] Unhandled packet type:",
+                packet.type,
+                packet
+              );
+              break;
           }
         });
       } catch (err) {
@@ -136,6 +253,9 @@ export function useBuildStreaming() {
       appendMessageToSession,
       updateLastMessageInSession,
       addArtifactToSession,
+      addToolCallToSession,
+      updateToolCallInSession,
+      clearToolCallsInSession,
     ]
   );
 

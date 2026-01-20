@@ -222,11 +222,14 @@ def _is_port_available(port: int) -> bool:
         return False
 
 
-def allocate_nextjs_port() -> int:
+def allocate_nextjs_port(db_session: Session) -> int:
     """Allocate an available port for a new sandbox.
 
     Finds the first available port in the configured range by checking
-    system-level port availability.
+    both database allocations and system-level port availability.
+
+    Args:
+        db_session: Database session for querying allocated ports
 
     Returns:
         An available port number
@@ -234,8 +237,17 @@ def allocate_nextjs_port() -> int:
     Raises:
         RuntimeError: If no ports are available in the configured range
     """
+    # Get all currently allocated ports from the database
+    allocated_ports = set(
+        db_session.query(Sandbox.nextjs_port)
+        .filter(Sandbox.nextjs_port.isnot(None))
+        .all()
+    )
+    allocated_ports = {port[0] for port in allocated_ports if port[0] is not None}
+
+    # Find first port that's not in DB and not currently bound
     for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-        if _is_port_available(port):
+        if port not in allocated_ports and _is_port_available(port):
             return port
 
     raise RuntimeError(
