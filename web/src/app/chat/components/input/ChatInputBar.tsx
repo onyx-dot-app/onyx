@@ -501,17 +501,19 @@ const ChatInputBar = React.memo(
           >
             <Popover.Menu>
               {[
-                ...filteredPrompts.map((prompt, index) => (
-                  <LineItem
-                    key={prompt.id}
-                    selected={tabbingIconIndex === index}
-                    emphasized={tabbingIconIndex === index}
-                    description={prompt.content?.trim()}
-                    onClick={() => updateInputPrompt(prompt)}
-                  >
-                    {prompt.prompt}
-                  </LineItem>
-                )),
+                ...[...filteredPrompts]
+                  .sort((a, b) => a.id - b.id)
+                  .map((prompt, index) => (
+                    <LineItem
+                      key={prompt.id}
+                      selected={tabbingIconIndex === index}
+                      emphasized={tabbingIconIndex === index}
+                      description={prompt.content?.trim()}
+                      onClick={() => updateInputPrompt(prompt)}
+                    >
+                      {prompt.prompt}
+                    </LineItem>
+                  )),
                 filteredPrompts.length > 0 ? null : undefined,
                 <LineItem
                   key="create-new"
