@@ -11,6 +11,9 @@ from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 #####
 # App Configs
@@ -74,8 +77,8 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 # Upgrades users from disabled auth to basic auth and shows warning.
 _auth_type_str = (os.environ.get("AUTH_TYPE") or AuthType.BASIC.value).lower()
 if _auth_type_str in ("disabled", "none"):
-    print(
-        "WARNING: AUTH_TYPE='disabled' is no longer supported. "
+    logger.warning(
+        "AUTH_TYPE='disabled' is no longer supported. "
         "Defaulting to 'basic'. Please update your configuration. "
         "Your existing data will be migrated automatically."
     )
