@@ -145,7 +145,12 @@ def update_sandbox_status(
     sandbox_id: UUID,
     status: SandboxStatus,
     container_id: str | None = None,
-    db_session: Session = None,
+def update_sandbox_status(
+    sandbox_id: UUID,
+    status: SandboxStatus,
+    db_session: Session,
+    container_id: str | None = None,
+) -> None:
 ) -> None:
     """Update the status of a sandbox."""
     sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
