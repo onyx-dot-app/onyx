@@ -12,6 +12,7 @@ from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
+from ee.onyx.db.license import get_used_seats
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.server.settings.models import ApplicationStatus
 from shared_configs.configs import MULTI_TENANT
@@ -25,6 +26,7 @@ from shared_configs.contextvars import get_current_tenant_id
 #   /me - Basic user info needed for UI rendering
 #   /settings, /enterprise-settings - View app status and branding
 #   /tenants/billing-* - Manage subscription to resolve gating
+#   /manage/users, /manage/admin/users - Manage users to resolve seat limit issues
 ALLOWED_PATH_PREFIXES = {
     "/auth",
     "/license",
@@ -35,6 +37,8 @@ ALLOWED_PATH_PREFIXES = {
     "/tenants/billing-information",
     "/tenants/create-customer-portal-session",
     "/tenants/create-subscription-session",
+    "/manage/users",
+    "/manage/admin/users",
 }
 
 
@@ -64,6 +68,7 @@ def add_license_enforcement_middleware(
             return await call_next(request)
 
         is_gated = False
+        seat_limit_exceeded = False
         tenant_id = get_current_tenant_id()
 
         if MULTI_TENANT:
@@ -73,19 +78,47 @@ def add_license_enforcement_middleware(
                 logger.warning(f"Failed to check tenant gating status: {e}")
                 # Fail open - don't block users due to Redis connectivity issues
                 is_gated = False
-        else:
-            try:
-                metadata = get_cached_license_metadata(tenant_id)
-                if metadata:
-                    if metadata.status == ApplicationStatus.GATED_ACCESS:
-                        is_gated = True
-                else:
-                    # No license metadata = gated for self-hosted EE
+
+        # Check license status and seat limits (works for both multi-tenant and self-hosted)
+        try:
+            metadata = get_cached_license_metadata(tenant_id)
+            if metadata:
+                # For self-hosted: check if license is gated
+                if (
+                    not MULTI_TENANT
+                    and metadata.status == ApplicationStatus.GATED_ACCESS
+                ):
                     is_gated = True
-            except RedisError as e:
-                logger.warning(f"Failed to check license metadata: {e}")
-                # Fail open - don't block users due to Redis connectivity issues
-                is_gated = False
+
+                # Check seat limits using signed license (tamper-proof)
+                # metadata.seats comes from the cryptographically signed license
+                used_seats = get_used_seats(tenant_id)
+                if used_seats > metadata.seats:
+                    seat_limit_exceeded = True
+                    logger.info(
+                        f"Seat limit exceeded for tenant {tenant_id}: "
+                        f"{used_seats} used > {metadata.seats} licensed"
+                    )
+            elif not MULTI_TENANT:
+                # No license metadata = gated for self-hosted EE
+                is_gated = True
+        except RedisError as e:
+            logger.warning(f"Failed to check license metadata: {e}")
+            # Fail open - don't block users due to Redis connectivity issues
+
+        if seat_limit_exceeded:
+            logger.info(
+                f"Blocking request for tenant over seat limit: {tenant_id}, path={path}"
+            )
+            return JSONResponse(
+                status_code=402,
+                content={
+                    "detail": {
+                        "error": "seat_limit_exceeded",
+                        "message": "Seat limit exceeded. Please purchase more seats or remove users.",
+                    }
+                },
+            )
 
         if is_gated:
             logger.info(f"Blocking request for gated tenant: {tenant_id}, path={path}")

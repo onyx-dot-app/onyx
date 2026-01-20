@@ -1,5 +1,6 @@
 """Tests for license enforcement middleware."""
 
+import json
 from collections.abc import Awaitable
 from collections.abc import Callable
 from typing import Any
@@ -34,6 +35,10 @@ class TestPathAllowlist:
             ("/enterprise-settings", True),
             ("/tenants/billing-information", True),
             ("/tenants/create-customer-portal-session", True),
+            # User management paths (for resolving seat limit issues)
+            ("/manage/users", True),
+            ("/manage/users/accepted", True),
+            ("/manage/admin/users", True),
             # Verify prefix matching works (subpath of allowlisted)
             ("/auth/callback/google", True),
             # Blocked paths (core functionality that requires license)
@@ -157,3 +162,122 @@ class TestLicenseEnforcementMiddleware:
 
         response = await middleware(mock_request, call_next)
         assert response.status_code == 200  # Fail open
+
+    @pytest.mark.asyncio
+    @patch(
+        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
+        True,
+    )
+    @patch("ee.onyx.server.middleware.license_enforcement.MULTI_TENANT", False)
+    @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
+    @patch("ee.onyx.server.middleware.license_enforcement.get_used_seats")
+    @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
+    async def test_seat_limit_exceeded_gets_402(
+        self,
+        mock_get_metadata: MagicMock,
+        mock_get_used_seats: MagicMock,
+        mock_get_tenant: MagicMock,
+        middleware_harness: MiddlewareHarness,
+    ) -> None:
+        """When used seats exceed licensed seats, return 402 with seat_limit_exceeded."""
+        from onyx.server.settings.models import ApplicationStatus
+
+        mock_get_tenant.return_value = "test_tenant"
+
+        # Create mock metadata with 5 licensed seats
+        mock_metadata = MagicMock()
+        mock_metadata.seats = 5
+        mock_metadata.status = ApplicationStatus.ACTIVE
+        mock_get_metadata.return_value = mock_metadata
+
+        # But 10 seats are in use
+        mock_get_used_seats.return_value = 10
+
+        middleware, call_next = middleware_harness
+        mock_request = MagicMock()
+        mock_request.url.path = "/api/chat"
+
+        response = await middleware(mock_request, call_next)
+        assert response.status_code == 402
+        # Verify it's specifically seat_limit_exceeded, not license_expired
+        body = json.loads(bytes(response.body).decode())
+        assert body["detail"]["error"] == "seat_limit_exceeded"
+
+    @pytest.mark.asyncio
+    @patch(
+        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
+        True,
+    )
+    @patch("ee.onyx.server.middleware.license_enforcement.MULTI_TENANT", False)
+    @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
+    @patch("ee.onyx.server.middleware.license_enforcement.get_used_seats")
+    @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
+    async def test_within_seat_limit_passes(
+        self,
+        mock_get_metadata: MagicMock,
+        mock_get_used_seats: MagicMock,
+        mock_get_tenant: MagicMock,
+        middleware_harness: MiddlewareHarness,
+    ) -> None:
+        """When used seats are within license limit, request proceeds."""
+        from onyx.server.settings.models import ApplicationStatus
+
+        mock_get_tenant.return_value = "test_tenant"
+
+        # 10 licensed seats
+        mock_metadata = MagicMock()
+        mock_metadata.seats = 10
+        mock_metadata.status = ApplicationStatus.ACTIVE
+        mock_get_metadata.return_value = mock_metadata
+
+        # Only 5 in use
+        mock_get_used_seats.return_value = 5
+
+        middleware, call_next = middleware_harness
+        mock_request = MagicMock()
+        mock_request.url.path = "/api/chat"
+
+        response = await middleware(mock_request, call_next)
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    @patch(
+        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
+        True,
+    )
+    @patch("ee.onyx.server.middleware.license_enforcement.MULTI_TENANT", True)
+    @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
+    @patch("ee.onyx.server.middleware.license_enforcement.get_used_seats")
+    @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
+    @patch("ee.onyx.server.middleware.license_enforcement.is_tenant_gated")
+    async def test_seat_limit_enforced_for_multi_tenant(
+        self,
+        mock_is_gated: MagicMock,
+        mock_get_metadata: MagicMock,
+        mock_get_used_seats: MagicMock,
+        mock_get_tenant: MagicMock,
+        middleware_harness: MiddlewareHarness,
+    ) -> None:
+        """Seat limit enforcement works for multi-tenant deployments too."""
+        from onyx.server.settings.models import ApplicationStatus
+
+        mock_get_tenant.return_value = "cloud_tenant"
+        mock_is_gated.return_value = False  # Not gated by subscription
+
+        # 5 licensed seats
+        mock_metadata = MagicMock()
+        mock_metadata.seats = 5
+        mock_metadata.status = ApplicationStatus.ACTIVE
+        mock_get_metadata.return_value = mock_metadata
+
+        # But 8 in use
+        mock_get_used_seats.return_value = 8
+
+        middleware, call_next = middleware_harness
+        mock_request = MagicMock()
+        mock_request.url.path = "/api/chat"
+
+        response = await middleware(mock_request, call_next)
+        assert response.status_code == 402
+        body = json.loads(bytes(response.body).decode())
+        assert body["detail"]["error"] == "seat_limit_exceeded"
