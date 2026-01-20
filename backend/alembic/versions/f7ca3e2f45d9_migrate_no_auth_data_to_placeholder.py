@@ -8,7 +8,7 @@ A database trigger is installed that automatically transfers all data from
 the placeholder user to the first real user who registers, then drops itself.
 
 Revision ID: f7ca3e2f45d9
-Revises: 73e9983e5091
+Revises: 8b5ce697290e
 Create Date: 2026-01-15 12:49:53.802741
 
 """
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "f7ca3e2f45d9"
-down_revision = "73e9983e5091"
+down_revision = "8b5ce697290e"
 branch_labels = None
 depends_on = None
 
