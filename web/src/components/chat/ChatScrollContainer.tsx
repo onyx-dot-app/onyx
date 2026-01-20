@@ -392,14 +392,14 @@ const ChatScrollContainer = React.memo(
           <div
             key={sessionId}
             ref={scrollContainerRef}
-            className="flex flex-1 justify-center min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
+            className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
             onScroll={handleScroll}
             style={{
               scrollbarGutter: "stable both-edges",
             }}
           >
             <div
-              className="w-full flex flex-col items-center"
+              className="w-full flex-1 flex flex-col items-center"
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",
