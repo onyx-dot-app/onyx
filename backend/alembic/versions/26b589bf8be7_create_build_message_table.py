@@ -36,7 +36,15 @@ def upgrade() -> None:
         ),
         sa.Column(
             "type",
-            sa.Enum(name="messagetype", create_type=False),
+            sa.Enum(
+                "SYSTEM",
+                "USER",
+                "ASSISTANT",
+                "DANSWER",
+                name="messagetype",
+                create_type=False,
+                native_enum=False,
+            ),
             nullable=False,
         ),
         sa.Column(
