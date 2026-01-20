@@ -105,10 +105,10 @@ function HorizontalInputLayout({
           justifyContent="between"
           alignItems={center ? "center" : "start"}
         >
-          <div className="flex-[7]">
+          <div className="flex-[7] w-full max-w-[70%]">
             <LabelLayout {...fieldLabelProps} />
           </div>
-          <div className="flex-[4]">
+          <div className="flex-shrink-0 flex-[3]">
             <Section alignItems="end">{children}</Section>
           </div>
         </Section>

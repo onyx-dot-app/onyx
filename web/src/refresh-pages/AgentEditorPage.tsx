@@ -1497,7 +1497,6 @@ export default function AgentEditorPage({
                               name="llm_model"
                               title="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
-                              center
                             >
                               <LLMSelector
                                 llmProviders={llmProviders ?? []}
@@ -1511,7 +1510,6 @@ export default function AgentEditorPage({
                               name="knowledge_cutoff_date"
                               title="Knowledge Cutoff Date"
                               description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
-                              center
                             >
                               <InputDatePickerField name="knowledge_cutoff_date" />
                             </InputLayouts.Horizontal>
