@@ -331,7 +331,8 @@ class LitellmLLM(LLM):
         # Temperature
         temperature = 1 if is_reasoning else self._temperature
 
-        if stream:
+        if stream and is_openai_model:
+            # stream_options is OpenAI-specific; other providers may reject it.
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Use configured default if not provided (if not set in env, low)
