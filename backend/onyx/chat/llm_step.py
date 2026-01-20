@@ -49,7 +49,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import find_json_objects_in_text
+from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
 
@@ -314,7 +314,7 @@ def extract_tool_calls_from_response_text(
         return []
 
     # Find all JSON objects in the response text
-    json_objects = find_json_objects_in_text(response_text)
+    json_objects = find_all_json_objects(response_text)
 
     tool_calls: list[ToolCallKickoff] = []
     tab_index = 0

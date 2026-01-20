@@ -29,7 +29,7 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/chat/stores/useChatSessionStore";
-import ChatUI from "@/sections/ChatUI";
+import MessageList from "@/components/chat/MessageList";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
@@ -350,17 +350,19 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   {/* Scrollable messages area */}
                   <div className="nrf-messages-scroll">
                     <div className="nrf-messages-content">
-                      <ChatUI
-                        liveAssistant={resolvedAssistant}
-                        llmManager={llmManager}
-                        currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={() => {}}
-                        onSubmit={onSubmit}
-                        onMessageSelection={() => {}}
-                        stopGenerating={stopGenerating}
-                        handleResubmitLastMessage={handleResubmitLastMessage}
-                        deepResearchEnabled={deepResearchEnabled}
-                      />
+                      {resolvedAssistant && (
+                        <MessageList
+                          liveAssistant={resolvedAssistant}
+                          llmManager={llmManager}
+                          currentMessageFiles={currentMessageFiles}
+                          setPresentingDocument={() => {}}
+                          onSubmit={onSubmit}
+                          onMessageSelection={() => {}}
+                          stopGenerating={stopGenerating}
+                          onResubmit={handleResubmitLastMessage}
+                          deepResearchEnabled={deepResearchEnabled}
+                        />
+                      )}
                     </div>
                   </div>
 
