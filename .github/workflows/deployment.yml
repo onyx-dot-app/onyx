@@ -9,7 +9,8 @@ on:
 # Set restrictive default permissions for all jobs. Jobs that need more permissions
 # should explicitly declare them.
 permissions:
-  id-token: write  # Required for OIDC authentication with AWS
+  # Required for OIDC authentication with AWS
+  id-token: write # zizmor: ignore[excessive-permissions]
 
 env:
   EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') }}
