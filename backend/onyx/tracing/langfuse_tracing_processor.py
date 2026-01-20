@@ -335,7 +335,7 @@ class LangfuseTracingProcessor(TracingProcessor):
 
         # Prepare observation parameters
         # Similar to Braintrust approach - use _span_type and _span_name helper functions
-        observation_kwargs: Dict[str,] = dict(
+        observation_kwargs: Dict[str, Any] = dict(
             name=span_name,
             as_type=_span_type(span),
             completion_start_time=_timestamp_from_maybe_iso(span.started_at),
