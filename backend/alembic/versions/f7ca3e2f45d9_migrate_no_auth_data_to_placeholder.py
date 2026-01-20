@@ -4,8 +4,8 @@ This migration handles the transition from AUTH_TYPE=disabled to requiring
 authentication. It creates a placeholder user and assigns all data that was
 created without a user (user_id=NULL) to this placeholder.
 
-When the first real user registers, their registration flow will transfer
-all data from the placeholder user to the new user and delete the placeholder.
+A database trigger is installed that automatically transfers all data from
+the placeholder user to the first real user who registers, then drops itself.
 
 Revision ID: f7ca3e2f45d9
 Revises: 73e9983e5091
@@ -28,9 +28,96 @@ NO_AUTH_PLACEHOLDER_USER_UUID = "00000000-0000-0000-0000-000000000001"
 NO_AUTH_PLACEHOLDER_USER_EMAIL = "no-auth-placeholder@onyx.app"
 
 
+# Trigger function that migrates data from placeholder to first real user
+MIGRATE_NO_AUTH_TRIGGER_FUNCTION = """
+CREATE OR REPLACE FUNCTION migrate_no_auth_data_to_user()
+RETURNS TRIGGER AS $$
+DECLARE
+    placeholder_uuid UUID := '00000000-0000-0000-0000-000000000001'::uuid;
+    placeholder_row RECORD;
+    current_schema TEXT;
+BEGIN
+    -- Skip if this is the placeholder user being inserted
+    IF NEW.id = placeholder_uuid THEN
+        RETURN NEW;
+    END IF;
+
+    -- Skip if the new user is not active (e.g., anonymous users)
+    IF NEW.is_active = FALSE THEN
+        RETURN NEW;
+    END IF;
+
+    -- Get current schema for self-cleanup
+    current_schema := current_schema();
+
+    -- Try to lock the placeholder user row with FOR UPDATE SKIP LOCKED
+    -- This ensures only one concurrent transaction can proceed with migration
+    -- SKIP LOCKED means if another transaction has the lock, we skip (don't wait)
+    SELECT id INTO placeholder_row
+    FROM "user"
+    WHERE id = placeholder_uuid
+    FOR UPDATE SKIP LOCKED;
+
+    IF NOT FOUND THEN
+        -- Either placeholder doesn't exist or another transaction has it locked
+        -- Either way, drop the trigger and return without making admin
+        EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', current_schema);
+        EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', current_schema);
+        RETURN NEW;
+    END IF;
+
+    -- We have exclusive lock on placeholder - proceed with migration
+    -- Migrate chat_session
+    UPDATE "chat_session" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+
+    -- Migrate credential (exclude public credential id=0)
+    UPDATE "credential" SET user_id = NEW.id WHERE user_id = placeholder_uuid AND id != 0;
+
+    -- Migrate document_set
+    UPDATE "document_set" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+
+    -- Migrate persona
+    UPDATE "persona" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+
+    -- Migrate tool (exclude builtin tools)
+    UPDATE "tool" SET user_id = NEW.id WHERE user_id = placeholder_uuid AND in_code_tool_id IS NULL;
+
+    -- Migrate notification
+    UPDATE "notification" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+
+    -- Migrate inputprompt
+    UPDATE "inputprompt" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+
+    -- Migrate agent__search_metrics
+    UPDATE "agent__search_metrics" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+
+    -- Make the new user an admin (they had admin access in no-auth mode)
+    NEW.role := 'ADMIN';
+
+    -- Delete the placeholder user (we hold the lock so this is safe)
+    DELETE FROM "user" WHERE id = placeholder_uuid;
+
+    -- Drop the trigger and function (self-cleanup)
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', current_schema);
+    EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', current_schema);
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+MIGRATE_NO_AUTH_TRIGGER = """
+CREATE TRIGGER trg_migrate_no_auth_data
+BEFORE INSERT ON "user"
+FOR EACH ROW
+EXECUTE FUNCTION migrate_no_auth_data_to_user();
+"""
+
+
 def upgrade() -> None:
     """
     Create a placeholder user and assign all NULL user_id records to it.
+    Install a trigger that migrates data to the first real user and self-destructs.
     Only runs if no real users exist (true AUTH_TYPE=disabled deployment).
     """
     connection = op.get_bind()
@@ -128,12 +215,26 @@ def upgrade() -> None:
         except Exception as e:
             print(f"Skipping {table}: {e}")
 
+    # Install the trigger function and trigger for automatic migration on first user registration
+    connection.execute(sa.text(MIGRATE_NO_AUTH_TRIGGER_FUNCTION))
+    connection.execute(sa.text(MIGRATE_NO_AUTH_TRIGGER))
+    print("Installed trigger for automatic data migration on first user registration")
+
 
 def downgrade() -> None:
     """
-    Set placeholder user's records back to NULL and delete the placeholder user.
+    Drop trigger and function, set placeholder user's records back to NULL,
+    and delete the placeholder user.
     """
     connection = op.get_bind()
+
+    # Drop trigger and function if they exist (they may have already self-destructed)
+    connection.execute(
+        sa.text('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON "user"')
+    )
+    connection.execute(
+        sa.text("DROP FUNCTION IF EXISTS migrate_no_auth_data_to_user()")
+    )
 
     tables_to_update = [
         "chat_session",

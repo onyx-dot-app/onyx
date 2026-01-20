@@ -57,7 +57,6 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
 from sqlalchemy import select
-from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,7 +98,6 @@ from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_UUID
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import PASSWORD_SPECIAL_CHARS
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
@@ -468,8 +466,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.update(user_update, user)
                 if user_created:
                     await self._assign_default_pinned_assistants(user, db_session)
-                    # Migrate data from placeholder user if this is the first real user
-                    await self._migrate_no_auth_data_to_user(user, db_session)
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -503,85 +499,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             {"pinned_assistants": default_persona_ids},
         )
         user.pinned_assistants = default_persona_ids
-
-    async def _migrate_no_auth_data_to_user(
-        self, user: User, db_session: AsyncSession
-    ) -> None:
-        """
-        Migrate data from the placeholder user (created during no-auth migration)
-        to the first registered user. This transfers ownership of all data that
-        was created when AUTH_TYPE=disabled was in use.
-
-        The placeholder user is deleted after successful migration.
-        """
-        placeholder_uuid = uuid.UUID(NO_AUTH_PLACEHOLDER_USER_UUID)
-
-        # Check if placeholder user exists
-        result = await db_session.execute(
-            text('SELECT id FROM "user" WHERE id = :user_id'),
-            {"user_id": str(placeholder_uuid)},
-        )
-        if not result.fetchone():
-            # No placeholder user - nothing to migrate
-            return
-
-        logger.notice(f"Migrating no-auth data from placeholder user to {user.email}")
-
-        # Tables with user_id foreign key that need migration
-        tables_to_migrate = [
-            "chat_session",
-            "credential",
-            "document_set",
-            "persona",
-            "tool",
-            "notification",
-            "inputprompt",
-            "agent__search_metrics",
-        ]
-
-        # Transfer ownership from placeholder user to the new user
-        for table in tables_to_migrate:
-            try:
-                result = await db_session.execute(
-                    text(
-                        f"""
-                        UPDATE "{table}"
-                        SET user_id = :new_user_id
-                        WHERE user_id = :placeholder_user_id
-                        """
-                    ),
-                    {
-                        "new_user_id": str(user.id),
-                        "placeholder_user_id": str(placeholder_uuid),
-                    },
-                )
-                if result.rowcount > 0:  # type: ignore[attr-defined]
-                    logger.info(f"Migrated {result.rowcount} rows in {table}")  # type: ignore[attr-defined]
-            except Exception as e:
-                logger.warning(f"Could not migrate {table}: {e}")
-
-        # Make the user an admin since they had admin access in no-auth mode
-        # Use raw SQL to keep everything in the same transaction
-        await db_session.execute(
-            text('UPDATE "user" SET role = :role WHERE id = :user_id'),
-            {"role": "ADMIN", "user_id": str(user.id)},
-        )
-        user.role = UserRole.ADMIN
-
-        # Delete the placeholder user
-        try:
-            await db_session.execute(
-                text('DELETE FROM "user" WHERE id = :user_id'),
-                {"user_id": str(placeholder_uuid)},
-            )
-            logger.notice(
-                f"Successfully migrated no-auth data to {user.email} and deleted placeholder user"
-            )
-        except Exception as e:
-            logger.warning(f"Could not delete placeholder user: {e}")
-
-        # Commit all the changes
-        await db_session.commit()
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
         # Validate password according to configurable security policy (defined via environment variables)
