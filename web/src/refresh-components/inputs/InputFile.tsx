@@ -51,8 +51,11 @@ export default function InputFile({
   const [isFileMode, setIsFileMode] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Derive disabled state from either the boolean prop or the variant
+  const isDisabled = disabled || variant === "disabled";
+
   function openFilePicker() {
-    if (disabled) return;
+    if (isDisabled) return;
     fileInputRef.current?.click();
   }
 
@@ -122,7 +125,7 @@ export default function InputFile({
   const rightSection = (
     <IconButton
       icon={SvgPaperclip}
-      disabled={disabled}
+      disabled={isDisabled}
       onClick={noProp(openFilePicker)}
       type="button"
       internal
@@ -140,13 +143,13 @@ export default function InputFile({
         aria-hidden
         className="hidden"
         tabIndex={-1}
-        disabled={disabled}
+        disabled={isDisabled}
       />
       <InputTypeIn
         {...rest}
         className={className}
         placeholder={placeholder}
-        variant={disabled ? "disabled" : error ? "error" : variant}
+        variant={isDisabled ? "disabled" : error ? "error" : variant}
         value={displayValue}
         onChange={handleChangeWhenTyping}
         onPaste={handlePaste}
