@@ -516,11 +516,11 @@ const ChatInputBar = React.memo(
                 <LineItem
                   key="create-new"
                   icon={SvgPlus}
-                  href="/chat/settings"
+                  href="/chat/settings/chat-preferences"
                   selected={tabbingIconIndex === filteredPrompts.length}
                   emphasized={tabbingIconIndex === filteredPrompts.length}
                 >
-                  Create a new prompt
+                  Create New Prompt
                 </LineItem>,
               ]}
             </Popover.Menu>

@@ -2,21 +2,18 @@
 
 import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import {
   LineItemLayout,
   Section,
   AttachmentItemLayout,
 } from "@/layouts/general-layouts";
-import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
   SvgArrowExchange,
   SvgKey,
   SvgLock,
   SvgMinusCircle,
-  SvgSliders,
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
@@ -39,7 +36,6 @@ import useChatSessions from "@/hooks/useChatSessions";
 import { AuthType } from "@/lib/constants";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { humanReadableFormat } from "@/lib/time";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -55,7 +51,6 @@ import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
-import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 
 interface PAT {
   id: number;
@@ -1542,62 +1537,9 @@ function ConnectorsSettings() {
   );
 }
 
-export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState(0);
-  const { user } = useUser();
-  const authType = useAuthType();
-
-  const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType && authType !== AuthType.DISABLED;
-  const showAccountsAccessTab = showPasswordSection || showTokensSection;
-
-  return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={SvgSliders} title="Settings" separator />
-
-      <SettingsLayouts.Body>
-        <div className="grid grid-cols-[auto_1fr]">
-          {/* Left: Tab Navigation */}
-          <div className="flex flex-col px-2 w-[12.5rem]">
-            <SidebarTab
-              transient={activeTab === 0}
-              onClick={() => setActiveTab(0)}
-            >
-              General
-            </SidebarTab>
-            <SidebarTab
-              transient={activeTab === 1}
-              onClick={() => setActiveTab(1)}
-            >
-              Chat Preferences
-            </SidebarTab>
-            {showAccountsAccessTab && (
-              <SidebarTab
-                transient={activeTab === 2}
-                onClick={() => setActiveTab(2)}
-              >
-                Accounts & Access
-              </SidebarTab>
-            )}
-            <SidebarTab
-              transient={activeTab === 3}
-              onClick={() => setActiveTab(3)}
-            >
-              Connectors
-            </SidebarTab>
-          </div>
-
-          {/* Right: Tab Content */}
-          <div className="px-4">
-            {activeTab === 0 && <GeneralSettings />}
-            {activeTab === 1 && <ChatPreferencesSettings />}
-            {activeTab === 2 && showAccountsAccessTab && (
-              <AccountsAccessSettings />
-            )}
-            {activeTab === 3 && <ConnectorsSettings />}
-          </div>
-        </div>
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
-  );
-}
+export {
+  GeneralSettings,
+  ChatPreferencesSettings,
+  AccountsAccessSettings,
+  ConnectorsSettings,
+};

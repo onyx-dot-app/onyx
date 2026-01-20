@@ -1,10 +1,5 @@
-import * as AppLayouts from "@/layouts/app-layouts";
-import SettingsPage from "@/refresh-pages/SettingsPage";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return (
-    <AppLayouts.Root>
-      <SettingsPage />
-    </AppLayouts.Root>
-  );
+export default function SettingsPage() {
+  redirect("/chat/settings/general");
 }
