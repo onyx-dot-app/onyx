@@ -144,13 +144,8 @@ def get_sandbox_by_session(
 def update_sandbox_status(
     sandbox_id: UUID,
     status: SandboxStatus,
-    container_id: str | None = None,
-def update_sandbox_status(
-    sandbox_id: UUID,
-    status: SandboxStatus,
     db_session: Session,
     container_id: str | None = None,
-) -> None:
 ) -> None:
     """Update the status of a sandbox."""
     sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
@@ -212,14 +207,9 @@ def get_session_artifacts(
 
 def update_artifact(
     artifact_id: UUID,
-    path: str | None = None,
-    name: str | None = None,
-def update_artifact(
-    artifact_id: UUID,
     db_session: Session,
     path: str | None = None,
     name: str | None = None,
-) -> None:
 ) -> None:
     """Update artifact metadata."""
     artifact = (
