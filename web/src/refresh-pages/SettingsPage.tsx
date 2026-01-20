@@ -1311,30 +1311,52 @@ function AccountsAccessSettings() {
                 </Section>
 
                 {/* Token List */}
-                {filteredPats.map((pat) => (
-                  <AttachmentItemLayout
-                    key={pat.id}
-                    icon={SvgKey}
-                    title={pat.name}
-                    description={pat.token_display}
-                    middleText="asdf"
-                    rightChildren={
-                      <Section flexDirection="row" gap={0.5} width="fit">
-                        <Text secondaryBody text03>
-                          {humanReadableFormat(pat.created_at)}
-                        </Text>
-                        <IconButton
-                          icon={SvgTrash}
-                          onClick={() =>
-                            setTokenToDelete({ id: pat.id, name: pat.name })
-                          }
-                          internal
-                        />
-                      </Section>
+                <Section gap={0.25}>
+                  {filteredPats.map((pat) => {
+                    const now = new Date();
+                    const createdDate = new Date(pat.created_at);
+                    const daysSinceCreation = Math.floor(
+                      (now.getTime() - createdDate.getTime()) /
+                        (1000 * 60 * 60 * 24)
+                    );
+
+                    let expiryText = "Never expires";
+                    if (pat.expires_at) {
+                      const expiresDate = new Date(pat.expires_at);
+                      const daysUntilExpiry = Math.ceil(
+                        (expiresDate.getTime() - now.getTime()) /
+                          (1000 * 60 * 60 * 24)
+                      );
+                      expiryText = `Expires in ${daysUntilExpiry} day${
+                        daysUntilExpiry === 1 ? "" : "s"
+                      }`;
                     }
-                    variant="secondary"
-                  />
-                ))}
+
+                    const middleText = `Created ${daysSinceCreation} day${
+                      daysSinceCreation === 1 ? "" : "s"
+                    } ago - ${expiryText}`;
+
+                    return (
+                      <AttachmentItemLayout
+                        key={pat.id}
+                        icon={SvgKey}
+                        title={pat.name}
+                        description={pat.token_display}
+                        middleText={middleText}
+                        rightChildren={
+                          <IconButton
+                            icon={SvgTrash}
+                            onClick={() =>
+                              setTokenToDelete({ id: pat.id, name: pat.name })
+                            }
+                            internal
+                          />
+                        }
+                        variant="secondary"
+                      />
+                    );
+                  })}
+                </Section>
               </Section>
             </Card>
           </Section>

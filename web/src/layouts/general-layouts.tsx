@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
+import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import { IconProps } from "@opal/types";
 import React from "react";
@@ -217,7 +218,7 @@ function LineItemLayout({
       flexDirection="row"
       justifyContent="between"
       alignItems={center ? "center" : "start"}
-      gap={0.5}
+      gap={1.5}
     >
       <div
         className="line-item-layout"
@@ -256,9 +257,9 @@ function LineItemLayout({
 
       {!loading && middleText && (
         <div className="flex-1">
-          <Text text03 secondaryBody>
+          <Truncated text03 secondaryBody>
             {middleText}
-          </Text>
+          </Truncated>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 /* LineItemLayout */
 .line-item-layout {
-  @apply grid flex-1;
+  @apply grid;
   column-gap: 0.5rem;
   grid-template-columns: 1fr;
 }
