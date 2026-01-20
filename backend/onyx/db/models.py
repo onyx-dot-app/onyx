@@ -4148,6 +4148,7 @@ class BuildSession(Base):
     user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[BuildSessionStatus] = mapped_column(
         Enum(BuildSessionStatus, native_enum=False, name="buildsessionstatus"),
         nullable=False,
@@ -4166,7 +4167,7 @@ class BuildSession(Base):
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
     sandbox: Mapped["Sandbox | None"] = relationship(
-        "Sandbox", back_populates="session", uselist=False
+        "Sandbox", back_populates="session", uselist=False, cascade="all, delete-orphan"
     )
     artifacts: Mapped[list["Artifact"]] = relationship(
         "Artifact", back_populates="session", cascade="all, delete-orphan"

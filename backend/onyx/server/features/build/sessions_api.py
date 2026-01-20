@@ -21,6 +21,7 @@ from onyx.db.models import User
 from onyx.server.features.build.models import SessionCreateRequest
 from onyx.server.features.build.models import SessionListResponse
 from onyx.server.features.build.models import SessionResponse
+from onyx.server.features.build.models import SessionUpdateRequest
 from onyx.server.features.build.sandbox_manager import provision_sandbox
 from onyx.server.features.build.sandbox_manager import restore_sandbox
 from onyx.server.features.build.sandbox_manager import terminate_sandbox
@@ -29,10 +30,12 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-router = APIRouter(prefix="/build/sessions")
+router = APIRouter(prefix="/sessions")
 
 
-@router.get("/", tags=PUBLIC_API_TAGS)
+@router.get(
+    "", tags=PUBLIC_API_TAGS
+)  # Changed from "/" to "" to match /sessions without trailing slash
 def list_sessions(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -46,7 +49,7 @@ def list_sessions(
     )
 
 
-@router.post("/", tags=PUBLIC_API_TAGS)
+@router.post("", tags=PUBLIC_API_TAGS)
 def create_session(
     request: SessionCreateRequest,
     user: User | None = Depends(current_user),
@@ -55,8 +58,8 @@ def create_session(
     """Create a new build session and provision its sandbox."""
     user_id = user.id if user is not None else None
 
-    # Create the session
-    session = create_build_session(user_id, db_session)
+    # Create the session with optional name
+    session = create_build_session(user_id, db_session, name=request.name)
 
     # Provision sandbox synchronously
     provision_sandbox(session.id, db_session)
@@ -93,6 +96,28 @@ def get_session_details(
         restore_sandbox(session_id, db_session)
 
     # Refresh to get updated sandbox status
+    db_session.refresh(session)
+
+    return SessionResponse.from_model(session)
+
+
+@router.put("/{session_id}/name", tags=PUBLIC_API_TAGS)
+def update_session_name(
+    session_id: UUID,
+    request: SessionUpdateRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> SessionResponse:
+    """Update the name of a build session."""
+    user_id = user.id if user is not None else None
+    session = get_build_session(session_id, user_id, db_session)
+
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Update the name
+    session.name = request.name
+    db_session.commit()
     db_session.refresh(session)
 
     return SessionResponse.from_model(session)

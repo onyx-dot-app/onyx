@@ -166,13 +166,23 @@ export function useBuild(): UseBuildReturn {
           const timestamp = Date.now();
 
           switch (event.type) {
-            // New ACP event types
+            // ACP event types (direct from backend)
             case "agent_message_chunk": {
-              // Messages API sends content directly in the data
+              // ACP format: content is an object with type and text
               const data = event.data as any;
-              const content = data.content || "";
-              // Skip output_start events (they have no content)
-              if (content && data.type !== "output_start") {
+              let content = "";
+              // Handle ACP content structure
+              if (data.content) {
+                if (data.content.type === "text" && data.content.text) {
+                  content = data.content.text;
+                } else if (Array.isArray(data.content)) {
+                  content = data.content
+                    .filter((c: any) => c.type === "text" && c.text)
+                    .map((c: any) => c.text)
+                    .join("");
+                }
+              }
+              if (content) {
                 setPackets((prev) => [
                   ...prev,
                   { type: "message", content, timestamp },
@@ -182,9 +192,14 @@ export function useBuild(): UseBuildReturn {
             }
 
             case "agent_thought_chunk": {
-              // Messages API sends content directly in the data
+              // ACP format: content is an object with type and text
               const data = event.data as any;
-              const content = data.content || "";
+              let content = "";
+              if (data.content) {
+                if (data.content.type === "text" && data.content.text) {
+                  content = data.content.text;
+                }
+              }
               if (content) {
                 setPackets((prev) => [
                   ...prev,
@@ -195,43 +210,48 @@ export function useBuild(): UseBuildReturn {
             }
 
             case "tool_call": {
-              // Messages API format: tool_name, tool_input
+              // ACP format: kind (tool type), title, tool_call_id
               const data = event.data as any;
-              const toolName = data.tool_name || "unknown";
-              const toolInput = data.tool_input || {};
-              const inputStr = JSON.stringify(toolInput);
+              const toolName = data.kind || data.tool_name || "unknown";
+              const title = data.title || "";
               setPackets((prev) => [
                 ...prev,
                 {
                   type: "tool_start",
-                  content: inputStr,
+                  content: title,
                   timestamp,
                   toolName: toolName,
+                  toolCallId: data.tool_call_id,
                 },
               ]);
               break;
             }
 
             case "tool_call_update": {
-              // Messages API format: tool_name, status
+              // ACP format: kind, status, title, tool_call_id
               const data = event.data as any;
-              const toolName = data.tool_name || "";
-              const status = data.status || "success";
+              const toolName = data.kind || data.tool_name || "";
+              const status = data.status || "completed";
+              const title = data.title || "";
               setPackets((prev) => [
                 ...prev,
                 {
                   type: "tool_progress",
-                  content: `[${status}]`,
+                  content: title || `[${status}]`,
                   timestamp,
                   toolName: toolName,
+                  toolCallId: data.tool_call_id,
                 },
               ]);
               break;
             }
 
             case "plan": {
+              // ACP format: plan.entries array
               const data = event.data as any;
-              if (data.plan) {
+              if (data.plan && data.plan.entries) {
+                setPlan(data.plan.entries);
+              } else if (data.plan) {
                 setPlan(data.plan);
               }
               break;
@@ -266,6 +286,18 @@ export function useBuild(): UseBuildReturn {
                   },
                 ]);
               }
+              break;
+            }
+
+            case "file_write": {
+              // Custom Onyx packet: file was written
+              const data = event.data as any;
+              console.debug(
+                "[Build] File written:",
+                data.path,
+                data.size_bytes
+              );
+              // Could track file writes in state if needed
               break;
             }
 

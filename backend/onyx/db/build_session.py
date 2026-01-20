@@ -22,10 +22,12 @@ logger = setup_logger()
 def create_build_session(
     user_id: UUID | None,
     db_session: Session,
+    name: str | None = None,
 ) -> BuildSession:
     """Create a new build session for the given user."""
     session = BuildSession(
         user_id=user_id,
+        name=name,
         status=BuildSessionStatus.ACTIVE,
     )
     db_session.add(session)

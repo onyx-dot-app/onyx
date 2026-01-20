@@ -14,8 +14,9 @@ import {
 // API Configuration
 // =============================================================================
 
-const API_BASE = "/api/build/v1";
-export const USAGE_LIMITS_ENDPOINT = `${API_BASE}/limit`;
+const API_BASE = "/api/build";
+const API_V1_BASE = "/api/build/v1"; // For v1 mock endpoints (limit, connectors, etc.)
+export const USAGE_LIMITS_ENDPOINT = `${API_V1_BASE}/limit`;
 
 // =============================================================================
 // SSE Stream Processing
@@ -30,6 +31,7 @@ export async function processSSEStream(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let currentEventType = "";
 
   while (true) {
     const { done, value } = await reader.read();
@@ -40,13 +42,38 @@ export async function processSSEStream(
     buffer = lines.pop() || "";
 
     for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          onPacket(data);
-        } catch {
-          // Ignore parse errors
+      if (line.startsWith("event: ") || line.startsWith("event:")) {
+        // Capture the event type from the SSE event line
+        currentEventType = line.slice(line.indexOf(":") + 1).trim();
+      } else if (line.startsWith("data: ") || line.startsWith("data:")) {
+        const dataStr = line.slice(line.indexOf(":") + 1).trim();
+        if (dataStr) {
+          try {
+            const data = JSON.parse(dataStr);
+            // Log raw SSE data for debugging
+            console.log("[SSE] Raw packet:", {
+              sseEvent: currentEventType,
+              dataType: data.type,
+              data,
+            });
+            // The backend sends `event: message` for all events and puts the
+            // actual type in data.type. Only use SSE event type as fallback
+            // if data.type is not present and SSE event is not "message".
+            if (
+              !data.type &&
+              currentEventType &&
+              currentEventType !== "message"
+            ) {
+              onPacket({ ...data, type: currentEventType });
+            } else {
+              onPacket(data);
+            }
+          } catch (e) {
+            console.error("[SSE] Parse error:", e, "Raw data:", dataStr);
+          }
         }
+        // Reset event type for next event
+        currentEventType = "";
       }
     }
   }
@@ -56,11 +83,13 @@ export async function processSSEStream(
 // Session API
 // =============================================================================
 
-export async function createSession(name: string): Promise<ApiSessionResponse> {
+export async function createSession(
+  name?: string | null
+): Promise<ApiSessionResponse> {
   const res = await fetch(`${API_BASE}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name: name || null }),
   });
 
   if (!res.ok) {
@@ -73,9 +102,7 @@ export async function createSession(name: string): Promise<ApiSessionResponse> {
 export async function fetchSession(
   sessionId: string
 ): Promise<ApiSessionResponse> {
-  const res = await fetch(`${API_BASE}/sessions/${sessionId}`, {
-    method: "PUT",
-  });
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}`);
 
   if (!res.ok) {
     throw new Error(`Failed to load session: ${res.status}`);
@@ -155,7 +182,7 @@ export async function sendMessageStream(
   content: string,
   signal?: AbortSignal
 ): Promise<Response> {
-  const res = await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/send-message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),

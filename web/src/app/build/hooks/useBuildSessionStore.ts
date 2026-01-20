@@ -9,6 +9,8 @@ import {
   Session,
   SessionHistoryItem,
   SessionStatus,
+  ToolCall,
+  ToolCallStatus,
 } from "@/app/build/services/buildStreamingModels";
 
 import {
@@ -29,6 +31,8 @@ export type {
   Session,
   SessionHistoryItem,
   SessionStatus,
+  ToolCall,
+  ToolCallStatus,
 };
 
 // =============================================================================
@@ -40,6 +44,8 @@ export interface BuildSessionData {
   status: SessionStatus;
   messages: BuildMessage[];
   artifacts: Artifact[];
+  /** Active tool calls for the current response */
+  toolCalls: ToolCall[];
   error: string | null;
   webappUrl: string | null;
   abortController: AbortController;
@@ -79,6 +85,15 @@ interface BuildSessionStore {
   updateLastMessageInSession: (sessionId: string, content: string) => void;
   addArtifactToSession: (sessionId: string, artifact: Artifact) => void;
 
+  // Actions - Tool Call Management
+  addToolCallToSession: (sessionId: string, toolCall: ToolCall) => void;
+  updateToolCallInSession: (
+    sessionId: string,
+    toolCallId: string,
+    updates: Partial<ToolCall>
+  ) => void;
+  clearToolCallsInSession: (sessionId: string) => void;
+
   // Actions - Abort Control
   setAbortController: (sessionId: string, controller: AbortController) => void;
   abortSession: (sessionId: string) => void;
@@ -110,6 +125,7 @@ const createInitialSessionData = (
   status: "idle",
   messages: [],
   artifacts: [],
+  toolCalls: [],
   error: null,
   webappUrl: null,
   abortController: new AbortController(),
@@ -338,6 +354,65 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         artifacts: [...session.artifacts, artifact],
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  // ===========================================================================
+  // Tool Call Management
+  // ===========================================================================
+
+  addToolCallToSession: (sessionId: string, toolCall: ToolCall) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        toolCalls: [...session.toolCalls, toolCall],
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  updateToolCallInSession: (
+    sessionId: string,
+    toolCallId: string,
+    updates: Partial<ToolCall>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const toolCalls = session.toolCalls.map((tc) =>
+        tc.id === toolCallId ? { ...tc, ...updates } : tc
+      );
+      const updatedSession: BuildSessionData = {
+        ...session,
+        toolCalls,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  clearToolCallsInSession: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        toolCalls: [],
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -615,6 +690,13 @@ export const useArtifacts = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return [];
     return sessions.get(currentSessionId)?.artifacts ?? [];
+  });
+
+export const useToolCalls = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return [];
+    return sessions.get(currentSessionId)?.toolCalls ?? [];
   });
 
 export const useSessionHistory = () =>

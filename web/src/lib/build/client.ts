@@ -88,6 +88,13 @@ export interface ACPErrorEvent {
   message: string;
 }
 
+/** File write event (custom Onyx extension) */
+export interface FileWriteEvent {
+  path: string;
+  size_bytes?: number;
+  operation?: "create" | "update" | "delete";
+}
+
 // =============================================================================
 // Legacy Event Types (kept for backwards compatibility)
 // =============================================================================
@@ -140,7 +147,8 @@ export type ACPEvent =
   | { type: "prompt_response"; data: PromptResponseEvent }
   | { type: "error"; data: ACPErrorEvent }
   | { type: "status"; data: StatusEvent }
-  | { type: "artifact"; data: ArtifactEvent };
+  | { type: "artifact"; data: ArtifactEvent }
+  | { type: "file_write"; data: FileWriteEvent };
 
 /** Legacy BuildEvent type - alias for ACPEvent */
 export type BuildEvent = ACPEvent;
@@ -304,20 +312,22 @@ export async function sendMessage(
 
 /**
  * Map message API packet types to BuildEvent types.
+ * Uses direct ACP event names from the backend, plus custom Onyx packet types.
  */
 function mapMessagePacketToEventType(packetType: string): string | null {
   const mapping: Record<string, string> = {
-    step_delta: "agent_thought_chunk",
-    output_start: "agent_message_chunk", // Signal output starting
-    output_delta: "agent_message_chunk",
-    tool_start: "tool_call",
-    tool_end: "tool_call_update",
-    file_write: "artifact", // Treat file writes as artifacts
-    plan: "plan",
-    mode_update: "current_mode_update",
-    artifact_created: "artifact",
-    done: "prompt_response",
+    // Direct ACP event types
+    agent_message_chunk: "agent_message_chunk",
+    agent_thought_chunk: "agent_thought_chunk",
+    tool_call_start: "tool_call",
+    tool_call_progress: "tool_call_update",
+    agent_plan_update: "plan",
+    current_mode_update: "current_mode_update",
+    prompt_response: "prompt_response",
     error: "error",
+    // Custom Onyx packet types (extensions to ACP)
+    artifact_created: "artifact",
+    file_write: "file_write",
   };
   return mapping[packetType] || null;
 }

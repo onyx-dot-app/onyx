@@ -1,6 +1,8 @@
 """API endpoints for Build Mode message management."""
 
+import json
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from acp.schema import AgentMessageChunk
@@ -36,18 +38,9 @@ from onyx.server.features.build.models import MessageResponse
 from onyx.server.features.build.packets import ArtifactCreatedPacket
 from onyx.server.features.build.packets import ArtifactType
 from onyx.server.features.build.packets import BuildPacket
-from onyx.server.features.build.packets import convert_acp_error_to_error
-from onyx.server.features.build.packets import convert_acp_message_chunk_to_output_delta
-from onyx.server.features.build.packets import convert_acp_mode_update_to_mode_update
-from onyx.server.features.build.packets import convert_acp_plan_to_plan
-from onyx.server.features.build.packets import convert_acp_prompt_response_to_done
-from onyx.server.features.build.packets import convert_acp_thought_to_step_delta
-from onyx.server.features.build.packets import convert_acp_tool_progress_to_tool_end
-from onyx.server.features.build.packets import convert_acp_tool_start_to_tool_start
 from onyx.server.features.build.packets import create_artifact_from_file
 from onyx.server.features.build.packets import ErrorPacket
 from onyx.server.features.build.packets import FileWritePacket
-from onyx.server.features.build.packets import OutputStartPacket
 from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.utils.logger import setup_logger
 
@@ -128,30 +121,68 @@ async def stream_cli_agent_response(
     - plan: Agent's execution plan (from AgentPlanUpdate)
     - mode_update: Agent mode change (from CurrentModeUpdate)
     - artifact_created: New artifact generated
-    - output_start: Begin agent's text output
-    - output_delta: Incremental agent text output (from AgentMessageChunk, accumulated for DB)
-    - done: Signal completion with summary (from PromptResponse)
-    - error: An error occurred (from Error)
+
+    ACP Events are passed through with their original type names:
+    - agent_message_chunk: Text/image content from agent
+    - agent_thought_chunk: Agent's internal reasoning
+    - tool_call_start: Tool invocation started
+    - tool_call_progress: Tool execution progress/result
+    - agent_plan_update: Agent's execution plan
+    - current_mode_update: Agent mode change
+    - prompt_response: Agent finished processing
+    - error: An error occurred
     """
-    # Accumulate assistant message content (from output_delta packets)
+    # Accumulate assistant message content
     assistant_message_parts: list[str] = []
-    output_started = False
+
+    def _serialize_acp_event(event: Any, event_type: str) -> str:
+        """Serialize an ACP event to SSE format, preserving ACP structure."""
+        # Convert Pydantic model to dict, handling nested models
+        if hasattr(event, "model_dump"):
+            data = event.model_dump(mode="json", by_alias=True, exclude_none=True)
+        else:
+            data = {"raw": str(event)}
+
+        # Add type field for frontend routing
+        data["type"] = event_type
+
+        return f"event: message\ndata: {json.dumps(data)}\n\n"
 
     def _format_packet_event(packet: BuildPacket) -> str:
-        """Format a packet as SSE (all events use event: message)."""
+        """Format a BuildPacket as SSE."""
         return f"event: message\ndata: {packet.model_dump_json(by_alias=True)}\n\n"
 
+    def _extract_text_from_content(content: Any) -> str:
+        """Extract text from ACP content structure."""
+        if content is None:
+            return ""
+        # Handle single content block
+        if hasattr(content, "type") and content.type == "text":
+            return getattr(content, "text", "") or ""
+        # Handle array of content blocks
+        if isinstance(content, list):
+            texts = []
+            for block in content:
+                if hasattr(block, "type") and block.type == "text":
+                    texts.append(getattr(block, "text", "") or "")
+            return "".join(texts)
+        return ""
+
     try:
-        # Create ONE session for the entire streaming operation (following chat pattern)
+        logger.warning(f"[STREAM] Starting stream for session {session_id}")
         with get_session_with_current_tenant() as db_session:
             # Verify session exists and belongs to user
+            logger.warning(f"[STREAM] Verifying session {session_id} exists")
             session = get_build_session(session_id, user_id, db_session)
             if session is None:
+                logger.warning(f"[STREAM] Session {session_id} not found")
                 yield _format_packet_event(ErrorPacket(message="Session not found"))
                 return
 
             # Check if sandbox is running
+            logger.warning(f"[STREAM] Checking sandbox status for session {session_id}")
             if not session.sandbox or session.sandbox.status != SandboxStatus.RUNNING:
+                logger.warning(f"[STREAM] Sandbox not running for session {session_id}")
                 yield _format_packet_event(
                     ErrorPacket(
                         message="Sandbox is not running. Please wait for it to start."
@@ -163,95 +194,145 @@ async def stream_cli_agent_response(
             update_session_activity(session_id, db_session)
 
             # Save user message to database
+            logger.warning(
+                f"[STREAM] Saving user message to DB for session {session_id}"
+            )
             user_message = create_message(
                 session_id=session_id,
                 message_type=MessageType.USER,
                 content=user_message_content,
                 db_session=db_session,
             )
-            logger.info(f"User message {user_message.id} sent to session {session_id}")
+            logger.warning(f"[STREAM] User message {user_message.id} saved")
 
             # Get sandbox
             sandbox = get_sandbox_by_session_id(db_session, session_id)
             if sandbox is None:
+                logger.warning(f"[STREAM] Sandbox not found for session {session_id}")
                 yield _format_packet_event(ErrorPacket(message="Sandbox not found"))
                 return
 
             sandbox_id = str(sandbox.id)
-            sandbox_session_id = sandbox.session_id
+            logger.warning(
+                f"[STREAM] Found sandbox {sandbox_id} for session {session_id}"
+            )
 
             sandbox_manager = SandboxManager()
+            logger.warning(
+                f"[STREAM] Starting to stream ACP events from sandbox {sandbox_id}"
+            )
 
-            # Stream ACP events from agent and map to frontend format
+            # Stream ACP events directly to frontend
+            event_count = 0
             for acp_event in sandbox_manager.send_message(
                 sandbox_id, user_message_content, db_session
             ):
-                # Map ACP events to frontend packet types using conversion utilities
-                if isinstance(acp_event, AgentThoughtChunk):
-                    # Map thought to step_delta
-                    packet = convert_acp_thought_to_step_delta(acp_event)
-                    yield _format_packet_event(packet)
+                event_count += 1
+                event_type = type(acp_event).__name__
+
+                # Log full ACP event structure for debugging
+                try:
+                    if hasattr(acp_event, "model_dump"):
+                        event_data = acp_event.model_dump(
+                            mode="json", by_alias=True, exclude_none=True
+                        )
+                        logger.warning(
+                            f"[STREAM] Event #{event_count}: {event_type} = {json.dumps(event_data, default=str)[:500]}"
+                        )
+                    else:
+                        logger.warning(
+                            f"[STREAM] Event #{event_count}: {event_type} = {str(acp_event)[:500]}"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"[STREAM] Event #{event_count}: {event_type} (failed to serialize: {e})"
+                    )
+
+                # Pass through ACP events with snake_case type names
+                if isinstance(acp_event, AgentMessageChunk):
+                    # Accumulate text for DB storage
+                    text = _extract_text_from_content(acp_event.content)
+                    if text:
+                        assistant_message_parts.append(text)
+                    yield _serialize_acp_event(acp_event, "agent_message_chunk")
+
+                elif isinstance(acp_event, AgentThoughtChunk):
+                    yield _serialize_acp_event(acp_event, "agent_thought_chunk")
 
                 elif isinstance(acp_event, ToolCallStart):
-                    # Emit tool_start packet
-                    packet = convert_acp_tool_start_to_tool_start(acp_event)
-                    yield _format_packet_event(packet)
+                    logger.warning(
+                        f"[STREAM] Tool started: {acp_event.kind} - {acp_event.title}"
+                    )
+                    yield _serialize_acp_event(acp_event, "tool_call_start")
 
                 elif isinstance(acp_event, ToolCallProgress):
-                    # Emit tool_end packet
-                    packet = convert_acp_tool_progress_to_tool_end(acp_event)
-                    yield _format_packet_event(packet)
+                    logger.warning(
+                        f"[STREAM] Tool progress: {acp_event.kind} - {acp_event.status}"
+                    )
+                    yield _serialize_acp_event(acp_event, "tool_call_progress")
 
-                    # If it's a write operation, emit file_write packet
-                    tool_name = getattr(acp_event, "tool_name", "")
-                    if tool_name.lower() in ["write", "write_file", "edit"]:
-                        result = getattr(acp_event, "result", "")
+                    # Emit file_write packet for write/edit operations (custom packet)
+                    if acp_event.kind and acp_event.kind.lower() in [
+                        "write",
+                        "write_file",
+                        "edit",
+                    ]:
+                        # Try to get file path from the tool result
+                        file_path = "outputs/file"  # Default path
+                        if hasattr(acp_event, "content") and acp_event.content:
+                            # Try to extract path from content
+                            for item in (
+                                acp_event.content
+                                if isinstance(acp_event.content, list)
+                                else [acp_event.content]
+                            ):
+                                if hasattr(item, "text") and item.text:
+                                    # Look for path in the text
+                                    if "/" in item.text or "\\" in item.text:
+                                        file_path = item.text.split("\n")[0][:200]
+                                        break
                         file_write_packet = FileWritePacket(
-                            path="outputs/file",
-                            size_bytes=len(str(result)),
+                            path=file_path,
+                            size_bytes=0,  # Size not always available
                         )
+                        logger.warning(f"[STREAM] File write detected: {file_path}")
                         yield _format_packet_event(file_write_packet)
 
                 elif isinstance(acp_event, AgentPlanUpdate):
-                    # Emit plan update
-                    packet = convert_acp_plan_to_plan(acp_event)
-                    yield _format_packet_event(packet)
+                    logger.warning("[STREAM] Plan update received")
+                    yield _serialize_acp_event(acp_event, "agent_plan_update")
 
                 elif isinstance(acp_event, CurrentModeUpdate):
-                    # Emit mode change update
-                    packet = convert_acp_mode_update_to_mode_update(acp_event)
-                    yield _format_packet_event(packet)
-
-                elif isinstance(acp_event, AgentMessageChunk):
-                    # Start output if not started
-                    if not output_started:
-                        yield _format_packet_event(OutputStartPacket())
-                        output_started = True
-
-                    # Emit output_delta and accumulate content
-                    packet = convert_acp_message_chunk_to_output_delta(acp_event)
-                    assistant_message_parts.append(packet.content)
-                    yield _format_packet_event(packet)
+                    logger.warning(f"[STREAM] Mode update: {acp_event.current_mode_id}")
+                    yield _serialize_acp_event(acp_event, "current_mode_update")
 
                 elif isinstance(acp_event, PromptResponse):
-                    # Agent finished - emit done packet
-                    packet = convert_acp_prompt_response_to_done(acp_event)
-                    yield _format_packet_event(packet)
+                    logger.warning(f"[STREAM] Agent finished: {acp_event.stop_reason}")
+                    yield _serialize_acp_event(acp_event, "prompt_response")
 
                 elif isinstance(acp_event, ACPError):
-                    # Emit error packet
-                    packet = convert_acp_error_to_error(acp_event)
-                    yield _format_packet_event(packet)
+                    logger.warning(f"[STREAM] ACP Error: {acp_event.message}")
+                    yield _serialize_acp_event(acp_event, "error")
+
+                else:
+                    logger.warning(f"[STREAM] Unhandled event type: {event_type}")
+
+            logger.warning(f"[STREAM] Finished processing {event_count} ACP events")
 
             # Check for artifacts and emit artifact_created events
             # For now, only check for web apps
-            sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox_session_id)
+            logger.warning(f"[STREAM] Checking for artifacts in sandbox {sandbox_id}")
+            sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox_id)
             outputs_dir = sandbox_path / "outputs"
 
             if outputs_dir.exists():
+                logger.warning(f"[STREAM] Outputs directory exists: {outputs_dir}")
                 # Check for webapp
                 web_dir = outputs_dir / "web"
                 if web_dir.exists():
+                    logger.warning(
+                        f"[STREAM] Web app found at {web_dir}, creating artifact"
+                    )
                     artifact = create_artifact_from_file(
                         session_id=session_id,
                         file_path="outputs/web/",
@@ -259,31 +340,50 @@ async def stream_cli_agent_response(
                         name="Web Application",
                     )
                     yield _format_packet_event(ArtifactCreatedPacket(artifact=artifact))
+                    logger.warning("[STREAM] Web app artifact created and emitted")
+                else:
+                    logger.warning(f"[STREAM] No web directory found at {web_dir}")
+            else:
+                logger.warning(
+                    f"[STREAM] Outputs directory does not exist: {outputs_dir}"
+                )
 
             # Save the complete assistant response to database (same session!)
             if assistant_message_parts:
+                total_chars = len("".join(assistant_message_parts))
+                logger.warning(
+                    f"[STREAM] Saving assistant response ({total_chars} chars) to DB"
+                )
                 create_message(
                     session_id=session_id,
                     message_type=MessageType.ASSISTANT,
                     content="".join(assistant_message_parts),
                     db_session=db_session,
                 )
-                logger.info(f"Saved assistant response for session {session_id}")
+                logger.warning(
+                    f"[STREAM] Assistant response saved for session {session_id}"
+                )
+            else:
+                logger.warning("[STREAM] No assistant message parts to save")
 
     except ValueError as e:
+        logger.warning(f"[STREAM] ValueError executing task: {e}")
         logger.error(f"Error executing task: {e}")
         yield _format_packet_event(ErrorPacket(message=str(e)))
     except RuntimeError as e:
+        logger.warning(f"[STREAM] RuntimeError in agent communication: {e}")
         logger.error(f"Agent communication error: {e}")
         yield _format_packet_event(ErrorPacket(message=str(e)))
     except Exception as e:
+        logger.warning(f"[STREAM] Exception in build message streaming: {e}")
         logger.exception("Error in build message streaming")
         yield _format_packet_event(ErrorPacket(message=str(e)))
     finally:
+        logger.warning(f"[STREAM] Stream generator finished for session {session_id}")
         logger.debug(f"Stream generator finished for session {session_id}")
 
 
-@router.post("/sessions/{session_id}/messages", tags=PUBLIC_API_TAGS)
+@router.post("/sessions/{session_id}/send-message", tags=PUBLIC_API_TAGS)
 async def send_message(
     session_id: UUID,
     request: MessageRequest,

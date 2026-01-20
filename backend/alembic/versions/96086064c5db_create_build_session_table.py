@@ -37,6 +37,7 @@ def upgrade() -> None:
             sa.ForeignKey("user.id", ondelete="CASCADE"),
             nullable=True,
         ),
+        sa.Column("name", sa.String(), nullable=True),
         sa.Column(
             "status",
             build_session_status_enum,
