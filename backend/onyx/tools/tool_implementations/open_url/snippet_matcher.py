@@ -214,14 +214,12 @@ def _token_based_match(
 
     min_threshold exists in the range [0, 1]
     """
-    # Preprocess content & snippet
-    processed_content = utils.default_process(content)
-    processed_snippet = utils.default_process(snippet)
-
-    if not processed_content or not processed_snippet:
+    if not content or not snippet:
         return NegativeSnippetMatchResult
 
-    res = fuzz.partial_ratio_alignment(processed_content, processed_snippet)
+    res = fuzz.partial_ratio_alignment(
+        content, snippet, processor=utils.default_process
+    )
 
     if not res:
         return NegativeSnippetMatchResult
