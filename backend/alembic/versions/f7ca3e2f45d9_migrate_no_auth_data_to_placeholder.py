@@ -88,9 +88,6 @@ BEGIN
     -- Migrate inputprompt
     UPDATE "inputprompt" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
 
-    -- Migrate agent__search_metrics
-    UPDATE "agent__search_metrics" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
-
     -- Make the new user an admin (they had admin access in no-auth mode)
     NEW.role := 'ADMIN';
 
@@ -140,7 +137,6 @@ def upgrade() -> None:
         "tool",
         "notification",
         "inputprompt",
-        "agent__search_metrics",
     ]
 
     has_null_records = False
@@ -244,7 +240,6 @@ def downgrade() -> None:
         "tool",
         "notification",
         "inputprompt",
-        "agent__search_metrics",
     ]
 
     # Set records back to NULL
