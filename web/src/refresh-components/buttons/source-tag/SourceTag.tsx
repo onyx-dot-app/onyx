@@ -30,7 +30,7 @@ const sizeClasses = {
 
 const getIconKey = (source: SourceInfo): string => {
   if (source.icon) return source.icon.name || "custom";
-  if (source.sourceType === "web" && source.sourceUrl) {
+  if (source.sourceType === ValidSources.Web && source.sourceUrl) {
     try {
       return new URL(source.sourceUrl).hostname;
     } catch {
@@ -138,12 +138,12 @@ const SourceTagInner = ({
             >
               {source.icon ? (
                 <source.icon size={12} />
-              ) : source.sourceType === "web" && source.sourceUrl ? (
+              ) : source.sourceType === ValidSources.Web && source.sourceUrl ? (
                 <WebResultIcon url={source.sourceUrl} size={12} />
               ) : (
                 <SourceIcon
                   sourceType={
-                    source.sourceType === "web"
+                    source.sourceType === ValidSources.Web
                       ? ValidSources.Web
                       : source.sourceType
                   }
