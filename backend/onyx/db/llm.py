@@ -69,7 +69,7 @@ def update_llm_provider_persona_relationships__no_commit(
         )
 
 
-def fetch_user_group_ids(db_session: Session, user: User) -> set[int]:
+def fetch_user_group_ids(db_session: Session, user: User | None) -> set[int]:
     """Fetch the set of user group IDs for a given user.
 
     Args:
