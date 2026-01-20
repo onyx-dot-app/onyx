@@ -1,49 +1,138 @@
 """Tests for proxy endpoints for self-hosted data planes."""
 
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-import jwt
 import pytest
 from fastapi import HTTPException
 
+from ee.onyx.server.license.models import LicensePayload
+from ee.onyx.server.license.models import PlanType
 from ee.onyx.server.tenants.proxy import forward_to_control_plane
-from ee.onyx.server.tenants.proxy import verify_self_hosted_token
+from ee.onyx.server.tenants.proxy import get_license_payload
+from ee.onyx.server.tenants.proxy import get_license_payload_allow_expired
+from ee.onyx.server.tenants.proxy import get_optional_license_payload
+from ee.onyx.server.tenants.proxy import verify_license_auth
 
 
-class TestVerifySelfHostedToken:
-    """Tests for verify_self_hosted_token function."""
+def make_license_payload(
+    tenant_id: str = "tenant_123",
+    expired: bool = False,
+) -> LicensePayload:
+    """Helper to create a test LicensePayload."""
+    now = datetime.now(timezone.utc)
+    if expired:
+        expires_at = now - timedelta(days=1)
+    else:
+        expires_at = now + timedelta(days=30)
 
-    @pytest.mark.asyncio
-    async def test_valid_token(self) -> None:
-        """Test that a valid token passes verification."""
-        mock_request = MagicMock()
-        mock_request.headers.get.side_effect = lambda key: {
-            "Authorization": "Bearer valid_token",
-            "X-Tenant-ID": "tenant_123",
-        }.get(key)
+    return LicensePayload(
+        version="1.0",
+        tenant_id=tenant_id,
+        organization_name="Test Org",
+        issued_at=now - timedelta(days=1),
+        expires_at=expires_at,
+        seats=10,
+        plan_type=PlanType.MONTHLY,
+    )
+
+
+class TestVerifyLicenseAuth:
+    """Tests for verify_license_auth function."""
+
+    def test_valid_license(self) -> None:
+        """Test that a valid license passes verification."""
+        payload = make_license_payload()
+
+        with patch(
+            "ee.onyx.server.tenants.proxy.verify_license_signature"
+        ) as mock_verify:
+            mock_verify.return_value = payload
+
+            result = verify_license_auth("valid_license_data", allow_expired=False)
+
+            assert result == payload
+            mock_verify.assert_called_once_with("valid_license_data")
+
+    def test_invalid_signature(self) -> None:
+        """Test that invalid signature raises 401."""
+        with patch(
+            "ee.onyx.server.tenants.proxy.verify_license_signature"
+        ) as mock_verify:
+            mock_verify.side_effect = ValueError("Invalid signature")
+
+            with pytest.raises(HTTPException) as exc_info:
+                verify_license_auth("bad_license", allow_expired=False)
+
+            assert exc_info.value.status_code == 401
+            assert "Invalid license" in str(exc_info.value.detail)
+
+    def test_expired_license_rejected(self) -> None:
+        """Test that expired license raises 401 when not allowed."""
+        payload = make_license_payload(expired=True)
 
         with (
-            patch("ee.onyx.server.tenants.proxy.DATA_PLANE_SECRET", "test_secret"),
-            patch("ee.onyx.server.tenants.proxy.jwt.decode") as mock_decode,
+            patch(
+                "ee.onyx.server.tenants.proxy.verify_license_signature"
+            ) as mock_verify,
+            patch("ee.onyx.server.tenants.proxy.is_license_valid") as mock_valid,
         ):
-            mock_decode.return_value = {"sub": "test"}
+            mock_verify.return_value = payload
+            mock_valid.return_value = False
 
-            result = await verify_self_hosted_token(mock_request)
+            with pytest.raises(HTTPException) as exc_info:
+                verify_license_auth("expired_license", allow_expired=False)
 
-            assert result == "tenant_123"
-            mock_decode.assert_called_once_with(
-                "valid_token", "test_secret", algorithms=["HS256"]
-            )
+            assert exc_info.value.status_code == 401
+            assert "expired" in str(exc_info.value.detail).lower()
+
+    def test_expired_license_allowed(self) -> None:
+        """Test that expired license is allowed when allow_expired=True."""
+        payload = make_license_payload(expired=True)
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.proxy.verify_license_signature"
+            ) as mock_verify,
+            patch("ee.onyx.server.tenants.proxy.is_license_valid") as mock_valid,
+        ):
+            mock_verify.return_value = payload
+            mock_valid.return_value = False
+
+            result = verify_license_auth("expired_license", allow_expired=True)
+
+            assert result == payload
+
+
+class TestGetLicensePayload:
+    """Tests for get_license_payload dependency."""
+
+    @pytest.mark.asyncio
+    async def test_valid_license(self) -> None:
+        """Test that valid license returns payload."""
+        payload = make_license_payload()
+
+        with (
+            patch(
+                "ee.onyx.server.tenants.proxy.verify_license_signature"
+            ) as mock_verify,
+            patch("ee.onyx.server.tenants.proxy.is_license_valid") as mock_valid,
+        ):
+            mock_verify.return_value = payload
+            mock_valid.return_value = True
+
+            result = await get_license_payload("Bearer valid_license_data")
+
+            assert result == payload
 
     @pytest.mark.asyncio
     async def test_missing_auth_header(self) -> None:
         """Test that missing Authorization header raises 401."""
-        mock_request = MagicMock()
-        mock_request.headers.get.return_value = None
-
         with pytest.raises(HTTPException) as exc_info:
-            await verify_self_hosted_token(mock_request)
+            await get_license_payload(None)
 
         assert exc_info.value.status_code == 401
         assert "Missing or invalid authorization header" in str(exc_info.value.detail)
@@ -51,93 +140,70 @@ class TestVerifySelfHostedToken:
     @pytest.mark.asyncio
     async def test_invalid_auth_format(self) -> None:
         """Test that non-Bearer auth raises 401."""
-        mock_request = MagicMock()
-        mock_request.headers.get.side_effect = lambda key: {
-            "Authorization": "Basic sometoken",
-        }.get(key)
-
         with pytest.raises(HTTPException) as exc_info:
-            await verify_self_hosted_token(mock_request)
+            await get_license_payload("Basic sometoken")
 
         assert exc_info.value.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_no_data_plane_secret(self) -> None:
-        """Test that missing DATA_PLANE_SECRET raises 500."""
-        mock_request = MagicMock()
-        mock_request.headers.get.side_effect = lambda key: {
-            "Authorization": "Bearer valid_token",
-        }.get(key)
 
-        with patch("ee.onyx.server.tenants.proxy.DATA_PLANE_SECRET", None):
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_self_hosted_token(mock_request)
-
-            assert exc_info.value.status_code == 500
-            assert "Proxy not configured" in str(exc_info.value.detail)
+class TestGetLicensePayloadAllowExpired:
+    """Tests for get_license_payload_allow_expired dependency."""
 
     @pytest.mark.asyncio
-    async def test_expired_token(self) -> None:
-        """Test that expired token raises 401."""
-        mock_request = MagicMock()
-        mock_request.headers.get.side_effect = lambda key: {
-            "Authorization": "Bearer expired_token",
-            "X-Tenant-ID": "tenant_123",
-        }.get(key)
+    async def test_expired_license_allowed(self) -> None:
+        """Test that expired license is accepted."""
+        payload = make_license_payload(expired=True)
 
         with (
-            patch("ee.onyx.server.tenants.proxy.DATA_PLANE_SECRET", "test_secret"),
-            patch("ee.onyx.server.tenants.proxy.jwt.decode") as mock_decode,
+            patch(
+                "ee.onyx.server.tenants.proxy.verify_license_signature"
+            ) as mock_verify,
         ):
-            mock_decode.side_effect = jwt.ExpiredSignatureError()
+            mock_verify.return_value = payload
 
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_self_hosted_token(mock_request)
+            result = await get_license_payload_allow_expired("Bearer expired_license")
 
-            assert exc_info.value.status_code == 401
-            assert "Token has expired" in str(exc_info.value.detail)
+            assert result == payload
 
     @pytest.mark.asyncio
-    async def test_invalid_token(self) -> None:
-        """Test that invalid token raises 401."""
-        mock_request = MagicMock()
-        mock_request.headers.get.side_effect = lambda key: {
-            "Authorization": "Bearer invalid_token",
-            "X-Tenant-ID": "tenant_123",
-        }.get(key)
+    async def test_missing_auth_header(self) -> None:
+        """Test that missing Authorization header raises 401."""
+        with pytest.raises(HTTPException) as exc_info:
+            await get_license_payload_allow_expired(None)
 
-        with (
-            patch("ee.onyx.server.tenants.proxy.DATA_PLANE_SECRET", "test_secret"),
-            patch("ee.onyx.server.tenants.proxy.jwt.decode") as mock_decode,
-        ):
-            mock_decode.side_effect = jwt.InvalidTokenError()
+        assert exc_info.value.status_code == 401
 
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_self_hosted_token(mock_request)
 
-            assert exc_info.value.status_code == 401
-            assert "Invalid token" in str(exc_info.value.detail)
+class TestGetOptionalLicensePayload:
+    """Tests for get_optional_license_payload dependency."""
 
     @pytest.mark.asyncio
-    async def test_missing_tenant_id(self) -> None:
-        """Test that missing X-Tenant-ID raises 400."""
-        mock_request = MagicMock()
-        mock_request.headers.get.side_effect = lambda key: {
-            "Authorization": "Bearer valid_token",
-            "X-Tenant-ID": None,
-        }.get(key)
+    async def test_no_auth_returns_none(self) -> None:
+        """Test that missing auth returns None (for new customers)."""
+        result = await get_optional_license_payload(None)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_non_bearer_returns_none(self) -> None:
+        """Test that non-Bearer auth returns None."""
+        result = await get_optional_license_payload("Basic sometoken")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_valid_license_returns_payload(self) -> None:
+        """Test that valid license returns payload."""
+        payload = make_license_payload()
 
         with (
-            patch("ee.onyx.server.tenants.proxy.DATA_PLANE_SECRET", "test_secret"),
-            patch("ee.onyx.server.tenants.proxy.jwt.decode") as mock_decode,
+            patch(
+                "ee.onyx.server.tenants.proxy.verify_license_signature"
+            ) as mock_verify,
         ):
-            mock_decode.return_value = {"sub": "test"}
+            mock_verify.return_value = payload
 
-            with pytest.raises(HTTPException) as exc_info:
-                await verify_self_hosted_token(mock_request)
+            result = await get_optional_license_payload("Bearer valid_license")
 
-            assert exc_info.value.status_code == 400
-            assert "Missing X-Tenant-ID header" in str(exc_info.value.detail)
+            assert result == payload
 
 
 class TestForwardToControlPlane:
