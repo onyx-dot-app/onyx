@@ -19,8 +19,8 @@ from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
+from onyx.server.features.build.db.sandbox import allocate_nextjs_port
 from onyx.server.features.build.db.sandbox import create_sandbox as db_create_sandbox
 from onyx.server.features.build.db.sandbox import create_snapshot as db_create_snapshot
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
@@ -215,8 +215,8 @@ class SandboxManager:
             )
             logger.debug("Opencode config ready")
 
-            # Start Next.js server on fixed port
-            nextjs_port = SANDBOX_NEXTJS_PORT_START
+            # Allocate Next.js port and start server
+            nextjs_port = allocate_nextjs_port()
             web_dir = self._directory_manager.get_web_path(sandbox_path)
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
@@ -228,6 +228,7 @@ class SandboxManager:
             sandbox = db_create_sandbox(
                 db_session=db_session,
                 session_id=session_uuid,
+                nextjs_port=nextjs_port,
             )
 
             update_sandbox_status(db_session, sandbox.id, SandboxStatus.RUNNING)
@@ -352,9 +353,13 @@ class SandboxManager:
         if not sandbox:
             return False
 
-        # Check Next.js server is responsive on fixed port
+        # Cannot check health if port is not known
+        if sandbox.nextjs_port is None:
+            return False
+
+        # Check Next.js server is responsive on the sandbox's allocated port
         if self._process_manager._wait_for_server(
-            f"http://localhost:{SANDBOX_NEXTJS_PORT_START}",
+            f"http://localhost:{sandbox.nextjs_port}",
             timeout=5.0,
         ):
             update_sandbox_heartbeat(db_session, UUID(sandbox_id))

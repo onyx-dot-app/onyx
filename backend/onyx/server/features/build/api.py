@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from uuid import UUID
 
 import httpx
 from fastapi import APIRouter
@@ -7,10 +8,12 @@ from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.server.features.build.configs import BUILD_WEBAPP_URL
+from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.messages_api import router as messages_router
 from onyx.server.features.build.sessions_api import router as sessions_router
 from onyx.utils.logger import setup_logger
@@ -23,10 +26,6 @@ router = APIRouter(prefix="/build")
 router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
 
-# Separate router for Next.js static assets at /_next/*
-# This is needed because Next.js apps reference assets with root-relative paths
-nextjs_assets_router = APIRouter()
-
 # Headers to skip when proxying (hop-by-hop headers)
 EXCLUDED_HEADERS = {
     "content-encoding",
@@ -35,9 +34,6 @@ EXCLUDED_HEADERS = {
     "connection",
 }
 
-# Base path where the webapp is served
-WEBAPP_BASE_PATH = "/api/build/webapp"
-
 
 def _stream_response(response: httpx.Response) -> Iterator[bytes]:
     """Stream the response content in chunks."""
@@ -45,19 +41,22 @@ def _stream_response(response: httpx.Response) -> Iterator[bytes]:
         yield chunk
 
 
-def _rewrite_asset_paths(content: bytes) -> bytes:
+def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     """Rewrite Next.js asset paths to go through the proxy."""
     import re
 
+    # Base path includes session_id for routing
+    webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
+
     text = content.decode("utf-8")
     # Rewrite /_next/ paths to go through our proxy
-    text = text.replace("/_next/", f"{WEBAPP_BASE_PATH}/_next/")
+    text = text.replace("/_next/", f"{webapp_base_path}/_next/")
     # Rewrite root-level JSON data file fetch paths (e.g., /data.json, /pr_data.json)
     # Only matches paths like "/filename.json" (no subdirectories)
-    text = re.sub(r'"(/[a-zA-Z0-9_-]+\.json)"', f'"{WEBAPP_BASE_PATH}\\1"', text)
-    text = re.sub(r"'(/[a-zA-Z0-9_-]+\.json)'", f"'{WEBAPP_BASE_PATH}\\1'", text)
+    text = re.sub(r'"(/[a-zA-Z0-9_-]+\.json)"', f'"{webapp_base_path}\\1"', text)
+    text = re.sub(r"'(/[a-zA-Z0-9_-]+\.json)'", f"'{webapp_base_path}\\1'", text)
     # Rewrite favicon
-    text = text.replace('"/favicon.ico', f'"{WEBAPP_BASE_PATH}/favicon.ico')
+    text = text.replace('"/favicon.ico', f'"{webapp_base_path}/favicon.ico')
     return text.encode("utf-8")
 
 
@@ -71,16 +70,35 @@ REWRITABLE_CONTENT_TYPES = {
 }
 
 
-def _proxy_request(path: str, request: Request) -> StreamingResponse | Response:
-    """Proxy a request to the configured BUILD_WEBAPP_URL."""
-    if not BUILD_WEBAPP_URL:
-        raise HTTPException(
-            status_code=503,
-            detail="BUILD_WEBAPP_URL is not configured",
-        )
+def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
+    """Get the localhost URL for a sandbox's Next.js server.
+
+    Args:
+        session_id: The build session ID
+        db_session: Database session
+
+    Returns:
+        The localhost URL (e.g., "http://localhost:3010")
+
+    Raises:
+        HTTPException: If sandbox not found or port not allocated
+    """
+    sandbox = get_sandbox_by_session_id(db_session, session_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+    if sandbox.nextjs_port is None:
+        raise HTTPException(status_code=503, detail="Sandbox port not allocated")
+    return f"http://localhost:{sandbox.nextjs_port}"
+
+
+def _proxy_request(
+    path: str, request: Request, session_id: UUID, db_session: Session
+) -> StreamingResponse | Response:
+    """Proxy a request to the sandbox's Next.js server."""
+    base_url = _get_sandbox_url(session_id, db_session)
 
     # Build the target URL
-    target_url = f"{BUILD_WEBAPP_URL.rstrip('/')}/{path.lstrip('/')}"
+    target_url = f"{base_url}/{path.lstrip('/')}"
 
     # Include query params if present
     if request.query_params:
@@ -111,7 +129,7 @@ def _proxy_request(path: str, request: Request) -> StreamingResponse | Response:
 
             # For HTML/CSS/JS responses, rewrite asset paths
             if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
-                content = _rewrite_asset_paths(response.content)
+                content = _rewrite_asset_paths(response.content, str(session_id))
                 return Response(
                     content=content,
                     status_code=response.status_code,
@@ -134,25 +152,24 @@ def _proxy_request(path: str, request: Request) -> StreamingResponse | Response:
         raise HTTPException(status_code=502, detail="Bad gateway")
 
 
-@router.get("/webapp", response_model=None)
+@router.get("/sessions/{session_id}/webapp", response_model=None)
 def get_webapp_root(
-    request: Request, _: User = Depends(current_user)
+    session_id: UUID,
+    request: Request,
+    _: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> StreamingResponse | Response:
-    """Proxy the root path of the webapp."""
-    return _proxy_request("", request)
+    """Proxy the root path of the webapp for a specific session."""
+    return _proxy_request("", request, session_id, db_session)
 
 
-@router.get("/webapp/{path:path}", response_model=None)
+@router.get("/sessions/{session_id}/webapp/{path:path}", response_model=None)
 def get_webapp_path(
-    path: str, request: Request, _: User = Depends(current_user)
+    session_id: UUID,
+    path: str,
+    request: Request,
+    _: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
 ) -> StreamingResponse | Response:
-    """Proxy any subpath of the webapp (static assets, etc.)."""
-    return _proxy_request(path, request)
-
-
-@nextjs_assets_router.get("/_next/{path:path}", response_model=None)
-def get_nextjs_assets(
-    path: str, request: Request, _: User = Depends(current_user)
-) -> StreamingResponse | Response:
-    """Proxy Next.js static assets requested at root /_next/ path."""
-    return _proxy_request(f"_next/{path}", request)
+    """Proxy any subpath of the webapp (static assets, etc.) for a specific session."""
+    return _proxy_request(path, request, session_id, db_session)
