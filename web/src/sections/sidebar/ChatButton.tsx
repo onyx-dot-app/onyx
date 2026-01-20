@@ -89,7 +89,7 @@ export function PopoverSearchInput({
         onKeyDown={handleKeyDown}
         placeholder="Search Projects"
         onClick={noProp()}
-        internal
+        variant="internal"
         autoFocus
       />
     </div>

@@ -35,6 +35,7 @@ class MessageOrigin(str, Enum):
     CHROME_EXTENSION = "chrome_extension"
     API = "api"
     SLACKBOT = "slackbot"
+    WIDGET = "widget"
     DISCORDBOT = "discordbot"
     UNKNOWN = "unknown"
     UNSET = "unset"

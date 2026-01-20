@@ -28,6 +28,8 @@ export default function InputTypeInElementField({
   const onBlur = useOnBlurEvent(name, onBlurProp);
   const hasError = meta.touched && meta.error;
   const isEmpty = !field.value || field.value.trim() === "";
+  const isNonEditable =
+    inputProps.variant === "disabled" || inputProps.variant === "readOnly";
 
   return (
     <Section flexDirection="row" gap={0.25}>
@@ -39,7 +41,13 @@ export default function InputTypeInElementField({
         value={field.value ?? ""}
         onChange={onChange}
         onBlur={onBlur}
-        error={!!hasError}
+        variant={
+          isNonEditable
+            ? inputProps.variant
+            : hasError
+              ? "error"
+              : inputProps.variant
+        }
         showClearButton={false}
       />
       <IconButton

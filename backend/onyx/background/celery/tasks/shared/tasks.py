@@ -25,7 +25,7 @@ from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_pool import get_redis_client
@@ -97,13 +97,17 @@ def document_by_cc_pair_cleanup_task(
             action = "skip"
 
             active_search_settings = get_active_search_settings(db_session)
-            doc_index = get_default_document_index(
+            # This flow is for updates and deletion so we get all indices.
+            document_indices = get_all_document_indices(
                 active_search_settings.primary,
                 active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
 
-            retry_index = RetryDocumentIndex(doc_index)
+            retry_document_indices: list[RetryDocumentIndex] = [
+                RetryDocumentIndex(document_index)
+                for document_index in document_indices
+            ]
 
             count = get_document_connector_count(db_session, document_id)
             if count == 1:
@@ -113,11 +117,12 @@ def document_by_cc_pair_cleanup_task(
 
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
 
-                _ = retry_index.delete_single(
-                    document_id,
-                    tenant_id=tenant_id,
-                    chunk_count=chunk_count,
-                )
+                for retry_document_index in retry_document_indices:
+                    _ = retry_document_index.delete_single(
+                        document_id,
+                        tenant_id=tenant_id,
+                        chunk_count=chunk_count,
+                    )
 
                 delete_document_references_from_kg(
                     db_session=db_session,
@@ -155,14 +160,18 @@ def document_by_cc_pair_cleanup_task(
                     hidden=doc.hidden,
                 )
 
-                # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                retry_index.update_single(
-                    document_id,
-                    tenant_id=tenant_id,
-                    chunk_count=doc.chunk_count,
-                    fields=fields,
-                    user_fields=None,
-                )
+                for retry_document_index in retry_document_indices:
+                    # TODO(andrei): Previously there was a comment here saying
+                    # it was ok if a doc did not exist in the document index. I
+                    # don't agree with that claim, so keep an eye on this task
+                    # to see if this raises.
+                    retry_document_index.update_single(
+                        document_id,
+                        tenant_id=tenant_id,
+                        chunk_count=doc.chunk_count,
+                        fields=fields,
+                        user_fields=None,
+                    )
 
                 # there are still other cc_pair references to the doc, so just resync to Vespa
                 delete_document_by_connector_credential_pair__no_commit(

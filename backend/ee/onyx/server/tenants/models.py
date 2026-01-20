@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -71,6 +72,12 @@ class ProductGatingResponse(BaseModel):
 
 class SubscriptionSessionResponse(BaseModel):
     sessionId: str
+
+
+class CreateSubscriptionSessionRequest(BaseModel):
+    """Request to create a subscription checkout session."""
+
+    billing_period: Literal["monthly", "annual"] = "monthly"
 
 
 class TenantByDomainResponse(BaseModel):

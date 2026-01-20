@@ -87,7 +87,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.httpx.httpx_pool import HttpxPool
@@ -1436,7 +1436,7 @@ def _docprocessing_task(
                 callback=callback,
             )
 
-            document_index = get_default_document_index(
+            document_indices = get_all_document_indices(
                 index_attempt.search_settings,
                 None,
                 httpx_client=HttpxPool.get("vespa"),
@@ -1473,7 +1473,7 @@ def _docprocessing_task(
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
-                document_index=document_index,
+                document_indices=document_indices,
                 ignore_time_skip=True,  # Documents are already filtered during extraction
                 db_session=db_session,
                 tenant_id=tenant_id,
