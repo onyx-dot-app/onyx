@@ -34,6 +34,7 @@ CREATE OR REPLACE FUNCTION migrate_no_auth_data_to_user()
 RETURNS TRIGGER AS $$
 DECLARE
     placeholder_uuid UUID := '00000000-0000-0000-0000-000000000001'::uuid;
+    anonymous_uuid UUID := '00000000-0000-0000-0000-000000000002'::uuid;
     placeholder_row RECORD;
     schema_name TEXT;
 BEGIN
@@ -42,7 +43,12 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- Skip if the new user is not active (e.g., anonymous users)
+    -- Skip if this is the anonymous user being inserted (not a real user)
+    IF NEW.id = anonymous_uuid THEN
+        RETURN NEW;
+    END IF;
+
+    -- Skip if the new user is not active
     IF NEW.is_active = FALSE THEN
         RETURN NEW;
     END IF;
