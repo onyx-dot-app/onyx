@@ -9,11 +9,15 @@ from onyx.auth.users import current_user
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.index_attempt import expire_index_attempts
+from onyx.db.models import IndexModelStatus
 from onyx.db.models import User
 from onyx.db.search_settings import delete_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
+from onyx.db.search_settings import update_search_settings_status
+from onyx.document_index.factory import get_default_document_index
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import update_unstructured_api_key
@@ -104,7 +108,6 @@ def set_new_search_settings(
     # # Ensure Vespa has the new index immediately
     # get_multipass_config(search_settings)
     # get_multipass_config(new_search_settings)
-
     # document_index = get_default_document_index(search_settings, new_search_settings)
 
     # document_index.ensure_indices_exist(
@@ -135,36 +138,29 @@ def cancel_new_embedding(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    # TODO(andrei): Re-enable.
-    logger.error("Cancelling new embedding is temporarily disabled.")
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Cancelling new embedding is temporarily disabled.",
-    )
-    # secondary_search_settings = get_secondary_search_settings(db_session)
+    secondary_search_settings = get_secondary_search_settings(db_session)
 
-    # if secondary_search_settings:
-    #     expire_index_attempts(
-    #         search_settings_id=secondary_search_settings.id, db_session=db_session
-    #     )
+    if secondary_search_settings:
+        expire_index_attempts(
+            search_settings_id=secondary_search_settings.id, db_session=db_session
+        )
 
-    #     update_search_settings_status(
-    #         search_settings=secondary_search_settings,
-    #         new_status=IndexModelStatus.PAST,
-    #         db_session=db_session,
-    #     )
+        update_search_settings_status(
+            search_settings=secondary_search_settings,
+            new_status=IndexModelStatus.PAST,
+            db_session=db_session,
+        )
 
-    #     # remove the old index from the vector db
-    #     primary_search_settings = get_current_search_settings(db_session)
-
-    #     document_index = get_default_document_index(primary_search_settings, None)
-    #     document_index.ensure_indices_exist(
-    #         primary_embedding_dim=primary_search_settings.final_embedding_dim,
-    #         primary_embedding_precision=primary_search_settings.embedding_precision,
-    #         # just finished swap, no more secondary index
-    #         secondary_index_embedding_dim=None,
-    #         secondary_index_embedding_precision=None,
-    #     )
+        # remove the old index from the vector db
+        primary_search_settings = get_current_search_settings(db_session)
+        document_index = get_default_document_index(primary_search_settings, None)
+        document_index.ensure_indices_exist(
+            primary_embedding_dim=primary_search_settings.final_embedding_dim,
+            primary_embedding_precision=primary_search_settings.embedding_precision,
+            # just finished swap, no more secondary index
+            secondary_index_embedding_dim=None,
+            secondary_index_embedding_precision=None,
+        )
 
 
 @router.delete("/delete-search-settings")

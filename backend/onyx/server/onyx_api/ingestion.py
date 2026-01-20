@@ -21,6 +21,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
@@ -137,37 +138,33 @@ def upsert_ingestion_doc(
     )
 
     # If there's a secondary index being built, index the doc but don't use it for return here
-    # NOTE, TODO(andrei): If get_secondary_search_settings works as I expect we
-    # should never enter this block, but I'm commenting it out just to be sure
-    # and also to not have to worry about typing as I change the interface of
-    # the document index.
-    # if active_search_settings.secondary:
-    #     sec_search_settings = get_secondary_search_settings(db_session)
+    if active_search_settings.secondary:
+        sec_search_settings = get_secondary_search_settings(db_session)
 
-    #     if sec_search_settings is None:
-    #         # Should not ever happen
-    #         raise RuntimeError(
-    #             "Secondary index exists but no search settings configured"
-    #         )
+        if sec_search_settings is None:
+            # Should not ever happen
+            raise RuntimeError(
+                "Secondary index exists but no search settings configured"
+            )
 
-    #     new_index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
-    #         search_settings=sec_search_settings
-    #     )
+        new_index_embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+            search_settings=sec_search_settings
+        )
 
-    #     sec_doc_index = get_default_document_index(
-    #         active_search_settings.secondary, None
-    #     )
+        sec_doc_index = get_default_document_index(
+            active_search_settings.secondary, None
+        )
 
-    #     run_indexing_pipeline(
-    #         embedder=new_index_embedding_model,
-    #         document_index=sec_doc_index,
-    #         ignore_time_skip=True,
-    #         db_session=db_session,
-    #         tenant_id=tenant_id,
-    #         document_batch=[document],
-    #         request_id=None,
-    #         adapter=adapter,
-    #     )
+        run_indexing_pipeline(
+            embedder=new_index_embedding_model,
+            document_index=sec_doc_index,
+            ignore_time_skip=True,
+            db_session=db_session,
+            tenant_id=tenant_id,
+            document_batch=[document],
+            request_id=None,
+            adapter=adapter,
+        )
 
     return IngestionResult(
         document_id=document.id,

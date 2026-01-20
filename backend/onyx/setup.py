@@ -30,7 +30,6 @@ from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
@@ -72,14 +71,11 @@ def setup_onyx(
 
     The Tenant Service calls the tenants/create endpoint which runs this.
     """
-    # WARNING, TODO(andrei): Index swapping is temporarily disabled.
     check_and_perform_index_swap(db_session=db_session)
 
     active_search_settings = get_active_search_settings(db_session)
     search_settings = active_search_settings.primary
-    # TODO(andrei): Re-enable this bit.
-    # secondary_search_settings = active_search_settings.secondary
-    secondary_search_settings: SearchSettings | None = None
+    secondary_search_settings = active_search_settings.secondary
 
     # search_settings = get_current_search_settings(db_session)
     # multipass_config_1 = get_multipass_config(search_settings)
