@@ -556,6 +556,9 @@ class OnyxCeleryTask:
     CHECK_KG_PROCESSING_CLUSTERING_ONLY = "check_kg_processing_clustering_only"
     KG_RESET_SOURCE_INDEX = "kg_reset_source_index"
 
+    # License management
+    LICENSE_REFRESH_TASK = "license_refresh_task"
+
 
 # this needs to correspond to the matching entry in supervisord
 ONYX_CELERY_BEAT_HEARTBEAT_KEY = "onyx:celery:beat:heartbeat"

@@ -308,6 +308,21 @@ if not MULTI_TENANT:
         ]
     )
 
+    # Add license refresh task for EE deployments
+    if ENTERPRISE_EDITION_ENABLED:
+        tasks_to_schedule.append(
+            {
+                "name": "license-refresh",
+                "task": OnyxCeleryTask.LICENSE_REFRESH_TASK,
+                # Run daily at 2 AM
+                "schedule": crontab(hour=2, minute=0),
+                "options": {
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                },
+            }
+        )
+
     tasks_to_schedule.extend(beat_task_templates)
 
 
