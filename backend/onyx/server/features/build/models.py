@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
@@ -89,6 +90,40 @@ class SessionListResponse(BaseModel):
     """Response containing list of sessions."""
 
     sessions: list[SessionResponse]
+
+
+# ===== Message Models =====
+class MessageRequest(BaseModel):
+    """Request to send a message to the CLI agent."""
+
+    content: str
+
+
+class MessageResponse(BaseModel):
+    """Response containing message details."""
+
+    id: str
+    session_id: str
+    type: MessageType
+    content: str
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, message):
+        """Convert BuildMessage ORM model to response."""
+        return cls(
+            id=str(message.id),
+            session_id=str(message.session_id),
+            type=message.type,
+            content=message.content,
+            created_at=message.created_at,
+        )
+
+
+class MessageListResponse(BaseModel):
+    """Response containing list of messages."""
+
+    messages: list[MessageResponse]
 
 
 # ===== Legacy Models (for compatibility with other code) =====
