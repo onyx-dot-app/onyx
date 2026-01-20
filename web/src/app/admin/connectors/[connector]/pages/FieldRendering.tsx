@@ -215,6 +215,7 @@ export const RenderField: FC<RenderFieldProps> = ({
             name={field.name}
             label={label}
             sublabel={description}
+            disabled={disabled}
             size="lg"
             onChange={(checked) => setFieldValue(field.name, checked)}
           />
