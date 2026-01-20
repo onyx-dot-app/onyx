@@ -13,7 +13,6 @@ export interface InputTextAreaFieldProps
 
 export default function InputTextAreaField({
   name,
-  disabled,
   onChange: onChangeProp,
   onBlur: onBlurProp,
   ...textareaProps
@@ -28,7 +27,6 @@ export default function InputTextAreaField({
 
   return (
     <InputTextArea
-      disabled={disabled}
       {...textareaProps}
       id={name}
       name={name}

@@ -231,7 +231,7 @@ export const RenderField: FC<RenderFieldProps> = ({
             <InputTextAreaField
               name={field.name}
               placeholder={field.placeholder}
-              disabled={disabled}
+              variant={disabled ? "disabled" : undefined}
               rows={1}
             />
           </InputLayouts.Vertical>
