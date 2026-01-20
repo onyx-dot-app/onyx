@@ -151,6 +151,7 @@ const ChatInputBar = React.memo(
     const [message, setMessage] = useState(initialMessage);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const { user } = useUser();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -442,7 +443,10 @@ const ChatInputBar = React.memo(
         )}
 
         {/* Input area */}
-        <Popover open={showPrompts} onOpenChange={setShowPrompts}>
+        <Popover
+          open={user?.preferences.shortcut_enabled && showPrompts}
+          onOpenChange={setShowPrompts}
+        >
           <Popover.Anchor asChild>
             <textarea
               onPaste={handlePaste}
