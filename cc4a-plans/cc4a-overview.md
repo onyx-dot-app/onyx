@@ -2,7 +2,7 @@
 
 ## Overview
 
-A platform enabling users to interact with CLI-based AI agents running in isolated containers through a chat interface. Agents can generate artifacts (Next.js apps, PowerPoints, markdown, charts) that are viewable and explorable within the UI.
+A platform enabling users to interact with CLI-based AI agents running in isolated containers through a chat interface. Agents can generate artifacts (web apps, PowerPoints, Word docs, markdown, Excel sheets, images) that are viewable and explorable within the UI.
 
 ---
 
@@ -19,11 +19,13 @@ A platform enabling users to interact with CLI-based AI agents running in isolat
 - Artifact tracking and retrieval
 - Request proxying to CLI agents
 - Streaming response handling
-- **Sandbox Module** (integrated within Backend):
-  - Container provisioning and management
-  - Volume mounting and snapshot management
-  - CLI agent communication
-  - Idle timeout and cleanup
+- **Sandbox Manager** (`sandbox_manager.py` - synchronous operations):
+  - `provision_sandbox()` - Create and start containers
+  - `restore_sandbox()` - Restore from snapshots
+  - `terminate_sandbox()` - Stop containers and snapshot
+  - All operations are SYNCHRONOUS (no Celery)
+- **Background Jobs** (Celery - ONLY for idle timeout):
+  - `check_build_sandbox_idle` - Periodic task to terminate idle sandboxes
 
 ### 3. PostgreSQL
 - Session metadata
@@ -38,19 +40,20 @@ A platform enabling users to interact with CLI-based AI agents running in isolat
 ### Session
 ```
 - id: UUID
-- org_id: UUID
-- user_id: UUID
-- sandbox_id: UUID (nullable)
-- status: enum (active, idle, archived)
+- user_id: UUID (nullable - supports anonymous sessions)
+- status: enum (active, idle)
 - created_at: timestamp
 - last_activity_at: timestamp
+- sandbox: Sandbox (one-to-one relationship)
+- artifacts: list[Artifact] (one-to-many relationship)
+- snapshots: list[Snapshot] (one-to-many relationship)
 ```
 
 ### Artifact
 ```
 - id: UUID
 - session_id: UUID
-- type: enum (nextjs_app, pptx, markdown, chart)
+- type: enum (web_app, pptx, docx, image, markdown, excel)
 - path: string (relative to outputs/)
 - name: string
 - created_at: timestamp
@@ -60,11 +63,11 @@ A platform enabling users to interact with CLI-based AI agents running in isolat
 ### Sandbox
 ```
 - id: UUID
-- session_id: UUID
-- container_id: string
+- session_id: UUID (unique - one-to-one with session)
+- container_id: string (nullable)
 - status: enum (provisioning, running, idle, terminated)
 - created_at: timestamp
-- last_heartbeat: timestamp
+- last_heartbeat: timestamp (nullable)
 ```
 
 ### Snapshot
@@ -192,7 +195,7 @@ Each sandbox container mounts three volumes:
      │                │                       │                        │
      │                │                       │  12. Stream: {"type":"artifact",
      │                │                       │      "artifact":{"type":
-     │                │                       │       "nextjs_app",...}}
+     │                │                       │       "web_app",...}}
      │                │                       │<───────────────────────│
      │                │                       │                        │
      │                │                       │ 13. Save artifact      │
@@ -252,60 +255,57 @@ Each sandbox container mounts three volumes:
 
 ## Request Flow
 
-### New Session Flow
+### New Session Flow (Synchronous)
 ```
-1. User sends first message
+1. User creates session via POST /api/build/sessions
 2. Backend creates Session record
-3. Backend sandbox module provisions container:
-   a. Prepares knowledge volume (bind mount)
-   b. Copies outputs template to session-specific volume
-   c. Generates instructions file
-   d. Starts container with volumes mounted
-   e. Stores sandbox_id + connection info
-4. Backend proxies message to CLI agent
-5. CLI agent streams steps/responses back
-6. Backend streams to frontend via SSE/WebSocket
-7. Frontend renders chat + any generated artifacts
-```
-
-### Message While Sandbox Initializing
-```
-1. User sends message before sandbox is ready
-2. Frontend displays "Initializing sandbox..." indicator
-3. Backend queues the message, waits for sandbox to be ready
-4. Once sandbox is running:
-   a. Backend proxies queued message to CLI agent
-   b. Streaming response proceeds as normal
-5. Frontend replaces "Initializing sandbox..." with actual response
+3. Backend SYNCHRONOUSLY provisions sandbox (sandbox_manager.py):
+   a. Creates Sandbox record with status=PROVISIONING
+   b. Prepares knowledge volume (bind mount)
+   c. Copies outputs template to session-specific volume
+   d. Generates instructions file
+   e. Starts container with volumes mounted
+   f. Updates status=RUNNING with container_id
+4. Returns SessionResponse with running sandbox
+5. Frontend can now send messages immediately
 ```
 
 ### Follow-up Message Flow (Container Running)
 ```
 1. User sends follow-up message
 2. Backend checks Session → Sandbox is running
-3. Backend proxies message directly to CLI agent
-4. Streaming response as above
+3. Backend updates last_activity_at timestamp
+4. Backend proxies message directly to CLI agent
+5. CLI agent streams steps/responses back
+6. Backend streams to frontend via SSE
+7. Frontend renders chat + any generated artifacts
 ```
 
 ### Follow-up Message Flow (Container Terminated)
 ```
-1. User sends follow-up message
-2. Backend checks Session → Sandbox terminated, has snapshot
-3. Backend sandbox module restores session:
-   a. Retrieves snapshot from file store
-   b. Extracts to new outputs volume
-   c. Spins up new container with restored state
-4. Continues as normal flow
+1. User accesses session via GET /api/build/sessions/{id}
+2. Backend checks Session → Sandbox status=TERMINATED
+3. Backend SYNCHRONOUSLY restores sandbox (sandbox_manager.py):
+   a. Gets latest snapshot from DB
+   b. Retrieves snapshot from file store
+   c. Extracts to new outputs volume
+   d. Starts container with restored state
+   e. Updates status=RUNNING with new container_id
+4. Returns SessionResponse with running sandbox
+5. User can now send messages
 ```
 
-### Idle Timeout Flow
+### Idle Timeout Flow (Celery Background Job - ONLY use of Celery)
 ```
-1. Backend sandbox module monitors last_activity_at
-2. After IDLE_TIMEOUT (e.g., 15 minutes):
-   a. Snapshot outputs volume to file store
-   b. Create Snapshot record (linked to session_id)
-   c. Terminate container
-   d. Update Sandbox status
+1. Celery beat schedules check_build_sandbox_idle task (every 5 minutes)
+2. Task queries for sandboxes with last_activity_at > 15 minutes ago
+3. For each idle sandbox:
+   a. Calls terminate_sandbox(session_id, create_snapshot=True)
+   b. Snapshot outputs volume to file store
+   c. Create Snapshot record (linked to session_id)
+   d. Terminate container
+   e. Update Sandbox status=TERMINATED
+4. Sandbox will be restored on next access
 ```
 
 ---
@@ -315,7 +315,7 @@ Each sandbox container mounts three volumes:
 ### Sessions
 ```
 POST   /api/build/sessions                    # Create new session       
-PUT    /api/build/sessions/{id}               # Get session details + wake it up
+GET    /api/build/sessions/{id}               # Get session details + wake it up
 GET    /api/build/sessions                    # List all sessions (with filters)
 DELETE /api/build/sessions/{id}               # End session (full cleanup)
 ```
@@ -345,15 +345,24 @@ GET    /api/build/sessions/{id}/fs/read?path=...      # Read file content (maybe
 GET   /api/build/limit   # unpaid gets 10 messages total, paid gets paid gets 50 messages / week
 ```
 
-### Sandbox Module (Internal Functions)
-The sandbox module exposes internal functions (not HTTP endpoints) for container management:
+### Sandbox Manager (Synchronous Internal Functions)
+Located in `backend/onyx/server/features/build/sandbox_manager.py`:
 ```python
-sandbox.provision(session_id, ...)      # Provision sandbox container
-sandbox.terminate(sandbox_id)           # Terminate sandbox container
-sandbox.create_snapshot(sandbox_id)     # Create snapshot of outputs volume
-sandbox.restore(session_id, snapshot_id)# Restore from snapshot
-sandbox.health_check(sandbox_id)        # Check container health
+# All operations are SYNCHRONOUS - called directly by API endpoints
+provision_sandbox(session_id, db_session)            # Provision new sandbox container
+restore_sandbox(session_id, db_session)              # Restore sandbox from snapshot
+terminate_sandbox(session_id, db_session, create_snapshot)  # Terminate sandbox
 ```
+
+### Background Jobs (Celery - ONLY for idle timeout)
+Located in `backend/onyx/background/celery/tasks/build_sandbox/tasks.py`:
+```python
+@shared_task
+def check_build_sandbox_idle(tenant_id)  # Periodic task to terminate idle sandboxes
+```
+
+**IMPORTANT**: Provisioning, restoration, and termination are NOT done via Celery.
+They are synchronous operations called directly within API request handlers.
 
 ---
 
@@ -463,12 +472,12 @@ class OutputDelta(BasePacket):
 # Artifact Packets
 ################################################
 class ArtifactType(str, Enum):
-    NEXTJS_APP = "nextjs_app"
+    WEB_APP = "web_app"
     PPTX = "pptx"
-    MARKDOWN = "markdown"
-    CHART = "chart"
-    CSV = "csv"
+    DOCX = "docx"
     IMAGE = "image"
+    MARKDOWN = "markdown"
+    EXCEL = "excel"
 
 
 class ArtifactMetadata(BaseModel):
@@ -586,7 +595,7 @@ event: message
 data: {"type": "file_write", "path": "web/src/App.tsx", "size_bytes": 1523, "timestamp": "2024-01-15T10:30:03Z"}
 
 event: message
-data: {"type": "artifact_created", "artifact": {"id": "uuid-here", "type": "nextjs_app", "name": "Dashboard", "path": "web/"}, "timestamp": "2024-01-15T10:30:04Z"}
+data: {"type": "artifact_created", "artifact": {"id": "uuid-here", "type": "web_app", "name": "Dashboard", "path": "web/"}, "timestamp": "2024-01-15T10:30:04Z"}
 
 event: message
 data: {"type": "output_start", "timestamp": "2024-01-15T10:30:05Z"}
@@ -620,7 +629,7 @@ enum StreamingType {
 }
 
 // Artifact types
-type ArtifactType = "nextjs_app" | "pptx" | "markdown" | "chart" | "csv" | "image";
+type ArtifactType = "web_app" | "pptx" | "docx" | "image" | "markdown" | "excel";
 
 interface ArtifactMetadata {
   id: string;
