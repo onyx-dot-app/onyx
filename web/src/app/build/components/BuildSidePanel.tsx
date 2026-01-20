@@ -105,7 +105,7 @@ export default function BuildSidePanel({
                 Live Preview
               </Text>
               <a
-                href={getWebappUrl()}
+                href={getWebappUrl(sessionId)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -116,7 +116,7 @@ export default function BuildSidePanel({
             </div>
             <div className="flex-1 p-2">
               <iframe
-                src={getWebappUrl()}
+                src={getWebappUrl(sessionId)}
                 className="w-full h-full rounded-08 border border-border-01 bg-white"
                 sandbox="allow-scripts allow-same-origin allow-forms"
                 title="Web App Preview"

@@ -258,6 +258,6 @@ export async function listDirectory(
   return response.json();
 }
 
-export function getWebappUrl(path: string = ""): string {
-  return `/api/build/webapp${path ? `/${path}` : ""}`;
+export function getWebappUrl(sessionId: string, path: string = ""): string {
+  return `/api/build/sessions/${sessionId}/webapp${path ? `/${path}` : ""}`;
 }

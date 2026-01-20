@@ -12,6 +12,8 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
+from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
+from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 
 
 def create_build_session(
@@ -47,11 +49,13 @@ def get_build_session_by_id(
 def create_sandbox(
     db_session: Session,
     session_id: UUID,
+    nextjs_port: int | None = None,
 ) -> Sandbox:
     """Create a new sandbox record."""
     sandbox = Sandbox(
         session_id=session_id,
         status=SandboxStatus.PROVISIONING,
+        nextjs_port=nextjs_port,
     )
     db_session.add(sandbox)
     db_session.commit()
@@ -203,3 +207,37 @@ def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     db_session.delete(snapshot)
     db_session.commit()
     return True
+
+
+def _is_port_available(port: int) -> bool:
+    """Check if a port is available by attempting to bind to it."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("127.0.0.1", port))
+            return True
+    except OSError:
+        return False
+
+
+def allocate_nextjs_port() -> int:
+    """Allocate an available port for a new sandbox.
+
+    Finds the first available port in the configured range by checking
+    system-level port availability.
+
+    Returns:
+        An available port number
+
+    Raises:
+        RuntimeError: If no ports are available in the configured range
+    """
+    for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
+        if _is_port_available(port):
+            return port
+
+    raise RuntimeError(
+        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
+    )
