@@ -436,6 +436,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             RuntimeError: There was an error verifying or creating the index or
                 search pipelines.
         """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary."
+        )
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
         )
@@ -465,6 +468,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} chunks for index {self._index_name}."
+        )
         # Set of doc IDs.
         unique_docs_to_be_indexed: set[str] = set()
         document_indexing_results: list[DocumentInsertionRecord] = []
@@ -527,6 +533,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         Returns:
             The number of chunks successfully deleted.
         """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Deleting document {document_id} from index {self._index_name}."
+        )
         query_body = DocumentQuery.delete_from_document_id_query(
             document_id=document_id,
             tenant_state=self._tenant_state,
@@ -557,6 +566,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             RuntimeError: Failed to update some or all of the chunks for the
                 specified documents.
         """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Updating {len(update_requests)} chunks for index {self._index_name}."
+        )
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
             # TODO(andrei): Nit but consider if we can use DocumentChunk
@@ -622,6 +634,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         TODO(andrei): Consider implementing this method to retrieve on document
         chunk IDs vs querying for matching document chunks.
         """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Retrieving {len(chunk_requests)} chunks for index {self._index_name}."
+        )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
             search_hits: list[SearchHit[DocumentChunk]] = []
@@ -661,6 +676,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
         offset: int = 0,
     ) -> list[InferenceChunk]:
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
+        )
         query_body = DocumentQuery.get_hybrid_search_query(
             query_text=query,
             query_vector=query_embedding,
