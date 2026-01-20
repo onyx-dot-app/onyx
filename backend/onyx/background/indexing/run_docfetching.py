@@ -42,6 +42,7 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import ProcessingMode
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
@@ -53,6 +54,7 @@ from onyx.db.models import IndexAttempt
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.indexing.persistent_document_writer import get_persistent_document_writer
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
@@ -367,6 +369,7 @@ def connector_document_extraction(
 
         db_connector = index_attempt.connector_credential_pair.connector
         db_credential = index_attempt.connector_credential_pair.credential
+        processing_mode = index_attempt.connector_credential_pair.processing_mode
         is_primary = index_attempt.search_settings.status == IndexModelStatus.PRESENT
 
         from_beginning = index_attempt.from_beginning
@@ -600,34 +603,60 @@ def connector_document_extraction(
                 logger.debug(f"Indexing batch of documents: {batch_description}")
                 memory_tracer.increment_and_maybe_trace()
 
-                # Store documents in storage
-                batch_storage.store_batch(batch_num, doc_batch_cleaned)
+                if processing_mode == ProcessingMode.FILE_SYSTEM:
+                    # File system only - write directly to persistent storage,
+                    # skip chunking/embedding/Vespa
+                    writer = get_persistent_document_writer()
+                    written_paths = writer.write_documents(doc_batch_cleaned)
 
-                # Create processing task data
-                processing_batch_data = {
-                    "index_attempt_id": index_attempt_id,
-                    "cc_pair_id": cc_pair_id,
-                    "tenant_id": tenant_id,
-                    "batch_num": batch_num,  # 0-indexed
-                }
+                    # Update coordination directly (no docprocessing task)
+                    with get_session_with_current_tenant() as db_session:
+                        IndexingCoordination.update_batch_completion_and_docs(
+                            db_session=db_session,
+                            index_attempt_id=index_attempt_id,
+                            total_docs_indexed=len(written_paths),
+                            new_docs_indexed=len(written_paths),
+                            total_chunks=0,  # No chunks for file system mode
+                        )
 
-                # Queue document processing task
-                app.send_task(
-                    OnyxCeleryTask.DOCPROCESSING_TASK,
-                    kwargs=processing_batch_data,
-                    queue=OnyxCeleryQueues.DOCPROCESSING,
-                    priority=docprocessing_priority,
-                )
+                    batch_num += 1
+                    total_doc_batches_queued += 1
 
-                batch_num += 1
-                total_doc_batches_queued += 1
+                    logger.info(
+                        f"Wrote documents to file system: "
+                        f"batch_num={batch_num} "
+                        f"docs={len(written_paths)} "
+                        f"attempt={index_attempt_id}"
+                    )
+                else:
+                    # REGULAR mode (default): Full pipeline - store and queue docprocessing
+                    batch_storage.store_batch(batch_num, doc_batch_cleaned)
 
-                logger.info(
-                    f"Queued document processing batch: "
-                    f"batch_num={batch_num} "
-                    f"docs={len(doc_batch_cleaned)} "
-                    f"attempt={index_attempt_id}"
-                )
+                    # Create processing task data
+                    processing_batch_data = {
+                        "index_attempt_id": index_attempt_id,
+                        "cc_pair_id": cc_pair_id,
+                        "tenant_id": tenant_id,
+                        "batch_num": batch_num,  # 0-indexed
+                    }
+
+                    # Queue document processing task
+                    app.send_task(
+                        OnyxCeleryTask.DOCPROCESSING_TASK,
+                        kwargs=processing_batch_data,
+                        queue=OnyxCeleryQueues.DOCPROCESSING,
+                        priority=docprocessing_priority,
+                    )
+
+                    batch_num += 1
+                    total_doc_batches_queued += 1
+
+                    logger.info(
+                        f"Queued document processing batch: "
+                        f"batch_num={batch_num} "
+                        f"docs={len(doc_batch_cleaned)} "
+                        f"attempt={index_attempt_id}"
+                    )
 
             # Check checkpoint size periodically
             CHECKPOINT_SIZE_CHECK_INTERVAL = 100

@@ -1204,7 +1204,6 @@ class SandboxManager:
 SANDBOX = "sandbox"
 
 # In OnyxCeleryTask
-CHECK_SANDBOX_HEALTH = "check_sandbox_health"
 CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
 CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 ```
@@ -1212,37 +1211,6 @@ CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 #### 6.2 Create `/onyx/server/features/build/sandbox/tasks/`
 
 **`tasks/__init__.py`**: Empty file
-
-**`tasks/health_check_task.py`**:
-```python
-from celery import shared_task
-from onyx.background.celery.apps.app_base import task_logger, TenantAwareTask
-
-@shared_task(name="check_sandbox_health", base=TenantAwareTask)
-def check_sandbox_health_task(tenant_id: str) -> None:
-    """
-    1. Get all running sandboxes for tenant
-    2. Check health of each (Next.js server running + responsive)
-    3. Mark failed sandboxes as FAILED status
-    """
-    from onyx.db.engine import get_session_with_tenant
-    from onyx.server.features.build.db.sandbox import get_sandboxes_by_tenant, update_sandbox_status
-    from onyx.server.features.build.sandbox.manager import SandboxManager
-    from onyx.db.enums import SandboxStatus
-
-    sandbox_manager = SandboxManager()
-
-    with get_session_with_tenant(tenant_id) as db_session:
-        sandboxes = get_sandboxes_by_tenant(db_session, tenant_id)
-
-        for sandbox in sandboxes:
-            if sandbox.status not in (SandboxStatus.RUNNING, SandboxStatus.IDLE):
-                continue
-
-            if not sandbox_manager.health_check(str(sandbox.id), db_session):
-                task_logger.warning(f"Sandbox {sandbox.id} failed health check (Next.js server unresponsive)")
-                update_sandbox_status(db_session, sandbox.id, SandboxStatus.FAILED)
-```
 
 **`tasks/cleanup_task.py`**:
 ```python
@@ -1294,13 +1262,6 @@ def cleanup_old_snapshots_task(tenant_id: str) -> None:
 
 In `/onyx/background/celery/tasks/beat_schedule.py`:
 ```python
-# Check sandbox health every 30 seconds
-{
-    "name": "check-sandbox-health",
-    "task": OnyxCeleryTask.CHECK_SANDBOX_HEALTH,
-    "schedule": timedelta(seconds=30),
-}
-
 # Cleanup idle sandboxes every minute
 {
     "name": "cleanup-idle-sandboxes",

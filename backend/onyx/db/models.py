@@ -59,6 +59,7 @@ from onyx.db.enums import (
     BuildSessionStatus,
     EmbeddingPrecision,
     IndexingMode,
+    ProcessingMode,
     SandboxStatus,
     SyncType,
     SyncStatus,
@@ -609,6 +610,16 @@ class ConnectorCredentialPair(Base):
 
     indexing_trigger: Mapped[IndexingMode | None] = mapped_column(
         Enum(IndexingMode, native_enum=False), nullable=True
+    )
+
+    # Determines how documents are processed after fetching:
+    # REGULAR: Full pipeline (chunk → embed → Vespa)
+    # FILE_SYSTEM: Write to file system only (for CLI agent sandbox)
+    processing_mode: Mapped[ProcessingMode] = mapped_column(
+        Enum(ProcessingMode, native_enum=False),
+        nullable=False,
+        default=ProcessingMode.REGULAR,
+        server_default="regular",
     )
 
     connector: Mapped["Connector"] = relationship(
