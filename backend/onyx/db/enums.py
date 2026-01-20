@@ -194,3 +194,25 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
+
+
+# Onyx Build Mode Enums
+class BuildSessionStatus(str, PyEnum):
+    ACTIVE = "active"
+    IDLE = "idle"
+
+
+class SandboxStatus(str, PyEnum):
+    PROVISIONING = "provisioning"
+    RUNNING = "running"
+    IDLE = "idle"
+    TERMINATED = "terminated"
+
+
+class ArtifactType(str, PyEnum):
+    WEB_APP = "web_app"
+    PPTX = "pptx"
+    DOCX = "docx"
+    IMAGE = "image"
+    MARKDOWN = "markdown"
+    EXCEL = "excel"
