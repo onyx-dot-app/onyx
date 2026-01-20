@@ -15,7 +15,7 @@ from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.server.settings.models import ApplicationStatus
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 # Paths that are ALWAYS accessible, even when license is expired/gated.
 # These enable users to:
@@ -64,7 +64,11 @@ def add_license_enforcement_middleware(
             return await call_next(request)
 
         is_gated = False
-        tenant_id = get_current_tenant_id()
+        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+        if tenant_id is None:
+            # Tenant context not set yet - pass through
+            # This can happen if this middleware runs before tenant identification
+            return await call_next(request)
 
         if MULTI_TENANT:
             try:
