@@ -456,6 +456,9 @@ export default function UserSettings() {
                                 : "transparent",
                             }}
                             title={bg.label}
+                            aria-label={`${bg.label} background${
+                              isSelected ? " (selected)" : ""
+                            }`}
                           >
                             {bg.url === CHAT_BACKGROUND_NONE ? (
                               <div className="w-full h-full bg-background-01 flex items-center justify-center">
