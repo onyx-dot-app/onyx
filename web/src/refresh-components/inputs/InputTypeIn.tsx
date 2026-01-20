@@ -65,6 +65,7 @@ export interface InputTypeInProps
   error?: boolean;
   disabled?: boolean;
 
+  prefixText?: string;
   leftSearchIcon?: boolean;
   rightSection?: React.ReactNode;
   showClearButton?: boolean;
@@ -76,6 +77,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
       internal,
       error,
       disabled,
+      prefixText,
       leftSearchIcon,
       rightSection,
       showClearButton = true,
@@ -143,6 +145,12 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
               <SvgSearch className="w-[1rem] h-[1rem] stroke-text-02" />
             </div>
           </div>
+        )}
+
+        {prefixText && (
+          <span className="select-none pointer-events-none text-text-02 pl-0.5">
+            {prefixText}
+          </span>
         )}
 
         <input

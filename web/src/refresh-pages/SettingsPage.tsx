@@ -636,7 +636,8 @@ function PromptShortcuts() {
                 className="w-full grid grid-cols-[1fr_min-content] gap-x-1 gap-y-1"
               >
                 <InputTypeIn
-                  placeholder="/Shortcut"
+                  prefixText="/"
+                  placeholder="Shortcut"
                   value={shortcut.prompt}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "prompt", e.target.value)
