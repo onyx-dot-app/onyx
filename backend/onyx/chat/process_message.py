@@ -82,7 +82,6 @@ from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
-from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -541,15 +540,6 @@ def handle_stream_message_objects(
         tools: list[Tool] = []
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
-
-        # TODO: actually implement this
-        tools.append(
-            MemoryTool(
-                tool_id=999,
-                emitter=emitter,
-                llm=llm,
-            )
-        )
 
         if forced_tool_id and forced_tool_id not in [tool.id for tool in tools]:
             raise ValueError(f"Forced tool {forced_tool_id} not found in tools")

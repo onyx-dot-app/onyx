@@ -76,7 +76,7 @@ MEMORY_GUIDANCE = """
 ## add_memory
 Use the `add_memory` tool for facts shared by the user that should be remembered for future conversations. \
 Only add memories that are specific, likely to remain true, and likely to be useful later. \
-Focus on enduring preferences, long term goals, stable constraints, and explicit "remember this" type requests.
+Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
 """
 
 TOOL_CALL_FAILURE_PROMPT = """

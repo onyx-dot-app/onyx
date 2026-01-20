@@ -334,17 +334,7 @@ def run_tool_calls(
             starting_citation_num += 100
 
         elif isinstance(tool, MemoryTool):
-            fake_memories = [
-                "User prefers dark mode",
-                "User's favorite frontend framework is React",
-            ]
-            override_kwargs = MemoryToolOverrideKwargs(
-                user_name="Yuhong Sun",
-                user_email="yuhong@onyx.app",
-                user_role="engineer",
-                existing_memories=fake_memories,
-                chat_history=minimal_history,
-            )
+            raise NotImplementedError("MemoryTool is not implemented")
 
         tool_run_params.append((tool, tool_call, override_kwargs))
 
