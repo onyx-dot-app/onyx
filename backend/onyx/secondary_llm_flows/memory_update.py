@@ -5,7 +5,7 @@ from onyx.llm.models import UserMessage
 from onyx.prompts.basic_memory import FULL_MEMORY_UPDATE_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import extract_json_from_text
+from onyx.utils.text_processing import parse_llm_json_response
 
 logger = setup_logger()
 
@@ -130,7 +130,7 @@ def process_memory_update(
         return (new_memory, None)
 
     # Parse JSON response
-    parsed_response = extract_json_from_text(content)
+    parsed_response = parse_llm_json_response(content)
 
     if not parsed_response:
         logger.warning(

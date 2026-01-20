@@ -23,7 +23,7 @@ You MUST respond in a json which follows the following format and keys:
 {{
     "operation": "add or update",
     "memory_id": "if the operation is update, the id of the memory to update, otherwise null",
-    "memory_text": "the text of the memory to add or update",
+    "memory_text": "the text of the memory to add or update"
 }}
 ```
 """.strip()
