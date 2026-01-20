@@ -1,6 +1,7 @@
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
+from onyx.db.models import SearchDoc
 from onyx.tools.tool_implementations.open_url.models import WebContent
 from onyx.tools.tool_implementations.open_url.snippet_matcher import (
     find_snippet_in_content,
@@ -189,3 +190,14 @@ def inference_section_from_internet_search_result(
         chunks=[chunk],
         combined_content=result.snippet,
     )
+
+
+def extract_url_snippet_map(documents: list[SearchDoc]) -> dict[str, str]:
+    """
+    Given a list of SearchDocs, this will extract the url -> summary map.
+    """
+    url_snippet_map: dict[str, str] = {}
+    for document in documents:
+        if document.source_type == DocumentSource.WEB and document.link:
+            url_snippet_map[document.link] = document.blurb
+    return url_snippet_map
