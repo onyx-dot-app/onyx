@@ -33,7 +33,7 @@ export default function InputTypeInField({
       onClear={() => {
         helpers.setValue("");
       }}
-      error={!!hasError}
+      variant={hasError ? "error" : inputProps.variant}
     />
   );
 }

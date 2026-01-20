@@ -140,7 +140,7 @@ export const FederatedConnectorSelector = ({
           leftSearchIcon
           placeholder={effectivePlaceholder}
           value={searchQuery}
-          disabled={isInputDisabled}
+          variant={isInputDisabled ? "disabled" : undefined}
           onChange={(e) => {
             setSearchQuery(e.target.value);
             setOpen(true);

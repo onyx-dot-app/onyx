@@ -13,6 +13,14 @@ export interface InputFileProps
     InputTypeInProps,
     "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
   > {
+  /**
+   * Whether the input is disabled.
+   */
+  disabled?: boolean;
+  /**
+   * Whether the input has an error.
+   */
+  error?: boolean;
   // Receives the extracted file content (text) or pasted value
   setValue: (value: string) => void;
   // Called when a value is committed via file selection or paste (not on each keystroke)
@@ -32,6 +40,8 @@ export default function InputFile({
   maxSizeKb,
   onFileSizeExceeded,
   disabled,
+  error,
+  variant,
   placeholder,
   className,
   ...rest
@@ -136,7 +146,7 @@ export default function InputFile({
         {...rest}
         className={className}
         placeholder={placeholder}
-        disabled={disabled}
+        variant={disabled ? "disabled" : error ? "error" : variant}
         value={displayValue}
         onChange={handleChangeWhenTyping}
         onPaste={handlePaste}

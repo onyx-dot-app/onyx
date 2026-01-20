@@ -39,7 +39,7 @@ export default function PasswordInputTypeInField({
       onChange={onChange}
       onBlur={onBlur}
       placeholder={placeholder ?? label ?? "API Key"}
-      error={!!hasError}
+      error={hasError ? true : inputProps.error}
     />
   );
 

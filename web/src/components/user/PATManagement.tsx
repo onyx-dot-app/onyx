@@ -163,7 +163,7 @@ export default function PATManagement() {
               placeholder="Token name (e.g., 'MCP Client')"
               value={newTokenName}
               onChange={(e) => setNewTokenName(e.target.value)}
-              disabled={isCreating}
+              variant={isCreating ? "disabled" : undefined}
               aria-label="Token name"
               autoComplete="new-password"
             />

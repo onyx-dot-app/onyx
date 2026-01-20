@@ -71,7 +71,7 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
                 {...field}
                 placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
                 showClearButton={false}
-                disabled={disabled}
+                variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>
             <FormField.Message
@@ -107,9 +107,9 @@ function AzureFormFields(props: OnboardingFormChildProps<AzureFormValues>) {
               <PasswordInputTypeIn
                 {...field}
                 placeholder=""
+                disabled={disabled || !formikProps.values.target_uri?.trim()}
                 error={apiStatus === "error"}
                 showClearButton={false}
-                disabled={disabled || !formikProps.values.target_uri?.trim()}
               />
             </FormField.Control>
             {!showApiMessage && (

@@ -30,7 +30,7 @@ export default function InputTextAreaField({
       value={field.value ?? ""}
       onChange={onChange}
       onBlur={onBlur}
-      error={!!hasError}
+      variant={hasError ? "error" : textareaProps.variant}
     />
   );
 }
