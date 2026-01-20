@@ -62,11 +62,9 @@ import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
  * </SettingsLayouts.Root>
  * ```
  */
-export type SettingsRootProps = WithoutStyles<
-  React.HtmlHTMLAttributes<HTMLDivElement>
->;
-
-function SettingsRoot(props: SettingsRootProps) {
+function SettingsRoot(
+  props: WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>>
+) {
   return (
     <div
       id="page-wrapper-scroll-container"
@@ -166,7 +164,6 @@ export interface SettingsHeaderProps {
   backButton?: boolean;
   separator?: boolean;
 }
-
 function SettingsHeader({
   icon: Icon,
   title,
@@ -283,11 +280,9 @@ function SettingsHeader({
  * </SettingsLayouts.Body>
  * ```
  */
-export type SettingsBodyProps = WithoutStyles<
-  HtmlHTMLAttributes<HTMLDivElement>
->;
-
-function SettingsBody(props: SettingsBodyProps) {
+function SettingsBody(
+  props: WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>>
+) {
   return (
     <div
       className="pt-6 pb-[4.5rem] px-4 flex flex-col gap-8 w-full"
