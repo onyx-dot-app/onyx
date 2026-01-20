@@ -4,7 +4,6 @@ import os
 from collections.abc import Generator
 from pathlib import Path
 from uuid import UUID
-from uuid import uuid4
 
 from acp.schema import AgentMessageChunk
 from acp.schema import AgentPlanUpdate
@@ -27,6 +26,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.db.sandbox import create_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.models import ArtifactInfo
 from onyx.server.features.build.models import CreateSessionRequest
@@ -127,9 +127,14 @@ def create_session(
     Creates a sandbox with the necessary file structure and returns a session ID.
     Uses SandboxManager for database-backed sandbox provisioning.
     """
-    session_id = str(uuid4())
     tenant_id = get_current_tenant_id()
     sandbox_manager = SandboxManager()
+
+    # Create BuildSession record first (required for Sandbox foreign key)
+    user_id = user.id if user else None
+    build_session = create_build_session(db_session, user_id=user_id)
+    session_id = str(build_session.id)
+    logger.info(f"Created build session {session_id} for user {user_id}")
 
     try:
         sandbox_manager.provision(

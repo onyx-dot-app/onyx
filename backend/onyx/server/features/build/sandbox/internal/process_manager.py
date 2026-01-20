@@ -9,6 +9,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
 
 class ProcessManager:
     """Manages CLI agent and Next.js server subprocess lifecycle.
@@ -97,30 +101,89 @@ class ProcessManager:
         Raises:
             RuntimeError: If server fails to start within timeout
         """
+        logger.info(f"Starting Next.js server in {web_dir} on port {port}")
+
         # Clear Next.js cache to avoid stale paths from template
         next_cache = web_dir / ".next"
         if next_cache.exists():
+            logger.debug(f"Clearing Next.js cache at {next_cache}")
             shutil.rmtree(next_cache)
 
+        # Verify web_dir exists and has package.json
+        if not web_dir.exists():
+            logger.error(f"Web directory does not exist: {web_dir}")
+            raise RuntimeError(f"Web directory does not exist: {web_dir}")
+
+        package_json = web_dir / "package.json"
+        if not package_json.exists():
+            logger.error(f"package.json not found in {web_dir}")
+            raise RuntimeError(f"package.json not found in {web_dir}")
+
+        logger.debug(f"Starting npm run dev command in {web_dir}")
         process = subprocess.Popen(
             ["npm", "run", "dev", "--", "-p", str(port)],
             cwd=web_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        logger.info(f"Next.js process started with PID {process.pid}")
 
         # Wait for server to be ready
         server_url = f"http://localhost:{port}"
-        if not self._wait_for_server(server_url, timeout=timeout):
+        logger.info(f"Waiting for Next.js server at {server_url} (timeout: {timeout}s)")
+
+        if not self._wait_for_server(server_url, timeout=timeout, process=process):
             # Check if process died
             if process.poll() is not None:
-                raise RuntimeError(
+                # Capture stdout/stderr for debugging
+                stdout_data = b""
+                stderr_data = b""
+                try:
+                    # Read available output (non-blocking since process is dead)
+                    if process.stdout:
+                        stdout_data = process.stdout.read()
+                    if process.stderr:
+                        stderr_data = process.stderr.read()
+                except Exception as e:
+                    logger.warning(f"Failed to read process output: {e}")
+
+                stdout_str = stdout_data.decode("utf-8", errors="replace")
+                stderr_str = stderr_data.decode("utf-8", errors="replace")
+
+                logger.error(
                     f"Next.js server process died with code {process.returncode}"
                 )
+                if stdout_str.strip():
+                    logger.error(f"Next.js stdout:\n{stdout_str}")
+                if stderr_str.strip():
+                    logger.error(f"Next.js stderr:\n{stderr_str}")
+
+                raise RuntimeError(
+                    f"Next.js server process died with code {process.returncode}. "
+                    f"stderr: {stderr_str[:500]}"
+                )
+
+            # Process still running but server not responding
+            logger.error(
+                f"Next.js server failed to respond within {timeout} seconds "
+                f"(process still running with PID {process.pid})"
+            )
+            # Try to get any available output
+            try:
+                if process.stdout:
+                    stdout_data = process.stdout.read1(4096)  # type: ignore
+                    if stdout_data:
+                        logger.error(
+                            f"Partial stdout: {stdout_data.decode('utf-8', errors='replace')}"
+                        )
+            except Exception:
+                pass
+
             raise RuntimeError(
                 f"Next.js server failed to start within {timeout} seconds"
             )
 
+        logger.info(f"Next.js server is ready at {server_url}")
         return process
 
     def _wait_for_server(
@@ -128,6 +191,7 @@ class ProcessManager:
         url: str,
         timeout: float = 30.0,
         poll_interval: float = 0.5,
+        process: subprocess.Popen[bytes] | None = None,
     ) -> bool:
         """Wait for a server to become available by polling.
 
@@ -135,19 +199,57 @@ class ProcessManager:
             url: URL to poll
             timeout: Maximum time to wait in seconds
             poll_interval: Time between poll attempts in seconds
+            process: Optional process to check if it's still running
 
         Returns:
             True if server became available, False if timeout reached
         """
         start_time = time.time()
+        attempt_count = 0
+        last_log_time = start_time
+
         while time.time() - start_time < timeout:
+            attempt_count += 1
+            elapsed = time.time() - start_time
+
+            # Check if process died early
+            if process is not None and process.poll() is not None:
+                logger.warning(
+                    f"Process died during wait (exit code: {process.returncode}) "
+                    f"after {elapsed:.1f}s and {attempt_count} attempts"
+                )
+                return False
+
             try:
                 with urllib.request.urlopen(url, timeout=2) as response:
                     if response.status == 200:
+                        logger.debug(
+                            f"Server ready after {elapsed:.1f}s and {attempt_count} attempts"
+                        )
                         return True
-            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-                pass
+            except urllib.error.HTTPError as e:
+                # Log HTTP errors (server responding but with error)
+                if time.time() - last_log_time >= 10:
+                    logger.debug(
+                        f"HTTP error {e.code} from {url} after {elapsed:.1f}s "
+                        f"({attempt_count} attempts)"
+                    )
+                    last_log_time = time.time()
+            except (urllib.error.URLError, TimeoutError) as e:
+                # Log connection errors periodically (every 10 seconds)
+                if time.time() - last_log_time >= 10:
+                    logger.debug(
+                        f"Still waiting for {url} after {elapsed:.1f}s "
+                        f"({attempt_count} attempts): {type(e).__name__}"
+                    )
+                    last_log_time = time.time()
+
             time.sleep(poll_interval)
+
+        logger.warning(
+            f"Server at {url} did not become available within {timeout}s "
+            f"({attempt_count} attempts)"
+        )
         return False
 
     def is_process_running(self, pid: int) -> bool:

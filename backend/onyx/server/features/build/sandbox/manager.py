@@ -129,10 +129,20 @@ class SandboxManager:
             ValueError: If max concurrent sandboxes reached
             RuntimeError: If provisioning fails
         """
+        logger.info(
+            f"Starting sandbox provisioning for session {session_id}, "
+            f"tenant {tenant_id}"
+        )
+
         session_uuid = UUID(session_id)
 
         # Check limit
+        logger.debug(f"Checking concurrent sandbox limit for tenant {tenant_id}")
         running_count = get_running_sandbox_count_by_tenant(db_session, tenant_id)
+        logger.debug(
+            f"Current running sandboxes: {running_count}, "
+            f"max: {SANDBOX_MAX_CONCURRENT_PER_ORG}"
+        )
         if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
             raise ValueError(
                 f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) "
@@ -140,38 +150,61 @@ class SandboxManager:
             )
 
         # Create directory structure
+        logger.info(f"Creating sandbox directory structure for session {session_id}")
         sandbox_path = self._directory_manager.create_sandbox_directory(session_id)
+        logger.debug(f"Sandbox directory created at {sandbox_path}")
 
         try:
             # Setup files symlink
+            logger.debug(f"Setting up files symlink to {file_system_path}")
             self._directory_manager.setup_files_symlink(
                 sandbox_path, Path(file_system_path)
             )
+            logger.debug("Files symlink created")
 
             # Setup outputs (from snapshot or template)
             if snapshot_id:
+                logger.debug(f"Restoring from snapshot {snapshot_id}")
                 snapshot = get_latest_snapshot_for_session(db_session, session_uuid)
                 if snapshot:
                     self._snapshot_manager.restore_snapshot(
                         snapshot.storage_path, sandbox_path
                     )
+                    logger.debug("Snapshot restored")
                 else:
+                    logger.warning(f"Snapshot {snapshot_id} not found, using template")
                     self._directory_manager.setup_outputs_directory(sandbox_path)
             else:
+                logger.debug("Setting up outputs directory from template")
                 self._directory_manager.setup_outputs_directory(sandbox_path)
+            logger.debug("Outputs directory ready")
 
             # Setup venv, AGENTS.md, and skills
+            logger.debug("Setting up virtual environment")
             self._directory_manager.setup_venv(sandbox_path)
+            logger.debug("Virtual environment ready")
+
+            logger.debug("Setting up agent instructions (AGENTS.md)")
             self._directory_manager.setup_agent_instructions(sandbox_path)
+            logger.debug("Agent instructions ready")
+
+            logger.debug("Setting up skills")
             self._directory_manager.setup_skills(sandbox_path)
+            logger.debug("Skills ready")
 
             # Setup opencode.json with LLM provider configuration
+            logger.debug("Fetching default LLM provider")
             llm_provider = fetch_default_provider(db_session)
             if not llm_provider:
+                logger.error("No default LLM provider configured")
                 raise RuntimeError(
                     "No default LLM provider configured. "
                     "Please configure an LLM provider in admin settings."
                 )
+            logger.debug(
+                f"Setting up opencode config with provider: {llm_provider.provider}, "
+                f"model: {llm_provider.default_model_name}"
+            )
             self._directory_manager.setup_opencode_config(
                 sandbox_path=sandbox_path,
                 provider=llm_provider.provider,
@@ -180,20 +213,25 @@ class SandboxManager:
                 api_base=llm_provider.api_base,
                 disabled_tools=OPENCODE_DISABLED_TOOLS,
             )
+            logger.debug("Opencode config ready")
 
             # Start Next.js server on fixed port
             nextjs_port = SANDBOX_NEXTJS_PORT_START
             web_dir = self._directory_manager.get_web_path(sandbox_path)
+            logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
             self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            logger.info("Next.js server started successfully")
 
             # Create DB record
+            logger.debug("Creating sandbox database record")
             sandbox = db_create_sandbox(
                 db_session=db_session,
                 session_id=session_uuid,
             )
 
             update_sandbox_status(db_session, sandbox.id, SandboxStatus.RUNNING)
+            logger.debug(f"Sandbox record created with ID {sandbox.id}")
 
             logger.info(
                 f"Provisioned sandbox {sandbox.id} for session {session_id} "
@@ -209,8 +247,13 @@ class SandboxManager:
                 last_heartbeat=None,
             )
 
-        except Exception:
+        except Exception as e:
             # Cleanup on failure
+            logger.error(
+                f"Sandbox provisioning failed for session {session_id}: {e}",
+                exc_info=True,
+            )
+            logger.info(f"Cleaning up sandbox directory at {sandbox_path}")
             self._directory_manager.cleanup_sandbox_directory(sandbox_path)
             raise
 
