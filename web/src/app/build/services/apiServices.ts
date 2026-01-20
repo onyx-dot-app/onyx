@@ -249,3 +249,28 @@ export async function fetchUsageLimits(): Promise<UsageLimits> {
   const data: ApiUsageLimitsResponse = await res.json();
   return transformUsageLimitsResponse(data);
 }
+
+// =============================================================================
+// Connector Management API
+// =============================================================================
+
+export async function deleteConnector(
+  connectorId: number,
+  credentialId: number
+): Promise<void> {
+  const res = await fetch("/api/manage/admin/deletion-attempt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      connector_id: connectorId,
+      credential_id: credentialId,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(
+      errorData.detail || `Failed to delete connector: ${res.status}`
+    );
+  }
+}
