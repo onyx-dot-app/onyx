@@ -669,6 +669,12 @@ def run_llm_loop(
                 ):
                     generated_images = tool_response.rich_response.generated_images
 
+                saved_response = (
+                    tool_response.rich_response
+                    if isinstance(tool_response.rich_response, str)
+                    else tool_response.llm_facing_response
+                )
+
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
                     turn_index=llm_cycle_count + reasoning_cycles,
@@ -678,7 +684,7 @@ def run_llm_loop(
                     tool_id=tool.id,
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
                     tool_call_arguments=tool_call.tool_args,
-                    tool_call_response=tool_response.llm_facing_response,
+                    tool_call_response=saved_response,
                     search_docs=search_docs,
                     generated_images=generated_images,
                 )

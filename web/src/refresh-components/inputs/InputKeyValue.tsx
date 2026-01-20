@@ -136,7 +136,7 @@ const KeyValueInputItem = ({
             aria-describedby={
               error?.key ? `${fieldId}-key-error-${index}` : undefined
             }
-            disabled={disabled}
+            variant={disabled ? "disabled" : undefined}
             showClearButton={false}
           />
           {error?.key && (
@@ -161,7 +161,7 @@ const KeyValueInputItem = ({
             aria-describedby={
               error?.value ? `${fieldId}-value-error-${index}` : undefined
             }
-            disabled={disabled}
+            variant={disabled ? "disabled" : undefined}
             showClearButton={false}
           />
           {error?.value && (

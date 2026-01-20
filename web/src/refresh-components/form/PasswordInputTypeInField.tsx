@@ -29,6 +29,8 @@ export default function PasswordInputTypeInField({
   const onChange = useOnChangeEvent(name, onChangeProp);
   const onBlur = useOnBlurEvent(name, onBlurProp);
   const hasError = meta.touched && meta.error;
+  // Don't show error styling for disabled fields
+  const showError = hasError && !inputProps.disabled;
 
   const input = (
     <PasswordInputTypeIn
@@ -39,7 +41,7 @@ export default function PasswordInputTypeInField({
       onChange={onChange}
       onBlur={onBlur}
       placeholder={placeholder ?? label ?? "API Key"}
-      error={!!hasError}
+      error={showError ? true : inputProps.error}
     />
   );
 

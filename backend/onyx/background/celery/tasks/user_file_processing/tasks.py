@@ -32,7 +32,7 @@ from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
@@ -244,7 +244,8 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                     search_settings=current_search_settings,
                 )
 
-                document_index = get_default_document_index(
+                # This flow is for indexing so we get all indices.
+                document_indices = get_all_document_indices(
                     current_search_settings,
                     None,
                     httpx_client=HttpxPool.get("vespa"),
@@ -258,7 +259,7 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 # real work happens here!
                 index_pipeline_result = run_indexing_pipeline(
                     embedder=embedding_model,
-                    document_index=document_index,
+                    document_indices=document_indices,
                     ignore_time_skip=True,
                     db_session=db_session,
                     tenant_id=tenant_id,
@@ -412,12 +413,16 @@ def process_single_user_file_delete(
                 httpx_init_vespa_pool(20)
 
             active_search_settings = get_active_search_settings(db_session)
-            document_index = get_default_document_index(
+            # This flow is for deletion so we get all indices.
+            document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
                 secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
-            retry_index = RetryDocumentIndex(document_index)
+            retry_document_indices: list[RetryDocumentIndex] = [
+                RetryDocumentIndex(document_index)
+                for document_index in document_indices
+            ]
             index_name = active_search_settings.primary.index_name
             selection = f"{index_name}.document_id=='{user_file_id}'"
 
@@ -438,11 +443,12 @@ def process_single_user_file_delete(
             else:
                 chunk_count = user_file.chunk_count
 
-            retry_index.delete_single(
-                doc_id=user_file_id,
-                tenant_id=tenant_id,
-                chunk_count=chunk_count,
-            )
+            for retry_document_index in retry_document_indices:
+                retry_document_index.delete_single(
+                    doc_id=user_file_id,
+                    tenant_id=tenant_id,
+                    chunk_count=chunk_count,
+                )
 
             # 2) Delete the user-uploaded file content from filestore (blob + metadata)
             file_store = get_default_file_store()
@@ -564,12 +570,16 @@ def process_single_user_file_project_sync(
                 httpx_init_vespa_pool(20)
 
             active_search_settings = get_active_search_settings(db_session)
-            doc_index = get_default_document_index(
+            # This flow is for updates so we get all indices.
+            document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
                 secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
-            retry_index = RetryDocumentIndex(doc_index)
+            retry_document_indices: list[RetryDocumentIndex] = [
+                RetryDocumentIndex(document_index)
+                for document_index in document_indices
+            ]
 
             user_file = db_session.get(UserFile, _as_uuid(user_file_id))
             if not user_file:
@@ -579,13 +589,14 @@ def process_single_user_file_project_sync(
                 return None
 
             project_ids = [project.id for project in user_file.projects]
-            retry_index.update_single(
-                doc_id=str(user_file.id),
-                tenant_id=tenant_id,
-                chunk_count=user_file.chunk_count,
-                fields=None,
-                user_fields=VespaDocumentUserFields(user_projects=project_ids),
-            )
+            for retry_document_index in retry_document_indices:
+                retry_document_index.update_single(
+                    doc_id=str(user_file.id),
+                    tenant_id=tenant_id,
+                    chunk_count=user_file.chunk_count,
+                    fields=None,
+                    user_fields=VespaDocumentUserFields(user_projects=project_ids),
+                )
 
             task_logger.info(
                 f"process_single_user_file_project_sync - User file id={user_file_id}"

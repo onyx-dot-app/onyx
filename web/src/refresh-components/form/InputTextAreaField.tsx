@@ -21,6 +21,9 @@ export default function InputTextAreaField({
   const onChange = useOnChangeEvent(name, onChangeProp);
   const onBlur = useOnBlurEvent(name, onBlurProp);
   const hasError = meta.touched && meta.error;
+  const isNonEditable =
+    textareaProps.variant === "disabled" ||
+    textareaProps.variant === "readOnly";
 
   return (
     <InputTextArea
@@ -30,7 +33,13 @@ export default function InputTextAreaField({
       value={field.value ?? ""}
       onChange={onChange}
       onBlur={onBlur}
-      error={!!hasError}
+      variant={
+        isNonEditable
+          ? textareaProps.variant
+          : hasError
+            ? "error"
+            : textareaProps.variant
+      }
     />
   );
 }
