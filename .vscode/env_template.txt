@@ -17,12 +17,6 @@ LOG_ONYX_MODEL_INTERACTIONS=True
 LOG_LEVEL=debug
 
 
-# This passes top N results to LLM an additional time for reranking prior to
-# answer generation.
-# This step is quite heavy on token usage so we disable it for dev generally.
-DISABLE_LLM_DOC_RELEVANCE=False
-
-
 # Useful if you want to toggle auth on/off (google_oauth/OIDC specifically).
 OAUTH_CLIENT_ID=<REPLACE THIS>
 OAUTH_CLIENT_SECRET=<REPLACE THIS>

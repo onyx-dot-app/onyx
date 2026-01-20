@@ -81,7 +81,7 @@ const footerMarkdownComponents = {
         {...rest}
         className={cn(className, "underline underline-offset-2")}
       >
-        <Text as="span" text03 secondaryAction>
+        <Text text03 secondaryAction>
           {children}
         </Text>
       </a>

@@ -17,7 +17,7 @@ export default function SelectModelModal({
 }: SelectModelModalProps) {
   return (
     <Modal open onOpenChange={onCancel}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgServer}
           title={`Select ${model.model_name}`}

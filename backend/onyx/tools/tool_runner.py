@@ -31,6 +31,9 @@ QUERIES_FIELD = "queries"
 URLS_FIELD = "urls"
 GENERIC_TOOL_ERROR_MESSAGE = "Tool failed with error: {error}"
 
+# 10 minute timeout for tool execution to prevent indefinite hangs
+TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60
+
 # Mapping of tool name to the field that should be merged when multiple calls exist
 MERGEABLE_TOOL_FIELDS: dict[str, str] = {
     SearchTool.NAME: QUERIES_FIELD,
@@ -339,6 +342,7 @@ def run_tool_calls(
         functions_with_args,
         allow_failures=True,  # Continue even if some tools fail
         max_workers=max_concurrent_tools,
+        timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
     )
 
     # Process results and update citation_mapping

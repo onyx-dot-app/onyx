@@ -15,6 +15,10 @@ from onyx.db.llm import remove_llm_provider__no_commit
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
+from onyx.image_gen.exceptions import ImageProviderCredentialsError
+from onyx.image_gen.factory import get_image_generation_provider
+from onyx.image_gen.factory import validate_credentials
+from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.utils import get_max_input_tokens
 from onyx.server.manage.image_generation.models import ImageGenerationConfigCreate
 from onyx.server.manage.image_generation.models import ImageGenerationConfigUpdate
@@ -56,6 +60,7 @@ def _build_llm_provider_request(
     api_base: str | None,
     api_version: str | None,
     deployment_name: str | None,
+    custom_config: dict[str, str] | None,
 ) -> LLMProviderUpsertRequest:
     """Build LLM provider request for image generation config.
 
@@ -89,33 +94,47 @@ def _build_llm_provider_request(
                     is_visible=True,
                 )
             ],
+            custom_config=custom_config,
         )
 
-    elif api_key is not None and provider is not None:
-        # New credentials mode
-        return LLMProviderUpsertRequest(
-            name=f"Image Gen - {image_provider_id}",
-            provider=provider,
-            api_key=api_key,
-            api_base=api_base,
-            api_version=api_version,
-            default_model_name=model_name,
-            deployment_name=deployment_name,
-            is_public=True,
-            groups=[],
-            model_configurations=[
-                ModelConfigurationUpsertRequest(
-                    name=model_name,
-                    is_visible=True,
-                )
-            ],
-        )
-
-    else:
+    if not provider:
         raise HTTPException(
             status_code=400,
-            detail="Either source_llm_provider_id or (api_key + provider) must be provided",
+            detail="No provider or source llm provided",
         )
+
+    credentials = ImageGenerationProviderCredentials(
+        api_key=api_key,
+        api_base=api_base,
+        api_version=api_version,
+        deployment_name=deployment_name,
+        custom_config=custom_config,
+    )
+
+    if not validate_credentials(provider, credentials):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect credentials for {provider}",
+        )
+
+    return LLMProviderUpsertRequest(
+        name=f"Image Gen - {image_provider_id}",
+        provider=provider,
+        api_key=api_key,
+        api_base=api_base,
+        api_version=api_version,
+        default_model_name=model_name,
+        deployment_name=deployment_name,
+        is_public=True,
+        groups=[],
+        model_configurations=[
+            ModelConfigurationUpsertRequest(
+                name=model_name,
+                is_visible=True,
+            )
+        ],
+        custom_config=custom_config,
+    )
 
 
 def _create_image_gen_llm_provider__no_commit(
@@ -139,6 +158,7 @@ def _create_image_gen_llm_provider__no_commit(
         default_model_name=provider_request.default_model_name,
         deployment_name=provider_request.deployment_name,
         is_public=provider_request.is_public,
+        custom_config=provider_request.custom_config,
     )
     db_session.add(new_provider)
     db_session.flush()  # Get the ID
@@ -175,7 +195,8 @@ def test_image_generation(
     1. Direct: api_key + provider provided
     2. From existing provider: source_llm_provider_id provided (fetches API key from DB)
     """
-    from litellm import image_generation
+    api_key = test_request.api_key
+    provider = test_request.provider
 
     # Resolve API key and provider
     if test_request.source_llm_provider_id is not None:
@@ -188,54 +209,51 @@ def test_image_generation(
                 status_code=404,
                 detail=f"Source LLM provider with id {test_request.source_llm_provider_id} not found",
             )
+
         api_key = source_provider.api_key
         provider = source_provider.provider
-    elif test_request.api_key is not None and test_request.provider is not None:
-        # Use directly provided credentials
-        api_key = test_request.api_key
-        provider = test_request.provider
-    else:
+
+    if provider is None:
         raise HTTPException(
             status_code=400,
-            detail="Either source_llm_provider_id or (api_key + provider) must be provided",
+            detail="No provider or source llm provided",
         )
-    # Use lowest quality for faster testing
-    quality = _get_test_quality_for_model(test_request.model_name)
+
     try:
-        if provider == "azure":
-            if not test_request.api_base or not test_request.api_version:
-                raise HTTPException(
-                    status_code=400,
-                    detail="api_base and api_version are required for Azure",
-                )
-
-            # For Azure, use deployment_name if provided, otherwise use model_name
-            deployment = test_request.deployment_name or test_request.model_name
-            model = f"azure/{deployment}"
-
-            # Make a minimal image generation request using LiteLLM
-            # Use descriptive prompt to avoid Azure content policy rejection
-            image_generation(
-                prompt="a simple blue circle on white background",
-                model=model,
+        # Build image provider from credentials
+        # If incorrect credentials are provided, this will raise an exception
+        image_provider = get_image_generation_provider(
+            provider=provider,
+            credentials=ImageGenerationProviderCredentials(
                 api_key=api_key,
                 api_base=test_request.api_base,
                 api_version=test_request.api_version,
-                size="1024x1024",
-                n=1,
-                quality=quality,
-            )
-        else:
-            image_generation(
-                prompt="a simple blue circle on white background",
-                model=test_request.model_name,
-                api_key=api_key,
-                api_base=test_request.api_base or None,
-                size="1024x1024",
-                n=1,
-                quality=quality,
-            )
+                deployment_name=(
+                    test_request.deployment_name or test_request.model_name
+                ),
+                custom_config=test_request.custom_config,
+            ),
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Invalid image generation provider: {provider}",
+        )
+    except ImageProviderCredentialsError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid image generation credentials",
+        )
 
+    quality = _get_test_quality_for_model(test_request.model_name)
+    try:
+        image_provider.generate_image(
+            prompt="a simple blue circle on white background",
+            model=test_request.model_name,
+            size="1024x1024",
+            n=1,
+            quality=quality,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -286,6 +304,7 @@ def create_config(
             api_base=config_create.api_base,
             api_version=config_create.api_version,
             deployment_name=config_create.deployment_name,
+            custom_config=config_create.custom_config,
         )
 
         model_configuration_id = _create_image_gen_llm_provider__no_commit(
@@ -401,6 +420,7 @@ def update_config(
             api_base=config_update.api_base,
             api_version=config_update.api_version,
             deployment_name=config_update.deployment_name,
+            custom_config=config_update.custom_config,
         )
 
         new_model_config_id = _create_image_gen_llm_provider__no_commit(

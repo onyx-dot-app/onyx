@@ -51,6 +51,8 @@ Remove any obviously irrelevant or duplicative information.
 
 If a statement seems not trustworthy or is contradictory to other statements, it is important to flag it.
 
+Write the report in the same language as the provided task.
+
 Cite all sources INLINE using the format [1], [2], [3], etc. based on the `document` field of the source. \
 Cite inline as opposed to leaving all citations until the very end of the response.
 """
@@ -61,7 +63,8 @@ Please write me a comprehensive report on the research topic given the context a
 {research_topic}
 
 Remember to include AS MUCH INFORMATION AS POSSIBLE and as faithful to the original sources as possible. \
-Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution.
+Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution. \
+Respond in the same language as the topic provided above.
 
 Cite every fact INLINE using the format [1], [2], [3], etc. based on the `document` field of the source.
 

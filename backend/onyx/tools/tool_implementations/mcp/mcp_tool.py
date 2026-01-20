@@ -18,6 +18,13 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Headers that cannot be overridden by user requests to prevent security issues
+# Host header is particularly critical - it can be used for Host Header Injection attacks
+# to route requests to unintended internal servers
+DENYLISTED_MCP_HEADERS = {
+    "host",  # Prevents Host Header Injection attacks
+}
+
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
 # In the future we may want custom handling for MCP tool responses
 # class MCPToolCallSummary(BaseModel):
@@ -41,6 +48,7 @@ class MCPTool(Tool[None]):
         connection_config: MCPConnectionConfig | None = None,
         user_email: str = "",
         user_oauth_token: str | None = None,
+        additional_headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -49,6 +57,7 @@ class MCPTool(Tool[None]):
         self.connection_config = connection_config
         self.user_email = user_email
         self._user_oauth_token = user_oauth_token
+        self._additional_headers = additional_headers or {}
 
         self._name = tool_name
         self._tool_definition = tool_definition
@@ -104,14 +113,39 @@ class MCPTool(Tool[None]):
     ) -> ToolResponse:
         """Execute the MCP tool by calling the MCP server"""
         try:
-            # Build headers from connection config; prefer explicit headers
-            headers: dict[str, str] = (
-                self.connection_config.config["headers"]
-                if self.connection_config
-                else {}
-            )
+            # Build headers with proper precedence:
+            # 1. Start with additional headers from API request (filled in first, excluding denylisted)
+            # 2. Override with connection config headers (from DB) - these take precedence
+            # 3. Override Authorization header with OAuth token if present
+            headers: dict[str, str] = {}
 
-            # For pass-through OAuth, use the user's login OAuth token
+            # Priority 1: Additional headers from API request (filled in first)
+            # Filter out denylisted headers to prevent security issues (e.g., Host Header Injection)
+            if self._additional_headers:
+                filtered_headers = {
+                    k: v
+                    for k, v in self._additional_headers.items()
+                    if k.lower() not in DENYLISTED_MCP_HEADERS
+                }
+                if filtered_headers:
+                    headers.update(filtered_headers)
+                # Log if any denylisted headers were provided (for security monitoring)
+                denylisted_provided = [
+                    k
+                    for k in self._additional_headers.keys()
+                    if k.lower() in DENYLISTED_MCP_HEADERS
+                ]
+                if denylisted_provided:
+                    logger.warning(
+                        f"MCP tool '{self._name}' received denylisted headers that were filtered: "
+                        f"{denylisted_provided}"
+                    )
+
+            # Priority 2: Base headers from connection config (DB) - overrides request
+            if self.connection_config:
+                headers.update(self.connection_config.config.get("headers", {}))
+
+            # Priority 3: For pass-through OAuth, use the user's login OAuth token
             if self._user_oauth_token:
                 headers["Authorization"] = f"Bearer {self._user_oauth_token}"
 

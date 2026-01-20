@@ -4,17 +4,12 @@ from datetime import datetime
 from typing import Any
 
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import RetrievalDetails
 from onyx.mcp_server.api import mcp_server
-from onyx.mcp_server.utils import get_api_server_url
 from onyx.mcp_server.utils import get_http_client
 from onyx.mcp_server.utils import get_indexed_sources
 from onyx.mcp_server.utils import require_access_token
-from onyx.server.query_and_chat.models import DocumentSearchRequest
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 
 logger = setup_logger()
 
@@ -107,31 +102,43 @@ async def search_indexed_documents(
                     f"Onyx MCP Server: Invalid source type '{src}' - will be ignored by server"
                 )
 
-    search_request = DocumentSearchRequest(
-        message=query,
-        search_type=SearchType.SEMANTIC,
-        retrieval_options=RetrievalDetails(
-            filters=IndexFilters(
-                source_type=source_type_enums,
-                time_cutoff=time_cutoff_dt,
-                access_control_list=None,  # Server handles ACL using the access token
-            ),
-            enable_auto_detect_filters=False,
-            offset=0,
-            limit=limit,
-        ),
-        evaluation_type=LLMEvaluationType.SKIP,
-    )
+    # Build filters dict only with non-None values
+    filters: dict[str, Any] | None = None
+    if source_type_enums or time_cutoff_dt:
+        filters = {}
+        if source_type_enums:
+            filters["source_type"] = [src.value for src in source_type_enums]
+        if time_cutoff_dt:
+            filters["time_cutoff"] = time_cutoff_dt.isoformat()
 
-    # Call the API server
+    # Build the search request using the new SendSearchQueryRequest format
+    search_request = {
+        "search_query": query,
+        "filters": filters,
+        "num_docs_fed_to_llm_selection": limit,
+        "run_query_expansion": False,
+        "include_content": True,
+        "stream": False,
+    }
+
+    # Call the API server using the new send-search-message route
     try:
         response = await get_http_client().post(
-            f"{get_api_server_url()}/query/document-search",
-            json=search_request.model_dump(mode="json"),
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search/send-search-message",
+            json=search_request,
             headers={"Authorization": f"Bearer {access_token.token}"},
         )
         response.raise_for_status()
         result = response.json()
+
+        # Check for error in response
+        if result.get("error"):
+            return {
+                "documents": [],
+                "total_results": 0,
+                "query": query,
+                "error": result.get("error"),
+            }
 
         # Return simplified format for MCP clients
         fields_to_return = [
@@ -143,7 +150,7 @@ async def search_indexed_documents(
         ]
         documents = [
             {key: doc.get(key) for key in fields_to_return}
-            for doc in result.get("top_documents", [])
+            for doc in result.get("search_docs", [])
         ]
 
         logger.info(
@@ -153,6 +160,7 @@ async def search_indexed_documents(
             "documents": documents,
             "total_results": len(documents),
             "query": query,
+            "executed_queries": result.get("all_executed_queries", [query]),
         }
     except Exception as e:
         logger.error(f"Onyx MCP Server: Document search error: {e}", exc_info=True)
@@ -190,7 +198,7 @@ async def search_web(
     try:
         request_payload = {"queries": [query], "max_results": limit}
         response = await get_http_client().post(
-            f"{get_api_server_url()}/web-search/search-lite",
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/web-search/search-lite",
             json=request_payload,
             headers={"Authorization": f"Bearer {access_token.token}"},
         )
@@ -236,7 +244,7 @@ async def open_urls(
 
     try:
         response = await get_http_client().post(
-            f"{get_api_server_url()}/web-search/open-urls",
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/web-search/open-urls",
             json={"urls": urls},
             headers={"Authorization": f"Bearer {access_token.token}"},
         )

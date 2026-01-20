@@ -287,7 +287,6 @@ export function useBuild(): UseBuildReturn {
                 setError(event.data.message || "Task failed");
               }
               break;
-
             case "artifact":
               setArtifacts((prev) => [
                 ...prev,
@@ -299,7 +298,6 @@ export function useBuild(): UseBuildReturn {
                 },
               ]);
               break;
-
             case "error":
               setStatus("failed");
               setError(event.data.message);

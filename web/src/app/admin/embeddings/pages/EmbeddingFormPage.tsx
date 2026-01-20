@@ -539,7 +539,7 @@ export default function EmbeddingForm() {
         )}
         {showPoorModel && (
           <Modal open onOpenChange={() => setShowPoorModel(false)}>
-            <Modal.Content medium>
+            <Modal.Content>
               <Modal.Header
                 icon={SvgAlertTriangle}
                 title={`Are you sure you want to select ${selectedProvider.model_name}?`}

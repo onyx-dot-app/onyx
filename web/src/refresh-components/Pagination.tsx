@@ -81,7 +81,6 @@ export default function Pagination({
           return (
             <Text
               key={`ellipsis-${index}`}
-              as="span"
               secondaryBody
               text03
               className={cn("px-3 py-2")}

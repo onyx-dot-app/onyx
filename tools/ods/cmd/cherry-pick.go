@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
@@ -55,6 +55,8 @@ Example usage:
 }
 
 func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
+	git.CheckGitHubCLI()
+
 	commitSHAs := args
 	if len(commitSHAs) == 1 {
 		log.Debugf("Cherry-picking commit: %s", commitSHAs[0])
@@ -67,7 +69,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	}
 
 	// Save the current branch to switch back later
-	originalBranch, err := getCurrentBranch()
+	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
 		log.Fatalf("Failed to get current branch: %v", err)
 	}
@@ -125,7 +127,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	// Get commit message(s) for PR title
 	var prTitle string
 	if len(commitSHAs) == 1 {
-		commitMsg, err := getCommitMessage(commitSHAs[0])
+		commitMsg, err := git.GetCommitMessage(commitSHAs[0])
 		if err != nil {
 			log.Warnf("Failed to get commit message, using default title: %v", err)
 			shortSHA := commitSHAs[0]
@@ -149,7 +151,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		prURL, err := cherryPickToRelease(commitSHAs, branchSuffix, release, prTitleWithRelease, opts.DryRun)
 		if err != nil {
 			// Switch back to original branch before exiting on error
-			if switchErr := runGitCommand("switch", "--quiet", originalBranch); switchErr != nil {
+			if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 				log.Warnf("Failed to switch back to original branch: %v", switchErr)
 			}
 			log.Fatalf("Failed to cherry-pick to release %s: %v", release, err)
@@ -161,7 +163,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 
 	// Switch back to the original branch
 	log.Infof("Switching back to original branch: %s", originalBranch)
-	if err := runGitCommand("switch", "--quiet", originalBranch); err != nil {
+	if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
 		log.Warnf("Failed to switch back to original branch: %v", err)
 	}
 
@@ -178,13 +180,13 @@ func cherryPickToRelease(commitSHAs []string, branchSuffix, version, prTitle str
 
 	// Fetch the release branch
 	log.Infof("Fetching release branch: %s", releaseBranch)
-	if err := runGitCommand("fetch", "--prune", "--quiet", "origin", releaseBranch); err != nil {
+	if err := git.RunCommand("fetch", "--prune", "--quiet", "origin", releaseBranch); err != nil {
 		return "", fmt.Errorf("failed to fetch release branch %s: %w", releaseBranch, err)
 	}
 
 	// Create the hotfix branch from the release branch
 	log.Infof("Creating hotfix branch: %s", hotfixBranch)
-	if err := runGitCommand("checkout", "--quiet", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
+	if err := git.RunCommand("checkout", "--quiet", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
 		return "", fmt.Errorf("failed to create hotfix branch: %w", err)
 	}
 
@@ -197,7 +199,7 @@ func cherryPickToRelease(commitSHAs []string, branchSuffix, version, prTitle str
 
 	// Build git cherry-pick command with all commits
 	cherryPickArgs := append([]string{"cherry-pick"}, commitSHAs...)
-	if err := runGitCommand(cherryPickArgs...); err != nil {
+	if err := git.RunCommand(cherryPickArgs...); err != nil {
 		return "", fmt.Errorf("failed to cherry-pick commits: %w", err)
 	}
 
@@ -209,29 +211,19 @@ func cherryPickToRelease(commitSHAs []string, branchSuffix, version, prTitle str
 
 	// Push the hotfix branch
 	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
-	if err := runGitCommand("push", "--quiet", "-u", "origin", hotfixBranch); err != nil {
+	if err := git.RunCommand("push", "--quiet", "-u", "origin", hotfixBranch); err != nil {
 		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
 	}
 
 	// Create PR using GitHub CLI
 	log.Info("Creating PR...")
-	prURL, err := createPR(hotfixBranch, releaseBranch, prTitle, commitSHAs)
+	prURL, err := createCherryPickPR(hotfixBranch, releaseBranch, prTitle, commitSHAs)
 	if err != nil {
 		return "", fmt.Errorf("failed to create PR: %w", err)
 	}
 
 	log.Infof("PR created successfully: %s", prURL)
 	return prURL, nil
-}
-
-// getCurrentBranch returns the name of the current git branch
-func getCurrentBranch() (string, error) {
-	cmd := exec.Command("git", "branch", "--show-current")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git branch failed: %w", err)
-	}
-	return strings.TrimSpace(string(output)), nil
 }
 
 // normalizeVersion ensures the version has a 'v' prefix
@@ -264,29 +256,8 @@ func findNearestStableTag(commitSHA string) (string, error) {
 	return matches[1], nil
 }
 
-// runGitCommand executes a git command and returns any error
-func runGitCommand(args ...string) error {
-	log.Debugf("Running: git %s", strings.Join(args, " "))
-	cmd := exec.Command("git", args...)
-	if log.IsLevelEnabled(log.DebugLevel) {
-		cmd.Stdout = os.Stdout
-	}
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-// getCommitMessage gets the first line of a commit message
-func getCommitMessage(commitSHA string) (string, error) {
-	cmd := exec.Command("git", "log", "-1", "--format=%s", commitSHA)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(output)), nil
-}
-
-// createPR creates a pull request using the GitHub CLI
-func createPR(headBranch, baseBranch, title string, commitSHAs []string) (string, error) {
+// createCherryPickPR creates a pull request for cherry-picks using the GitHub CLI
+func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs []string) (string, error) {
 	var body string
 	if len(commitSHAs) == 1 {
 		body = fmt.Sprintf("Cherry-pick of commit %s to %s branch.", commitSHAs[0], baseBranch)

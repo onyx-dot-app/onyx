@@ -25,14 +25,12 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import ThreadMessage
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import POD_NAME
 from onyx.configs.app_configs import POD_NAMESPACE
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
-from onyx.configs.onyxbot_configs import ONYX_BOT_REPHRASE_MESSAGE
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.retrieval.search_runner import (
     download_nltk_data,
@@ -83,6 +81,7 @@ from onyx.onyxbot.slack.handlers.handle_message import (
 from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.onyxbot.slack.models import SlackMessageInfo
+from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.onyxbot.slack.utils import check_message_limit
 from onyx.onyxbot.slack.utils import decompose_action_id
 from onyx.onyxbot.slack.utils import get_channel_name_from_id
@@ -90,7 +89,6 @@ from onyx.onyxbot.slack.utils import get_channel_type_from_id
 from onyx.onyxbot.slack.utils import get_onyx_bot_auth_ids
 from onyx.onyxbot.slack.utils import read_slack_thread
 from onyx.onyxbot.slack.utils import remove_onyx_bot_tag
-from onyx.onyxbot.slack.utils import rephrase_slack_message
 from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.redis.redis_pool import get_redis_client
@@ -842,15 +840,7 @@ def build_request_details(
 
         msg = remove_onyx_bot_tag(tenant_id, msg, client=client.web_client)
 
-        if ONYX_BOT_REPHRASE_MESSAGE:
-            logger.info(f"Rephrasing Slack message. Original message: {msg}")
-            try:
-                msg = rephrase_slack_message(msg)
-                logger.info(f"Rephrased message: {msg}")
-            except Exception as e:
-                logger.error(f"Error while trying to rephrase the Slack message: {e}")
-        else:
-            logger.info(f"Received Slack message: {msg}")
+        logger.info(f"Received Slack message: {msg}")
 
         event_type = event.get("type")
         if event_type == "app_mention":
@@ -880,7 +870,7 @@ def build_request_details(
         )
 
         if thread_ts != message_ts and thread_ts is not None:
-            thread_messages = read_slack_thread(
+            thread_messages: list[ThreadMessage] = read_slack_thread(
                 tenant_id=tenant_id,
                 channel=channel,
                 thread=thread_ts,

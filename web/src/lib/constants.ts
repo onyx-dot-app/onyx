@@ -70,9 +70,6 @@ export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
 export const GTM_ENABLED =
   process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
 
-export const DISABLE_LLM_DOC_RELEVANCE =
-  process.env.DISABLE_LLM_DOC_RELEVANCE?.toLowerCase() === "true";
-
 export const NEXT_PUBLIC_CLOUD_ENABLED =
   process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 

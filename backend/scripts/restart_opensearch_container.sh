@@ -4,7 +4,7 @@
 source "$(dirname "$0")/../../.vscode/.env"
 
 OPENSEARCH_CONTAINER_NAME="onyx-opensearch"
-OPENSEARCH_IMAGE="opensearchproject/opensearch:3.2.0"
+OPENSEARCH_IMAGE="opensearchproject/opensearch:3.4.0"
 # First check the env for OPENSEARCH_REST_API_PORT, else hardcode to 9200.
 OPENSEARCH_REST_API_PORT=${OPENSEARCH_REST_API_PORT:-9200}
 OPENSEARCH_PERFORMANCE_ANALYZER_PORT=9600

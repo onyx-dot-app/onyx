@@ -22,6 +22,9 @@ logger = setup_logger()
 SERPER_SEARCH_URL = "https://google.serper.dev/search"
 SERPER_CONTENTS_URL = "https://scrape.serper.dev"
 
+# 1 minute timeout for Serper API requests to prevent indefinite hangs
+SERPER_REQUEST_TIMEOUT_SECONDS = 60
+
 
 class SerperClient(WebSearchProvider, WebContentProvider):
     def __init__(self, api_key: str, num_results: int = 10) -> None:
@@ -42,6 +45,7 @@ class SerperClient(WebSearchProvider, WebContentProvider):
             SERPER_SEARCH_URL,
             headers=self.headers,
             data=json.dumps(payload),
+            timeout=SERPER_REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()
@@ -130,6 +134,7 @@ class SerperClient(WebSearchProvider, WebContentProvider):
             SERPER_CONTENTS_URL,
             headers=self.headers,
             data=json.dumps(payload),
+            timeout=SERPER_REQUEST_TIMEOUT_SECONDS,
         )
 
         # 400 returned when serper cannot scrape

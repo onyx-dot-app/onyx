@@ -13,6 +13,7 @@ aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
     # via
     #   aiobotocore
+    #   discord-py
     #   litellm
     #   voyageai
 aioitertools==0.13.0
@@ -105,6 +106,8 @@ decorator==5.2.1
     # via
     #   ipython
     #   retry
+discord-py==2.4.0
+    # via onyx
 distlib==0.4.0
     # via virtualenv
 distro==1.9.0
@@ -313,7 +316,7 @@ numpy==2.4.1
     #   pandas-stubs
     #   shapely
     #   voyageai
-onyx-devtools==0.2.2
+onyx-devtools==0.3.2
     # via onyx
 openai==2.14.0
     # via
@@ -401,7 +404,7 @@ pure-eval==0.2.3
     # via stack-data
 py==1.11.0
     # via retry
-pyasn1==0.6.1
+pyasn1==0.6.2
     # via
     #   pyasn1-modules
     #   rsa

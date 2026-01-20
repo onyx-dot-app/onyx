@@ -360,7 +360,6 @@ class TestSlackBotFederatedSearch:
 
         def mock_query_slack_capture_params(
             query_string: str,
-            original_query: str,
             access_token: str,
             limit: int | None = None,
             allowed_private_channel: str | None = None,

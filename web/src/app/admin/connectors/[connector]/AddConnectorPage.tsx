@@ -618,7 +618,7 @@ export default function AddConnector({
                       open
                       onOpenChange={() => setCreateCredentialFormToggle(false)}
                     >
-                      <Modal.Content medium>
+                      <Modal.Content>
                         <Modal.Header
                           icon={SvgKey}
                           title={`Create a ${getSourceDisplayName(
