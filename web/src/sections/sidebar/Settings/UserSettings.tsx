@@ -43,7 +43,6 @@ import {
   CHAT_BACKGROUND_NONE,
   CHAT_BACKGROUND_OPTIONS,
 } from "@/lib/constants/chatBackgrounds";
-import { cn } from "@/lib/utils";
 import Modal from "@/refresh-components/Modal";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
