@@ -10,6 +10,7 @@ from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
 from ee.onyx.server.tenants.billing import fetch_tenant_stripe_information
 from ee.onyx.server.tenants.models import BillingInformation
+from ee.onyx.server.tenants.models import CreateSubscriptionSessionRequest
 from ee.onyx.server.tenants.models import ProductGatingFullSyncRequest
 from ee.onyx.server.tenants.models import ProductGatingRequest
 from ee.onyx.server.tenants.models import ProductGatingResponse
@@ -104,15 +105,18 @@ async def create_customer_portal_session(
 
 @router.post("/create-subscription-session")
 async def create_subscription_session(
+    request: CreateSubscriptionSessionRequest | None = None,
     _: User = Depends(current_admin_user),
 ) -> SubscriptionSessionResponse:
     try:
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
         if not tenant_id:
             raise HTTPException(status_code=400, detail="Tenant ID not found")
-        session_id = fetch_stripe_checkout_session(tenant_id)
+
+        billing_period = request.billing_period if request else "monthly"
+        session_id = fetch_stripe_checkout_session(tenant_id, billing_period)
         return SubscriptionSessionResponse(sessionId=session_id)
 
     except Exception as e:
-        logger.exception("Failed to create resubscription session")
+        logger.exception("Failed to create subscription session")
         raise HTTPException(status_code=500, detail=str(e))
