@@ -15,7 +15,7 @@ interface Particle {
   glowVelocity?: number;
 }
 
-interface BuildModeIntroBackgroundAnimationProps {
+interface BuildModeIntroBackgroundProps {
   particleCount?: number;
   particleSize?: number;
   particleOpacity?: number;
@@ -35,8 +35,8 @@ interface BuildModeIntroBackgroundAnimationProps {
  * @framerSupportedLayoutWidth any
  * @framerSupportedLayoutHeight any
  */
-export default function BuildModeIntroBackgroundAnimation(
-  props: BuildModeIntroBackgroundAnimationProps
+export default function BuildModeIntroBackground(
+  props: BuildModeIntroBackgroundProps
 ) {
   const {
     particleCount = 400,
