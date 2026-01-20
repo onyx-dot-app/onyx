@@ -209,7 +209,12 @@ def update_artifact(
     artifact_id: UUID,
     path: str | None = None,
     name: str | None = None,
-    db_session: Session = None,
+def update_artifact(
+    artifact_id: UUID,
+    db_session: Session,
+    path: str | None = None,
+    name: str | None = None,
+) -> None:
 ) -> None:
     """Update artifact metadata."""
     artifact = (
