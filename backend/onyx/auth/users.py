@@ -1456,8 +1456,6 @@ def get_default_admin_user_emails_() -> list[str]:
 
 
 STATE_TOKEN_AUDIENCE = "fastapi-users:oauth-state"
-OAUTH_CSRF_COOKIE_NAME = "onyx_oauth_csrf"
-OAUTH_CSRF_COOKIE_MAX_AGE_SECONDS = 3600
 
 
 class OAuth2AuthorizeResponse(BaseModel):
@@ -1523,7 +1521,6 @@ def get_oauth_router(
     )
     async def authorize(
         request: Request,
-        response: Response,
         scopes: List[str] = Query(None),
     ) -> OAuth2AuthorizeResponse:
         referral_source = request.cookies.get("referral_source", None)
@@ -1535,22 +1532,11 @@ def get_oauth_router(
 
         next_url = request.query_params.get("next", "/")
 
-        csrf_token = secrets.token_urlsafe(32)
         state_data: Dict[str, str] = {
             "next_url": next_url,
             "referral_source": referral_source or "default_referral",
-            "csrf_token": csrf_token,
         }
         state = generate_state_token(state_data, state_secret)
-
-        response.set_cookie(
-            key=OAUTH_CSRF_COOKIE_NAME,
-            value=csrf_token,
-            httponly=True,
-            max_age=OAUTH_CSRF_COOKIE_MAX_AGE_SECONDS,
-            secure=WEB_DOMAIN.startswith("https"),
-            samesite="lax",
-        )
 
         # Get the basic authorization URL
         authorization_url = await oauth_client.get_authorization_url(
@@ -1616,11 +1602,6 @@ def get_oauth_router(
         except jwt.DecodeError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
 
-        csrf_cookie = request.cookies.get(OAUTH_CSRF_COOKIE_NAME)
-        csrf_state = state_data.get("csrf_token")
-        if not csrf_cookie or not csrf_state or csrf_cookie != csrf_state:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
-
         next_url = state_data.get("next_url", "/")
         referral_source = state_data.get("referral_source", None)
         try:
@@ -1678,11 +1659,6 @@ def get_oauth_router(
                     redirect_response.headers.append(header_name, cookie_value)
             else:
                 redirect_response.headers[header_name] = header_value
-
-        redirect_response.delete_cookie(
-            OAUTH_CSRF_COOKIE_NAME,
-            samesite="lax",
-        )
 
         if hasattr(response, "body"):
             redirect_response.body = response.body
