@@ -233,8 +233,18 @@ def upgrade() -> None:
         ["hierarchy_node_id"],
     )
 
+    # 6. Add last_time_hierarchy_fetch column to connector_credential_pair table
+    op.add_column(
+        "connector_credential_pair",
+        sa.Column(
+            "last_time_hierarchy_fetch", sa.DateTime(timezone=True), nullable=True
+        ),
+    )
+
 
 def downgrade() -> None:
+    # Remove last_time_hierarchy_fetch from connector_credential_pair
+    op.drop_column("connector_credential_pair", "last_time_hierarchy_fetch")
     op.drop_index(
         "ix_persona__hierarchy_node_hierarchy_node_id",
         table_name="persona__hierarchy_node",

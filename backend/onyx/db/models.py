@@ -609,6 +609,11 @@ class ConnectorCredentialPair(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
 
+    # last successful hierarchy fetch
+    last_time_hierarchy_fetch: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     total_docs_indexed: Mapped[int] = mapped_column(Integer, default=0)
 
     indexing_trigger: Mapped[IndexingMode | None] = mapped_column(
