@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
 import Message from "@/refresh-components/messages/Message";
-import BuildInputBar, { BuildInputBarHandle } from "./components/BuildInputBar";
-import BuildMessage, { OutputItem } from "./components/BuildMessage";
-import UserMessage from "./components/UserMessage";
-import BuildSidePanel from "./components/BuildSidePanel";
+import BuildInputBar, {
+  BuildInputBarHandle,
+} from "@/app/build/components/BuildInputBar";
+import BuildMessage, { OutputItem } from "@/app/build/components/BuildMessage";
+import UserMessage from "@/app/build/components/UserMessage";
+import BuildSidePanel from "@/app/build/components/BuildSidePanel";
 import { SvgSidebar } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 

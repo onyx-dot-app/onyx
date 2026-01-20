@@ -24,7 +24,7 @@ class SandboxResponse(BaseModel):
     last_heartbeat: datetime | None
 
     @classmethod
-    def from_model(cls, sandbox):
+    def from_model(cls, sandbox) -> "SandboxResponse":
         """Convert Sandbox ORM model to response."""
         return cls(
             id=str(sandbox.id),
@@ -46,7 +46,7 @@ class ArtifactResponse(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, artifact):
+    def from_model(cls, artifact) -> "ArtifactResponse":
         """Convert Artifact ORM model to response."""
         return cls(
             id=str(artifact.id),
@@ -70,7 +70,7 @@ class SessionResponse(BaseModel):
     artifacts: list[ArtifactResponse]
 
     @classmethod
-    def from_model(cls, session):
+    def from_model(cls, session) -> "SessionResponse":
         """Convert BuildSession ORM model to response."""
         return cls(
             id=str(session.id),
