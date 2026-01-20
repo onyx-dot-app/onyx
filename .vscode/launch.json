@@ -578,6 +578,23 @@
       }
     },
     {
+      "name": "Build Sandbox Templates",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "onyx.server.features.build.sandbox.build_templates",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
+      },
+      "consoleTitle": "Build Sandbox Templates"
+    },
+    {
       // script to generate the openapi schema
       "name": "Onyx OpenAPI Schema Generator",
       "type": "debugpy",
