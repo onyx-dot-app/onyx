@@ -21,6 +21,8 @@ export default function InputTypeInField({
   const onChange = useOnChangeEvent(name, onChangeProp);
   const onBlur = useOnBlurEvent(name, onBlurProp);
   const hasError = meta.touched && meta.error;
+  const isNonEditable =
+    inputProps.variant === "disabled" || inputProps.variant === "readOnly";
 
   return (
     <InputTypeIn
@@ -33,7 +35,13 @@ export default function InputTypeInField({
       onClear={() => {
         helpers.setValue("");
       }}
-      variant={hasError ? "error" : inputProps.variant}
+      variant={
+        isNonEditable
+          ? inputProps.variant
+          : hasError
+            ? "error"
+            : inputProps.variant
+      }
     />
   );
 }
