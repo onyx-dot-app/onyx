@@ -20,9 +20,12 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -71,31 +74,59 @@ def temp_sandbox_dir() -> Generator[Path, None, None]:
 
 
 @pytest.fixture
+def actual_sandbox_path(sandbox_record: Sandbox) -> Path:
+    """Get the actual sandbox path where the manager expects it."""
+    return Path(SANDBOX_BASE_PATH) / str(sandbox_record.session_id)
+
+
+@pytest.fixture
 def sandbox_record(
-    db_session: Session, temp_sandbox_dir: Path, tenant_context: None
+    db_session: Session, tenant_context: None
 ) -> Generator[Sandbox, None, None]:
-    """Create a real Sandbox record in the database."""
-    session_id = uuid4()
+    """Create a real Sandbox record in the database and set up sandbox directory."""
+    # Create BuildSession first (required foreign key)
+    build_session = BuildSession(
+        id=uuid4(),
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(build_session)
+    db_session.flush()  # Flush to get the ID without committing
+
+    # Create Sandbox with reference to BuildSession
     sandbox = Sandbox(
         id=uuid4(),
-        session_id=session_id,
-        tenant_id=TEST_TENANT_ID,
-        directory_path=str(temp_sandbox_dir),
+        session_id=build_session.id,
         status=SandboxStatus.RUNNING,
-        agent_pid=None,
-        nextjs_pid=None,
-        nextjs_port=None,
     )
     db_session.add(sandbox)
     db_session.commit()
     db_session.refresh(sandbox)
 
+    # Create sandbox directory at the expected location
+    # The manager uses _get_sandbox_path() which returns SANDBOX_BASE_PATH / session_id
+    expected_sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+    expected_sandbox_path.mkdir(parents=True, exist_ok=True)
+
+    # Ensure outputs directory exists at the expected path
+    expected_outputs = expected_sandbox_path / "outputs"
+    expected_outputs.mkdir(parents=True, exist_ok=True)
+
     yield sandbox
+
+    # Cleanup sandbox directory
+    if expected_sandbox_path.exists():
+        shutil.rmtree(expected_sandbox_path, ignore_errors=True)
 
     # Cleanup - re-fetch in case it was deleted
     existing = db_session.get(Sandbox, sandbox.id)
     if existing:
         db_session.delete(existing)
+        db_session.commit()
+
+    # Cleanup BuildSession (cascade should handle it, but be explicit)
+    existing_session = db_session.get(BuildSession, build_session.id)
+    if existing_session:
+        db_session.delete(existing_session)
         db_session.commit()
 
 
@@ -124,7 +155,6 @@ class TestTerminate:
 
         db_session.refresh(sandbox_record)
         assert sandbox_record.status == SandboxStatus.TERMINATED
-        assert sandbox_record.terminated_at is not None
 
 
 class TestCreateSnapshot:
@@ -135,12 +165,12 @@ class TestCreateSnapshot:
         sandbox_manager: SandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
-        temp_sandbox_dir: Path,
+        actual_sandbox_path: Path,
         tenant_context: None,
         file_store_initialized: None,
     ) -> None:
         """Test that create_snapshot archives the outputs directory."""
-        outputs_dir = temp_sandbox_dir / "outputs"
+        outputs_dir = actual_sandbox_path / "outputs"
         (outputs_dir / "app.py").write_text("print('hello')")
 
         result = sandbox_manager.create_snapshot(str(sandbox_record.id), db_session)
@@ -174,11 +204,11 @@ class TestListDirectory:
         sandbox_manager: SandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
-        temp_sandbox_dir: Path,
+        actual_sandbox_path: Path,
         tenant_context: None,
     ) -> None:
         """Test that list_directory returns filesystem entries."""
-        outputs_dir = temp_sandbox_dir / "outputs"
+        outputs_dir = actual_sandbox_path / "outputs"
         (outputs_dir / "file.txt").write_text("content")
         (outputs_dir / "subdir").mkdir()
 
@@ -200,11 +230,11 @@ class TestReadFile:
         sandbox_manager: SandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
-        temp_sandbox_dir: Path,
+        actual_sandbox_path: Path,
         tenant_context: None,
     ) -> None:
         """Test that read_file returns file contents as bytes."""
-        outputs_dir = temp_sandbox_dir / "outputs"
+        outputs_dir = actual_sandbox_path / "outputs"
         (outputs_dir / "test.txt").write_bytes(b"Hello, World!")
 
         result = sandbox_manager.read_file(
@@ -292,7 +322,7 @@ class TestSendMessage:
         sandbox_manager: SandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
-        temp_sandbox_dir: Path,
+        actual_sandbox_path: Path,
         tenant_context: None,
     ) -> None:
         """Test that send_message can write files and emits edit tool calls."""
@@ -319,7 +349,7 @@ class TestSendMessage:
         assert isinstance(last_event, PromptResponse)
 
         # Verify the file was actually created (agent writes relative to sandbox root)
-        created_file = temp_sandbox_dir / "hello.txt"
+        created_file = actual_sandbox_path / "hello.txt"
         assert created_file.exists(), f"Expected file {created_file} to be created"
         assert "Hello" in created_file.read_text()
 
@@ -334,14 +364,14 @@ class TestSendMessage:
         sandbox_manager: SandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
-        temp_sandbox_dir: Path,
+        actual_sandbox_path: Path,
         tenant_context: None,
     ) -> None:
         """Test that send_message can read files and emits read tool calls."""
         sandbox_id = str(sandbox_record.id)
 
         # Create a file for the agent to read (at sandbox root, where agent has access)
-        test_file = temp_sandbox_dir / "secret.txt"
+        test_file = actual_sandbox_path / "secret.txt"
         test_file.write_text("The secret code is 12345")
 
         events: list[ACPEvent] = []

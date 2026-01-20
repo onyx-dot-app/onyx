@@ -9,20 +9,16 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
-from onyx.db.models import SandboxSnapshot
+from onyx.db.models import Snapshot
 
 
 def create_sandbox(
     db_session: Session,
     session_id: UUID,
-    tenant_id: str,
-    directory_path: str,
 ) -> Sandbox:
     """Create a new sandbox record."""
     sandbox = Sandbox(
         session_id=session_id,
-        tenant_id=tenant_id,
-        directory_path=directory_path,
         status=SandboxStatus.PROVISIONING,
     )
     db_session.add(sandbox)
@@ -51,35 +47,6 @@ def update_sandbox_status(
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.status = status
-    if status == SandboxStatus.TERMINATED:
-        sandbox.terminated_at = datetime.datetime.now(datetime.timezone.utc)
-    db_session.commit()
-    return sandbox
-
-
-def update_sandbox_agent_pid(
-    db_session: Session, sandbox_id: UUID, agent_pid: int
-) -> Sandbox:
-    """Update sandbox agent process PID."""
-    sandbox = get_sandbox_by_id(db_session, sandbox_id)
-    if not sandbox:
-        raise ValueError(f"Sandbox {sandbox_id} not found")
-
-    sandbox.agent_pid = agent_pid
-    db_session.commit()
-    return sandbox
-
-
-def update_sandbox_nextjs(
-    db_session: Session, sandbox_id: UUID, nextjs_pid: int, nextjs_port: int
-) -> Sandbox:
-    """Update sandbox Next.js server process info."""
-    sandbox = get_sandbox_by_id(db_session, sandbox_id)
-    if not sandbox:
-        raise ValueError(f"Sandbox {sandbox_id} not found")
-
-    sandbox.nextjs_pid = nextjs_pid
-    sandbox.nextjs_port = nextjs_port
     db_session.commit()
     return sandbox
 
@@ -110,18 +77,15 @@ def get_idle_sandboxes(
     return list(db_session.execute(stmt).scalars().all())
 
 
-def get_sandboxes_by_tenant(db_session: Session, tenant_id: str) -> list[Sandbox]:
-    """Get all sandboxes for a tenant."""
-    stmt = select(Sandbox).where(Sandbox.tenant_id == tenant_id)
-    return list(db_session.execute(stmt).scalars().all())
-
-
 def get_running_sandbox_count_by_tenant(db_session: Session, tenant_id: str) -> int:
-    """Get count of running sandboxes for a tenant (for limit enforcement)."""
-    stmt = (
-        select(func.count(Sandbox.id))
-        .where(Sandbox.tenant_id == tenant_id)
-        .where(Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE]))
+    """Get count of running sandboxes for a tenant (for limit enforcement).
+
+    Note: tenant_id parameter is kept for API compatibility but is not used
+    since Sandbox model no longer has tenant_id. This function returns
+    the count of all running sandboxes.
+    """
+    stmt = select(func.count(Sandbox.id)).where(
+        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE])
     )
     result = db_session.execute(stmt).scalar()
     return result or 0
@@ -130,14 +94,12 @@ def get_running_sandbox_count_by_tenant(db_session: Session, tenant_id: str) -> 
 def create_snapshot(
     db_session: Session,
     session_id: UUID,
-    tenant_id: str,
     storage_path: str,
     size_bytes: int,
-) -> SandboxSnapshot:
+) -> Snapshot:
     """Create a snapshot record."""
-    snapshot = SandboxSnapshot(
+    snapshot = Snapshot(
         session_id=session_id,
-        tenant_id=tenant_id,
         storage_path=storage_path,
         size_bytes=size_bytes,
     )
@@ -148,25 +110,23 @@ def create_snapshot(
 
 def get_latest_snapshot_for_session(
     db_session: Session, session_id: UUID
-) -> SandboxSnapshot | None:
+) -> Snapshot | None:
     """Get most recent snapshot for a session."""
     stmt = (
-        select(SandboxSnapshot)
-        .where(SandboxSnapshot.session_id == session_id)
-        .order_by(SandboxSnapshot.created_at.desc())
+        select(Snapshot)
+        .where(Snapshot.session_id == session_id)
+        .order_by(Snapshot.created_at.desc())
         .limit(1)
     )
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def get_snapshots_for_session(
-    db_session: Session, session_id: UUID
-) -> list[SandboxSnapshot]:
+def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Snapshot]:
     """Get all snapshots for a session, ordered by creation time descending."""
     stmt = (
-        select(SandboxSnapshot)
-        .where(SandboxSnapshot.session_id == session_id)
-        .order_by(SandboxSnapshot.created_at.desc())
+        select(Snapshot)
+        .where(Snapshot.session_id == session_id)
+        .order_by(Snapshot.created_at.desc())
     )
     return list(db_session.execute(stmt).scalars().all())
 
@@ -174,14 +134,18 @@ def get_snapshots_for_session(
 def delete_old_snapshots(
     db_session: Session, tenant_id: str, retention_days: int
 ) -> int:
-    """Delete snapshots older than retention period, return count deleted."""
+    """Delete snapshots older than retention period, return count deleted.
+
+    Note: tenant_id parameter is kept for API compatibility but is not used
+    since Snapshot model no longer has tenant_id. This function deletes
+    all snapshots older than the retention period.
+    """
     cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
         days=retention_days
     )
 
-    stmt = select(SandboxSnapshot).where(
-        SandboxSnapshot.tenant_id == tenant_id,
-        SandboxSnapshot.created_at < cutoff_time,
+    stmt = select(Snapshot).where(
+        Snapshot.created_at < cutoff_time,
     )
     old_snapshots = db_session.execute(stmt).scalars().all()
 
@@ -198,7 +162,7 @@ def delete_old_snapshots(
 
 def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     """Delete a specific snapshot by ID. Returns True if deleted, False if not found."""
-    stmt = select(SandboxSnapshot).where(SandboxSnapshot.id == snapshot_id)
+    stmt = select(Snapshot).where(Snapshot.id == snapshot_id)
     snapshot = db_session.execute(stmt).scalar_one_or_none()
 
     if not snapshot:

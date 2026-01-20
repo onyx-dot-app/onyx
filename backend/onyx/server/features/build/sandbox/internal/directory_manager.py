@@ -3,6 +3,7 @@
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 
 class DirectoryManager:
@@ -168,13 +169,13 @@ class DirectoryManager:
         opencode_model = f"{provider}/{model_name}"
 
         # Build configuration
-        config: dict[str, any] = {
+        config: dict[str, Any] = {
             "model": opencode_model,
         }
 
         # Add provider-specific configuration if API key provided
         if api_key:
-            provider_config: dict[str, any] = {"options": {"apiKey": api_key}}
+            provider_config: dict[str, Any] = {"options": {"apiKey": api_key}}
             if api_base:
                 provider_config["api"] = api_base
             config["provider"] = {provider: provider_config}

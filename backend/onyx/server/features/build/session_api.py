@@ -26,6 +26,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.models import ArtifactInfo
 from onyx.server.features.build.models import CreateSessionRequest
@@ -165,7 +166,7 @@ def get_session_status(
 
     # Determine webapp URL based on status
     webapp_url = None
-    if sandbox.status.is_active() and sandbox.nextjs_port:
+    if sandbox.status.is_active():
         webapp_url = "/api/build/webapp"
 
     return SessionStatus(
@@ -256,7 +257,7 @@ def execute_task(
                     yield _format_status_event("failed", acp_event.message)
 
             # Check for webapp artifact
-            sandbox_path = Path(sandbox.directory_path)
+            sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
             web_dir = sandbox_path / "outputs" / "web"
             if web_dir.exists():
                 artifact_data = json.dumps(
@@ -312,7 +313,7 @@ def list_artifacts(
     if sandbox is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    sandbox_path = Path(sandbox.directory_path)
+    sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
     artifacts: list[ArtifactInfo] = []
     output_dir = sandbox_path / "outputs"
 
@@ -405,7 +406,7 @@ def list_directory(
     if sandbox is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    sandbox_path = Path(sandbox.directory_path)
+    sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
 
     # Construct the target directory path
     target_dir = sandbox_path / path if path else sandbox_path
@@ -473,7 +474,7 @@ def download_artifact(
     if sandbox is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    sandbox_path = Path(sandbox.directory_path)
+    sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
     file_path = sandbox_path / path
 
     # Security check: ensure path doesn't escape sandbox

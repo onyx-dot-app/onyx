@@ -16,9 +16,6 @@ class SandboxInfo(BaseModel):
     id: str
     session_id: str
     directory_path: str
-    agent_pid: int | None
-    nextjs_pid: int | None
-    nextjs_port: int | None
     status: SandboxStatus
     created_at: datetime
     last_heartbeat: datetime | None
