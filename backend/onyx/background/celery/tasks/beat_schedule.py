@@ -112,6 +112,15 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-hierarchy-fetching",
+        "task": OnyxCeleryTask.CHECK_FOR_HIERARCHY_FETCHING,
+        "schedule": timedelta(hours=1),  # Check hourly, but only fetch once per day
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         "name": "monitor-background-processes",
         "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
         "schedule": timedelta(minutes=5),
