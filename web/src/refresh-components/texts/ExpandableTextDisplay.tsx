@@ -19,8 +19,8 @@ export interface ExpandableTextDisplayProps {
   displayContent?: string;
   /** Subtitle text (e.g., file size). If not provided, calculates from content */
   subtitle?: string;
-  /** Maximum lines to show in collapsed state. Default: 5 */
-  maxLines?: number;
+  /** Maximum lines to show in collapsed state (1-6). Values outside this range default to 5. */
+  maxLines?: 1 | 2 | 3 | 4 | 5 | 6;
   /** Additional className for the container */
   className?: string;
   /** Optional custom renderer for content (e.g., markdown). Falls back to plain text. */
@@ -61,6 +61,7 @@ export default function ExpandableTextDisplay({
   displayContent,
   subtitle,
   maxLines = 5,
+  className,
   renderContent,
 }: ExpandableTextDisplayProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -87,7 +88,7 @@ export default function ExpandableTextDisplay({
   return (
     <>
       {/* Collapsed View */}
-      <div className="w-full">
+      <div className={cn("w-full", className)}>
         <div
           className={cn(
             lineClampClass,

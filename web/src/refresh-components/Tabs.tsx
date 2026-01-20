@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn, mergeRefs } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -246,6 +246,7 @@ const TabsList = React.forwardRef<
   const listRef = useRef<HTMLDivElement>(null);
   const isPill = variant === "pill";
   const indicatorStyle = usePillIndicator(listRef, isPill);
+  const contextValue = useMemo(() => ({ variant }), [variant]);
 
   return (
     <TabsPrimitive.List
@@ -262,7 +263,7 @@ const TabsList = React.forwardRef<
       }
       {...props}
     >
-      <TabsContext.Provider value={{ variant }}>
+      <TabsContext.Provider value={contextValue}>
         {isPill ? (
           <div className="flex items-center gap-2">{children}</div>
         ) : (
