@@ -81,7 +81,7 @@ function DiscordBotContent() {
             <Text text04 mainUiBody>
               Copy the command and send it from any text channel in your server!
             </Text>
-            <Card translucent>
+            <Card variant="secondary">
               <Section
                 flexDirection="row"
                 justifyContent="between"
@@ -99,7 +99,7 @@ function DiscordBotContent() {
         </Modal.Content>
       </Modal>
 
-      <Card disabled={!isBotAvailable}>
+      <Card variant={!isBotAvailable ? "disabled" : "primary"}>
         <Section
           flexDirection="row"
           justifyContent="between"
