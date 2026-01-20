@@ -230,6 +230,98 @@ export async function executeTask(
   }
 }
 
+/**
+ * Send a message to the build session using the new messages API endpoint.
+ * This endpoint streams SSE events with message-prefixed packet types.
+ */
+export async function sendMessage(
+  sessionId: string,
+  message: string,
+  onEvent: (event: BuildEvent) => void,
+  onError: (error: Error) => void,
+  onComplete: () => void
+): Promise<void> {
+  try {
+    const response = await fetch(`/api/build/sessions/${sessionId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({ content: message }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `HTTP ${response.status}: ${errorText || response.statusText}`
+      );
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          // Skip event type line (all events are "message")
+          continue;
+        } else if (line.startsWith("data:")) {
+          const data = line.slice(5).trim();
+          if (data) {
+            try {
+              const parsed = JSON.parse(data);
+              // Map frontend packet types to BuildEvent types
+              const eventType = mapMessagePacketToEventType(parsed.type);
+              if (eventType) {
+                onEvent({ type: eventType, data: parsed } as BuildEvent);
+              }
+            } catch (err) {
+              console.error("Failed to parse SSE data:", err);
+            }
+          }
+        }
+      }
+    }
+
+    onComplete();
+  } catch (error) {
+    onError(error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
+/**
+ * Map message API packet types to BuildEvent types.
+ */
+function mapMessagePacketToEventType(packetType: string): string | null {
+  const mapping: Record<string, string> = {
+    step_delta: "agent_thought_chunk",
+    output_start: "agent_message_chunk", // Signal output starting
+    output_delta: "agent_message_chunk",
+    tool_start: "tool_call",
+    tool_end: "tool_call_update",
+    file_write: "artifact", // Treat file writes as artifacts
+    plan: "plan",
+    mode_update: "current_mode_update",
+    artifact_created: "artifact",
+    done: "prompt_response",
+    error: "error",
+  };
+  return mapping[packetType] || null;
+}
+
 export async function listArtifacts(
   sessionId: string
 ): Promise<ArtifactInfo[]> {

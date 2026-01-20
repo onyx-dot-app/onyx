@@ -196,13 +196,15 @@ async def stream_cli_agent_response(
                 # Map ACP events to frontend packet types
                 if isinstance(acp_event, AgentThoughtChunk):
                     # Map thought to step_delta
-                    content = getattr(acp_event, "content", "")
-                    if content:
+                    # AgentThoughtChunk has a content field which is a ContentBlock (TextContentBlock, etc.)
+                    content_block = getattr(acp_event, "content", None)
+                    if content_block and hasattr(content_block, "text"):
+                        text = content_block.text
                         yield _format_message_event(
                             {
                                 "type": "step_delta",
                                 "step_id": "thinking",
-                                "content": content,
+                                "content": text,
                                 "timestamp": _get_timestamp(),
                             }
                         )
@@ -280,13 +282,15 @@ async def stream_cli_agent_response(
                         output_started = True
 
                     # Emit output_delta and accumulate content
-                    content = getattr(acp_event, "content", "")
-                    if content:
-                        assistant_message_parts.append(content)
+                    # AgentMessageChunk has a content field which is a ContentBlock (TextContentBlock, etc.)
+                    content_block = getattr(acp_event, "content", None)
+                    if content_block and hasattr(content_block, "text"):
+                        text = content_block.text
+                        assistant_message_parts.append(text)
                         yield _format_message_event(
                             {
                                 "type": "output_delta",
-                                "content": content,
+                                "content": text,
                                 "timestamp": _get_timestamp(),
                             }
                         )
