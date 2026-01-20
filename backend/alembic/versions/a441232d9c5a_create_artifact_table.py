@@ -21,7 +21,7 @@ depends_on = None
 def upgrade() -> None:
     # Create artifact type enum
     artifact_type_enum = sa.Enum(
-        "react_app",
+        "web_app",
         "pptx",
         "docx",
         "markdown",

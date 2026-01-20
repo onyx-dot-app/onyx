@@ -210,7 +210,7 @@ class SandboxStatus(str, PyEnum):
 
 
 class ArtifactType(str, PyEnum):
-    REACT_APP = "react_app"
+    WEB_APP = "web_app"
     PPTX = "pptx"
     DOCX = "docx"
     IMAGE = "image"
