@@ -40,17 +40,17 @@ DECLARE
 BEGIN
     -- Skip if this is the placeholder user being inserted
     IF NEW.id = placeholder_uuid THEN
-        RETURN NEW;
+        RETURN NULL;
     END IF;
 
     -- Skip if this is the anonymous user being inserted (not a real user)
     IF NEW.id = anonymous_uuid THEN
-        RETURN NEW;
+        RETURN NULL;
     END IF;
 
     -- Skip if the new user is not active
     IF NEW.is_active = FALSE THEN
-        RETURN NEW;
+        RETURN NULL;
     END IF;
 
     -- Get current schema for self-cleanup
@@ -69,10 +69,12 @@ BEGIN
         -- Either way, drop the trigger and return without making admin
         EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', schema_name);
         EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', schema_name);
-        RETURN NEW;
+        RETURN NULL;
     END IF;
 
     -- We have exclusive lock on placeholder - proceed with migration
+    -- The INSERT has already completed (AFTER INSERT), so NEW.id exists in the table
+
     -- Migrate chat_session
     UPDATE "chat_session" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
 
@@ -95,7 +97,8 @@ BEGIN
     UPDATE "inputprompt" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
 
     -- Make the new user an admin (they had admin access in no-auth mode)
-    NEW.role := 'ADMIN';
+    -- In AFTER INSERT trigger, we must UPDATE the row since it already exists
+    UPDATE "user" SET role = 'ADMIN' WHERE id = NEW.id;
 
     -- Delete the placeholder user (we hold the lock so this is safe)
     DELETE FROM "user" WHERE id = placeholder_uuid;
@@ -104,14 +107,14 @@ BEGIN
     EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', schema_name);
     EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', schema_name);
 
-    RETURN NEW;
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 """
 
 MIGRATE_NO_AUTH_TRIGGER = """
 CREATE TRIGGER trg_migrate_no_auth_data
-BEFORE INSERT ON "user"
+AFTER INSERT ON "user"
 FOR EACH ROW
 EXECUTE FUNCTION migrate_no_auth_data_to_user();
 """
