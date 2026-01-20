@@ -204,14 +204,14 @@ def upgrade() -> None:
     # Assign NULL user_id records to the placeholder user
     for table in tables_to_check:
         try:
+            # Base condition for all tables
+            condition = "user_id IS NULL"
             # Exclude public credential (id=0) which must remain user_id=NULL
-            # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
             if table == "credential":
-                condition = "user_id IS NULL AND id != 0"
+                condition += " AND id != 0"
+            # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
             elif table == "tool":
-                condition = "user_id IS NULL AND in_code_tool_id IS NULL"
-            else:
-                condition = "user_id IS NULL"
+                condition += " AND in_code_tool_id IS NULL"
             result = connection.execute(
                 sa.text(
                     f"""
