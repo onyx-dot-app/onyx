@@ -360,13 +360,13 @@ export default function UserSettings() {
       {popup}
 
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-        <Modal.Content tall>
+        <Modal.Content width="sm" height="lg">
           <Modal.Header
             icon={SvgSettings}
             title="Settings"
             onClose={() => modal.toggle(false)}
           />
-          <Modal.Body className="flex flex-col gap-4 px-4 pb-4">
+          <Modal.Body twoTone={false}>
             {sections.length > 1 && (
               <nav>
                 <ul className="flex flex-row gap-1">
@@ -437,6 +437,7 @@ export default function UserSettings() {
                       onCheckedChange={(checked) => {
                         updateUserAutoScroll(checked);
                       }}
+                      aria-label="Auto-scroll"
                     />
                   </div>
                   <div className="flex items-center justify-between">

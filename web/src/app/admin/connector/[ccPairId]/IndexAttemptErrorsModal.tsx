@@ -125,7 +125,7 @@ export default function IndexAttemptErrorsModal({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content large>
+      <Modal.Content width="lg" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Indexing Errors"
@@ -136,7 +136,7 @@ export default function IndexAttemptErrorsModal({
           }
           onClose={onClose}
         />
-        <Modal.Body className="flex flex-col gap-4 min-h-0">
+        <Modal.Body>
           {!isResolvingErrors && (
             <div className="flex flex-col gap-2 flex-shrink-0">
               <Text as="p">

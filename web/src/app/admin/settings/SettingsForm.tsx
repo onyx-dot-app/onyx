@@ -308,7 +308,7 @@ export function SettingsForm() {
       )}
       {showConfirmModal && (
         <Modal open onOpenChange={() => setShowConfirmModal(false)}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgAlertTriangle}
               title="Enable Anonymous Users"
@@ -320,7 +320,7 @@ export function SettingsForm() {
                 anyone to use Onyx without signing in.
               </p>
             </Modal.Body>
-            <Modal.Footer className="p-4 flex justify-end gap-2">
+            <Modal.Footer>
               <Button secondary onClick={() => setShowConfirmModal(false)}>
                 Cancel
               </Button>

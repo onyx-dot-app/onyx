@@ -61,13 +61,13 @@ def test_cold_startup_default_assistant() -> None:
 
         # Verify all three main tools are attached
         assert (
-            "SearchTool" in tool_names
+            "internal_search" in tool_names
         ), "Default assistant should have SearchTool attached"
         assert (
-            "ImageGenerationTool" in tool_names
+            "generate_image" in tool_names
         ), "Default assistant should have ImageGenerationTool attached"
         assert (
-            "WebSearchTool" in tool_names
+            "web_search" in tool_names
         ), "Default assistant should have WebSearchTool attached"
 
         # Also verify by display names for clarity

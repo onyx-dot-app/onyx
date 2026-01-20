@@ -4,8 +4,7 @@ import {
   StreamStopInfo,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
-import { ChatState, FeedbackType } from "@/app/chat/interfaces";
-import { MutableRefObject, RefObject, useEffect, useRef } from "react";
+import { FeedbackType } from "@/app/chat/interfaces";
 import {
   BackendMessage,
   DocumentsResponse,
@@ -101,6 +100,15 @@ export type PacketType =
   | UserKnowledgeFilePacket
   | Packet;
 
+// Origin of the message for telemetry tracking.
+// Keep in sync with backend: backend/onyx/server/query_and_chat/models.py::MessageOrigin
+export type MessageOrigin =
+  | "webapp"
+  | "chrome_extension"
+  | "api"
+  | "slackbot"
+  | "unknown";
+
 export interface SendMessageParams {
   message: string;
   fileDescriptors?: FileDescriptor[];
@@ -116,6 +124,8 @@ export interface SendMessageParams {
   modelProvider?: string;
   modelVersion?: string;
   temperature?: number;
+  // Origin of the message for telemetry tracking
+  origin?: MessageOrigin;
 }
 
 export async function* sendMessage({
@@ -131,6 +141,7 @@ export async function* sendMessage({
   modelProvider,
   modelVersion,
   temperature,
+  origin,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   // Build payload for new send-chat-message API
   const payload = {
@@ -150,6 +161,8 @@ export async function* sendMessage({
             model_version: modelVersion,
           }
         : null,
+    // Default to "unknown" for consistency with backend; callers should set explicitly
+    origin: origin ?? "unknown",
   };
 
   const body = JSON.stringify(payload);
@@ -442,105 +455,4 @@ export async function uploadFilesForChat(
   const responseJson = await response.json();
 
   return [responseJson.files as FileDescriptor[], null];
-}
-
-export function useScrollonStream({
-  chatState,
-  scrollableDivRef,
-  scrollDist,
-  endDivRef,
-  debounceNumber,
-  mobile,
-  enableAutoScroll,
-}: {
-  chatState: ChatState;
-  scrollableDivRef: RefObject<HTMLDivElement | null>;
-  scrollDist: MutableRefObject<number>;
-  endDivRef: RefObject<HTMLDivElement | null>;
-  debounceNumber: number;
-  mobile?: boolean;
-  enableAutoScroll?: boolean;
-}) {
-  const mobileDistance = 900; // distance that should "engage" the scroll
-  const desktopDistance = 500; // distance that should "engage" the scroll
-
-  const distance = mobile ? mobileDistance : desktopDistance;
-
-  const preventScrollInterference = useRef<boolean>(false);
-  const preventScroll = useRef<boolean>(false);
-  const blockActionRef = useRef<boolean>(false);
-  const previousScroll = useRef<number>(0);
-
-  useEffect(() => {
-    if (!enableAutoScroll) {
-      return;
-    }
-
-    if (chatState != "input" && scrollableDivRef && scrollableDivRef.current) {
-      const newHeight: number = scrollableDivRef.current?.scrollTop!;
-      const heightDifference = newHeight - previousScroll.current;
-      previousScroll.current = newHeight;
-
-      // Prevent streaming scroll
-      if (heightDifference < 0 && !preventScroll.current) {
-        scrollableDivRef.current.style.scrollBehavior = "auto";
-        scrollableDivRef.current.scrollTop = scrollableDivRef.current.scrollTop;
-        scrollableDivRef.current.style.scrollBehavior = "smooth";
-        preventScrollInterference.current = true;
-        preventScroll.current = true;
-
-        setTimeout(() => {
-          preventScrollInterference.current = false;
-        }, 2000);
-        setTimeout(() => {
-          preventScroll.current = false;
-        }, 10000);
-      }
-
-      // Ensure can scroll if scroll down
-      else if (!preventScrollInterference.current) {
-        preventScroll.current = false;
-      }
-      if (
-        scrollDist.current < distance &&
-        !blockActionRef.current &&
-        !blockActionRef.current &&
-        !preventScroll.current &&
-        endDivRef &&
-        endDivRef.current
-      ) {
-        // catch up if necessary!
-        const scrollAmount = scrollDist.current + (mobile ? 1000 : 10000);
-        if (scrollDist.current > 300) {
-          // if (scrollDist.current > 140) {
-          endDivRef.current.scrollIntoView();
-        } else {
-          blockActionRef.current = true;
-
-          scrollableDivRef?.current?.scrollBy({
-            left: 0,
-            top: Math.max(0, scrollAmount),
-            behavior: "smooth",
-          });
-
-          setTimeout(() => {
-            blockActionRef.current = false;
-          }, debounceNumber);
-        }
-      }
-    }
-  });
-
-  // scroll on end of stream if within distance
-  useEffect(() => {
-    if (scrollableDivRef?.current && chatState == "input" && enableAutoScroll) {
-      if (scrollDist.current < distance - 50) {
-        scrollableDivRef?.current?.scrollBy({
-          left: 0,
-          top: Math.max(scrollDist.current + 600, 0),
-          behavior: "smooth",
-        });
-      }
-    }
-  }, [chatState, distance, scrollDist, scrollableDivRef, enableAutoScroll]);
 }

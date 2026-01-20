@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
@@ -23,12 +23,7 @@ import {
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
 import Separator from "@/refresh-components/Separator";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/refresh-components/tabs/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
@@ -322,12 +317,11 @@ export default function MCPAuthenticationModal({
 
   return (
     <Modal open={isOpen} onOpenChange={toggle}>
-      <Modal.Content tall skipOverlay={skipOverlay}>
+      <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgArrowExchange}
           title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
           description="Authenticate your connection to start using the MCP server."
-          className="p-4"
         />
 
         <Formik<MCPAuthFormValues>
@@ -355,7 +349,7 @@ export default function MCPAuthenticationModal({
 
             return (
               <Form className="flex flex-col h-full">
-                <Modal.Body className="flex-1 overflow-y-auto max-h-[580px] p-2 bg-background-tint-01 w-full">
+                <Modal.Body>
                   <div className="flex flex-col gap-4 p-2">
                     {/* Authentication Type */}
                     <FormField
@@ -559,27 +553,26 @@ export default function MCPAuthenticationModal({
                               : MCPAuthenticationPerformer.ADMIN
                           );
                         }}
-                        className="w-full"
                       >
-                        <TabsList className="w-full">
-                          <TabsTrigger value="per-user" className="flex-1">
+                        <Tabs.List>
+                          <Tabs.Trigger value="per-user">
                             Individual Key (Per User)
-                          </TabsTrigger>
-                          <TabsTrigger value="admin" className="flex-1">
+                          </Tabs.Trigger>
+                          <Tabs.Trigger value="admin">
                             Shared Key (Admin)
-                          </TabsTrigger>
-                        </TabsList>
+                          </Tabs.Trigger>
+                        </Tabs.List>
 
                         {/* Per-user Tab Content */}
-                        <TabsContent value="per-user" className="w-full">
+                        <Tabs.Content value="per-user">
                           <PerUserAuthConfig
                             values={values}
                             setFieldValue={setFieldValue}
                           />
-                        </TabsContent>
+                        </Tabs.Content>
 
                         {/* Admin Tab Content */}
-                        <TabsContent value="admin" className="w-full">
+                        <Tabs.Content value="admin">
                           <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
                             <FormField
                               name="api_token"
@@ -613,7 +606,7 @@ export default function MCPAuthenticationModal({
                               />
                             </FormField>
                           </div>
-                        </TabsContent>
+                        </Tabs.Content>
                       </Tabs>
                     </div>
                   )}
@@ -641,7 +634,7 @@ export default function MCPAuthenticationModal({
                   )}
                 </Modal.Body>
 
-                <Modal.Footer className="gap-2">
+                <Modal.Footer>
                   <Button
                     main
                     tertiary

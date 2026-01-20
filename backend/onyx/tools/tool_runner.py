@@ -17,6 +17,8 @@ from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -30,6 +32,9 @@ logger = setup_logger()
 QUERIES_FIELD = "queries"
 URLS_FIELD = "urls"
 GENERIC_TOOL_ERROR_MESSAGE = "Tool failed with error: {error}"
+
+# 10 minute timeout for tool execution to prevent indefinite hangs
+TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60
 
 # Mapping of tool name to the field that should be merged when multiple calls exist
 MERGEABLE_TOOL_FIELDS: dict[str, str] = {
@@ -294,6 +299,7 @@ def run_tool_calls(
             SearchToolOverrideKwargs
             | WebSearchToolOverrideKwargs
             | OpenURLToolOverrideKwargs
+            | MemoryToolOverrideKwargs
             | None
         ) = None
 
@@ -327,6 +333,9 @@ def run_tool_calls(
             )
             starting_citation_num += 100
 
+        elif isinstance(tool, MemoryTool):
+            raise NotImplementedError("MemoryTool is not implemented")
+
         tool_run_params.append((tool, tool_call, override_kwargs))
 
     # Run all tools in parallel
@@ -339,6 +348,7 @@ def run_tool_calls(
         functions_with_args,
         allow_failures=True,  # Continue even if some tools fail
         max_workers=max_concurrent_tools,
+        timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
     )
 
     # Process results and update citation_mapping

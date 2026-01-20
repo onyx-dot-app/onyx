@@ -13,7 +13,7 @@ export default function InstantSwitchConfirmModal({
 }: InstantSwitchConfirmModalProps) {
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Are you sure you want to do an instant switch?"
@@ -29,7 +29,7 @@ export default function InstantSwitchConfirmModal({
             <strong>This is not reversible.</strong>
           </Text>
         </Modal.Body>
-        <Modal.Footer className="p-4 gap-2">
+        <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
           <Button secondary onClick={onClose}>
             Cancel

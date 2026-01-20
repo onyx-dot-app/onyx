@@ -3,21 +3,16 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import AgentCard from "@/refresh-components/AgentCard";
 import { useUser } from "@/components/user/UserProvider";
-import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/assistants/checkOwnership";
+import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/agents";
 import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import CounterSeparator from "@/refresh-components/CounterSeparator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -442,29 +437,33 @@ export default function AgentsNavigationPage() {
       >
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
-            <InputTypeIn
-              ref={searchInputRef}
-              placeholder="Search agents..."
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              leftSearchIcon
-            />
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) => setActiveTab(value as "all" | "your")}
-            >
-              <TabsList>
-                <TabsTrigger value="all">All Agents</TabsTrigger>
-                <TabsTrigger value="your">Your Agents</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex-[2]">
+              <InputTypeIn
+                ref={searchInputRef}
+                placeholder="Search agents..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                leftSearchIcon
+              />
+            </div>
+            <div className="flex-1">
+              <Tabs
+                value={activeTab}
+                onValueChange={(value) => setActiveTab(value as "all" | "your")}
+              >
+                <Tabs.List>
+                  <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
+                  <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
+                </Tabs.List>
+              </Tabs>
+            </div>
           </div>
           <div className="flex flex-row gap-2">
             <Popover
               open={creatorFilterOpen}
               onOpenChange={setCreatorFilterOpen}
             >
-              <PopoverTrigger asChild>
+              <Popover.Trigger asChild>
                 <FilterButton
                   leftIcon={SvgUser}
                   active={selectedCreatorIds.size > 0}
@@ -473,9 +472,9 @@ export default function AgentsNavigationPage() {
                 >
                   {creatorFilterButtonText}
                 </FilterButton>
-              </PopoverTrigger>
-              <PopoverContent align="start">
-                <PopoverMenu medium>
+              </Popover.Trigger>
+              <Popover.Content align="start">
+                <PopoverMenu>
                   {[
                     <InputTypeIn
                       key="created-by"
@@ -530,13 +529,13 @@ export default function AgentsNavigationPage() {
                     }),
                   ]}
                 </PopoverMenu>
-              </PopoverContent>
+              </Popover.Content>
             </Popover>
             <Popover
               open={actionsFilterOpen}
               onOpenChange={setActionsFilterOpen}
             >
-              <PopoverTrigger asChild>
+              <Popover.Trigger asChild>
                 <FilterButton
                   leftIcon={SvgActions}
                   transient={actionsFilterOpen}
@@ -550,9 +549,9 @@ export default function AgentsNavigationPage() {
                 >
                   {actionsFilterButtonText}
                 </FilterButton>
-              </PopoverTrigger>
-              <PopoverContent align="start">
-                <PopoverMenu medium>
+              </Popover.Trigger>
+              <Popover.Content align="start">
+                <PopoverMenu>
                   {[
                     <InputTypeIn
                       key="actions"
@@ -637,7 +636,7 @@ export default function AgentsNavigationPage() {
                     }),
                   ]}
                 </PopoverMenu>
-              </PopoverContent>
+              </Popover.Content>
             </Popover>
           </div>
         </div>

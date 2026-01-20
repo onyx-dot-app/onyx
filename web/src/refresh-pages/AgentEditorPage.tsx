@@ -52,20 +52,17 @@ import {
   UserFileStatus,
 } from "@/app/chat/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverMenu,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
   SvgExpand,
   SvgFold,
   SvgImage,
+  SvgLock,
   SvgOnyxOctagon,
   SvgSliders,
+  SvgTrash,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
@@ -90,6 +87,9 @@ import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { deleteAgent } from "@/lib/agents";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -204,7 +204,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
       />
 
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           <InputAvatar className="group/InputAvatar relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
             {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
             <CustomAgentAvatar
@@ -220,9 +220,9 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               Edit
             </Button>
           </InputAvatar>
-        </PopoverTrigger>
-        <PopoverContent>
-          <PopoverMenu medium>
+        </Popover.Trigger>
+        <Popover.Content>
+          <PopoverMenu>
             {[
               <LineItem
                 key="upload-image"
@@ -255,7 +255,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               </div>,
             ]}
           </PopoverMenu>
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
     </>
   );
@@ -349,39 +349,44 @@ function MCPServerCard({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <Button
-              internal
-              rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
-              onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
-            >
-              {actionsLayouts.isFolded ? "Expand" : "Fold"}
-            </Button>
+            {enabledTools.length > 0 && (
+              <Button
+                internal
+                rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
+                onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
+              >
+                {actionsLayouts.isFolded ? "Expand" : "Fold"}
+              </Button>
+            )}
           </GeneralLayouts.Section>
         </ActionsLayouts.Header>
-        <ActionsLayouts.Content>
-          {isLoading ? (
+        {isLoading ? (
+          <ActionsLayouts.Content>
             <ActionsLayouts.ToolSkeleton />
-          ) : filteredTools.length === 0 ? (
-            <ActionsLayouts.NoToolsFound />
-          ) : (
-            filteredTools.map((tool) => (
-              <ActionsLayouts.Tool
-                key={tool.id}
-                name={`${serverFieldName}.tool_${tool.id}`}
-                title={tool.name}
-                description={tool.description}
-                icon={tool.icon ?? SvgSliders}
-                disabled={!tool.isAvailable}
-                rightChildren={
-                  <SwitchField
-                    name={`${serverFieldName}.tool_${tool.id}`}
-                    disabled={!isServerEnabled}
-                  />
-                }
-              />
-            ))
-          )}
-        </ActionsLayouts.Content>
+          </ActionsLayouts.Content>
+        ) : (
+          enabledTools.length > 0 &&
+          filteredTools.length > 0 && (
+            <ActionsLayouts.Content>
+              {filteredTools.map((tool) => (
+                <ActionsLayouts.Tool
+                  key={tool.id}
+                  name={`${serverFieldName}.tool_${tool.id}`}
+                  title={tool.name}
+                  description={tool.description}
+                  icon={tool.icon ?? SvgSliders}
+                  disabled={!tool.isAvailable}
+                  rightChildren={
+                    <SwitchField
+                      name={`${serverFieldName}.tool_${tool.id}`}
+                      disabled={!isServerEnabled}
+                    />
+                  }
+                />
+              ))}
+            </ActionsLayouts.Content>
+          )
+        )}
       </ActionsLayouts.Root>
     </actionsLayouts.Provider>
   );
@@ -443,6 +448,8 @@ export default function AgentEditorPage({
   const appRouter = useAppRouter();
   const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
+  const shareAgentModal = useCreateModal();
+  const deleteAgentModal = useCreateModal();
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -571,30 +578,33 @@ export default function AgentEditorPage({
     replace_base_system_prompt:
       existingAgent?.replace_base_system_prompt ?? false,
     reminders: existingAgent?.task_prompt ?? "",
+    // For new assistants, default to false for optional tools to avoid
+    // "Tool not available" errors when the tool isn't configured.
+    // For existing assistants, preserve the current tool configuration.
     image_generation:
-      (!!imageGenTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
-        )) ??
-      true,
+      !!imageGenTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
+      ) ??
+        false),
     web_search:
-      (!!webSearchTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
-        )) ??
-      true,
+      !!webSearchTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === WEB_SEARCH_TOOL_ID
+      ) ??
+        false),
     open_url:
-      (!!openURLTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
-        )) ??
-      true,
+      !!openURLTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === OPEN_URL_TOOL_ID
+      ) ??
+        false),
     code_interpreter:
-      (!!codeInterpreterTool &&
-        existingAgent?.tools?.some(
-          (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
-        )) ??
-      true,
+      !!codeInterpreterTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
+      ) ??
+        false),
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
@@ -631,6 +641,11 @@ export default function AgentEditorPage({
         existingAgent?.tools?.some((t) => t.id === openApiTool.id) ?? false,
       ])
     ),
+
+    // Sharing
+    shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
+    shared_group_ids: existingAgent?.groups ?? [],
+    is_public: existingAgent?.is_public ?? true,
   };
 
   const validationSchema = Yup.object().shape({
@@ -775,15 +790,15 @@ export default function AgentEditorPage({
             ? values.document_set_ids
             : [],
         num_chunks: numChunks,
-        is_public: existingAgent?.is_public ?? true,
+        is_public: values.is_public,
         // recency_bias: ...,
         // llm_filter_extraction: ...,
         llm_relevance_filter: false,
         llm_model_provider_override: values.llm_model_provider_override || null,
         llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,
-        users: undefined, // TODO: Handle restricted access users
-        groups: [], // TODO: Handle groups
+        users: values.shared_user_ids,
+        groups: values.shared_group_ids,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
@@ -849,6 +864,30 @@ export default function AgentEditorPage({
         message: `An error occurred: ${error}`,
       });
     }
+  }
+
+  // Delete agent handler
+  async function handleDeleteAgent() {
+    if (!existingAgent) return;
+
+    const error = await deleteAgent(existingAgent.id);
+
+    if (error) {
+      setPopup({
+        type: "error",
+        message: `Failed to delete agent: ${error}`,
+      });
+    } else {
+      setPopup({
+        type: "success",
+        message: "Agent deleted successfully",
+      });
+
+      await refreshAgents();
+      router.push("/chat/agents");
+    }
+
+    deleteAgentModal.toggle(false);
   }
 
   // FilePickerPopover callbacks - defined outside render to avoid inline functions
@@ -937,9 +976,28 @@ export default function AgentEditorPage({
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
+            const fileStatusMap = new Map(
+              allRecentFiles.map((f) => [f.id, f.status])
+            );
+
+            const hasUploadingFiles = values.user_file_ids.some(
+              (fileId: string) => {
+                const status = fileStatusMap.get(fileId);
+                return (
+                  status === undefined || status === UserFileStatus.UPLOADING
+                );
+              }
+            );
+
+            const hasProcessingFiles = values.user_file_ids.some(
+              (fileId: string) =>
+                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
+            );
+
             return (
               <>
                 <FormWarningsEffect />
+
                 <userFilesModal.Provider>
                   <UserFilesModal
                     title="User Files"
@@ -988,6 +1046,40 @@ export default function AgentEditorPage({
                   />
                 </userFilesModal.Provider>
 
+                <shareAgentModal.Provider>
+                  <ShareAgentModal
+                    agent={existingAgent}
+                    onShare={(userIds, groupIds, isPublic) => {
+                      setFieldValue("shared_user_ids", userIds);
+                      setFieldValue("shared_group_ids", groupIds);
+                      setFieldValue("is_public", isPublic);
+                    }}
+                  />
+                </shareAgentModal.Provider>
+
+                <deleteAgentModal.Provider>
+                  {deleteAgentModal.isOpen && (
+                    <ConfirmationModalLayout
+                      icon={SvgTrash}
+                      title="Delete Agent"
+                      submit={
+                        <Button danger onClick={handleDeleteAgent}>
+                          Delete Agent
+                        </Button>
+                      }
+                      onClose={() => deleteAgentModal.toggle(false)}
+                    >
+                      <GeneralLayouts.Section alignItems="start" gap={0.5}>
+                        <Text>
+                          Anyone using this agent will no longer be able to
+                          access it. Deletion cannot be undone.
+                        </Text>
+                        <Text>Are you sure you want to delete this agent?</Text>
+                      </GeneralLayouts.Section>
+                    </ConfirmationModalLayout>
+                  )}
+                </deleteAgentModal.Provider>
+
                 <Form className="h-full w-full">
                   <SettingsLayouts.Root>
                     <SettingsLayouts.Header
@@ -1004,7 +1096,12 @@ export default function AgentEditorPage({
                           </Button>
                           <Button
                             type="submit"
-                            disabled={isSubmitting || !isValid || !dirty}
+                            disabled={
+                              isSubmitting ||
+                              !isValid ||
+                              !dirty ||
+                              hasUploadingFiles
+                            }
                           >
                             {existingAgent ? "Save" : "Create"}
                           </Button>
@@ -1022,7 +1119,7 @@ export default function AgentEditorPage({
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputLayouts.Vertical name="name" label="Name">
+                          <InputLayouts.Vertical name="name" title="Name">
                             <InputTypeInField
                               name="name"
                               placeholder="Name your agent"
@@ -1031,7 +1128,7 @@ export default function AgentEditorPage({
 
                           <InputLayouts.Vertical
                             name="description"
-                            label="Description"
+                            title="Description"
                             optional
                           >
                             <InputTextAreaField
@@ -1041,10 +1138,10 @@ export default function AgentEditorPage({
                           </InputLayouts.Vertical>
                         </GeneralLayouts.Section>
 
-                        <GeneralLayouts.Section fit>
+                        <GeneralLayouts.Section width="fit">
                           <InputLayouts.Vertical
                             name="agent_avatar"
-                            label="Agent Avatar"
+                            title="Agent Avatar"
                             center
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
@@ -1057,7 +1154,7 @@ export default function AgentEditorPage({
                       <GeneralLayouts.Section>
                         <InputLayouts.Vertical
                           name="instructions"
-                          label="Instructions"
+                          title="Instructions"
                           optional
                           description="Add instructions to tailor the response for this agent."
                         >
@@ -1069,7 +1166,7 @@ export default function AgentEditorPage({
 
                         <InputLayouts.Vertical
                           name="starter_messages"
-                          label="Conversation Starters"
+                          title="Conversation Starters"
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           optional
                         >
@@ -1082,15 +1179,14 @@ export default function AgentEditorPage({
                       <GeneralLayouts.Section>
                         <GeneralLayouts.Section gap={1}>
                           <InputLayouts.Label
-                            name="knowledge"
-                            label="Knowledge"
+                            title="Knowledge"
                             description="Add specific connectors and documents for this agent to use to inform its responses."
                           />
 
                           <Card>
                             <InputLayouts.Horizontal
                               name="enable_knowledge"
-                              label="Enable Knowledge"
+                              title="Enable Knowledge"
                               center
                             >
                               <SwitchField name="enable_knowledge" />
@@ -1099,7 +1195,7 @@ export default function AgentEditorPage({
                             {values.enable_knowledge && (
                               <InputLayouts.Horizontal
                                 name="knowledge_source"
-                                label="Knowledge Source"
+                                title="Knowledge Source"
                                 description="Choose the sources of truth this agent refers to."
                                 center
                               >
@@ -1123,7 +1219,10 @@ export default function AgentEditorPage({
                             {values.enable_knowledge &&
                               values.knowledge_source === "team_knowledge" &&
                               ((documentSets?.length ?? 0) > 0 ? (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section
+                                  gap={0.5}
+                                  alignItems="start"
+                                >
                                   {documentSets!.map((documentSet) => (
                                     <DocumentSetSelectable
                                       key={documentSet.id}
@@ -1163,7 +1262,10 @@ export default function AgentEditorPage({
 
                             {values.enable_knowledge &&
                               values.knowledge_source === "user_knowledge" && (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section
+                                  gap={0.5}
+                                  alignItems="start"
+                                >
                                   <FilePickerPopover
                                     trigger={(open) => (
                                       <CreateButton transient={open}>
@@ -1200,6 +1302,7 @@ export default function AgentEditorPage({
                                       flexDirection="row"
                                       wrap
                                       gap={0.5}
+                                      justifyContent="start"
                                     >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
@@ -1230,6 +1333,14 @@ export default function AgentEditorPage({
                                       })}
                                     </GeneralLayouts.Section>
                                   )}
+                                  {hasProcessingFiles && (
+                                    <Text as="p" text03 secondaryBody>
+                                      Onyx is still processing your uploaded
+                                      files. You can create the agent now, but
+                                      it will not have access to all files until
+                                      processing completes.
+                                    </Text>
+                                  )}
                                 </GeneralLayouts.Section>
                               )}
                           </Card>
@@ -1249,12 +1360,18 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section gap={0.5}>
                           <SimpleTooltip
                             tooltip={imageGenerationDisabledTooltip}
-                            side="top"
+                            side="left"
                           >
-                            <Card disabled={!isImageGenerationAvailable}>
+                            <Card
+                              variant={
+                                isImageGenerationAvailable
+                                  ? undefined
+                                  : "disabled"
+                              }
+                            >
                               <InputLayouts.Horizontal
                                 name="image_generation"
-                                label="Image Generation"
+                                title="Image Generation"
                                 description="Generate and manipulate images using AI-powered tools."
                               >
                                 <SwitchField
@@ -1265,10 +1382,12 @@ export default function AgentEditorPage({
                             </Card>
                           </SimpleTooltip>
 
-                          <Card>
+                          <Card
+                            variant={!!webSearchTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="web_search"
-                              label="Web Search"
+                              title="Web Search"
                               description="Search the web for real-time information and up-to-date results."
                             >
                               <SwitchField
@@ -1278,10 +1397,12 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card>
+                          <Card
+                            variant={!!openURLTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="open_url"
-                              label="Open URL"
+                              title="Open URL"
                               description="Fetch and read content from web URLs."
                             >
                               <SwitchField
@@ -1291,10 +1412,14 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card disabled={!codeInterpreterTool}>
+                          <Card
+                            variant={
+                              !!codeInterpreterTool ? undefined : "disabled"
+                            }
+                          >
                             <InputLayouts.Horizontal
                               name="code_interpreter"
-                              label="Code Interpreter"
+                              title="Code Interpreter"
                               description="Generate and run code."
                             >
                               <SwitchField
@@ -1353,8 +1478,24 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section>
                           <Card>
                             <InputLayouts.Horizontal
+                              title="Share This Agent"
+                              description="Share this agent with other users, groups, or everyone in your organization. "
+                              center
+                            >
+                              <Button
+                                secondary
+                                leftIcon={SvgLock}
+                                onClick={() => shareAgentModal.toggle(true)}
+                              >
+                                Share
+                              </Button>
+                            </InputLayouts.Horizontal>
+                          </Card>
+
+                          <Card>
+                            <InputLayouts.Horizontal
                               name="llm_model"
-                              label="Default Model"
+                              title="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
                               center
                             >
@@ -1368,7 +1509,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
                               name="knowledge_cutoff_date"
-                              label="Knowledge Cutoff Date"
+                              title="Knowledge Cutoff Date"
                               description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
                               center
                             >
@@ -1376,7 +1517,7 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                             <InputLayouts.Horizontal
                               name="replace_base_system_prompt"
-                              label="Overwrite System Prompt"
+                              title="Overwrite System Prompt"
                               description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
                             >
                               <SwitchField name="replace_base_system_prompt" />
@@ -1386,7 +1527,7 @@ export default function AgentEditorPage({
                           <GeneralLayouts.Section gap={0.25}>
                             <InputLayouts.Vertical
                               name="reminders"
-                              label="Reminders"
+                              title="Reminders"
                             >
                               <InputTextAreaField
                                 name="reminders"
@@ -1403,6 +1544,28 @@ export default function AgentEditorPage({
                           </GeneralLayouts.Section>
                         </GeneralLayouts.Section>
                       </SimpleCollapsible>
+
+                      {existingAgent && (
+                        <>
+                          <Separator noPadding />
+
+                          <Card>
+                            <InputLayouts.Horizontal
+                              title="Delete This Agent"
+                              description="Anyone using this agent will no longer be able to access it."
+                              center
+                            >
+                              <Button
+                                secondary
+                                danger
+                                onClick={() => deleteAgentModal.toggle(true)}
+                              >
+                                Delete Agent
+                              </Button>
+                            </InputLayouts.Horizontal>
+                          </Card>
+                        </>
+                      )}
                     </SettingsLayouts.Body>
                   </SettingsLayouts.Root>
                 </Form>

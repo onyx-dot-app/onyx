@@ -16,13 +16,13 @@ export default function ExceptionTraceModal({
 
   return (
     <Modal open onOpenChange={onOutsideClick}>
-      <Modal.Content large>
+      <Modal.Content width="lg" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Full Exception Trace"
           onClose={onOutsideClick}
         />
-        <Modal.Body className="overflow-y-auto overflow-x-hidden pr-3 max-h-[70vh]">
+        <Modal.Body>
           <div className="mb-6">
             {!copyClicked ? (
               <button
@@ -34,12 +34,12 @@ export default function ExceptionTraceModal({
                 }}
                 className="flex w-fit items-center hover:bg-accent-background p-2 border-border border rounded"
               >
-                <Text as="span">Copy full trace</Text>
+                <Text>Copy full trace</Text>
                 <SvgCopy className="stroke-text-04 ml-2 h-4 w-4 flex flex-shrink-0" />
               </button>
             ) : (
               <div className="flex w-fit items-center hover:bg-accent-background p-2 border-border border rounded cursor-default">
-                <Text as="span">Copied to clipboard</Text>
+                <Text>Copied to clipboard</Text>
                 <SvgCheck className="stroke-text-04 my-auto ml-2 h-4 w-4 flex flex-shrink-0" />
               </div>
             )}

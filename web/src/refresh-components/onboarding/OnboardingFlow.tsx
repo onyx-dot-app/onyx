@@ -11,6 +11,7 @@ import NonAdminStep from "./components/NonAdminStep";
 
 type OnboardingFlowProps = {
   handleHideOnboarding: () => void;
+  handleFinishOnboarding: () => void;
   state: OnboardingState;
   actions: OnboardingActions;
   llmDescriptors: WellKnownLLMProviderDescriptor[];
@@ -18,6 +19,7 @@ type OnboardingFlowProps = {
 
 const OnboardingFlowInner = ({
   handleHideOnboarding,
+  handleFinishOnboarding,
   state: onboardingState,
   actions: onboardingActions,
   llmDescriptors,
@@ -31,6 +33,7 @@ const OnboardingFlowInner = ({
         state={onboardingState}
         actions={onboardingActions}
         handleHideOnboarding={handleHideOnboarding}
+        handleFinishOnboarding={handleFinishOnboarding}
       />
       {hasStarted && (
         <div className="relative w-full overflow-hidden">

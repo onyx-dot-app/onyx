@@ -51,7 +51,10 @@ import {
   useDocumentSidebarVisible,
 } from "@/app/chat/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
-import ChatUI, { ChatUIHandle } from "@/sections/ChatUI";
+import ChatScrollContainer, {
+  ChatScrollContainerHandle,
+} from "@/components/chat/ChatScrollContainer";
+import MessageList from "@/components/chat/MessageList";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -66,7 +69,9 @@ import OnboardingFlow from "@/refresh-components/onboarding/OnboardingFlow";
 import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
-import { SvgFileText } from "@opal/icons";
+import { SvgChevronDown, SvgFileText } from "@opal/icons";
+import ChatHeader from "@/app/chat/components/ChatHeader";
+import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 
@@ -204,6 +209,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     hasAnyProvider: llmManager.hasAnyProvider,
     isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
+    userId: user?.id,
   });
 
   const noAssistants = liveAssistant === null || liveAssistant === undefined;
@@ -266,18 +272,17 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     settings,
   });
 
-  const chatUiRef = useRef<ChatUIHandle>(null);
-  const autoScrollEnabled = user?.preferences?.auto_scroll ?? false;
+  const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // Handle input bar height changes for scroll adjustment
-  const handleInputHeightChange = useCallback(
-    (delta: number) => {
-      if (autoScrollEnabled && delta > 0) {
-        chatUiRef.current?.scrollBy(delta);
-      }
-    },
-    [autoScrollEnabled]
-  );
+  // Reset scroll button when session changes
+  useEffect(() => {
+    setShowScrollButton(false);
+  }, [currentChatSessionId]);
+
+  const handleScrollToBottom = useCallback(() => {
+    scrollContainerRef.current?.scrollToBottom();
+  }, []);
 
   const resetInputBar = useCallback(() => {
     chatInputBarRef.current?.reset();
@@ -327,6 +332,15 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     (state) => state.updateCurrentDocumentSidebarVisible
   );
   const messageHistory = useCurrentMessageHistory();
+
+  // Determine anchor: second-to-last message (last user message before current response)
+  const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
+  const anchorNodeId = anchorMessage?.nodeId;
+  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+
+  // Auto-scroll preference from user settings
+  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  const isStreaming = currentChatState === "streaming";
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -579,7 +593,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
             open
             onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
           >
-            <Modal.Content medium>
+            <Modal.Content>
               <Modal.Header
                 icon={SvgFileText}
                 title="Sources"
@@ -626,7 +640,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full flex flex-col items-center outline-none"
+              className="h-full w-full flex flex-col items-center outline-none relative"
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* ProjectUI */}
@@ -639,19 +653,31 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
               )}
 
               {/* ChatUI */}
-              {!!currentChatSessionId && (
-                <ChatUI
-                  ref={chatUiRef}
-                  liveAssistant={liveAssistant}
-                  llmManager={llmManager}
-                  deepResearchEnabled={deepResearchEnabled}
-                  currentMessageFiles={currentMessageFiles}
-                  setPresentingDocument={setPresentingDocument}
-                  onSubmit={onSubmit}
-                  onMessageSelection={onMessageSelection}
-                  stopGenerating={stopGenerating}
-                  handleResubmitLastMessage={handleResubmitLastMessage}
-                />
+              {!!currentChatSessionId && liveAssistant && (
+                <ChatScrollContainer
+                  ref={scrollContainerRef}
+                  sessionId={currentChatSessionId}
+                  anchorSelector={anchorSelector}
+                  autoScroll={autoScrollEnabled}
+                  isStreaming={isStreaming}
+                  onScrollButtonVisibilityChange={setShowScrollButton}
+                >
+                  <AppLayouts.StickyHeader>
+                    <ChatHeader />
+                  </AppLayouts.StickyHeader>
+                  <MessageList
+                    liveAssistant={liveAssistant}
+                    llmManager={llmManager}
+                    deepResearchEnabled={deepResearchEnabled}
+                    currentMessageFiles={currentMessageFiles}
+                    setPresentingDocument={setPresentingDocument}
+                    onSubmit={onSubmit}
+                    onMessageSelection={onMessageSelection}
+                    stopGenerating={stopGenerating}
+                    onResubmit={handleResubmitLastMessage}
+                    anchorNodeId={anchorNodeId}
+                  />
+                </ChatScrollContainer>
               )}
 
               {!currentChatSessionId && !currentProjectId && (
@@ -664,57 +690,82 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                 </div>
               )}
 
-              {/* ChatInputBar container */}
-              <div className="w-[min(50rem,100%)] pointer-events-auto z-sticky flex flex-col px-4 justify-center items-center">
-                {(showOnboarding ||
-                  (user?.role !== UserRole.ADMIN &&
-                    !user?.personalization?.name)) &&
-                  currentProjectId === null && (
-                    <OnboardingFlow
-                      handleHideOnboarding={hideOnboarding}
-                      state={onboardingState}
-                      actions={onboardingActions}
-                      llmDescriptors={llmDescriptors}
-                    />
+              {/* ChatInputBar container - absolutely positioned when in chat, centered when no session */}
+              <div
+                className={cn(
+                  "flex justify-center",
+                  currentChatSessionId
+                    ? "absolute bottom-0 left-0 right-0 pointer-events-none"
+                    : "w-full"
+                )}
+              >
+                <div
+                  className={cn(
+                    "w-[min(50rem,100%)] z-sticky flex flex-col px-4",
+                    currentChatSessionId && "pointer-events-auto"
+                  )}
+                >
+                  {/* Scroll to bottom button - positioned above ChatInputBar */}
+                  {showScrollButton && (
+                    <div className="mb-2 self-center">
+                      <IconButton
+                        icon={SvgChevronDown}
+                        onClick={handleScrollToBottom}
+                        aria-label="Scroll to bottom"
+                      />
+                    </div>
                   )}
 
-                <ChatInputBar
-                  ref={chatInputBarRef}
-                  deepResearchEnabled={deepResearchEnabled}
-                  toggleDeepResearch={toggleDeepResearch}
-                  toggleDocumentSidebar={toggleDocumentSidebar}
-                  filterManager={filterManager}
-                  llmManager={llmManager}
-                  removeDocs={() => setSelectedDocuments([])}
-                  retrievalEnabled={retrievalEnabled}
-                  selectedDocuments={selectedDocuments}
-                  initialMessage={
-                    searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
-                  }
-                  stopGenerating={stopGenerating}
-                  onSubmit={handleChatInputSubmit}
-                  onHeightChange={handleInputHeightChange}
-                  chatState={currentChatState}
-                  currentSessionFileTokenCount={
-                    currentChatSessionId
-                      ? currentSessionFileTokenCount
-                      : projectContextTokenCount
-                  }
-                  availableContextTokens={availableContextTokens}
-                  selectedAssistant={selectedAssistant || liveAssistant}
-                  handleFileUpload={handleMessageSpecificFileUpload}
-                  setPresentingDocument={setPresentingDocument}
-                  disabled={
-                    (!llmManager.isLoadingProviders &&
-                      llmManager.hasAnyProvider === false) ||
-                    (!isLoadingOnboarding &&
-                      onboardingState.currentStep !== OnboardingStep.Complete)
-                  }
-                />
+                  {(showOnboarding ||
+                    (user?.role !== UserRole.ADMIN &&
+                      !user?.personalization?.name)) &&
+                    currentProjectId === null && (
+                      <OnboardingFlow
+                        handleHideOnboarding={hideOnboarding}
+                        handleFinishOnboarding={finishOnboarding}
+                        state={onboardingState}
+                        actions={onboardingActions}
+                        llmDescriptors={llmDescriptors}
+                      />
+                    )}
 
-                <Spacer rem={0.5} />
+                  <ChatInputBar
+                    ref={chatInputBarRef}
+                    deepResearchEnabled={deepResearchEnabled}
+                    toggleDeepResearch={toggleDeepResearch}
+                    toggleDocumentSidebar={toggleDocumentSidebar}
+                    filterManager={filterManager}
+                    llmManager={llmManager}
+                    removeDocs={() => setSelectedDocuments([])}
+                    retrievalEnabled={retrievalEnabled}
+                    selectedDocuments={selectedDocuments}
+                    initialMessage={
+                      searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
+                    }
+                    stopGenerating={stopGenerating}
+                    onSubmit={handleChatInputSubmit}
+                    chatState={currentChatState}
+                    currentSessionFileTokenCount={
+                      currentChatSessionId
+                        ? currentSessionFileTokenCount
+                        : projectContextTokenCount
+                    }
+                    availableContextTokens={availableContextTokens}
+                    selectedAssistant={selectedAssistant || liveAssistant}
+                    handleFileUpload={handleMessageSpecificFileUpload}
+                    setPresentingDocument={setPresentingDocument}
+                    disabled={
+                      (!llmManager.isLoadingProviders &&
+                        llmManager.hasAnyProvider === false) ||
+                      (!isLoadingOnboarding &&
+                        onboardingState.currentStep !== OnboardingStep.Complete)
+                    }
+                  />
 
-                {!!currentProjectId && <ProjectChatSessionList />}
+                  <Spacer rem={0.5} />
+
+                  {!!currentProjectId && <ProjectChatSessionList />}
+                </div>
               </div>
 
               {/* SearchUI */}

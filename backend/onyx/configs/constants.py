@@ -7,6 +7,7 @@ from enum import Enum
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
+ONYX_UTM_SOURCE = "onyx_app"
 SLACK_USER_TOKEN_PREFIX = "xoxp-"
 SLACK_BOT_TOKEN_PREFIX = "xoxb-"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
@@ -21,6 +22,9 @@ GEN_AI_API_KEY_STORAGE_KEY = "genai_api_key"
 PUBLIC_DOC_PAT = "PUBLIC"
 ID_SEPARATOR = ":;:"
 DEFAULT_BOOST = 0
+
+# Tag for endpoints that should be included in the public API documentation
+PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 
 # Cookies
 FASTAPI_USERS_AUTH_COOKIE_NAME = (
@@ -89,6 +93,7 @@ SSL_CERT_FILE = "bundle.pem"
 DANSWER_API_KEY_PREFIX = "API_KEY__"
 DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN = "onyxapikey.ai"
 UNNAMED_KEY_PLACEHOLDER = "Unnamed"
+DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service"
 
 # Key-Value store keys
 KV_REINDEX_KEY = "needs_reindexing"
@@ -235,6 +240,7 @@ class NotificationType(str, Enum):
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
     RELEASE_NOTES = "release_notes"
+    ASSISTANT_FILES_READY = "assistant_files_ready"
 
 
 class BlobType(str, Enum):
@@ -421,6 +427,9 @@ class OnyxRedisLocks:
     USER_FILE_PROJECT_SYNC_LOCK_PREFIX = "da_lock:user_file_project_sync"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
+
+    # Release notes
+    RELEASE_NOTES_FETCH_LOCK = "da_lock:release_notes_fetch"
 
 
 class OnyxRedisSignals:

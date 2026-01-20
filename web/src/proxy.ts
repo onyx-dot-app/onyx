@@ -6,8 +6,9 @@ import {
   SERVER_SIDE_ONLY__AUTH_TYPE,
 } from "./lib/constants";
 
-// Authentication cookie name (matches backend: FASTAPI_USERS_AUTH_COOKIE_NAME)
+// Authentication cookie names (matches backend constants)
 const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
+const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
 // Protected route prefixes (require authentication)
 const PROTECTED_ROUTES = ["/chat", "/admin", "/assistants", "/connector"];
@@ -68,8 +69,10 @@ export async function proxy(request: NextRequest) {
 
     if (isProtectedRoute && !isPublicRoute) {
       const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
+      const anonymousCookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME);
 
-      if (!authCookie) {
+      // Allow access if user has either a regular auth cookie or anonymous user cookie
+      if (!authCookie && !anonymousCookie) {
         const loginUrl = new URL("/auth/login", request.url);
         // Preserve full URL including query params and hash for deep linking
         const fullPath =

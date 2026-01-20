@@ -1,5 +1,3 @@
-from onyx.prompts.constants import GENERAL_SEP_PAT
-
 # ruff: noqa: E501, W605 start
 
 DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
@@ -12,7 +10,9 @@ ALT_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
 # This is editable by the user in the admin UI.
 # The first line is intended to help guide the general feel/behavior of the system.
 DEFAULT_SYSTEM_PROMPT = f"""
-You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.
+You are an expert assistant who is truthful, nuanced, insightful, and efficient. \
+Your goal is to deeply understand the user's intent, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. \
+Whenever there is any ambiguity around the user's query (or more information would be helpful), you use available tools (if any) to get more context.
 
 The current date is {DATETIME_REPLACEMENT_PAT}.{CITATION_GUIDANCE_REPLACEMENT_PAT}
 
@@ -93,17 +93,18 @@ This tool call completed but the results are no longer accessible.
 # date and time but the replacement pattern is not present in the prompt.
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
-CHAT_NAMING = f"""
-Given the following conversation, provide a SHORT name for the conversation.{{language_hint_or_empty}}
-IMPORTANT: TRY NOT TO USE MORE THAN 5 WORDS, MAKE IT AS CONCISE AS POSSIBLE.
-Focus the name on the important keywords to convey the topic of the conversation.
 
-Chat History:
-{GENERAL_SEP_PAT}
-{{chat_history}}
-{GENERAL_SEP_PAT}
+CHAT_NAMING_SYSTEM_PROMPT = """
+Given the conversation history, provide a SHORT name for the conversation. Focus the name on the important keywords to convey the topic of the conversation. \
+Make sure the name is in the same language as the user's language.
 
-Based on the above, what is a short name to convey the topic of the conversation?
+IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 
+
+CHAT_NAMING_REMINDER = """
+Provide a short name for the conversation. Refer to other messages in the conversation (not including this one) to determine the language of the name.
+
+IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
+""".strip()
 # ruff: noqa: E501, W605 end

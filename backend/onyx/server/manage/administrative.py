@@ -16,6 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
@@ -37,7 +38,6 @@ from onyx.server.manage.models import BoostDoc
 from onyx.server.manage.models import BoostUpdateRequest
 from onyx.server.manage.models import HiddenUpdateRequest
 from onyx.server.models import StatusResponse
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

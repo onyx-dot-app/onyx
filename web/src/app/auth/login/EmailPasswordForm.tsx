@@ -224,7 +224,7 @@ export default function EmailPasswordForm({
                           }
                           field.onChange(e);
                         }}
-                        placeholder="**************"
+                        placeholder="∗∗∗∗∗∗∗∗∗∗∗∗∗∗"
                         onClear={() => helper.setValue("")}
                         data-testid="password"
                         error={apiStatus === "error"}

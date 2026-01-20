@@ -1,12 +1,15 @@
 import { cn } from "@/lib/utils";
+import Text from "@/refresh-components/texts/Text";
 import { WithoutStyles } from "@/types";
+import { IconProps } from "@opal/types";
 import React from "react";
 
 export type FlexDirection = "row" | "column";
-export type JustifyContent = "start" | "center" | "end";
-export type AlignItems = "start" | "center" | "end";
+export type JustifyContent = "start" | "center" | "end" | "between";
+export type AlignItems = "start" | "center" | "end" | "stretch";
+export type Length = "auto" | "fit" | "full";
 
-const directionClassMap: Record<FlexDirection, string> = {
+const flexDirectionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
   column: "flex-col",
 };
@@ -14,11 +17,23 @@ const justifyClassMap: Record<JustifyContent, string> = {
   start: "justify-start",
   center: "justify-center",
   end: "justify-end",
+  between: "justify-between",
 };
 const alignClassMap: Record<AlignItems, string> = {
   start: "items-start",
   center: "items-center",
   end: "items-end",
+  stretch: "items-stretch",
+};
+const widthClassmap: Record<Length, string> = {
+  auto: "w-auto",
+  fit: "w-fit",
+  full: "w-full",
+};
+const heightClassmap: Record<Length, string> = {
+  auto: "h-auto",
+  fit: "h-fit",
+  full: "h-full",
 };
 
 /**
@@ -27,14 +42,15 @@ const alignClassMap: Record<AlignItems, string> = {
  * Provides a standardized layout container with configurable direction and spacing.
  * Uses flexbox layout with customizable gap between children. Defaults to column layout.
  *
- * @param flexDirection - Flex direction. Default: column.
- * @param justifyContent - Justify content along the main axis. Default: center.
- * @param alignItems - Align items along the cross axis. Default: center.
+ * @param flexDirection - Flex direction. Default: "column".
+ * @param justifyContent - Justify content along the main axis. Default: "center".
+ * @param alignItems - Align items along the cross axis. Default: "center".
+ * @param width - Width of the container: "auto", "fit", or "full". Default: "full".
+ * @param height - Height of the container: "auto", "fit", or "full". Default: "full".
  * @param gap - Gap in REM units between children. Default: 1 (translates to gap-4 in Tailwind)
  * @param padding - Padding in REM units. Default: 0
- * @param fit - If true, uses w-fit instead of w-full. Default: false
  * @param wrap - If true, enables flex-wrap. Default: false
- * @param children - React children to render inside the section
+ * @param dbg - If true, adds a debug red border for visual debugging. Default: false
  *
  * @example
  * ```tsx
@@ -62,11 +78,16 @@ const alignClassMap: Record<AlignItems, string> = {
  * <GeneralLayouts.Section flexDirection="row" justifyContent="center" alignItems="center">
  *   <Text>Centered content</Text>
  * </GeneralLayouts.Section>
+ *
+ * // Section with fit width
+ * <GeneralLayouts.Section width="fit">
+ *   <Button>Fit to content</Button>
+ * </GeneralLayouts.Section>
  * ```
  *
  * @remarks
  * - The component defaults to column layout when no direction is specified
- * - Full width by default (w-full) unless fit is true
+ * - Full width and height by default
  * - Prevents style overrides (className and style props are not available)
  * - Import using namespace import for consistent usage: `import * as GeneralLayouts from "@/layouts/general-layouts"`
  */
@@ -75,36 +96,170 @@ export interface SectionProps
   flexDirection?: FlexDirection;
   justifyContent?: JustifyContent;
   alignItems?: AlignItems;
+  width?: Length;
+  height?: Length;
+
   gap?: number;
   padding?: number;
-  fit?: boolean;
   wrap?: boolean;
-}
 
-export function Section({
+  // Debugging utilities
+  dbg?: boolean;
+
+  ref?: React.Ref<HTMLDivElement>;
+}
+function Section({
   flexDirection = "column",
   justifyContent = "center",
   alignItems = "center",
+  width = "full",
+  height = "full",
   gap = 1,
   padding = 0,
-  fit,
   wrap,
+  dbg,
+  ref,
   ...rest
 }: SectionProps) {
-  const width = fit ? "w-fit" : "w-full";
-
   return (
     <div
+      ref={ref}
       className={cn(
-        "flex w-full",
-        wrap && "flex-wrap",
+        "flex",
+
+        flexDirectionClassMap[flexDirection],
         justifyClassMap[justifyContent],
         alignClassMap[alignItems],
-        width,
-        directionClassMap[flexDirection]
+        widthClassmap[width],
+        heightClassmap[height],
+
+        wrap && "flex-wrap",
+        dbg && "dbg-red"
       )}
       style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
       {...rest}
     />
   );
 }
+
+/**
+ * LineItemLayout - A layout for icon + title + description rows
+ *
+ * Structure:
+ *   Flexbox Row [
+ *     Grid [
+ *       [Icon] [Title      ]
+ *       [    ] [Description]
+ *     ],
+ *     rightChildren
+ *   ]
+ *
+ * - Icon column auto-sizes to icon width
+ * - Icon vertically centers with title
+ * - Description aligns with title's left edge (both in grid column 2)
+ * - rightChildren is outside the grid, in the outer flexbox
+ *
+ * Variants:
+ * - `primary`: Standard size (20px icon) with emphasized text. The default for prominent list items.
+ * - `secondary`: Compact size (16px icon) with standard text. Use for denser lists or nested items.
+ * - `tertiary`: Compact size (16px icon) with standard text. Use for less prominent items in tight layouts.
+ * - `tertiary-muted`: Compact size (16px icon) with muted text styling. Use for de-emphasized or secondary information.
+ *
+ * @param icon - Optional icon component to display on the left
+ * @param title - The main title text (required)
+ * @param description - Optional description text below the title
+ * @param rightChildren - Optional content to render on the right side
+ * @param variant - Visual variant. Default: "primary"
+ * @param strikethrough - If true, applies line-through style to title. Default: false
+ * @param loading - If true, renders skeleton placeholders instead of content. Default: false
+ * @param center - If true, vertically centers items; otherwise aligns to start. Default: false
+ */
+type LineItemLayoutVariant =
+  | "primary"
+  | "secondary"
+  | "tertiary"
+  | "tertiary-muted";
+export interface LineItemLayoutProps {
+  icon?: React.FunctionComponent<IconProps>;
+  title: string;
+  description?: string;
+  rightChildren?: React.ReactNode;
+
+  variant?: LineItemLayoutVariant;
+  strikethrough?: boolean;
+  loading?: boolean;
+  center?: boolean;
+  rightChildrenReducedPadding?: boolean;
+}
+function LineItemLayout({
+  icon: Icon,
+  title,
+  description,
+  rightChildren,
+
+  variant = "primary",
+  strikethrough,
+  loading,
+  center,
+  rightChildrenReducedPadding,
+}: LineItemLayoutProps) {
+  // Derive styling from variant
+  const isCompact =
+    variant === "secondary" ||
+    variant === "tertiary" ||
+    variant === "tertiary-muted";
+  const isMuted = variant === "tertiary-muted";
+
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      alignItems={center ? "center" : "start"}
+    >
+      <div
+        className="line-item-layout"
+        data-variant={variant}
+        data-has-icon={Icon ? "true" : undefined}
+        data-loading={loading ? "true" : undefined}
+        data-right-children-reduced-padding={
+          rightChildrenReducedPadding ? "true" : undefined
+        }
+      >
+        {/* Row 1: Icon, Title */}
+        {Icon && (
+          <Icon size={isCompact ? 16 : 20} className="line-item-layout-icon" />
+        )}
+        {loading ? (
+          <div className="line-item-layout-skeleton-title" />
+        ) : (
+          <Text
+            mainContentEmphasis={!isCompact}
+            text03={isMuted}
+            className={cn(strikethrough && "line-through")}
+          >
+            {title}
+          </Text>
+        )}
+
+        {/* Row 2: Description (column 2, or column 1 if no icon) */}
+        {loading && description ? (
+          <div className="line-item-layout-skeleton-description" />
+        ) : description ? (
+          <div className="line-item-layout-description">
+            <Text secondaryBody text03>
+              {description}
+            </Text>
+          </div>
+        ) : undefined}
+      </div>
+
+      {loading && rightChildren ? (
+        <div className="line-item-layout-skeleton-right" />
+      ) : rightChildren ? (
+        <div className="flex-shrink-0">{rightChildren}</div>
+      ) : undefined}
+    </Section>
+  );
+}
+
+export { Section, LineItemLayout };

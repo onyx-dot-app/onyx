@@ -25,7 +25,7 @@ export default function OnyxApiKeyForm({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content tall>
+      <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgKey}
           title={isUpdate ? "Update API Key" : "Create a new API Key"}

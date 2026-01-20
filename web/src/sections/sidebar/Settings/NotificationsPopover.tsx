@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
+import { usePostHog } from "posthog-js/react";
 import {
   Notification,
   NotificationType,
@@ -14,6 +15,8 @@ import { SvgSparkle, SvgRefreshCw, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { Section } from "@/layouts/general-layouts";
+import Separator from "@/refresh-components/Separator";
 
 function getNotificationIcon(
   notifType: string
@@ -36,6 +39,7 @@ export default function NotificationsPopover({
   onNavigate,
 }: NotificationsPopoverProps) {
   const router = useRouter();
+  const posthog = usePostHog();
   const {
     data: notifications,
     mutate,
@@ -44,14 +48,34 @@ export default function NotificationsPopover({
 
   const handleNotificationClick = (notification: Notification) => {
     const link = notification.additional_data?.link;
-    if (link) {
-      onNavigate();
-      router.push(link as Route);
+    if (!link) return;
+
+    // Track release notes clicks
+    if (notification.notif_type === NotificationType.RELEASE_NOTES) {
+      posthog?.capture("release_notification_clicked", {
+        version: notification.additional_data?.version,
+      });
     }
+
+    // External links open in new tab
+    if (link.startsWith("http://") || link.startsWith("https://")) {
+      if (!notification.dismissed) {
+        handleDismiss(notification.id);
+      }
+      window.open(link, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // Relative links navigate internally
+    onNavigate();
+    router.push(link as Route);
   };
 
-  const handleDismiss = async (notificationId: number, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the LineItem onClick
+  const handleDismiss = async (
+    notificationId: number,
+    e?: React.MouseEvent
+  ) => {
+    e?.stopPropagation(); // Prevent triggering the LineItem onClick
     try {
       const response = await fetch(
         `/api/notifications/${notificationId}/dismiss`,
@@ -68,51 +92,57 @@ export default function NotificationsPopover({
   };
 
   return (
-    <div className="w-[20rem] h-[32rem] flex flex-col">
-      <div className="flex flex-row justify-between items-center p-4 border-b border-divider-subtle">
-        <Text as="p" headingH2>
-          Notifications
-        </Text>
-        <SvgX
-          className="stroke-text-05 w-[1.2rem] h-[1.2rem] hover:stroke-text-04 cursor-pointer"
-          onClick={onClose}
-        />
-      </div>
+    <Section gap={0.5} padding={0.25}>
+      <Section flexDirection="row" justifyContent="between" padding={0.5}>
+        <Text headingH3>Notifications</Text>
+        <IconButton icon={SvgX} internal onClick={onClose} />
+      </Section>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <Separator noPadding className="px-2" />
+
+      <Section>
         {isLoading ? (
-          <div className="w-full h-48 flex flex-col justify-center items-center">
-            <SimpleLoader className="animate-spin" />
+          <div className="h-48">
+            <Section>
+              <SimpleLoader />
+            </Section>
           </div>
         ) : !notifications || notifications.length === 0 ? (
-          <div className="w-full h-48 flex flex-col justify-center items-center">
-            <Text as="p" text03>
-              No notifications
-            </Text>
+          <div className="h-48">
+            <Section>
+              <Text as="p" text03>
+                No notifications
+              </Text>
+            </Section>
           </div>
         ) : (
-          <div className="flex flex-col py-2">
-            {notifications.map((notification) => (
-              <LineItem
-                key={notification.id}
-                icon={getNotificationIcon(notification.notif_type)}
-                description={notification.description ?? undefined}
-                onClick={() => handleNotificationClick(notification)}
-                rightChildren={
-                  <IconButton
-                    internal
-                    icon={SvgX}
-                    onClick={(e) => handleDismiss(notification.id, e)}
-                    tooltip="Dismiss"
-                  />
-                }
-              >
-                {notification.title}
-              </LineItem>
-            ))}
+          <div className="max-h-96 overflow-y-auto w-full">
+            <Section alignItems="stretch" gap={0}>
+              {notifications.map((notification) => (
+                <LineItem
+                  key={notification.id}
+                  icon={getNotificationIcon(notification.notif_type)}
+                  description={notification.description ?? undefined}
+                  onClick={() => handleNotificationClick(notification)}
+                  strikethrough={notification.dismissed}
+                  rightChildren={
+                    !notification.dismissed ? (
+                      <IconButton
+                        internal
+                        icon={SvgX}
+                        onClick={(e) => handleDismiss(notification.id, e)}
+                        tooltip="Dismiss"
+                      />
+                    ) : undefined
+                  }
+                >
+                  {notification.title}
+                </LineItem>
+              ))}
+            </Section>
           </div>
         )}
-      </div>
-    </div>
+      </Section>
+    </Section>
   );
 }

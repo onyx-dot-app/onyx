@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
@@ -15,10 +16,15 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_HTML_SIZE_BYTES,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_PDF_SIZE_BYTES,
+)
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     OnyxWebCrawler,
 )
@@ -97,7 +103,10 @@ def _get_active_content_provider(
         # NOTE: the OnyxWebCrawler is not stored in the content provider table,
         # so we need to return it directly.
 
-        return None, OnyxWebCrawler()
+        return None, OnyxWebCrawler(
+            max_pdf_size_bytes=DEFAULT_MAX_PDF_SIZE_BYTES,
+            max_html_size_bytes=DEFAULT_MAX_HTML_SIZE_BYTES,
+        )
 
     if provider_model.api_key is None:
         # TODO - this is not a great error, in fact, this key should not be nullable.

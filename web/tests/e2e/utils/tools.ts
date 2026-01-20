@@ -6,9 +6,9 @@ export const TOOL_IDS = {
   actionToggle: '[data-testid="action-management-toggle"]',
   options: '[data-testid="tool-options"]',
   // These IDs are derived from tool.name in the app
-  searchOption: '[data-testid="tool-option-SearchTool"]',
-  webSearchOption: '[data-testid="tool-option-WebSearchTool"]',
-  imageGenerationOption: '[data-testid="tool-option-ImageGenerationTool"]',
+  searchOption: '[data-testid="tool-option-internal_search"]',
+  webSearchOption: '[data-testid="tool-option-web_search"]',
+  imageGenerationOption: '[data-testid="tool-option-generate_image"]',
   // Generic toggle selector used inside tool options
   toggleInput: 'input[type="checkbox"], input[type="radio"], [role="switch"]',
 } as const;
@@ -26,8 +26,10 @@ export async function waitForUnifiedGreeting(page: Page): Promise<string> {
 
 // Ensure the Action Management popover is open
 export async function openActionManagement(page: Page): Promise<void> {
-  await page.click(TOOL_IDS.actionToggle);
-  await page.waitForSelector(TOOL_IDS.options, { timeout: 5000 });
+  const actionToggle = page.locator(TOOL_IDS.actionToggle);
+  await actionToggle.waitFor({ timeout: 5000 });
+  await actionToggle.click();
+  await page.locator(TOOL_IDS.options).waitFor({ timeout: 5000 });
 }
 
 // Check presence of the Action Management toggle

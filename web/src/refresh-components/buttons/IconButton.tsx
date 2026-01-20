@@ -251,6 +251,8 @@ export interface IconButtonProps
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   icon: React.FunctionComponent<IconProps>;
   tooltip?: string;
+  toolTipPosition?: "top" | "bottom" | "left" | "right";
+  tooltipSize?: "sm" | "md" | "lg";
 }
 
 export default function IconButton({
@@ -271,7 +273,8 @@ export default function IconButton({
   icon: Icon,
   className,
   tooltip,
-
+  toolTipPosition = "top",
+  tooltipSize = "lg",
   ...props
 }: IconButtonProps) {
   const variant = main
@@ -331,7 +334,7 @@ export default function IconButton({
   if (!tooltip) return buttonElement;
 
   return (
-    <SimpleTooltip side="top" tooltip={tooltip}>
+    <SimpleTooltip side={toolTipPosition} size={tooltipSize} tooltip={tooltip}>
       {buttonElement}
     </SimpleTooltip>
   );

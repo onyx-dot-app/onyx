@@ -5,10 +5,9 @@ All queries run directly from pods.
 Supports two-cluster architecture (data plane and control plane in separate clusters).
 
 Usage:
-    PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py <tenant_id> [--force]
-    PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py --csv <csv_file_path> [--force] [--concurrency N]
+    PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py <tenant_id> \
+        --data-plane-context <context> --control-plane-context <context> [--force]
 
-    With explicit contexts:
     PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py --csv <csv_file_path> \
         --data-plane-context <context> --control-plane-context <context> [--force] [--concurrency N]
 """
@@ -26,6 +25,9 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_background_pod
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_worker_pod
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import get_tenant_status
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import read_tenant_ids_from_csv
+from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
+    TenantNotFoundInControlPlaneError,
+)
 
 # Global lock for thread-safe printing
 _print_lock: Lock = Lock()
@@ -37,15 +39,13 @@ def safe_print(*args: Any, **kwargs: Any) -> None:
         print(*args, **kwargs)
 
 
-def run_connector_deletion(
-    pod_name: str, tenant_id: str, context: str | None = None
-) -> None:
+def run_connector_deletion(pod_name: str, tenant_id: str, context: str) -> None:
     """Mark all connector credential pairs for deletion.
 
     Args:
         pod_name: Data plane pod to execute deletion on
         tenant_id: Tenant ID to process
-        context: Optional kubectl context for data plane cluster
+        context: kubectl context for data plane cluster
     """
     safe_print("  Marking all connector credential pairs for deletion...")
 
@@ -62,9 +62,7 @@ def run_connector_deletion(
 
     try:
         # Copy script to pod
-        cmd_cp = ["kubectl", "cp"]
-        if context:
-            cmd_cp.extend(["--context", context])
+        cmd_cp = ["kubectl", "cp", "--context", context]
         cmd_cp.extend(
             [
                 str(mark_deletion_script),
@@ -79,12 +77,9 @@ def run_connector_deletion(
         )
 
         # Execute script on pod
-        cmd_exec = ["kubectl", "exec"]
-        if context:
-            cmd_exec.extend(["--context", context])
+        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
         cmd_exec.extend(
             [
-                pod_name,
                 "--",
                 "python",
                 "/tmp/execute_connector_deletion.py",
@@ -118,8 +113,8 @@ def mark_tenant_connectors_for_deletion(
     tenant_id: str,
     data_plane_pod: str,
     control_plane_pod: str,
-    data_plane_context: str | None = None,
-    control_plane_context: str | None = None,
+    data_plane_context: str,
+    control_plane_context: str,
     force: bool = False,
 ) -> None:
     """Main function to mark all connectors for a tenant for deletion.
@@ -128,8 +123,8 @@ def mark_tenant_connectors_for_deletion(
         tenant_id: Tenant ID to process
         data_plane_pod: Data plane pod for connector operations
         control_plane_pod: Control plane pod for status checks
-        data_plane_context: Optional kubectl context for data plane cluster
-        control_plane_context: Optional kubectl context for control plane cluster
+        data_plane_context: kubectl context for data plane cluster
+        control_plane_context: kubectl context for control plane cluster
         force: Skip confirmations if True
     """
     safe_print(f"Processing connectors for tenant: {tenant_id}")
@@ -174,6 +169,23 @@ def mark_tenant_connectors_for_deletion(
                     )
             else:
                 raise RuntimeError(f"Could not verify tenant status for {tenant_id}")
+    except TenantNotFoundInControlPlaneError as e:
+        # Tenant/table not found in control plane
+        error_str = str(e)
+        safe_print(f"⚠️  WARNING: Tenant not found in control plane: {error_str}")
+
+        if force:
+            safe_print(
+                "[FORCE MODE] Tenant not found in control plane - continuing with connector deletion anyway"
+            )
+        else:
+            response = input("Continue anyway? Type 'yes' to confirm: ")
+            if response.lower() != "yes":
+                safe_print("Operation aborted - tenant not found in control plane")
+                raise RuntimeError(f"Tenant {tenant_id} not found in control plane")
+    except RuntimeError:
+        # Re-raise RuntimeError (from status checks above) without wrapping
+        raise
     except Exception as e:
         safe_print(f"⚠️  WARNING: Failed to check tenant status: {e}")
         if not force:
@@ -205,16 +217,14 @@ def main() -> None:
     if len(sys.argv) < 2:
         print(
             "Usage: PYTHONPATH=. python scripts/tenant_cleanup/"
-            "no_bastion_mark_connectors.py <tenant_id> [--force] [--concurrency N]"
+            "no_bastion_mark_connectors.py <tenant_id> \\"
+        )
+        print(
+            "           --data-plane-context <context> --control-plane-context <context> [--force]"
         )
         print(
             "       PYTHONPATH=. python scripts/tenant_cleanup/"
-            "no_bastion_mark_connectors.py --csv <csv_file_path> "
-            "[--force] [--concurrency N]"
-        )
-        print("\nTwo-cluster architecture (with explicit contexts):")
-        print(
-            "       PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py --csv <csv_file_path> \\"
+            "no_bastion_mark_connectors.py --csv <csv_file_path> \\"
         )
         print(
             "           --data-plane-context <context> --control-plane-context <context> [--force] [--concurrency N]"
@@ -222,20 +232,20 @@ def main() -> None:
         print("\nThis version runs ALL operations from pods (no bastion required)")
         print("\nArguments:")
         print(
-            "  tenant_id                  The tenant ID to process (required if not using --csv)"
+            "  tenant_id                   The tenant ID to process (required if not using --csv)"
         )
         print(
-            "  --csv PATH                 Path to CSV file containing tenant IDs to process"
+            "  --csv PATH                  Path to CSV file containing tenant IDs to process"
         )
-        print("  --force                    Skip all confirmation prompts (optional)")
+        print("  --force                     Skip all confirmation prompts (optional)")
         print(
-            "  --concurrency N            Process N tenants concurrently (default: 1)"
-        )
-        print(
-            "  --data-plane-context CTX   Kubectl context for data plane cluster (optional)"
+            "  --concurrency N             Process N tenants concurrently (default: 1)"
         )
         print(
-            "  --control-plane-context CTX Kubectl context for control plane cluster (optional)"
+            "  --data-plane-context CTX    Kubectl context for data plane cluster (required)"
+        )
+        print(
+            "  --control-plane-context CTX Kubectl context for control plane cluster (required)"
         )
         sys.exit(1)
 
@@ -243,7 +253,7 @@ def main() -> None:
     force = "--force" in sys.argv
     tenant_ids: list[str] = []
 
-    # Parse contexts
+    # Parse contexts (required)
     data_plane_context: str | None = None
     control_plane_context: str | None = None
 
@@ -272,6 +282,21 @@ def main() -> None:
             control_plane_context = sys.argv[idx + 1]
         except ValueError:
             pass
+
+    # Validate required contexts
+    if not data_plane_context:
+        print(
+            "Error: --data-plane-context is required",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if not control_plane_context:
+        print(
+            "Error: --control-plane-context is required",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Parse concurrency
     concurrency: int = 1

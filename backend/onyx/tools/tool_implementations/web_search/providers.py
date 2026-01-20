@@ -6,6 +6,12 @@ from onyx.tools.tool_implementations.open_url.firecrawl import FirecrawlClient
 from onyx.tools.tool_implementations.open_url.models import (
     WebContentProvider,
 )
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_HTML_SIZE_BYTES,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_PDF_SIZE_BYTES,
+)
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 from onyx.tools.tool_implementations.web_search.clients.exa_client import (
     ExaClient,
@@ -84,8 +90,15 @@ def build_content_provider_from_config(
 ) -> WebContentProvider | None:
     if provider_type == WebContentProviderType.ONYX_WEB_CRAWLER:
         if config.timeout_seconds is not None:
-            return OnyxWebCrawler(timeout_seconds=config.timeout_seconds)
-        return OnyxWebCrawler()
+            return OnyxWebCrawler(
+                timeout_seconds=config.timeout_seconds,
+                max_pdf_size_bytes=DEFAULT_MAX_PDF_SIZE_BYTES,
+                max_html_size_bytes=DEFAULT_MAX_HTML_SIZE_BYTES,
+            )
+        return OnyxWebCrawler(
+            max_pdf_size_bytes=DEFAULT_MAX_PDF_SIZE_BYTES,
+            max_html_size_bytes=DEFAULT_MAX_HTML_SIZE_BYTES,
+        )
 
     if provider_type == WebContentProviderType.FIRECRAWL:
         if config.base_url is None:
@@ -97,6 +110,9 @@ def build_content_provider_from_config(
             base_url=config.base_url,
             timeout_seconds=config.timeout_seconds,
         )
+
+    if provider_type == WebContentProviderType.EXA:
+        return ExaClient(api_key=api_key)
 
 
 def get_default_provider() -> WebSearchProvider | None:
@@ -121,4 +137,7 @@ def get_default_content_provider() -> WebContentProvider:
             if provider:
                 return provider
 
-    return OnyxWebCrawler()
+    return OnyxWebCrawler(
+        max_pdf_size_bytes=DEFAULT_MAX_PDF_SIZE_BYTES,
+        max_html_size_bytes=DEFAULT_MAX_HTML_SIZE_BYTES,
+    )

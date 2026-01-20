@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from typing import Tuple
 from uuid import UUID
 
@@ -90,59 +91,6 @@ def get_chat_sessions_by_slack_thread_id(
     return db_session.scalars(stmt).all()
 
 
-def get_valid_messages_from_query_sessions(
-    chat_session_ids: list[UUID],
-    db_session: Session,
-) -> dict[UUID, str]:
-    user_message_subquery = (
-        select(
-            ChatMessage.chat_session_id, func.min(ChatMessage.id).label("user_msg_id")
-        )
-        .where(
-            ChatMessage.chat_session_id.in_(chat_session_ids),
-            ChatMessage.message_type == MessageType.USER,
-        )
-        .group_by(ChatMessage.chat_session_id)
-        .subquery()
-    )
-
-    assistant_message_subquery = (
-        select(
-            ChatMessage.chat_session_id,
-            func.min(ChatMessage.id).label("assistant_msg_id"),
-        )
-        .where(
-            ChatMessage.chat_session_id.in_(chat_session_ids),
-            ChatMessage.message_type == MessageType.ASSISTANT,
-        )
-        .group_by(ChatMessage.chat_session_id)
-        .subquery()
-    )
-
-    query = (
-        select(ChatMessage.chat_session_id, ChatMessage.message)
-        .join(
-            user_message_subquery,
-            ChatMessage.chat_session_id == user_message_subquery.c.chat_session_id,
-        )
-        .join(
-            assistant_message_subquery,
-            ChatMessage.chat_session_id == assistant_message_subquery.c.chat_session_id,
-        )
-        .join(
-            ChatMessage__SearchDoc,
-            ChatMessage__SearchDoc.chat_message_id
-            == assistant_message_subquery.c.assistant_msg_id,
-        )
-        .where(ChatMessage.id == user_message_subquery.c.user_msg_id)
-    )
-
-    first_messages = db_session.execute(query).all()
-    logger.info(f"Retrieved {len(first_messages)} first messages with documents")
-
-    return {row.chat_session_id: row.message for row in first_messages}
-
-
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
 def get_chat_sessions_by_user(
@@ -181,7 +129,11 @@ def get_chat_sessions_by_user(
             .correlate(ChatSession)
         )
 
-        stmt = stmt.where(non_system_message_exists_subq)
+        # Leeway for newly created chats that don't have messages yet
+        time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        recently_created = ChatSession.time_created >= time
+
+        stmt = stmt.where(or_(non_system_message_exists_subq, recently_created))
 
     result = db_session.execute(stmt)
     chat_sessions = result.scalars().all()
@@ -503,21 +455,6 @@ def add_chats_to_session_from_slack_thread(
             message_type=chat_message.message_type,
             reasoning_tokens=chat_message.reasoning_tokens,
         )
-
-
-def get_search_docs_for_chat_message(
-    chat_message_id: int, db_session: Session
-) -> list[DBSearchDoc]:
-    stmt = (
-        select(DBSearchDoc)
-        .join(
-            ChatMessage__SearchDoc,
-            ChatMessage__SearchDoc.search_doc_id == DBSearchDoc.id,
-        )
-        .where(ChatMessage__SearchDoc.chat_message_id == chat_message_id)
-    )
-
-    return list(db_session.scalars(stmt).all())
 
 
 def add_search_docs_to_chat_message(

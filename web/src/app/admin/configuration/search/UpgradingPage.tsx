@@ -130,7 +130,7 @@ export default function UpgradingPage({
       {popup}
       {isCancelling && (
         <Modal open onOpenChange={() => setIsCancelling(false)}>
-          <Modal.Content small>
+          <Modal.Content width="sm" height="sm">
             <Modal.Header
               icon={SvgX}
               title="Cancel Embedding Model Switch"
@@ -142,7 +142,7 @@ export default function UpgradingPage({
                 previous model and all progress will be lost.
               </div>
             </Modal.Body>
-            <Modal.Footer className="p-4 flex gap-x-2 w-full justify-end">
+            <Modal.Footer>
               <Button onClick={onCancel}>Confirm</Button>
               <Button onClick={() => setIsCancelling(false)} secondary>
                 Cancel

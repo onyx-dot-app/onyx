@@ -30,24 +30,28 @@
 
 import { SvgEmpty } from "@opal/icons";
 import Card from "@/refresh-components/cards/Card";
-import * as GeneralLayouts from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
+import { LineItemLayout } from "@/layouts/general-layouts";
+import { IconProps } from "@opal/types";
 
 export interface EmptyMessageProps {
-  children: string;
+  icon?: React.FunctionComponent<IconProps>;
+  title: string;
+  description?: string;
 }
 
-export default function EmptyMessage({ children }: EmptyMessageProps) {
+export default function EmptyMessage({
+  icon: Icon = SvgEmpty,
+  title,
+  description,
+}: EmptyMessageProps) {
   return (
-    <Card translucent>
-      <GeneralLayouts.Section
-        flexDirection="row"
-        justifyContent="start"
-        gap={0.5}
-      >
-        <SvgEmpty size={16} className="stroke-text-03" />
-        <Text text03>{children}</Text>
-      </GeneralLayouts.Section>
+    <Card variant="tertiary">
+      <LineItemLayout
+        icon={Icon}
+        title={title}
+        description={description}
+        variant="tertiary-muted"
+      />
     </Card>
   );
 }

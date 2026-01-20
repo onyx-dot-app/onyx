@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { PopoverMenu } from "@/components/ui/popover";
+import { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import type { IconProps } from "@opal/types";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -17,6 +17,8 @@ export interface SwitchListItem {
   leading?: React.ReactNode;
   isEnabled: boolean;
   onToggle: () => void;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }
 
 export interface SwitchListProps {
@@ -54,7 +56,7 @@ export default function SwitchList({
   }, [items, searchTerm]);
 
   return (
-    <PopoverMenu medium footer={footer}>
+    <PopoverMenu footer={footer}>
       {[
         <div className="flex items-center gap-1" key="search">
           <IconButton
@@ -84,10 +86,13 @@ export default function SwitchList({
         </LineItem>,
 
         ...filteredItems.map((item) => {
+          const tooltip = item.disabled
+            ? item.disabledTooltip
+            : item.description;
           return (
             <SimpleTooltip
               key={item.id}
-              tooltip={item.description}
+              tooltip={tooltip}
               className="max-w-[30rem]"
             >
               <LineItem
@@ -102,6 +107,7 @@ export default function SwitchList({
                     checked={item.isEnabled}
                     onCheckedChange={item.onToggle}
                     aria-label={`Toggle ${item.label}`}
+                    disabled={item.disabled}
                   />
                 }
               >

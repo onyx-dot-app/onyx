@@ -63,15 +63,27 @@ test.describe("Message feedback thumbs controls", () => {
     await expect(likeButton).toBeVisible({ timeout: 15000 });
     await expect(dislikeButton).toBeVisible();
 
-    // Thumbs up submits positive feedback
+    // Thumbs up opens the feedback modal with optional feedback
+    await likeButton.click();
+    const modalTitle = page.getByText("Feedback").first();
+    await expect(modalTitle).toBeVisible({ timeout: 5000 });
+
+    // Submit without entering feedback (optional for thumbs up)
+    const submitButton = page.getByRole("button", { name: "Submit" });
+    await expect(submitButton).toBeEnabled({ timeout: 2000 });
+
     await Promise.all([
       page.waitForRequest("**/api/chat/create-chat-message-feedback"),
-      likeButton.click(),
+      submitButton.click(),
     ]);
+
     expect(createFeedbackRequests).toHaveLength(1);
     const likedRequest = createFeedbackRequests[0];
     expect(likedRequest?.is_positive).toBe(true);
     expect(likedRequest?.chat_message_id).toBeTruthy();
+    expect(likedRequest?.feedback_text).toBeFalsy();
+
+    await expect(modalTitle).toBeHidden({ timeout: 5000 });
 
     // Clicking thumbs up again removes the feedback
     await Promise.all([
@@ -83,19 +95,26 @@ test.describe("Message feedback thumbs controls", () => {
       String(likedRequest?.chat_message_id)
     );
 
-    // Thumbs down opens the feedback modal and submits negative feedback
+    // Thumbs down opens the feedback modal with mandatory feedback
     await dislikeButton.click();
-    const modalTitle = page.getByText("Provide Additional Feedback").first();
     await expect(modalTitle).toBeVisible({ timeout: 5000 });
 
+    // Verify submit button is disabled without feedback
+    const submitButtonDislike = page.getByRole("button", { name: "Submit" });
+    await expect(submitButtonDislike).toBeDisabled();
+
+    // Enter feedback (mandatory for thumbs down)
     const feedbackInput = page.getByPlaceholder(
       /What did you .* about this response\?/i
     );
     await feedbackInput.fill("Response missed some details.");
 
+    // Submit button should now be enabled
+    await expect(submitButtonDislike).toBeEnabled();
+
     await Promise.all([
       page.waitForRequest("**/api/chat/create-chat-message-feedback"),
-      page.getByRole("button", { name: "Submit" }).click(),
+      submitButtonDislike.click(),
     ]);
 
     expect(createFeedbackRequests).toHaveLength(2);

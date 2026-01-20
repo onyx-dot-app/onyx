@@ -37,17 +37,13 @@ load_dotenv(env_path)
 # pylint: disable=E402
 # flake8: noqa: E402
 
-from onyx.server.query_and_chat.models import OneShotQARequest
-from onyx.server.query_and_chat.models import OneShotQAResponse
-from onyx.chat.models import ThreadMessage
+from ee.onyx.server.query_and_chat.models import SearchFullResponse
+from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.constants import AuthType
-from onyx.configs.constants import MessageType
-from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -424,65 +420,59 @@ class SearchAnswerAnalyzer:
         return dataset
 
     @retry(tries=3, delay=1, backoff=2)
-    def _perform_oneshot_qa(self, query: str) -> OneshotQAResult:
-        """Perform a OneShot QA query against the Onyx API and time it."""
-        # create the OneShot QA request
-        messages = [ThreadMessage(message=query, sender=None, role=MessageType.USER)]
-        filters = IndexFilters(access_control_list=None, tenant_id=self.tenant_id)
-        qa_request = OneShotQARequest(
-            messages=messages,
-            persona_id=0,  # default persona
-            retrieval_options=RetrievalDetails(
-                run_search=OptionalSearchSetting.ALWAYS,
-                real_time=True,
-                filters=filters,
-                enable_auto_detect_filters=False,
-                limit=self.config.max_search_results,
-            ),
-            skip_gen_ai_answer_generation=self.config.search_only,
+    def _perform_search(self, query: str) -> OneshotQAResult:
+        """Perform a document search query against the Onyx API and time it."""
+        # create the search request
+        filters = BaseFilters()
+        search_request = SendSearchQueryRequest(
+            search_query=query,
+            filters=filters,
+            num_docs_fed_to_llm_selection=self.config.max_search_results,
+            run_query_expansion=False,
+            stream=False,
         )
 
         # send the request
         response = None
         try:
-            request_data = qa_request.model_dump()
+            request_data = search_request.model_dump()
             headers = GENERAL_HEADERS.copy()
             if AUTH_TYPE != AuthType.DISABLED:
                 headers["Authorization"] = f"Bearer {os.environ.get('ONYX_API_KEY')}"
 
             start_time = time.monotonic()
             response = requests.post(
-                url=f"{self.config.api_url}/query/answer-with-citation",
+                url=f"{self.config.api_url}/search/send-search-message",
                 json=request_data,
                 headers=headers,
                 timeout=self.config.request_timeout,
             )
             time_taken = time.monotonic() - start_time
             response.raise_for_status()
-            result = OneShotQAResponse.model_validate(response.json())
+            result = SearchFullResponse.model_validate(response.json())
 
-            # extract documents from the QA response
-            if result.docs:
+            # extract documents from the search response
+            if result.search_docs:
                 top_documents = [
                     SavedSearchDoc.from_search_doc(doc)
-                    for doc in result.docs.top_documents
+                    for doc in result.search_docs[: self.config.max_search_results]
                 ]
                 return OneshotQAResult(
                     time_taken=time_taken,
                     top_documents=top_documents,
-                    answer=result.answer,
+                    answer=None,  # search endpoint doesn't generate answers
                 )
         except RequestException as e:
             raise RuntimeError(
-                f"OneShot QA failed for query '{query}': {e}."
+                f"Search failed for query '{query}': {e}."
                 f" Response: {response.json()}"
                 if response
                 else ""
             )
-        raise RuntimeError(f"OneShot QA returned no documents for query {query}")
+        raise RuntimeError(f"Search returned no documents for query {query}")
 
     def _run_and_analyze_one(self, test_case: TestQuery, total: int) -> AnalysisSummary:
-        result = self._perform_oneshot_qa(test_case.question)
+        result = self._perform_search(test_case.question)
 
         # compute rank
         rank = None

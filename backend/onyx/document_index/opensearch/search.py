@@ -24,7 +24,7 @@ from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
 
 MIN_MAX_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_min_max"
-MIN_MAX_NORMALIZATION_PIPELINE_CONFIG = {
+MIN_MAX_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
     "description": "Normalization for keyword and vector scores using min-max",
     "phase_results_processors": [
         {
@@ -49,7 +49,7 @@ MIN_MAX_NORMALIZATION_PIPELINE_CONFIG = {
 }
 
 ZSCORE_NORMALIZATION_PIPELINE_NAME = "normalization_pipeline_zscore"
-ZSCORE_NORMALIZATION_PIPELINE_CONFIG = {
+ZSCORE_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
     "description": "Normalization for keyword and vector scores using z-score",
     "phase_results_processors": [
         {
@@ -140,7 +140,7 @@ class DocumentQuery:
             {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}}
         ]
 
-        if tenant_state.tenant_id is not None:
+        if tenant_state.multitenant:
             # TODO(andrei): Fix tenant stuff.
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
@@ -199,7 +199,7 @@ class DocumentQuery:
             {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}}
         ]
 
-        if tenant_state.tenant_id is not None:
+        if tenant_state.multitenant:
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
             )
@@ -244,6 +244,9 @@ class DocumentQuery:
             query_text, query_vector, num_candidates
         )
         hybrid_search_filters = DocumentQuery._get_hybrid_search_filters(tenant_state)
+        match_highlights_configuration = (
+            DocumentQuery._get_match_highlights_configuration()
+        )
 
         hybrid_search_query: dict[str, Any] = {
             "bool": {
@@ -254,6 +257,8 @@ class DocumentQuery:
                         }
                     }
                 ],
+                # TODO(andrei): When revisiting our hybrid query logic see if
+                # this needs to be nested one level down.
                 "filter": hybrid_search_filters,
             }
         }
@@ -261,6 +266,7 @@ class DocumentQuery:
         final_hybrid_search_body: dict[str, Any] = {
             "query": hybrid_search_query,
             "size": num_hits,
+            "highlight": match_highlights_configuration,
         }
         return final_hybrid_search_body
 
@@ -316,6 +322,7 @@ class DocumentQuery:
             {
                 "multi_match": {
                     "query": query_text,
+                    # TODO(andrei): Ask Yuhong do we want this?
                     "fields": [f"{TITLE_FIELD_NAME}^2", f"{TITLE_FIELD_NAME}.keyword"],
                     "type": "best_fields",
                 }
@@ -340,8 +347,35 @@ class DocumentQuery:
             {"term": {PUBLIC_FIELD_NAME: {"value": True}}},
             {"term": {HIDDEN_FIELD_NAME: {"value": False}}},
         ]
-        if tenant_state.tenant_id is not None:
+        if tenant_state.multitenant:
             hybrid_search_filters.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
             )
         return hybrid_search_filters
+
+    @staticmethod
+    def _get_match_highlights_configuration() -> dict[str, Any]:
+        """
+        Gets configuration for returning match highlights for a hit.
+        """
+        match_highlights_configuration: dict[str, Any] = {
+            "fields": {
+                CONTENT_FIELD_NAME: {
+                    # See https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#highlighter-types
+                    "type": "unified",
+                    # The length in chars of a match snippet. Somewhat
+                    # arbitrarily-chosen. The Vespa codepath limited total
+                    # highlights length to 400 chars. fragment_size *
+                    # number_of_fragments = 400 should be good enough.
+                    "fragment_size": 100,
+                    # The number of snippets to return per field per document
+                    # hit.
+                    "number_of_fragments": 4,
+                    # These tags wrap matched keywords and they match what Vespa
+                    # used to return. Use them to minimize changes to our code.
+                    "pre_tags": ["<hi>"],
+                    "post_tags": ["</hi>"],
+                }
+            }
+        }
+        return match_highlights_configuration

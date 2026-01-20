@@ -18,6 +18,7 @@ from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.prompts.prompt_utils import replace_citation_guidance_tag
 from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
+from onyx.prompts.tool_prompts import MEMORY_GUIDANCE
 from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
 from onyx.prompts.tool_prompts import PYTHON_TOOL_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
@@ -28,6 +29,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -178,8 +180,9 @@ def build_system_prompt(
                 site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
             )
             + OPEN_URLS_GUIDANCE
-            + GENERATE_IMAGE_GUIDANCE
             + PYTHON_TOOL_GUIDANCE
+            + GENERATE_IMAGE_GUIDANCE
+            + MEMORY_GUIDANCE
         )
         return system_prompt
 
@@ -193,6 +196,7 @@ def build_system_prompt(
         has_generate_image = any(
             isinstance(tool, ImageGenerationTool) for tool in tools
         )
+        has_memory = any(isinstance(tool, MemoryTool) for tool in tools)
 
         if has_web_search or has_internal_search or include_all_guidance:
             system_prompt += TOOL_DESCRIPTION_SEARCH_GUIDANCE
@@ -221,5 +225,8 @@ def build_system_prompt(
 
         if has_generate_image or include_all_guidance:
             system_prompt += GENERATE_IMAGE_GUIDANCE
+
+        if has_memory or include_all_guidance:
+            system_prompt += MEMORY_GUIDANCE
 
     return system_prompt

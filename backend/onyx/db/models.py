@@ -26,6 +26,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
+from sqlalchemy import BigInteger
 
 from sqlalchemy import Sequence
 from sqlalchemy import String
@@ -83,7 +84,6 @@ from onyx.utils.special_types import JSON_ro
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.kg.models import KGStage
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.encryption import decrypt_bytes_to_string
@@ -91,6 +91,8 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
+from onyx.context.search.enums import RecencyBiasSetting
+
 
 logger = setup_logger()
 
@@ -375,6 +377,17 @@ class Notification(Base):
     user: Mapped[User] = relationship("User", back_populates="notifications")
     additional_data: Mapped[dict | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+
+    # Unique constraint ix_notification_user_type_data on (user_id, notif_type, additional_data)
+    # ensures notification deduplication for batch inserts. Defined in migration 8405ca81cc83.
+    __table_args__ = (
+        Index(
+            "ix_notification_user_sort",
+            "user_id",
+            "dismissed",
+            desc("first_shown"),
+        ),
     )
 
 
@@ -2321,6 +2334,23 @@ class SearchDoc(Base):
     )
 
 
+class SearchQuery(Base):
+    # This table contains search queries for the Search UI. There are no followups and less is stored because the reply
+    # functionality is simply to rerun the search query again as things may have changed and this is more common for search.
+    __tablename__ = "search_query"
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("user.id"))
+    query: Mapped[str] = mapped_column(String)
+    query_expansions: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 """
 Feedback, Logging, Metrics Tables
 """
@@ -2605,6 +2635,7 @@ class Tool(Base):
     __tablename__ = "tool"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # The name of the tool that the LLM will see
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     # ID of the tool in the codebase, only applies for in-code tools.
@@ -3008,6 +3039,124 @@ class SlackBot(Base):
     )
 
 
+class DiscordBotConfig(Base):
+    """Global Discord bot configuration (one per tenant).
+
+    Stores the bot token when not provided via DISCORD_BOT_TOKEN env var.
+    Uses a fixed ID with check constraint to enforce only one row per tenant.
+    """
+
+    __tablename__ = "discord_bot_config"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, server_default=text("'SINGLETON'")
+    )
+    bot_token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class DiscordGuildConfig(Base):
+    """Configuration for a Discord guild (server) connected to this tenant.
+
+    registration_key is a one-time key used to link a Discord server to this tenant.
+    Format: discord_<tenant_id>.<random_token>
+    guild_id is NULL until the Discord admin runs !register with the key.
+    """
+
+    __tablename__ = "discord_guild_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Discord snowflake - NULL until registered via command in Discord
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, unique=True)
+    guild_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    # One-time registration key: discord_<tenant_id>.<random_token>
+    registration_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+
+    registered_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Configuration
+    default_persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+
+    # Relationships
+    default_persona: Mapped["Persona | None"] = relationship(
+        "Persona", foreign_keys=[default_persona_id]
+    )
+    channels: Mapped[list["DiscordChannelConfig"]] = relationship(
+        back_populates="guild_config", cascade="all, delete-orphan"
+    )
+
+
+class DiscordChannelConfig(Base):
+    """Per-channel configuration for Discord bot behavior.
+
+    Used to whitelist specific channels and configure per-channel behavior.
+    """
+
+    __tablename__ = "discord_channel_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    guild_config_id: Mapped[int] = mapped_column(
+        ForeignKey("discord_guild_config.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Discord snowflake
+    channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    channel_name: Mapped[str] = mapped_column(String(), nullable=False)
+
+    # Channel type from Discord (text, forum)
+    channel_type: Mapped[str] = mapped_column(
+        String(20), server_default=text("'text'"), nullable=False
+    )
+
+    # True if @everyone cannot view the channel
+    is_private: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+
+    # If true, bot only responds to messages in threads
+    # Otherwise, will reply in channel
+    thread_only_mode: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+
+    # If true (default), bot only responds when @mentioned
+    # If false, bot responds to ALL messages in this channel
+    require_bot_invocation: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+
+    # Override the guild's default persona for this channel
+    persona_override_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id", ondelete="SET NULL"), nullable=True
+    )
+
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+
+    # Relationships
+    guild_config: Mapped["DiscordGuildConfig"] = relationship(back_populates="channels")
+    persona_override: Mapped["Persona | None"] = relationship()
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint(
+            "guild_config_id", "channel_id", name="uq_discord_channel_guild_channel"
+        ),
+    )
+
+
 class Milestone(Base):
     # This table is used to track significant events for a deployment towards finding value
     # The table is currently not used for features but it may be used in the future to inform
@@ -3083,25 +3232,6 @@ class FileRecord(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-
-
-class AgentSearchMetrics(Base):
-    __tablename__ = "agent__search_metrics"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
-    )
-    persona_id: Mapped[int | None] = mapped_column(
-        ForeignKey("persona.id"), nullable=True
-    )
-    agent_type: Mapped[str] = mapped_column(String)
-    start_time: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
-    base_duration_s: Mapped[float] = mapped_column(Float)
-    full_duration_s: Mapped[float] = mapped_column(Float)
-    base_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
-    refined_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
-    all_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
 
 
 """

@@ -190,7 +190,7 @@ export default function ModifyCredential({
     <>
       {confirmDeletionCredential != null && (
         <Modal open onOpenChange={() => setConfirmDeletionCredential(null)}>
-          <Modal.Content small>
+          <Modal.Content width="sm" height="sm">
             <Modal.Header
               icon={SvgAlertTriangle}
               title="Confirm Deletion"
@@ -202,7 +202,7 @@ export default function ModifyCredential({
                 delete credentials that are linked to live connectors.
               </Text>
             </Modal.Body>
-            <Modal.Footer className="p-4 gap-2 justify-end">
+            <Modal.Footer>
               <Button
                 onClick={async () => {
                   onDeleteCredential(confirmDeletionCredential);

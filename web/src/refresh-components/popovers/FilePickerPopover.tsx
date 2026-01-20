@@ -1,12 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverMenu,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { cn, noProp } from "@/lib/utils";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -24,7 +19,6 @@ import { isImageFile } from "@/lib/utils";
 import {
   SvgExternalLink,
   SvgFileText,
-  SvgFiles,
   SvgImage,
   SvgLoader,
   SvgMoreHorizontal,
@@ -125,7 +119,7 @@ function FilePickerPopoverContents({
   const quickAccessFiles = recentFiles.slice(0, MAX_FILES_TO_SHOW);
 
   return (
-    <PopoverMenu medium>
+    <PopoverMenu>
       {[
         // Action button to upload more files
         <LineItem
@@ -297,10 +291,10 @@ export default function FilePickerPopover({
       </recentFilesModal.Provider>
 
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
+        <Popover.Trigger asChild>
           {typeof trigger === "function" ? trigger(open) : trigger}
-        </PopoverTrigger>
-        <PopoverContent align="start" side="bottom">
+        </Popover.Trigger>
+        <Popover.Content align="start" side="bottom" width="lg">
           <FilePickerPopoverContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
@@ -321,7 +315,7 @@ export default function FilePickerPopover({
               setOpen(false);
             }}
           />
-        </PopoverContent>
+        </Popover.Content>
       </Popover>
     </>
   );

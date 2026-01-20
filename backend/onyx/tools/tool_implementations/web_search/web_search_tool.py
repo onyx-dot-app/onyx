@@ -159,7 +159,23 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the web search tool with multiple queries in parallel"""
-        queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+        raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+
+        # Normalize queries:
+        # - strip leading/trailing whitespace
+        # - drop empty/whitespace-only queries (e.g. "\n", "\r\n", "   ")
+        queries = [q.strip() for q in raw_queries if q.strip()]
+        if not queries:
+            raise ToolCallException(
+                message=(
+                    "No valid web search queries provided; all queries were empty or "
+                    "whitespace-only after trimming."
+                ),
+                llm_facing_message=(
+                    "No valid web search queries were provided (they were empty or "
+                    "whitespace-only). Please provide a real search query."
+                ),
+            )
 
         # Emit queries
         self.emitter.emit(
@@ -265,13 +281,22 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         )
 
         # Format for LLM
-        docs_str, citation_mapping = convert_inference_sections_to_llm_string(
-            top_sections=inference_sections,
-            citation_start=override_kwargs.starting_citation_num,
-            limit=None,  # Already truncated
-            include_source_type=False,
-            include_link=True,
-        )
+        if not all_search_results:
+            docs_str = json.dumps(
+                {
+                    "results": [],
+                    "message": "The web search completed but returned no results for any of the queries. Do not search again.",
+                }
+            )
+            citation_mapping: dict[int, str] = {}
+        else:
+            docs_str, citation_mapping = convert_inference_sections_to_llm_string(
+                top_sections=inference_sections,
+                citation_start=override_kwargs.starting_citation_num,
+                limit=None,  # Already truncated
+                include_source_type=False,
+                include_link=True,
+            )
 
         return ToolResponse(
             rich_response=SearchDocsResponse(

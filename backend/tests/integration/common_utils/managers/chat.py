@@ -8,7 +8,6 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
-from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -16,6 +15,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import RetrievalDetails
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -163,6 +163,86 @@ class ChatSessionManager:
         #         break
 
         return streamed_response
+
+    @staticmethod
+    def send_message_with_disconnect(
+        chat_session_id: UUID,
+        message: str,
+        disconnect_after_packets: int = 0,
+        parent_message_id: int | None = None,
+        user_performing_action: DATestUser | None = None,
+        file_descriptors: list[FileDescriptor] | None = None,
+        search_doc_ids: list[int] | None = None,
+        query_override: str | None = None,
+        regenerate: bool | None = None,
+        llm_override: LLMOverride | None = None,
+        prompt_override: PromptOverride | None = None,
+        alternate_assistant_id: int | None = None,
+        use_existing_user_message: bool = False,
+        forced_tool_ids: list[int] | None = None,
+    ) -> None:
+        """
+        Send a message and simulate client disconnect before stream completes.
+
+        This is useful for testing how the server handles client disconnections
+        during streaming responses.
+
+        Args:
+            chat_session_id: The chat session ID
+            message: The message to send
+            disconnect_after_packets: Disconnect after receiving this many packets.
+                If None, disconnect_after_type must be specified.
+            disconnect_after_type: Disconnect after receiving a packet of this type
+                (e.g., "message_start", "search_tool_start"). If None,
+                disconnect_after_packets must be specified.
+            ... (other standard message parameters)
+
+        Returns:
+            StreamedResponse containing data received before disconnect,
+            with is_disconnected=True flag set.
+        """
+        chat_message_req = CreateChatMessageRequest(
+            chat_session_id=chat_session_id,
+            parent_message_id=parent_message_id,
+            message=message,
+            file_descriptors=file_descriptors or [],
+            search_doc_ids=search_doc_ids or [],
+            retrieval_options=RetrievalDetails(),  # This will be deprecated soon anyway
+            rerank_settings=None,
+            query_override=query_override,
+            regenerate=regenerate,
+            llm_override=llm_override,
+            prompt_override=prompt_override,
+            alternate_assistant_id=alternate_assistant_id,
+            use_existing_user_message=use_existing_user_message,
+            forced_tool_ids=forced_tool_ids,
+        )
+
+        headers = (
+            user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS
+        )
+        cookies = user_performing_action.cookies if user_performing_action else None
+
+        packets_received = 0
+
+        with requests.post(
+            f"{API_SERVER_URL}/chat/send-message",
+            json=chat_message_req.model_dump(),
+            headers=headers,
+            stream=True,
+            cookies=cookies,
+        ) as response:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+
+                packets_received += 1
+                if packets_received > disconnect_after_packets:
+                    break
+
+        return None
 
     @staticmethod
     def analyze_response(response: Response) -> StreamedResponse:

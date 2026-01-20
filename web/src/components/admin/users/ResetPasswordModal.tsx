@@ -56,7 +56,7 @@ export default function ResetPasswordModal({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgKey}
           title="Reset Password"

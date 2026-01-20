@@ -23,6 +23,8 @@ logger = setup_logger()
 
 DEFAULT_TIMEOUT_SECONDS = 15
 DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
+DEFAULT_MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+DEFAULT_MAX_HTML_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 class OnyxWebCrawler(WebContentProvider):
@@ -37,8 +39,12 @@ class OnyxWebCrawler(WebContentProvider):
         *,
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         user_agent: str = DEFAULT_USER_AGENT,
+        max_pdf_size_bytes: int | None = None,
+        max_html_size_bytes: int | None = None,
     ) -> None:
         self._timeout_seconds = timeout_seconds
+        self._max_pdf_size_bytes = max_pdf_size_bytes
+        self._max_html_size_bytes = max_html_size_bytes
         self._headers = {
             "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -96,6 +102,23 @@ class OnyxWebCrawler(WebContentProvider):
         content_type = response.headers.get("Content-Type", "")
         content_sniff = response.content[:1024] if response.content else None
         if is_pdf_resource(url, content_type, content_sniff):
+            if (
+                self._max_pdf_size_bytes is not None
+                and len(response.content) > self._max_pdf_size_bytes
+            ):
+                logger.warning(
+                    "PDF content too large (%d bytes) for %s, max is %d",
+                    len(response.content),
+                    url,
+                    self._max_pdf_size_bytes,
+                )
+                return WebContent(
+                    title="",
+                    link=url,
+                    full_content="",
+                    published_date=None,
+                    scrape_successful=False,
+                )
             text_content, metadata = extract_pdf_text(response.content)
             title = title_from_pdf_metadata(metadata) or title_from_url(url)
             return WebContent(
@@ -104,6 +127,24 @@ class OnyxWebCrawler(WebContentProvider):
                 full_content=text_content,
                 published_date=None,
                 scrape_successful=bool(text_content.strip()),
+            )
+
+        if (
+            self._max_html_size_bytes is not None
+            and len(response.content) > self._max_html_size_bytes
+        ):
+            logger.warning(
+                "HTML content too large (%d bytes) for %s, max is %d",
+                len(response.content),
+                url,
+                self._max_html_size_bytes,
+            )
+            return WebContent(
+                title="",
+                link=url,
+                full_content="",
+                published_date=None,
+                scrape_successful=False,
             )
 
         try:

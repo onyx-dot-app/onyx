@@ -16,16 +16,17 @@ from ee.onyx.server.enterprise_settings.api import (
 from ee.onyx.server.evals.api import router as evals_router
 from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
+from ee.onyx.server.middleware.license_enforcement import (
+    add_license_enforcement_middleware,
+)
 from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
 from ee.onyx.server.oauth.api import router as ee_oauth_router
-from ee.onyx.server.query_and_chat.chat_backend import (
-    router as chat_router,
-)
 from ee.onyx.server.query_and_chat.query_backend import (
     basic_router as ee_query_router,
 )
+from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.seeding import seed_db
@@ -85,6 +86,10 @@ def get_application() -> FastAPI:
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
 
+    # Add license enforcement middleware (runs after tenant tracking)
+    # This blocks access when license is expired/gated
+    add_license_enforcement_middleware(application, logger)
+
     if AUTH_TYPE == AuthType.CLOUD:
         # For Google OAuth, refresh tokens are requested by:
         # 1. Adding the right scopes
@@ -124,7 +129,7 @@ def get_application() -> FastAPI:
     # EE only backend APIs
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, ee_query_router)
-    include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, search_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)
     include_router_with_global_prefix_prepended(application, ee_document_cc_pair_router)

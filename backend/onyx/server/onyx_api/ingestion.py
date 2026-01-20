@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -36,7 +37,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 # not using /api to avoid confusion with nginx api path routing
-router = APIRouter(prefix="/onyx-api")
+router = APIRouter(prefix="/onyx-api", tags=PUBLIC_API_TAGS)
 
 
 @router.get("/connector-docs/{cc_pair_id}")

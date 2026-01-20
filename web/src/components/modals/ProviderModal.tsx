@@ -64,7 +64,7 @@ export default function ProviderModal({
 
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
-      <Modal.Content tall onKeyDown={handleKeyDown}>
+      <Modal.Content width="sm" height="lg" onKeyDown={handleKeyDown}>
         <Modal.Header
           icon={icon}
           title={title}
@@ -72,12 +72,10 @@ export default function ProviderModal({
           onClose={() => onOpenChange(false)}
         />
 
-        <Modal.Body className="flex-1 overflow-y-auto bg-background-tint-01">
-          {children}
-        </Modal.Body>
+        <Modal.Body>{children}</Modal.Body>
 
         {onSubmit && (
-          <Modal.Footer className="flex justify-end gap-2 p-4 ">
+          <Modal.Footer>
             <Button type="button" secondary onClick={() => onOpenChange(false)}>
               {cancelLabel}
             </Button>

@@ -1,9 +1,10 @@
+"use client";
+
 import { useState, ReactNode } from "react";
 import useSWR, { useSWRConfig, KeyedMutator } from "swr";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import {
   LLMProviderView,
-  ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "../../interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -114,15 +115,13 @@ export function ProviderFormEntrypointWrapper({
 
         {formIsVisible && (
           <Modal open onOpenChange={onClose}>
-            <Modal.Content medium>
+            <Modal.Content>
               <Modal.Header
                 icon={SvgSettings}
                 title={`Setup ${providerName}`}
                 onClose={onClose}
               />
-              <Modal.Body className="max-h-[70vh] overflow-y-auto">
-                {children(context)}
-              </Modal.Body>
+              <Modal.Body>{children(context)}</Modal.Body>
             </Modal.Content>
           </Modal>
         )}
@@ -198,7 +197,7 @@ export function ProviderFormEntrypointWrapper({
 
       {formIsVisible && (
         <Modal open onOpenChange={onClose}>
-          <Modal.Content medium>
+          <Modal.Content>
             <Modal.Header
               icon={SvgSettings}
               title={`${existingLlmProvider ? "Configure" : "Setup"} ${
@@ -208,9 +207,7 @@ export function ProviderFormEntrypointWrapper({
               }`}
               onClose={onClose}
             />
-            <Modal.Body className="max-h-[70vh] overflow-y-auto">
-              {children(context)}
-            </Modal.Body>
+            <Modal.Body>{children(context)}</Modal.Body>
           </Modal.Content>
         </Modal>
       )}
