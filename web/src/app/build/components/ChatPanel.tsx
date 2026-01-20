@@ -1,16 +1,26 @@
 "use client";
 
 import { useCallback } from "react";
-import { useBuildContext } from "@/app/build/contexts/BuildContext";
-import { useBuildSession } from "@/app/build/hooks/useBuildSession";
+import { useRouter } from "next/navigation";
+import {
+  useSession,
+  useSessionId,
+  useHasSession,
+  useIsRunning,
+  useOutputPanelOpen,
+  useToggleOutputPanel,
+  useBuildSessionStore,
+} from "@/app/build/hooks/useBuildSessionStore";
+import { useBuildStreaming } from "@/app/build/hooks/useBuildStreaming";
 import { BuildFile } from "@/app/build/contexts/UploadFilesContext";
 import { useLlmManager } from "@/lib/hooks";
-import Text from "@/refresh-components/texts/Text";
+import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
 import Logo from "@/refresh-components/Logo";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgSidebar } from "@opal/icons";
+import Text from "@/refresh-components/texts/Text";
 import InputBar from "@/app/build/components/InputBar";
 import BuildWelcome from "@/app/build/components/BuildWelcome";
+import BuildMessageList from "@/app/build/components/BuildMessageList";
+import OutputPanelTab from "@/app/build/components/OutputPanelTab";
 
 /**
  * BuildChatPanel - Center panel containing the chat interface
@@ -22,43 +32,70 @@ import BuildWelcome from "@/app/build/components/BuildWelcome";
  * - Header with output panel toggle
  */
 export default function BuildChatPanel() {
-  const { outputPanelOpen, toggleOutputPanel } = useBuildContext();
-  const { hasSession, isRunning, startSession, sendMessage } =
-    useBuildSession();
+  const router = useRouter();
+  const outputPanelOpen = useOutputPanelOpen();
+  const toggleOutputPanel = useToggleOutputPanel();
+  const session = useSession();
+  const sessionId = useSessionId();
+  const hasSession = useHasSession();
+  const isRunning = useIsRunning();
+  // Access actions directly like chat does - these don't cause re-renders
+  const createNewSession = useBuildSessionStore(
+    (state) => state.createNewSession
+  );
+  const appendMessage = useBuildSessionStore(
+    (state) => state.appendMessageToCurrent
+  );
+  const { streamMessage } = useBuildStreaming();
   const llmManager = useLlmManager();
 
   const handleSubmit = useCallback(
     async (message: string, _files: BuildFile[]) => {
       // TODO: Pass files to session/message when API supports it
-      if (hasSession) {
-        await sendMessage(message);
+      if (hasSession && sessionId) {
+        // Add user message to state
+        appendMessage({
+          id: `msg-${Date.now()}`,
+          role: "user",
+          content: message,
+          timestamp: new Date(),
+        });
+        // Stream the response
+        await streamMessage(sessionId, message);
       } else {
-        await startSession(message);
+        // Create new session (adds user message internally)
+        const newSessionId = await createNewSession(message);
+        if (newSessionId) {
+          router.push(
+            `/build/v1?${BUILD_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
+          );
+          // Stream the response after navigation
+          await streamMessage(newSessionId, message);
+        }
       }
     },
-    [hasSession, sendMessage, startSession]
+    [
+      hasSession,
+      sessionId,
+      appendMessage,
+      streamMessage,
+      createNewSession,
+      router,
+    ]
   );
 
   return (
     <div className="flex flex-col h-full w-full">
       {/* Chat header */}
-      <div className="flex flex-row items-center justify-between px-4 py-3 border-b border-border-01">
+      <div className="flex flex-row items-center justify-between pl-4 py-3">
         <div className="flex flex-row items-center gap-2">
           <Logo folded size={24} />
           <Text headingH3 text05>
             Build
           </Text>
         </div>
-        {hasSession && (
-          <div className="flex flex-row items-center gap-2">
-            <IconButton
-              icon={SvgSidebar}
-              onClick={toggleOutputPanel}
-              tertiary
-              tooltip={outputPanelOpen ? "Hide panel" : "Show panel"}
-            />
-          </div>
-        )}
+        {/* Output panel tab in header */}
+        <OutputPanelTab isOpen={outputPanelOpen} onClick={toggleOutputPanel} />
       </div>
 
       {/* Main content area */}
@@ -70,18 +107,16 @@ export default function BuildChatPanel() {
             llmManager={llmManager}
           />
         ) : (
-          // TODO: Render BuildMessageList when session exists
-          <div className="p-4">
-            <Text secondaryBody text03>
-              Message list will appear here
-            </Text>
-          </div>
+          <BuildMessageList
+            messages={session?.messages ?? []}
+            isStreaming={isRunning}
+          />
         )}
       </div>
 
       {/* Input bar at bottom when session exists */}
       {hasSession && (
-        <div className="px-4 pb-4 pt-2 border-t border-border-01">
+        <div className="px-4 pb-4 pt-2">
           <div className="max-w-2xl mx-auto">
             <InputBar
               onSubmit={handleSubmit}

@@ -1,41 +1,53 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import Text from "@/refresh-components/texts/Text";
+import { BuildMessage } from "@/app/build/services/buildStreamingModels";
+import UserMessage from "@/app/build/components/UserMessage";
+import AIMessageSimple from "@/app/build/components/AIMessageSimple";
+
+interface BuildMessageListProps {
+  messages: BuildMessage[];
+  isStreaming?: boolean;
+}
 
 /**
  * BuildMessageList - Displays the conversation history
  *
  * Shows:
- * - User messages
- * - Assistant responses with tool calls
- * - Status messages
- * - Error messages
- *
- * TODO: Connect to useBuildSession hook for message data
+ * - User messages (right-aligned bubbles)
+ * - Assistant responses (left-aligned with logo)
  */
-export default function BuildMessageList() {
+export default function BuildMessageList({
+  messages,
+  isStreaming = false,
+}: BuildMessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  // TODO: Get messages from useBuildSession hook
-  const isRunning = false;
+  }, [messages.length]);
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
       <div className="w-full max-w-2xl">
-        {/* Placeholder - will be populated via useBuildSession hook */}
-        <div className="py-8 text-center">
-          <Text secondaryBody text03>
-            {isRunning
-              ? "Processing your request..."
-              : "Send a message to start building"}
-          </Text>
-        </div>
+        {messages.map((message, index) => {
+          const isLastMessage = index === messages.length - 1;
+          const isStreamingThis =
+            isStreaming && isLastMessage && message.role === "assistant";
+
+          if (message.role === "user") {
+            return <UserMessage key={message.id} content={message.content} />;
+          }
+
+          return (
+            <AIMessageSimple
+              key={message.id}
+              content={message.content}
+              isStreaming={isStreamingThis}
+            />
+          );
+        })}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} />

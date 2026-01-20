@@ -1,42 +1,46 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useBuildContext } from "@/app/build/contexts/BuildContext";
-import { useBuildSession } from "@/app/build/hooks/useBuildSession";
+import { useBuildSessionController } from "@/app/build/hooks/useBuildSessionController";
+import {
+  useOutputPanelOpen,
+  useToggleOutputPanel,
+} from "@/app/build/hooks/useBuildSessionStore";
+import { getSessionIdFromSearchParams } from "@/app/build/services/searchParams";
 import BuildChatPanel from "@/app/build/components/ChatPanel";
 import BuildOutputPanel from "@/app/build/components/OutputPanel";
 
 /**
- * Build V1 Page - Skeleton pattern for the 3-panel build interface
+ * Build V1 Page - Entry point for builds
  *
- * This page uses the new architecture:
- * - BuildContext for UI state (sidebar visibility, panel states)
- * - useBuildSession hook for session data (will connect to APIs when ready)
- * - BuildChatPanel for the center chat interface
- * - BuildOutputPanel for the right preview/files/artifacts panel
+ * URL: /build/v1 (new build)
+ * URL: /build/v1?sessionId=xxx (existing session)
+ *
+ * Renders the 2-panel layout (chat + output) and handles session controller setup.
  */
 export default function BuildV1Page() {
-  const { outputPanelOpen, toggleOutputPanel } = useBuildContext();
-  const { hasSession } = useBuildSession();
+  const searchParams = useSearchParams();
+  const sessionId = getSessionIdFromSearchParams(searchParams);
+
+  const outputPanelOpen = useOutputPanelOpen();
+  const toggleOutputPanel = useToggleOutputPanel();
+  useBuildSessionController({ existingSessionId: sessionId });
 
   return (
-    <div className="flex flex-row flex-1 h-full">
+    <div className="flex flex-row flex-1 h-full overflow-hidden">
       {/* Center panel - Chat */}
       <div
         className={cn(
-          "flex-1 h-full transition-all duration-300",
-          outputPanelOpen && hasSession ? "w-1/2" : "w-full"
+          "h-full transition-all duration-300 ease-in-out",
+          outputPanelOpen ? "w-1/2" : "w-full"
         )}
       >
         <BuildChatPanel />
       </div>
 
       {/* Right panel - Output (Preview, Files, Artifacts) */}
-      {outputPanelOpen && hasSession && (
-        <div className="w-1/2 border-l border-border-01 h-full">
-          <BuildOutputPanel onClose={toggleOutputPanel} />
-        </div>
-      )}
+      <BuildOutputPanel onClose={toggleOutputPanel} isOpen={outputPanelOpen} />
     </div>
   );
 }

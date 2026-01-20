@@ -1,35 +1,25 @@
 "use client";
 
-import { useState, memo } from "react";
+import { memo, useState } from "react";
+import { useSession, Artifact } from "@/app/build/hooks/useBuildSessionStore";
 import { cn } from "@/lib/utils";
-import { useBuildSession } from "@/app/build/hooks/useBuildSession";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Button from "@/refresh-components/buttons/Button";
-import {
-  SvgGlobe,
-  SvgHardDrive,
-  SvgFiles,
-  SvgX,
-  SvgExternalLink,
-} from "@opal/icons";
+import { SvgGlobe, SvgHardDrive, SvgFiles, SvgExternalLink } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
+import { IconProps } from "@opal/types";
 
-type TabId = "preview" | "files" | "artifacts";
+type TabValue = "preview" | "files" | "artifacts";
 
-interface TabConfig {
-  id: TabId;
-  label: string;
-  icon: React.FC<{ className?: string }>;
-}
-
-const TABS: TabConfig[] = [
-  { id: "preview", label: "Preview", icon: SvgGlobe },
-  { id: "files", label: "Files", icon: SvgHardDrive },
-  { id: "artifacts", label: "Artifacts", icon: SvgFiles },
+const tabs: { value: TabValue; label: string; icon: React.FC<IconProps> }[] = [
+  { value: "preview", label: "Preview", icon: SvgGlobe },
+  { value: "files", label: "Files", icon: SvgHardDrive },
+  { value: "artifacts", label: "Artifacts", icon: SvgFiles },
 ];
 
 interface BuildOutputPanelProps {
   onClose: () => void;
+  isOpen: boolean;
 }
 
 /**
@@ -41,60 +31,67 @@ interface BuildOutputPanelProps {
  * - File browser for exploring sandbox filesystem
  * - Artifact list with download/view options
  */
-const BuildOutputPanel = memo(({ onClose }: BuildOutputPanelProps) => {
-  const { session } = useBuildSession();
-  const [activeTab, setActiveTab] = useState<TabId>("preview");
+const BuildOutputPanel = memo(
+  ({ onClose: _onClose, isOpen }: BuildOutputPanelProps) => {
+    const session = useSession();
+    const [activeTab, setActiveTab] = useState<TabValue>("preview");
 
-  const hasWebapp = session.artifacts.some((a) => a.type === "nextjs_app");
-  const webappUrl = session.webappUrl;
+    const hasWebapp =
+      session?.artifacts.some((a: Artifact) => a.type === "nextjs_app") ??
+      false;
+    const webappUrl = session?.webappUrl ?? null;
 
-  return (
-    <div className="h-full flex flex-col bg-background-neutral-00">
-      {/* Header with tabs */}
-      <div className="flex flex-row items-center justify-between px-3 py-2 border-b border-border-01">
-        <div className="flex flex-row items-center gap-2">
-          {TABS.map((tab) => {
+    return (
+      <div
+        className={cn(
+          "h-full flex flex-col border py-4 rounded-12 border-border-01 bg-background-neutral-00 transition-all duration-300 ease-in-out overflow-hidden",
+          isOpen ? "w-1/2 opacity-100 px-4" : "w-0 opacity-0"
+        )}
+      >
+        {/* Tab List */}
+        <div className="flex w-full rounded-t-08 bg-background-tint-03">
+          {tabs.map((tab) => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const isActive = activeTab === tab.value;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
                 className={cn(
-                  "flex flex-row items-center gap-1.5 px-3 py-2",
-                  "border-b-2 transition-colors",
+                  "flex-1 inline-flex items-center justify-center gap-2 rounded-t-08 p-2",
                   isActive
-                    ? "border-theme-primary-05 text-text-05"
-                    : "border-transparent text-text-03 hover:text-text-04"
+                    ? "bg-background-neutral-00 text-text-04 shadow-01 border"
+                    : "text-text-03 bg-transparent border border-transparent"
                 )}
               >
-                <Icon className="size-4" />
-                <Text mainUiAction>{tab.label}</Text>
+                <Icon size={16} className="stroke-text-03" />
+                <Text>{tab.label}</Text>
               </button>
             );
           })}
         </div>
-        <IconButton
-          icon={SvgX}
-          tertiary
-          onClick={onClose}
-          tooltip="Close panel"
-        />
-      </div>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-auto">
-        {activeTab === "preview" && (
-          <PreviewTab webappUrl={webappUrl} hasWebapp={hasWebapp} />
-        )}
-        {activeTab === "files" && <FilesTab sessionId={session.id} />}
-        {activeTab === "artifacts" && (
-          <ArtifactsTab artifacts={session.artifacts} sessionId={session.id} />
-        )}
+        {/* Tab Content */}
+        <div className="flex-1 min-h-0">
+          <div className="h-full border-x border-b border-border-01 rounded-b-08">
+            {activeTab === "preview" && (
+              <PreviewTab webappUrl={webappUrl} hasWebapp={hasWebapp} />
+            )}
+            {activeTab === "files" && (
+              <FilesTab sessionId={session?.id ?? null} />
+            )}
+            {activeTab === "artifacts" && (
+              <ArtifactsTab
+                artifacts={session?.artifacts ?? []}
+                sessionId={session?.id ?? null}
+              />
+            )}
+          </div>
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 BuildOutputPanel.displayName = "BuildOutputPanel";
 
@@ -112,24 +109,26 @@ interface PreviewTabProps {
 function PreviewTab({ webappUrl, hasWebapp }: PreviewTabProps) {
   if (!hasWebapp) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-        <SvgGlobe className="size-12 stroke-text-02 mb-4" />
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <SvgGlobe size={48} className="stroke-text-02" />
         <Text headingH3 text03>
           No preview available
         </Text>
-        <Text secondaryBody text02 className="mt-2">
+        <Text secondaryBody text02>
           Build a web app to see a live preview here
         </Text>
-      </div>
+      </Section>
     );
   }
 
   return (
     <div className="h-full flex flex-col">
       <div className="flex flex-row items-center justify-between p-3 border-b border-border-01">
-        <Text secondaryBody text03>
-          Live Preview
-        </Text>
         {webappUrl && (
           <a href={webappUrl} target="_blank" rel="noopener noreferrer">
             <Button action tertiary rightIcon={SvgExternalLink}>
@@ -159,15 +158,20 @@ interface FilesTabProps {
 function FilesTab({ sessionId }: FilesTabProps) {
   if (!sessionId) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-        <SvgHardDrive className="size-12 stroke-text-02 mb-4" />
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <SvgHardDrive size={48} className="stroke-text-02" />
         <Text headingH3 text03>
           No files yet
         </Text>
-        <Text secondaryBody text02 className="mt-2">
+        <Text secondaryBody text02>
           Files created during the build will appear here
         </Text>
-      </div>
+      </Section>
     );
   }
 
@@ -182,22 +186,27 @@ function FilesTab({ sessionId }: FilesTabProps) {
 }
 
 interface ArtifactsTabProps {
-  artifacts: { id: string; type: string; name: string; path: string }[];
+  artifacts: Artifact[];
   sessionId: string | null;
 }
 
 function ArtifactsTab({ artifacts, sessionId }: ArtifactsTabProps) {
   if (!sessionId || artifacts.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-        <SvgFiles className="size-12 stroke-text-02 mb-4" />
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <SvgFiles size={48} className="stroke-text-02" />
         <Text headingH3 text03>
           No artifacts yet
         </Text>
-        <Text secondaryBody text02 className="mt-2">
+        <Text secondaryBody text02>
           Artifacts created during the build will appear here
         </Text>
-      </div>
+      </Section>
     );
   }
 

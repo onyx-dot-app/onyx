@@ -41,11 +41,23 @@ import Text from "./texts/Text";
  * </Tabs>
  * ```
  */
+interface TabsRootProps
+  extends WithoutStyles<
+    React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+  > {
+  /** When true, tabs fill available vertical space with flex layout */
+  fill?: boolean;
+}
+
 const TabsRoot = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Root>,
-  WithoutStyles<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>>
->(({ ...props }, ref) => (
-  <TabsPrimitive.Root ref={ref} className="w-full" {...props} />
+  TabsRootProps
+>(({ fill, ...props }, ref) => (
+  <TabsPrimitive.Root
+    ref={ref}
+    className={cn("w-full", fill && "flex-1 flex flex-col min-h-0")}
+    {...props}
+  />
 ));
 TabsRoot.displayName = TabsPrimitive.Root.displayName;
 
@@ -246,13 +258,16 @@ TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   SectionProps & { value: string }
->(({ children, value, ...props }, ref) => (
+>(({ children, value, height, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
     value={value}
-    className="pt-4 focus:outline-none focus:border-theme-primary-05 w-full"
+    className={cn(
+      "pt-4 focus:outline-none focus:border-theme-primary-05 w-full",
+      height === "full" && "flex-1 flex flex-col min-h-0"
+    )}
   >
-    <Section padding={0} {...props}>
+    <Section padding={0} height={height} {...props}>
       {children}
     </Section>
   </TabsPrimitive.Content>

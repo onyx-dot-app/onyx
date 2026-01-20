@@ -1,6 +1,6 @@
 import { BuildProvider } from "@/app/build/contexts/BuildContext";
 import { UploadFilesProvider } from "@/app/build/contexts/UploadFilesContext";
-import BuildSidebar from "@/app/build/components/SidePanel";
+import BuildSidebar from "@/app/build/components/SideBar";
 
 export interface LayoutProps {
   children: React.ReactNode;
