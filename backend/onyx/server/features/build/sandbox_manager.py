@@ -39,7 +39,7 @@ def provision_sandbox(
     logger.info(f"Provisioning sandbox for session {session_id}")
 
     # Get the session
-    session = db_session.query("BuildSession").filter_by(id=session_id).first()
+    session = db_session.query(BuildSession).filter_by(id=session_id).first()
     if not session:
         raise ValueError(f"Session {session_id} not found")
 
