@@ -132,7 +132,21 @@ function PATModal({
             </InputLayouts.Vertical>
             <InputLayouts.Vertical
               title="Expires in"
-              description="Expires at end of day (23:59 UTC)."
+              subDescription={
+                expirationDays === "null"
+                  ? undefined
+                  : (() => {
+                      const expiryDate = new Date();
+                      expiryDate.setUTCDate(
+                        expiryDate.getUTCDate() + parseInt(expirationDays)
+                      );
+                      expiryDate.setUTCHours(23, 59, 59, 999);
+                      return `This token will expire at: ${expiryDate
+                        .toISOString()
+                        .replace("T", " ")
+                        .replace(".999Z", " UTC")}`;
+                    })()
+              }
             >
               <InputSelect
                 value={expirationDays}
@@ -971,10 +985,7 @@ function AccountsAccessSettings() {
   const [expirationDays, setExpirationDays] = useState<string>("30");
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreatedTokenState | null>(null);
-  const [tokenToDelete, setTokenToDelete] = useState<{
-    id: number;
-    name: string;
-  } | null>(null);
+  const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = authType && authType !== AuthType.DISABLED;
@@ -1169,8 +1180,10 @@ function AccountsAccessSettings() {
         >
           <Section gap={0.5} alignItems="start">
             <Text>
-              Any application using this token will lose access to Onyx. This
-              action cannot be undone.
+              Any application using this token{" "}
+              <Text className="!font-bold">{tokenToDelete.name}</Text>{" "}
+              <Text secondaryMono>({tokenToDelete.token_display})</Text> will
+              lose access to Onyx. This action cannot be undone.
             </Text>
             <Text>Are you sure you want to revoke this token?</Text>
           </Section>
@@ -1346,9 +1359,7 @@ function AccountsAccessSettings() {
                         rightChildren={
                           <IconButton
                             icon={SvgTrash}
-                            onClick={() =>
-                              setTokenToDelete({ id: pat.id, name: pat.name })
-                            }
+                            onClick={() => setTokenToDelete(pat)}
                             internal
                           />
                         }
