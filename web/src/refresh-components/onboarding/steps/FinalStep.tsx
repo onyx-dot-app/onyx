@@ -34,7 +34,7 @@ const FinalStepItem = React.memo(
               </Button>
             </Link>
           }
-          rightChildrenReducedPadding
+          reducedPadding
           variant="tertiary"
         />
       </Card>

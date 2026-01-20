@@ -65,7 +65,7 @@ const OnboardingHeader = React.memo(
             )
           }
           variant="tertiary-muted"
-          rightChildrenReducedPadding
+          reducedPadding
           center
         />
       </Card>

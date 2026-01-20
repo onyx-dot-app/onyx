@@ -4,7 +4,11 @@ import { useRef, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { LineItemLayout, Section } from "@/layouts/general-layouts";
+import {
+  LineItemLayout,
+  Section,
+  AttachmentItemLayout,
+} from "@/layouts/general-layouts";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { Formik, Form } from "formik";
 import {
@@ -49,10 +53,9 @@ import Code from "@/refresh-components/Code";
 import { InputPrompt } from "@/app/chat/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
-import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
-import { cn } from "@/lib/utils";
+import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 
 interface PAT {
   id: number;
@@ -605,7 +608,7 @@ function PromptShortcuts() {
       {popup}
 
       {shortcuts.length > 0 && (
-        <Section gap={1}>
+        <Section gap={0.75}>
           {shortcuts.map((shortcut, index) => {
             const isEmpty = !shortcut.prompt.trim() && !shortcut.content.trim();
             const isExisting = !shortcut.isNew;
@@ -641,7 +644,7 @@ function PromptShortcuts() {
                     aria-label="Remove shortcut"
                     tooltip={
                       shortcut.is_public
-                        ? "Cannot delete a public prompt-shortcut"
+                        ? "Cannot delete public prompt-shortcuts."
                         : undefined
                     }
                   />
@@ -1301,6 +1304,7 @@ function AccountsAccessSettings() {
                     secondary={false}
                     internal
                     transient={showCreateModal}
+                    rightIcon
                   >
                     New Access Token
                   </CreateButton>
@@ -1308,18 +1312,28 @@ function AccountsAccessSettings() {
 
                 {/* Token List */}
                 {filteredPats.map((pat) => (
-                  <AttachmentButton
+                  <AttachmentItemLayout
                     key={pat.id}
                     icon={SvgKey}
+                    title={pat.name}
                     description={pat.token_display}
-                    rightText={humanReadableFormat(pat.created_at)}
-                    actionIcon={SvgTrash}
-                    onAction={() =>
-                      setTokenToDelete({ id: pat.id, name: pat.name })
+                    middleText="asdf"
+                    rightChildren={
+                      <Section flexDirection="row" gap={0.5} width="fit">
+                        <Text secondaryBody text03>
+                          {humanReadableFormat(pat.created_at)}
+                        </Text>
+                        <IconButton
+                          icon={SvgTrash}
+                          onClick={() =>
+                            setTokenToDelete({ id: pat.id, name: pat.name })
+                          }
+                          internal
+                        />
+                      </Section>
                     }
-                  >
-                    {pat.name}
-                  </AttachmentButton>
+                    variant="secondary"
+                  />
                 ))}
               </Section>
             </Card>
@@ -1419,7 +1433,7 @@ function FederatedConnectorCard({
               </Button>
             ) : undefined
           }
-          rightChildrenReducedPadding
+          reducedPadding
         />
       </Card>
     </>

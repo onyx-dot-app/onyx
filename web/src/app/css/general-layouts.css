@@ -5,7 +5,7 @@
   grid-template-columns: 1fr;
 }
 
-.line-item-layout[data-right-children-reduced-padding="true"] {
+.line-item-layout[data-reduced-padding="true"] {
   @apply p-2;
 }
 
