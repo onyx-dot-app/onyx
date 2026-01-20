@@ -10,6 +10,7 @@ from onyx.db.build_session import get_latest_snapshot
 from onyx.db.build_session import get_sandbox_by_session
 from onyx.db.build_session import update_sandbox_status
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.utils.logger import setup_logger
 
