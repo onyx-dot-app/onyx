@@ -86,6 +86,43 @@ class SandboxManager:
             {}
         )  # sandbox_id -> ACPAgentClient
 
+        # Validate templates exist (raises RuntimeError if missing)
+        self._validate_templates()
+
+    def _validate_templates(self) -> None:
+        """Validate that sandbox templates exist.
+
+        Raises RuntimeError if templates are missing.
+        Templates are required for sandbox functionality.
+
+        Raises:
+            RuntimeError: If outputs or venv templates are missing
+        """
+        outputs_path = Path(OUTPUTS_TEMPLATE_PATH)
+        venv_path = Path(VENV_TEMPLATE_PATH)
+
+        missing_templates: list[str] = []
+
+        if not outputs_path.exists():
+            missing_templates.append(f"Outputs template not found at {outputs_path}")
+
+        if not venv_path.exists():
+            missing_templates.append(f"Venv template not found at {venv_path}")
+
+        if missing_templates:
+            error_msg = (
+                "Sandbox templates are missing. "
+                "Please build templates using:\n"
+                "  python -m onyx.server.features.build.sandbox.build_templates\n"
+                "Or use Docker image built with Dockerfile.sandbox-templates.\n\n"
+                "Missing templates:\n"
+            )
+            error_msg += "\n".join(f"  - {template}" for template in missing_templates)
+            raise RuntimeError(error_msg)
+
+        logger.debug(f"Outputs template found at {outputs_path}")
+        logger.debug(f"Venv template found at {venv_path}")
+
     def _get_sandbox_path(self, session_id: str | UUID) -> Path:
         """Get the filesystem path for a sandbox based on session_id.
 
