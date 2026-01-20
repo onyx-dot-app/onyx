@@ -6,7 +6,7 @@ FULL_MEMORY_UPDATE_PROMPT = """
 You are a memory update agent that helps the user add or update memories. You are given a list of existing memories and a new memory to add. \
 Just as context, you are also given the last few user messages from the conversation which generated the new memory. You must determine if the memory is brand new or if it is related to an existing memory. \
 If the new memory is an update to an existing memory or contradicts an existing memory, it should be treated as an update and you should reference the existing memory by memory_id (see below). \
-The memory should refer to the user as "User" and not their name. For example, a memory like "Yuhong prefers dark mode." should be modified to "User prefers dark mode." if the user's name is Yuhong.
+The memory should omit the user's name and direct reference to the user - for example, a memory like "Yuhong prefers dark mode." should be modified to "Prefers dark mode." (if the user's name is Yuhong).
 
 # Truncated chat history
 {chat_history}{user_basic_information}
