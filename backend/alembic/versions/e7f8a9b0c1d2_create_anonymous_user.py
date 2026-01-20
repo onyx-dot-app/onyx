@@ -69,7 +69,6 @@ def upgrade() -> None:
         "tool",
         "notification",
         "inputprompt",
-        "agent__search_metrics",
     ]
 
     for table in tables_to_check:
@@ -110,6 +109,7 @@ def downgrade() -> None:
     """
     connection = op.get_bind()
 
+    # Note: agent__search_metrics was dropped in migration a1b2c3d4e5f7
     tables_to_update = [
         "chat_session",
         "credential",
@@ -118,7 +118,6 @@ def downgrade() -> None:
         "tool",
         "notification",
         "inputprompt",
-        "agent__search_metrics",
     ]
 
     # Set records back to NULL
