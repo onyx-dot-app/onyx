@@ -1,9 +1,5 @@
 """API endpoints for Build Mode message management."""
 
-import json
-import uuid
-from datetime import datetime
-from datetime import timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -37,6 +33,21 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.models import MessageListResponse
 from onyx.server.features.build.models import MessageRequest
 from onyx.server.features.build.models import MessageResponse
+from onyx.server.features.build.packets import ArtifactCreatedPacket
+from onyx.server.features.build.packets import ArtifactType
+from onyx.server.features.build.packets import BuildPacket
+from onyx.server.features.build.packets import convert_acp_error_to_error
+from onyx.server.features.build.packets import convert_acp_message_chunk_to_output_delta
+from onyx.server.features.build.packets import convert_acp_mode_update_to_mode_update
+from onyx.server.features.build.packets import convert_acp_plan_to_plan
+from onyx.server.features.build.packets import convert_acp_prompt_response_to_done
+from onyx.server.features.build.packets import convert_acp_thought_to_step_delta
+from onyx.server.features.build.packets import convert_acp_tool_progress_to_tool_end
+from onyx.server.features.build.packets import convert_acp_tool_start_to_tool_start
+from onyx.server.features.build.packets import create_artifact_from_file
+from onyx.server.features.build.packets import ErrorPacket
+from onyx.server.features.build.packets import FileWritePacket
+from onyx.server.features.build.packets import OutputStartPacket
 from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.utils.logger import setup_logger
 
@@ -126,13 +137,9 @@ async def stream_cli_agent_response(
     assistant_message_parts: list[str] = []
     output_started = False
 
-    def _format_message_event(data: dict) -> str:
-        """Format a message event as SSE (all events use event: message)."""
-        return f"event: message\ndata: {json.dumps(data)}\n\n"
-
-    def _get_timestamp() -> str:
-        """Get current timestamp in ISO format."""
-        return datetime.now(tz=timezone.utc).isoformat()
+    def _format_packet_event(packet: BuildPacket) -> str:
+        """Format a packet as SSE (all events use event: message)."""
+        return f"event: message\ndata: {packet.model_dump_json(by_alias=True)}\n\n"
 
     try:
         # Create ONE session for the entire streaming operation (following chat pattern)
@@ -140,23 +147,15 @@ async def stream_cli_agent_response(
             # Verify session exists and belongs to user
             session = get_build_session(session_id, user_id, db_session)
             if session is None:
-                yield _format_message_event(
-                    {
-                        "type": "error",
-                        "message": "Session not found",
-                        "timestamp": _get_timestamp(),
-                    }
-                )
+                yield _format_packet_event(ErrorPacket(message="Session not found"))
                 return
 
             # Check if sandbox is running
             if not session.sandbox or session.sandbox.status != SandboxStatus.RUNNING:
-                yield _format_message_event(
-                    {
-                        "type": "error",
-                        "message": "Sandbox is not running. Please wait for it to start.",
-                        "timestamp": _get_timestamp(),
-                    }
+                yield _format_packet_event(
+                    ErrorPacket(
+                        message="Sandbox is not running. Please wait for it to start."
+                    )
                 )
                 return
 
@@ -175,13 +174,7 @@ async def stream_cli_agent_response(
             # Get sandbox
             sandbox = get_sandbox_by_session_id(db_session, session_id)
             if sandbox is None:
-                yield _format_message_event(
-                    {
-                        "type": "error",
-                        "message": "Sandbox not found",
-                        "timestamp": _get_timestamp(),
-                    }
-                )
+                yield _format_packet_event(ErrorPacket(message="Sandbox not found"))
                 return
 
             sandbox_id = str(sandbox.id)
@@ -193,133 +186,65 @@ async def stream_cli_agent_response(
             for acp_event in sandbox_manager.send_message(
                 sandbox_id, user_message_content, db_session
             ):
-                # Map ACP events to frontend packet types
+                # Map ACP events to frontend packet types using conversion utilities
                 if isinstance(acp_event, AgentThoughtChunk):
                     # Map thought to step_delta
-                    # AgentThoughtChunk has a content field which is a ContentBlock (TextContentBlock, etc.)
-                    content_block = getattr(acp_event, "content", None)
-                    if content_block and hasattr(content_block, "text"):
-                        text = content_block.text
-                        yield _format_message_event(
-                            {
-                                "type": "step_delta",
-                                "step_id": "thinking",
-                                "content": text,
-                                "timestamp": _get_timestamp(),
-                            }
-                        )
+                    packet = convert_acp_thought_to_step_delta(acp_event)
+                    yield _format_packet_event(packet)
 
                 elif isinstance(acp_event, ToolCallStart):
                     # Emit tool_start packet
-                    tool_name = getattr(acp_event, "tool_name", "unknown")
-                    tool_input = getattr(acp_event, "input", {})
-                    yield _format_message_event(
-                        {
-                            "type": "tool_start",
-                            "tool_name": tool_name,
-                            "tool_input": tool_input,
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
+                    packet = convert_acp_tool_start_to_tool_start(acp_event)
+                    yield _format_packet_event(packet)
 
                 elif isinstance(acp_event, ToolCallProgress):
                     # Emit tool_end packet
-                    tool_name = getattr(acp_event, "tool_name", "")
-                    yield _format_message_event(
-                        {
-                            "type": "tool_end",
-                            "tool_name": tool_name,
-                            "status": "success",
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
+                    packet = convert_acp_tool_progress_to_tool_end(acp_event)
+                    yield _format_packet_event(packet)
 
                     # If it's a write operation, emit file_write packet
+                    tool_name = getattr(acp_event, "tool_name", "")
                     if tool_name.lower() in ["write", "write_file", "edit"]:
                         result = getattr(acp_event, "result", "")
-                        yield _format_message_event(
-                            {
-                                "type": "file_write",
-                                "path": "outputs/file",
-                                "size_bytes": len(str(result)),
-                                "timestamp": _get_timestamp(),
-                            }
+                        file_write_packet = FileWritePacket(
+                            path="outputs/file",
+                            size_bytes=len(str(result)),
                         )
+                        yield _format_packet_event(file_write_packet)
 
                 elif isinstance(acp_event, AgentPlanUpdate):
                     # Emit plan update
-                    plan = getattr(acp_event, "plan", "")
-                    if plan:
-                        yield _format_message_event(
-                            {
-                                "type": "plan",
-                                "plan": plan,
-                                "timestamp": _get_timestamp(),
-                            }
-                        )
+                    packet = convert_acp_plan_to_plan(acp_event)
+                    yield _format_packet_event(packet)
 
                 elif isinstance(acp_event, CurrentModeUpdate):
                     # Emit mode change update
-                    mode = getattr(acp_event, "mode", "")
-                    if mode:
-                        yield _format_message_event(
-                            {
-                                "type": "mode_update",
-                                "mode": mode,
-                                "timestamp": _get_timestamp(),
-                            }
-                        )
+                    packet = convert_acp_mode_update_to_mode_update(acp_event)
+                    yield _format_packet_event(packet)
 
                 elif isinstance(acp_event, AgentMessageChunk):
                     # Start output if not started
                     if not output_started:
-                        yield _format_message_event(
-                            {
-                                "type": "output_start",
-                                "timestamp": _get_timestamp(),
-                            }
-                        )
+                        yield _format_packet_event(OutputStartPacket())
                         output_started = True
 
                     # Emit output_delta and accumulate content
-                    # AgentMessageChunk has a content field which is a ContentBlock (TextContentBlock, etc.)
-                    content_block = getattr(acp_event, "content", None)
-                    if content_block and hasattr(content_block, "text"):
-                        text = content_block.text
-                        assistant_message_parts.append(text)
-                        yield _format_message_event(
-                            {
-                                "type": "output_delta",
-                                "content": text,
-                                "timestamp": _get_timestamp(),
-                            }
-                        )
+                    packet = convert_acp_message_chunk_to_output_delta(acp_event)
+                    assistant_message_parts.append(packet.content)
+                    yield _format_packet_event(packet)
 
                 elif isinstance(acp_event, PromptResponse):
                     # Agent finished - emit done packet
-                    stop_reason = getattr(acp_event, "stop_reason", None)
-                    summary = (
-                        f"Completed: {stop_reason}" if stop_reason else "Task completed"
-                    )
-                    yield _format_message_event(
-                        {
-                            "type": "done",
-                            "summary": summary,
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
+                    packet = convert_acp_prompt_response_to_done(acp_event)
+                    yield _format_packet_event(packet)
 
                 elif isinstance(acp_event, ACPError):
                     # Emit error packet
-                    yield _format_message_event(
-                        {
-                            "type": "error",
-                            "message": acp_event.message,
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
+                    packet = convert_acp_error_to_error(acp_event)
+                    yield _format_packet_event(packet)
 
             # Check for artifacts and emit artifact_created events
+            # For now, only check for web apps
             sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox_session_id)
             outputs_dir = sandbox_path / "outputs"
 
@@ -327,114 +252,13 @@ async def stream_cli_agent_response(
                 # Check for webapp
                 web_dir = outputs_dir / "web"
                 if web_dir.exists():
-                    yield _format_message_event(
-                        {
-                            "type": "artifact_created",
-                            "artifact": {
-                                "id": str(uuid.uuid4()),
-                                "type": "web_app",
-                                "name": "Web Application",
-                                "path": "outputs/web/",
-                                "preview_url": (
-                                    f"/api/build/sessions/{session_id}/" "preview"
-                                ),
-                            },
-                            "timestamp": _get_timestamp(),
-                        }
+                    artifact = create_artifact_from_file(
+                        session_id=session_id,
+                        file_path="outputs/web/",
+                        artifact_type=ArtifactType.WEB_APP,
+                        name="Web Application",
                     )
-
-                # Check for markdown files
-                for md_file in outputs_dir.glob("**/*.md"):
-                    yield _format_message_event(
-                        {
-                            "type": "artifact_created",
-                            "artifact": {
-                                "id": str(uuid.uuid4()),
-                                "type": "markdown",
-                                "name": md_file.stem,
-                                "path": str(md_file.relative_to(sandbox_path)),
-                                "preview_url": None,
-                            },
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
-
-                # Check for images
-                for img_ext in ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg"]:
-                    for img_file in outputs_dir.glob(f"**/{img_ext}"):
-                        yield _format_message_event(
-                            {
-                                "type": "artifact_created",
-                                "artifact": {
-                                    "id": str(uuid.uuid4()),
-                                    "type": "image",
-                                    "name": img_file.name,
-                                    "path": str(img_file.relative_to(sandbox_path)),
-                                    "preview_url": (
-                                        f"/api/build/sessions/{session_id}/"
-                                        f"artifacts/{img_file.relative_to(sandbox_path)}"
-                                    ),
-                                },
-                                "timestamp": _get_timestamp(),
-                            }
-                        )
-
-                # Check for PowerPoint files
-                for pptx_file in outputs_dir.glob("**/*.pptx"):
-                    yield _format_message_event(
-                        {
-                            "type": "artifact_created",
-                            "artifact": {
-                                "id": str(uuid.uuid4()),
-                                "type": "pptx",
-                                "name": pptx_file.stem,
-                                "path": str(pptx_file.relative_to(sandbox_path)),
-                                "preview_url": (
-                                    f"/api/build/sessions/{session_id}/"
-                                    f"artifacts/{pptx_file.relative_to(sandbox_path)}"
-                                ),
-                            },
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
-
-                # Check for Excel files
-                for xlsx_file in outputs_dir.glob("**/*.xlsx"):
-                    yield _format_message_event(
-                        {
-                            "type": "artifact_created",
-                            "artifact": {
-                                "id": str(uuid.uuid4()),
-                                "type": "csv",
-                                "name": xlsx_file.stem,
-                                "path": str(xlsx_file.relative_to(sandbox_path)),
-                                "preview_url": (
-                                    f"/api/build/sessions/{session_id}/"
-                                    f"artifacts/{xlsx_file.relative_to(sandbox_path)}"
-                                ),
-                            },
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
-
-                # Check for Word documents
-                for docx_file in outputs_dir.glob("**/*.docx"):
-                    yield _format_message_event(
-                        {
-                            "type": "artifact_created",
-                            "artifact": {
-                                "id": str(uuid.uuid4()),
-                                "type": "markdown",
-                                "name": docx_file.stem,
-                                "path": str(docx_file.relative_to(sandbox_path)),
-                                "preview_url": (
-                                    f"/api/build/sessions/{session_id}/"
-                                    f"artifacts/{docx_file.relative_to(sandbox_path)}"
-                                ),
-                            },
-                            "timestamp": _get_timestamp(),
-                        }
-                    )
+                    yield _format_packet_event(ArtifactCreatedPacket(artifact=artifact))
 
             # Save the complete assistant response to database (same session!)
             if assistant_message_parts:
@@ -448,31 +272,13 @@ async def stream_cli_agent_response(
 
     except ValueError as e:
         logger.error(f"Error executing task: {e}")
-        yield _format_message_event(
-            {
-                "type": "error",
-                "message": str(e),
-                "timestamp": _get_timestamp(),
-            }
-        )
+        yield _format_packet_event(ErrorPacket(message=str(e)))
     except RuntimeError as e:
         logger.error(f"Agent communication error: {e}")
-        yield _format_message_event(
-            {
-                "type": "error",
-                "message": str(e),
-                "timestamp": _get_timestamp(),
-            }
-        )
+        yield _format_packet_event(ErrorPacket(message=str(e)))
     except Exception as e:
         logger.exception("Error in build message streaming")
-        yield _format_message_event(
-            {
-                "type": "error",
-                "message": str(e),
-                "timestamp": _get_timestamp(),
-            }
-        )
+        yield _format_packet_event(ErrorPacket(message=str(e)))
     finally:
         logger.debug(f"Stream generator finished for session {session_id}")
 
