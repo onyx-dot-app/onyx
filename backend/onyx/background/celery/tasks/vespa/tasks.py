@@ -470,6 +470,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
             # This flow is for updates so we get all indices.
             document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
+                secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
 

@@ -107,6 +107,7 @@ def upsert_ingestion_doc(
     document_indices = get_all_document_indices(
         active_search_settings.primary,
         None,
+        None,
     )
 
     search_settings = get_current_search_settings(db_session)
@@ -154,7 +155,7 @@ def upsert_ingestion_doc(
 
         # This flow is for indexing so we get all indices.
         sec_document_indices = get_all_document_indices(
-            active_search_settings.secondary, None
+            active_search_settings.secondary, None, None
         )
 
         run_indexing_pipeline(
@@ -197,6 +198,7 @@ def delete_ingestion_doc(
     # This flow is for deletion so we get all indices.
     document_indices = get_all_document_indices(
         active_search_settings.primary,
+        active_search_settings.secondary,
         None,
     )
     for document_index in document_indices:

@@ -217,6 +217,7 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         # This flow is for deletion so we get all indices.
         document_indices = get_all_document_indices(
             active_search_settings.primary,
+            active_search_settings.secondary,
             None,
         )
 

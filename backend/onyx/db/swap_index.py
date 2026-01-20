@@ -82,7 +82,7 @@ def _perform_index_swap(
 
     # This flow is for checking and possibly creating an index so we get all
     # indices.
-    document_indices = get_all_document_indices(new_search_settings, None)
+    document_indices = get_all_document_indices(new_search_settings, None, None)
 
     WAIT_SECONDS = 5
 

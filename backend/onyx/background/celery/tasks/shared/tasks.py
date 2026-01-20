@@ -100,6 +100,7 @@ def document_by_cc_pair_cleanup_task(
             # This flow is for updates and deletion so we get all indices.
             document_indices = get_all_document_indices(
                 active_search_settings.primary,
+                active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
 

@@ -135,6 +135,8 @@ def setup_onyx(
     # This flow is for setting up the document index so we get all indices here.
     document_indices = get_all_document_indices(
         search_settings,
+        secondary_search_settings,
+        None,
     )
 
     success = setup_document_indices(

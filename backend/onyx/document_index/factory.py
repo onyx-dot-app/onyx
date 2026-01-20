@@ -55,6 +55,7 @@ def get_default_document_index(
 
 def get_all_document_indices(
     search_settings: SearchSettings,
+    secondary_search_settings: SearchSettings | None,
     httpx_client: httpx.Client | None = None,
 ) -> list[DocumentIndex]:
     """Gets all document indices.
@@ -71,9 +72,15 @@ def get_all_document_indices(
     """
     vespa_document_index = VespaIndex(
         index_name=search_settings.index_name,
-        secondary_index_name=None,
-        large_chunks_enabled=False,
-        secondary_large_chunks_enabled=None,
+        secondary_index_name=(
+            secondary_search_settings.index_name if secondary_search_settings else None
+        ),
+        large_chunks_enabled=search_settings.large_chunks_enabled,
+        secondary_large_chunks_enabled=(
+            secondary_search_settings.large_chunks_enabled
+            if secondary_search_settings
+            else None
+        ),
         multitenant=MULTI_TENANT,
         httpx_client=httpx_client,
     )

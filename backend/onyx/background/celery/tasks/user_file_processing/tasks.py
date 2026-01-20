@@ -247,6 +247,7 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
                 # This flow is for indexing so we get all indices.
                 document_indices = get_all_document_indices(
                     current_search_settings,
+                    None,
                     httpx_client=HttpxPool.get("vespa"),
                 )
 
@@ -415,6 +416,7 @@ def process_single_user_file_delete(
             # This flow is for deletion so we get all indices.
             document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
+                secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
             retry_document_indices: list[RetryDocumentIndex] = [
@@ -571,6 +573,7 @@ def process_single_user_file_project_sync(
             # This flow is for updates so we get all indices.
             document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
+                secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
             retry_document_indices: list[RetryDocumentIndex] = [
