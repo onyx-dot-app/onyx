@@ -393,26 +393,11 @@ async def send_message(
     """
     Send a message to the CLI agent and stream the response.
 
-    Enforces rate limiting before executing the agent.
+    Enforces rate limiting before executing the agent (via dependency).
     Returns a Server-Sent Events (SSE) stream with the agent's response.
 
     Follows the same pattern as /chat/send-message for consistency.
     """
-    from onyx.server.features.build.rate_limit import get_user_rate_limit_status
-
-    # Check rate limits BEFORE proceeding
-    rate_limit_status = get_user_rate_limit_status(user, db_session)
-    if rate_limit_status.is_limited:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit exceeded. You have used {rate_limit_status.messages_used}/{rate_limit_status.limit} messages. "
-            + (
-                f"Limit resets at {rate_limit_status.reset_timestamp}."
-                if rate_limit_status.reset_timestamp
-                else "This is a lifetime limit."
-            ),
-        )
-
     user_id = user.id if user is not None else None
 
     # Stream the CLI agent's response
