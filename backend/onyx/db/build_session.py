@@ -1,0 +1,272 @@
+"""Database operations for Build Mode sessions."""
+
+from datetime import datetime
+from uuid import UUID
+
+from sqlalchemy import desc
+from sqlalchemy.orm import Session
+
+from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import SandboxStatus
+from onyx.db.models import Artifact
+from onyx.db.models import BuildSession
+from onyx.db.models import Sandbox
+from onyx.db.models import Snapshot
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def create_build_session(
+    user_id: UUID | None,
+    db_session: Session,
+) -> BuildSession:
+    """Create a new build session for the given user."""
+    session = BuildSession(
+        user_id=user_id,
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(session)
+    db_session.commit()
+    db_session.refresh(session)
+
+    logger.info(f"Created build session {session.id} for user {user_id}")
+    return session
+
+
+def get_build_session(
+    session_id: UUID,
+    user_id: UUID | None,
+    db_session: Session,
+) -> BuildSession | None:
+    """Get a build session by ID, ensuring it belongs to the user."""
+    return (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.id == session_id,
+            BuildSession.user_id == user_id,
+        )
+        .one_or_none()
+    )
+
+
+def get_user_build_sessions(
+    user_id: UUID | None,
+    db_session: Session,
+    limit: int = 100,
+) -> list[BuildSession]:
+    """Get all build sessions for a user, ordered by most recent first."""
+    return (
+        db_session.query(BuildSession)
+        .filter(BuildSession.user_id == user_id)
+        .order_by(desc(BuildSession.created_at))
+        .limit(limit)
+        .all()
+    )
+
+
+def update_session_activity(
+    session_id: UUID,
+    db_session: Session,
+) -> None:
+    """Update the last activity timestamp for a session."""
+    session = (
+        db_session.query(BuildSession)
+        .filter(BuildSession.id == session_id)
+        .one_or_none()
+    )
+    if session:
+        session.last_activity_at = datetime.utcnow()
+        db_session.commit()
+
+
+def update_session_status(
+    session_id: UUID,
+    status: BuildSessionStatus,
+    db_session: Session,
+) -> None:
+    """Update the status of a build session."""
+    session = (
+        db_session.query(BuildSession)
+        .filter(BuildSession.id == session_id)
+        .one_or_none()
+    )
+    if session:
+        session.status = status
+        db_session.commit()
+        logger.info(f"Updated build session {session_id} status to {status}")
+
+
+def delete_build_session(
+    session_id: UUID,
+    user_id: UUID | None,
+    db_session: Session,
+) -> bool:
+    """Delete a build session and all related data."""
+    session = get_build_session(session_id, user_id, db_session)
+    if not session:
+        return False
+
+    db_session.delete(session)
+    db_session.commit()
+    logger.info(f"Deleted build session {session_id}")
+    return True
+
+
+# Sandbox operations
+def create_sandbox(
+    session_id: UUID,
+    db_session: Session,
+) -> Sandbox:
+    """Create a new sandbox for a build session."""
+    sandbox = Sandbox(
+        session_id=session_id,
+        status=SandboxStatus.PROVISIONING,
+    )
+    db_session.add(sandbox)
+    db_session.commit()
+    db_session.refresh(sandbox)
+
+    logger.info(f"Created sandbox {sandbox.id} for session {session_id}")
+    return sandbox
+
+
+def get_sandbox_by_session(
+    session_id: UUID,
+    db_session: Session,
+) -> Sandbox | None:
+    """Get the sandbox for a given session."""
+    return (
+        db_session.query(Sandbox).filter(Sandbox.session_id == session_id).one_or_none()
+    )
+
+
+def update_sandbox_status(
+    sandbox_id: UUID,
+    status: SandboxStatus,
+    container_id: str | None = None,
+    db_session: Session = None,
+) -> None:
+    """Update the status of a sandbox."""
+    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
+    if sandbox:
+        sandbox.status = status
+        if container_id is not None:
+            sandbox.container_id = container_id
+        sandbox.last_heartbeat = datetime.utcnow()
+        db_session.commit()
+        logger.info(f"Updated sandbox {sandbox_id} status to {status}")
+
+
+def update_sandbox_heartbeat(
+    sandbox_id: UUID,
+    db_session: Session,
+) -> None:
+    """Update the heartbeat timestamp for a sandbox."""
+    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
+    if sandbox:
+        sandbox.last_heartbeat = datetime.utcnow()
+        db_session.commit()
+
+
+# Artifact operations
+def create_artifact(
+    session_id: UUID,
+    artifact_type: str,
+    path: str,
+    name: str,
+    db_session: Session,
+) -> Artifact:
+    """Create a new artifact record."""
+    artifact = Artifact(
+        session_id=session_id,
+        type=artifact_type,
+        path=path,
+        name=name,
+    )
+    db_session.add(artifact)
+    db_session.commit()
+    db_session.refresh(artifact)
+
+    logger.info(f"Created artifact {artifact.id} for session {session_id}")
+    return artifact
+
+
+def get_session_artifacts(
+    session_id: UUID,
+    db_session: Session,
+) -> list[Artifact]:
+    """Get all artifacts for a session."""
+    return (
+        db_session.query(Artifact)
+        .filter(Artifact.session_id == session_id)
+        .order_by(desc(Artifact.created_at))
+        .all()
+    )
+
+
+def update_artifact(
+    artifact_id: UUID,
+    path: str | None = None,
+    name: str | None = None,
+    db_session: Session = None,
+) -> None:
+    """Update artifact metadata."""
+    artifact = (
+        db_session.query(Artifact).filter(Artifact.id == artifact_id).one_or_none()
+    )
+    if artifact:
+        if path is not None:
+            artifact.path = path
+        if name is not None:
+            artifact.name = name
+        artifact.updated_at = datetime.utcnow()
+        db_session.commit()
+        logger.info(f"Updated artifact {artifact_id}")
+
+
+# Snapshot operations
+def create_snapshot(
+    session_id: UUID,
+    storage_path: str,
+    size_bytes: int,
+    db_session: Session,
+) -> Snapshot:
+    """Create a new snapshot record."""
+    snapshot = Snapshot(
+        session_id=session_id,
+        storage_path=storage_path,
+        size_bytes=size_bytes,
+    )
+    db_session.add(snapshot)
+    db_session.commit()
+    db_session.refresh(snapshot)
+
+    logger.info(f"Created snapshot {snapshot.id} for session {session_id}")
+    return snapshot
+
+
+def get_latest_snapshot(
+    session_id: UUID,
+    db_session: Session,
+) -> Snapshot | None:
+    """Get the most recent snapshot for a session."""
+    return (
+        db_session.query(Snapshot)
+        .filter(Snapshot.session_id == session_id)
+        .order_by(desc(Snapshot.created_at))
+        .first()
+    )
+
+
+def get_session_snapshots(
+    session_id: UUID,
+    db_session: Session,
+) -> list[Snapshot]:
+    """Get all snapshots for a session."""
+    return (
+        db_session.query(Snapshot)
+        .filter(Snapshot.session_id == session_id)
+        .order_by(desc(Snapshot.created_at))
+        .all()
+    )
