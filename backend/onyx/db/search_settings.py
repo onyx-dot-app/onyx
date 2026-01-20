@@ -140,18 +140,15 @@ def get_current_search_settings(db_session: Session) -> SearchSettings:
 
 
 def get_secondary_search_settings(db_session: Session) -> SearchSettings | None:
-    logger.warning("Secondary search settings are temporarily disabled.")
-    # TODO(andrei): Re-enable secondary search settings.
-    return None
-    # query = (
-    #     select(SearchSettings)
-    #     .where(SearchSettings.status == IndexModelStatus.FUTURE)
-    #     .order_by(SearchSettings.id.desc())
-    # )
-    # result = db_session.execute(query)
-    # latest_settings = result.scalars().first()
+    query = (
+        select(SearchSettings)
+        .where(SearchSettings.status == IndexModelStatus.FUTURE)
+        .order_by(SearchSettings.id.desc())
+    )
+    result = db_session.execute(query)
+    latest_settings = result.scalars().first()
 
-    # return latest_settings
+    return latest_settings
 
 
 def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:
