@@ -35,7 +35,7 @@ RETURNS TRIGGER AS $$
 DECLARE
     placeholder_uuid UUID := '00000000-0000-0000-0000-000000000001'::uuid;
     placeholder_row RECORD;
-    current_schema TEXT;
+    schema_name TEXT;
 BEGIN
     -- Skip if this is the placeholder user being inserted
     IF NEW.id = placeholder_uuid THEN
@@ -48,7 +48,7 @@ BEGIN
     END IF;
 
     -- Get current schema for self-cleanup
-    current_schema := current_schema();
+    schema_name := current_schema();
 
     -- Try to lock the placeholder user row with FOR UPDATE SKIP LOCKED
     -- This ensures only one concurrent transaction can proceed with migration
@@ -61,8 +61,8 @@ BEGIN
     IF NOT FOUND THEN
         -- Either placeholder doesn't exist or another transaction has it locked
         -- Either way, drop the trigger and return without making admin
-        EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', current_schema);
-        EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', current_schema);
+        EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', schema_name);
+        EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', schema_name);
         RETURN NEW;
     END IF;
 
@@ -95,8 +95,8 @@ BEGIN
     DELETE FROM "user" WHERE id = placeholder_uuid;
 
     -- Drop the trigger and function (self-cleanup)
-    EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', current_schema);
-    EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', current_schema);
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', schema_name);
+    EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', schema_name);
 
     RETURN NEW;
 END;
