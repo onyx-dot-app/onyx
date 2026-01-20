@@ -42,11 +42,13 @@ def _run_single_search(
     document_index: DocumentIndex,
     user: User | None,
     db_session: Session,
+    num_hits: int | None = None,
 ) -> list[InferenceChunk]:
     """Execute a single search query and return chunks."""
     chunk_search_request = ChunkSearchRequest(
         query=query,
         user_selected_filters=filters,
+        limit=num_hits,
     )
 
     return search_pipeline(
@@ -114,6 +116,7 @@ def stream_search_query(
             document_index=document_index,
             user=user,
             db_session=db_session,
+            num_hits=request.num_hits,
         )
     else:
         # Multiple queries - run in parallel and merge with RRF
@@ -121,7 +124,14 @@ def stream_search_query(
         search_functions = [
             (
                 _run_single_search,
-                (query, request.filters, document_index, user, db_session),
+                (
+                    query,
+                    request.filters,
+                    document_index,
+                    user,
+                    db_session,
+                    request.num_hits,
+                ),
             )
             for query in all_executed_queries
         ]
@@ -167,6 +177,9 @@ def stream_search_query(
 
     # Merge chunks into sections
     sections = merge_individual_chunks(chunks)
+
+    # Truncate to the requested number of hits
+    sections = sections[: request.num_hits]
 
     # Apply LLM document selection if requested
     # num_docs_fed_to_llm_selection specifies how many sections to feed to the LLM for selection

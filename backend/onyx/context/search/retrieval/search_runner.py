@@ -23,45 +23,6 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-def _dedupe_chunks(
-    chunks: list[InferenceChunk],
-) -> list[InferenceChunk]:
-    used_chunks: dict[tuple[str, int], InferenceChunk] = {}
-    for chunk in chunks:
-        key = (chunk.document_id, chunk.chunk_id)
-        if key not in used_chunks:
-            used_chunks[key] = chunk
-        else:
-            stored_chunk_score = used_chunks[key].score or 0
-            this_chunk_score = chunk.score or 0
-            if stored_chunk_score < this_chunk_score:
-                used_chunks[key] = chunk
-
-    return list(used_chunks.values())
-
-
-def download_nltk_data() -> None:
-    import nltk  # type: ignore[import-untyped]
-
-    resources = {
-        "stopwords": "corpora/stopwords",
-        # "wordnet": "corpora/wordnet",  # Not in use
-        "punkt_tab": "tokenizers/punkt_tab",
-    }
-
-    for resource_name, resource_path in resources.items():
-        try:
-            nltk.data.find(resource_path)
-            logger.info(f"{resource_name} is already downloaded.")
-        except LookupError:
-            try:
-                logger.info(f"Downloading {resource_name}...")
-                nltk.download(resource_name, quiet=True)
-                logger.info(f"{resource_name} downloaded successfully.")
-            except Exception as e:
-                logger.error(f"Failed to download {resource_name}. Error: {e}")
-
-
 def combine_retrieval_results(
     chunk_sets: list[list[InferenceChunk]],
 ) -> list[InferenceChunk]:
