@@ -77,6 +77,16 @@ _EXPECTED_JIRA_GROUPS = [
         },
         gives_anyone_access=False,
     ),
+    ExternalUserGroupSet(
+        id="bitbucket-admins-onyxai",
+        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="bitbucket-users-onyxai",
+        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        gives_anyone_access=False,
+    ),
 ]
 
 

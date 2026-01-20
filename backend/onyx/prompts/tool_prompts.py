@@ -71,6 +71,14 @@ GENERATE_IMAGE_GUIDANCE = """
 NEVER use generate_image unless the user specifically requests an image.
 """
 
+MEMORY_GUIDANCE = """
+
+## add_memory
+Use the `add_memory` tool for facts shared by the user that should be remembered for future conversations. \
+Only add memories that are specific, likely to remain true, and likely to be useful later. \
+Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
+"""
+
 TOOL_CALL_FAILURE_PROMPT = """
 LLM attempted to call a tool but failed. Most likely the tool name or arguments were misspelled.
 """.strip()

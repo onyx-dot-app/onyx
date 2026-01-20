@@ -80,6 +80,8 @@ class ToolResponse(BaseModel):
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
         | CustomToolCallSummary
+        # If the rich response is a string, this is what's saved to the tool call in the DB
+        | str
         | None  # If nothing needs to be persisted outside of the string value passed to the LLM
     )
     # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history

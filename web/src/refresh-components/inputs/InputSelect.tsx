@@ -334,7 +334,8 @@ InputSelectContent.displayName = "InputSelectContent";
  * </InputSelect.Item>
  * ```
  */
-interface InputSelectItemProps extends Omit<LineItemProps, "heavyForced"> {
+interface InputSelectItemProps
+  extends WithoutStyles<Omit<LineItemProps, "heavyForced">> {
   /** Unique value for this option */
   value: string;
   /** Optional callback when item is selected */
@@ -382,7 +383,6 @@ const InputSelectItem = React.forwardRef<
         emphasized
         description={description}
         onClick={noProp((event) => event.preventDefault())}
-        className={cn("w-full", props.className)}
       >
         {children}
       </LineItem>
@@ -473,10 +473,9 @@ InputSelectLabel.displayName = "InputSelectLabel";
  * </InputSelect.Content>
  * ```
  */
-type InputSelectSeparatorProps = WithoutStyles<SeparatorProps>;
 const InputSelectSeparator = React.forwardRef<
   React.ComponentRef<typeof Separator>,
-  InputSelectSeparatorProps
+  WithoutStyles<SeparatorProps>
 >(({ noPadding = true, ...props }, ref) => (
   <Separator ref={ref} noPadding={noPadding} className="px-2 py-1" {...props} />
 ));
@@ -535,5 +534,4 @@ export {
   type InputSelectItemProps,
   type InputSelectGroupProps,
   type InputSelectLabelProps,
-  type InputSelectSeparatorProps,
 };
