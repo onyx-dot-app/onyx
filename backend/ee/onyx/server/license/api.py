@@ -42,6 +42,20 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/license")
 
+# PEM-style delimiters used in license file format
+_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
+_PEM_END = "-----END ONYX LICENSE-----"
+
+
+def _strip_pem_delimiters(content: str) -> str:
+    """Strip PEM-style delimiters from license content if present."""
+    content = content.strip()
+    if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
+        # Remove first and last lines (the delimiters)
+        lines = content.split("\n")
+        return "\n".join(lines[1:-1]).strip()
+    return content
+
 
 @router.get("")
 async def get_license_status(
@@ -215,6 +229,8 @@ async def upload_license(
     try:
         content = await license_file.read()
         license_data = content.decode("utf-8").strip()
+        # Strip PEM-style delimiters if present (used in .lic file format)
+        license_data = _strip_pem_delimiters(license_data)
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid license file format")
 
