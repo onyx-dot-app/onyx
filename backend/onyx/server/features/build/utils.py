@@ -2,6 +2,7 @@
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.models import User
 from onyx.db.notification import create_notification
@@ -55,7 +56,12 @@ def ensure_build_mode_intro_notification(user: User, db_session: Session) -> Non
     Called from /api/notifications endpoint. Uses notification deduplication
     to ensure each user only gets one notification.
     """
+    # Posthog feature flag check
     if not is_build_mode_intro_enabled(user):
+        return
+
+    # Only show to admin users (since only admins can create connectors)
+    if user.role != UserRole.ADMIN:
         return
 
     # Create notification (will be skipped if already exists due to deduplication)
