@@ -139,9 +139,14 @@ function OllamaFormFields({
                   <InputTypeIn
                     {...field}
                     placeholder={OLLAMA_SELF_HOSTED_DEFAULT_URL}
-                    error={apiStatus === "error"}
+                    variant={
+                      disabled
+                        ? "disabled"
+                        : apiStatus === "error"
+                          ? "error"
+                          : undefined
+                    }
                     showClearButton={false}
-                    disabled={disabled}
                   />
                 </FormField.Control>
                 {showApiMessage && (
@@ -246,9 +251,9 @@ function OllamaFormFields({
                   <PasswordInputTypeIn
                     {...field}
                     placeholder=""
+                    disabled={disabled}
                     error={apiStatus === "error"}
                     showClearButton={false}
-                    disabled={disabled}
                     onBlur={(e) => {
                       field.onBlur(e);
                       if (field.value) {

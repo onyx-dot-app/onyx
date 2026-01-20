@@ -395,7 +395,7 @@ export default function LLMPopover({
           <InputTypeIn
             ref={searchInputRef}
             leftSearchIcon
-            internal
+            variant="internal"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search models..."

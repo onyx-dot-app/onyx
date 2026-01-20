@@ -69,7 +69,7 @@ export default function SwitchList({
             }}
           />
           <InputTypeIn
-            internal
+            variant="internal"
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}

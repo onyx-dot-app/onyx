@@ -344,7 +344,7 @@ function MCPServerCard({
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn
               placeholder="Search tools..."
-              internal
+              variant="internal"
               leftSearchIcon
               value={query}
               onChange={(e) => setQuery(e.target.value)}
