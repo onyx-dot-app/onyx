@@ -395,7 +395,7 @@ function ActionsTool({
           description={description}
           rightChildren={rightChildren}
           strikethrough={disabled}
-          compact
+          variant="secondary"
         />
       </label>
     </Card>

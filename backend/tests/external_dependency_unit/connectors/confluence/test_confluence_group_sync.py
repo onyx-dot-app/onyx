@@ -90,12 +90,12 @@ _EXPECTED_CONFLUENCE_GROUPS = [
     ),
     ExternalUserGroupSet(
         id="bitbucket-users-onyxai",
-        user_emails={"oauth@onyx.app"},
+        user_emails={"founders@onyx.app", "oauth@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(
         id="bitbucket-admins-onyxai",
-        user_emails={"oauth@onyx.app"},
+        user_emails={"founders@onyx.app", "oauth@onyx.app"},
         gives_anyone_access=False,
     ),
     ExternalUserGroupSet(

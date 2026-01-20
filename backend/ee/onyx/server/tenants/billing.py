@@ -1,9 +1,9 @@
 from typing import cast
+from typing import Literal
 
 import requests
 import stripe
 
-from ee.onyx.configs.app_configs import STRIPE_PRICE_ID
 from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import BillingInformation
@@ -16,15 +16,21 @@ stripe.api_key = STRIPE_SECRET_KEY
 logger = setup_logger()
 
 
-def fetch_stripe_checkout_session(tenant_id: str) -> str:
+def fetch_stripe_checkout_session(
+    tenant_id: str,
+    billing_period: Literal["monthly", "annual"] = "monthly",
+) -> str:
     token = generate_data_plane_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
     url = f"{CONTROL_PLANE_API_BASE_URL}/create-checkout-session"
-    params = {"tenant_id": tenant_id}
-    response = requests.post(url, headers=headers, params=params)
+    payload = {
+        "tenant_id": tenant_id,
+        "billing_period": billing_period,
+    }
+    response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.json()["sessionId"]
 
@@ -72,22 +78,24 @@ def fetch_billing_information(
 
 def register_tenant_users(tenant_id: str, number_of_users: int) -> stripe.Subscription:
     """
-    Send a request to the control service to register the number of users for a tenant.
+    Update the number of seats for a tenant's subscription.
+    Preserves the existing price (monthly, annual, or grandfathered).
     """
-
-    if not STRIPE_PRICE_ID:
-        raise Exception("STRIPE_PRICE_ID is not set")
-
     response = fetch_tenant_stripe_information(tenant_id)
     stripe_subscription_id = cast(str, response.get("stripe_subscription_id"))
 
     subscription = stripe.Subscription.retrieve(stripe_subscription_id)
+    subscription_item = subscription["items"]["data"][0]
+
+    # Use existing price to preserve the customer's current plan
+    current_price_id = subscription_item.price.id
+
     updated_subscription = stripe.Subscription.modify(
         stripe_subscription_id,
         items=[
             {
-                "id": subscription["items"]["data"][0].id,
-                "price": STRIPE_PRICE_ID,
+                "id": subscription_item.id,
+                "price": current_price_id,
                 "quantity": number_of_users,
             }
         ],

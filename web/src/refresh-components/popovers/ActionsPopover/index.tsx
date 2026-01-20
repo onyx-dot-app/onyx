@@ -825,7 +825,7 @@ export default function ActionsPopover({
   const totalSourceCount = accessibleConfiguredSources.length;
 
   const primaryView = (
-    <PopoverMenu md>
+    <PopoverMenu>
       {[
         <InputTypeIn
           key="search"
@@ -980,7 +980,7 @@ export default function ActionsPopover({
             />
           </div>
         </Popover.Trigger>
-        <Popover.Content side="bottom" align="start">
+        <Popover.Content side="bottom" align="start" width="lg">
           <div data-testid="tool-options">
             {secondaryView
               ? secondaryView.type === "mcp"

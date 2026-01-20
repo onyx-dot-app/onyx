@@ -1,75 +1,77 @@
-import { memo } from "react";
-import { STEP_CONFIG } from "../constants";
-import { OnboardingActions, OnboardingState } from "../types";
+import React from "react";
+import { STEP_CONFIG } from "@/refresh-components/onboarding/constants";
+import {
+  OnboardingActions,
+  OnboardingState,
+  OnboardingStep,
+} from "@/refresh-components/onboarding/types";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { OnboardingStep } from "../types";
 import ProgressSteps from "@/refresh-components/inputs/ProgressSteps";
-import { SvgCheckCircle, SvgX } from "@opal/icons";
+import { SvgX } from "@opal/icons";
+import { Card } from "@/refresh-components/cards";
+import { LineItemLayout, Section } from "@/layouts/general-layouts";
 
-type OnboardingHeaderProps = {
+interface OnboardingHeaderProps {
   state: OnboardingState;
   actions: OnboardingActions;
   handleHideOnboarding: () => void;
   handleFinishOnboarding: () => void;
-};
+}
+const OnboardingHeader = React.memo(
+  ({
+    state: onboardingState,
+    actions: onboardingActions,
+    handleHideOnboarding,
+    handleFinishOnboarding,
+  }: OnboardingHeaderProps) => {
+    const iconPercentage =
+      STEP_CONFIG[onboardingState.currentStep].iconPercentage;
+    const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
+    const isWelcomeStep =
+      onboardingState.currentStep === OnboardingStep.Welcome;
+    const isCompleteStep =
+      onboardingState.currentStep === OnboardingStep.Complete;
 
-const OnboardingHeaderInner = ({
-  state: onboardingState,
-  actions: onboardingActions,
-  handleHideOnboarding,
-  handleFinishOnboarding,
-}: OnboardingHeaderProps) => {
-  const iconPercentage =
-    STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-  const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
-  const isWelcomeStep = onboardingState.currentStep === OnboardingStep.Welcome;
-  const isCompleteStep =
-    onboardingState.currentStep === OnboardingStep.Complete;
-
-  const handleButtonClick = () => {
-    if (isCompleteStep) {
-      handleFinishOnboarding();
-    } else {
-      onboardingActions.nextStep();
+    function handleButtonClick() {
+      if (isCompleteStep) handleFinishOnboarding();
+      else onboardingActions.nextStep();
     }
-  };
 
-  return (
-    <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01">
-      <div className="flex items-center gap-1">
-        {iconPercentage != null ? (
-          <ProgressSteps value={iconPercentage} />
-        ) : (
-          <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-        )}
-        <Text as="p" text03 mainUiBody>
-          {STEP_CONFIG[onboardingState.currentStep].title}
-        </Text>
-      </div>
-      <div className="flex items-center gap-3">
-        {stepButtonText ? (
-          <>
-            {!isWelcomeStep && (
-              <Text as="p" text03 mainUiBody>
-                Step {onboardingState.stepIndex} of {onboardingState.totalSteps}
-              </Text>
-            )}
-            <Button
-              onClick={handleButtonClick}
-              disabled={!onboardingState.isButtonActive}
-            >
-              {stepButtonText}
-            </Button>
-          </>
-        ) : (
-          <IconButton internal icon={SvgX} onClick={handleHideOnboarding} />
-        )}
-      </div>
-    </div>
-  );
-};
+    return (
+      <Card padding={0.5}>
+        <LineItemLayout
+          icon={(props) => <ProgressSteps value={iconPercentage} {...props} />}
+          title={STEP_CONFIG[onboardingState.currentStep].title}
+          rightChildren={
+            stepButtonText ? (
+              <Section flexDirection="row">
+                {!isWelcomeStep && (
+                  <Text as="p" text03 mainUiBody>
+                    Step {onboardingState.stepIndex} of{" "}
+                    {onboardingState.totalSteps}
+                  </Text>
+                )}
+                <Button
+                  onClick={handleButtonClick}
+                  disabled={!onboardingState.isButtonActive}
+                >
+                  {stepButtonText}
+                </Button>
+              </Section>
+            ) : (
+              <IconButton internal icon={SvgX} onClick={handleHideOnboarding} />
+            )
+          }
+          variant="tertiary-muted"
+          rightChildrenReducedPadding
+          center
+        />
+      </Card>
+    );
+  }
+);
+OnboardingHeader.displayName = "OnboardingHeader";
 
-const OnboardingHeader = memo(OnboardingHeaderInner);
 export default OnboardingHeader;
