@@ -111,19 +111,15 @@ def get_all_users(
     is assumed to be relatively small (<< 1 million)"""
     stmt = select(User)
 
-    where_clause = [
-        # Exclude system users (anonymous user, no-auth placeholder)
-        User.email != ANONYMOUS_USER_EMAIL,  # type: ignore
-        User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL,  # type: ignore
-    ]
+    # Exclude system users (anonymous user, no-auth placeholder)
+    stmt = stmt.where(User.email != ANONYMOUS_USER_EMAIL)  # type: ignore
+    stmt = stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)  # type: ignore
 
     if not include_external:
-        where_clause.append(User.role != UserRole.EXT_PERM_USER)
+        stmt = stmt.where(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string is not None:
-        where_clause.append(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
-
-    stmt = stmt.where(*where_clause)
+        stmt = stmt.where(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
 
     return db_session.scalars(stmt).unique().all()
 
