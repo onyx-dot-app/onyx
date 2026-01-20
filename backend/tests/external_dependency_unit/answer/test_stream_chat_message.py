@@ -58,7 +58,7 @@ def create_chat_session(
     )
 
 
-def createPacketWithAgentResponseDelta(token: str) -> Packet:
+def create_packet_with_agent_response_delta(token: str) -> Packet:
     return Packet(
         placement=DEFAULT_PLACEMENT,
         obj=AgentResponseDelta(
@@ -132,7 +132,7 @@ def test_stream_chat_with_answer(
 
         for word in answer.split(" "):
             expected_token = word + " "
-            expected_packet = createPacketWithAgentResponseDelta(expected_token)
+            expected_packet = create_packet_with_agent_response_delta(expected_token)
 
             packet = next(answer_stream)
             assert_answer_stream_part_correct(packet, expected_packet)
