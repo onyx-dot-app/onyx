@@ -416,12 +416,13 @@ function PromptShortcuts() {
     if (isLoading || error) return;
 
     // Convert InputPrompt[] to LocalShortcut[] with isNew: false for existing items
-    const existingShortcuts: LocalShortcut[] = promptShortcuts.map(
-      (shortcut) => ({
+    // Sort by id to maintain stable ordering when editing
+    const existingShortcuts: LocalShortcut[] = promptShortcuts
+      .map((shortcut) => ({
         ...shortcut,
         isNew: false,
-      })
-    );
+      }))
+      .sort((a, b) => a.id - b.id);
 
     // Always ensure there's at least one empty row
     setShortcuts([
