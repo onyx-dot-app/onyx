@@ -1027,3 +1027,14 @@ INSTANCE_TYPE = (
 ## Discord Bot Configuration
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 DISCORD_BOT_INVOKE_CHAR = os.environ.get("DISCORD_BOT_INVOKE_CHAR", "!")
+
+
+## Stripe Configuration
+# URL to fetch the Stripe publishable key from a public S3 bucket.
+# Publishable keys are safe to expose publicly - they can only initialize
+# Stripe.js and tokenize payment info, not make charges or access data.
+STRIPE_PUBLISHABLE_KEY_URL = (
+    "https://onyx-stripe-public.s3.amazonaws.com/publishable-key.txt"
+)
+# Override for local testing with Stripe test keys (pk_test_*)
+STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")
