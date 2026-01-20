@@ -11,6 +11,7 @@ import {
   DOCS_ADMINS_PATH,
   GMAIL_AUTH_IS_ADMIN_COOKIE_NAME,
 } from "@/lib/constants";
+import { BUILD_MODE_OAUTH_COOKIE_NAME } from "@/app/build/v1/constants";
 import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
@@ -25,6 +26,7 @@ import { ValidSources } from "@/lib/types";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { FiFile, FiCheck, FiLink, FiAlertTriangle } from "react-icons/fi";
 import { cn, truncateString } from "@/lib/utils";
+import { Section } from "@/layouts/general-layouts";
 
 type GmailCredentialJsonTypes = "authorized_user" | "service_account";
 
@@ -257,7 +259,6 @@ export const GmailJsonUploadSection = ({
   existingAuthCredential,
 }: GmailJsonUploadSectionProps) => {
   const { mutate } = useSWRConfig();
-  const router = useRouter();
   const [localServiceAccountData, setLocalServiceAccountData] = useState(
     serviceAccountCredentialData
   );
@@ -417,6 +418,13 @@ interface GmailCredentialSectionProps {
   refreshCredentials: () => void;
   connectorExists: boolean;
   user: User | null;
+  buildMode?: boolean;
+  onOAuthRedirect?: () => void;
+  onCredentialCreated?: (
+    credential: Credential<
+      GmailCredentialJson | GmailServiceAccountCredentialJson
+    >
+  ) => void;
 }
 
 async function handleRevokeAccess(
@@ -456,6 +464,9 @@ export const GmailAuthSection = ({
   refreshCredentials,
   connectorExists,
   user,
+  buildMode = false,
+  onOAuthRedirect,
+  onCredentialCreated,
 }: GmailCredentialSectionProps) => {
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -501,19 +512,29 @@ export const GmailAuthSection = ({
               </p>
             </div>
           </div>
-          <Button
-            danger
-            onClick={async () => {
-              handleRevokeAccess(
-                connectorExists,
-                setPopup,
-                existingCredential,
-                refreshCredentials
-              );
-            }}
-          >
-            Revoke Access
-          </Button>
+          <Section flexDirection="row" justifyContent="between" height="fit">
+            <Button
+              danger
+              onClick={async () => {
+                handleRevokeAccess(
+                  connectorExists,
+                  setPopup,
+                  existingCredential,
+                  refreshCredentials
+                );
+              }}
+            >
+              Revoke Access
+            </Button>
+            {buildMode && onCredentialCreated && (
+              <Button
+                primary
+                onClick={() => onCredentialCreated(existingCredential)}
+              >
+                Continue
+              </Button>
+            )}
+          </Section>
         </div>
       </div>
     );
@@ -629,11 +650,17 @@ export const GmailAuthSection = ({
               Cookies.set(GMAIL_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
                 path: "/",
               });
+              if (buildMode) {
+                Cookies.set(BUILD_MODE_OAUTH_COOKIE_NAME, "true", {
+                  path: "/",
+                });
+              }
               const [authUrl, errorMsg] = await setupGmailOAuth({
                 isAdmin: true,
               });
 
               if (authUrl) {
+                onOAuthRedirect?.();
                 router.push(authUrl as Route);
               } else {
                 setPopup({

@@ -223,12 +223,12 @@ const MemoizedBuildSidebarInner = memo(
       [folded, handleNewBuild]
     );
 
-    const buildAdminPanel = useMemo(
+    const buildConfigurePanel = useMemo(
       () => (
         <SidebarTab
           leftIcon={SvgSettings}
           folded={folded}
-          href="/build/v1/admin"
+          href="/build/v1/configure"
         >
           Configure
         </SidebarTab>
@@ -248,7 +248,7 @@ const MemoizedBuildSidebarInner = memo(
     return (
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody
-          actionButtons={[newBuildButton, buildAdminPanel]}
+          actionButtons={[newBuildButton, buildConfigurePanel]}
           footer={backToChatButton}
           scrollKey="build-sidebar"
         >

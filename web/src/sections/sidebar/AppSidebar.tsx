@@ -423,7 +423,7 @@ const MemoizedAppSidebarInner = memo(
     const buildButton = useMemo(
       () => (
         <div data-testid="AppSidebar/build">
-          <SidebarTab leftIcon={SvgDevKit} folded={folded} href="/build">
+          <SidebarTab leftIcon={SvgDevKit} folded={folded} href="/build/v1">
             Build
           </SidebarTab>
         </div>

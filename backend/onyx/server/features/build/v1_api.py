@@ -27,6 +27,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import User
 
 
@@ -42,12 +44,15 @@ class BuildConnectorStatus(str, Enum):
     CONNECTED = "connected"
     INDEXING = "indexing"
     ERROR = "error"
+    DELETING = "deleting"
 
 
 class BuildConnectorInfo(BaseModel):
     """Simplified connector info for build admin panel."""
 
     cc_pair_id: int
+    connector_id: int
+    credential_id: int
     source: str
     name: str
     status: BuildConnectorStatus
@@ -810,28 +815,80 @@ def get_build_connectors(
             continue
 
         # Determine status
-        if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
-            continue  # Skip connectors being deleted
+        error_message: str | None = None
 
-        if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
-            status = BuildConnectorStatus.CONNECTED
+        if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+            status = BuildConnectorStatus.DELETING
         elif cc_pair.status == ConnectorCredentialPairStatus.INVALID:
             status = BuildConnectorStatus.ERROR
-        elif cc_pair.last_successful_index_time is None:
-            # Never successfully indexed
-            status = BuildConnectorStatus.INDEXING
+            error_message = "Connector credentials are invalid"
         else:
-            status = BuildConnectorStatus.CONNECTED
+            # Check latest index attempt for errors
+            latest_attempt = get_latest_index_attempt_for_cc_pair_id(
+                db_session=db_session,
+                connector_credential_pair_id=cc_pair.id,
+                secondary_index=False,
+                only_finished=True,
+            )
+
+            if latest_attempt and latest_attempt.status == IndexingStatus.FAILED:
+                status = BuildConnectorStatus.ERROR
+                error_message = latest_attempt.error_msg
+            elif (
+                latest_attempt
+                and latest_attempt.status == IndexingStatus.COMPLETED_WITH_ERRORS
+            ):
+                status = BuildConnectorStatus.ERROR
+                error_message = "Indexing completed with errors"
+            elif cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+                status = BuildConnectorStatus.CONNECTED
+            elif cc_pair.last_successful_index_time is None:
+                # Never successfully indexed - check if currently indexing
+                # First check cc_pair status for scheduled/initial indexing
+                if cc_pair.status in (
+                    ConnectorCredentialPairStatus.SCHEDULED,
+                    ConnectorCredentialPairStatus.INITIAL_INDEXING,
+                ):
+                    status = BuildConnectorStatus.INDEXING
+                else:
+                    in_progress_attempt = get_latest_index_attempt_for_cc_pair_id(
+                        db_session=db_session,
+                        connector_credential_pair_id=cc_pair.id,
+                        secondary_index=False,
+                        only_finished=False,
+                    )
+                    if (
+                        in_progress_attempt
+                        and in_progress_attempt.status == IndexingStatus.IN_PROGRESS
+                    ):
+                        status = BuildConnectorStatus.INDEXING
+                    elif (
+                        in_progress_attempt
+                        and in_progress_attempt.status == IndexingStatus.NOT_STARTED
+                    ):
+                        status = BuildConnectorStatus.INDEXING
+                    else:
+                        # Has a finished attempt but never succeeded - likely error
+                        status = BuildConnectorStatus.ERROR
+                        error_message = (
+                            latest_attempt.error_msg
+                            if latest_attempt
+                            else "Initial indexing failed"
+                        )
+            else:
+                status = BuildConnectorStatus.CONNECTED
 
         connectors.append(
             BuildConnectorInfo(
                 cc_pair_id=cc_pair.id,
+                connector_id=cc_pair.connector.id,
+                credential_id=cc_pair.credential.id,
                 source=cc_pair.connector.source.value,
                 name=cc_pair.name or cc_pair.connector.name or "Unnamed",
                 status=status,
                 docs_indexed=0,  # Would need to query for this
                 last_indexed=cc_pair.last_successful_index_time,
-                error_message=None,
+                error_message=error_message,
             )
         )
 
