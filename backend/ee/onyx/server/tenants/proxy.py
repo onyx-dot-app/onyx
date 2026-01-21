@@ -26,6 +26,7 @@ from fastapi import Header
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import update_license_cache
 from ee.onyx.db.license import upsert_license
 from ee.onyx.server.license.models import LicensePayload
@@ -40,6 +41,20 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 router = APIRouter(prefix="/proxy")
+
+
+def _check_license_enforcement_enabled() -> None:
+    """Raise 503 if license enforcement is not enabled.
+
+    These proxy endpoints require LICENSE_ENFORCEMENT_ENABLED=true because
+    they use license-based authentication. When disabled, the endpoints
+    are not available.
+    """
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="Proxy endpoints require LICENSE_ENFORCEMENT_ENABLED=true",
+        )
 
 
 def verify_license_auth(
@@ -58,6 +73,8 @@ def verify_license_auth(
     Raises:
         HTTPException: If license is invalid or expired (when not allowed)
     """
+    _check_license_enforcement_enabled()
+
     try:
         payload = verify_license_signature(license_data)
     except ValueError as e:
@@ -109,6 +126,8 @@ async def get_optional_license_payload(
     Returns None if no license provided, otherwise validates and returns payload.
     Expired licenses are allowed for renewal flows.
     """
+    _check_license_enforcement_enabled()
+
     if not authorization or not authorization.startswith("Bearer "):
         return None
 
@@ -253,6 +272,8 @@ async def proxy_claim_license(
 
     This endpoint auto-fetches and stores the license in Redis for the customer.
     """
+    _check_license_enforcement_enabled()
+
     logger.info(f"Proxying claim-license for session {request_body.session_id[:8]}...")
 
     result = forward_to_control_plane(

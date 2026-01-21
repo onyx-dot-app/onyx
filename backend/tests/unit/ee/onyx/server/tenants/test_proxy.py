@@ -11,11 +11,18 @@ from fastapi import HTTPException
 
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import PlanType
+from ee.onyx.server.tenants.proxy import _check_license_enforcement_enabled
 from ee.onyx.server.tenants.proxy import forward_to_control_plane
 from ee.onyx.server.tenants.proxy import get_license_payload
 from ee.onyx.server.tenants.proxy import get_license_payload_allow_expired
 from ee.onyx.server.tenants.proxy import get_optional_license_payload
 from ee.onyx.server.tenants.proxy import verify_license_auth
+
+
+# All tests that use license auth need LICENSE_ENFORCEMENT_ENABLED=True
+LICENSE_ENABLED_PATCH = patch(
+    "ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True
+)
 
 
 def make_license_payload(
@@ -40,6 +47,24 @@ def make_license_payload(
     )
 
 
+class TestLicenseEnforcementCheck:
+    """Tests for _check_license_enforcement_enabled function."""
+
+    def test_raises_when_disabled(self) -> None:
+        """Test that 503 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
+        with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", False):
+            with pytest.raises(HTTPException) as exc_info:
+                _check_license_enforcement_enabled()
+
+            assert exc_info.value.status_code == 503
+            assert "LICENSE_ENFORCEMENT_ENABLED" in str(exc_info.value.detail)
+
+    def test_passes_when_enabled(self) -> None:
+        """Test that no exception is raised when LICENSE_ENFORCEMENT_ENABLED=True."""
+        with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True):
+            _check_license_enforcement_enabled()  # Should not raise
+
+
 class TestVerifyLicenseAuth:
     """Tests for verify_license_auth function."""
 
@@ -47,9 +72,12 @@ class TestVerifyLicenseAuth:
         """Test that a valid license passes verification."""
         payload = make_license_payload()
 
-        with patch(
-            "ee.onyx.server.tenants.proxy.verify_license_signature"
-        ) as mock_verify:
+        with (
+            LICENSE_ENABLED_PATCH,
+            patch(
+                "ee.onyx.server.tenants.proxy.verify_license_signature"
+            ) as mock_verify,
+        ):
             mock_verify.return_value = payload
 
             result = verify_license_auth("valid_license_data", allow_expired=False)
@@ -59,9 +87,12 @@ class TestVerifyLicenseAuth:
 
     def test_invalid_signature(self) -> None:
         """Test that invalid signature raises 401."""
-        with patch(
-            "ee.onyx.server.tenants.proxy.verify_license_signature"
-        ) as mock_verify:
+        with (
+            LICENSE_ENABLED_PATCH,
+            patch(
+                "ee.onyx.server.tenants.proxy.verify_license_signature"
+            ) as mock_verify,
+        ):
             mock_verify.side_effect = ValueError("Invalid signature")
 
             with pytest.raises(HTTPException) as exc_info:
@@ -75,6 +106,7 @@ class TestVerifyLicenseAuth:
         payload = make_license_payload(expired=True)
 
         with (
+            LICENSE_ENABLED_PATCH,
             patch(
                 "ee.onyx.server.tenants.proxy.verify_license_signature"
             ) as mock_verify,
@@ -94,6 +126,7 @@ class TestVerifyLicenseAuth:
         payload = make_license_payload(expired=True)
 
         with (
+            LICENSE_ENABLED_PATCH,
             patch(
                 "ee.onyx.server.tenants.proxy.verify_license_signature"
             ) as mock_verify,
@@ -106,6 +139,14 @@ class TestVerifyLicenseAuth:
 
             assert result == payload
 
+    def test_raises_503_when_enforcement_disabled(self) -> None:
+        """Test that 503 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
+        with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", False):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_license_auth("any_license", allow_expired=False)
+
+            assert exc_info.value.status_code == 503
+
 
 class TestGetLicensePayload:
     """Tests for get_license_payload dependency."""
@@ -116,6 +157,7 @@ class TestGetLicensePayload:
         payload = make_license_payload()
 
         with (
+            LICENSE_ENABLED_PATCH,
             patch(
                 "ee.onyx.server.tenants.proxy.verify_license_signature"
             ) as mock_verify,
@@ -131,19 +173,23 @@ class TestGetLicensePayload:
     @pytest.mark.asyncio
     async def test_missing_auth_header(self) -> None:
         """Test that missing Authorization header raises 401."""
-        with pytest.raises(HTTPException) as exc_info:
-            await get_license_payload(None)
+        with LICENSE_ENABLED_PATCH:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_license_payload(None)
 
-        assert exc_info.value.status_code == 401
-        assert "Missing or invalid authorization header" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 401
+            assert "Missing or invalid authorization header" in str(
+                exc_info.value.detail
+            )
 
     @pytest.mark.asyncio
     async def test_invalid_auth_format(self) -> None:
         """Test that non-Bearer auth raises 401."""
-        with pytest.raises(HTTPException) as exc_info:
-            await get_license_payload("Basic sometoken")
+        with LICENSE_ENABLED_PATCH:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_license_payload("Basic sometoken")
 
-        assert exc_info.value.status_code == 401
+            assert exc_info.value.status_code == 401
 
 
 class TestGetLicensePayloadAllowExpired:
@@ -155,6 +201,7 @@ class TestGetLicensePayloadAllowExpired:
         payload = make_license_payload(expired=True)
 
         with (
+            LICENSE_ENABLED_PATCH,
             patch(
                 "ee.onyx.server.tenants.proxy.verify_license_signature"
             ) as mock_verify,
@@ -168,10 +215,11 @@ class TestGetLicensePayloadAllowExpired:
     @pytest.mark.asyncio
     async def test_missing_auth_header(self) -> None:
         """Test that missing Authorization header raises 401."""
-        with pytest.raises(HTTPException) as exc_info:
-            await get_license_payload_allow_expired(None)
+        with LICENSE_ENABLED_PATCH:
+            with pytest.raises(HTTPException) as exc_info:
+                await get_license_payload_allow_expired(None)
 
-        assert exc_info.value.status_code == 401
+            assert exc_info.value.status_code == 401
 
 
 class TestGetOptionalLicensePayload:
@@ -180,14 +228,16 @@ class TestGetOptionalLicensePayload:
     @pytest.mark.asyncio
     async def test_no_auth_returns_none(self) -> None:
         """Test that missing auth returns None (for new customers)."""
-        result = await get_optional_license_payload(None)
-        assert result is None
+        with LICENSE_ENABLED_PATCH:
+            result = await get_optional_license_payload(None)
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_non_bearer_returns_none(self) -> None:
         """Test that non-Bearer auth returns None."""
-        result = await get_optional_license_payload("Basic sometoken")
-        assert result is None
+        with LICENSE_ENABLED_PATCH:
+            result = await get_optional_license_payload("Basic sometoken")
+            assert result is None
 
     @pytest.mark.asyncio
     async def test_valid_license_returns_payload(self) -> None:
@@ -195,6 +245,7 @@ class TestGetOptionalLicensePayload:
         payload = make_license_payload()
 
         with (
+            LICENSE_ENABLED_PATCH,
             patch(
                 "ee.onyx.server.tenants.proxy.verify_license_signature"
             ) as mock_verify,
@@ -204,6 +255,15 @@ class TestGetOptionalLicensePayload:
             result = await get_optional_license_payload("Bearer valid_license")
 
             assert result == payload
+
+    @pytest.mark.asyncio
+    async def test_raises_503_when_enforcement_disabled(self) -> None:
+        """Test that 503 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
+        with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", False):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_optional_license_payload(None)
+
+            assert exc_info.value.status_code == 503
 
 
 class TestForwardToControlPlane:
