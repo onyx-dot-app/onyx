@@ -1,7 +1,6 @@
 """CRUD operations for HierarchyNode."""
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -67,6 +66,28 @@ def resolve_parent_hierarchy_node_id(
     return source_node.id if source_node else None
 
 
+def upsert_parents(
+    db_session: Session,
+    node: PydanticHierarchyNode,
+    source: DocumentSource,
+    node_by_id: dict[str, PydanticHierarchyNode],
+    done_ids: set[str],
+) -> None:
+    """
+    Upsert the parents of a hierarchy node.
+    """
+    if (
+        node.node_type == HierarchyNodeType.SOURCE
+        or (node.raw_parent_id not in node_by_id)
+        or (node.raw_parent_id in done_ids)
+    ):
+        return
+    parent_node = node_by_id[node.raw_parent_id]
+    upsert_parents(db_session, parent_node, source, node_by_id, done_ids)
+    upsert_hierarchy_node(db_session, parent_node, source, commit=False)
+    done_ids.add(parent_node.raw_node_id)
+
+
 def upsert_hierarchy_node(
     db_session: Session,
     node: PydanticHierarchyNode,
@@ -76,38 +97,44 @@ def upsert_hierarchy_node(
     """
     Upsert a hierarchy node from a Pydantic model.
 
-    Uses PostgreSQL ON CONFLICT to handle upserts efficiently.
+    If a node with the same raw_node_id and source exists, updates it.
+    Otherwise, creates a new node.
     """
     # Resolve parent_id from raw_parent_id
-    parent_id = resolve_parent_hierarchy_node_id(db_session, node.raw_parent_id, source)
-
-    values = {
-        "raw_node_id": node.raw_node_id,
-        "display_name": node.display_name,
-        "link": node.link,
-        "source": source.value,
-        "node_type": node.node_type.value,
-        "document_id": node.document_id,
-        "parent_id": parent_id,
-    }
-
-    stmt = insert(HierarchyNode).values(**values)
-    stmt = stmt.on_conflict_do_update(
-        constraint="uq_hierarchy_node_raw_id_source",
-        set_={
-            "display_name": stmt.excluded.display_name,
-            "link": stmt.excluded.link,
-            "node_type": stmt.excluded.node_type,
-            "document_id": stmt.excluded.document_id,
-            "parent_id": stmt.excluded.parent_id,
-        },
+    parent_id = (
+        None
+        if node.node_type == HierarchyNodeType.SOURCE
+        else resolve_parent_hierarchy_node_id(db_session, node.raw_parent_id, source)
     )
-    stmt = stmt.returning(HierarchyNode)
-    result = db_session.execute(stmt)
-    hierarchy_node = result.scalar_one()
+
+    # Check if node already exists
+    existing_node = get_hierarchy_node_by_raw_id(db_session, node.raw_node_id, source)
+
+    if existing_node:
+        # Update existing node
+        existing_node.display_name = node.display_name
+        existing_node.link = node.link
+        existing_node.node_type = node.node_type
+        existing_node.document_id = node.document_id
+        existing_node.parent_id = parent_id
+        hierarchy_node = existing_node
+    else:
+        # Create new node
+        hierarchy_node = HierarchyNode(
+            raw_node_id=node.raw_node_id,
+            display_name=node.display_name,
+            link=node.link,
+            source=source,
+            node_type=node.node_type,
+            document_id=node.document_id,
+            parent_id=parent_id,
+        )
+        db_session.add(hierarchy_node)
 
     if commit:
         db_session.commit()
+    else:
+        db_session.flush()
 
     return hierarchy_node
 
@@ -121,12 +148,24 @@ def upsert_hierarchy_nodes_batch(
     """
     Batch upsert hierarchy nodes.
 
-    Note: This function processes nodes in order. For correct parent resolution,
-    parent nodes should appear before their children in the list.
+    Note: This function requires that for each node passed in, all
+    its ancestors exist in either the database or elsewhere in the nodes list.
+    This function handles parent dependencies for you as long as that condition is met
+    (so you don't need to worry about parent nodes appearing before their children in the list).
     """
+    node_by_id = {}
+    for node in nodes:
+        if node.node_type != HierarchyNodeType.SOURCE:
+            node_by_id[node.raw_node_id] = node
+    done_ids = set[str]()
+
     results = []
     for node in nodes:
+        if node.raw_node_id in done_ids:
+            continue
+        upsert_parents(db_session, node, source, node_by_id, done_ids)
         hierarchy_node = upsert_hierarchy_node(db_session, node, source, commit=False)
+        done_ids.add(node.raw_node_id)
         results.append(hierarchy_node)
 
     if commit:
