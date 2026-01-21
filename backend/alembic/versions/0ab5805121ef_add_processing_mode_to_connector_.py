@@ -24,7 +24,7 @@ def upgrade() -> None:
             "processing_mode",
             sa.String(),
             nullable=False,
-            server_default="regular",
+            server_default="REGULAR",
         ),
     )
 
