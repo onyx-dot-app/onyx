@@ -10,9 +10,6 @@ from onyx.configs.constants import DEFAULT_BOOST
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.chunk import update_chunk_boost_components__no_commit
-from onyx.db.connector_credential_pair import (
-    get_connector_credential_pair,
-)
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
 from onyx.db.document import prepare_to_modify_documents
@@ -26,10 +23,6 @@ from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
-from onyx.indexing.persistent_document_writer import (
-    get_persistent_document_writer,
-)
-from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_ENABLED
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -216,21 +209,3 @@ class DocumentIndexingBatchAdapter:
         )
 
         self.db_session.commit()
-
-        # Write to persistent storage if enabled
-        if PERSISTENT_DOCUMENT_STORAGE_ENABLED and filtered_documents:
-            try:
-                # Get creator_id from CC pair for user-segregated storage paths
-                cc_pair = get_connector_credential_pair(
-                    db_session=self.db_session,
-                    connector_id=self.connector_id,
-                    credential_id=self.credential_id,
-                )
-                creator_id = cc_pair.creator_id if cc_pair else None
-                user_id_str: str = str(creator_id) if creator_id else "system"
-
-                writer = get_persistent_document_writer(user_id=user_id_str)
-                writer.write_documents(filtered_documents)
-            except Exception as e:
-                # Log but don't fail indexing
-                logger.warning(f"Failed to write documents to persistent storage: {e}")
