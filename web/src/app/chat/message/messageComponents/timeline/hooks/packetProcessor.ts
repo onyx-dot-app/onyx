@@ -391,6 +391,9 @@ export function processPackets(
     state = createInitialState(state.nodeId);
   }
 
+  // Track if we processed any new packets
+  const prevProcessedIndex = state.lastProcessedIndex;
+
   // Process only new packets
   for (let i = state.lastProcessedIndex; i < rawPackets.length; i++) {
     const packet = rawPackets[i];
@@ -401,13 +404,17 @@ export function processPackets(
 
   state.lastProcessedIndex = rawPackets.length;
 
-  // Build result arrays after processing
-  state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
-  state.potentialDisplayGroups = buildGroupsFromKeys(
-    state,
-    state.displayGroupKeys
-  );
-  state.uniqueToolNamesArray = Array.from(state.uniqueToolNames);
+  // Only rebuild result arrays if we processed new packets
+  // This prevents creating new references when nothing changed
+  if (prevProcessedIndex !== rawPackets.length) {
+    // Build result arrays after processing new packets
+    state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
+    state.potentialDisplayGroups = buildGroupsFromKeys(
+      state,
+      state.displayGroupKeys
+    );
+    state.uniqueToolNamesArray = Array.from(state.uniqueToolNames);
+  }
 
   return state;
 }
