@@ -105,3 +105,7 @@ class PendingUserSnapshot(BaseModel):
 
 class ApproveUserRequest(BaseModel):
     email: str
+
+
+class StripePublishableKeyResponse(BaseModel):
+    publishable_key: str

@@ -8,8 +8,7 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import ProgressSteps from "@/refresh-components/inputs/ProgressSteps";
-import { SvgX } from "@opal/icons";
+import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
 import { LineItemLayout, Section } from "@/layouts/general-layouts";
 
@@ -42,7 +41,9 @@ const OnboardingHeader = React.memo(
     return (
       <Card padding={0.5}>
         <LineItemLayout
-          icon={(props) => <ProgressSteps value={iconPercentage} {...props} />}
+          icon={(props) => (
+            <SvgProgressCircle value={iconPercentage} {...props} />
+          )}
           title={STEP_CONFIG[onboardingState.currentStep].title}
           rightChildren={
             stepButtonText ? (

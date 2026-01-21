@@ -7,14 +7,21 @@ import Button from "@/refresh-components/buttons/Button";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { loadStripe } from "@stripe/stripe-js";
-import {
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
-  NEXT_PUBLIC_CLOUD_ENABLED,
-} from "@/lib/constants";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";
 
 const linkClassName = "text-action-link-05 hover:text-action-link-06";
+
+const fetchStripePublishableKey = async (): Promise<string> => {
+  const response = await fetch("/api/tenants/stripe-publishable-key");
+  if (!response.ok) {
+    throw new Error("Failed to fetch Stripe publishable key");
+  }
+  const data = await response.json();
+  return data.publishable_key;
+};
+
 const fetchResubscriptionSession = async () => {
   const response = await fetch("/api/tenants/create-subscription-session", {
     method: "POST",
@@ -35,14 +42,10 @@ export default function AccessRestricted() {
   const handleResubscribe = async () => {
     setIsLoading(true);
     setError(null);
-    if (!NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-      setError("Stripe public key not found");
-      setIsLoading(false);
-      return;
-    }
     try {
+      const publishableKey = await fetchStripePublishableKey();
       const { sessionId } = await fetchResubscriptionSession();
-      const stripe = await loadStripe(NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+      const stripe = await loadStripe(publishableKey);
 
       if (stripe) {
         await stripe.redirectToCheckout({ sessionId });
