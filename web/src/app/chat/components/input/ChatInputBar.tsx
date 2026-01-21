@@ -391,8 +391,7 @@ const ChatInputBar = React.memo(
           // "Create a new prompt" is selected
           window.open("/chat/settings/chat-preferences", "_self");
         } else {
-          const selectedPrompt =
-            filteredPrompts[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
+          const selectedPrompt = filteredPrompts[tabbingIconIndex];
           if (selectedPrompt) {
             updateInputPrompt(selectedPrompt);
           }
