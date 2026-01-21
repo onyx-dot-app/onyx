@@ -7,7 +7,6 @@ import HumanMessage from "@/app/chat/message/HumanMessage";
 import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import Spacer from "@/refresh-components/Spacer";
 import {
   useCurrentMessageHistory,
@@ -15,6 +14,7 @@ import {
   useLoadingError,
   useUncaughtError,
 } from "@/app/chat/stores/useChatSessionStore";
+import AgentMessage from "@/app/chat/message/messageComponents/AgentMessage";
 
 export interface MessageListProps {
   liveAssistant: MinimalPersonaSnapshot;
@@ -181,8 +181,10 @@ const MessageList = React.memo(
                 key={messageReactComponentKey}
                 data-anchor={isAnchor ? "true" : undefined}
               >
-                <AIMessage
+                <AgentMessage
+                  processingDurationSeconds={message.processingDurationSeconds}
                   rawPackets={message.packets}
+                  packetCount={message.packetCount}
                   chatState={chatStateData}
                   nodeId={message.nodeId}
                   messageId={message.messageId}

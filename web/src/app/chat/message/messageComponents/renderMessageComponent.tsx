@@ -14,13 +14,13 @@ import {
 } from "./interfaces";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
-import { PythonToolRenderer } from "./renderers/PythonToolRenderer";
-import { ReasoningRenderer } from "./renderers/ReasoningRenderer";
+import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer";
+import { ReasoningRenderer } from "./timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
-import { FetchToolRenderer } from "./renderers/FetchToolRenderer";
-import { DeepResearchPlanRenderer } from "./renderers/DeepResearchPlanRenderer";
-import { ResearchAgentRenderer } from "./renderers/ResearchAgentRenderer";
-import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
+import { FetchToolRenderer } from "./timeline/renderers/fetch/FetchToolRenderer";
+import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/DeepResearchPlanRenderer";
+import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
+import { SearchToolRenderer } from "./timeline/renderers/search/SearchToolRenderer";
 
 // Different types of chat packets using discriminated unions
 export interface GroupedPackets {
