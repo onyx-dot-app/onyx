@@ -62,28 +62,15 @@ export default function BuildConfigPage() {
   const [connectorToDelete, setConnectorToDelete] =
     useState<BuildConnectorConfig | null>(null);
 
-  // Get store values - we use local state to defer updates until navigation
-  const storeDemoDataEnabled = useBuildSessionStore(
+  // Get store values - update store directly on switch change
+  const demoDataEnabled = useBuildSessionStore(
     (state) => state.demoDataEnabled
   );
-  const setStoreDemoDataEnabled = useBuildSessionStore(
+  const setDemoDataEnabled = useBuildSessionStore(
     (state) => state.setDemoDataEnabled
   );
 
-  // Local state for demo data toggle - initialized from store
-  const [localDemoDataEnabled, setLocalDemoDataEnabled] =
-    useState(storeDemoDataEnabled);
-
-  // Sync local state if store value changes externally (e.g., on mount after refresh)
-  useEffect(() => {
-    setLocalDemoDataEnabled(storeDemoDataEnabled);
-  }, [storeDemoDataEnabled]);
-
-  // Handler for navigating back - syncs to store if value changed
   const handleNavigateBack = () => {
-    if (localDemoDataEnabled !== storeDemoDataEnabled) {
-      setStoreDemoDataEnabled(localDemoDataEnabled);
-    }
     router.push("/build/v1");
   };
 
@@ -178,8 +165,8 @@ export default function BuildConfigPage() {
                     disabled={hasActiveConnector}
                   >
                     <Switch
-                      checked={localDemoDataEnabled}
-                      onCheckedChange={setLocalDemoDataEnabled}
+                      checked={demoDataEnabled}
+                      onCheckedChange={setDemoDataEnabled}
                       disabled={!hasActiveConnector}
                     />
                   </SimpleTooltip>
