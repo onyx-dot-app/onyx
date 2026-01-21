@@ -31,12 +31,14 @@ from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import Document
+from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import TextSection
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
+from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -54,8 +56,10 @@ from onyx.db.models import IndexAttempt
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.indexing.persistent_document_writer import get_persistent_document_writer
 from onyx.utils.logger import setup_logger
+from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
@@ -603,9 +607,41 @@ def connector_document_extraction(
                 logger.debug(f"Indexing batch of documents: {batch_description}")
                 memory_tracer.increment_and_maybe_trace()
 
+                # cc4a
                 if processing_mode == ProcessingMode.FILE_SYSTEM:
                     # File system only - write directly to persistent storage,
-                    # skip chunking/embedding/Vespa
+                    # skip chunking/embedding/Vespa but still track documents in DB
+
+                    with get_session_with_current_tenant() as db_session:
+                        # Create metadata for the batch
+                        index_attempt_metadata = IndexAttemptMetadata(
+                            attempt_id=index_attempt_id,
+                            connector_id=db_connector.id,
+                            credential_id=db_credential.id,
+                            request_id=make_randomized_onyx_request_id("FSI"),
+                            structured_id=f"{tenant_id}:{cc_pair_id}:{index_attempt_id}:{batch_num}",
+                            batch_num=batch_num,
+                        )
+
+                        # Upsert documents to PostgreSQL (document table + cc_pair relationship)
+                        # This is a subset of what docprocessing does - just DB tracking, no chunking/embedding
+                        index_doc_batch_prepare(
+                            documents=doc_batch_cleaned,
+                            index_attempt_metadata=index_attempt_metadata,
+                            db_session=db_session,
+                            ignore_time_skip=True,  # Documents already filtered during extraction
+                        )
+
+                        # Mark documents as indexed for the CC pair
+                        mark_document_as_indexed_for_cc_pair__no_commit(
+                            connector_id=db_connector.id,
+                            credential_id=db_credential.id,
+                            document_ids=[doc.id for doc in doc_batch_cleaned],
+                            db_session=db_session,
+                        )
+                        db_session.commit()
+
+                    # Write documents to persistent file system
                     writer = get_persistent_document_writer()
                     written_paths = writer.write_documents(doc_batch_cleaned)
 
@@ -614,8 +650,8 @@ def connector_document_extraction(
                         IndexingCoordination.update_batch_completion_and_docs(
                             db_session=db_session,
                             index_attempt_id=index_attempt_id,
-                            total_docs_indexed=len(written_paths),
-                            new_docs_indexed=len(written_paths),
+                            total_docs_indexed=len(doc_batch_cleaned),
+                            new_docs_indexed=len(doc_batch_cleaned),
                             total_chunks=0,  # No chunks for file system mode
                         )
 
