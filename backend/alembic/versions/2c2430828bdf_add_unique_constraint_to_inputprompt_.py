@@ -1,8 +1,8 @@
 """add_unique_constraint_to_inputprompt_prompt_user_id
 
-Revision ID: ea5852214897
-Revises: 8b5ce697290e
-Create Date: 2026-01-20 00:02:29.401924
+Revision ID: 2c2430828bdf
+Revises: fb80bdd256de
+Create Date: 2026-01-20 16:01:54.314805
 
 """
 
@@ -10,8 +10,8 @@ from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision = "ea5852214897"
-down_revision = "8b5ce697290e"
+revision = "2c2430828bdf"
+down_revision = "fb80bdd256de"
 branch_labels = None
 depends_on = None
 
