@@ -9,6 +9,7 @@ import {
   AttachmentItemLayout,
 } from "@/layouts/general-layouts";
 import { Formik, Form } from "formik";
+import * as Yup from "yup";
 import {
   SvgArrowExchange,
   SvgKey,
@@ -20,6 +21,7 @@ import {
 import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Button from "@/refresh-components/buttons/Button";
@@ -988,10 +990,24 @@ function ChatPreferencesSettings() {
 }
 
 function AccountsAccessSettings() {
-  const { user } = useUser();
+  const { user, authTypeMetadata } = useUser();
   const { popup, setPopup } = usePopup();
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  // const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
+
+  const passwordValidationSchema = Yup.object().shape({
+    currentPassword: Yup.string().required("Current password is required"),
+    newPassword: Yup.string()
+      .min(
+        authTypeMetadata.passwordMinLength,
+        `Password must be at least ${authTypeMetadata.passwordMinLength} characters`
+      )
+      .required("New password is required"),
+    confirmPassword: Yup.string()
+      .oneOf([Yup.ref("newPassword")], "Passwords do not match")
+      .required("Please confirm your new password"),
+  });
 
   // PAT state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -1110,11 +1126,6 @@ function AccountsAccessSettings() {
       newPassword: string;
       confirmPassword: string;
     }) => {
-      if (values.newPassword !== values.confirmPassword) {
-        setPopup({ message: "New passwords do not match", type: "error" });
-        return;
-      }
-
       try {
         const response = await fetch("/api/password/change-password", {
           method: "POST",
@@ -1129,8 +1140,8 @@ function AccountsAccessSettings() {
 
         if (response.ok) {
           setPopup({
-            message: "Password changed successfully",
             type: "success",
+            message: "Password updated successfully",
           });
           setShowPasswordModal(false);
         } else {
@@ -1212,26 +1223,33 @@ function AccountsAccessSettings() {
             newPassword: "",
             confirmPassword: "",
           }}
-          onSubmit={async (values, { setSubmitting }) => {
-            await handleChangePassword(values);
-            setSubmitting(false);
-          }}
+          validationSchema={passwordValidationSchema}
+          validateOnChange={true}
+          validateOnBlur={true}
+          onSubmit={() => undefined}
         >
-          {({ values, handleChange, isSubmitting, dirty }) => (
+          {({
+            values,
+            handleChange,
+            handleBlur,
+            isSubmitting,
+            dirty,
+            isValid,
+            errors,
+            touched,
+            setSubmitting,
+          }) => (
             <Form>
               <ConfirmationModalLayout
                 icon={SvgLock}
                 title="Change Password"
                 submit={
                   <Button
-                    type="submit"
-                    disabled={
-                      isSubmitting ||
-                      !dirty ||
-                      !values.currentPassword ||
-                      !values.newPassword ||
-                      !values.confirmPassword
-                    }
+                    disabled={isSubmitting || !dirty || !isValid}
+                    onClick={async () => {
+                      await handleChangePassword(values);
+                      setSubmitting(false);
+                    }}
                   >
                     {isSubmitting ? "Updating..." : "Update"}
                   </Button>
@@ -1241,30 +1259,52 @@ function AccountsAccessSettings() {
                 }}
               >
                 <Section gap={1}>
-                  <InputLayouts.Vertical title="Current Password">
-                    <InputTypeIn
+                  <Section gap={0.25} alignItems="start">
+                    <InputLayouts.Vertical
                       name="currentPassword"
-                      type="password"
-                      value={values.currentPassword}
-                      onChange={handleChange}
-                    />
-                  </InputLayouts.Vertical>
-                  <InputLayouts.Vertical title="New Password">
-                    <InputTypeIn
+                      title="Current Password"
+                    >
+                      <PasswordInputTypeIn
+                        name="currentPassword"
+                        value={values.currentPassword}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        error={
+                          touched.currentPassword && !!errors.currentPassword
+                        }
+                      />
+                    </InputLayouts.Vertical>
+                  </Section>
+                  <Section gap={0.25} alignItems="start">
+                    <InputLayouts.Vertical
                       name="newPassword"
-                      type="password"
-                      value={values.newPassword}
-                      onChange={handleChange}
-                    />
-                  </InputLayouts.Vertical>
-                  <InputLayouts.Vertical title="Confirm New Password">
-                    <InputTypeIn
+                      title="New Password"
+                    >
+                      <PasswordInputTypeIn
+                        name="newPassword"
+                        value={values.newPassword}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        error={touched.newPassword && !!errors.newPassword}
+                      />
+                    </InputLayouts.Vertical>
+                  </Section>
+                  <Section gap={0.25} alignItems="start">
+                    <InputLayouts.Vertical
                       name="confirmPassword"
-                      type="password"
-                      value={values.confirmPassword}
-                      onChange={handleChange}
-                    />
-                  </InputLayouts.Vertical>
+                      title="Confirm New Password"
+                    >
+                      <PasswordInputTypeIn
+                        name="confirmPassword"
+                        value={values.confirmPassword}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        error={
+                          touched.confirmPassword && !!errors.confirmPassword
+                        }
+                      />
+                    </InputLayouts.Vertical>
+                  </Section>
                 </Section>
               </ConfirmationModalLayout>
             </Form>
