@@ -3627,6 +3627,18 @@ class InputPrompt(Base):
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
 
+    __table_args__ = (
+        # Unique constraint on (prompt, user_id) for user-owned prompts
+        UniqueConstraint("prompt", "user_id", name="uq_inputprompt_prompt_user_id"),
+        # Partial unique index for public prompts (user_id IS NULL)
+        Index(
+            "uq_inputprompt_prompt_public",
+            "prompt",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+        ),
+    )
+
 
 class InputPrompt__User(Base):
     __tablename__ = "inputprompt__user"
