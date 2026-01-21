@@ -104,6 +104,19 @@ def upgrade() -> None:
         "ix_hierarchy_node_source_type", "hierarchy_node", ["source", "node_type"]
     )
 
+    # Add partial unique index to ensure only one SOURCE-type node per source
+    # This prevents duplicate source root nodes from being created
+    # NOTE: node_type stores enum NAME ('SOURCE'), not value ('source')
+    op.execute(
+        sa.text(
+            """
+            CREATE UNIQUE INDEX uq_hierarchy_node_one_source_per_type
+            ON hierarchy_node (source)
+            WHERE node_type = 'SOURCE'
+            """
+        )
+    )
+
     # 2. Create hierarchy_fetch_attempt table
     op.create_table(
         "hierarchy_fetch_attempt",
@@ -150,8 +163,13 @@ def upgrade() -> None:
 
     # 3. Insert SOURCE-type hierarchy nodes for each DocumentSource
     # We insert these so every existing document can have a parent hierarchy node
+    # NOTE: SQLAlchemy's Enum with native_enum=False stores the enum NAME (e.g., 'GOOGLE_DRIVE'),
+    # not the VALUE (e.g., 'google_drive'). We must use .name for source and node_type columns.
     for source in DocumentSource:
-        source_value = source.value
+        source_name = (
+            source.name
+        )  # e.g., 'GOOGLE_DRIVE' - what SQLAlchemy stores/expects
+        source_value = source.value  # e.g., 'google_drive' - the raw_node_id
         display_name = SOURCE_DISPLAY_NAMES.get(
             source_value, source_value.replace("_", " ").title()
         )
@@ -159,12 +177,12 @@ def upgrade() -> None:
             sa.text(
                 """
                 INSERT INTO hierarchy_node (raw_node_id, display_name, source, node_type, parent_id)
-                VALUES (:raw_node_id, :display_name, :source, 'source', NULL)
+                VALUES (:raw_node_id, :display_name, :source, 'SOURCE', NULL)
                 """
             ).bindparams(
-                raw_node_id=source_value,
+                raw_node_id=source_value,  # Use .value for raw_node_id (human-readable identifier)
                 display_name=display_name,
-                source=source_value,
+                source=source_name,  # Use .name for source column (SQLAlchemy enum storage)
             )
         )
 
@@ -188,6 +206,8 @@ def upgrade() -> None:
 
     # 5. Set all existing documents' parent_hierarchy_node_id to their source's SOURCE node
     # For documents with multiple connectors, we pick one source deterministically (MIN connector_id)
+    # NOTE: Both connector.source and hierarchy_node.source store enum NAMEs (e.g., 'GOOGLE_DRIVE')
+    # because SQLAlchemy Enum(native_enum=False) uses the enum name for storage.
     op.execute(
         sa.text(
             """
@@ -202,7 +222,7 @@ def upgrade() -> None:
                 JOIN connector c ON dbcc.connector_id = c.id
                 ORDER BY dbcc.id, dbcc.connector_id
             ) doc_source
-            JOIN hierarchy_node hn ON hn.raw_node_id = doc_source.source AND hn.node_type = 'source'
+            JOIN hierarchy_node hn ON hn.source = doc_source.source AND hn.node_type = 'SOURCE'
             WHERE d.id = doc_source.doc_id
             """
         )
@@ -271,6 +291,7 @@ def downgrade() -> None:
     op.drop_table("hierarchy_fetch_attempt")
 
     # Drop hierarchy_node table
+    op.drop_index("uq_hierarchy_node_one_source_per_type", table_name="hierarchy_node")
     op.drop_index("ix_hierarchy_node_source_type", table_name="hierarchy_node")
     op.drop_index("ix_hierarchy_node_parent_id", table_name="hierarchy_node")
     op.drop_table("hierarchy_node")
