@@ -385,6 +385,9 @@ class OnyxCeleryQueues:
     # KG processing queue
     KG_PROCESSING = "kg_processing"
 
+    # Sandbox processing queue
+    SANDBOX = "sandbox"
+
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -432,6 +435,10 @@ class OnyxRedisLocks:
 
     # Release notes
     RELEASE_NOTES_FETCH_LOCK = "da_lock:release_notes_fetch"
+
+    # Sandbox cleanup
+    CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
+    CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK = "da_lock:cleanup_old_snapshots_beat"
 
 
 class OnyxRedisSignals:
@@ -557,6 +564,10 @@ class OnyxCeleryTask:
     KG_CLUSTERING_ONLY = "kg_clustering_only"
     CHECK_KG_PROCESSING_CLUSTERING_ONLY = "check_kg_processing_clustering_only"
     KG_RESET_SOURCE_INDEX = "kg_reset_source_index"
+
+    # Sandbox cleanup
+    CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
+    CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 
 
 # this needs to correspond to the matching entry in supervisord

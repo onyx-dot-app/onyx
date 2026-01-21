@@ -1,10 +1,14 @@
 """Public interface for sandbox operations.
 
-SandboxManager is the main entry point for sandbox lifecycle management.
-It orchestrates internal managers for directory, process, snapshot, and agent communication.
+SandboxManager is the abstract interface for sandbox lifecycle management.
+LocalSandboxManager is the filesystem-based implementation for local/dev environments.
+
+Use get_sandbox_manager() to get the appropriate implementation based on SANDBOX_BACKEND.
 """
 
 import threading
+from abc import ABC
+from abc import abstractmethod
 from collections.abc import Generator
 from datetime import datetime
 from pathlib import Path
@@ -17,8 +21,10 @@ from onyx.db.llm import fetch_default_provider
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
+from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.db.sandbox import allocate_nextjs_port
 from onyx.server.features.build.db.sandbox import create_sandbox as db_create_sandbox
@@ -44,19 +50,194 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-class SandboxManager:
-    """Public interface for sandbox operations.
+class SandboxManager(ABC):
+    """Abstract interface for sandbox operations.
 
-    Orchestrates internal managers for directory lifecycle, processes,
-    snapshots, and agent communication.
+    Defines the contract for sandbox lifecycle management including:
+    - Provisioning and termination
+    - Snapshot creation
+    - Health checks
+    - Agent communication
+    - Filesystem operations
 
-    This is a singleton class - use SandboxManager() to get the instance.
+    Use get_sandbox_manager() to get the appropriate implementation.
     """
 
-    _instance: "SandboxManager | None" = None
+    @abstractmethod
+    def provision(
+        self,
+        session_id: str,
+        tenant_id: str,
+        file_system_path: str,
+        db_session: Session,
+        snapshot_id: str | None = None,
+    ) -> SandboxInfo:
+        """Provision a new sandbox for a session.
+
+        Args:
+            session_id: Unique identifier for the session
+            tenant_id: Tenant identifier for multi-tenant isolation
+            file_system_path: Path to the knowledge/source files to link
+            db_session: Database session
+            snapshot_id: Optional snapshot ID to restore from
+
+        Returns:
+            SandboxInfo with the provisioned sandbox details
+
+        Raises:
+            ValueError: If max concurrent sandboxes reached
+            RuntimeError: If provisioning fails
+        """
+        ...
+
+    @abstractmethod
+    def terminate(self, sandbox_id: str, db_session: Session) -> None:
+        """Terminate a sandbox.
+
+        Args:
+            sandbox_id: The sandbox ID to terminate
+            db_session: Database session
+        """
+        ...
+
+    @abstractmethod
+    def create_snapshot(
+        self, sandbox_id: str, db_session: Session
+    ) -> SnapshotInfo | None:
+        """Create a snapshot of the sandbox's outputs directory.
+
+        Args:
+            sandbox_id: The sandbox ID to snapshot
+            db_session: Database session
+
+        Returns:
+            SnapshotInfo with the created snapshot details, or None if
+            snapshots are disabled
+
+        Raises:
+            ValueError: If sandbox not found
+            RuntimeError: If snapshot creation fails
+        """
+        ...
+
+    @abstractmethod
+    def health_check(self, sandbox_id: str, db_session: Session) -> bool:
+        """Check if the sandbox is healthy.
+
+        Args:
+            sandbox_id: The sandbox ID to check
+            db_session: Database session
+
+        Returns:
+            True if sandbox is healthy, False otherwise
+        """
+        ...
+
+    @abstractmethod
+    def send_message(
+        self,
+        sandbox_id: str,
+        message: str,
+        db_session: Session,
+    ) -> Generator[ACPEvent, None, None]:
+        """Send a message to the CLI agent and stream typed ACP events.
+
+        Args:
+            sandbox_id: The sandbox ID to send message to
+            message: The message content to send
+            db_session: Database session
+
+        Yields:
+            Typed ACP schema event objects
+
+        Raises:
+            ValueError: If sandbox not found
+            RuntimeError: If agent communication fails
+        """
+        ...
+
+    @abstractmethod
+    def list_directory(
+        self, sandbox_id: str, path: str, db_session: Session
+    ) -> list[FilesystemEntry]:
+        """List contents of a directory in the sandbox's outputs directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            path: Relative path within the outputs directory
+            db_session: Database session
+
+        Returns:
+            List of FilesystemEntry objects sorted by directory first, then name
+
+        Raises:
+            ValueError: If sandbox not found, path traversal attempted,
+                       or path is not a directory
+        """
+        ...
+
+    @abstractmethod
+    def read_file(self, sandbox_id: str, path: str, db_session: Session) -> bytes:
+        """Read a file from the sandbox's outputs directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            path: Relative path within the outputs directory
+            db_session: Database session
+
+        Returns:
+            File contents as bytes
+
+        Raises:
+            ValueError: If sandbox not found, path traversal attempted,
+                       or path is not a file
+        """
+        ...
+
+    @abstractmethod
+    def get_sandbox_info(
+        self, sandbox_id: str, db_session: Session
+    ) -> SandboxInfo | None:
+        """Get information about a sandbox.
+
+        Args:
+            sandbox_id: The sandbox ID
+            db_session: Database session
+
+        Returns:
+            SandboxInfo or None if not found
+        """
+        ...
+
+    @abstractmethod
+    def cancel_agent(self, sandbox_id: str) -> None:
+        """Cancel the current agent operation.
+
+        Args:
+            sandbox_id: The sandbox ID
+        """
+        ...
+
+
+class LocalSandboxManager(SandboxManager):
+    """Filesystem-based sandbox manager for local/dev environments.
+
+    Manages sandboxes as directories on the local filesystem.
+    Suitable for development, testing, and single-node deployments.
+
+    Key characteristics:
+    - Sandboxes are directories under SANDBOX_BASE_PATH
+    - No container isolation (process-level only)
+    - Snapshots disabled by default (SANDBOX_BACKEND=local)
+    - No automatic cleanup of idle sandboxes
+
+    This is a singleton class - use get_sandbox_manager() to get the instance.
+    """
+
+    _instance: "LocalSandboxManager | None" = None
     _lock = threading.Lock()
 
-    def __new__(cls) -> "SandboxManager":
+    def __new__(cls) -> "LocalSandboxManager":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -147,24 +328,10 @@ class SandboxManager:
         1. Check concurrent sandbox limit for tenant
         2. Create sandbox directory structure
         3. Setup files symlink, outputs, venv, AGENTS.md, and skills
-        4. If snapshot_id provided, restore outputs from snapshot
+        4. If snapshot_id provided and kubernetes backend, restore outputs from snapshot
         5. Start Next.js dev server
         6. Store sandbox record in DB
         7. Return sandbox info (agent not started until first message)
-
-        Args:
-            session_id: Unique identifier for the session
-            tenant_id: Tenant identifier for multi-tenant isolation
-            file_system_path: Path to the knowledge/source files to link
-            db_session: Database session
-            snapshot_id: Optional snapshot ID to restore from
-
-        Returns:
-            SandboxInfo with the provisioned sandbox details
-
-        Raises:
-            ValueError: If max concurrent sandboxes reached
-            RuntimeError: If provisioning fails
         """
         logger.info(
             f"Starting sandbox provisioning for session {session_id}, "
@@ -200,7 +367,8 @@ class SandboxManager:
             logger.debug("Files symlink created")
 
             # Setup outputs (from snapshot or template)
-            if snapshot_id:
+            # NOTE: Snapshot restore is only supported in kubernetes backend
+            if snapshot_id and SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                 logger.debug(f"Restoring from snapshot {snapshot_id}")
                 snapshot = get_latest_snapshot_for_session(db_session, session_uuid)
                 if snapshot:
@@ -212,6 +380,11 @@ class SandboxManager:
                     logger.warning(f"Snapshot {snapshot_id} not found, using template")
                     self._directory_manager.setup_outputs_directory(sandbox_path)
             else:
+                if snapshot_id and SANDBOX_BACKEND == SandboxBackend.LOCAL:
+                    logger.debug(
+                        f"Ignoring snapshot {snapshot_id} (local backend - "
+                        "snapshots disabled)"
+                    )
                 logger.debug("Setting up outputs directory from template")
                 self._directory_manager.setup_outputs_directory(sandbox_path)
             logger.debug("Outputs directory ready")
@@ -301,10 +474,6 @@ class SandboxManager:
         1. Stop ACP client (terminates agent subprocess)
         2. Cleanup sandbox directory (this will handle Next.js process cleanup)
         3. Update DB status to TERMINATED
-
-        Args:
-            sandbox_id: The sandbox ID to terminate
-            db_session: Database session
         """
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
@@ -330,20 +499,21 @@ class SandboxManager:
 
         logger.info(f"Terminated sandbox {sandbox_id}")
 
-    def create_snapshot(self, sandbox_id: str, db_session: Session) -> SnapshotInfo:
+    def create_snapshot(
+        self, sandbox_id: str, db_session: Session
+    ) -> SnapshotInfo | None:
         """Create a snapshot of the sandbox's outputs directory.
 
-        Args:
-            sandbox_id: The sandbox ID to snapshot
-            db_session: Database session
-
-        Returns:
-            SnapshotInfo with the created snapshot details
-
-        Raises:
-            ValueError: If sandbox not found
-            RuntimeError: If snapshot creation fails
+        Returns None if snapshots are disabled (local backend).
         """
+        # Snapshots are disabled for local backend
+        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+            logger.debug(
+                f"Skipping snapshot creation for sandbox {sandbox_id} "
+                "(local backend - snapshots disabled)"
+            )
+            return None
+
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
             raise ValueError(f"Sandbox {sandbox_id} not found")
@@ -377,15 +547,7 @@ class SandboxManager:
         )
 
     def health_check(self, sandbox_id: str, db_session: Session) -> bool:
-        """Check if the sandbox is healthy (Next.js server running).
-
-        Args:
-            sandbox_id: The sandbox ID to check
-            db_session: Database session
-
-        Returns:
-            True if sandbox is healthy, False otherwise
-        """
+        """Check if the sandbox is healthy (Next.js server running)."""
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
             return False
@@ -421,18 +583,6 @@ class SandboxManager:
         - CurrentModeUpdate: Agent mode change
         - PromptResponse: Agent finished (has stop_reason)
         - Error: An error occurred
-
-        Args:
-            sandbox_id: The sandbox ID to send message to
-            message: The message content to send
-            db_session: Database session
-
-        Yields:
-            Typed ACP schema event objects
-
-        Raises:
-            ValueError: If sandbox not found
-            RuntimeError: If agent communication fails
         """
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
@@ -458,20 +608,7 @@ class SandboxManager:
     def list_directory(
         self, sandbox_id: str, path: str, db_session: Session
     ) -> list[FilesystemEntry]:
-        """List contents of a directory in the sandbox's outputs directory.
-
-        Args:
-            sandbox_id: The sandbox ID
-            path: Relative path within the outputs directory
-            db_session: Database session
-
-        Returns:
-            List of FilesystemEntry objects sorted by directory first, then name
-
-        Raises:
-            ValueError: If sandbox not found, path traversal attempted,
-                       or path is not a directory
-        """
+        """List contents of a directory in the sandbox's outputs directory."""
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
             raise ValueError(f"Sandbox {sandbox_id} not found")
@@ -505,20 +642,7 @@ class SandboxManager:
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
     def read_file(self, sandbox_id: str, path: str, db_session: Session) -> bytes:
-        """Read a file from the sandbox's outputs directory.
-
-        Args:
-            sandbox_id: The sandbox ID
-            path: Relative path within the outputs directory
-            db_session: Database session
-
-        Returns:
-            File contents as bytes
-
-        Raises:
-            ValueError: If sandbox not found, path traversal attempted,
-                       or path is not a file
-        """
+        """Read a file from the sandbox's outputs directory."""
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
             raise ValueError(f"Sandbox {sandbox_id} not found")
@@ -541,15 +665,7 @@ class SandboxManager:
     def get_sandbox_info(
         self, sandbox_id: str, db_session: Session
     ) -> SandboxInfo | None:
-        """Get information about a sandbox.
-
-        Args:
-            sandbox_id: The sandbox ID
-            db_session: Database session
-
-        Returns:
-            SandboxInfo or None if not found
-        """
+        """Get information about a sandbox."""
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
             return None
@@ -564,11 +680,44 @@ class SandboxManager:
         )
 
     def cancel_agent(self, sandbox_id: str) -> None:
-        """Cancel the current agent operation.
-
-        Args:
-            sandbox_id: The sandbox ID
-        """
+        """Cancel the current agent operation."""
         client = self._acp_clients.get(sandbox_id)
         if client:
             client.cancel()
+
+
+# Singleton instance cache for the factory
+_sandbox_manager_instance: SandboxManager | None = None
+_sandbox_manager_lock = threading.Lock()
+
+
+def get_sandbox_manager() -> SandboxManager:
+    """Get the appropriate SandboxManager implementation based on SANDBOX_BACKEND.
+
+    Returns:
+        SandboxManager instance (LocalSandboxManager for local backend,
+        future implementations for kubernetes backend)
+
+    Note:
+        Currently only LocalSandboxManager is implemented. When kubernetes
+        backend is needed, add KubernetesSandboxManager and update this factory.
+    """
+    global _sandbox_manager_instance
+
+    if _sandbox_manager_instance is None:
+        with _sandbox_manager_lock:
+            if _sandbox_manager_instance is None:
+                if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+                    _sandbox_manager_instance = LocalSandboxManager()
+                elif SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
+                    # For now, use LocalSandboxManager for kubernetes too
+                    # TODO: Implement KubernetesSandboxManager when needed
+                    logger.warning(
+                        "Kubernetes sandbox backend not yet implemented, "
+                        "falling back to LocalSandboxManager"
+                    )
+                    _sandbox_manager_instance = LocalSandboxManager()
+                else:
+                    raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
+
+    return _sandbox_manager_instance

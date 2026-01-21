@@ -27,6 +27,7 @@ from onyx.db.models import Sandbox
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
@@ -57,8 +58,8 @@ def tenant_context() -> Generator[None, None, None]:
 
 @pytest.fixture
 def sandbox_manager() -> SandboxManager:
-    """Get the SandboxManager singleton."""
-    return SandboxManager()
+    """Get the SandboxManager instance via factory function."""
+    return get_sandbox_manager()
 
 
 @pytest.fixture

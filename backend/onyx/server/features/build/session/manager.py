@@ -48,7 +48,7 @@ from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
-from onyx.server.features.build.sandbox.manager import SandboxManager
+from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -121,7 +121,7 @@ class SessionManager:
             db_session: The SQLAlchemy database session to use for all operations
         """
         self._db_session = db_session
-        self._sandbox_manager = SandboxManager()
+        self._sandbox_manager = get_sandbox_manager()
 
     # =========================================================================
     # Rate Limiting
