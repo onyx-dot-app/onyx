@@ -31,6 +31,7 @@ import MessageList from "@/components/chat/MessageList";
 import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
+import * as AppLayouts from "@/layouts/app-layouts";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
 import Spacer from "@/refresh-components/Spacer";
@@ -385,7 +386,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               className={cn(
                 "flex justify-center",
                 hasMessages
-                  ? "absolute bottom-0 left-0 right-0 pointer-events-none"
+                  ? "absolute bottom-6 left-0 right-0 pointer-events-none"
                   : "w-full"
               )}
             >
@@ -421,6 +422,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             </div>
             {!hasMessages && <div className="flex-1 w-full" />}
+            <AppLayouts.Footer />
           </div>
         )}
       </Dropzone>
