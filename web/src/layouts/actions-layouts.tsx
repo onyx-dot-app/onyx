@@ -259,7 +259,7 @@ function ActionsHeader({
         shouldFullyRound ? "rounded-16" : "rounded-t-16"
       )}
     >
-      <label className="px-4" htmlFor={name}>
+      <label className="px-4 cursor-pointer" htmlFor={name}>
         <LineItemLayout
           icon={Icon}
           title={title}
@@ -395,7 +395,7 @@ function ActionsTool({
           description={description}
           rightChildren={rightChildren}
           strikethrough={disabled}
-          compact
+          variant="secondary"
         />
       </label>
     </Card>

@@ -65,3 +65,9 @@ def get_gated_tenants() -> set[str]:
     redis_client = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     gated_tenants_bytes = cast(set[bytes], redis_client.smembers(GATED_TENANTS_KEY))
     return {tenant_id.decode("utf-8") for tenant_id in gated_tenants_bytes}
+
+
+def is_tenant_gated(tenant_id: str) -> bool:
+    """Fast O(1) check if tenant is in gated set (multi-tenant only)."""
+    redis_client = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+    return bool(redis_client.sismember(GATED_TENANTS_KEY, tenant_id))

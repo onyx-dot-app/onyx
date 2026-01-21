@@ -7,6 +7,7 @@ from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
+from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.utils.logger import setup_logger
 
@@ -101,3 +102,28 @@ def wait_for_vespa_with_timeout(wait_interval: int = 5, wait_limit: int = 60) ->
         )
 
         time.sleep(wait_interval)
+
+
+def wait_for_opensearch_with_timeout(
+    wait_interval_s: int = 5, wait_limit_s: int = 60
+) -> bool:
+    # NOTE: index_name does not matter because we are only using this object to
+    # ping.
+    # TODO(andrei): Make this better.
+    os_client = OpenSearchClient(index_name="")
+    time_start = time.monotonic()
+    while True:
+        if os_client.ping():
+            logger.info("[OpenSearch] Readiness probe succeeded. Continuing...")
+            return True
+        time_elapsed = time.monotonic() - time_start
+        if time_elapsed > wait_limit_s:
+            logger.info(
+                f"[OpenSearch] Readiness probe did not succeed within the timeout "
+                f"({wait_limit_s} seconds)."
+            )
+            return False
+        logger.info(
+            f"[OpenSearch] Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={wait_limit_s:.1f}"
+        )
+        time.sleep(wait_interval_s)

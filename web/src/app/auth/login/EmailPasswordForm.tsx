@@ -200,7 +200,7 @@ export default function EmailPasswordForm({
                         placeholder="email@yourcompany.com"
                         onClear={() => helper.setValue("")}
                         data-testid="email"
-                        error={apiStatus === "error"}
+                        variant={apiStatus === "error" ? "error" : undefined}
                         showClearButton={false}
                       />
                     </FormField.Control>

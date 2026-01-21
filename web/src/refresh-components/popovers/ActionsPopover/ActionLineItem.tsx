@@ -15,6 +15,7 @@ import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import EnabledCount from "@/refresh-components/EnabledCount";
+import { Section } from "@/layouts/general-layouts";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -125,7 +126,7 @@ export default function ActionLineItem({
           }
           icon={Icon}
           rightChildren={
-            <div className="flex flex-row items-center gap-1">
+            <Section gap={0.25} flexDirection="row">
               {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
                 <IconButton
                   icon={({ className }) => (
@@ -160,6 +161,7 @@ export default function ActionLineItem({
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}
+
               {isUnavailable && showAdminConfigure && adminConfigureHref && (
                 <IconButton
                   icon={SvgSettings}
@@ -171,6 +173,7 @@ export default function ActionLineItem({
                   tooltip={adminConfigureTooltip}
                 />
               )}
+
               {/* Source count for internal search - show when some but not all sources selected AND tool is pinned */}
               {shouldShowSourceCount && (
                 <span className="relative flex items-center whitespace-nowrap">
@@ -191,6 +194,7 @@ export default function ActionLineItem({
                   </span>
                 </span>
               )}
+
               {isSearchToolAndNotInProject &&
                 !isSearchToolWithNoDocumentSets && (
                   <IconButton
@@ -216,7 +220,7 @@ export default function ActionLineItem({
                     }
                   />
                 )}
-            </div>
+            </Section>
           }
         >
           {label}

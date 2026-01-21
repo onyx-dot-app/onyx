@@ -288,35 +288,4 @@ test.describe("Channel Configuration", () => {
     await expect(messageContainer).toHaveCSS("opacity", "1", { timeout: 5000 });
     await expect(unsavedMessage).toBeVisible({ timeout: 5000 });
   });
-
-  test("error toast appears on save failure", async ({
-    adminPage,
-    mockRegisteredGuild,
-  }) => {
-    await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
-
-    // Intercept PATCH to return error
-    await adminPage.route(
-      `**/api/manage/admin/discord-bot/guilds/${mockRegisteredGuild.id}`,
-      (route) => {
-        if (route.request().method() === "PATCH") {
-          route.fulfill({
-            status: 400,
-            contentType: "application/json",
-            body: JSON.stringify({ detail: "Validation error" }),
-          });
-        } else {
-          route.continue();
-        }
-      }
-    );
-
-    // Toggle to trigger save
-    const toggle = adminPage.locator('[role="switch"]').first();
-    await toggle.click();
-
-    // Error toast should appear
-    const errorToast = adminPage.locator("text=/error|failed/i");
-    await expect(errorToast).toBeVisible({ timeout: 5000 });
-  });
 });

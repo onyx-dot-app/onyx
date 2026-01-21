@@ -19,7 +19,7 @@ import {
 import { createGuildConfig } from "@/app/admin/discord-bot/lib";
 import { DiscordGuildsTable } from "@/app/admin/discord-bot/DiscordGuildsTable";
 import { BotConfigCard } from "@/app/admin/discord-bot/BotConfigCard";
-import { MonoDiscordIcon } from "@/components/icons/icons";
+import { SvgDiscordMono } from "@opal/icons";
 
 function DiscordBotContent() {
   const { popup, setPopup } = usePopup();
@@ -81,7 +81,7 @@ function DiscordBotContent() {
             <Text text04 mainUiBody>
               Copy the command and send it from any text channel in your server!
             </Text>
-            <Card translucent>
+            <Card variant="secondary">
               <Section
                 flexDirection="row"
                 justifyContent="between"
@@ -99,7 +99,7 @@ function DiscordBotContent() {
         </Modal.Content>
       </Modal>
 
-      <Card disabled={!isBotAvailable}>
+      <Card variant={!isBotAvailable ? "disabled" : "primary"}>
         <Section
           flexDirection="row"
           justifyContent="between"
@@ -129,10 +129,9 @@ export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={MonoDiscordIcon}
+        icon={SvgDiscordMono}
         title="Discord Bots"
         description="Connect Onyx to your Discord servers. Users can ask questions directly in Discord channels."
-        iconSize={30}
       />
       <SettingsLayouts.Body>
         <DiscordBotContent />

@@ -51,8 +51,7 @@ export function ListFieldInput({
       <InputTypeIn
         placeholder={placeholder}
         value={inputValue}
-        disabled={disabled}
-        error={error}
+        variant={disabled ? "disabled" : error ? "error" : undefined}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
       />

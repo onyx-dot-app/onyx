@@ -56,6 +56,7 @@ from onyx.db.user_preferences import get_latest_access_token_for_user
 from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
+from onyx.db.user_preferences import update_user_chat_background
 from onyx.db.user_preferences import update_user_default_model
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
@@ -75,6 +76,7 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
@@ -782,6 +784,25 @@ def update_user_theme_preference_api(
             raise RuntimeError("This should never happen")
 
     update_user_theme_preference(user.id, request.theme_preference, db_session)
+
+
+@router.patch("/user/chat-background")
+def update_user_chat_background_api(
+    request: ChatBackgroundRequest,
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    if user is None:
+        if AUTH_TYPE == AuthType.DISABLED:
+            store = get_kv_store()
+            no_auth_user = fetch_no_auth_user(store)
+            no_auth_user.preferences.chat_background = request.chat_background
+            set_no_auth_user_preferences(store, no_auth_user.preferences)
+            return
+        else:
+            raise RuntimeError("This should never happen")
+
+    update_user_chat_background(user.id, request.chat_background, db_session)
 
 
 @router.patch("/user/default-model")

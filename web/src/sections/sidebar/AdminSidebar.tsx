@@ -5,7 +5,6 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import Text from "@/refresh-components/texts/Text";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
@@ -15,7 +14,6 @@ import { MdOutlineCreditCard } from "react-icons/md";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
-  MonoDiscordIcon,
   SlackIconSkeleton,
   BrainIcon,
 } from "@/components/icons/icons";
@@ -44,8 +42,11 @@ import {
   SvgUsers,
   SvgZoomIn,
   SvgPaintBrush,
+  SvgDiscordMono,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+
 const connectors_items = () => [
   {
     name: "Existing Connectors",
@@ -98,7 +99,7 @@ const custom_assistants_items = (
       },
       {
         name: "Discord Bots",
-        icon: MonoDiscordIcon,
+        icon: SvgDiscordMono,
         link: "/admin/discord-bot",
       }
     );
@@ -361,7 +362,7 @@ export default function AdminSidebar({
                 {`Onyx version: ${settings.webVersion}`}
               </Text>
             )}
-            <Settings />
+            <UserAvatarPopover />
           </div>
         }
       >

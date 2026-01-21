@@ -88,7 +88,7 @@ function GuildDetailContent({
         </Callout>
       )}
 
-      <Card disabled={disabled}>
+      <Card variant={disabled ? "disabled" : "primary"}>
         <LineItemLayout
           title="Channel Configuration"
           description="Run !sync-channels in Discord to update the channel list."
@@ -351,7 +351,7 @@ export default function Page({ params }: Props) {
       />
       <SettingsLayouts.Body>
         {/* Default Persona Selector */}
-        <Card disabled={!guild?.enabled}>
+        <Card variant={!guild?.enabled ? "disabled" : "primary"}>
           <LineItemLayout
             title="Default Agent"
             description="The agent used by the bot in all channels unless overridden."

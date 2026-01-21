@@ -222,7 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
           </InputAvatar>
         </Popover.Trigger>
         <Popover.Content>
-          <PopoverMenu md>
+          <PopoverMenu>
             {[
               <LineItem
                 key="upload-image"
@@ -344,7 +344,7 @@ function MCPServerCard({
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn
               placeholder="Search tools..."
-              internal
+              variant="internal"
               leftSearchIcon
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -1362,7 +1362,13 @@ export default function AgentEditorPage({
                             tooltip={imageGenerationDisabledTooltip}
                             side="left"
                           >
-                            <Card disabled={!isImageGenerationAvailable}>
+                            <Card
+                              variant={
+                                isImageGenerationAvailable
+                                  ? undefined
+                                  : "disabled"
+                              }
+                            >
                               <InputLayouts.Horizontal
                                 name="image_generation"
                                 title="Image Generation"
@@ -1376,7 +1382,9 @@ export default function AgentEditorPage({
                             </Card>
                           </SimpleTooltip>
 
-                          <Card>
+                          <Card
+                            variant={!!webSearchTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="web_search"
                               title="Web Search"
@@ -1389,7 +1397,9 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card>
+                          <Card
+                            variant={!!openURLTool ? undefined : "disabled"}
+                          >
                             <InputLayouts.Horizontal
                               name="open_url"
                               title="Open URL"
@@ -1402,7 +1412,11 @@ export default function AgentEditorPage({
                             </InputLayouts.Horizontal>
                           </Card>
 
-                          <Card disabled={!codeInterpreterTool}>
+                          <Card
+                            variant={
+                              !!codeInterpreterTool ? undefined : "disabled"
+                            }
+                          >
                             <InputLayouts.Horizontal
                               name="code_interpreter"
                               title="Code Interpreter"
@@ -1483,7 +1497,6 @@ export default function AgentEditorPage({
                               name="llm_model"
                               title="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
-                              center
                             >
                               <LLMSelector
                                 llmProviders={llmProviders ?? []}
@@ -1497,7 +1510,6 @@ export default function AgentEditorPage({
                               name="knowledge_cutoff_date"
                               title="Knowledge Cutoff Date"
                               description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
-                              center
                             >
                               <InputDatePickerField name="knowledge_cutoff_date" />
                             </InputLayouts.Horizontal>

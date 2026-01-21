@@ -1,5 +1,4 @@
 import React, { FC, useEffect } from "react";
-import { AdminBooleanFormField } from "@/components/credentials/CredentialFields";
 import { TabOption } from "@/lib/connectors/connectors";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
@@ -11,6 +10,11 @@ import { Credential } from "@/lib/connectors/credentials";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
 import Tabs from "@/refresh-components/Tabs";
 import { useFormikContext } from "formik";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import * as InputLayouts from "@/layouts/input-layouts";
+import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
+import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import Text from "@/refresh-components/texts/Text";
 
 // Define a general type for form values
 type FormValues = Record<string, any>;
@@ -30,28 +34,29 @@ const TabsField: FC<TabsFieldProps> = ({
 }) => {
   const { setFieldValue } = useFormikContext<FormValues>();
 
+  const resolvedLabel =
+    typeof tabField.label === "function"
+      ? tabField.label(currentCredential)
+      : tabField.label;
+  const resolvedDescription =
+    typeof tabField.description === "function"
+      ? tabField.description(currentCredential)
+      : tabField.description;
+
   return (
-    <div className="w-full">
+    <GeneralLayouts.Section gap={0.5} alignItems="start">
       {tabField.label && (
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold">
-            {typeof tabField.label === "function"
-              ? tabField.label(currentCredential)
-              : tabField.label}
-          </h3>
-          {tabField.description && (
-            <p className="text-sm text-muted-foreground mt-1">
-              {typeof tabField.description === "function"
-                ? tabField.description(currentCredential)
-                : tabField.description}
-            </p>
-          )}
-        </div>
+        <InputLayouts.Label
+          title={resolvedLabel ?? ""}
+          description={resolvedDescription}
+        />
       )}
 
       {/* Ensure there's at least one tab before rendering */}
       {tabField.tabs.length === 0 ? (
-        <div className="text-sm text-muted-foreground">No tabs to display.</div>
+        <Text text03 secondaryBody>
+          No tabs to display.
+        </Text>
       ) : (
         <Tabs
           defaultValue={tabField.defaultTab || tabField.tabs[0]?.value}
@@ -78,24 +83,17 @@ const TabsField: FC<TabsFieldProps> = ({
           </Tabs.List>
           {tabField.tabs.map((tab) => (
             <Tabs.Content key={tab.value} value={tab.value}>
-              {tab.fields.map((subField, index, array) => {
-                // Check visibility condition first
-                if (
-                  subField.visibleCondition &&
-                  !subField.visibleCondition(values, currentCredential)
-                ) {
-                  return null;
-                }
+              <GeneralLayouts.Section gap={0.75} alignItems="start">
+                {tab.fields.map((subField) => {
+                  // Check visibility condition first
+                  if (
+                    subField.visibleCondition &&
+                    !subField.visibleCondition(values, currentCredential)
+                  ) {
+                    return null;
+                  }
 
-                return (
-                  <div
-                    key={subField.name}
-                    className={
-                      index < array.length - 1 && subField.type !== "string_tab"
-                        ? "mb-4"
-                        : ""
-                    }
-                  >
+                  return (
                     <RenderField
                       key={subField.name}
                       field={subField}
@@ -103,14 +101,14 @@ const TabsField: FC<TabsFieldProps> = ({
                       connector={connector}
                       currentCredential={currentCredential}
                     />
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </GeneralLayouts.Section>
             </Tabs.Content>
           ))}
         </Tabs>
       )}
-    </div>
+    </GeneralLayouts.Section>
   );
 };
 
@@ -207,28 +205,55 @@ export const RenderField: FC<RenderFieldProps> = ({
           name={field.name}
         />
       ) : field.type === "checkbox" ? (
-        <AdminBooleanFormField
-          checked={values[field.name]}
-          subtext={description}
-          name={field.name}
-          label={label}
-          disabled={disabled}
-          onChange={(e) => setFieldValue(field.name, e.target.value)}
-        />
+        <GeneralLayouts.Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="start"
+          gap={0.5}
+        >
+          <CheckboxField
+            name={field.name}
+            label={label}
+            sublabel={description}
+            disabled={disabled}
+            size="lg"
+            onChange={(checked) => setFieldValue(field.name, checked)}
+          />
+        </GeneralLayouts.Section>
       ) : field.type === "text" ? (
-        <TextFormField
-          subtext={description}
-          optional={field.optional}
-          type={field.type}
-          label={label}
-          name={field.name}
-          isTextArea={field.isTextArea || false}
-          defaultHeight={"h-15"}
-          disabled={disabled}
-          onChange={(e) => setFieldValue(field.name, e.target.value)}
-        />
+        field.isTextArea ? (
+          <InputLayouts.Vertical
+            name={field.name}
+            title={label}
+            description={description}
+            optional={field.optional}
+          >
+            <InputTextAreaField
+              name={field.name}
+              placeholder={field.placeholder}
+              variant={disabled ? "disabled" : undefined}
+              rows={1}
+            />
+          </InputLayouts.Vertical>
+        ) : (
+          <TextFormField
+            subtext={description}
+            optional={field.optional}
+            type={field.type}
+            label={label}
+            name={field.name}
+            isTextArea={false}
+            defaultHeight={"h-15"}
+            disabled={disabled}
+            onChange={(e) => setFieldValue(field.name, e.target.value)}
+          />
+        )
       ) : field.type === "string_tab" ? (
-        <div className="text-center">{description}</div>
+        <GeneralLayouts.Section>
+          <Text text03 secondaryBody>
+            {description}
+          </Text>
+        </GeneralLayouts.Section>
       ) : (
         <>INVALID FIELD TYPE</>
       )}
@@ -243,5 +268,9 @@ export const RenderField: FC<RenderFieldProps> = ({
     );
   }
 
-  return <div key={field.name}>{fieldContent}</div>;
+  return (
+    <GeneralLayouts.Section alignItems="start">
+      {fieldContent}
+    </GeneralLayouts.Section>
+  );
 };

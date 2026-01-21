@@ -144,36 +144,48 @@ export default function useUserPersonalization(
     }));
   }, []);
 
-  const handleSavePersonalization = useCallback(async () => {
-    setIsSavingPersonalization(true);
-    const trimmedMemories = personalizationValues.memories
-      .map((memory) => memory.trim())
-      .filter((memory) => memory.length > 0);
+  const setMemories = useCallback((memories: string[]) => {
+    setPersonalizationValues((prev) => ({
+      ...prev,
+      memories,
+    }));
+  }, []);
 
-    const updatedPersonalization: UserPersonalization = {
-      ...personalizationValues,
-      memories: trimmedMemories,
-    };
+  const handleSavePersonalization = useCallback(
+    async (overrides?: Partial<UserPersonalization>) => {
+      setIsSavingPersonalization(true);
 
-    try {
-      await persistPersonalization(updatedPersonalization);
-      setPersonalizationValues(updatedPersonalization);
-      onSuccess?.(updatedPersonalization);
-      return updatedPersonalization;
-    } catch (error) {
-      setPersonalizationValues(basePersonalization);
-      onError?.(error);
-      return null;
-    } finally {
-      setIsSavingPersonalization(false);
-    }
-  }, [
-    basePersonalization,
-    onError,
-    onSuccess,
-    persistPersonalization,
-    personalizationValues,
-  ]);
+      const valuesToSave = { ...personalizationValues, ...overrides };
+      const trimmedMemories = valuesToSave.memories
+        .map((memory) => memory.trim())
+        .filter((memory) => memory.length > 0);
+
+      const updatedPersonalization: UserPersonalization = {
+        ...valuesToSave,
+        memories: trimmedMemories,
+      };
+
+      try {
+        await persistPersonalization(updatedPersonalization);
+        setPersonalizationValues(updatedPersonalization);
+        onSuccess?.(updatedPersonalization);
+        return updatedPersonalization;
+      } catch (error) {
+        setPersonalizationValues(basePersonalization);
+        onError?.(error);
+        return null;
+      } finally {
+        setIsSavingPersonalization(false);
+      }
+    },
+    [
+      basePersonalization,
+      onError,
+      onSuccess,
+      persistPersonalization,
+      personalizationValues,
+    ]
+  );
 
   return {
     personalizationValues,
@@ -181,6 +193,7 @@ export default function useUserPersonalization(
     toggleUseMemories,
     updateMemoryAtIndex,
     addMemory,
+    setMemories,
     handleSavePersonalization,
     isSavingPersonalization,
   };
