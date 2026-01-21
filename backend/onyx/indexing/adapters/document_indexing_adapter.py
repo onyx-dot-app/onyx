@@ -23,7 +23,6 @@ from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
-from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_ENABLED
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -210,16 +209,3 @@ class DocumentIndexingBatchAdapter:
         )
 
         self.db_session.commit()
-
-        # Write to persistent storage if enabled
-        if PERSISTENT_DOCUMENT_STORAGE_ENABLED and filtered_documents:
-            try:
-                from onyx.indexing.persistent_document_writer import (
-                    get_persistent_document_writer,
-                )
-
-                writer = get_persistent_document_writer()
-                writer.write_documents(filtered_documents)
-            except Exception as e:
-                # Log but don't fail indexing
-                logger.warning(f"Failed to write documents to persistent storage: {e}")

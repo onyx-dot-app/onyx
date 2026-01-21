@@ -53,10 +53,12 @@ def list_messages(
     db_session: Session = Depends(get_session),
 ) -> MessageListResponse:
     """Get all messages for a build session."""
-    user_id = user.id if user is not None else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     session_manager = SessionManager(db_session)
 
-    messages = session_manager.list_messages(session_id, user_id)
+    messages = session_manager.list_messages(session_id, user.id)
 
     if messages is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -82,12 +84,14 @@ async def send_message(
 
     Follows the same pattern as /chat/send-message for consistency.
     """
-    user_id = user.id if user is not None else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     session_manager = SessionManager(db_session)
 
     # Stream the CLI agent's response
     return StreamingResponse(
-        session_manager.send_message(session_id, user_id, request.content),
+        session_manager.send_message(session_id, user.id, request.content),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -21,7 +21,7 @@ logger = setup_logger()
 
 
 def create_build_session(
-    user_id: UUID | None,
+    user_id: UUID,
     db_session: Session,
     name: str | None = None,
 ) -> BuildSession:
@@ -41,7 +41,7 @@ def create_build_session(
 
 def get_build_session(
     session_id: UUID,
-    user_id: UUID | None,
+    user_id: UUID,
     db_session: Session,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
@@ -56,7 +56,7 @@ def get_build_session(
 
 
 def get_user_build_sessions(
-    user_id: UUID | None,
+    user_id: UUID,
     db_session: Session,
     limit: int = 100,
 ) -> list[BuildSession]:
@@ -104,7 +104,7 @@ def update_session_status(
 
 def delete_build_session(
     session_id: UUID,
-    user_id: UUID | None,
+    user_id: UUID,
     db_session: Session,
 ) -> bool:
     """Delete a build session and all related data."""

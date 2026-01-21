@@ -642,7 +642,15 @@ def connector_document_extraction(
                         db_session.commit()
 
                     # Write documents to persistent file system
-                    writer = get_persistent_document_writer()
+                    # Use creator_id for user-segregated storage paths (sandbox isolation)
+                    creator_id = index_attempt.connector_credential_pair.creator_id
+                    if creator_id is None:
+                        raise ValueError(
+                            f"ConnectorCredentialPair {index_attempt.connector_credential_pair.id} "
+                            "must have a creator_id for persistent document storage"
+                        )
+                    user_id_str: str = str(creator_id)
+                    writer = get_persistent_document_writer(user_id=user_id_str)
                     written_paths = writer.write_documents(doc_batch_cleaned)
 
                     # Update coordination directly (no docprocessing task)
