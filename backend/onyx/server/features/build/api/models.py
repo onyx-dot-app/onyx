@@ -39,6 +39,7 @@ class SandboxResponse(BaseModel):
     container_id: str | None
     created_at: datetime
     last_heartbeat: datetime | None
+    nextjs_port: int | None
 
     @classmethod
     def from_model(cls, sandbox) -> "SandboxResponse":
@@ -49,6 +50,7 @@ class SandboxResponse(BaseModel):
             container_id=sandbox.container_id,
             created_at=sandbox.created_at,
             last_heartbeat=sandbox.last_heartbeat,
+            nextjs_port=sandbox.nextjs_port,
         )
 
 
@@ -189,3 +191,9 @@ class FileSystemEntry(BaseModel):
 class DirectoryListing(BaseModel):
     path: str  # Current directory path
     entries: list[FileSystemEntry]  # Contents
+
+
+class WebappInfo(BaseModel):
+    has_webapp: bool  # Whether a webapp exists in outputs/web
+    webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
+    status: str  # Sandbox status (running, terminated, etc.)

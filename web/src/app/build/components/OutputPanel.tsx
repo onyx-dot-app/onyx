@@ -1,11 +1,27 @@
 "use client";
 
 import { memo, useState } from "react";
+import useSWR from "swr";
 import { useSession, Artifact } from "@/app/build/hooks/useBuildSessionStore";
+import {
+  fetchWebappInfo,
+  fetchDirectoryListing,
+  fetchArtifacts,
+} from "@/app/build/services/apiServices";
+import { FileSystemEntry } from "@/app/build/services/buildStreamingModels";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import { SvgGlobe, SvgHardDrive, SvgFiles, SvgExternalLink } from "@opal/icons";
+import {
+  SvgGlobe,
+  SvgHardDrive,
+  SvgFiles,
+  SvgExternalLink,
+  SvgFolder,
+  SvgFileText,
+  SvgChevronLeft,
+  SvgDownloadCloud,
+} from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
 
@@ -36,10 +52,55 @@ const BuildOutputPanel = memo(
     const session = useSession();
     const [activeTab, setActiveTab] = useState<TabValue>("preview");
 
-    const hasWebapp =
-      session?.artifacts.some((a: Artifact) => a.type === "nextjs_app") ??
-      false;
-    const webappUrl = session?.webappUrl ?? null;
+    // Fetch webapp info from dedicated endpoint
+    // Only fetch for real sessions (not temp-* IDs) that are loaded
+    const shouldFetchWebapp =
+      session?.id &&
+      !session.id.startsWith("temp-") &&
+      session.status !== "creating";
+
+    const { data: webappInfo } = useSWR(
+      shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp` : null,
+      () => (session?.id ? fetchWebappInfo(session.id) : null),
+      {
+        refreshInterval: 5000, // Refresh every 5 seconds to catch when webapp starts
+        revalidateOnFocus: true,
+      }
+    );
+
+    const hasWebapp = webappInfo?.has_webapp ?? false;
+    const webappUrl = webappInfo?.webapp_url ?? null;
+
+    // Fetch artifacts - poll every 5 seconds when on artifacts tab
+    const shouldFetchArtifacts =
+      session?.id &&
+      !session.id.startsWith("temp-") &&
+      session.status !== "creating" &&
+      activeTab === "artifacts";
+
+    const { data: polledArtifacts } = useSWR(
+      shouldFetchArtifacts
+        ? `/api/build/sessions/${session.id}/artifacts`
+        : null,
+      () => (session?.id ? fetchArtifacts(session.id) : null),
+      {
+        refreshInterval: 5000, // Refresh every 5 seconds to catch new artifacts
+        revalidateOnFocus: true,
+      }
+    );
+
+    // Use polled artifacts if available, otherwise fall back to session store
+    const artifacts = polledArtifacts ?? session?.artifacts ?? [];
+
+    // Debug logging
+    console.log("[OutputPanel] Debug:", {
+      hasWebapp,
+      webappUrl,
+      webappInfo,
+      sessionId: session?.id,
+      artifactsCount: artifacts.length,
+      isPolling: shouldFetchArtifacts,
+    });
 
     return (
       <div
@@ -82,7 +143,7 @@ const BuildOutputPanel = memo(
             )}
             {activeTab === "artifacts" && (
               <ArtifactsTab
-                artifacts={session?.artifacts ?? []}
+                artifacts={artifacts}
                 sessionId={session?.id ?? null}
               />
             )}
@@ -156,6 +217,19 @@ interface FilesTabProps {
 }
 
 function FilesTab({ sessionId }: FilesTabProps) {
+  const [currentPath, setCurrentPath] = useState("");
+
+  const { data: listing, error } = useSWR(
+    sessionId
+      ? `/api/build/sessions/${sessionId}/files?path=${currentPath}`
+      : null,
+    () => (sessionId ? fetchDirectoryListing(sessionId, currentPath) : null),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 2000,
+    }
+  );
+
   if (!sessionId) {
     return (
       <Section
@@ -175,12 +249,124 @@ function FilesTab({ sessionId }: FilesTabProps) {
     );
   }
 
-  // TODO: Implement file browser
+  const handleNavigate = (entry: FileSystemEntry) => {
+    if (entry.is_directory) {
+      setCurrentPath(entry.path);
+    }
+  };
+
+  const handleBack = () => {
+    const parts = currentPath.split("/").filter(Boolean);
+    parts.pop();
+    setCurrentPath(parts.join("/"));
+  };
+
+  const formatFileSize = (bytes: number | null): string => {
+    if (bytes === null) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  if (error) {
+    return (
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <SvgHardDrive size={48} className="stroke-text-02" />
+        <Text headingH3 text03>
+          Error loading files
+        </Text>
+        <Text secondaryBody text02>
+          {error.message}
+        </Text>
+      </Section>
+    );
+  }
+
+  if (!listing) {
+    return (
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <Text secondaryBody text03>
+          Loading files...
+        </Text>
+      </Section>
+    );
+  }
+
   return (
-    <div className="p-3">
-      <Text secondaryBody text03>
-        File browser - session: {sessionId}
-      </Text>
+    <div className="flex flex-col h-full">
+      {/* Breadcrumb / Navigation */}
+      <div className="flex items-center gap-2 p-3 border-b border-border-01">
+        {currentPath && (
+          <button
+            onClick={handleBack}
+            className="p-1 hover:bg-background-tint-02 rounded"
+          >
+            <SvgChevronLeft size={16} className="stroke-text-03" />
+          </button>
+        )}
+        <Text secondaryBody text03>
+          /{currentPath || ""}
+        </Text>
+      </div>
+
+      {/* File List */}
+      <div className="flex-1 overflow-auto">
+        {listing.entries.length === 0 ? (
+          <Section
+            height="full"
+            alignItems="center"
+            justifyContent="center"
+            padding={2}
+          >
+            <Text secondaryBody text03>
+              No files in this directory
+            </Text>
+          </Section>
+        ) : (
+          <div className="divide-y divide-border-01">
+            {listing.entries.map((entry) => (
+              <button
+                key={entry.path}
+                onClick={() => handleNavigate(entry)}
+                className={cn(
+                  "w-full flex items-center gap-3 p-3 hover:bg-background-tint-02 transition-colors",
+                  !entry.is_directory && "cursor-default"
+                )}
+              >
+                {entry.is_directory ? (
+                  <SvgFolder
+                    size={20}
+                    className="stroke-text-03 flex-shrink-0"
+                  />
+                ) : (
+                  <SvgFileText
+                    size={20}
+                    className="stroke-text-03 flex-shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0 text-left">
+                  <Text secondaryBody text04 className="truncate">
+                    {entry.name}
+                  </Text>
+                  {!entry.is_directory && entry.size !== null && (
+                    <Text text02>{formatFileSize(entry.size)}</Text>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -191,7 +377,25 @@ interface ArtifactsTabProps {
 }
 
 function ArtifactsTab({ artifacts, sessionId }: ArtifactsTabProps) {
-  if (!sessionId || artifacts.length === 0) {
+  // Filter to only show webapp artifacts
+  const webappArtifacts = artifacts.filter(
+    (a) => a.type === "nextjs_app" || a.type === "web_app"
+  );
+
+  const handleDownload = () => {
+    if (!sessionId) return;
+
+    // Trigger download by creating a link and clicking it
+    const downloadUrl = `/api/build/sessions/${sessionId}/webapp/download`;
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = ""; // Let the server set the filename
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  if (!sessionId || webappArtifacts.length === 0) {
     return (
       <Section
         height="full"
@@ -199,23 +403,62 @@ function ArtifactsTab({ artifacts, sessionId }: ArtifactsTabProps) {
         justifyContent="center"
         padding={2}
       >
-        <SvgFiles size={48} className="stroke-text-02" />
+        <SvgGlobe size={48} className="stroke-text-02" />
         <Text headingH3 text03>
-          No artifacts yet
+          No web apps yet
         </Text>
         <Text secondaryBody text02>
-          Artifacts created during the build will appear here
+          Web apps created during the build will appear here
         </Text>
       </Section>
     );
   }
 
-  // TODO: Implement artifact list
   return (
-    <div className="p-3">
-      <Text secondaryBody text03>
-        {artifacts.length} artifact(s) created
-      </Text>
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="p-3 border-b border-border-01">
+        <Text secondaryBody text03>
+          {webappArtifacts.length} web app
+          {webappArtifacts.length !== 1 ? "s" : ""}
+        </Text>
+      </div>
+
+      {/* Webapp Artifact List */}
+      <div className="flex-1 overflow-auto">
+        <div className="divide-y divide-border-01">
+          {webappArtifacts.map((artifact) => {
+            return (
+              <div
+                key={artifact.id}
+                className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors"
+              >
+                <SvgGlobe size={24} className="stroke-text-03 flex-shrink-0" />
+
+                <div className="flex-1 min-w-0">
+                  <Text secondaryBody text04 className="truncate">
+                    {artifact.name}
+                  </Text>
+                  <Text secondaryBody text02>
+                    Next.js Application
+                  </Text>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    tertiary
+                    action
+                    leftIcon={SvgDownloadCloud}
+                    onClick={handleDownload}
+                  >
+                    Download
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

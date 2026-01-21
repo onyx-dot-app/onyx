@@ -17,6 +17,7 @@ import {
   createSession as apiCreateSession,
   fetchSession,
   fetchSessionHistory,
+  generateSessionName,
   updateSessionName,
   deleteSession as apiDeleteSession,
   fetchMessages,
@@ -478,7 +479,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             messages: [
               {
                 id: `msg-${Date.now()}`,
-                role: "user",
+                type: "user",
                 content: prompt,
                 timestamp: new Date(),
               },
@@ -529,10 +530,20 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         fetchArtifacts(sessionId),
       ]);
 
+      // Construct webapp URL if sandbox has a Next.js port and there's a webapp artifact
+      let webappUrl: string | null = null;
+      const hasWebapp = artifacts.some(
+        (a) => a.type === "nextjs_app" || a.type === "web_app"
+      );
+      if (hasWebapp && sessionData.sandbox?.nextjs_port) {
+        webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+      }
+
       updateSessionData(sessionId, {
         status: sessionData.status === "active" ? "completed" : "idle",
         messages,
         artifacts,
+        webappUrl,
         error: null,
         isLoaded: true,
       });
@@ -559,7 +570,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
   nameBuildSession: async (sessionId: string) => {
     try {
-      await updateSessionName(sessionId, null);
+      // Generate name using LLM based on first user message
+      const generatedName = await generateSessionName(sessionId);
+      // Update session with the generated name
+      await updateSessionName(sessionId, generatedName);
       await get().refreshSessionHistory();
     } catch (err) {
       console.error("Failed to auto-name session:", err);

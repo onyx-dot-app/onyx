@@ -11,13 +11,14 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.server.features.build.api.models import ArtifactInfo
+from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import SessionCreateRequest
 from onyx.server.features.build.api.models import SessionListResponse
 from onyx.server.features.build.api.models import SessionNameGenerateResponse
 from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
+from onyx.server.features.build.api.models import WebappInfo
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
 
@@ -160,9 +161,6 @@ def delete_session(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     session_manager = SessionManager(db_session)
 
     success = session_manager.delete_session(session_uuid, user.id)
@@ -178,12 +176,12 @@ def delete_session(
 # =============================================================================
 
 
-@router.get("/sessions/{session_id}/artifacts", response_model=list[ArtifactInfo])
+@router.get("/sessions/{session_id}/artifacts", response_model=list[ArtifactResponse])
 def list_artifacts(
     session_id: str,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> list[ArtifactInfo]:
+) -> list[dict]:
     """List artifacts generated in the session."""
     try:
         session_uuid = UUID(session_id)
@@ -280,6 +278,68 @@ def download_artifact(
     return Response(
         content=content,
         media_type=mime_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@router.get("/sessions/{session_id}/webapp", response_model=WebappInfo)
+def get_webapp_info(
+    session_id: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> WebappInfo:
+    """
+    Get webapp information for a session.
+
+    Returns whether a webapp exists, its URL, and the sandbox status.
+    """
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    user_id: UUID = user.id
+    session_manager = SessionManager(db_session)
+
+    webapp_info = session_manager.get_webapp_info(session_uuid, user_id)
+
+    if webapp_info is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return WebappInfo(**webapp_info)
+
+
+@router.get("/sessions/{session_id}/webapp/download")
+def download_webapp(
+    session_id: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """
+    Download the webapp directory as a zip file.
+
+    Returns the entire outputs/web directory as a zip archive.
+    """
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    user_id: UUID = user.id
+    session_manager = SessionManager(db_session)
+
+    result = session_manager.download_webapp_zip(session_uuid, user_id)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Webapp not found")
+
+    zip_bytes, filename = result
+
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
         },

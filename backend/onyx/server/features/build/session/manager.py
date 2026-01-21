@@ -4,9 +4,11 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
+import io
 import json
 import mimetypes
 import os
+import zipfile
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
@@ -28,7 +30,6 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
-from onyx.server.features.build.api.models import ArtifactInfo
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import FileSystemEntry
 from onyx.server.features.build.api.packets import ArtifactCreatedPacket
@@ -699,17 +700,21 @@ class SessionManager:
         self,
         session_id: UUID,
         user_id: UUID | None,
-    ) -> list[ArtifactInfo] | None:
+    ) -> list[dict[str, Any]] | None:
         """
         List artifacts generated in a session.
+
+        Returns artifacts in the format expected by the frontend (matching ArtifactResponse).
 
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
 
         Returns:
-            List of ArtifactInfo or None if session not found or user doesn't own session
+            List of artifact dicts or None if session not found or user doesn't own session
         """
+        import uuid
+
         # Verify session ownership
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -720,53 +725,29 @@ class SessionManager:
             return None
 
         sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
-        artifacts: list[ArtifactInfo] = []
+        artifacts: list[dict[str, Any]] = []
         output_dir = sandbox_path / "outputs"
 
         if not output_dir.exists():
             return artifacts
 
+        now = datetime.now(timezone.utc)
+
         # Check for webapp
         web_dir = output_dir / "web"
         if web_dir.exists():
             artifacts.append(
-                ArtifactInfo(
-                    artifact_type="webapp",
-                    path="outputs/web",
-                    filename="webapp",
-                    mime_type="application/x-directory",
-                )
+                {
+                    "id": str(uuid.uuid4()),
+                    "session_id": str(session_id),
+                    "type": "web_app",  # Use web_app to match streaming packet type
+                    "name": "Web Application",
+                    "path": "outputs/web",
+                    "preview_url": None,  # Preview is via webapp URL, not artifact preview
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                }
             )
-
-        # Scan for other generated files
-        for root, _, files in os.walk(output_dir):
-            for filename in files:
-                if filename.startswith(".") or filename in (
-                    "package.json",
-                    "package-lock.json",
-                    "tsconfig.json",
-                ):
-                    continue
-
-                file_path = Path(root) / filename
-                rel_path = file_path.relative_to(sandbox_path)
-                mime_type, _ = mimetypes.guess_type(str(file_path))
-
-                if mime_type and mime_type.startswith("image/"):
-                    artifact_type = "image"
-                elif filename.endswith(".md"):
-                    artifact_type = "markdown"
-                else:
-                    artifact_type = "file"
-
-                artifacts.append(
-                    ArtifactInfo(
-                        artifact_type=artifact_type,
-                        path=str(rel_path),
-                        filename=filename,
-                        mime_type=mime_type,
-                    )
-                )
 
         return artifacts
 
@@ -821,6 +802,100 @@ class SessionManager:
         mime_type, _ = mimetypes.guess_type(str(file_path))
 
         return (content, mime_type or "application/octet-stream", file_path.name)
+
+    def get_webapp_info(
+        self,
+        session_id: UUID,
+        user_id: UUID | None,
+    ) -> dict[str, Any] | None:
+        """
+        Get webapp information for a session.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+
+        Returns:
+            Dict with has_webapp, webapp_url, and status, or None if session not found
+        """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
+        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        if sandbox is None:
+            return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
+
+        # Check if web directory exists
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        web_dir = sandbox_path / "outputs" / "web"
+        has_webapp = web_dir.exists()
+
+        # Build webapp URL if we have a port and webapp exists
+        webapp_url = None
+        if has_webapp and sandbox.nextjs_port:
+            webapp_url = f"http://localhost:{sandbox.nextjs_port}"
+
+        return {
+            "has_webapp": has_webapp,
+            "webapp_url": webapp_url,
+            "status": sandbox.status.value,
+        }
+
+    def download_webapp_zip(
+        self,
+        session_id: UUID,
+        user_id: UUID | None,
+    ) -> tuple[bytes, str] | None:
+        """
+        Create a zip file of the webapp directory.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+
+        Returns:
+            Tuple of (zip_bytes, filename) or None if session/webapp not found
+        """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
+        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        if sandbox is None:
+            return None
+
+        # Check if web directory exists
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        web_dir = sandbox_path / "outputs" / "web"
+
+        if not web_dir.exists():
+            return None
+
+        # Create zip file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Walk through the web directory and add all files
+            for root, _, files in os.walk(web_dir):
+                for file in files:
+                    file_path = Path(root) / file
+                    # Create relative path for the zip archive
+                    arcname = file_path.relative_to(web_dir)
+                    zip_file.write(file_path, arcname)
+
+        zip_buffer.seek(0)
+
+        # Create filename with session name or ID
+        session_name = session.name or f"session-{str(session_id)[:8]}"
+        # Sanitize filename
+        safe_name = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in session_name
+        )
+        filename = f"{safe_name}-webapp.zip"
+
+        return zip_buffer.getvalue(), filename
 
     # =========================================================================
     # File System Operations

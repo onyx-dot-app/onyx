@@ -14,6 +14,7 @@ import {
 import {
   sendMessageStream,
   processSSEStream,
+  fetchSession,
 } from "@/app/build/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
@@ -76,12 +77,16 @@ export function useBuildStreaming() {
 
       // Add placeholder assistant message using session-specific method
       // to avoid race condition when currentSessionId changes during navigation
+      const assistantMessageId = `msg-${Date.now()}-${Math.random()}-assistant`;
       appendMessageToSession(sessionId, {
-        id: `msg-${Date.now()}-assistant`,
-        role: "assistant",
+        id: assistantMessageId,
+        type: "assistant",
         content: "",
         timestamp: new Date(),
       });
+
+      // Accumulator for agent message chunks (they arrive as deltas, not cumulative)
+      let accumulatedMessageContent = "";
 
       try {
         const response = await sendMessageStream(
@@ -90,7 +95,9 @@ export function useBuildStreaming() {
           controller.signal
         );
 
-        let assistantContent = "";
+        console.log(
+          `[Build] Starting stream for session ${sessionId}, new assistant message ID: ${assistantMessageId}`
+        );
 
         await processSSEStream(response, (packet) => {
           const packetData = packet as any;
@@ -112,12 +119,19 @@ export function useBuildStreaming() {
           };
 
           switch (packet.type) {
-            // ACP: Agent message content
+            // ACP: Agent message content (arrives as deltas, not cumulative)
             case "agent_message_chunk": {
               const text = extractText(packetData.content);
               if (text) {
-                assistantContent += text;
-                updateLastMessageInSession(sessionId, assistantContent);
+                // Accumulate the delta and update the message with full accumulated content
+                accumulatedMessageContent += text;
+                console.log(
+                  `[Build] Received delta (${text.length} chars), accumulated length: ${accumulatedMessageContent.length}, updating message ${assistantMessageId}`
+                );
+                updateLastMessageInSession(
+                  sessionId,
+                  accumulatedMessageContent
+                );
               }
               break;
             }
@@ -128,6 +142,14 @@ export function useBuildStreaming() {
                 "[Build] Thought:",
                 extractText(packetData.content)
               );
+              // Add as a message for the timeline
+              appendMessageToSession(sessionId, {
+                id: `event-thought-${Date.now()}`,
+                type: "assistant",
+                content: "",
+                message_metadata: packetData,
+                timestamp: new Date(),
+              });
               break;
 
             // ACP: Tool invocation started
@@ -140,10 +162,22 @@ export function useBuildStreaming() {
                   packetData.title || `Running ${packetData.kind || "tool"}...`,
                 status: "in_progress",
                 input: packetData.input,
+                raw_input: packetData.raw_input,
+                raw_output: packetData.raw_output,
+                content: packetData.content,
                 startedAt: new Date(),
               };
               console.log("[Build] Tool started:", toolCall);
               addToolCallToSession(sessionId, toolCall);
+
+              // Also add as a message for the timeline
+              appendMessageToSession(sessionId, {
+                id: `event-${packetData.tool_call_id || Date.now()}`,
+                type: "assistant",
+                content: "",
+                message_metadata: packetData,
+                timestamp: new Date(),
+              });
               break;
             }
 
@@ -161,10 +195,22 @@ export function useBuildStreaming() {
               if (toolCallId) {
                 updateToolCallInSession(sessionId, toolCallId, {
                   status,
+                  raw_input: packetData.raw_input,
+                  raw_output: packetData.raw_output,
+                  content: packetData.content,
                   ...(isFinished && { finishedAt: new Date() }),
                   ...(status === "failed" && {
                     error: packetData.error || "Tool execution failed",
                   }),
+                });
+
+                // Also add as a message for the timeline
+                appendMessageToSession(sessionId, {
+                  id: `event-progress-${toolCallId}-${Date.now()}`,
+                  type: "assistant",
+                  content: "",
+                  message_metadata: packetData,
+                  timestamp: new Date(),
                 });
               }
               break;
@@ -174,9 +220,17 @@ export function useBuildStreaming() {
             case "agent_plan_update":
               console.debug(
                 "[Build] Plan updated:",
-                packetData.plan?.entries?.length,
+                packetData.entries?.length,
                 "entries"
               );
+              // Add as a message for the timeline
+              appendMessageToSession(sessionId, {
+                id: `event-plan-${Date.now()}`,
+                type: "assistant",
+                content: "",
+                message_metadata: packetData,
+                timestamp: new Date(),
+              });
               break;
 
             // ACP: Agent mode change
@@ -206,6 +260,29 @@ export function useBuildStreaming() {
                 updated_at: new Date(),
               };
               addArtifactToSession(sessionId, newArtifact);
+
+              // If it's a webapp, fetch session to get sandbox port and set webappUrl
+              const isWebapp =
+                newArtifact.type === "nextjs_app" ||
+                newArtifact.type === "web_app";
+              if (isWebapp) {
+                fetchSession(sessionId)
+                  .then((sessionData) => {
+                    if (sessionData.sandbox?.nextjs_port) {
+                      const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+                      updateSessionData(sessionId, { webappUrl });
+                      console.log(
+                        `[Build] Webapp URL set to: ${webappUrl} (port ${sessionData.sandbox.nextjs_port})`
+                      );
+                    }
+                  })
+                  .catch((err) => {
+                    console.error(
+                      "Failed to fetch session for webapp URL:",
+                      err
+                    );
+                  });
+              }
               break;
             }
 

@@ -1,15 +1,16 @@
 "use client";
 
-import { ToolCall } from "@/app/build/services/buildStreamingModels";
+import { BuildMessage } from "@/app/build/services/buildStreamingModels";
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import ToolCallList from "@/app/build/components/ToolCallList";
+import BuildAgentTimeline from "@/app/build/components/BuildAgentTimeline";
 import { SvgLoader } from "@opal/icons";
 
 interface AIMessageWithToolsProps {
   content: string;
-  toolCalls: ToolCall[];
+  /** Structured event messages (tool calls, thinking, plans) to display in timeline */
+  eventMessages?: BuildMessage[];
   isStreaming?: boolean;
 }
 
@@ -17,20 +18,25 @@ interface AIMessageWithToolsProps {
  * AIMessageWithTools - AI message display with tool call activity
  *
  * Shows:
- * - Tool calls (when present) above the message content
+ * - Agent timeline (tool calls, thinking, plans) when present
  * - Message content with markdown rendering
  * - Loading indicator when streaming
  */
 export default function AIMessageWithTools({
   content,
-  toolCalls,
+  eventMessages = [],
   isStreaming = false,
 }: AIMessageWithToolsProps) {
   const hasContent = content.length > 0;
-  const hasToolCalls = toolCalls.length > 0;
-  const hasActiveToolCalls = toolCalls.some(
-    (tc) => tc.status === "in_progress" || tc.status === "pending"
+  const hasEvents = eventMessages.length > 0;
+  const hasActiveEvents = eventMessages.some(
+    (msg) => msg.message_metadata?.status === "in_progress"
   );
+
+  // Don't render anything if there's no content and no events
+  if (!hasContent && !hasEvents && !isStreaming) {
+    return null;
+  }
 
   return (
     <div className="flex items-start gap-3 py-4">
@@ -38,10 +44,10 @@ export default function AIMessageWithTools({
         <Logo folded size={24} />
       </div>
       <div className="flex-1 flex flex-col gap-3 min-w-0">
-        {/* Tool calls section */}
-        {hasToolCalls && (
+        {/* Agent timeline section */}
+        {hasEvents && (
           <div className="flex flex-col gap-2">
-            <ToolCallList toolCalls={toolCalls} />
+            <BuildAgentTimeline messages={eventMessages} />
           </div>
         )}
 
@@ -50,7 +56,7 @@ export default function AIMessageWithTools({
           <div className="flex items-center gap-2 py-1">
             <SvgLoader className="size-4 stroke-text-03 animate-spin" />
             <Text secondaryBody text03>
-              {hasActiveToolCalls ? "Working..." : "Thinking..."}
+              {hasActiveEvents ? "Working..." : "Thinking..."}
             </Text>
           </div>
         ) : hasContent ? (
