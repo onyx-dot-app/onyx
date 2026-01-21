@@ -55,7 +55,7 @@ interface NRFPageProps {
 const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
 
 export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
-  const { theme, setUseOnyxAsNewTab } = useNRFPreferences();
+  const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
   const filterManager = useFilters();
