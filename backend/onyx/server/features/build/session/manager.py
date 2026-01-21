@@ -599,10 +599,12 @@ class SessionManager:
         except RuntimeError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
+            logger.exception(f"RuntimeError in build message streaming: {e}")
             yield _format_packet_event(error_packet)
         except Exception as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
+            logger.exception("Unexpected error in build message streaming")
             yield _format_packet_event(error_packet)
 
     # =========================================================================
