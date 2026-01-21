@@ -380,42 +380,6 @@ const ChatInputBar = React.memo(
       combinedSettings?.settings?.deep_research_enabled,
     ]);
 
-    function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-      if (!showPrompts) return;
-
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (tabbingIconIndex === filteredPrompts.length) {
-          // "Create a new prompt" is selected
-          window.open("/chat/settings", "_self");
-        } else {
-          const selectedPrompt =
-            filteredPrompts[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
-          if (selectedPrompt) {
-            updateInputPrompt(selectedPrompt);
-          }
-        }
-      } else if (e.key === "Tab" && e.shiftKey) {
-        // Shift+Tab: cycle backward
-        e.preventDefault();
-        setTabbingIconIndex((prev) => Math.max(prev - 1, 0));
-      } else if (e.key === "Tab") {
-        // Tab: cycle forward
-        e.preventDefault();
-        setTabbingIconIndex((prev) =>
-          Math.min(prev + 1, filteredPrompts.length)
-        );
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setTabbingIconIndex((prev) =>
-          Math.min(prev + 1, filteredPrompts.length)
-        );
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setTabbingIconIndex((prev) => Math.max(prev - 1, 0));
-      }
-    }
-
     return (
       <div
         ref={containerRef}
@@ -450,7 +414,6 @@ const ChatInputBar = React.memo(
           <Popover.Anchor asChild>
             <textarea
               onPaste={handlePaste}
-              onKeyDownCapture={handleKeyDown}
               onChange={handleInputChange}
               ref={textAreaRef}
               id="onyx-chat-input-textarea"
@@ -518,7 +481,6 @@ const ChatInputBar = React.memo(
                 <LineItem
                   key="create-new"
                   icon={SvgPlus}
-                  href="/chat/settings/chat-preferences"
                   selected={tabbingIconIndex === filteredPrompts.length}
                   emphasized={tabbingIconIndex === filteredPrompts.length}
                 >

@@ -82,7 +82,12 @@ def insert_input_prompt(
     if user_id is not None:
         stmt = stmt.on_conflict_do_nothing(constraint="uq_inputprompt_prompt_user_id")
     else:
-        stmt = stmt.on_conflict_do_nothing(constraint="uq_inputprompt_prompt_public")
+        # Partial unique indexes cannot be targeted by constraint name;
+        # must use index_elements + index_where
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=[InputPrompt.prompt],
+            index_where=InputPrompt.user_id.is_(None),
+        )
 
     stmt = stmt.returning(InputPrompt)
 
