@@ -51,13 +51,6 @@ export default function BuildAgentTimeline({
       : "") +
     (planMessages.length > 0 ? `, ${planMessages.length} plan` : "");
 
-  console.log("[BuildAgentTimeline] Rendering", {
-    total: structuredMessages.length,
-    tools: toolMessages.length,
-    thinking: thinkingMessages.length,
-    plans: planMessages.length,
-  });
-
   return (
     <div className="my-2 border border-border-01 bg-background rounded-md overflow-hidden">
       {/* Header */}

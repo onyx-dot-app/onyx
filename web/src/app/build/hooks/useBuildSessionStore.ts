@@ -170,20 +170,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // ===========================================================================
 
   setCurrentSession: (sessionId: string | null) => {
-    console.log("[Store] setCurrentSession called", { sessionId });
     set((state) => {
       // If setting to null, just clear current session
       if (sessionId === null) {
-        console.log("[Store] Clearing currentSessionId");
         return { currentSessionId: null };
       }
 
       // If session doesn't exist, create it
       if (!state.sessions.has(sessionId)) {
-        console.log(
-          "[Store] Session not found, creating new entry for:",
-          sessionId
-        );
         const newSession = createInitialSessionData(sessionId);
         const newSessions = new Map(state.sessions);
         newSessions.set(sessionId, newSession);
@@ -194,7 +188,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
 
       // Update last accessed for existing session
-      console.log("[Store] Session found, setting as current:", sessionId);
       const session = state.sessions.get(sessionId)!;
       const updatedSession = { ...session, lastAccessed: new Date() };
       const newSessions = new Map(state.sessions);
@@ -212,18 +205,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     sessionId: string,
     initialData?: Partial<BuildSessionData>
   ) => {
-    console.log("[Store] createSession called", {
-      sessionId,
-      initialData: { ...initialData, messages: initialData?.messages?.length },
-    });
     set((state) => {
       const newSession = createInitialSessionData(sessionId, initialData);
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, newSession);
-      console.log("[Store] Session created in local state", {
-        sessionId,
-        sessionsCount: newSessions.size,
-      });
       return { sessions: newSessions };
     });
   },
@@ -547,26 +532,16 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   loadSession: async (sessionId: string) => {
-    console.log("[Store] loadSession called", { sessionId });
     const { setCurrentSession, updateSessionData, sessions } = get();
 
     // Check if already loaded in cache
     const existingSession = sessions.get(sessionId);
-    console.log("[Store] loadSession: existing session check", {
-      exists: !!existingSession,
-      isLoaded: existingSession?.isLoaded,
-      status: existingSession?.status,
-    });
     if (existingSession?.isLoaded) {
-      console.log(
-        "[Store] loadSession: already loaded, just setting as current"
-      );
       setCurrentSession(sessionId);
       return;
     }
 
     // Set as current and mark as loading
-    console.log("[Store] loadSession: fetching from API...");
     setCurrentSession(sessionId);
 
     try {
@@ -575,10 +550,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         fetchMessages(sessionId),
         fetchArtifacts(sessionId),
       ]);
-      console.log("[Store] loadSession: API returned", {
-        messagesCount: messages.length,
-        artifactsCount: artifacts.length,
-      });
 
       // Construct webapp URL if sandbox has a Next.js port and there's a webapp artifact
       let webappUrl: string | null = null;
@@ -718,45 +689,27 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
   ensurePreProvisionedSession: async () => {
     const { preProvisioning } = get();
-    console.log(
-      "[PreProvision] ensurePreProvisionedSession called, current state:",
-      preProvisioning.status
-    );
 
     // Already have a pre-provisioned session ready
     if (preProvisioning.status === "ready") {
-      console.log(
-        "[PreProvision] Already ready, returning sessionId:",
-        preProvisioning.sessionId
-      );
       return preProvisioning.sessionId;
     }
 
     // Already provisioning - return existing promise
     if (preProvisioning.status === "provisioning") {
-      console.log(
-        "[PreProvision] Already provisioning, returning existing promise"
-      );
       return preProvisioning.promise;
     }
 
     // Start new provisioning
-    console.log("[PreProvision] Starting new provisioning...");
     const promise = (async (): Promise<string | null> => {
       try {
-        console.log("[PreProvision] Calling apiCreateSession...");
         const sessionData = await apiCreateSession();
-        console.log(
-          "[PreProvision] apiCreateSession returned, sessionId:",
-          sessionData.id
-        );
         set({
           preProvisioning: {
             status: "ready",
             sessionId: sessionData.id,
           },
         });
-        console.log("[PreProvision] State set to ready");
         return sessionData.id;
       } catch (err) {
         console.error("[PreProvision] Failed to pre-provision session:", err);
@@ -766,31 +719,22 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     })();
 
     set({ preProvisioning: { status: "provisioning", promise } });
-    console.log("[PreProvision] State set to provisioning");
     return promise;
   },
 
   consumePreProvisionedSession: async () => {
     const { preProvisioning } = get();
-    console.log(
-      "[PreProvision] consumePreProvisionedSession called, current state:",
-      preProvisioning.status
-    );
 
     // Wait for provisioning to complete if in progress
     if (preProvisioning.status === "provisioning") {
-      console.log("[PreProvision] Waiting for provisioning to complete...");
       await preProvisioning.promise;
-      console.log("[PreProvision] Provisioning promise resolved");
     }
 
     // Re-check state after awaiting (may have changed)
     const { preProvisioning: currentState, sessionHistory } = get();
-    console.log("[PreProvision] After await, state is:", currentState.status);
 
     if (currentState.status === "ready") {
       const { sessionId } = currentState;
-      console.log("[PreProvision] Consuming session:", sessionId);
 
       // Optimistically add to session history so it appears in sidebar immediately
       // (Backend excludes empty sessions, but we're about to send a message)
@@ -798,7 +742,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         (item) => item.id === sessionId
       );
       if (!alreadyInHistory) {
-        console.log("[PreProvision] Adding to session history");
         set({
           sessionHistory: [
             { id: sessionId, title: "New Build", createdAt: new Date() },
@@ -809,15 +752,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       // Reset to idle and return the session ID
       set({ preProvisioning: { status: "idle" } });
-      console.log(
-        "[PreProvision] State reset to idle, returning sessionId:",
-        sessionId
-      );
       return sessionId;
     }
 
     // No session available
-    console.log("[PreProvision] No session available, returning null");
     return null;
   },
 }));

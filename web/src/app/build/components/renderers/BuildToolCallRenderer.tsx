@@ -107,8 +107,6 @@ export default function BuildToolCallRenderer({
   const command = extractCommand(metadata);
   const isFailed = metadata.status === "failed";
 
-  console.log("[BuildToolCallRenderer] Rendering tool:", metadata);
-
   return (
     <div className="relative">
       {!isLastItem && (
