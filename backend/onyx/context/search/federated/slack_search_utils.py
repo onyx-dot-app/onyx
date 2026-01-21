@@ -562,31 +562,8 @@ def _is_valid_keyword_query(line: str) -> bool:
 
     Returns False for lines that appear to be LLM explanations rather than keywords.
     """
-    line_lower = line.lower()
-
     # Reject lines that start with parentheses (explanatory notes)
     if line.startswith("("):
-        return False
-
-    # Reject lines containing common explanation patterns
-    explanation_patterns = [
-        "no keyword",
-        "no content",
-        "no search",
-        "no query",
-        "this query",
-        "this is a",
-        "the query",
-        "cannot extract",
-        "unable to",
-        "doesn't contain",
-        "does not contain",
-        "user-based",
-        "temporal-based",
-        "command/instruction",
-        "rather than",
-    ]
-    if any(pattern in line_lower for pattern in explanation_patterns):
         return False
 
     # Reject lines that are too long (likely sentences, not keywords)
