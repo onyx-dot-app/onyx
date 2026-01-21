@@ -387,11 +387,11 @@ const ChatInputBar = React.memo(
 
       if (e.key === "Enter") {
         e.preventDefault();
-        if (tabbingIconIndex === filteredPrompts.length) {
+        if (tabbingIconIndex === sortedFilteredPrompts.length) {
           // "Create a new prompt" is selected
           window.open("/chat/settings/chat-preferences", "_self");
         } else {
-          const selectedPrompt = filteredPrompts[tabbingIconIndex];
+          const selectedPrompt = sortedFilteredPrompts[tabbingIconIndex];
           if (selectedPrompt) {
             updateInputPrompt(selectedPrompt);
           }
@@ -404,12 +404,12 @@ const ChatInputBar = React.memo(
         // Tab: cycle forward
         e.preventDefault();
         setTabbingIconIndex((prev) =>
-          Math.min(prev + 1, filteredPrompts.length)
+          Math.min(prev + 1, sortedFilteredPrompts.length)
         );
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
         setTabbingIconIndex((prev) =>
-          Math.min(prev + 1, filteredPrompts.length)
+          Math.min(prev + 1, sortedFilteredPrompts.length)
         );
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
