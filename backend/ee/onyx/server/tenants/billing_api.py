@@ -143,11 +143,16 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
 
     # Use lock to prevent concurrent S3 requests
     async with _stripe_key_lock:
+        # Double-check after acquiring lock (another request may have populated cache)
+        if _stripe_publishable_key_cache:
+            return StripePublishableKeyResponse(
+                publishable_key=_stripe_publishable_key_cache
+            )
+
         # Check for env var override first (for local testing with pk_test_* keys)
         if STRIPE_PUBLISHABLE_KEY_OVERRIDE:
             key = STRIPE_PUBLISHABLE_KEY_OVERRIDE.strip()
             if not key.startswith("pk_"):
-                logger.error("Invalid Stripe publishable key format in env var")
                 raise HTTPException(
                     status_code=500,
                     detail="Invalid Stripe publishable key format",
@@ -176,10 +181,8 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
                     )
 
                 _stripe_publishable_key_cache = key
-                logger.info(f"Using Stripe publishable key from S3: {key}")
                 return StripePublishableKeyResponse(publishable_key=key)
         except httpx.HTTPError:
-            # Don't log raw exception - may contain sensitive URL params
             raise HTTPException(
                 status_code=500,
                 detail="Failed to fetch Stripe publishable key",
