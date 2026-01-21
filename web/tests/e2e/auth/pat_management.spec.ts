@@ -29,10 +29,12 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
     .locator('a[href="/chat/settings/accounts-access"]')
     .click({ force: true });
 
-  // Wait for PAT page to load
-  await expect(page.getByText("Access Tokens").first()).toBeVisible({
-    timeout: 10000,
-  });
+  // Wait for PAT page to load (button is unique to the PAT section)
+  await expect(page.locator('button:has-text("New Access Token")')).toBeVisible(
+    {
+      timeout: 10000,
+    }
+  );
 
   await page.locator('button:has-text("New Access Token")').first().click();
 
@@ -153,10 +155,12 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
     .locator('a[href="/chat/settings/accounts-access"]')
     .click({ force: true });
 
-  // Wait for PAT page to load
-  await expect(page.getByText("Access Tokens").first()).toBeVisible({
-    timeout: 10000,
-  });
+  // Wait for PAT page to load (button is unique to the PAT section)
+  await expect(page.locator('button:has-text("New Access Token")')).toBeVisible(
+    {
+      timeout: 10000,
+    }
+  );
 
   const tokens = [
     { name: `Token 1 - ${Date.now()}`, expiration: "7 days" },
