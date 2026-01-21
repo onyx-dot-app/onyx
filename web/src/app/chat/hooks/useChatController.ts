@@ -874,7 +874,15 @@ export function useChatController({
                   packetsVersion: packetsVersion,
                   packetCount: packets.length,
                   processingDurationSeconds:
-                    finalMessage?.processing_duration_seconds,
+                    finalMessage?.processing_duration_seconds ??
+                    (() => {
+                      const startTime = useChatSessionStore
+                        .getState()
+                        .getStreamingStartTime(frozenSessionId);
+                      return startTime
+                        ? Math.floor((Date.now() - startTime) / 1000)
+                        : undefined;
+                    })(),
                 },
               ],
               // Pass the latest map state

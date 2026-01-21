@@ -131,6 +131,7 @@ interface ChatSessionStore {
 
   // Actions - Streaming Duration
   setStreamingStartTime: (sessionId: string, time: number | null) => void;
+  getStreamingStartTime: (sessionId: string) => number | undefined;
 
   // Actions - Abort Controllers
   setAbortController: (sessionId: string, controller: AbortController) => void;
@@ -472,6 +473,10 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, {
       streamingStartTime: time ?? undefined,
     });
+  },
+
+  getStreamingStartTime: (sessionId: string) => {
+    return get().sessions.get(sessionId)?.streamingStartTime;
   },
 
   // Abort Controller Actions
