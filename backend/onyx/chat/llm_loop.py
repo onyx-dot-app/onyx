@@ -376,21 +376,12 @@ def run_llm_loop(
     include_citations: bool = True,
     assistant_message: Any | None = None,
 ) -> None:
-    # Get the user's input message (last user message in history)
-    user_input = None
-    for msg in reversed(simple_chat_history):
-        if msg.message_type == MessageType.USER:
-            user_input = msg.message
-            break
-
     trace_metadata = {
         "tenant_id": get_current_tenant_id(),
         "chat_session_id": chat_session_id,
     }
     if user_identity:
         trace_metadata["user_id"] = str(user_identity.user_id)
-    if user_input:
-        trace_metadata["user_input"] = user_input
 
     with trace(
         "run_llm_loop",
