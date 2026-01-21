@@ -337,7 +337,9 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
   ({ icon: Icon, title, description, onClose, children, ...props }, ref) => {
     const { closeButtonRef, setHasDescription } = useModalContext();
 
-    React.useEffect(() => {
+    // useLayoutEffect ensures aria-describedby is set before paint,
+    // so screen readers announce the description when the dialog opens
+    React.useLayoutEffect(() => {
       setHasDescription(!!description);
     }, [description, setHasDescription]);
 
