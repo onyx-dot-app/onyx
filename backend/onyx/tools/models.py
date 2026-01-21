@@ -36,6 +36,15 @@ class ToolCallException(Exception):
         self.llm_facing_message = llm_facing_message
 
 
+class ToolExecutionException(Exception):
+    """Exception raise for errors during tool execution."""
+
+    def __init__(self, message: str, emit_error_packet: bool = False):
+        super().__init__(message)
+
+        self.emit_error_packet = emit_error_packet
+
+
 class SearchToolUsage(str, Enum):
     DISABLED = "disabled"
     ENABLED = "enabled"
