@@ -161,22 +161,24 @@ export default function ConnectorCard({
   );
 
   return (
-    <Card
-      variant={isConnected ? "primary" : "secondary"}
+    <div
+      className={cn(!isDeleting && "cursor-pointer")}
       onClick={handleCardClick}
     >
-      <LineItemLayout
-        icon={sourceMetadata.icon}
-        title={sourceMetadata.displayName}
-        description={
-          <StatusDescription
-            status={status}
-            docsIndexed={config?.docs_indexed || 0}
-          />
-        }
-        rightChildren={rightContent}
-        center
-      />
-    </Card>
+      <Card variant={isConnected ? "primary" : "secondary"}>
+        <LineItemLayout
+          icon={sourceMetadata.icon}
+          title={sourceMetadata.displayName}
+          description={
+            <StatusDescription
+              status={status}
+              docsIndexed={config?.docs_indexed || 0}
+            />
+          }
+          rightChildren={rightContent}
+          center
+        />
+      </Card>
+    </div>
   );
 }

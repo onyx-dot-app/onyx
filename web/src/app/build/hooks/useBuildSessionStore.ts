@@ -44,8 +44,12 @@ export type {
 /** Pre-provisioning state machine - exactly one of these states at a time */
 export type PreProvisioningState =
   | { status: "idle" }
-  | { status: "provisioning"; promise: Promise<string | null> }
-  | { status: "ready"; sessionId: string };
+  | {
+      status: "provisioning";
+      promise: Promise<string | null>;
+      demoDataEnabled: boolean;
+    }
+  | { status: "ready"; sessionId: string; demoDataEnabled: boolean };
 
 export interface BuildSessionData {
   id: string;
@@ -72,6 +76,9 @@ interface BuildSessionStore {
 
   // Pre-provisioning state (discriminated union - see PreProvisioningState type)
   preProvisioning: PreProvisioningState;
+
+  // Demo data toggle (controls whether demo files are mounted in sandbox)
+  demoDataEnabled: boolean;
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
@@ -128,6 +135,9 @@ interface BuildSessionStore {
   // Pre-provisioning Actions
   ensurePreProvisionedSession: () => Promise<string | null>;
   consumePreProvisionedSession: () => Promise<string | null>;
+
+  // Demo Data Actions
+  setDemoDataEnabled: (enabled: boolean) => void;
 }
 
 // =============================================================================
@@ -164,6 +174,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
   // Pre-provisioning state
   preProvisioning: { status: "idle" },
+
+  // Demo data toggle (defaults to true)
+  demoDataEnabled: true,
 
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
@@ -478,6 +491,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       updateSessionData,
       refreshSessionHistory,
       nameBuildSession,
+      demoDataEnabled,
     } = get();
 
     // Create a temporary session ID for optimistic UI
@@ -486,7 +500,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     updateSessionData(tempId, { status: "creating" });
 
     try {
-      const sessionData = await apiCreateSession(prompt.slice(0, 50));
+      const sessionData = await apiCreateSession({
+        name: prompt.slice(0, 50),
+        demoDataEnabled,
+      });
       const realSessionId = sessionData.id;
 
       // Remove temp session and create real one
@@ -688,10 +705,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // ===========================================================================
 
   ensurePreProvisionedSession: async () => {
-    const { preProvisioning } = get();
+    const { preProvisioning, demoDataEnabled } = get();
 
-    // Already have a pre-provisioned session ready
+    // Already have a pre-provisioned session ready with matching demoDataEnabled
     if (preProvisioning.status === "ready") {
+      // If demoDataEnabled changed, we need to re-provision (handled by setDemoDataEnabled)
       return preProvisioning.sessionId;
     }
 
@@ -700,14 +718,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return preProvisioning.promise;
     }
 
-    // Start new provisioning
+    // Start new provisioning with current demoDataEnabled value
     const promise = (async (): Promise<string | null> => {
       try {
-        const sessionData = await apiCreateSession();
+        const sessionData = await apiCreateSession({ demoDataEnabled });
         set({
           preProvisioning: {
             status: "ready",
             sessionId: sessionData.id,
+            demoDataEnabled,
           },
         });
         return sessionData.id;
@@ -718,7 +737,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
     })();
 
-    set({ preProvisioning: { status: "provisioning", promise } });
+    set({
+      preProvisioning: { status: "provisioning", promise, demoDataEnabled },
+    });
     return promise;
   },
 
@@ -757,6 +778,71 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // No session available
     return null;
+  },
+
+  // ===========================================================================
+  // Demo Data Actions
+  // ===========================================================================
+
+  setDemoDataEnabled: (enabled: boolean) => {
+    const {
+      preProvisioning,
+      demoDataEnabled: currentValue,
+      ensurePreProvisionedSession,
+    } = get();
+
+    // If value hasn't changed, do nothing
+    if (enabled === currentValue) {
+      return;
+    }
+
+    // Update the state value
+    set({ demoDataEnabled: enabled });
+
+    // Check if we need to invalidate a pre-provisioned session
+    if (preProvisioning.status === "ready") {
+      // Pre-provisioned session exists with different demoDataEnabled value
+      if (preProvisioning.demoDataEnabled !== enabled) {
+        const sessionIdToDelete = preProvisioning.sessionId;
+
+        // Reset to idle first
+        set({ preProvisioning: { status: "idle" } });
+
+        // Delete the old session in the background (don't await)
+        apiDeleteSession(sessionIdToDelete).catch((err) => {
+          console.error(
+            "[PreProvision] Failed to delete invalidated session:",
+            err
+          );
+        });
+
+        // Start new pre-provisioning with updated demoDataEnabled
+        ensurePreProvisionedSession();
+      }
+    } else if (preProvisioning.status === "provisioning") {
+      // If currently provisioning with different value, the new session will have wrong demoDataEnabled
+      // We'll let it complete but mark it for replacement
+      if (preProvisioning.demoDataEnabled !== enabled) {
+        // Wait for current provisioning to complete, then invalidate
+        preProvisioning.promise.then((sessionId) => {
+          if (sessionId) {
+            // Check if demoDataEnabled is still different (user may have toggled back)
+            const { demoDataEnabled: latestValue } = get();
+            if (latestValue !== preProvisioning.demoDataEnabled) {
+              // Delete the session and re-provision
+              set({ preProvisioning: { status: "idle" } });
+              apiDeleteSession(sessionId).catch((err) => {
+                console.error(
+                  "[PreProvision] Failed to delete invalidated session:",
+                  err
+                );
+              });
+              get().ensurePreProvisionedSession();
+            }
+          }
+        });
+      }
+    }
   },
 }));
 
@@ -841,3 +927,10 @@ export const useIsPreProvisioning = () =>
 
 export const useIsPreProvisioningReady = () =>
   useBuildSessionStore((state) => state.preProvisioning.status === "ready");
+
+// Demo data selectors
+export const useDemoDataEnabled = () =>
+  useBuildSessionStore((state) => state.demoDataEnabled);
+
+export const useSetDemoDataEnabled = () =>
+  useBuildSessionStore((state) => state.setDemoDataEnabled);
