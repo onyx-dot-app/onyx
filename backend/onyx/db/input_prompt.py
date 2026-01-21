@@ -143,13 +143,14 @@ def validate_user_prompt_authorization(
     """
     Check if the user is authorized to modify the given input prompt.
     Returns True only if the user owns the prompt.
-    Returns False for public prompts (only admins can modify those).
+    Returns False for public prompts (only admins can modify those),
+    unless auth is disabled (then anyone can manage public prompts).
     """
     prompt = InputPromptSnapshot.from_model(input_prompt=input_prompt)
 
-    # Public prompts cannot be modified via the user API
+    # Public prompts cannot be modified via the user API (unless auth is disabled)
     if prompt.is_public or prompt.user_id is None:
-        return False
+        return AUTH_TYPE == AuthType.DISABLED
 
     # User must be logged in
     if user is None:
