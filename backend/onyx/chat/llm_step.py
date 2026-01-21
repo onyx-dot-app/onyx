@@ -14,6 +14,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
@@ -432,7 +433,7 @@ def translate_history_to_llm_format(
 
     for idx, msg in enumerate(history):
         # if the message is being added to the history
-        if msg.message_type in [
+        if PROMPT_CACHE_CHAT_HISTORY and msg.message_type in [
             MessageType.SYSTEM,
             MessageType.USER,
             MessageType.ASSISTANT,
