@@ -135,6 +135,7 @@ export default function IndexAttemptErrorsModal({
               : undefined
           }
           onClose={onClose}
+          height="fit"
         />
         <Modal.Body>
           {!isResolvingErrors && (
