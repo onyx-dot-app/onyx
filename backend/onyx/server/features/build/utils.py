@@ -225,7 +225,7 @@ def validate_file(
     filename: str,
     content_type: str | None,
     size: int,
-) -> bool:
+) -> tuple[bool, str | None]:
     """Validate a file for upload.
 
     Performs all validation checks:
@@ -239,15 +239,25 @@ def validate_file(
         size: File size in bytes
 
     Returns:
-        True if the file is valid, False otherwise
+        Tuple of (is_valid, error_message). error_message is None if valid.
     """
     # Validate extension
-    is_valid = (
-        validate_file_extension(filename)
-        and validate_mime_type(content_type)
-        and validate_file_size(size)
-    )
-    return is_valid
+    ext_valid, ext_error = validate_file_extension(filename)
+    if not ext_valid:
+        return False, ext_error
+
+    # Validate MIME type
+    if not validate_mime_type(content_type):
+        return False, f"MIME type '{content_type}' is not supported"
+
+    # Validate file size
+    if not validate_file_size(size):
+        return (
+            False,
+            f"File size exceeds maximum allowed size of {MAX_UPLOAD_FILE_SIZE_BYTES} bytes",
+        )
+
+    return True, None
 
 
 # =============================================================================

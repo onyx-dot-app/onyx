@@ -30,6 +30,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
+from onyx.db.models import User
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import FileSystemEntry
 from onyx.server.features.build.api.packets import ArtifactCreatedPacket
@@ -95,7 +96,7 @@ class RateLimitError(Exception):
         message: str,
         messages_used: int,
         limit: int,
-        reset_timestamp: datetime | None = None,
+        reset_timestamp: str | None = None,
     ):
         super().__init__(message)
         self.messages_used = messages_used
@@ -130,17 +131,17 @@ class SessionManager:
     # Rate Limiting
     # =========================================================================
 
-    def check_rate_limit(self, user_id: UUID) -> None:
+    def check_rate_limit(self, user: User) -> None:
         """
         Check build mode rate limits for a user.
 
         Args:
-            user_id: The user ID to check rate limits for
+            user: The user to check rate limits for
 
         Raises:
             RateLimitError: If rate limit is exceeded
         """
-        rate_limit_status = get_user_rate_limit_status(user_id, self._db_session)
+        rate_limit_status = get_user_rate_limit_status(user, self._db_session)
         if rate_limit_status.is_limited:
             raise RateLimitError(
                 message=(
@@ -248,7 +249,7 @@ class SessionManager:
     def generate_session_name(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
     ) -> str | None:
         """
         Generate a session name using LLM based on the first user message.
@@ -587,11 +588,12 @@ class SessionManager:
                     ]:
                         file_path = "outputs/file"
                         if hasattr(acp_event, "content") and acp_event.content:
-                            for item in (
+                            content_items = (
                                 acp_event.content
                                 if isinstance(acp_event.content, list)
                                 else [acp_event.content]
-                            ):
+                            )
+                            for item in content_items:  # type: ignore[union-attr]
                                 if hasattr(item, "text") and item.text:
                                     if "/" in item.text or "\\" in item.text:
                                         file_path = item.text.split("\n")[0][:200]
@@ -696,7 +698,7 @@ class SessionManager:
     def list_artifacts(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
     ) -> list[dict[str, Any]] | None:
         """
         List artifacts generated in a session.
@@ -751,7 +753,7 @@ class SessionManager:
     def download_artifact(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
         path: str,
     ) -> tuple[bytes, str, str] | None:
         """
@@ -803,7 +805,7 @@ class SessionManager:
     def get_webapp_info(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
     ) -> dict[str, Any] | None:
         """
         Get webapp information for a session.
@@ -843,7 +845,7 @@ class SessionManager:
     def download_webapp_zip(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
     ) -> tuple[bytes, str] | None:
         """
         Create a zip file of the webapp directory.
@@ -901,7 +903,7 @@ class SessionManager:
     def list_directory(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
         path: str,
     ) -> DirectoryListing | None:
         """
@@ -972,7 +974,7 @@ class SessionManager:
     def upload_file(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
         filename: str,
         content: bytes,
     ) -> tuple[str, int]:
@@ -1041,7 +1043,7 @@ class SessionManager:
     def delete_file(
         self,
         session_id: UUID,
-        user_id: UUID | None,
+        user_id: UUID,
         path: str,
     ) -> bool:
         """Delete a file from the session's sandbox.

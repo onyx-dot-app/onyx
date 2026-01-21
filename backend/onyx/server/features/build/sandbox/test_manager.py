@@ -28,7 +28,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.manager import get_sandbox_manager
-from onyx.server.features.build.sandbox.manager import SandboxManager
+from onyx.server.features.build.sandbox.manager import LocalSandboxManager
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotInfo
@@ -57,9 +57,11 @@ def tenant_context() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def sandbox_manager() -> SandboxManager:
+def sandbox_manager() -> LocalSandboxManager:
     """Get the SandboxManager instance via factory function."""
-    return get_sandbox_manager()
+    manager = get_sandbox_manager()
+    assert isinstance(manager, LocalSandboxManager)
+    return manager
 
 
 @pytest.fixture
@@ -143,7 +145,7 @@ class TestTerminate:
 
     def test_terminate_updates_status(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         temp_sandbox_dir: Path,
@@ -163,7 +165,7 @@ class TestCreateSnapshot:
 
     def test_create_snapshot_archives_outputs(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         actual_sandbox_path: Path,
@@ -186,7 +188,7 @@ class TestHealthCheck:
 
     def test_health_check_returns_false_when_no_processes(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         tenant_context: None,
@@ -202,7 +204,7 @@ class TestListDirectory:
 
     def test_list_directory_returns_entries(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         actual_sandbox_path: Path,
@@ -228,7 +230,7 @@ class TestReadFile:
 
     def test_read_file_returns_contents(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         actual_sandbox_path: Path,
@@ -250,7 +252,7 @@ class TestGetSandboxInfo:
 
     def test_get_sandbox_info_returns_info(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         tenant_context: None,
@@ -270,7 +272,7 @@ class TestCancelAgent:
 
     def test_cancel_agent_no_client_is_noop(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
     ) -> None:
         """Test that cancel_agent is a no-op when no client exists."""
         fake_sandbox_id = str(uuid4())
@@ -286,7 +288,7 @@ class TestSendMessage:
 
     def test_send_message_streams_events(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         temp_sandbox_dir: Path,
@@ -320,7 +322,7 @@ class TestSendMessage:
 
     def test_send_message_write_file(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         actual_sandbox_path: Path,
@@ -362,7 +364,7 @@ class TestSendMessage:
 
     def test_send_message_read_file(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: LocalSandboxManager,
         db_session: Session,
         sandbox_record: Sandbox,
         actual_sandbox_path: Path,
