@@ -263,28 +263,31 @@ def create_chat_message_feedback(
     db_session.add(message_feedback)
     db_session.commit()
 
-    # Refresh the chat_message to ensure we have the latest trace_id
-    db_session.refresh(chat_message)
-
-    # Update trace score if feedback is positive or negative and trace_id exists
+    # Update trace score if feedback is positive or negative
+    # We reconstruct the trace_id deterministically instead of reading from DB
     if is_positive is not None:
-        if chat_message.trace_id:
+        from onyx.tracing.framework import score_trace
+        from onyx.tracing.framework.util import generate_deterministic_trace_id
+
+        # Reconstruct trace_id deterministically from chat_session_id and message_id
+        if chat_message.id and chat_message.chat_session_id:
+            trace_id = generate_deterministic_trace_id(
+                str(chat_message.chat_session_id), chat_message.id
+            )
             logger.debug(
-                f"Updating trace score for message {chat_message_id}, "
-                f"trace_id: {chat_message.trace_id}, is_positive: {is_positive}, "
-                f"feedback_text: {feedback_text}"
+                f"Reconstructed trace_id {trace_id} for message {chat_message_id}, "
+                f"is_positive: {is_positive}, feedback_text: {feedback_text}"
             )
             score_value = 1.0 if is_positive else 0.0
-            from onyx.tracing.framework import score_trace
-
             score_trace(
-                trace_id=chat_message.trace_id,
+                trace_id=trace_id,
                 score=score_value,
                 comment=feedback_text,
             )
         else:
             logger.debug(
-                f"No trace_id found for message {chat_message_id}, skipping score update"
+                f"Could not reconstruct trace_id for message {chat_message_id} "
+                f"(missing id or chat_session_id), skipping score update"
             )
 
 
