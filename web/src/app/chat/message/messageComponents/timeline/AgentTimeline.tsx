@@ -107,6 +107,49 @@ const TimelineStep = React.memo(function TimelineStep({
 });
 
 // =============================================================================
+// Private Wrapper Components
+// =============================================================================
+
+interface TimelineContainerProps {
+  className?: string;
+  agent: FullChatState["assistant"];
+  headerContent?: React.ReactNode;
+  children?: React.ReactNode;
+}
+
+const TimelineContainer: React.FC<TimelineContainerProps> = ({
+  className,
+  agent,
+  headerContent,
+  children,
+}) => (
+  <div className={cn("flex flex-col", className)}>
+    <div className="flex w-full h-9">
+      <div className="flex justify-center items-center size-9">
+        <AgentAvatar agent={agent} size={24} />
+      </div>
+      {headerContent}
+    </div>
+    {children}
+  </div>
+);
+
+interface TimelineContentRowProps {
+  className?: string;
+  children: React.ReactNode;
+}
+
+const TimelineContentRow: React.FC<TimelineContentRowProps> = ({
+  className,
+  children,
+}) => (
+  <div className="flex w-full">
+    <div className="w-9" />
+    <div className={cn("w-full", className)}>{children}</div>
+  </div>
+);
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -320,11 +363,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // Empty state: no packets, still streaming, and not stopped
   if (!hasPackets && !hasDisplayContent && !stopPacketSeen) {
     return (
-      <div className={cn("flex flex-col", className)}>
-        <div className="flex w-full h-9">
-          <div className="flex justify-center items-center size-9">
-            <AgentAvatar agent={chatState.assistant} size={24} />
-          </div>
+      <TimelineContainer
+        className={className}
+        agent={chatState.assistant}
+        headerContent={
           <div className="flex w-full h-full items-center px-2">
             <Text
               as="p"
@@ -335,31 +377,23 @@ export const AgentTimeline = React.memo(function AgentTimeline({
               {headerText}
             </Text>
           </div>
-        </div>
-      </div>
+        }
+      />
     );
   }
 
   // Display content only (no timeline steps) - but show header for image generation
   if (hasDisplayContent && !hasPackets && !isGeneratingImage) {
     return (
-      <div className={cn("flex flex-col", className)}>
-        <div className="flex w-full h-9">
-          <div className="flex justify-center items-center size-9">
-            <AgentAvatar agent={chatState.assistant} size={24} />
-          </div>
-        </div>
-      </div>
+      <TimelineContainer className={className} agent={chatState.assistant} />
     );
   }
 
   return (
-    <div className={cn("flex flex-col", className)}>
-      {/* Header row */}
-      <div className="flex w-full h-9">
-        <div className="flex justify-center items-center size-9">
-          <AgentAvatar agent={chatState.assistant} size={24} />
-        </div>
+    <TimelineContainer
+      className={className}
+      agent={chatState.assistant}
+      headerContent={
         <div
           className={cn(
             "flex w-full h-full items-center justify-between pl-2 pr-1",
@@ -373,50 +407,44 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         >
           {renderHeader()}
         </div>
-      </div>
-
+      }
+    >
       {/* Collapsed streaming view - single step compact mode */}
       {showCollapsedCompact && lastStep && (
-        <div className="flex w-full">
-          <div className="w-9" />
-          <div className="w-full bg-background-tint-00 rounded-b-12 px-2 pb-2">
-            <TimelineRendererComponent
-              key={`${lastStep.key}-compact`}
-              packets={lastStep.packets}
-              chatState={chatState}
-              onComplete={noopComplete}
-              animate={true}
-              stopPacketSeen={false}
-              stopReason={stopReason}
-              defaultExpanded={false}
-              isLastStep={true}
-            >
-              {renderContentOnly}
-            </TimelineRendererComponent>
-          </div>
-        </div>
+        <TimelineContentRow className="bg-background-tint-00 rounded-b-12 px-2 pb-2">
+          <TimelineRendererComponent
+            key={`${lastStep.key}-compact`}
+            packets={lastStep.packets}
+            chatState={chatState}
+            onComplete={noopComplete}
+            animate={true}
+            stopPacketSeen={false}
+            stopReason={stopReason}
+            defaultExpanded={false}
+            isLastStep={true}
+          >
+            {renderContentOnly}
+          </TimelineRendererComponent>
+        </TimelineContentRow>
       )}
 
       {/* Collapsed streaming view - parallel tools compact mode */}
       {showCollapsedParallel && parallelActiveStep && (
-        <div className="flex w-full">
-          <div className="w-9" />
-          <div className="w-full bg-background-tint-00 rounded-b-12 px-2 pb-2">
-            <TimelineRendererComponent
-              key={`${parallelActiveStep.key}-compact`}
-              packets={parallelActiveStep.packets}
-              chatState={chatState}
-              onComplete={noopComplete}
-              animate={true}
-              stopPacketSeen={false}
-              stopReason={stopReason}
-              defaultExpanded={false}
-              isLastStep={true}
-            >
-              {renderContentOnly}
-            </TimelineRendererComponent>
-          </div>
-        </div>
+        <TimelineContentRow className="bg-background-tint-00 rounded-b-12 px-2 pb-2">
+          <TimelineRendererComponent
+            key={`${parallelActiveStep.key}-compact`}
+            packets={parallelActiveStep.packets}
+            chatState={chatState}
+            onComplete={noopComplete}
+            animate={true}
+            stopPacketSeen={false}
+            stopReason={stopReason}
+            defaultExpanded={false}
+            isLastStep={true}
+          >
+            {renderContentOnly}
+          </TimelineRendererComponent>
+        </TimelineContentRow>
       )}
 
       {/* Expanded timeline view */}
@@ -482,7 +510,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           )}
         </div>
       )}
-    </div>
+    </TimelineContainer>
   );
 }, areAgentTimelinePropsEqual);
 
