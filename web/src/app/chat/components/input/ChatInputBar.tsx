@@ -444,7 +444,7 @@ const ChatInputBar = React.memo(
 
         {/* Input area */}
         <Popover
-          open={user?.preferences.shortcut_enabled && showPrompts}
+          open={user?.preferences?.shortcut_enabled && showPrompts}
           onOpenChange={setShowPrompts}
         >
           <Popover.Anchor asChild>
