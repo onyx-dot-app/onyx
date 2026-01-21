@@ -26,9 +26,17 @@
   @apply stroke-text-03;
 }
 
+.line-item-layout-title {
+  @apply text-left;
+}
+
+.line-item-layout[data-strikethrough="true"] .line-item-layout-title {
+  @apply line-through;
+}
+
 /* LineItemLayout Description */
 .line-item-layout-description {
-  @apply leading-none;
+  @apply leading-none text-left;
 }
 
 .line-item-layout[data-has-icon="true"] .line-item-layout-description {
