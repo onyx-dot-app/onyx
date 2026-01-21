@@ -365,6 +365,8 @@ class SearchDoc(BaseModel):
 
 class SearchDocsResponse(BaseModel):
     search_docs: list[SearchDoc]
+    # The LLM-selected subset of docs that were shown to the user
+    displayed_docs: list[SearchDoc] | None = None
     # Maps the citation number to the document id
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the
     # document id is  the most staightforward way.

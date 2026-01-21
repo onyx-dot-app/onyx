@@ -300,7 +300,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
 
         return ToolResponse(
             rich_response=SearchDocsResponse(
-                search_docs=search_docs, citation_mapping=citation_mapping
+                search_docs=search_docs,
+                # For web search, all docs are displayed (no LLM filtering)
+                displayed_docs=search_docs,
+                citation_mapping=citation_mapping,
             ),
             llm_facing_response=docs_str,
         )

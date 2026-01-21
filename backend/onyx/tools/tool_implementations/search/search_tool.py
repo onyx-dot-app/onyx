@@ -702,6 +702,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             top_sections = merge_individual_chunks(top_chunks)[
                 : override_kwargs.num_hits
             ]
+            
+            # Convert InferenceSections to SearchDocs for emission
+            search_docs = convert_inference_sections_to_search_docs(
+                top_sections, is_internet=False
+            )
 
             secondary_flows_user_query = (
                 override_kwargs.original_query
@@ -840,9 +845,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             return ToolResponse(
-                # Return only the LLM-selected docs for UI display and replay consistency
                 rich_response=SearchDocsResponse(
-                    search_docs=final_ui_docs, citation_mapping=citation_mapping
+                    search_docs=search_docs,
+                    displayed_docs=final_ui_docs,
+                    citation_mapping=citation_mapping,
                 ),
                 # The LLM facing response typically includes less docs to cut down on noise and token usage
                 llm_facing_response=docs_str,

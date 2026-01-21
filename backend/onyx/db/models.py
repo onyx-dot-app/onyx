@@ -471,6 +471,8 @@ class ToolCall__SearchDoc(Base):
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id", ondelete="CASCADE"), primary_key=True
     )
+    # Whether this doc was shown to the user (default True for backwards compat)
+    is_displayed: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
 
 
 class Document__Tag(Base):

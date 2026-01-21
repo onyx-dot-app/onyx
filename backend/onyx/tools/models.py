@@ -214,6 +214,7 @@ class ToolCallInfo(BaseModel):
     tool_call_arguments: dict[str, Any]
     tool_call_response: str
     search_docs: list[SearchDoc] | None = None
+    displayed_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
 
 
