@@ -56,8 +56,8 @@ def _get_prefix_for_environment(environment: Environment) -> str:
     config = _load_secrets_yaml()
     environments = config.get("environments", {})
     if environment in environments:
-        return environments[environment].get("prefix", f"onyx/{environment}/")
-    return f"onyx/{environment}/"
+        return environments[environment].get("prefix", environment)
+    return environment
 
 
 def get_aws_secrets(

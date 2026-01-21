@@ -60,7 +60,7 @@ def _get_all_secrets_with_environments() -> list[tuple[str, str, str]]:
     config = _load_secrets_yaml()
     results = []
     for env_name, env_config in config.get("environments", {}).items():
-        prefix = env_config.get("prefix", f"onyx/{env_name}/")
+        prefix = env_config.get("prefix", env_name)
         secrets = env_config.get("secrets", []) or []
         for secret in secrets:
             results.append((env_name, secret["name"], prefix))
