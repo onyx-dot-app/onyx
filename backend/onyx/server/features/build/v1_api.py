@@ -102,8 +102,6 @@ class StreamingType(str, Enum):
     TOOL_START = "tool_start"
     TOOL_OUTPUT = "tool_output"
     TOOL_END = "tool_end"
-    FILE_WRITE = "file_write"
-    FILE_DELETE = "file_delete"
 
 
 class ArtifactType(str, Enum):
@@ -350,16 +348,6 @@ def _generate_streaming_response(session_id: str) -> Generator[str, None, None]:
         },
     )
     time.sleep(0.2)
-
-    yield _format_sse_event(
-        "message",
-        {
-            "type": "file_write",
-            "path": "web/src/App.tsx",
-            "size_bytes": 1523,
-            "timestamp": datetime.utcnow().isoformat(),
-        },
-    )
 
     yield _format_sse_event(
         "message",
