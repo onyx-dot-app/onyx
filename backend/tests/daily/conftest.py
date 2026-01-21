@@ -41,8 +41,6 @@ def test_secrets() -> dict[SecretName, str]:
             SecretName.COHERE_API_KEY,
             SecretName.AZURE_API_KEY,
             SecretName.AZURE_API_URL,
-            SecretName.LITELLM_API_KEY,
-            SecretName.LITELLM_API_URL,
         ],
         environment=Environment.TEST,
     )
