@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -569,6 +570,9 @@ class OpenSearchClient:
     def close(self) -> None:
         """Closes the client.
 
+        TODO(andrei): Can we have some way to auto close when the client no
+        longer has any references?
+
         Raises:
             Exception: There was an error closing the client.
         """
@@ -596,3 +600,55 @@ class OpenSearchClient:
             )
         hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
         return hits_second_layer
+
+
+def wait_for_opensearch_with_timeout(
+    wait_interval_s: int = 5,
+    wait_limit_s: int = 60,
+    client: OpenSearchClient | None = None,
+) -> bool:
+    """Waits for OpenSearch to become ready subject to a timeout.
+
+    Will create a new dummy client if no client is provided. Will close this
+    client at the end of the function. Will not close the client if it was
+    supplied.
+
+    Args:
+        wait_interval_s: The interval in seconds to wait between checks.
+            Defaults to 5.
+        wait_limit_s: The total timeout in seconds to wait for OpenSearch to
+            become ready. Defaults to 60.
+        client: The OpenSearch client to use for pinging. If None, a new dummy
+            client will be created. Defaults to None.
+
+    Returns:
+        True if OpenSearch is ready, False otherwise.
+    """
+    made_client = False
+    try:
+        if client is None:
+            # NOTE: index_name does not matter because we are only using this object
+            # to ping.
+            # TODO(andrei): Make this better.
+            client = OpenSearchClient(index_name="")
+            made_client = True
+        time_start = time.monotonic()
+        while True:
+            if client.ping():
+                logger.info("[OpenSearch] Readiness probe succeeded. Continuing...")
+                return True
+            time_elapsed = time.monotonic() - time_start
+            if time_elapsed > wait_limit_s:
+                logger.info(
+                    f"[OpenSearch] Readiness probe did not succeed within the timeout "
+                    f"({wait_limit_s} seconds)."
+                )
+                return False
+            logger.info(
+                f"[OpenSearch] Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={wait_limit_s:.1f}"
+            )
+            time.sleep(wait_interval_s)
+    finally:
+        if made_client:
+            assert client is not None
+            client.close()

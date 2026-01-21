@@ -7,6 +7,7 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
@@ -15,6 +16,7 @@ from onyx.tools.models import ParallelToolCallResponse
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
@@ -152,6 +154,33 @@ def _safe_run_single_tool(
                     },
                 )
             )
+        except ToolExecutionException as e:
+            # Unexpected error during tool execution
+            logger.error(f"Unexpected error running tool {tool.name}: {e}")
+            tool_response = ToolResponse(
+                rich_response=None,
+                llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(error=str(e)),
+            )
+            _error_tracing.attach_error_to_current_span(
+                SpanError(
+                    message="Tool execution error (unexpected)",
+                    data={
+                        "tool_name": tool.name,
+                        "tool_call_id": tool_call.tool_call_id,
+                        "tool_args": tool_call.tool_args,
+                        "error": str(e),
+                        "stack_trace": traceback.format_exc(),
+                        "error_type": type(e).__name__,
+                    },
+                )
+            )
+            if e.emit_error_packet:
+                tool.emitter.emit(
+                    Packet(
+                        placement=tool_call.placement,
+                        obj=PacketException(exception=e),
+                    )
+                )
         except Exception as e:
             # Unexpected error during tool execution
             logger.error(f"Unexpected error running tool {tool.name}: {e}")

@@ -17,7 +17,7 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.chunk_content_enrichment import (
-    generate_enriched_content_for_chunk,
+    generate_enriched_content_for_chunk_text,
 )
 from onyx.document_index.interfaces import DocumentIndex as OldDocumentIndex
 from onyx.document_index.interfaces import (
@@ -140,9 +140,12 @@ def _convert_onyx_chunk_to_opensearch_document(
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
-        title=chunk.source_document.title,
+        # Use get_title_for_document_index to match the logic used when creating
+        # the title_embedding in the embedder. This method falls back to
+        # semantic_identifier when title is None (but not empty string).
+        title=chunk.source_document.get_title_for_document_index(),
         title_vector=chunk.title_embedding,
-        content=generate_enriched_content_for_chunk(chunk),
+        content=generate_enriched_content_for_chunk_text(chunk),
         content_vector=chunk.embeddings.full_embedding,
         source_type=chunk.source_document.source.value,
         metadata_list=chunk.source_document.get_metadata_str_attributes(),

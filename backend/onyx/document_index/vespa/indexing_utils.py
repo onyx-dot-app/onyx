@@ -17,7 +17,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.document_index.chunk_content_enrichment import (
-    generate_enriched_content_for_chunk,
+    generate_enriched_content_for_chunk_text,
 )
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
@@ -186,7 +186,7 @@ def _index_vespa_chunk(
         # For the BM25 index, the keyword suffix is used, the vector is already generated with the more
         # natural language representation of the metadata section
         CONTENT: remove_invalid_unicode_chars(
-            generate_enriched_content_for_chunk(chunk)
+            generate_enriched_content_for_chunk_text(chunk)
         ),
         # This duplication of `content` is needed for keyword highlighting
         # Note that it's not exactly the same as the actual content
