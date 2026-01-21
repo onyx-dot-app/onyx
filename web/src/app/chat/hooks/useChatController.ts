@@ -861,6 +861,8 @@ export function useChatController({
                   packets: packets,
                   packetsVersion: packetsVersion,
                   packetCount: packets.length,
+                  processingDurationSeconds:
+                    finalMessage?.processing_duration_seconds,
                 },
               ],
               // Pass the latest map state
