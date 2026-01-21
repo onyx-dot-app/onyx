@@ -45,7 +45,8 @@ export type {
 export type PreProvisioningState =
   | { status: "idle" }
   | { status: "provisioning"; promise: Promise<string | null> }
-  | { status: "ready"; sessionId: string };
+  | { status: "ready"; sessionId: string }
+  | { status: "failed"; error: string };
 
 export interface BuildSessionData {
   id: string;
@@ -713,7 +714,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         return sessionData.id;
       } catch (err) {
         console.error("[PreProvision] Failed to pre-provision session:", err);
-        set({ preProvisioning: { status: "idle" } });
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        set({
+          preProvisioning: {
+            status: "failed",
+            error: errorMessage,
+          },
+        });
         return null;
       }
     })();
@@ -841,3 +849,6 @@ export const useIsPreProvisioning = () =>
 
 export const useIsPreProvisioningReady = () =>
   useBuildSessionStore((state) => state.preProvisioning.status === "ready");
+
+export const useIsPreProvisioningFailed = () =>
+  useBuildSessionStore((state) => state.preProvisioning.status === "failed");
