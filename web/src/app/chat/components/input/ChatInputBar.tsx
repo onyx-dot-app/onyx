@@ -316,6 +316,11 @@ const ChatInputBar = React.memo(
       [filteredPrompts]
     );
 
+    // Reset tabbingIconIndex when filtered prompts change to avoid out-of-bounds
+    useEffect(() => {
+      setTabbingIconIndex(0);
+    }, [filteredPrompts]);
+
     const handlePromptInput = useCallback(
       (text: string) => {
         if (text.startsWith("/")) {
