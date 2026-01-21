@@ -1416,6 +1416,7 @@ function AccountsAccessSettings() {
                             icon={SvgTrash}
                             onClick={() => setTokenToDelete(pat)}
                             internal
+                            aria-label={`Delete token ${pat.name}`}
                           />
                         }
                         variant="secondary"
