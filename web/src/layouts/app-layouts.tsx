@@ -109,7 +109,7 @@ function AppHeader() {
   );
 }
 
-function AppFooter() {
+function Footer() {
   const settings = useSettingsContext();
 
   const customFooterContent =
@@ -180,10 +180,11 @@ function AppFooter() {
  * ```
  */
 export interface AppRootProps {
+  DEPRECATEDDisableFooter?: boolean;
   children?: React.ReactNode;
 }
 
-function AppRoot({ children }: AppRootProps) {
+function AppRoot({ children, DEPRECATEDDisableFooter }: AppRootProps) {
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
       breakout of their immediate containers using cqw units.
@@ -191,7 +192,7 @@ function AppRoot({ children }: AppRootProps) {
     <div className="@container flex flex-col h-full w-full">
       <AppHeader />
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
-      <AppFooter />
+      {!DEPRECATEDDisableFooter && <Footer />}
     </div>
   );
 }
@@ -225,4 +226,4 @@ function StickyHeader({ children, className }: StickyHeaderProps) {
   );
 }
 
-export { AppRoot as Root, StickyHeader };
+export { AppRoot as Root, StickyHeader, Footer };
