@@ -9,6 +9,9 @@ def get_memories(user: User | None, db_session: Session) -> list[str]:
     if user is None:
         return []
 
+    if not user.use_memories:
+        return []
+
     user_info = [
         f"User's name: {user.personal_name}" if user.personal_name else "",
         f"User's role: {user.personal_role}" if user.personal_role else "",

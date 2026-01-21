@@ -171,7 +171,7 @@ function PATModal({
 function GeneralSettings() {
   const { user, updateUserPersonalization, updateUserThemePreference } =
     useUser();
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, systemTheme } = useTheme();
   const { popup, setPopup } = usePopup();
   const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
@@ -339,14 +339,14 @@ function GeneralSettings() {
                     value={ThemePreference.SYSTEM}
                     icon={() => (
                       <ColorSwatch
-                        light={resolvedTheme === "light"}
-                        dark={resolvedTheme === "dark"}
+                        light={systemTheme === "light"}
+                        dark={systemTheme === "dark"}
                       />
                     )}
                     description={
-                      resolvedTheme
-                        ? resolvedTheme.charAt(0).toUpperCase() +
-                          resolvedTheme.slice(1)
+                      systemTheme
+                        ? systemTheme.charAt(0).toUpperCase() +
+                          systemTheme.slice(1)
                         : undefined
                     }
                   >
