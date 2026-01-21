@@ -100,6 +100,7 @@ test.describe("Guilds List Page", () => {
     const initialState = await enabledSwitch.getAttribute("aria-checked");
     const expectedState = initialState === "true" ? "false" : "true";
     const guildUrl = `/api/manage/admin/discord-bot/guilds/${mockRegisteredGuild.id}`;
+    const guildsListUrl = `/api/manage/admin/discord-bot/guilds`;
 
     // Set up response waiters before clicking
     const patchPromise = adminPage.waitForResponse(
@@ -108,9 +109,10 @@ test.describe("Guilds List Page", () => {
         response.request().method() === "PATCH"
     );
 
+    // refreshGuilds() calls the list endpoint, not the individual guild endpoint
     const getPromise = adminPage.waitForResponse(
       (response) =>
-        response.url().includes(guildUrl) &&
+        response.url().includes(guildsListUrl) &&
         response.request().method() === "GET"
     );
 

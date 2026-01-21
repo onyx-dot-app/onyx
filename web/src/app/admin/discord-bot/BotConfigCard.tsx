@@ -16,6 +16,7 @@ import {
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { getFormattedDateTime } from "@/lib/dateUtils";
 
 interface Props {
   setPopup: (popup: PopupSpec) => void;
@@ -150,7 +151,7 @@ export function BotConfigCard({ setPopup }: Props) {
               {botConfig?.created_at && (
                 <>
                   {" "}
-                  Added {new Date(botConfig.created_at).toLocaleDateString()}.
+                  Added {getFormattedDateTime(new Date(botConfig.created_at))}.
                 </>
               )}
             </Text>
