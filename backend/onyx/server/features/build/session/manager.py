@@ -41,6 +41,7 @@ from onyx.server.features.build.api.packets import FileWritePacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.configs import USER_UPLOADS_DIRECTORY
 from onyx.server.features.build.db.build_session import create_build_session
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session
@@ -49,6 +50,7 @@ from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -465,9 +467,9 @@ class SessionManager:
                 )
 
         try:
-            logger.warning(f"[STREAM] Starting stream for session {session_id}")
+            logger.debug(f"[STREAM] Starting stream for session {session_id}")
             # Verify session exists and belongs to user
-            logger.warning(f"[STREAM] Verifying session {session_id} exists")
+            logger.debug(f"[STREAM] Verifying session {session_id} exists")
             session = get_build_session(session_id, user_id, self._db_session)
             if session is None:
                 logger.warning(f"[STREAM] Session {session_id} not found")
@@ -475,9 +477,9 @@ class SessionManager:
                 return
 
             # Check if sandbox is running
-            logger.warning(f"[STREAM] Checking sandbox status for session {session_id}")
+            logger.debug(f"[STREAM] Checking sandbox status for session {session_id}")
             if not session.sandbox or session.sandbox.status != SandboxStatus.RUNNING:
-                logger.warning(f"[STREAM] Sandbox not running for session {session_id}")
+                logger.debug(f"[STREAM] Sandbox not running for session {session_id}")
                 yield _format_packet_event(
                     ErrorPacket(
                         message="Sandbox is not running. Please wait for it to start."
@@ -489,16 +491,14 @@ class SessionManager:
             update_session_activity(session_id, self._db_session)
 
             # Save user message to database
-            logger.warning(
-                f"[STREAM] Saving user message to DB for session {session_id}"
-            )
+            logger.debug(f"[STREAM] Saving user message to DB for session {session_id}")
             user_message = create_message(
                 session_id=session_id,
                 message_type=MessageType.USER,
                 content=user_message_content,
                 db_session=self._db_session,
             )
-            logger.warning(f"[STREAM] User message {user_message.id} saved")
+            logger.debug(f"[STREAM] User message {user_message.id} saved")
 
             # Get sandbox
             sandbox = get_sandbox_by_session_id(self._db_session, session_id)
@@ -508,11 +508,11 @@ class SessionManager:
                 return
 
             sandbox_id = str(sandbox.id)
-            logger.warning(
+            logger.debug(
                 f"[STREAM] Found sandbox {sandbox_id} for session {session_id}"
             )
 
-            logger.warning(
+            logger.debug(
                 f"[STREAM] Starting to stream ACP events from sandbox {sandbox_id}"
             )
 
@@ -530,11 +530,11 @@ class SessionManager:
                         event_data = acp_event.model_dump(
                             mode="json", by_alias=True, exclude_none=True
                         )
-                        logger.warning(
+                        logger.debug(
                             f"[STREAM] Event #{event_count}: {event_type} = {json.dumps(event_data, default=str)[:500]}"
                         )
                     else:
-                        logger.warning(
+                        logger.debug(
                             f"[STREAM] Event #{event_count}: {event_type} = {str(acp_event)[:500]}"
                         )
                 except Exception as e:
@@ -558,7 +558,7 @@ class SessionManager:
                     yield _serialize_acp_event(acp_event, "agent_thought_chunk")
 
                 elif isinstance(acp_event, ToolCallStart):
-                    logger.warning(
+                    logger.debug(
                         f"[STREAM] Tool started: {acp_event.kind} - {acp_event.title}"
                     )
                     event_data = acp_event.model_dump(
@@ -569,7 +569,7 @@ class SessionManager:
                     yield _serialize_acp_event(acp_event, "tool_call_start")
 
                 elif isinstance(acp_event, ToolCallProgress):
-                    logger.warning(
+                    logger.debug(
                         f"[STREAM] Tool progress: {acp_event.kind} - {acp_event.status}"
                     )
                     event_data = acp_event.model_dump(
@@ -600,11 +600,11 @@ class SessionManager:
                             path=file_path,
                             size_bytes=0,
                         )
-                        logger.warning(f"[STREAM] File write detected: {file_path}")
+                        logger.debug(f"[STREAM] File write detected: {file_path}")
                         yield _format_packet_event(file_write_packet)
 
                 elif isinstance(acp_event, AgentPlanUpdate):
-                    logger.warning("[STREAM] Plan update received")
+                    logger.debug("[STREAM] Plan update received")
                     event_data = acp_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
@@ -613,32 +613,32 @@ class SessionManager:
                     yield _serialize_acp_event(acp_event, "agent_plan_update")
 
                 elif isinstance(acp_event, CurrentModeUpdate):
-                    logger.warning(f"[STREAM] Mode update: {acp_event.current_mode_id}")
+                    logger.debug(f"[STREAM] Mode update: {acp_event.current_mode_id}")
                     yield _serialize_acp_event(acp_event, "current_mode_update")
 
                 elif isinstance(acp_event, PromptResponse):
-                    logger.warning(f"[STREAM] Agent finished: {acp_event.stop_reason}")
+                    logger.debug(f"[STREAM] Agent finished: {acp_event.stop_reason}")
                     yield _serialize_acp_event(acp_event, "prompt_response")
 
                 elif isinstance(acp_event, ACPError):
-                    logger.warning(f"[STREAM] ACP Error: {acp_event.message}")
+                    logger.debug(f"[STREAM] ACP Error: {acp_event.message}")
                     yield _serialize_acp_event(acp_event, "error")
 
                 else:
                     logger.warning(f"[STREAM] Unhandled event type: {event_type}")
 
-            logger.warning(f"[STREAM] Finished processing {event_count} ACP events")
+            logger.debug(f"[STREAM] Finished processing {event_count} ACP events")
 
             # Check for artifacts and emit artifact_created events
-            logger.warning(f"[STREAM] Checking for artifacts in sandbox {sandbox_id}")
+            logger.debug(f"[STREAM] Checking for artifacts in sandbox {sandbox_id}")
             sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox_id)
             outputs_dir = sandbox_path / "outputs"
 
             if outputs_dir.exists():
-                logger.warning(f"[STREAM] Outputs directory exists: {outputs_dir}")
+                logger.debug(f"[STREAM] Outputs directory exists: {outputs_dir}")
                 web_dir = outputs_dir / "web"
                 if web_dir.exists():
-                    logger.warning(
+                    logger.debug(
                         f"[STREAM] Web app found at {web_dir}, creating artifact"
                     )
                     artifact = create_artifact_from_file(
@@ -648,7 +648,7 @@ class SessionManager:
                         name="Web Application",
                     )
                     yield _format_packet_event(ArtifactCreatedPacket(artifact=artifact))
-                    logger.warning("[STREAM] Web app artifact created and emitted")
+                    logger.debug("[STREAM] Web app artifact created and emitted")
                 else:
                     logger.warning(f"[STREAM] No web directory found at {web_dir}")
             else:
@@ -659,7 +659,7 @@ class SessionManager:
             # Save the complete assistant response to database
             if assistant_message_parts:
                 total_chars = len("".join(assistant_message_parts))
-                logger.warning(
+                logger.debug(
                     f"[STREAM] Saving assistant response ({total_chars} chars) to DB"
                 )
                 create_message(
@@ -668,11 +668,11 @@ class SessionManager:
                     content="".join(assistant_message_parts),
                     db_session=self._db_session,
                 )
-                logger.warning(
+                logger.debug(
                     f"[STREAM] Assistant response saved for session {session_id}"
                 )
             else:
-                logger.warning("[STREAM] No assistant message parts to save")
+                logger.debug("[STREAM] No assistant message parts to save")
 
         except ValueError as e:
             logger.warning(f"[STREAM] ValueError executing task: {e}")
@@ -687,10 +687,7 @@ class SessionManager:
             logger.exception("Error in build message streaming")
             yield _format_packet_event(ErrorPacket(message=str(e)))
         finally:
-            logger.warning(
-                f"[STREAM] Stream generator finished for session {session_id}"
-            )
-            logger.debug(f"Stream generator finished for session {session_id}")
+            logger.debug(f"[STREAM] Stream generator finished for session {session_id}")
 
     # =========================================================================
     # Artifact Operations
@@ -971,3 +968,124 @@ class SessionManager:
         entries.sort(key=lambda e: (not e.is_directory, e.name.lower()))
 
         return DirectoryListing(path=path, entries=entries)
+
+    def upload_file(
+        self,
+        session_id: UUID,
+        user_id: UUID | None,
+        filename: str,
+        content: bytes,
+    ) -> tuple[str, int]:
+        """Upload a file to the session's sandbox.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            filename: Sanitized filename (validation done at API layer)
+            content: File content as bytes
+
+        Returns:
+            Tuple of (relative_path, size_bytes) where the file was saved
+
+        Raises:
+            ValueError: If session not found
+        """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            raise ValueError("Session not found")
+
+        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        if sandbox is None:
+            raise ValueError("Sandbox not found")
+
+        # Filename is already sanitized by API layer
+        safe_filename = filename
+
+        # Get upload directory path
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        uploads_path = sandbox_path / USER_UPLOADS_DIRECTORY
+
+        # Ensure uploads directory exists
+        uploads_path.mkdir(parents=True, exist_ok=True)
+
+        # Handle filename collisions by appending a number
+        target_path = uploads_path / safe_filename
+        if target_path.exists():
+            stem = target_path.stem
+            suffix = target_path.suffix
+            counter = 1
+            while target_path.exists():
+                target_path = uploads_path / f"{stem}_{counter}{suffix}"
+                counter += 1
+            safe_filename = target_path.name
+
+        # Write file with read-only permissions (no execute)
+        target_path.write_bytes(content)
+        # Explicitly remove execute permissions: rw-r--r-- (644)
+        target_path.chmod(0o644)
+
+        # Return relative path from sandbox root
+        relative_path = f"{USER_UPLOADS_DIRECTORY}/{safe_filename}"
+
+        # Update heartbeat - file upload is user activity that keeps sandbox alive
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+
+        logger.info(
+            f"Uploaded file to session {session_id}: {relative_path} "
+            f"({len(content)} bytes)"
+        )
+
+        return relative_path, len(content)
+
+    def delete_file(
+        self,
+        session_id: UUID,
+        user_id: UUID | None,
+        path: str,
+    ) -> bool:
+        """Delete a file from the session's sandbox.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the file (e.g., "user_uploaded_files/doc.pdf")
+
+        Returns:
+            True if file was deleted, False if not found
+
+        Raises:
+            ValueError: If session not found or path traversal attempted
+        """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            raise ValueError("Session not found")
+
+        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        if sandbox is None:
+            raise ValueError("Sandbox not found")
+
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        file_path = sandbox_path / path
+
+        # Security check: ensure path doesn't escape sandbox
+        try:
+            file_path = file_path.resolve()
+            sandbox_path_resolved = sandbox_path.resolve()
+            if not str(file_path).startswith(str(sandbox_path_resolved)):
+                raise ValueError("Access denied - path traversal")
+        except ValueError:
+            raise
+
+        if not file_path.exists():
+            return False
+
+        if file_path.is_dir():
+            raise ValueError("Cannot delete directory")
+
+        file_path.unlink()
+
+        logger.info(f"Deleted file from session {session_id}: {path}")
+
+        return True

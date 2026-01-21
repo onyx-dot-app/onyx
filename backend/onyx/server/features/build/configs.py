@@ -64,3 +64,8 @@ SANDBOX_SNAPSHOTS_BUCKET = os.environ.get(
 # Next.js preview server port range
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
+
+# File upload configuration
+MAX_UPLOAD_FILE_SIZE_MB = int(os.environ.get("BUILD_MAX_UPLOAD_FILE_SIZE_MB", "50"))
+MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
+USER_UPLOADS_DIRECTORY = "user_uploaded_files"

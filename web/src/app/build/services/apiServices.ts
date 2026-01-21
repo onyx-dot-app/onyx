@@ -310,6 +310,57 @@ export async function fetchUsageLimits(): Promise<UsageLimits> {
 }
 
 // =============================================================================
+// File Upload API
+// =============================================================================
+
+export interface UploadFileResponse {
+  filename: string;
+  path: string;
+  size_bytes: number;
+}
+
+/**
+ * Upload a file to the session's sandbox.
+ * The file will be placed in the sandbox's user_uploaded_files directory.
+ */
+export async function uploadFile(
+  sessionId: string,
+  file: File
+): Promise<UploadFileResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Failed to upload file: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Delete a file from the session's sandbox.
+ */
+export async function deleteFile(
+  sessionId: string,
+  path: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/files/${path}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
+  }
+}
+
+// =============================================================================
 // Connector Management API
 // =============================================================================
 

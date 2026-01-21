@@ -39,6 +39,8 @@ export interface InputBarProps {
   disabled?: boolean;
   placeholder?: string;
   llmManager: LlmManager;
+  /** Session ID for immediate file uploads. If provided, files upload immediately when attached. */
+  sessionId?: string;
 }
 
 /**
@@ -89,6 +91,7 @@ const InputBar = React.memo(
         disabled = false,
         placeholder = "Describe your task...",
         llmManager,
+        sessionId,
       },
       ref
     ) => {
@@ -141,10 +144,11 @@ const InputBar = React.memo(
         async (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
-          uploadFiles(Array.from(files));
+          // Pass sessionId so files upload immediately if session exists
+          uploadFiles(Array.from(files), sessionId);
           e.target.value = "";
         },
-        [uploadFiles]
+        [uploadFiles, sessionId]
       );
 
       const handlePaste = useCallback(
@@ -161,11 +165,12 @@ const InputBar = React.memo(
             }
             if (pastedFiles.length > 0) {
               event.preventDefault();
-              uploadFiles(pastedFiles);
+              // Pass sessionId so files upload immediately if session exists
+              uploadFiles(pastedFiles, sessionId);
             }
           }
         },
-        [uploadFiles]
+        [uploadFiles, sessionId]
       );
 
       const handleInputChange = useCallback(
@@ -237,7 +242,7 @@ const InputBar = React.memo(
                 <BuildFileCard
                   key={file.id}
                   file={file}
-                  onRemove={removeFile}
+                  onRemove={(id) => removeFile(id, sessionId)}
                 />
               ))}
             </div>

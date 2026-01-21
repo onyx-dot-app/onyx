@@ -44,16 +44,17 @@ class DirectoryManager:
 
         Creates the base directory for a sandbox session:
         {base_path}/{session_id}/
-        ├── files/              # Symlink to knowledge/source files
-        ├── outputs/            # Working directory from template
-        │   ├── web/            # Next.js app
+        ├── files/                      # Symlink to knowledge/source files
+        ├── user_uploaded_files/        # User-uploaded files
+        ├── outputs/                    # Working directory from template
+        │   ├── web/                    # Next.js app
         │   ├── slides/
         │   ├── markdown/
         │   └── graphs/
-        ├── .venv/              # Python virtual environment
-        ├── AGENTS.md            # Agent instructions
+        ├── .venv/                      # Python virtual environment
+        ├── AGENTS.md                   # Agent instructions
         └── .agent/
-            └── skills/         # Agent skills
+            └── skills/                 # Agent skills
 
         Args:
             session_id: Unique identifier for the session
@@ -238,3 +239,30 @@ class DirectoryManager:
             True if directory exists and is a directory
         """
         return sandbox_path.exists() and sandbox_path.is_dir()
+
+    def setup_user_uploads_directory(self, sandbox_path: Path) -> Path:
+        """Create user uploads directory at user_uploaded_files.
+
+        This directory is used to store files uploaded by the user
+        through the chat interface.
+
+        Args:
+            sandbox_path: Path to the sandbox directory
+
+        Returns:
+            Path to the user uploads directory
+        """
+        uploads_path = sandbox_path / "user_uploaded_files"
+        uploads_path.mkdir(parents=True, exist_ok=True)
+        return uploads_path
+
+    def get_user_uploads_path(self, sandbox_path: Path) -> Path:
+        """Return path to user uploads directory.
+
+        Args:
+            sandbox_path: Path to the sandbox directory
+
+        Returns:
+            Path to the user_uploaded_files directory
+        """
+        return sandbox_path / "user_uploaded_files"
