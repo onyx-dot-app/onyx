@@ -29,7 +29,7 @@ dependencies:
     condition: vespa.enabled
   - name: opensearch
     version: 3.4.0
-    repository: https://opensearch-project.github.io/helm-charts/
+    repository: https://opensearch-project.github.io/helm-charts
     condition: opensearch.enabled
   - name: ingress-nginx
     version: 4.13.3
