@@ -9,9 +9,8 @@ repos:
     rev: d30b4298e4fb63ce8609e29acdbcf4c9018a483c
     hooks:
       - id: uv-sync
-        args: ["--active", "--locked", "--all-extras"]
+        args: ["--locked", "--all-extras"]
       - id: uv-lock
-        files: ^pyproject\.toml$
       - id: uv-export
         name: uv-export default.txt
         args:
@@ -78,8 +77,9 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
     hooks:
-      - id: check-yaml
-        files: ^.github/
+      - id: check-added-large-files
+        name: Check for added large files
+        args: ["--maxkb=1500"]
 
   - repo: https://github.com/rhysd/actionlint
     rev: a443f344ff32813837fa49f7aa6cbc478d770e62 # frozen: v1.7.9
@@ -152,6 +152,22 @@ repos:
         language: system
         pass_filenames: false
         files: \.tf$
+
+      - id: npm-install
+        name: npm install
+        description: "Automatically run 'npm install' after a checkout, pull or rebase"
+        language: system
+        entry: bash -c 'cd web && npm install --no-save'
+        pass_filenames: false
+        files: ^web/package(-lock)?\.json$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: npm-install-check
+        name: npm install --package-lock-only
+        description: "Check the 'web/package-lock.json' is updated"
+        language: system
+        entry: bash -c 'cd web && npm install --package-lock-only'
+        pass_filenames: false
+        files: ^web/package(-lock)?\.json$
 
       # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
       # This is a preview package - if it breaks:

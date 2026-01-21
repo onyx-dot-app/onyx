@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
@@ -19,7 +20,16 @@ from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_HTML_SIZE_BYTES,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_PDF_SIZE_BYTES,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     OnyxWebCrawler,
+)
+from onyx.tools.tool_implementations.open_url.utils import (
+    filter_web_contents_with_no_title_or_content,
 )
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
@@ -30,13 +40,16 @@ from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
+    filter_web_search_results_with_no_title_or_snippet,
+)
+from onyx.tools.tool_implementations.web_search.utils import (
     truncate_search_result_content,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
-router = APIRouter(prefix="/web-search")
+router = APIRouter(prefix="/web-search", tags=PUBLIC_API_TAGS)
 logger = setup_logger()
 
 
@@ -90,7 +103,10 @@ def _get_active_content_provider(
         # NOTE: the OnyxWebCrawler is not stored in the content provider table,
         # so we need to return it directly.
 
-        return None, OnyxWebCrawler()
+        return None, OnyxWebCrawler(
+            max_pdf_size_bytes=DEFAULT_MAX_PDF_SIZE_BYTES,
+            max_html_size_bytes=DEFAULT_MAX_HTML_SIZE_BYTES,
+        )
 
     if provider_model.api_key is None:
         # TODO - this is not a great error, in fact, this key should not be nullable.
@@ -155,7 +171,10 @@ def _run_web_search(
                 status_code=502, detail="Web search provider failed to execute query."
             ) from exc
 
-        trimmed_results = list(search_results)[: request.max_results]
+        filtered_results = filter_web_search_results_with_no_title_or_snippet(
+            list(search_results)
+        )
+        trimmed_results = list(filtered_results)[: request.max_results]
         for search_result in trimmed_results:
             results.append(
                 LlmWebSearchResult(
@@ -173,10 +192,15 @@ def _open_urls(
     urls: list[str],
     db_session: Session,
 ) -> tuple[WebContentProviderType | None, list[LlmOpenUrlResult]]:
+    # SSRF protection is handled inside the content provider (OnyxWebCrawler)
+    # which uses ssrf_safe_get() to validate and fetch atomically,
+    # preventing DNS rebinding attacks
     provider_view, provider = _get_active_content_provider(db_session)
 
     try:
-        docs = provider.contents(urls)
+        docs = filter_web_contents_with_no_title_or_content(
+            list(provider.contents(urls))
+        )
     except HTTPException:
         raise
     except Exception as exc:

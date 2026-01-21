@@ -109,11 +109,6 @@ CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS = float(
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
-STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE")
-
-OPENAI_DEFAULT_API_KEY = os.environ.get("OPENAI_DEFAULT_API_KEY")
-ANTHROPIC_DEFAULT_API_KEY = os.environ.get("ANTHROPIC_DEFAULT_API_KEY")
-COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
 
 # JWT Public Key URL
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
@@ -133,3 +128,8 @@ MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
 
 GATED_TENANTS_KEY = "gated_tenants"
+
+# License enforcement - when True, blocks API access for gated/expired licenses
+LICENSE_ENFORCEMENT_ENABLED = (
+    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "").lower() == "true"
+)

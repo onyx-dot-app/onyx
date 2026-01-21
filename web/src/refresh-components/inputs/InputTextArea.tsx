@@ -3,8 +3,10 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import {
-  wrapperClasses,
   innerClasses,
+  textClasses,
+  Variants,
+  wrapperClasses,
 } from "@/refresh-components/inputs/styles";
 
 /**
@@ -23,13 +25,16 @@ import {
  *
  * // With error state
  * <InputTextArea
- *   error
+ *   variant="error"
  *   value={value}
  *   onChange={(e) => setValue(e.target.value)}
  * />
  *
  * // Disabled state
- * <InputTextArea disabled value="Cannot edit" />
+ * <InputTextArea variant="disabled" value="Cannot edit" />
+ *
+ * // Read-only state (non-editable, minimal styling)
+ * <InputTextArea variant="readOnly" value="Read-only value" />
  *
  * // Custom rows
  * <InputTextArea
@@ -39,55 +44,36 @@ import {
  * />
  *
  * // Internal styling (no border)
- * <InputTextArea internal value={value} onChange={handleChange} />
+ * <InputTextArea variant="internal" value={value} onChange={handleChange} />
  * ```
  */
 export interface InputTextAreaProps
-  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  // input-text-area variants
-  main?: boolean;
-  internal?: boolean;
-  error?: boolean;
-  disabled?: boolean;
-  action?: React.ReactNode;
+  extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "disabled"> {
+  variant?: Variants;
 }
 const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
-  (
-    { main, internal, error, disabled, action, className, rows = 4, ...props },
-    ref
-  ) => {
-    const variant = main
-      ? "main"
-      : internal
-        ? "internal"
-        : error
-          ? "error"
-          : disabled
-            ? "disabled"
-            : "main";
-
-    const paddingClasses = action ? "pl-0.5 pr-16 py-0.5" : "p-0.5";
+  ({ variant = "primary", className, rows = 4, readOnly, ...props }, ref) => {
+    const disabled = variant === "disabled";
+    const isReadOnlyVariant = variant === "readOnly";
+    const isReadOnly = isReadOnlyVariant || readOnly;
 
     return (
       <div
         className={cn(
           wrapperClasses[variant],
-          "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
+          "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 relative",
+          !isReadOnlyVariant && "bg-background-neutral-00",
           className
         )}
       >
-        {action && (
-          <div className="absolute top-2 right-5 z-[1] flex items-center gap-2">
-            {action}
-          </div>
-        )}
         <textarea
           ref={ref}
           disabled={disabled}
+          readOnly={isReadOnly}
           className={cn(
+            "w-full min-h-[3rem] bg-transparent focus:outline-none resize-y p-0.5",
             innerClasses[variant],
-            "w-full min-h-[3rem] bg-transparent focus:outline-none resize-y",
-            paddingClasses
+            textClasses[variant]
           )}
           rows={rows}
           {...props}

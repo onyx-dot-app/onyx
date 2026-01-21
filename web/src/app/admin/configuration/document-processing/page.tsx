@@ -59,22 +59,27 @@ function Main() {
     <div className="pb-36">
       <div className="w-full max-w-2xl">
         <CardSection className="flex flex-col gap-2">
-          <Text headingH3 text05 className="border-b border-border-01 pb-2">
+          <Text
+            as="p"
+            headingH3
+            text05
+            className="border-b border-border-01 pb-2"
+          >
             Process with Unstructured API
           </Text>
 
           <div className="flex flex-col gap-2">
-            <Text mainContentBody text04 className="leading-relaxed">
+            <Text as="p" mainContentBody text04 className="leading-relaxed">
               Unstructured extracts and transforms complex data from formats
               like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to
               ingest. Provide an API key to enable Unstructured document
               processing.
             </Text>
-            <Text mainContentMuted text03>
+            <Text as="p" mainContentMuted text03>
               <span className="font-main-ui-action text-text-03">Note:</span>{" "}
               this will send documents to Unstructured servers for processing.
             </Text>
-            <Text mainContentBody text04 className="leading-relaxed">
+            <Text as="p" mainContentBody text04 className="leading-relaxed">
               Learn more about Unstructured{" "}
               <a
                 href="https://docs.unstructured.io/welcome"
@@ -102,6 +107,7 @@ function Main() {
                   )}
                 >
                   <Text
+                    as="p"
                     mainUiMuted
                     text03
                     className="flex-1 tracking-[0.3em] text-text-03"
@@ -124,7 +130,7 @@ function Main() {
                   <Button onClick={handleDelete} danger>
                     Delete API Key
                   </Button>
-                  <Text mainContentBody text04 className="desktop:mt-0">
+                  <Text as="p" mainContentBody text04 className="desktop:mt-0">
                     Delete the current API key before updating.
                   </Text>
                 </>
@@ -143,12 +149,12 @@ function Main() {
 
 export default function Page() {
   return (
-    <div className="container">
+    <>
       <AdminPageTitle
         title="Document Processing"
         icon={<DocumentIcon2 size={32} className="my-auto" />}
       />
       <Main />
-    </div>
+    </>
   );
 }

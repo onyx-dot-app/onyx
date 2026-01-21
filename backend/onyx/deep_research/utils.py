@@ -56,6 +56,7 @@ def _unescape_json_string(s: str) -> str:
 
     # Finally, restore escaped backslashes as single backslashes
     result = result.replace(placeholder, "\\")
+
     return result
 
 
@@ -86,13 +87,29 @@ def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
         state.buffer += state.accumulated_args
         state.accumulated_args = ""
 
-    # Hold back last 2 chars in case they're the JSON suffix "}
-    if len(state.buffer) <= 2:
+    # Hold back enough chars to avoid splitting escape sequences AND the JSON suffix "}
+    # We need at least 2 for the suffix, but we also need to ensure escape sequences
+    # like \n, \t, \\, \" don't get split. The longest escape is \\ (2 chars).
+    # So we hold back 3 chars to be safe: if the last char is \, we don't want to
+    # emit it without knowing what follows.
+    holdback = 3
+    if len(state.buffer) <= holdback:
         return None
 
-    # Emit everything except last 2 chars
-    to_emit = state.buffer[:-2]
-    state.buffer = state.buffer[-2:]
+    # Check if there's a trailing backslash that could be part of an escape sequence
+    # If so, hold back one more character to avoid splitting the escape
+    to_emit = state.buffer[:-holdback]
+    remaining = state.buffer[-holdback:]
+
+    # If to_emit ends with a backslash, it might be the start of an escape sequence
+    # Move it to the remaining buffer to process with the next chunk
+    # If to_emit ends with a backslash, it might be the start of an escape sequence
+    # Move it to the remaining buffer to process with the next chunk
+    if to_emit and to_emit[-1] == "\\":
+        remaining = to_emit[-1] + remaining
+        to_emit = to_emit[:-1]
+
+    state.buffer = remaining
 
     # Unescape JSON escape sequences (e.g., \\n -> \n)
     if to_emit:

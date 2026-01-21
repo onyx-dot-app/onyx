@@ -38,9 +38,6 @@ CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
 # INTENT_MODEL_TAG = "v1.0.3"
 INTENT_MODEL_TAG: str | None = None
-INFORMATION_CONTENT_MODEL_VERSION = "onyx-dot-app/information-content-model"
-INFORMATION_CONTENT_MODEL_TAG: str | None = None
-
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
 
@@ -211,22 +208,48 @@ SKIP_USERFILE_THRESHOLD_TENANT_LIST = (
     else None
 )
 
-# Maximum (least severe) downgrade factor for chunks above the cutoff
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX") or 1.0
+ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
+
+
+#####
+# Usage Limits Configuration (meant for cloud, off by default for self-hosted)
+#####
+# Whether usage limits are enforced (defaults to MULTI_TENANT value)
+_USAGE_LIMITS_ENABLED_RAW = os.environ.get("USAGE_LIMITS_ENABLED")
+if _USAGE_LIMITS_ENABLED_RAW is not None:
+    USAGE_LIMITS_ENABLED = _USAGE_LIMITS_ENABLED_RAW.lower() == "true"
+else:
+    # Default: enabled on cloud (MULTI_TENANT), disabled for self-hosted
+    USAGE_LIMITS_ENABLED = MULTI_TENANT
+
+# Usage limit window in seconds (default: 1 week = 604800 seconds)
+USAGE_LIMIT_WINDOW_SECONDS = int(os.environ.get("USAGE_LIMIT_WINDOW_SECONDS", "604800"))
+
+# Per-week LLM usage cost limits in cents (e.g., 1000 = $10.00)
+# Trial users get lower limits than paid users
+USAGE_LIMIT_LLM_COST_CENTS_TRIAL = int(
+    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_TRIAL", "800")  # $8.00 default
 )
-# Minimum (most severe) downgrade factor for short chunks below the cutoff if no content
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN") or 0.7
-)
-# Temperature for the information content classification model
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE") or 4.0
-)
-# Cutoff below which we start using the information content classification model
-# (cutoff length number itself is still considered 'short'))
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = int(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
+USAGE_LIMIT_LLM_COST_CENTS_PAID = int(
+    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_PAID", "1600")  # $16.00 default
 )
 
-ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
+# Per-week chunks indexed limits
+USAGE_LIMIT_CHUNKS_INDEXED_TRIAL = int(
+    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_TRIAL", 100_000)
+)
+USAGE_LIMIT_CHUNKS_INDEXED_PAID = int(
+    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PAID", 1_000_000)
+)
+
+# Per-week API calls using API keys or Personal Access Tokens
+USAGE_LIMIT_API_CALLS_TRIAL = int(os.environ.get("USAGE_LIMIT_API_CALLS_TRIAL", "100"))
+USAGE_LIMIT_API_CALLS_PAID = int(os.environ.get("USAGE_LIMIT_API_CALLS_PAID", "10000"))
+
+# Per-week non-streaming API calls (more expensive, so lower limits)
+USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL = int(
+    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL", "20")
+)
+USAGE_LIMIT_NON_STREAMING_CALLS_PAID = int(
+    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_PAID", "40")
+)

@@ -620,41 +620,6 @@ celery_worker_primary:
   tolerations: []
   affinity: {}
 
-celery_worker_user_files_indexing:
-  replicaCount: 1
-  autoscaling:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 10
-    targetCPUUtilizationPercentage: 80
-    targetMemoryUtilizationPercentage: 80
-    # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
-    pollingInterval: 30  # seconds
-    cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
-    failureThreshold: 3  # number of failures before fallback
-    fallbackReplicas: 1  # replicas to maintain on failure
-    # Custom triggers for advanced KEDA configurations
-    customTriggers: []
-  podAnnotations: {}
-  podLabels:
-    scope: onyx-backend-celery
-    app: celery-worker-user-files-indexing
-  deploymentLabels:
-    app: celery-worker-user-files-indexing
-  resources:
-    requests:
-      cpu: 500m
-      memory: 512Mi
-    limits:
-      cpu: 2000m
-      memory: 2Gi
-  volumes: []  # Additional volumes on the output Deployment definition.
-  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-
 celery_worker_user_file_processing:
   replicaCount: 1
   autoscaling:
@@ -1090,15 +1055,10 @@ configMap:
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
-  DISABLE_LLM_DOC_RELEVANCE: ""
-  DISABLE_LLM_QUERY_REPHRASE: ""
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
   EDIT_KEYWORD_QUERY: ""
-  MULTILINGUAL_QUERY_EXPANSION: ""
-  LANGUAGE_HINT: ""
-  LANGUAGE_CHAT_NAMING_HINT: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""

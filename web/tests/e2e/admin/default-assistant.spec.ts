@@ -10,7 +10,7 @@ import { OnyxApiClient } from "../utils/onyxApiClient";
 test.describe("Default Assistant Admin Page", () => {
   let testCcPairId: number | null = null;
   let webSearchProviderId: number | null = null;
-  let imageGenProviderId: number | null = null;
+  let imageGenConfigId: string | null = null;
 
   test.beforeEach(async ({ page }) => {
     // Log in as admin
@@ -30,20 +30,16 @@ test.describe("Default Assistant Admin Page", () => {
         "exa",
         `Test Web Search Provider ${Date.now()}`
       );
-      imageGenProviderId = await apiClient.createImageGenProvider(
-        `Test Image Gen Provider ${Date.now()}`
+      imageGenConfigId = await apiClient.createImageGenerationConfig(
+        `test-image-gen-${Date.now()}`
       );
     } catch (error) {
       console.warn(`Failed to create tool providers: ${error}`);
     }
 
     // Navigate to default assistant
-    await page.goto(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
-    await page.waitForURL(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
+    await page.goto("/admin/configuration/default-assistant");
+    await page.waitForURL("**/admin/configuration/default-assistant**");
 
     // Attach basic API logging for this spec
     page.on("response", async (resp) => {
@@ -66,11 +62,10 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Proactively log tool availability and current config
     try {
-      const toolsResp = await page.request.get(
-        "http://localhost:3000/api/tool"
-      );
+      const baseURL = process.env.BASE_URL || "http://localhost:3000";
+      const toolsResp = await page.request.get(`${baseURL}/api/tool`);
       const cfgResp = await page.request.get(
-        "http://localhost:3000/api/admin/default-assistant/configuration"
+        `${baseURL}/api/admin/default-assistant/configuration`
       );
       console.log(
         `[/api/tool] status=${toolsResp.status()} body=${(
@@ -114,14 +109,14 @@ test.describe("Default Assistant Admin Page", () => {
       }
     }
 
-    // Clean up image gen provider
-    if (imageGenProviderId !== null) {
+    // Clean up image gen config
+    if (imageGenConfigId !== null) {
       try {
-        await apiClient.deleteProvider(imageGenProviderId);
-        imageGenProviderId = null;
+        await apiClient.deleteImageGenerationConfig(imageGenConfigId);
+        imageGenConfigId = null;
       } catch (error) {
         console.warn(
-          `Failed to delete image gen provider ${imageGenProviderId}: ${error}`
+          `Failed to delete image gen config ${imageGenConfigId}: ${error}`
         );
       }
     }
@@ -586,8 +581,9 @@ test.describe("Default Assistant Admin Page", () => {
     });
     // Also try via page.request (uses storageState) to capture status in case page fetch fails
     try {
+      const baseURL = process.env.BASE_URL || "http://localhost:3000";
       const alt = await page.request.patch(
-        "http://localhost:3000/api/admin/default-assistant",
+        `${baseURL}/api/admin/default-assistant`,
         {
           data: { tool_ids: ["InvalidTool", "AnotherInvalidTool"] },
           headers: { "Content-Type": "application/json" },
@@ -667,13 +663,11 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForTimeout(500);
 
     // Navigate to chat to verify tools are disabled and initial load greeting
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await waitForUnifiedGreeting(page);
 
     // Go back and re-enable all tools
-    await page.goto(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
+    await page.goto("/admin/configuration/default-assistant");
     await page.waitForLoadState("networkidle");
     // Reload to ensure the page has the updated tools list (after providers were created)
     await page.reload();
@@ -708,7 +702,7 @@ test.describe("Default Assistant Admin Page", () => {
     await page.waitForTimeout(500);
 
     // Navigate to chat and verify the Action Management toggle and actions exist
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     await page.waitForLoadState("networkidle");
 
     // Wait a bit for backend to process the changes
@@ -720,9 +714,8 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Debug: Check what tools are available via API
     try {
-      const toolsResp = await page.request.get(
-        "http://localhost:3000/api/tool"
-      );
+      const baseURL = process.env.BASE_URL || "http://localhost:3000";
+      const toolsResp = await page.request.get(`${baseURL}/api/tool`);
       const toolsData = await toolsResp.json();
       console.log(
         `[toggle-all] Available tools from API: ${JSON.stringify(
@@ -739,8 +732,9 @@ test.describe("Default Assistant Admin Page", () => {
 
     // Debug: Check assistant configuration
     try {
+      const baseURL = process.env.BASE_URL || "http://localhost:3000";
       const configResp = await page.request.get(
-        "http://localhost:3000/api/admin/default-assistant/configuration"
+        `${baseURL}/api/admin/default-assistant/configuration`
       );
       const configData = await configResp.json();
       console.log(
@@ -781,9 +775,7 @@ test.describe("Default Assistant Admin Page", () => {
     // Web Search and Image Generation form state when providers are created in beforeEach.
     // This is being tracked separately as a potential Formik/form state bug.
 
-    await page.goto(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
+    await page.goto("/admin/configuration/default-assistant");
 
     // Restore original states
     let needsSave = false;
@@ -828,9 +820,7 @@ test.describe("Default Assistant Non-Admin Access", () => {
     await page.context().clearCookies();
 
     // Try to navigate directly to default assistant without logging in
-    await page.goto(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
+    await page.goto("/admin/configuration/default-assistant");
 
     // Wait for navigation to settle
     await page.waitForTimeout(2000);

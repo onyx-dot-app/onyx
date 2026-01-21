@@ -22,13 +22,13 @@ export const NonSelectableConnectors = ({
   return (
     <div className="mt-6 mb-4">
       <Label className="text-base font-medium mb-1">{title}</Label>
-      <Text mainUiMuted text03 className="mb-3">
+      <Text as="p" mainUiMuted text03 className="mb-3">
         {description}
       </Text>
       <div className="p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01">
         <div className="mb-2 flex items-center gap-1.5">
           <SvgLock className="h-3.5 w-3.5 stroke-text-03" />
-          <Text figureSmallLabel text04 className="!mb-0">
+          <Text as="p" figureSmallLabel text04 className="!mb-0">
             Unavailable connectors:
           </Text>
         </div>

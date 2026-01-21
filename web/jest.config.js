@@ -139,6 +139,8 @@ module.exports = {
         // Pure unit tests that don't need DOM
         "**/src/**/codeUtils.test.ts",
         "**/src/lib/**/*.test.ts",
+        "**/src/app/**/services/*.test.ts",
+        "**/src/refresh-components/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
     },

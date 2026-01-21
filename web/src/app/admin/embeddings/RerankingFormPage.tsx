@@ -323,7 +323,7 @@ const RerankingDetailsForm = forwardRef<
                     open
                     onOpenChange={() => setShowGpuWarningModalModel(null)}
                   >
-                    <Modal.Content small>
+                    <Modal.Content width="sm" height="sm">
                       <Modal.Header
                         icon={SvgAlertTriangle}
                         title="GPU Not Enabled"
@@ -339,7 +339,7 @@ const RerankingDetailsForm = forwardRef<
                           better performance.
                         </p>
                       </Modal.Body>
-                      <Modal.Footer className="p-4 flex justify-end">
+                      <Modal.Footer>
                         <Button
                           onClick={() => setShowGpuWarningModalModel(null)}
                         >
@@ -358,7 +358,7 @@ const RerankingDetailsForm = forwardRef<
                       setShowLiteLLMConfigurationModal(false);
                     }}
                   >
-                    <Modal.Content medium>
+                    <Modal.Content>
                       <Modal.Header
                         icon={SvgKey}
                         title="API Key Configuration"
@@ -433,7 +433,7 @@ const RerankingDetailsForm = forwardRef<
                           />
                         </div>
                       </Modal.Body>
-                      <Modal.Footer className="p-4 flex w-full justify-end">
+                      <Modal.Footer>
                         <Button
                           onClick={() => {
                             setShowLiteLLMConfigurationModal(false);
@@ -462,7 +462,7 @@ const RerankingDetailsForm = forwardRef<
                       setIsApiKeyModalOpen(false);
                     }}
                   >
-                    <Modal.Content medium>
+                    <Modal.Content>
                       <Modal.Header
                         icon={SvgKey}
                         title="API Key Configuration"
@@ -513,7 +513,7 @@ const RerankingDetailsForm = forwardRef<
                           />
                         </div>
                       </Modal.Body>
-                      <Modal.Footer className="p-4 flex w-full justify-end">
+                      <Modal.Footer>
                         <Button onClick={() => setIsApiKeyModalOpen(false)}>
                           Update
                         </Button>

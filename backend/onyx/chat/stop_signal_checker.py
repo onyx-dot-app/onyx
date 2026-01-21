@@ -2,12 +2,23 @@ from uuid import UUID
 
 from redis.client import Redis
 
-from shared_configs.contextvars import get_current_tenant_id
-
 # Redis key prefixes for chat session stop signals
 PREFIX = "chatsessionstop"
 FENCE_PREFIX = f"{PREFIX}_fence"
-FENCE_TTL = 24 * 60 * 60  # 24 hours - defensive TTL to prevent memory leaks
+FENCE_TTL = 10 * 60  # 10 minutes - defensive TTL to prevent memory leaks
+
+
+def _get_fence_key(chat_session_id: UUID) -> str:
+    """
+    Generate the Redis key for a chat session stop signal fence.
+
+    Args:
+        chat_session_id: The UUID of the chat session
+
+    Returns:
+        The fence key string (tenant_id is automatically added by the Redis client)
+    """
+    return f"{FENCE_PREFIX}_{chat_session_id}"
 
 
 def set_fence(chat_session_id: UUID, redis_client: Redis, value: bool) -> None:
@@ -16,11 +27,10 @@ def set_fence(chat_session_id: UUID, redis_client: Redis, value: bool) -> None:
 
     Args:
         chat_session_id: The UUID of the chat session
-        redis_client: Redis client to use
+        redis_client: Redis client to use (tenant-aware client that auto-prefixes keys)
         value: True to set the fence (stop signal), False to clear it
     """
-    tenant_id = get_current_tenant_id()
-    fence_key = f"{FENCE_PREFIX}_{tenant_id}_{chat_session_id}"
+    fence_key = _get_fence_key(chat_session_id)
     if not value:
         redis_client.delete(fence_key)
         return
@@ -34,13 +44,12 @@ def is_connected(chat_session_id: UUID, redis_client: Redis) -> bool:
 
     Args:
         chat_session_id: The UUID of the chat session to check
-        redis_client: Redis client to use for checking the stop signal
+        redis_client: Redis client to use for checking the stop signal (tenant-aware client that auto-prefixes keys)
 
     Returns:
         True if the session should continue, False if it should stop
     """
-    tenant_id = get_current_tenant_id()
-    fence_key = f"{FENCE_PREFIX}_{tenant_id}_{chat_session_id}"
+    fence_key = _get_fence_key(chat_session_id)
     return not bool(redis_client.exists(fence_key))
 
 
@@ -50,8 +59,7 @@ def reset_cancel_status(chat_session_id: UUID, redis_client: Redis) -> None:
 
     Args:
         chat_session_id: The UUID of the chat session
-        redis_client: Redis client to use
+        redis_client: Redis client to use (tenant-aware client that auto-prefixes keys)
     """
-    tenant_id = get_current_tenant_id()
-    fence_key = f"{FENCE_PREFIX}_{tenant_id}_{chat_session_id}"
+    fence_key = _get_fence_key(chat_session_id)
     redis_client.delete(fence_key)

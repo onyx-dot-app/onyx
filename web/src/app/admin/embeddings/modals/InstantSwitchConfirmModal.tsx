@@ -13,23 +13,23 @@ export default function InstantSwitchConfirmModal({
 }: InstantSwitchConfirmModalProps) {
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Are you sure you want to do an instant switch?"
           onClose={onClose}
         />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             Instant switching will immediately change the embedding model
             without re-indexing. Searches will be over a partial set of
             documents (starting with 0 documents) until re-indexing is complete.
           </Text>
-          <Text>
+          <Text as="p">
             <strong>This is not reversible.</strong>
           </Text>
         </Modal.Body>
-        <Modal.Footer className="p-4 gap-2">
+        <Modal.Footer>
           <Button onClick={onConfirm}>Confirm</Button>
           <Button secondary onClick={onClose}>
             Cancel

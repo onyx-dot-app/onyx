@@ -7,16 +7,18 @@ export default function Error() {
   return (
     <ErrorPageLayout>
       <div className="flex flex-row items-center gap-2">
-        <Text headingH2>We encountered an issue</Text>
+        <Text as="p" headingH2>
+          We encountered an issue
+        </Text>
         <SvgAlertCircle className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
       </div>
 
-      <Text text03>
+      <Text as="p" text03>
         It seems there was a problem loading your Onyx settings. This could be
         due to a configuration issue or incomplete setup.
       </Text>
 
-      <Text text03>
+      <Text as="p" text03>
         If you&apos;re an admin, please review our{" "}
         <a
           className="text-action-link-05"
@@ -30,7 +32,7 @@ export default function Error() {
         your admin for assistance.
       </Text>
 
-      <Text text03>
+      <Text as="p" text03>
         Need help? Join our{" "}
         <a
           className="text-action-link-05"

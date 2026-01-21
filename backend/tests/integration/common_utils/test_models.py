@@ -118,10 +118,20 @@ class DATestLLMProvider(BaseModel):
     api_key: str
     default_model_name: str
     is_public: bool
+    is_auto_mode: bool = False
     groups: list[int]
     personas: list[int]
     api_base: str | None = None
     api_version: str | None = None
+
+
+class DATestImageGenerationConfig(BaseModel):
+    image_provider_id: str
+    model_configuration_id: int
+    model_name: str
+    llm_provider_id: int
+    llm_provider_name: str
+    is_default: bool
 
 
 class DATestDocumentSet(BaseModel):
@@ -255,3 +265,38 @@ class DATestIndexAttempt:
             ),
             time_updated=datetime.fromisoformat(index_attempt.time_updated),
         )
+
+
+class DATestTool(BaseModel):
+    id: int
+    name: str
+    description: str
+    display_name: str
+    in_code_tool_id: str | None
+
+
+# Discord Bot Models
+class DATestDiscordGuildConfig(BaseModel):
+    """Discord guild config model for testing."""
+
+    id: int
+    registration_key: str | None = None  # Only present on creation
+    guild_id: int | None = None
+    guild_name: str | None = None
+    enabled: bool = True
+    default_persona_id: int | None = None
+
+
+class DATestDiscordChannelConfig(BaseModel):
+    """Discord channel config model for testing."""
+
+    id: int
+    guild_config_id: int
+    channel_id: int
+    channel_name: str
+    channel_type: str
+    is_private: bool
+    enabled: bool = False
+    thread_only_mode: bool = False
+    require_bot_invocation: bool = True
+    persona_override_id: int | None = None

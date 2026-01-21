@@ -4,35 +4,20 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from onyx.llm.llm_provider_options import BEDROCK_PROVIDER_NAME
-from onyx.llm.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
+from onyx.llm.constants import LlmProviderNames
 
 
-@pytest.fixture
-def bedrock_provider() -> WellKnownLLMProviderDescriptor:
-    provider = next(
-        (
-            provider
-            for provider in fetch_available_well_known_llms()
-            if provider.name == BEDROCK_PROVIDER_NAME
-        ),
-        None,
-    )
-    assert provider is not None, "Bedrock provider not found"
-    return provider
+_DEFAULT_BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 
 @pytest.mark.xfail(
     reason="Credentials not yet available due to compliance work needed",
 )
-def test_bedrock_llm_configuration(
-    client: TestClient, bedrock_provider: WellKnownLLMProviderDescriptor
-) -> None:
+def test_bedrock_llm_configuration(client: TestClient) -> None:
     # Prepare the test request payload
     test_request: dict[str, Any] = {
-        "provider": BEDROCK_PROVIDER_NAME,
-        "default_model_name": bedrock_provider.default_model,
+        "provider": LlmProviderNames.BEDROCK,
+        "default_model_name": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,
@@ -41,6 +26,8 @@ def test_bedrock_llm_configuration(
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         },
+        "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
+        "api_key_changed": True,
     }
 
     # Send the test request
@@ -52,19 +39,11 @@ def test_bedrock_llm_configuration(
     ), f"Expected status code 200, but got {response.status_code}. Response: {response.text}"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Now broken due to db_session dependency injection on the route and "
-        "a change that requires manual sql engine init."
-    ),
-)
-def test_bedrock_llm_configuration_invalid_key(
-    client: TestClient, bedrock_provider: WellKnownLLMProviderDescriptor
-) -> None:
+def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
     # Prepare the test request payload with invalid credentials
     test_request: dict[str, Any] = {
-        "provider": BEDROCK_PROVIDER_NAME,
-        "default_model_name": bedrock_provider.default_model,
+        "provider": LlmProviderNames.BEDROCK,
+        "default_model_name": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,
@@ -73,6 +52,8 @@ def test_bedrock_llm_configuration_invalid_key(
             "AWS_ACCESS_KEY_ID": "invalid_access_key_id",
             "AWS_SECRET_ACCESS_KEY": "invalid_secret_access_key",
         },
+        "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
+        "api_key_changed": True,
     }
 
     # Send the test request

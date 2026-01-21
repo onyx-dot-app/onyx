@@ -1,11 +1,15 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import { getRandomGreeting } from "@/lib/chat/greetingMessages";
+import {
+  getRandomGreeting,
+  GREETING_MESSAGES,
+} from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -16,32 +20,49 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
+  const settings = useSettingsContext();
+  const enterpriseSettings = settings?.enterpriseSettings;
+
+  // Use a stable default for SSR, then randomize on client after hydration
+  const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);
+
+  useEffect(() => {
+    if (enterpriseSettings?.custom_greeting_message) {
+      setGreeting(enterpriseSettings.custom_greeting_message);
+    } else {
+      setGreeting(getRandomGreeting());
+    }
+  }, [enterpriseSettings?.custom_greeting_message]);
+
   let content: React.ReactNode = null;
 
   if (isDefaultAgent) {
-    const greeting = useMemo(getRandomGreeting, []);
     content = (
       <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
         <Logo folded size={32} />
-        <Text headingH2>{greeting}</Text>
+        <Text as="p" headingH2>
+          {greeting}
+        </Text>
       </div>
     );
   } else if (agent) {
     content = (
-      <div className="flex flex-col items-center gap-3 w-full max-w-[50rem]">
+      <>
         <div
           data-testid="assistant-name-display"
           className="flex flex-row items-center gap-3"
         >
           <AgentAvatar agent={agent} size={36} />
-          <Text headingH2>{agent.name}</Text>
+          <Text as="p" headingH2>
+            {agent.name}
+          </Text>
         </div>
         {agent.description && (
-          <Text secondaryBody text03>
+          <Text as="p" secondaryBody text03>
             {agent.description}
           </Text>
         )}
-      </div>
+      </>
     );
   }
 
@@ -52,7 +73,7 @@ export default function WelcomeMessage({
   return (
     <div
       data-testid="chat-intro"
-      className="flex flex-col items-center justify-center"
+      className="flex flex-col items-center justify-center gap-3 max-w-[50rem]"
     >
       {content}
     </div>

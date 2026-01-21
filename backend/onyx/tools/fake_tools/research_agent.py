@@ -1,9 +1,11 @@
 from collections.abc import Callable
+from typing import Any
 from typing import cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
@@ -34,7 +36,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION_REASONING,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
-from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_REASEARCH_AGENT
+from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_RESEARCH_AGENT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
 from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
@@ -69,6 +71,9 @@ logger = setup_logger()
 
 
 RESEARCH_CYCLE_CAP = 3
+# 15 minute timeout per research agent
+RESEARCH_AGENT_TIMEOUT_SECONDS = 15 * 60
+RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 15 minutes"
 # May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
 MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 10000
 
@@ -205,10 +210,13 @@ def run_research_agent_call(
     with function_span("research_agent") as span:
         span.span_data.input = str(research_agent_call.tool_args)
         try:
-            # Used to track the citations, but in this case they're not processed into links.
-            # They are later stripped from the output since the user cannot use these and the numbers
-            # change between the research and the final report.
-            citation_processor = DynamicCitationProcessor(replace_citation_tokens=False)
+            # Used to track citations while keeping original citation markers in intermediate reports.
+            # KEEP_MARKERS preserves citation markers like [1], [2] in the text unchanged
+            # while tracking which documents were cited via get_seen_citations().
+            # This allows collapse_citations() to later renumber them in the final report.
+            citation_processor = DynamicCitationProcessor(
+                citation_mode=CitationMode.KEEP_MARKERS
+            )
 
             research_cycle_count = 0
             llm_cycle_count = 0
@@ -288,7 +296,7 @@ def run_research_agent_call(
 
                 if just_ran_web_search:
                     reminder_message = ChatMessageSimple(
-                        message=OPEN_URL_REMINDER_REASEARCH_AGENT,
+                        message=OPEN_URL_REMINDER_RESEARCH_AGENT,
                         token_count=100,
                         message_type=MessageType.USER,
                     )
@@ -410,7 +418,7 @@ def run_research_agent_call(
                     most_recent_reasoning = llm_step_result.reasoning
                     continue
                 else:
-                    tool_responses, citation_mapping = run_tool_calls(
+                    parallel_tool_call_results = run_tool_calls(
                         tool_calls=tool_calls,
                         tools=current_tools,
                         message_history=msg_history,
@@ -418,8 +426,15 @@ def run_research_agent_call(
                         user_info=None,
                         citation_mapping=citation_mapping,
                         next_citation_num=citation_processor.get_next_citation_number(),
+                        # Packets currently cannot differentiate between parallel calls in a nested level
+                        # so we just cannot show parallel calls in the UI. This should not happen for deep research anyhow.
+                        max_concurrent_tools=1,
                         # May be better to not do this step, hard to say, needs to be tested
                         skip_search_query_expansion=False,
+                    )
+                    tool_responses = parallel_tool_call_results.tool_responses
+                    citation_mapping = (
+                        parallel_tool_call_results.updated_citation_mapping
                     )
 
                     if tool_calls and not tool_responses:
@@ -427,6 +442,10 @@ def run_research_agent_call(
                             tool_calls[0], token_counter
                         )
                         msg_history.extend(failure_messages)
+
+                        # If there is a failure like this, we still increment to avoid potential infinite loops
+                        research_cycle_count += 1
+                        llm_cycle_count += 1
                         continue
 
                     for tool_response in tool_responses:
@@ -545,6 +564,30 @@ def run_research_agent_call(
             return None
 
 
+def _on_research_agent_timeout(
+    index: int,
+    func: Callable[..., Any],
+    args: tuple[Any, ...],
+) -> ResearchAgentCallResult:
+    """Callback for handling research agent timeouts.
+
+    Returns a ResearchAgentCallResult with the timeout message so the research
+    can continue with other agents.
+    """
+    research_agent_call: ToolCallKickoff = args[0]  # First arg
+    research_task = research_agent_call.tool_args.get(
+        RESEARCH_AGENT_TASK_KEY, "unknown"
+    )
+    logger.warning(
+        f"Research agent timed out after {RESEARCH_AGENT_TIMEOUT_SECONDS} seconds "
+        f"for task: {research_task}"
+    )
+    return ResearchAgentCallResult(
+        intermediate_report=RESEARCH_AGENT_TIMEOUT_MESSAGE,
+        citation_mapping={},
+    )
+
+
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
     parent_tool_call_ids: list[str],
@@ -557,7 +600,7 @@ def run_research_agent_calls(
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None = None,
 ) -> CombinedResearchAgentCallResult:
-    # Run all research agent calls in parallel
+    # Run all research agent calls in parallel with timeout
     functions_with_args = [
         (
             run_research_agent_call,
@@ -581,6 +624,11 @@ def run_research_agent_calls(
     research_agent_call_results = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=False,
+        # Note: This simply allows the main thread to continue with an error message
+        # It does not kill the background thread which may still write to the state objects passed to it
+        # This is because forcefully killing Python threads is very dangerous
+        timeout=RESEARCH_AGENT_TIMEOUT_SECONDS,
+        timeout_callback=_on_research_agent_timeout,
     )
 
     updated_citation_mapping = citation_mapping
@@ -591,6 +639,9 @@ def run_research_agent_calls(
             updated_answers.append(None)
             continue
 
+        # Use collapse_citations to renumber citations in the text and merge mappings.
+        # Since we use KEEP_MARKERS mode, the intermediate reports have original citation
+        # markers like [1], [2] which need to be renumbered for the combined report.
         updated_answer, updated_citation_mapping = collapse_citations(
             answer_text=result.intermediate_report,
             existing_citation_mapping=updated_citation_mapping,

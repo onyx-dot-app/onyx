@@ -105,6 +105,8 @@ class DocExternalAccess:
         )
 
 
+# TODO(andrei): First refactor this into a pydantic model, then get rid of
+# duplicate fields.
 @dataclass(frozen=True, init=False)
 class DocumentAccess(ExternalAccess):
     # User emails for Onyx users, None indicates admin

@@ -12,8 +12,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
   test.afterEach(async ({ page }) => {
     // Ensure default assistant is enabled (checkbox unchecked) after each test
     // to avoid interfering with other tests
-    await page.goto("http://localhost:3000/admin/settings");
-    await page.waitForURL("http://localhost:3000/admin/settings");
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
 
     const disableDefaultAssistantCheckbox = page.locator(
       'label:has-text("Disable Default Assistant") input[type="checkbox"]'
@@ -29,8 +29,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // Navigate to settings page
-    await page.goto("http://localhost:3000/admin/settings");
-    await page.waitForURL("http://localhost:3000/admin/settings");
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
 
     // Find the "Disable Default Assistant" checkbox
     const disableDefaultAssistantCheckbox = page.locator(
@@ -59,8 +59,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // First enable the setting
-    await page.goto("http://localhost:3000/admin/settings");
-    await page.waitForURL("http://localhost:3000/admin/settings");
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
 
     const disableDefaultAssistantCheckbox = page.locator(
       'label:has-text("Disable Default Assistant") input[type="checkbox"]'
@@ -71,7 +71,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     }
 
     // Navigate to chat and create a new assistant to ensure there's one besides the default
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
     const assistantName = `Test Assistant ${Date.now()}`;
     await createAssistant(page, {
       name: assistantName,
@@ -102,8 +102,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // First enable the setting
-    await page.goto("http://localhost:3000/admin/settings");
-    await page.waitForURL("http://localhost:3000/admin/settings");
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
 
     const disableDefaultAssistantCheckbox = page.locator(
       'label:has-text("Disable Default Assistant") input[type="checkbox"]'
@@ -114,7 +114,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     }
 
     // Navigate directly to /chat
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
 
     // Verify that we didn't land on the default assistant (ID 0)
     // The assistant selection should be a pinned or available assistant (not ID 0)
@@ -129,8 +129,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // First enable the setting
-    await page.goto("http://localhost:3000/admin/settings");
-    await page.waitForURL("http://localhost:3000/admin/settings");
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
 
     const disableDefaultAssistantCheckbox = page.locator(
       'label:has-text("Disable Default Assistant") input[type="checkbox"]'
@@ -141,12 +141,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     }
 
     // Navigate to default assistant configuration page
-    await page.goto(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
-    await page.waitForURL(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
+    await page.goto("/admin/configuration/default-assistant");
+    await page.waitForURL("/admin/configuration/default-assistant");
 
     // Verify informative message is shown
     await expect(
@@ -171,8 +167,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // Navigate to settings and ensure setting is disabled
-    await page.goto("http://localhost:3000/admin/settings");
-    await page.waitForURL("http://localhost:3000/admin/settings");
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
 
     const disableDefaultAssistantCheckbox = page.locator(
       'label:has-text("Disable Default Assistant") input[type="checkbox"]'
@@ -183,14 +179,14 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     }
 
     // Navigate directly to /chat without parameters
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("/chat");
 
     // The default assistant (ID 0) should be available
     // We can verify this by checking that the chat loads successfully
     // and doesn't force navigation to a specific assistant
     const currentUrl = page.url();
     // URL might not have assistantId, or it might be 0, or might redirect to default behavior
-    expect(page.url()).toContain("localhost:3000/chat");
+    expect(page.url()).toContain("/chat");
 
     // Verify the new session button navigates to /chat without assistantId
     const newSessionButton = page.locator(
@@ -200,15 +196,15 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
 
     // Should navigate to /chat without assistantId parameter
     const newUrl = page.url();
-    expect(newUrl).toContain("localhost:3000/chat");
+    expect(newUrl).toContain("/chat");
   });
 
   test("default assistant config panel shows configuration UI when setting is disabled", async ({
     page,
   }) => {
     // Navigate to settings and ensure setting is disabled
-    await page.goto("http://localhost:3000/admin/settings");
-    await page.waitForURL("http://localhost:3000/admin/settings");
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
 
     const disableDefaultAssistantCheckbox = page.locator(
       'label:has-text("Disable Default Assistant") input[type="checkbox"]'
@@ -219,12 +215,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     }
 
     // Navigate to default assistant configuration page
-    await page.goto(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
-    await page.waitForURL(
-      "http://localhost:3000/admin/configuration/default-assistant"
-    );
+    await page.goto("/admin/configuration/default-assistant");
+    await page.waitForURL("/admin/configuration/default-assistant");
 
     // Verify configuration UI is shown (Instructions section should be visible)
     await expect(page.getByText("Instructions", { exact: true })).toBeVisible();

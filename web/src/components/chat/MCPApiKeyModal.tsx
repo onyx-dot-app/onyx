@@ -153,19 +153,19 @@ export default function MCPApiKeyModal({
   const credsType = isTemplateMode ? "Credentials" : "API Key";
   return (
     <Modal open={isOpen} onOpenChange={handleClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgKey}
           title={isAuthenticated ? `Manage ${credsType}` : `Enter ${credsType}`}
           onClose={handleClose}
         />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             {isAuthenticated
               ? `Update your ${credsType} for ${serverName}.`
               : `Enter your ${credsType} for ${serverName} to enable authentication.`}
           </Text>
-          <Text text02>
+          <Text as="p" text02>
             {isAuthenticated
               ? "Changes will be validated against the server before being saved."
               : `Your ${credsType} will be validated against the server and stored securely.`}

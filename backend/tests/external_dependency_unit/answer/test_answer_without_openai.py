@@ -9,15 +9,16 @@ from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import stream_chat_message_objects
-from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import RetrievalDetails
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -44,7 +45,7 @@ def test_answer_with_only_anthropic_provider(
     anthropic_provider = upsert_llm_provider(
         LLMProviderUpsertRequest(
             name=provider_name,
-            provider="anthropic",
+            provider=LlmProviderNames.ANTHROPIC,
             api_key=anthropic_api_key,
             default_model_name=anthropic_model,
             is_public=True,

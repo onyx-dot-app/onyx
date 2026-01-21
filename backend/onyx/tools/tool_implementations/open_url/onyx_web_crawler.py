@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import requests
-
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.tools.tool_implementations.open_url.models import (
@@ -13,11 +11,20 @@ from onyx.tools.tool_implementations.open_url.models import (
     WebContentProvider,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import ssrf_safe_get
+from onyx.utils.url import SSRFException
+from onyx.utils.web_content import decode_html_bytes
+from onyx.utils.web_content import extract_pdf_text
+from onyx.utils.web_content import is_pdf_resource
+from onyx.utils.web_content import title_from_pdf_metadata
+from onyx.utils.web_content import title_from_url
 
 logger = setup_logger()
 
 DEFAULT_TIMEOUT_SECONDS = 15
 DEFAULT_USER_AGENT = "OnyxWebCrawler/1.0 (+https://www.onyx.app)"
+DEFAULT_MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+DEFAULT_MAX_HTML_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 class OnyxWebCrawler(WebContentProvider):
@@ -32,8 +39,12 @@ class OnyxWebCrawler(WebContentProvider):
         *,
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         user_agent: str = DEFAULT_USER_AGENT,
+        max_pdf_size_bytes: int | None = None,
+        max_html_size_bytes: int | None = None,
     ) -> None:
         self._timeout_seconds = timeout_seconds
+        self._max_pdf_size_bytes = max_pdf_size_bytes
+        self._max_html_size_bytes = max_html_size_bytes
         self._headers = {
             "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -47,8 +58,22 @@ class OnyxWebCrawler(WebContentProvider):
 
     def _fetch_url(self, url: str) -> WebContent:
         try:
-            response = requests.get(
+            # Use SSRF-safe request to prevent DNS rebinding attacks
+            response = ssrf_safe_get(
                 url, headers=self._headers, timeout=self._timeout_seconds
+            )
+        except SSRFException as exc:
+            logger.error(
+                "SSRF protection blocked request to %s: %s",
+                url,
+                str(exc),
+            )
+            return WebContent(
+                title="",
+                link=url,
+                full_content="",
+                published_date=None,
+                scrape_successful=False,
             )
         except Exception as exc:  # pragma: no cover - network failures vary
             logger.warning(
@@ -74,8 +99,61 @@ class OnyxWebCrawler(WebContentProvider):
                 scrape_successful=False,
             )
 
+        content_type = response.headers.get("Content-Type", "")
+        content_sniff = response.content[:1024] if response.content else None
+        if is_pdf_resource(url, content_type, content_sniff):
+            if (
+                self._max_pdf_size_bytes is not None
+                and len(response.content) > self._max_pdf_size_bytes
+            ):
+                logger.warning(
+                    "PDF content too large (%d bytes) for %s, max is %d",
+                    len(response.content),
+                    url,
+                    self._max_pdf_size_bytes,
+                )
+                return WebContent(
+                    title="",
+                    link=url,
+                    full_content="",
+                    published_date=None,
+                    scrape_successful=False,
+                )
+            text_content, metadata = extract_pdf_text(response.content)
+            title = title_from_pdf_metadata(metadata) or title_from_url(url)
+            return WebContent(
+                title=title,
+                link=url,
+                full_content=text_content,
+                published_date=None,
+                scrape_successful=bool(text_content.strip()),
+            )
+
+        if (
+            self._max_html_size_bytes is not None
+            and len(response.content) > self._max_html_size_bytes
+        ):
+            logger.warning(
+                "HTML content too large (%d bytes) for %s, max is %d",
+                len(response.content),
+                url,
+                self._max_html_size_bytes,
+            )
+            return WebContent(
+                title="",
+                link=url,
+                full_content="",
+                published_date=None,
+                scrape_successful=False,
+            )
+
         try:
-            parsed: ParsedHTML = web_html_cleanup(response.text)
+            decoded_html = decode_html_bytes(
+                response.content,
+                content_type=content_type,
+                fallback_encoding=response.apparent_encoding or response.encoding,
+            )
+            parsed: ParsedHTML = web_html_cleanup(decoded_html)
             text_content = parsed.cleaned_text or ""
             title = parsed.title or ""
         except Exception as exc:

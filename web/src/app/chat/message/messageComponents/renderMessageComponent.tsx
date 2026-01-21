@@ -4,6 +4,7 @@ import {
   Packet,
   PacketType,
   ReasoningPacket,
+  StopReason,
 } from "../../services/streamingModels";
 import {
   FullChatState,
@@ -12,7 +13,6 @@ import {
   RendererResult,
 } from "./interfaces";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
-import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "./renderers/PythonToolRenderer";
 import { ReasoningRenderer } from "./renderers/ReasoningRenderer";
@@ -20,6 +20,7 @@ import CustomToolRenderer from "./renderers/CustomToolRenderer";
 import { FetchToolRenderer } from "./renderers/FetchToolRenderer";
 import { DeepResearchPlanRenderer } from "./renderers/DeepResearchPlanRenderer";
 import { ResearchAgentRenderer } from "./renderers/ResearchAgentRenderer";
+import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
 
 // Different types of chat packets using discriminated unions
 export interface GroupedPackets {
@@ -128,6 +129,7 @@ export function RendererComponent({
   onComplete,
   animate,
   stopPacketSeen,
+  stopReason,
   useShortRenderer = false,
   children,
 }: {
@@ -136,6 +138,7 @@ export function RendererComponent({
   onComplete: () => void;
   animate: boolean;
   stopPacketSeen: boolean;
+  stopReason?: StopReason;
   useShortRenderer?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
@@ -154,6 +157,7 @@ export function RendererComponent({
       animate={animate}
       renderType={renderType}
       stopPacketSeen={stopPacketSeen}
+      stopReason={stopReason}
     >
       {children}
     </RendererFn>

@@ -26,20 +26,10 @@ class ReasoningEffort(str, Enum):
     HIGH = "high"
 
 
-# Budget tokens for Claude extended thinking at each reasoning effort level
-CLAUDE_REASONING_BUDGET_TOKENS: dict[ReasoningEffort, int] = {
-    ReasoningEffort.OFF: 0,
-    ReasoningEffort.LOW: 1024,
-    ReasoningEffort.MEDIUM: 5000,
-    ReasoningEffort.HIGH: 10000,
-}
-
-# OpenAI reasoning effort mapping (direct string values)
-# TODO this needs to be cleaned up, there is a lot of jank and unnecessary slowness
-# Also there should be auto for reasoning level which is not used here.
+# OpenAI reasoning effort mapping
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
-    None: "medium",  # Seems there is no auto mode in this version unfortunately
-    ReasoningEffort.OFF: "low",  # Issues with 5.2 models not supporting minimal or off with this version of litellm
+    None: "low",
+    ReasoningEffort.OFF: "none",
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
@@ -51,6 +41,8 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
 class TextContentPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
+    # Some providers (e.g. Anthropic/Gemini) support prompt caching controls on content blocks.
+    cache_control: dict | None = None
 
 
 class ImageUrlDetail(BaseModel):
@@ -79,23 +71,31 @@ class ToolCall(BaseModel):
 
 
 # Message types
-class SystemMessage(BaseModel):
+
+
+# Base class for all cacheable messages
+class CacheableMessage(BaseModel):
+    # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
+    cache_control: dict | None = None
+
+
+class SystemMessage(CacheableMessage):
     role: Literal["system"] = "system"
-    content: str
+    content: str | list[ContentPart]
 
 
-class UserMessage(BaseModel):
+class UserMessage(CacheableMessage):
     role: Literal["user"] = "user"
     content: str | list[ContentPart]
 
 
-class AssistantMessage(BaseModel):
+class AssistantMessage(CacheableMessage):
     role: Literal["assistant"] = "assistant"
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
 
 
-class ToolMessage(BaseModel):
+class ToolMessage(CacheableMessage):
     role: Literal["tool"] = "tool"
     content: str
     tool_call_id: str
@@ -104,4 +104,4 @@ class ToolMessage(BaseModel):
 # Union type for all OpenAI Chat Completions messages
 ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 # Allows for passing in a string directly. This is provided for convenience and is wrapped as a UserMessage.
-LanguageModelInput = list[ChatCompletionMessage] | str
+LanguageModelInput = list[ChatCompletionMessage] | ChatCompletionMessage

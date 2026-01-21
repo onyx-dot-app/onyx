@@ -117,7 +117,7 @@ export const ConnectorMultiSelect = ({
     <div className="flex flex-col w-full space-y-2 mb-4">
       {label && <Label className="text-base font-medium">{label}</Label>}
 
-      <Text mainUiMuted text03>
+      <Text as="p" mainUiMuted text03>
         All documents indexed by the selected connectors will be part of this
         document set.
       </Text>
@@ -127,7 +127,7 @@ export const ConnectorMultiSelect = ({
           leftSearchIcon
           placeholder={effectivePlaceholder}
           value={searchQuery}
-          disabled={isInputDisabled}
+          variant={isInputDisabled ? "disabled" : undefined}
           onChange={(e) => {
             setSearchQuery(e.target.value);
             setOpen(true);

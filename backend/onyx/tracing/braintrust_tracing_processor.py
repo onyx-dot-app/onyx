@@ -13,6 +13,7 @@ from .framework.span_data import GenerationSpanData
 from .framework.span_data import SpanData
 from .framework.spans import Span
 from .framework.traces import Trace
+from onyx.llm.cost import calculate_llm_cost_cents
 
 
 def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
@@ -67,10 +68,14 @@ class BraintrustTracingProcessor(TracingProcessor):
         self._spans: Dict[str, Any] = {}
         self._first_input: Dict[str, Any] = {}
         self._last_output: Dict[str, Any] = {}
+        self._trace_metadata: Dict[str, Dict[str, Any]] = {}
+        self._span_names: Dict[str, str] = {}
 
     def on_trace_start(self, trace: Trace) -> None:
         trace_meta = trace.export() or {}
         metadata = trace_meta.get("metadata") or {}
+        if metadata:
+            self._trace_metadata[trace.trace_id] = metadata
 
         current_context = braintrust.current_span()
         if current_context != NOOP_SPAN:
@@ -92,9 +97,12 @@ class BraintrustTracingProcessor(TracingProcessor):
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,
             )
+        self._span_names[trace.trace_id] = trace.name
 
     def on_trace_end(self, trace: Trace) -> None:
         span: Any = self._spans.pop(trace.trace_id)
+        self._trace_metadata.pop(trace.trace_id, None)
+        self._span_names.pop(trace.trace_id, None)
         # Get the first input and last output for this specific trace
         trace_first_input = self._first_input.pop(trace.trace_id, None)
         trace_last_output = self._last_output.pop(trace.trace_id, None)
@@ -118,26 +126,34 @@ class BraintrustTracingProcessor(TracingProcessor):
 
     def _generation_log_data(self, span: Span[GenerationSpanData]) -> Dict[str, Any]:
         metrics = {}
-        ttft = _maybe_timestamp_elapsed(span.ended_at, span.started_at)
+        total_latency = _maybe_timestamp_elapsed(span.ended_at, span.started_at)
 
-        if ttft is not None:
-            metrics["time_to_first_token"] = ttft
+        if total_latency is not None:
+            metrics["total_latency_seconds"] = total_latency
+
+        if span.span_data.time_to_first_action_seconds is not None:
+            metrics["time_to_first_action_seconds"] = (
+                span.span_data.time_to_first_action_seconds
+            )
 
         usage = span.span_data.usage or {}
-        if "prompt_tokens" in usage:
-            metrics["prompt_tokens"] = usage["prompt_tokens"]
-        elif "input_tokens" in usage:
-            metrics["prompt_tokens"] = usage["input_tokens"]
-
-        if "completion_tokens" in usage:
-            metrics["completion_tokens"] = usage["completion_tokens"]
-        elif "output_tokens" in usage:
-            metrics["completion_tokens"] = usage["output_tokens"]
+        prompt_tokens = None
+        completion_tokens = None
+        prompt_tokens = usage.get("prompt_tokens")
+        if prompt_tokens is None:
+            prompt_tokens = usage.get("input_tokens")
+        if prompt_tokens is not None:
+            metrics["prompt_tokens"] = int(prompt_tokens)
+        completion_tokens = usage.get("completion_tokens")
+        if completion_tokens is None:
+            completion_tokens = usage.get("output_tokens")
+        if completion_tokens is not None:
+            metrics["completion_tokens"] = int(completion_tokens)
 
         if "total_tokens" in usage:
             metrics["tokens"] = usage["total_tokens"]
-        elif "input_tokens" in usage and "output_tokens" in usage:
-            metrics["tokens"] = usage["input_tokens"] + usage["output_tokens"]
+        elif prompt_tokens is not None and completion_tokens is not None:
+            metrics["tokens"] = prompt_tokens + completion_tokens
 
         if "cache_read_input_tokens" in usage:
             metrics["prompt_cached_tokens"] = usage["cache_read_input_tokens"]
@@ -145,6 +161,16 @@ class BraintrustTracingProcessor(TracingProcessor):
             metrics["prompt_cache_creation_tokens"] = usage[
                 "cache_creation_input_tokens"
             ]
+
+        model_name = span.span_data.model
+        if model_name and prompt_tokens is not None and completion_tokens is not None:
+            cost_cents = calculate_llm_cost_cents(
+                model_name=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+            if cost_cents > 0:
+                metrics["cost_cents"] = cost_cents
 
         return {
             "input": span.span_data.input,
@@ -172,19 +198,34 @@ class BraintrustTracingProcessor(TracingProcessor):
             if span.parent_id is not None
             else self._spans[span.trace_id]
         )
-        created_span: Any = parent.start_span(
+        trace_metadata = self._trace_metadata.get(span.trace_id)
+        span_name = _span_name(span)
+        if isinstance(span.span_data, GenerationSpanData):
+            parent_name = (
+                self._span_names.get(span.parent_id)
+                if span.parent_id is not None
+                else self._span_names.get(span.trace_id)
+            )
+            if parent_name:
+                span_name = parent_name
+        span_kwargs: Dict[str, Any] = dict(
             id=span.span_id,
-            name=_span_name(span),
+            name=span_name,
             type=_span_type(span),
             start_time=_timestamp_from_maybe_iso(span.started_at),
         )
+        if trace_metadata:
+            span_kwargs["metadata"] = trace_metadata
+        created_span: Any = parent.start_span(**span_kwargs)
         self._spans[span.span_id] = created_span
+        self._span_names[span.span_id] = span_name
 
         # Set the span as current so current_span() calls will return it
         created_span.set_current()
 
     def on_span_end(self, span: Span[SpanData]) -> None:
         s: Any = self._spans.pop(span.span_id)
+        self._span_names.pop(span.span_id, None)
         event = dict(error=span.error, **self._log_data(span))
         s.log(**event)
         s.unset_current()

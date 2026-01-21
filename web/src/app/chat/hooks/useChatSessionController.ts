@@ -132,7 +132,6 @@ export function useChatSessionController({
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
       filterManager.setSelectedDocumentSets([]);
-      filterManager.setSelectedSources([]);
       filterManager.setSelectedTags([]);
       filterManager.setTimeRange(null);
 
@@ -272,7 +271,7 @@ export function useChatSessionController({
           await nameChatSession(existingChatSessionId);
           refreshChatSessions();
         }
-      } else if (newMessageHistory.length === 2 && !chatSession.description) {
+      } else if (newMessageHistory.length >= 2 && !chatSession.description) {
         await nameChatSession(existingChatSessionId);
         refreshChatSessions();
       }

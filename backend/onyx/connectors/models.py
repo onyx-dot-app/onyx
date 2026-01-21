@@ -161,6 +161,8 @@ class DocumentBase(BaseModel):
     sections: list[TextSection | ImageSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
+    # TODO(andrei): Ideally we could improve this to where each value is just a
+    # list of strings.
     metadata: dict[str, str | list[str]]
 
     # UTC time
@@ -202,13 +204,7 @@ class DocumentBase(BaseModel):
         if not self.metadata:
             return None
         # Combined string for the key/value for easy filtering
-        attributes: list[str] = []
-        for k, v in self.metadata.items():
-            if isinstance(v, list):
-                attributes.extend([k + INDEX_SEPARATOR + vi for vi in v])
-            else:
-                attributes.append(k + INDEX_SEPARATOR + v)
-        return attributes
+        return convert_metadata_dict_to_list_of_strings(self.metadata)
 
     def __sizeof__(self) -> int:
         size = sys.getsizeof(self.id)
@@ -238,6 +234,66 @@ class DocumentBase(BaseModel):
 
     def get_text_content(self) -> str:
         return " ".join([section.text for section in self.sections if section.text])
+
+
+def convert_metadata_dict_to_list_of_strings(
+    metadata: dict[str, str | list[str]],
+) -> list[str]:
+    """Converts a metadata dict to a list of strings.
+
+    Each string is a key-value pair separated by the INDEX_SEPARATOR. If a key
+    points to a list of values, each value generates a unique pair.
+
+    Args:
+        metadata: The metadata dict to convert where values can be either a
+            string or a list of strings.
+
+    Returns:
+        A list of strings where each string is a key-value pair separated by the
+            INDEX_SEPARATOR.
+    """
+    attributes: list[str] = []
+    for k, v in metadata.items():
+        if isinstance(v, list):
+            attributes.extend([k + INDEX_SEPARATOR + vi for vi in v])
+        else:
+            attributes.append(k + INDEX_SEPARATOR + v)
+    return attributes
+
+
+def convert_metadata_list_of_strings_to_dict(
+    metadata_list: list[str],
+) -> dict[str, str | list[str]]:
+    """
+    Converts a list of strings to a metadata dict. The inverse of
+    convert_metadata_dict_to_list_of_strings.
+
+    Assumes the input strings are formatted as in the output of
+    convert_metadata_dict_to_list_of_strings.
+
+    The schema of the output metadata dict is suboptimal yet bound to legacy
+    code. Ideally each key would just point to a list of strings, where each
+    list might contain just one element.
+
+    Args:
+        metadata_list: The list of strings to convert to a metadata dict.
+
+    Returns:
+        A metadata dict where values can be either a string or a list of
+            strings.
+    """
+    metadata: dict[str, str | list[str]] = {}
+    for item in metadata_list:
+        key, value = item.split(INDEX_SEPARATOR, 1)
+        if key in metadata:
+            # We have already seen this key therefore it must point to a list.
+            if isinstance(metadata[key], list):
+                cast(list[str], metadata[key]).append(value)
+            else:
+                metadata[key] = [cast(str, metadata[key]), value]
+        else:
+            metadata[key] = value
+    return metadata
 
 
 class Document(DocumentBase):

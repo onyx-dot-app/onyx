@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiUsers, FiCircle, FiTarget } from "react-icons/fi";
 import { SvgChevronDown } from "@opal/icons";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,6 @@ import { RendererComponent } from "../renderMessageComponent";
 import { getToolName } from "../toolDisplayHelpers";
 import { STANDARD_TEXT_COLOR } from "../constants";
 import Text from "@/refresh-components/texts/Text";
-import { usePacketAnimationAndCollapse } from "../hooks/usePacketAnimationAndCollapse";
 import { useMarkdownRenderer } from "../markdownUtils";
 
 interface NestedToolGroup {
@@ -35,12 +34,14 @@ function NestedToolItemRow({
   status,
   isLastItem,
   isLoading,
+  isCancelled,
 }: {
   icon: ((props: { size: number }) => React.JSX.Element) | null;
   content: React.JSX.Element | string;
   status: string | React.JSX.Element | null;
   isLastItem: boolean;
   isLoading?: boolean;
+  isCancelled?: boolean;
 }) {
   return (
     <div className="relative">
@@ -75,8 +76,12 @@ function NestedToolItemRow({
           )}
         >
           <Text
+            as="p"
             text02
-            className={cn("text-sm mb-1", isLoading && "loading-text")}
+            className={cn(
+              "text-sm mb-1",
+              isLoading && !isCancelled && "loading-text"
+            )}
           >
             {status}
           </Text>
@@ -164,17 +169,16 @@ export const ResearchAgentRenderer: MessageRenderer<
   const isComplete = parentPackets.some(
     (p) => p.obj.type === PacketType.SECTION_END
   );
+  const [isExpanded, toggleExpanded] = useState(true);
+  const hasCalledCompleteRef = useRef(false);
 
-  // Use shared hook for animation and auto-collapse logic
-  // Use preventDoubleComplete since this renderer needs to avoid double-calling onComplete
-  const { displayedPacketCount, isExpanded, toggleExpanded } =
-    usePacketAnimationAndCollapse({
-      packets,
-      animate,
-      isComplete,
-      onComplete,
-      preventDoubleComplete: true,
-    });
+  // Call onComplete when research agent is complete
+  useEffect(() => {
+    if (isComplete && !hasCalledCompleteRef.current) {
+      hasCalledCompleteRef.current = true;
+      onComplete();
+    }
+  }, [isComplete, onComplete]);
 
   // Get the full report content from parent packets only
   const fullReportContent = parentPackets
@@ -220,7 +224,10 @@ export const ResearchAgentRenderer: MessageRenderer<
     totalGroups: number
   ) => {
     const isLastItem = index === totalGroups - 1;
-    const isLoading = !group.isComplete && !isComplete;
+    // If stopPacketSeen is true, loading is false (cancelled state)
+    const isLoading = !stopPacketSeen && !group.isComplete && !isComplete;
+    // Tool is cancelled if stop was triggered and it's not complete
+    const isCancelled = stopPacketSeen && !group.isComplete;
 
     return (
       <RendererComponent
@@ -239,6 +246,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             status={result.status}
             isLastItem={isLastItem}
             isLoading={isLoading}
+            isCancelled={isCancelled}
           />
         )}
       </RendererComponent>
@@ -252,7 +260,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   const statusElement = (
     <div
       className="flex items-center justify-between gap-2 cursor-pointer group w-full"
-      onClick={toggleExpanded}
+      onClick={() => toggleExpanded(!isExpanded)}
     >
       <span>{statusText}</span>
       <div className="flex items-center gap-2">

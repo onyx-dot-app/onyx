@@ -128,10 +128,10 @@ export default function ReIndexModal({
 
   return (
     <Modal open onOpenChange={hide}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header icon={SvgRefreshCw} title="Run Indexing" onClose={hide} />
         <Modal.Body>
-          <Text>
+          <Text as="p">
             This will pull in and index all documents that have changed and/or
             have been added since the last successful indexing run.
           </Text>
@@ -141,11 +141,11 @@ export default function ReIndexModal({
 
           <Separator />
 
-          <Text>
+          <Text as="p">
             This will cause a complete re-indexing of all documents from the
             source.
           </Text>
-          <Text>
+          <Text as="p">
             <strong>NOTE:</strong> depending on the number of documents stored
             in the source, this may take a long time.
           </Text>

@@ -37,6 +37,13 @@ class WebSearchResult(BaseModel):
 
 
 class WebSearchProvider:
+    @property
+    def supports_site_filter(self) -> bool:
+        """Whether this provider supports the site: operator in queries.
+        Override in subclasses that don't support it.
+        """
+        return True
+
     @abstractmethod
     def search(self, query: str) -> Sequence[WebSearchResult]:
         pass

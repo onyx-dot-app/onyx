@@ -16,15 +16,15 @@ import {
   ZAIIcon,
 } from "@/components/icons/icons";
 import {
-  WellKnownLLMProviderDescriptor,
-  LLMProviderView,
-  DynamicProviderConfig,
   OllamaModelResponse,
   OpenRouterModelResponse,
   BedrockModelResponse,
   ModelConfiguration,
+  LLMProviderName,
+  BedrockFetchParams,
+  OllamaFetchParams,
+  OpenRouterFetchParams,
 } from "./interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { SvgAws, SvgOpenrouter } from "@opal/icons";
 
 // Aggregator providers that host models from multiple vendors
@@ -109,229 +109,218 @@ export const getProviderIcon = (
 export const isAnthropic = (provider: string, modelName: string) =>
   provider === "anthropic" || modelName.toLowerCase().includes("claude");
 
-// Static provider configs - these use the models from the descriptor (litellm)
-// without making an API call. Used for OpenAI, Anthropic, Vertex AI, etc.
-const createStaticProviderConfig = (
-  providerDisplayName: string
-): DynamicProviderConfig<ModelConfiguration[], ModelConfiguration> => ({
-  endpoint: "", // Not used for static providers
-  isDisabled: () => false,
-  disabledReason: "",
-  buildRequestBody: () => ({}),
-  // For static providers, we pass through the descriptor's models directly
-  processResponse: (models) => models,
-  getModelNames: (models) => models.map((m) => m.name),
-  successMessage: (count: number) =>
-    `Refreshed ${count} available ${providerDisplayName} models.`,
-  // Flag to indicate this is a static provider (uses descriptor models)
-  isStatic: true,
-});
-
-export const dynamicProviderConfigs: Record<
-  string,
-  DynamicProviderConfig<any, ModelConfiguration>
-> = {
-  // Static providers - use models from litellm via the descriptor
-  openai: createStaticProviderConfig("OpenAI"),
-  anthropic: createStaticProviderConfig("Anthropic"),
-  vertex_ai: createStaticProviderConfig("Vertex AI"),
-
-  // Dynamic providers - fetch models from external APIs
-  bedrock: {
-    endpoint: "/api/admin/llm/bedrock/available-models",
-    isDisabled: (values) => !values.custom_config?.AWS_REGION_NAME,
-    disabledReason: "AWS region is required to fetch Bedrock models",
-    buildRequestBody: ({ values, existingLlmProvider }) => ({
-      aws_region_name: values.custom_config?.AWS_REGION_NAME,
-      aws_access_key_id: values.custom_config?.AWS_ACCESS_KEY_ID,
-      aws_secret_access_key: values.custom_config?.AWS_SECRET_ACCESS_KEY,
-      aws_bearer_token_bedrock: values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-      provider_name: existingLlmProvider?.name,
-    }),
-    processResponse: (data: BedrockModelResponse[], llmProviderDescriptor) =>
-      data.map((modelData) => {
-        const existingConfig = llmProviderDescriptor.model_configurations.find(
-          (config) => config.name === modelData.name
-        );
-        return {
-          name: modelData.name,
-          display_name: modelData.display_name,
-          is_visible: existingConfig?.is_visible ?? false,
-          max_input_tokens: modelData.max_input_tokens,
-          supports_image_input: modelData.supports_image_input,
-        };
-      }),
-    getModelNames: (data: BedrockModelResponse[]) =>
-      data.map((model) => model.name),
-    successMessage: (count: number) =>
-      `Successfully fetched ${count} models for the selected region (including cross-region inference models).`,
-  },
-  ollama_chat: {
-    endpoint: "/api/admin/llm/ollama/available-models",
-    isDisabled: (values) => !values.api_base,
-    disabledReason: "API Base is required to fetch Ollama models",
-    buildRequestBody: ({ values, existingLlmProvider }) => ({
-      api_base: values.api_base,
-      provider_name: existingLlmProvider?.name,
-    }),
-    processResponse: (data: OllamaModelResponse[], llmProviderDescriptor) =>
-      data.map((modelData) => {
-        const existingConfig = llmProviderDescriptor.model_configurations.find(
-          (config) => config.name === modelData.name
-        );
-        return {
-          name: modelData.name,
-          display_name: modelData.display_name,
-          is_visible: existingConfig?.is_visible ?? true,
-          max_input_tokens: modelData.max_input_tokens,
-          supports_image_input: modelData.supports_image_input,
-        };
-      }),
-    getModelNames: (data: OllamaModelResponse[]) =>
-      data.map((model) => model.name),
-    successMessage: (count: number) =>
-      `Successfully fetched ${count} models from Ollama.`,
-  },
-  openrouter: {
-    endpoint: "/api/admin/llm/openrouter/available-models",
-    isDisabled: (values) => !values.api_base || !values.api_key,
-    disabledReason:
-      "API Base and API Key are required to fetch OpenRouter models",
-    buildRequestBody: ({ values, existingLlmProvider }) => ({
-      api_base: values.api_base,
-      api_key: values.api_key,
-      provider_name: existingLlmProvider?.name,
-    }),
-    processResponse: (data: OpenRouterModelResponse[], llmProviderDescriptor) =>
-      data.map((modelData) => {
-        const existingConfig = llmProviderDescriptor.model_configurations.find(
-          (config) => config.name === modelData.name
-        );
-        return {
-          name: modelData.name,
-          display_name: modelData.display_name,
-          is_visible: existingConfig?.is_visible ?? true,
-          max_input_tokens: modelData.max_input_tokens,
-          supports_image_input: modelData.supports_image_input,
-        };
-      }),
-    getModelNames: (data: OpenRouterModelResponse[]) => data.map((m) => m.name),
-    successMessage: (count: number) =>
-      `Successfully fetched ${count} models from OpenRouter.`,
-  },
-};
-
-export const fetchModels = async (
-  llmProviderDescriptor: WellKnownLLMProviderDescriptor,
-  existingLlmProvider: LLMProviderView | undefined,
-  values: any,
-  setFieldValue: any,
-  setIsFetchingModels: (loading: boolean) => void,
-  setFetchModelsError: (error: string) => void,
-  setPopup?: (popup: PopupSpec) => void
-) => {
-  const config = dynamicProviderConfigs[llmProviderDescriptor.name];
-  if (!config) {
-    return;
+/**
+ * Fetches Bedrock models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
+ */
+export const fetchBedrockModels = async (
+  params: BedrockFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  if (!params.aws_region_name) {
+    return { models: [], error: "AWS region is required" };
   }
-
-  if (config.isDisabled(values)) {
-    setFetchModelsError(config.disabledReason);
-    return;
-  }
-
-  setIsFetchingModels(true);
-  setFetchModelsError("");
 
   try {
-    let updatedModelConfigs: ModelConfiguration[];
-    let availableModelNames: string[];
-
-    if (config.isStatic) {
-      // For static providers, use models from the descriptor (which comes from litellm)
-      // Preserve visibility settings from existing provider if editing
-      const existingVisibleModels = new Set(
-        existingLlmProvider?.model_configurations
-          .filter((m) => m.is_visible)
-          .map((m) => m.name) || []
-      );
-
-      updatedModelConfigs = llmProviderDescriptor.model_configurations.map(
-        (model) => ({
-          ...model,
-          // Preserve visibility if model existed before, otherwise default to false
-          is_visible: existingVisibleModels.has(model.name)
-            ? true
-            : model.is_visible,
-        })
-      );
-      availableModelNames = updatedModelConfigs.map((m) => m.name);
-    } else {
-      // For dynamic providers, fetch from the API
-      const response = await fetch(config.endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-          config.buildRequestBody({ values, existingLlmProvider })
-        ),
-      });
-
-      if (!response.ok) {
-        let errorMessage = "Failed to fetch models";
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.detail || errorMessage;
-        } catch {
-          // ignore JSON parsing errors and use the fallback message
-        }
-        throw new Error(errorMessage);
-      }
-
-      const availableModels = await response.json();
-      updatedModelConfigs = config.processResponse(
-        availableModels,
-        llmProviderDescriptor
-      );
-      availableModelNames = config.getModelNames(availableModels);
-    }
-
-    // Store the updated model configurations in form state instead of mutating props
-    setFieldValue("fetched_model_configurations", updatedModelConfigs);
-
-    // Update selected model names to only include previously visible models that are available
-    const previouslySelectedModels = values.selected_model_names || [];
-    const stillAvailableSelectedModels = previouslySelectedModels.filter(
-      (modelName: string) => availableModelNames.includes(modelName)
-    );
-    setFieldValue("selected_model_names", stillAvailableSelectedModels);
-
-    // Set a default model if none is set
-    if (
-      (!values.default_model_name ||
-        !availableModelNames.includes(values.default_model_name)) &&
-      availableModelNames.length > 0
-    ) {
-      setFieldValue("default_model_name", availableModelNames[0]);
-    }
-
-    // Force a re-render by updating a timestamp or counter
-    setFieldValue("_modelListUpdated", Date.now());
-
-    setPopup?.({
-      message: config.successMessage(availableModelNames.length),
-      type: "success",
+    const response = await fetch("/api/admin/llm/bedrock/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        aws_region_name: params.aws_region_name,
+        aws_access_key_id: params.aws_access_key_id,
+        aws_secret_access_key: params.aws_secret_access_key,
+        aws_bearer_token_bedrock: params.aws_bearer_token_bedrock,
+        provider_name: params.provider_name,
+      }),
     });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: BedrockModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: false,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+    }));
+
+    return { models };
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    setFetchModelsError(errorMessage);
-    setPopup?.({
-      message: `Failed to fetch models: ${errorMessage}`,
-      type: "error",
-    });
-  } finally {
-    setIsFetchingModels(false);
+    return { models: [], error: errorMessage };
   }
 };
+
+/**
+ * Fetches Ollama models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
+ */
+export const fetchOllamaModels = async (
+  params: OllamaFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  if (!apiBase) {
+    return { models: [], error: "API Base is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/ollama/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        provider_name: params.provider_name,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: OllamaModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches OpenRouter models directly without any form state dependencies.
+ * Uses snake_case params to match API structure.
+ */
+export const fetchOpenRouterModels = async (
+  params: OpenRouterFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  const apiKey = params.api_key;
+  if (!apiBase) {
+    return { models: [], error: "API Base is required" };
+  }
+  if (!apiKey) {
+    return { models: [], error: "API Key is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/openrouter/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        api_key: apiKey,
+        provider_name: params.provider_name,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorMessage;
+      } catch {
+        // ignore JSON parsing errors
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: OpenRouterModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches models for a provider. Accepts form values directly and maps them
+ * to the expected fetch params format internally.
+ */
+export const fetchModels = async (
+  providerName: string,
+  formValues: {
+    api_base?: string;
+    api_key?: string;
+    name?: string;
+    custom_config?: Record<string, string>;
+    model_configurations?: ModelConfiguration[];
+  }
+) => {
+  const customConfig = formValues.custom_config || {};
+
+  switch (providerName) {
+    case LLMProviderName.BEDROCK:
+      return fetchBedrockModels({
+        aws_region_name: customConfig.AWS_REGION_NAME || "",
+        aws_access_key_id: customConfig.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key: customConfig.AWS_SECRET_ACCESS_KEY,
+        aws_bearer_token_bedrock: customConfig.AWS_BEARER_TOKEN_BEDROCK,
+        provider_name: formValues.name,
+      });
+    case LLMProviderName.OLLAMA_CHAT:
+      return fetchOllamaModels({
+        api_base: formValues.api_base,
+        provider_name: formValues.name,
+      });
+    case LLMProviderName.OPENROUTER:
+      return fetchOpenRouterModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_name: formValues.name,
+      });
+    default:
+      return { models: [], error: `Unknown provider: ${providerName}` };
+  }
+};
+
+export function canProviderFetchModels(providerName?: string) {
+  if (!providerName) return false;
+  switch (providerName) {
+    case LLMProviderName.BEDROCK:
+    case LLMProviderName.OLLAMA_CHAT:
+    case LLMProviderName.OPENROUTER:
+      return true;
+    default:
+      return false;
+  }
+}

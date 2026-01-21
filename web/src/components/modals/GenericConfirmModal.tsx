@@ -19,10 +19,10 @@ export default function GenericConfirmModal({
 }: GenericConfirmModalProps) {
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header icon={SvgCheck} title={title} onClose={onClose} />
         <Modal.Body>
-          <Text>{message}</Text>
+          <Text as="p">{message}</Text>
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={onConfirm}>{confirmText}</Button>

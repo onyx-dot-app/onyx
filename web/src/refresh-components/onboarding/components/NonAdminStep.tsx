@@ -5,7 +5,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/components/user/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Avatar } from "@/components/ui/avatar";
+import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 
@@ -48,7 +48,7 @@ export default function NonAdminStep() {
         <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2">
           <div className="flex items-center gap-1">
             <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-            <Text text03 mainUiBody>
+            <Text as="p" text03 mainUiBody>
               You're all set!
             </Text>
           </div>
@@ -70,10 +70,10 @@ export default function NonAdminStep() {
               <SvgUser className="w-4 h-4 stroke-text-03" />
             </div>
             <div>
-              <Text text04 mainUiAction>
+              <Text as="p" text04 mainUiAction>
                 What should Onyx call you?
               </Text>
-              <Text text03 secondaryBody>
+              <Text as="p" text03 secondaryBody>
                 We will display this name in the app.
               </Text>
             </div>
@@ -111,17 +111,17 @@ export default function NonAdminStep() {
           }}
         >
           <div className="flex items-center gap-1">
-            <Avatar
+            <InputAvatar
               className={cn(
                 "flex items-center justify-center bg-background-neutral-inverted-00",
                 "w-5 h-5"
               )}
             >
-              <Text inverted secondaryBody>
+              <Text as="p" inverted secondaryBody>
                 {savedName?.[0]?.toUpperCase()}
               </Text>
-            </Avatar>
-            <Text text04 mainUiAction>
+            </InputAvatar>
+            <Text as="p" text04 mainUiAction>
               {savedName}
             </Text>
           </div>

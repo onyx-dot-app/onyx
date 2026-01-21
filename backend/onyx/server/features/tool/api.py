@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Tool
 from onyx.db.models import User
@@ -80,7 +81,7 @@ def _get_editable_custom_tool(
     return tool
 
 
-@admin_router.post("/custom")
+@admin_router.post("/custom", tags=PUBLIC_API_TAGS)
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
@@ -103,7 +104,7 @@ def create_custom_tool(
     return ToolSnapshot.from_model(tool)
 
 
-@admin_router.put("/custom/{tool_id}")
+@admin_router.put("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
 def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
@@ -128,7 +129,7 @@ def update_custom_tool(
     return ToolSnapshot.from_model(updated_tool)
 
 
-@admin_router.delete("/custom/{tool_id}")
+@admin_router.delete("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
 def delete_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
@@ -204,7 +205,7 @@ class ValidateToolResponse(BaseModel):
     methods: list[MethodSpec]
 
 
-@admin_router.post("/custom/validate")
+@admin_router.post("/custom/validate", tags=PUBLIC_API_TAGS)
 def validate_tool(
     tool_data: ValidateToolRequest,
     _: User | None = Depends(current_curator_or_admin_user),
@@ -217,7 +218,7 @@ def validate_tool(
 """Endpoints for all"""
 
 
-@router.get("/openapi")
+@router.get("/openapi", tags=PUBLIC_API_TAGS)
 def list_openapi_tools(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
@@ -234,7 +235,7 @@ def list_openapi_tools(
     return openapi_tools
 
 
-@router.get("/{tool_id}")
+@router.get("/{tool_id}", tags=PUBLIC_API_TAGS)
 def get_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
@@ -247,7 +248,7 @@ def get_custom_tool(
     return ToolSnapshot.from_model(tool)
 
 
-@router.get("")
+@router.get("", tags=PUBLIC_API_TAGS)
 def list_tools(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),

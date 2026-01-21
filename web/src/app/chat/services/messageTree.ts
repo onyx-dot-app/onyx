@@ -439,23 +439,22 @@ export const buildImmediateMessages = (
   initialUserNode: Message;
   initialAssistantNode: Message;
 } => {
-  const initialUserNode = messageToResend
-    ? { ...messageToResend } // clone the message to avoid mutating the original
-    : buildEmptyMessage({
-        messageType: "user",
-        parentNodeId,
-        message: userInput,
-        files,
-      });
+  // Always create a NEW message with a new nodeId for proper branching.
+  // When editing (messageToResend exists), this creates a sibling to the original
+  // message since they share the same parentNodeId.
+  const initialUserNode = buildEmptyMessage({
+    messageType: "user",
+    parentNodeId,
+    message: userInput,
+    files,
+  });
   const initialAssistantNode = buildEmptyMessage({
     messageType: "assistant",
     parentNodeId: initialUserNode.nodeId,
     nodeIdOffset: 1,
   });
 
-  initialUserNode.childrenNodeIds = initialUserNode.childrenNodeIds
-    ? [...initialUserNode.childrenNodeIds, initialAssistantNode.nodeId]
-    : [initialAssistantNode.nodeId];
+  initialUserNode.childrenNodeIds = [initialAssistantNode.nodeId];
   initialUserNode.latestChildNodeId = initialAssistantNode.nodeId;
 
   return {

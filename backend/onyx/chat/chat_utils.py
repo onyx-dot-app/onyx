@@ -18,14 +18,13 @@ from onyx.background.celery.tasks.kg_processing.kg_indexing import (
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
+from onyx.db.chat import get_or_create_root_message
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.llm import fetch_existing_doc_sets
@@ -37,6 +36,7 @@ from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.projects import check_project_ownership
 from onyx.db.search_settings import get_current_search_settings
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
@@ -46,12 +46,10 @@ from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
 )
-from onyx.llm.override_models import LLMOverride
-from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -61,88 +59,43 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
+
 logger = setup_logger()
 
 
-def prepare_chat_message_request(
-    message_text: str,
-    user: User | None,
-    persona_id: int | None,
-    # Does the question need to have a persona override
-    persona_override_config: PersonaOverrideConfig | None,
-    message_ts_to_respond_to: str | None,
-    retrieval_details: RetrievalDetails | None,
-    rerank_settings: RerankingDetails | None,
+def create_chat_session_from_request(
+    chat_session_request: ChatSessionCreationRequest,
+    user_id: UUID | None,
     db_session: Session,
-    skip_gen_ai_answer_generation: bool = False,
-    llm_override: LLMOverride | None = None,
-    allowed_tool_ids: list[int] | None = None,
-) -> CreateChatMessageRequest:
-    # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
-    new_chat_session = create_chat_session(
+) -> ChatSession:
+    """Create a chat session from a ChatSessionCreationRequest.
+
+    Includes project ownership validation when project_id is provided.
+
+    Args:
+        chat_session_request: The request containing persona_id, description, and project_id
+        user_id: The ID of the user creating the session (can be None for anonymous)
+        db_session: The database session
+
+    Returns:
+        The newly created ChatSession
+
+    Raises:
+        ValueError: If user lacks access to the specified project
+        Exception: If the persona is invalid
+    """
+    project_id = chat_session_request.project_id
+    if project_id:
+        if not check_project_ownership(project_id, user_id, db_session):
+            raise ValueError("User does not have access to project")
+
+    return create_chat_session(
         db_session=db_session,
-        description=None,
-        user_id=user.id if user else None,
-        # If using an override, this id will be ignored later on
-        persona_id=persona_id or DEFAULT_PERSONA_ID,
-        onyxbot_flow=True,
-        slack_thread_id=message_ts_to_respond_to,
+        description=chat_session_request.description or "",
+        user_id=user_id,
+        persona_id=chat_session_request.persona_id,
+        project_id=chat_session_request.project_id,
     )
-
-    return CreateChatMessageRequest(
-        chat_session_id=new_chat_session.id,
-        parent_message_id=None,  # It's a standalone chat session each time
-        message=message_text,
-        file_descriptors=[],  # Currently SlackBot/answer api do not support files in the context
-        # Can always override the persona for the single query, if it's a normal persona
-        # then it will be treated the same
-        persona_override_config=persona_override_config,
-        search_doc_ids=None,
-        retrieval_options=retrieval_details,
-        rerank_settings=rerank_settings,
-        skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
-        llm_override=llm_override,
-        allowed_tool_ids=allowed_tool_ids,
-    )
-
-
-def combine_message_thread(
-    messages: list[ThreadMessage],
-    max_tokens: int | None,
-    llm_tokenizer: BaseTokenizer,
-) -> str:
-    """Used to create a single combined message context from threads"""
-    if not messages:
-        return ""
-
-    message_strs: list[str] = []
-    total_token_count = 0
-
-    for message in reversed(messages):
-        if message.role == MessageType.USER:
-            role_str = message.role.value.upper()
-            if message.sender:
-                role_str += " " + message.sender
-            else:
-                # Since other messages might have the user identifying information
-                # better to use Unknown for symmetry
-                role_str += " Unknown"
-        else:
-            role_str = message.role.value.upper()
-
-        msg_str = f"{role_str}:\n{message.message}"
-        message_token_count = len(llm_tokenizer.encode(msg_str))
-
-        if (
-            max_tokens is not None
-            and total_token_count + message_token_count > max_tokens
-        ):
-            break
-
-        message_strs.insert(0, msg_str)
-        total_token_count += message_token_count
-
-    return "\n\n".join(message_strs)
 
 
 def create_chat_history_chain(
@@ -164,13 +117,15 @@ def create_chat_history_chain(
     )
 
     if not all_chat_messages:
-        raise RuntimeError("No messages in Chat Session")
-
-    root_message = all_chat_messages[0]
-    if root_message.parent_message is not None:
-        raise RuntimeError(
-            "Invalid root message, unable to fetch valid chat message sequence"
+        root_message = get_or_create_root_message(
+            chat_session_id=chat_session_id, db_session=db_session
         )
+    else:
+        root_message = all_chat_messages[0]
+        if root_message.parent_message is not None:
+            raise RuntimeError(
+                "Invalid root message, unable to fetch valid chat message sequence"
+            )
 
     current_message: ChatMessage | None = root_message
     previous_message: ChatMessage | None = None
@@ -201,35 +156,7 @@ def create_chat_history_chain(
 
         previous_message = current_message
 
-    if not mainline_messages:
-        raise RuntimeError("Could not trace chat message history")
-
     return mainline_messages
-
-
-def combine_message_chain(
-    messages: list[ChatMessage],
-    token_limit: int,
-    msg_limit: int | None = None,
-) -> str:
-    """Used for secondary LLM flows that require the chat history,"""
-    message_strs: list[str] = []
-    total_token_count = 0
-
-    if msg_limit is not None:
-        messages = messages[-msg_limit:]
-
-    for message in cast(list[ChatMessage], reversed(messages)):
-        message_token_count = message.token_count
-
-        if total_token_count + message_token_count > token_limit:
-            break
-
-        role = message.message_type.value.upper()
-        message_strs.insert(0, f"{role}:\n{message.message}")
-        total_token_count += message_token_count
-
-    return "\n\n".join(message_strs)
 
 
 def reorganize_citations(
@@ -372,7 +299,7 @@ def create_temporary_persona(
         num_chunks=persona_config.num_chunks,
         llm_relevance_filter=persona_config.llm_relevance_filter,
         llm_filter_extraction=persona_config.llm_filter_extraction,
-        recency_bias=persona_config.recency_bias,
+        recency_bias=RecencyBiasSetting.BASE_DECAY,
         llm_model_provider_override=persona_config.llm_model_provider_override,
         llm_model_version_override=persona_config.llm_model_version_override,
     )
@@ -540,6 +467,71 @@ def load_all_chat_files(
         ),
     )
     return files
+
+
+def convert_chat_history_basic(
+    chat_history: list[ChatMessage],
+    token_counter: Callable[[str], int],
+    max_individual_message_tokens: int | None = None,
+    max_total_tokens: int | None = None,
+) -> list[ChatMessageSimple]:
+    """Convert ChatMessage history to ChatMessageSimple format with no tool calls or files included.
+
+    Args:
+        chat_history: List of ChatMessage objects to convert
+        token_counter: Function to count tokens in a message string
+        max_individual_message_tokens: If set, messages exceeding this number of tokens are dropped.
+            If None, no messages are dropped based on individual token count.
+        max_total_tokens: If set, maximum number of tokens allowed for the entire history.
+            If None, the history is not trimmed based on total token count.
+
+    Returns:
+        List of ChatMessageSimple objects
+    """
+    # Defensive: treat a non-positive total budget as "no history".
+    if max_total_tokens is not None and max_total_tokens <= 0:
+        return []
+
+    # Convert only the core USER/ASSISTANT messages; omit files and tool calls.
+    converted: list[ChatMessageSimple] = []
+    for chat_message in chat_history:
+        if chat_message.message_type not in (MessageType.USER, MessageType.ASSISTANT):
+            continue
+
+        message = chat_message.message or ""
+        token_count = getattr(chat_message, "token_count", None)
+        if token_count is None:
+            token_count = token_counter(message)
+
+        # Drop any single message that would dominate the context window.
+        if (
+            max_individual_message_tokens is not None
+            and token_count > max_individual_message_tokens
+        ):
+            continue
+
+        converted.append(
+            ChatMessageSimple(
+                message=message,
+                token_count=token_count,
+                message_type=chat_message.message_type,
+                image_files=None,
+            )
+        )
+
+    if max_total_tokens is None:
+        return converted
+
+    # Enforce a max total budget by keeping a contiguous suffix of the conversation.
+    trimmed_reversed: list[ChatMessageSimple] = []
+    total_tokens = 0
+    for msg in reversed(converted):
+        if total_tokens + msg.token_count > max_total_tokens:
+            break
+        trimmed_reversed.append(msg)
+        total_tokens += msg.token_count
+
+    return list(reversed(trimmed_reversed))
 
 
 def convert_chat_history(

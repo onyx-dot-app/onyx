@@ -5,10 +5,14 @@ import { useContext, useState } from "react";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
-import { Input } from "@/components/ui/input";
-import { ThreeDotsLoader } from "@/components/Loading";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { SvgCopy } from "@opal/icons";
+import { Card } from "@/refresh-components/cards";
+import Text from "@/refresh-components/texts/Text";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+
 export function AnonymousUserPath({
   setPopup,
 }: {
@@ -38,15 +42,8 @@ export function AnonymousUserPath({
 
   async function handleCustomPathUpdate() {
     try {
-      if (!customPath) {
-        setPopup({
-          message: "Custom path cannot be empty",
-          type: "error",
-        });
-        return;
-      }
       // Validate custom path
-      if (!customPath.trim()) {
+      if (!customPath || !customPath.trim()) {
         setPopup({
           message: "Custom path cannot be empty",
           type: "error",
@@ -95,56 +92,50 @@ export function AnonymousUserPath({
   }
 
   return (
-    <div className="mt-4 ml-6 max-w-xl p-6 bg-white shadow-lg border border-background-200 rounded-lg">
-      <h4 className="font-semibold text-lg text-text-800 mb-3">
-        Anonymous User Access
-      </h4>
-      <p className="text-text-600 text-sm mb-4">
-        Enable this to allow non-authenticated users to access all documents
-        indexed by public connectors in your workspace.
-        {anonymousUserPath
-          ? "Customize the access path for anonymous users."
-          : "Set a custom access path for anonymous users."}{" "}
-        Anonymous users will only be able to view and search public documents,
-        but cannot access private or restricted content. The path will always
-        start with &quot;/anonymous/&quot;.
-      </p>
-      {isLoading ? (
-        <ThreeDotsLoader />
-      ) : (
-        <div className="flex flex-col gap-2 justify-center items-start">
-          <div className="w-full flex-grow  flex items-center rounded-md shadow-sm">
-            <span className="inline-flex items-center rounded-l-md border border-r-0 border-background-300 bg-background-50 px-3 text-text-500 sm:text-sm h-10">
-              {settings?.webDomain}/anonymous/
-            </span>
-            <Input
-              type="text"
-              className="block w-full flex-grow flex-1 rounded-none rounded-r-md border-background-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-10"
-              placeholder="your-custom-path"
-              value={customPath ?? anonymousUserPath ?? ""}
-              onChange={(e) => setCustomPath(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-row gap-2">
-            <Button onClick={handleCustomPathUpdate}>Update Path</Button>
-            <Button
-              secondary
-              onClick={() => {
-                navigator.clipboard.writeText(
-                  `${settings?.webDomain}/anonymous/${anonymousUserPath}`
-                );
-                setPopup({
-                  message: "Invite link copied!",
-                  type: "success",
-                });
-              }}
-              leftIcon={SvgCopy}
+    <div className="max-w-xl">
+      <Card gap={0}>
+        <GeneralLayouts.Section alignItems="start" gap={0.5}>
+          <Text headingH3>Anonymous User Access</Text>
+          <Text secondaryBody text03>
+            Enable this to allow anonymous users to access all public connectors
+            in your workspace. Anonymous users will not be able to access
+            private or restricted content.
+          </Text>
+        </GeneralLayouts.Section>
+
+        {isLoading ? (
+          <SimpleLoader className="self-center animate-spin mt-4" />
+        ) : (
+          <>
+            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+              <Text mainContentBody text03>
+                {settings?.webDomain}/anonymous/
+              </Text>
+              <InputTypeIn
+                placeholder="your-custom-path"
+                value={customPath ?? anonymousUserPath ?? ""}
+                onChange={(e) => setCustomPath(e.target.value)}
+                showClearButton={false}
+              />
+            </GeneralLayouts.Section>
+
+            <GeneralLayouts.Section
+              flexDirection="row"
+              gap={0.5}
+              justifyContent="start"
             >
-              Copy
-            </Button>
-          </div>
-        </div>
-      )}
+              <Button onClick={handleCustomPathUpdate}>Update Path</Button>
+              <CopyIconButton
+                getCopyText={() =>
+                  `${settings?.webDomain}/anonymous/${anonymousUserPath ?? ""}`
+                }
+                tooltip="Copy invite link"
+                secondary
+              />
+            </GeneralLayouts.Section>
+          </>
+        )}
+      </Card>
     </div>
   );
 }

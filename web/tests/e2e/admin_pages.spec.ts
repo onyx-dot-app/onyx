@@ -14,7 +14,7 @@ async function verifyAdminPageNavigation(
     subHeaderText?: string;
   }
 ) {
-  await page.goto(`http://localhost:3000/admin/${path}`);
+  await page.goto(`/admin/${path}`);
 
   try {
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(

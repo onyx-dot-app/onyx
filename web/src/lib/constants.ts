@@ -70,9 +70,6 @@ export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
 export const GTM_ENABLED =
   process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
 
-export const DISABLE_LLM_DOC_RELEVANCE =
-  process.env.DISABLE_LLM_DOC_RELEVANCE?.toLowerCase() === "true";
-
 export const NEXT_PUBLIC_CLOUD_ENABLED =
   process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 
@@ -96,14 +93,20 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
 
-export const NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-
 // Restrict markdown links to safe protocols
 export const ALLOWED_URL_PROTOCOLS = ["http:", "https:", "mailto:"] as const;
 
+// Agent/Persona related constants
 export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;
+export const MAX_CHARACTERS_AGENT_DESCRIPTION = 500;
 export const MAX_STARTER_MESSAGES = 4;
+export const MAX_CHARACTERS_STARTER_MESSAGE = 200;
+export const STARTER_MESSAGES_EXAMPLES = [
+  "Give me an overview of some documents.",
+  "Find the latest sales report.",
+  "Compile a list of our engineering goals for this quarter.",
+  "Summarize my goals for today.",
+];
 
 //Credential form data key constants
 export const CREDENTIAL_NAME = "name";
@@ -135,3 +138,4 @@ export const LOGO_FOLDED_SIZE_PX = 24;
 export const LOGO_UNFOLDED_SIZE_PX = 88;
 
 export const DEFAULT_CONTEXT_TOKENS = 120_000;
+export const MAX_CHUNKS_FED_TO_CHAT = 25;

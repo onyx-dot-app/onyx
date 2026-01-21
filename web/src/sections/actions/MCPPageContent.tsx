@@ -539,7 +539,7 @@ export default function MCPPageContent() {
       {/* Shared overlay that persists across modal transitions */}
       {showSharedOverlay && (
         <div
-          className="fixed inset-0 z-[2000] bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          className="fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
           data-state="open"
           aria-hidden="true"
         />

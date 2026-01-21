@@ -49,8 +49,8 @@ export function ClientLayout({
             enableCloudSS={enableCloud}
             enableEnterpriseSS={enableEnterprise}
           />
-          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto flex flex-col pt-10 pb-4 px-4 md:px-12">
-            <div className="container w-full">{children}</div>
+          <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-y-auto py-10 px-4 md:px-12">
+            {children}
           </div>
         </>
       )}

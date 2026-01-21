@@ -351,7 +351,12 @@ def _patch_openai_responses_chunk_parser() -> None:
         # Handle different event types from responses API
 
         event_type = parsed_chunk.get("type")
+        # Allow enum-like event types
+        if hasattr(event_type, "value"):
+            event_type = getattr(event_type, "value")
         verbose_logger.debug(f"Chat provider: Processing event type: {event_type}")
+
+        output_index = parsed_chunk.get("output_index", 0) or 0
 
         if event_type == "response.created":
             # Initial response creation event
@@ -368,7 +373,7 @@ def _patch_openai_responses_chunk_parser() -> None:
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=output_item.get("call_id"),
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=output_item.get("name", None),
@@ -393,7 +398,7 @@ def _patch_openai_responses_chunk_parser() -> None:
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=None,
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=None, arguments=content_part
@@ -412,19 +417,21 @@ def _patch_openai_responses_chunk_parser() -> None:
             # New output item added
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
+                # Don't set is_finished=True here - for parallel tool calls,
+                # more tool calls may follow. Wait for response.completed.
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
                         id=output_item.get("call_id"),
-                        index=0,
+                        index=output_index,
                         type="function",
                         function=ChatCompletionToolCallFunctionChunk(
                             name=parsed_chunk.get("name", None),
                             arguments="",  # responses API sends everything again, we don't
                         ),
                     ),
-                    is_finished=True,
-                    finish_reason="tool_calls",
+                    is_finished=False,
+                    finish_reason="",
                     usage=None,
                 )
             elif output_item.get("type") == "message":
@@ -482,6 +489,24 @@ def _patch_openai_responses_chunk_parser() -> None:
                     ]
                 )
 
+        elif event_type == "response.completed":
+            # Final event signaling all output items (including parallel tool calls) are done
+            response_data = parsed_chunk.get("response", {})
+            # Determine finish reason based on response content
+            finish_reason = "stop"
+            if response_data.get("output"):
+                for item in response_data["output"]:
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        finish_reason = "tool_calls"
+                        break
+            return GenericStreamingChunk(
+                text="",
+                tool_use=None,
+                is_finished=True,
+                finish_reason=finish_reason,
+                usage=None,
+            )
+
         else:
             pass
 
@@ -497,7 +522,7 @@ def _patch_openai_responses_chunk_parser() -> None:
     _patched_openai_responses_chunk_parser.__name__ = (
         "_patched_openai_responses_chunk_parser"
     )
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore[method-assign]
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore
 
 
 def _patch_openai_responses_transform_response() -> None:
@@ -606,56 +631,6 @@ def _patch_openai_responses_transform_response() -> None:
     LiteLLMResponsesTransformationHandler.transform_response = _patched_transform_response  # type: ignore[method-assign]
 
 
-def _patch_openai_responses_tool_content_type() -> None:
-    """
-    Patches LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text
-    to use 'input_text' type for tool messages instead of 'output_text'.
-
-    The OpenAI Responses API only accepts 'input_text', 'input_image', and 'input_file'
-    in the function_call_output.output array. The default litellm implementation
-    incorrectly uses 'output_text' for tool messages, causing 400 Bad Request errors.
-
-    See: https://github.com/BerriAI/litellm/issues/17507
-
-    This should be removed once litellm releases a fix for this issue.
-    """
-    original_method = (
-        LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text
-    )
-
-    if (
-        getattr(
-            original_method,
-            "__name__",
-            "",
-        )
-        == "_patched_convert_content_str_to_input_text"
-    ):
-        return
-
-    def _patched_convert_content_str_to_input_text(
-        self: Any, content: str, role: str
-    ) -> Dict[str, Any]:
-        """
-        Convert string content to the appropriate Responses API format.
-
-        For user, system, and tool messages, use 'input_text' type.
-        For assistant messages, use 'output_text' type.
-
-        Tool messages go into function_call_output.output, which only accepts
-        'input_text', 'input_image', and 'input_file' types.
-        """
-        if role in ("user", "system", "tool"):
-            return {"type": "input_text", "text": content}
-        else:
-            return {"type": "output_text", "text": content}
-
-    _patched_convert_content_str_to_input_text.__name__ = (
-        "_patched_convert_content_str_to_input_text"
-    )
-    LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text = _patched_convert_content_str_to_input_text  # type: ignore[method-assign]
-
-
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -671,7 +646,6 @@ def apply_monkey_patches() -> None:
     _patch_ollama_chunk_parser()
     _patch_openai_responses_chunk_parser()
     _patch_openai_responses_transform_response()
-    _patch_openai_responses_tool_content_type()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:

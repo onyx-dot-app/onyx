@@ -5,7 +5,6 @@ import {
 } from "@/components/search/results/Citation";
 import { LoadedOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import React, { memo, JSX } from "react";
-import isEqual from "lodash/isEqual";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
@@ -185,19 +184,21 @@ export const MemoizedLink = memo(
   }
 );
 
-export const MemoizedParagraph = memo(
-  function MemoizedParagraph({ className, children }: any) {
-    return (
-      <Text mainContentBody className={className}>
-        {children}
-      </Text>
-    );
-  },
-  (prevProps, nextProps) => {
-    const areEqual = isEqual(prevProps.children, nextProps.children);
-    return areEqual;
-  }
-);
+interface MemoizedParagraphProps {
+  className?: string;
+  children?: React.ReactNode;
+}
+
+export const MemoizedParagraph = memo(function MemoizedParagraph({
+  className,
+  children,
+}: MemoizedParagraphProps) {
+  return (
+    <Text as="p" mainContentBody className={className}>
+      {children}
+    </Text>
+  );
+});
 
 MemoizedAnchor.displayName = "MemoizedAnchor";
 MemoizedLink.displayName = "MemoizedLink";

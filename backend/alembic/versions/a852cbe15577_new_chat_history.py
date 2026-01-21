@@ -280,6 +280,14 @@ def downgrade() -> None:
     op.add_column(
         "chat_message", sa.Column("alternate_assistant_id", sa.Integer(), nullable=True)
     )
+    # Recreate the FK constraint that was implicitly dropped when the column was dropped
+    op.create_foreign_key(
+        "fk_chat_message_persona",
+        "chat_message",
+        "persona",
+        ["alternate_assistant_id"],
+        ["id"],
+    )
     op.add_column(
         "chat_message", sa.Column("rephrased_query", sa.Text(), nullable=True)
     )

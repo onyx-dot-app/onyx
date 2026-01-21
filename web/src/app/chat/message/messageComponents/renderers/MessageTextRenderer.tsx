@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
+import Text from "@/refresh-components/texts/Text";
 
-import { ChatPacket, PacketType } from "../../../services/streamingModels";
+import {
+  ChatPacket,
+  PacketType,
+  StopReason,
+} from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { isFinalAnswerComplete } from "../../../services/packetUtils";
 import { useMarkdownRenderer } from "../markdownUtils";
@@ -19,6 +24,7 @@ export const MessageTextRenderer: MessageRenderer<
   renderType,
   animate,
   stopPacketSeen,
+  stopReason,
   children,
 }) => {
   // If we're animating and the final answer is already complete, show more packets initially
@@ -115,12 +121,21 @@ export const MessageTextRenderer: MessageRenderer<
     "font-main-content-body"
   );
 
+  const wasUserCancelled = stopReason === StopReason.USER_CANCELLED;
+
   return children({
     icon: null,
     status: null,
     content:
       content.length > 0 || packets.length > 0 ? (
-        renderedContent
+        <>
+          {renderedContent}
+          {wasUserCancelled && (
+            <Text as="p" secondaryBody text04>
+              User has stopped generation
+            </Text>
+          )}
+        </>
       ) : (
         <BlinkingDot addMargin />
       ),

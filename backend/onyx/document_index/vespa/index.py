@@ -2,7 +2,6 @@ import concurrent.futures
 import io
 import logging
 import os
-import random
 import re
 import time
 import urllib
@@ -44,21 +43,15 @@ from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
+from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
-from onyx.document_index.vespa.chunk_retrieval import (
-    parallel_visit_api_retrieval,
-)
 from onyx.document_index.vespa.chunk_retrieval import query_vespa
 from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
 from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa.shared_utils.utils import (
-    replace_invalid_doc_id_characters,
-)
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
@@ -78,6 +71,7 @@ from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
@@ -486,12 +480,24 @@ class VespaIndex(DocumentIndex):
         indexing_metadata = IndexingMetadata(
             doc_id_to_chunk_cnt_diff=doc_id_to_chunk_cnt_diff,
         )
+        tenant_state = TenantState(
+            tenant_id=get_current_tenant_id(),
+            multitenant=MULTI_TENANT,
+        )
+        if tenant_state.multitenant != self.multitenant:
+            raise ValueError(
+                f"Bug: Multitenant mismatch. Expected {tenant_state.multitenant}, got {self.multitenant}."
+            )
+        if (
+            tenant_state.multitenant
+            and tenant_state.tenant_id != index_batch_params.tenant_id
+        ):
+            raise ValueError(
+                f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {index_batch_params.tenant_id}."
+            )
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
-            tenant_state=TenantState(
-                tenant_id=index_batch_params.tenant_id,
-                multitenant=self.multitenant,
-            ),
+            tenant_state=tenant_state,
             large_chunks_enabled=self.large_chunks_enabled,
             httpx_client=self.httpx_client,
         )
@@ -662,18 +668,23 @@ class VespaIndex(DocumentIndex):
             raise ValueError(
                 f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
             )
-        # TODO(andrei): Very temporary, reinstate this soon.
-        # if fields is not None and fields.document_id is not None:
-        #     raise ValueError(
-        #         "The new vector db interface does not support updating the document ID field."
-        #     )
+
+        tenant_state = TenantState(
+            tenant_id=get_current_tenant_id(),
+            multitenant=MULTI_TENANT,
+        )
+        if tenant_state.multitenant != self.multitenant:
+            raise ValueError(
+                f"Bug: Multitenant mismatch. Expected {tenant_state.multitenant}, got {self.multitenant}."
+            )
+        if tenant_state.multitenant and tenant_state.tenant_id != tenant_id:
+            raise ValueError(
+                f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {tenant_id}."
+            )
 
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
-            tenant_state=TenantState(
-                tenant_id=tenant_id,
-                multitenant=self.multitenant,
-            ),
+            tenant_state=tenant_state,
             large_chunks_enabled=self.large_chunks_enabled,
             httpx_client=self.httpx_client,
         )
@@ -693,12 +704,7 @@ class VespaIndex(DocumentIndex):
             project_ids=project_ids,
         )
 
-        old_doc_id_to_new_doc_id: dict[str, str] = dict()
-        if fields is not None and fields.document_id is not None:
-            old_doc_id_to_new_doc_id[doc_id] = fields.document_id
-        vespa_document_index.update(
-            [update_request], old_doc_id_to_new_doc_id=old_doc_id_to_new_doc_id
-        )
+        vespa_document_index.update([update_request])
 
     def delete_single(
         self,
@@ -707,12 +713,21 @@ class VespaIndex(DocumentIndex):
         tenant_id: str,
         chunk_count: int | None,
     ) -> int:
+        tenant_state = TenantState(
+            tenant_id=get_current_tenant_id(),
+            multitenant=MULTI_TENANT,
+        )
+        if tenant_state.multitenant != self.multitenant:
+            raise ValueError(
+                f"Bug: Multitenant mismatch. Expected {tenant_state.multitenant}, got {self.multitenant}."
+            )
+        if tenant_state.multitenant and tenant_state.tenant_id != tenant_id:
+            raise ValueError(
+                f"Bug: Tenant ID mismatch. Expected {tenant_state.tenant_id}, got {tenant_id}."
+            )
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
-            tenant_state=TenantState(
-                tenant_id=tenant_id,
-                multitenant=self.multitenant,
-            ),
+            tenant_state=tenant_state,
             large_chunks_enabled=self.large_chunks_enabled,
             httpx_client=self.httpx_client,
         )
@@ -725,34 +740,29 @@ class VespaIndex(DocumentIndex):
         batch_retrieval: bool = False,
         get_large_chunks: bool = False,
     ) -> list[InferenceChunk]:
-        # make sure to use the vespa-afied document IDs
-        chunk_requests = [
-            VespaChunkRequest(
-                document_id=replace_invalid_doc_id_characters(
-                    chunk_request.document_id
-                ),
-                min_chunk_ind=chunk_request.min_chunk_ind,
-                max_chunk_ind=chunk_request.max_chunk_ind,
-            )
-            for chunk_request in chunk_requests
-        ]
-
-        if batch_retrieval:
-            return cleanup_chunks(
-                batch_search_api_retrieval(
-                    index_name=self.index_name,
-                    chunk_requests=chunk_requests,
-                    filters=filters,
-                    get_large_chunks=get_large_chunks,
+        tenant_state = TenantState(
+            tenant_id=get_current_tenant_id(),
+            multitenant=MULTI_TENANT,
+        )
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=tenant_state,
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        generic_chunk_requests: list[DocumentSectionRequest] = []
+        for chunk_request in chunk_requests:
+            generic_chunk_requests.append(
+                DocumentSectionRequest(
+                    document_id=chunk_request.document_id,
+                    min_chunk_ind=chunk_request.min_chunk_ind,
+                    max_chunk_ind=chunk_request.max_chunk_ind,
                 )
             )
-        return cleanup_chunks(
-            parallel_visit_api_retrieval(
-                index_name=self.index_name,
-                chunk_requests=chunk_requests,
-                filters=filters,
-                get_large_chunks=get_large_chunks,
-            )
+        return vespa_document_index.id_based_retrieval(
+            chunk_requests=generic_chunk_requests,
+            filters=filters,
+            batch_retrieval=batch_retrieval,
         )
 
     @log_function_time(print_only=True, debug_only=True)
@@ -769,13 +779,13 @@ class VespaIndex(DocumentIndex):
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
-        tenant_id = filters.tenant_id if filters.tenant_id is not None else ""
+        tenant_state = TenantState(
+            tenant_id=get_current_tenant_id(),
+            multitenant=MULTI_TENANT,
+        )
         vespa_document_index = VespaDocumentIndex(
             index_name=self.index_name,
-            tenant_state=TenantState(
-                tenant_id=tenant_id,
-                multitenant=self.multitenant,
-            ),
+            tenant_state=tenant_state,
             large_chunks_enabled=self.large_chunks_enabled,
             httpx_client=self.httpx_client,
         )
@@ -1042,21 +1052,20 @@ class VespaIndex(DocumentIndex):
         This method is currently used for random chunk retrieval in the context of
         assistant starter message creation (passed as sample context for usage by the assistant).
         """
-        vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
-
-        yql = YQL_BASE.format(index_name=self.index_name) + vespa_where_clauses
-
-        random_seed = random.randint(0, 1000000)
-
-        params: dict[str, str | int | float] = {
-            "yql": yql,
-            "hits": num_to_retrieve,
-            "timeout": VESPA_TIMEOUT,
-            "ranking.profile": "random_",
-            "ranking.properties.random.seed": random_seed,
-        }
-
-        return cleanup_chunks(query_vespa(params))
+        tenant_state = TenantState(
+            tenant_id=get_current_tenant_id(),
+            multitenant=MULTI_TENANT,
+        )
+        vespa_document_index = VespaDocumentIndex(
+            index_name=self.index_name,
+            tenant_state=tenant_state,
+            large_chunks_enabled=self.large_chunks_enabled,
+            httpx_client=self.httpx_client,
+        )
+        return vespa_document_index.random_retrieval(
+            filters=filters,
+            num_to_retrieve=num_to_retrieve,
+        )
 
 
 class _VespaDeleteRequest:

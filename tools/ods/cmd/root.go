@@ -45,10 +45,11 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewCherryPickCommand())
 	cmd.AddCommand(NewDBCommand())
 	cmd.AddCommand(NewOpenAPICommand())
+	cmd.AddCommand(NewRunCICommand())
 
 	return cmd
 }
 
 func rootCmd(cmd *cobra.Command, args []string) {
-	log.Debug("Debug log in rootCmd")
+	_ = cmd.Help()
 }

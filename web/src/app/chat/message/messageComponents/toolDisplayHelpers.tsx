@@ -18,7 +18,7 @@ import {
   PacketType,
   SearchToolPacket,
 } from "@/app/chat/services/streamingModels";
-import { constructCurrentSearchState } from "./renderers/SearchToolRendererV2";
+import { constructCurrentSearchState } from "./renderers/SearchToolRenderer";
 
 /**
  * Check if a packet group contains an ERROR packet (tool failed)

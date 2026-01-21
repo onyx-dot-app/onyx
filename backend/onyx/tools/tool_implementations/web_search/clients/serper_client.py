@@ -22,6 +22,9 @@ logger = setup_logger()
 SERPER_SEARCH_URL = "https://google.serper.dev/search"
 SERPER_CONTENTS_URL = "https://scrape.serper.dev"
 
+# 1 minute timeout for Serper API requests to prevent indefinite hangs
+SERPER_REQUEST_TIMEOUT_SECONDS = 60
+
 
 class SerperClient(WebSearchProvider, WebContentProvider):
     def __init__(self, api_key: str, num_results: int = 10) -> None:
@@ -42,23 +45,34 @@ class SerperClient(WebSearchProvider, WebContentProvider):
             SERPER_SEARCH_URL,
             headers=self.headers,
             data=json.dumps(payload),
+            timeout=SERPER_REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()
 
         results = response.json()
-        organic_results = results["organic"]
+        organic_results = results.get("organic") or []
 
-        return [
-            WebSearchResult(
-                title=result["title"],
-                link=result["link"],
-                snippet=result["snippet"],
-                author=None,
-                published_date=None,
+        validated_results: list[WebSearchResult] = []
+        for result in organic_results:
+            link = (result.get("link") or "").strip()
+            if not link:
+                continue
+
+            title = (result.get("title") or "").strip()
+            snippet = (result.get("snippet") or "").strip()
+
+            validated_results.append(
+                WebSearchResult(
+                    title=title,
+                    link=link,
+                    snippet=snippet,
+                    author=None,
+                    published_date=None,
+                )
             )
-            for result in organic_results
-        ]
+
+        return validated_results
 
     def test_connection(self) -> dict[str, str]:
         try:
@@ -120,6 +134,7 @@ class SerperClient(WebSearchProvider, WebContentProvider):
             SERPER_CONTENTS_URL,
             headers=self.headers,
             data=json.dumps(payload),
+            timeout=SERPER_REQUEST_TIMEOUT_SECONDS,
         )
 
         # 400 returned when serper cannot scrape

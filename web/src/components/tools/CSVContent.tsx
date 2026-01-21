@@ -114,7 +114,12 @@ const CsvContent: React.FC<ContentComponentProps> = ({
           <TableRow className="bg-background-tint-01">
             {headers.map((header, index) => (
               <TableHead key={index}>
-                <Text className="line-clamp-2 font-medium" text03 mainUiBody>
+                <Text
+                  as="p"
+                  className="line-clamp-2 font-medium"
+                  text03
+                  mainUiBody
+                >
                   {header}
                 </Text>
               </TableHead>
@@ -144,12 +149,12 @@ const CsvContent: React.FC<ContentComponentProps> = ({
               <TableCell colSpan={headers.length} className="text-center py-8">
                 <div className="flex flex-col items-center justify-center space-y-2">
                   <SvgAlertCircle className="w-8 h-8 stroke-error" />
-                  <Text text03 mainUiBody>
+                  <Text as="p" text03 mainUiBody>
                     {headers.length === 0
                       ? "Error loading CSV"
                       : "No data available"}
                   </Text>
-                  <Text text04 mainUiBody>
+                  <Text as="p" text04 mainUiBody>
                     {headers.length === 0
                       ? "The CSV file may be too large or couldn't be loaded properly."
                       : ""}

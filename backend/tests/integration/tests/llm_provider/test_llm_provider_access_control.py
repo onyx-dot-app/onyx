@@ -15,6 +15,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -39,7 +40,7 @@ def _create_llm_provider(
 ) -> LLMProviderModel:
     provider = LLMProviderModel(
         name=name,
-        provider="openai",
+        provider=LlmProviderNames.OPENAI,
         api_key=None,
         api_base=None,
         api_version=None,

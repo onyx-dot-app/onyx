@@ -56,15 +56,15 @@ export default function Tag({
       </div>
 
       {/* Count display - only shows on hover/active */}
-      <div
+      <Text
         className={cn(
-          "transition-all duration-200 ease-in-out overflow-hidden",
+          "inline-flex transition-all duration-200 ease-in-out overflow-hidden",
           "group-hover:max-w-8 group-hover:opacity-100",
           active ? "max-w-[10rem] opacity-100" : "max-w-0 opacity-0"
         )}
       >
-        <Text>{children.length}</Text>
-      </div>
+        {children.length}
+      </Text>
 
       <Text>{label}</Text>
     </button>

@@ -182,6 +182,10 @@ def run_functions_tuples_in_parallel(
     functions_with_args: Sequence[tuple[CallableProtocol, tuple[Any, ...]]],
     allow_failures: bool = False,
     max_workers: int | None = None,
+    timeout: float | None = None,
+    timeout_callback: (
+        Callable[[int, CallableProtocol, tuple[Any, ...]], Any] | None
+    ) = None,
 ) -> list[Any]:
     """
     Executes multiple functions in parallel and returns a list of the results for each function.
@@ -192,6 +196,16 @@ def run_functions_tuples_in_parallel(
         functions_with_args: List of tuples each containing the function callable and a tuple of arguments.
         allow_failures: if set to True, then the function result will just be None
         max_workers: Max number of worker threads
+        timeout: Optional wall-clock timeout in seconds. If any function hasn't completed
+            within this time, it will be considered timed out. When timeout is set, threads
+            that exceed the timeout will continue running in the background but their results
+            will not be awaited. IMPORTANT: because the thread continues to run in the background,
+            it can continue to consume resources and updated shared state objects even though the caller
+            has moved on.
+        timeout_callback: Optional callback for handling timeouts. Called with (index, func, args)
+            for each timed-out function. If provided, its return value is used as the result.
+            If not provided and allow_failures is False, TimeoutError is raised.
+            If not provided and allow_failures is True, None is returned for timed-out functions.
 
     Returns:
         list: A list of results from each function, in the same order as the input functions.
@@ -205,8 +219,10 @@ def run_functions_tuples_in_parallel(
     if workers <= 0:
         return []
 
-    results = []
-    with ThreadPoolExecutor(max_workers=workers) as executor:
+    results: list[tuple[int, Any]] = []
+    executor = ThreadPoolExecutor(max_workers=workers)
+
+    try:
         # The primary reason for propagating contextvars is to allow acquiring a db session
         # that respects tenant id. Context.run is expected to be low-overhead, but if we later
         # find that it is increasing latency we can make using it optional.
@@ -215,16 +231,57 @@ def run_functions_tuples_in_parallel(
             for i, (func, args) in enumerate(functions_with_args)
         }
 
-        for future in as_completed(future_to_index):
-            index = future_to_index[future]
-            try:
-                results.append((index, future.result()))
-            except Exception as e:
-                logger.exception(f"Function at index {index} failed due to {e}")
-                results.append((index, None))
+        if timeout is not None:
+            # Wait for completion or timeout
+            done, not_done = wait(future_to_index.keys(), timeout=timeout)
 
-                if not allow_failures:
-                    raise
+            # Process completed futures
+            for future in done:
+                index = future_to_index[future]
+                try:
+                    results.append((index, future.result()))
+                except Exception as e:
+                    logger.exception(f"Function at index {index} failed due to {e}")
+                    results.append((index, None))
+                    if not allow_failures:
+                        raise
+
+            # Process timed-out futures
+            for future in not_done:
+                index = future_to_index[future]
+                func, args = functions_with_args[index]
+                logger.warning(
+                    f"Function at index {index} timed out after {timeout} seconds"
+                )
+
+                if timeout_callback:
+                    timeout_result = timeout_callback(index, func, args)
+                    results.append((index, timeout_result))
+                else:
+                    results.append((index, None))
+                    if not allow_failures:
+                        raise TimeoutError(
+                            f"Function at index {index} timed out after {timeout} seconds"
+                        )
+
+                # Attempt to cancel (only effective if not yet started)
+                future.cancel()
+        else:
+            for future in as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    results.append((index, future.result()))
+                except Exception as e:
+                    logger.exception(f"Function at index {index} failed due to {e}")
+                    results.append((index, None))
+
+                    if not allow_failures:
+                        raise
+    finally:
+        # When timeout is used, don't wait for timed-out threads to complete
+        # (they will continue running in the background)
+        # When no timeout, wait for all threads to complete (original behavior)
+        executor.shutdown(wait=(timeout is None))
 
     results.sort(key=lambda x: x[0])
     return [result for index, result in results]

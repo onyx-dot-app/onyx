@@ -18,12 +18,12 @@ export interface BillingInformation {
 
 export default function page() {
   return (
-    <div className="container max-w-4xl">
+    <>
       <AdminPageTitle
         title="Billing Information"
         icon={<MdOutlineCreditCard size={32} className="my-auto" />}
       />
       <BillingInformationPage />
-    </div>
+    </>
   );
 }

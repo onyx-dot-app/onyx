@@ -39,7 +39,9 @@ config = context.config
 if config.config_file_name is not None and config.attributes.get(
     "configure_logger", True
 ):
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False prevents breaking pytest's caplog fixture
+    # See: https://pytest-alembic.readthedocs.io/en/latest/setup.html#caplog-issues
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = [Base.metadata, ResultModelBase.metadata]
 
@@ -223,7 +225,6 @@ def do_run_migrations(
 ) -> None:
     if create_schema:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
-        connection.execute(text("COMMIT"))
 
     connection.execute(text(f'SET search_path TO "{schema_name}"'))
 
@@ -307,6 +308,7 @@ async def run_async_migrations() -> None:
                         schema_name=schema,
                         create_schema=create_schema,
                     )
+                    await connection.commit()
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
                 if not continue_on_error:
@@ -344,6 +346,7 @@ async def run_async_migrations() -> None:
                         schema_name=schema,
                         create_schema=create_schema,
                     )
+                    await connection.commit()
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
                 if not continue_on_error:
@@ -460,8 +463,49 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    logger.info("run_migrations_online starting.")
-    asyncio.run(run_async_migrations())
+    """Run migrations in 'online' mode.
+
+    Supports pytest-alembic by checking for a pre-configured connection
+    in context.config.attributes["connection"]. If present, uses that
+    connection/engine directly instead of creating a new async engine.
+    """
+    # Check if pytest-alembic is providing a connection/engine
+    connectable = context.config.attributes.get("connection", None)
+
+    if connectable is not None:
+        # pytest-alembic is providing an engine - use it directly
+        logger.info("run_migrations_online starting (pytest-alembic mode).")
+
+        # For pytest-alembic, we use the default schema (public)
+        schema_name = context.config.attributes.get(
+            "schema_name", POSTGRES_DEFAULT_SCHEMA
+        )
+
+        # pytest-alembic passes an Engine, we need to get a connection from it
+        with connectable.connect() as connection:
+            # Set search path for the schema
+            connection.execute(text(f'SET search_path TO "{schema_name}"'))
+
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,  # type: ignore
+                include_object=include_object,
+                version_table_schema=schema_name,
+                include_schemas=True,
+                compare_type=True,
+                compare_server_default=True,
+                script_location=config.get_main_option("script_location"),
+            )
+
+            with context.begin_transaction():
+                context.run_migrations()
+
+            # Commit the transaction to ensure changes are visible to next migration
+            connection.commit()
+    else:
+        # Normal operation - use async migrations
+        logger.info("run_migrations_online starting.")
+        asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():

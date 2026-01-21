@@ -125,7 +125,7 @@ export default function IndexAttemptErrorsModal({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content large>
+      <Modal.Content width="lg" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
           title="Indexing Errors"
@@ -135,15 +135,16 @@ export default function IndexAttemptErrorsModal({
               : undefined
           }
           onClose={onClose}
+          height="fit"
         />
-        <Modal.Body className="flex flex-col gap-4 min-h-0">
+        <Modal.Body>
           {!isResolvingErrors && (
             <div className="flex flex-col gap-2 flex-shrink-0">
-              <Text>
+              <Text as="p">
                 Below are the errors encountered during indexing. Each row
                 represents a failed document or entity.
               </Text>
-              <Text>
+              <Text as="p">
                 Click the button below to kick off a full re-index to try and
                 resolve these errors. This full re-index may take much longer
                 than a normal update.

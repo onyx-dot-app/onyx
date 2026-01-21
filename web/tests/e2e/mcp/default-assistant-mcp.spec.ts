@@ -6,7 +6,6 @@ import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
-const APP_BASE_URL = "http://localhost:3000";
 const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 
 async function scrollToBottom(page: Page): Promise<void> {
@@ -71,7 +70,7 @@ test.describe("Default Assistant MCP Integration", () => {
     }
 
     // Create a basic user for testing
-    basicUserEmail = `pw-basic-user-${Date.now()}@test.com`;
+    basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
     await adminClient.registerUser(basicUserEmail, basicUserPassword);
 
@@ -106,7 +105,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Starting with server name: ${serverName}`);
 
     // Navigate to MCP actions page
-    await page.goto(`${APP_BASE_URL}/admin/actions/mcp`);
+    await page.goto("/admin/actions/mcp");
     await page.waitForURL("**/admin/actions/mcp**");
     console.log(`[test] Navigated to MCP actions page`);
 
@@ -247,7 +246,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as admin for default assistant config`);
 
     // Navigate to default assistant page
-    await page.goto(`${APP_BASE_URL}/admin/configuration/default-assistant`);
+    await page.goto("/admin/configuration/default-assistant");
     await page.waitForURL("**/admin/configuration/default-assistant**");
     console.log(`[test] Navigated to default assistant page`);
 
@@ -319,7 +318,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
     // Navigate to chat (which uses default assistant for new users)
-    await page.goto(`${APP_BASE_URL}/chat`);
+    await page.goto("/chat");
     await page.waitForURL("**/chat**");
     console.log(`[test] Navigated to chat page`);
 
@@ -424,7 +423,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Testing tool modification`);
 
     // Navigate to default assistant page
-    await page.goto(`${APP_BASE_URL}/admin/configuration/default-assistant`);
+    await page.goto("/admin/configuration/default-assistant");
     await page.waitForURL("**/admin/configuration/default-assistant**");
 
     // Scroll to actions section
@@ -512,7 +511,7 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    await page.goto(`${APP_BASE_URL}/admin/configuration/default-assistant`);
+    await page.goto("/admin/configuration/default-assistant");
     await page.waitForURL("**/admin/configuration/default-assistant**");
 
     // Find the instructions textarea
@@ -560,7 +559,7 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as basic user to verify tool visibility`);
 
     // Navigate to chat
-    await page.goto(`${APP_BASE_URL}/chat`);
+    await page.goto("/chat");
     await page.waitForURL("**/chat**");
     console.log(`[test] Navigated to chat`);
 

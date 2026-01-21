@@ -1,3 +1,12 @@
+"use client";
+
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  RefObject,
+} from "react";
 import {
   Packet,
   PacketType,
@@ -6,6 +15,8 @@ import {
   StreamingCitation,
   FetchToolDocuments,
   TopLevelBranching,
+  StopReason,
+  Stop,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { FullChatState } from "@/app/chat/message/messageComponents/interfaces";
@@ -13,7 +24,6 @@ import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
-import { useRef, useState, useEffect, useCallback, RefObject } from "react";
 import {
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -28,11 +38,13 @@ import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import {
   getTextContent,
+  isActualToolCallPacket,
   isDisplayPacket,
   isFinalAnswerComing,
   isStreamingComplete,
   isToolPacket,
 } from "@/app/chat/services/packetUtils";
+import { removeThinkingTokens } from "@/app/chat/services/thinkingTokens";
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
@@ -42,14 +54,23 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
-import { LlmManager } from "@/lib/hooks";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { Message } from "@/app/chat/interfaces";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
-} from "../../components/modal/FeedbackModal";
+} from "@/sections/modals/FeedbackModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useFeedbackController } from "../../hooks/useFeedbackController";
+import useFeedbackController from "@/hooks/useFeedbackController";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+import Text from "@/refresh-components/texts/Text";
+
+// Type for the regeneration factory function passed from ChatUI
+export type RegenerationFactory = (regenerationRequest: {
+  messageId: number;
+  parentMessage: Message;
+  forceSearch?: boolean;
+}) => (modelOverride: LlmDescriptor) => Promise<void>;
 
 export interface AIMessageProps {
   rawPackets: Packet[];
@@ -60,9 +81,39 @@ export interface AIMessageProps {
   llmManager: LlmManager | null;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
+  // Stable regeneration callback - takes (parentMessage) and returns a function that takes (modelOverride)
+  onRegenerate?: RegenerationFactory;
+  // Parent message needed to construct regeneration request
+  parentMessage?: Message | null;
 }
 
-export default function AIMessage({
+// TODO: Consider more robust comparisons:
+// - `rawPackets.length` assumes packets are append-only. Could compare the last
+//   packet or use a shallow comparison if packets can be modified in place.
+// - `chatState.docs`, `chatState.citations`, and `otherMessagesCanSwitchTo` use
+//   reference equality. Shallow array/object comparison would be more robust if
+//   these are recreated with the same values.
+function arePropsEqual(prev: AIMessageProps, next: AIMessageProps): boolean {
+  return (
+    prev.nodeId === next.nodeId &&
+    prev.messageId === next.messageId &&
+    prev.currentFeedback === next.currentFeedback &&
+    prev.rawPackets.length === next.rawPackets.length &&
+    prev.chatState.assistant?.id === next.chatState.assistant?.id &&
+    prev.chatState.docs === next.chatState.docs &&
+    prev.chatState.citations === next.chatState.citations &&
+    prev.chatState.overriddenModel === next.chatState.overriddenModel &&
+    prev.chatState.researchType === next.chatState.researchType &&
+    prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
+    prev.onRegenerate === next.onRegenerate &&
+    prev.parentMessage?.messageId === next.parentMessage?.messageId &&
+    prev.llmManager?.isLoadingProviders === next.llmManager?.isLoadingProviders
+    // Skip: chatState.regenerate, chatState.setPresentingDocument,
+    //       most of llmManager, onMessageSelection (function/object props)
+  );
+}
+
+const AIMessage = React.memo(function AIMessage({
   rawPackets,
   chatState,
   nodeId,
@@ -71,8 +122,11 @@ export default function AIMessage({
   llmManager,
   otherMessagesCanSwitchTo,
   onMessageSelection,
+  onRegenerate,
+  parentMessage,
 }: AIMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
+  const finalAnswerRef = useRef<HTMLDivElement>(null);
   const { popup, setPopup } = usePopup();
   const { handleFeedbackChange } = useFeedbackController({ setPopup });
 
@@ -115,21 +169,13 @@ export default function AIMessage({
       }
 
       // Clicking like (will automatically clear dislike if it was active).
-      // Check if we need modal for positive feedback.
+      // Open modal for positive feedback
       else if (clickedFeedback === "like") {
-        const predefinedOptions =
-          process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
-        if (predefinedOptions && predefinedOptions.trim()) {
-          // Open modal for positive feedback
-          setFeedbackModalProps({
-            feedbackType: "like",
-            messageId,
-          });
-          modal.toggle(true);
-        } else {
-          // No modal needed - just submit like (this replaces any existing feedback)
-          await handleFeedbackChange(messageId, "like");
-        }
+        setFeedbackModalProps({
+          feedbackType: "like",
+          messageId,
+        });
+        modal.toggle(true);
       }
 
       // Clicking dislike (will automatically clear like if it was active).
@@ -169,6 +215,12 @@ export default function AIMessage({
     stopPacketSeenRef.current = value;
   };
 
+  // Track the reason for stopping (e.g., user cancelled)
+  const [stopReason, setStopReason] = useState<StopReason | undefined>(
+    undefined
+  );
+  const stopReasonRef = useRef<StopReason | undefined>(undefined);
+
   // Incremental packet processing state
   const lastProcessedIndexRef = useRef<number>(0);
   const citationsRef = useRef<StreamingCitation[]>([]);
@@ -202,6 +254,8 @@ export default function AIMessage({
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
     displayCompleteRef.current = isStreamingComplete(rawPackets);
     stopPacketSeenRef.current = isStreamingComplete(rawPackets);
+    stopReasonRef.current = undefined;
+    setStopReason(undefined);
     seenGroupKeysRef.current = new Set();
     groupKeysWithSectionEndRef.current = new Set();
     expectedBranchesRef.current = new Map();
@@ -365,6 +419,10 @@ export default function AIMessage({
 
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
         setStopPacketSeen(true);
+        // Extract and store the stop reason
+        const stopPacket = packet.obj as Stop;
+        setStopReason(stopPacket.stop_reason);
+        stopReasonRef.current = stopPacket.stop_reason;
         // Inject SECTION_END for all group keys that don't have one
         Array.from(seenGroupKeysRef.current).forEach((groupKey) => {
           if (!groupKeysWithSectionEndRef.current.has(groupKey)) {
@@ -374,11 +432,15 @@ export default function AIMessage({
       }
 
       // handles case where we get a Message packet from Claude, and then tool
-      // calling packets
+      // calling packets. We use isActualToolCallPacket instead of isToolPacket
+      // to exclude reasoning packets - reasoning is just the model thinking,
+      // not an actual tool call that would produce new content. If we reset
+      // finalAnswerComing for reasoning packets, the message content won't
+      // display until page refresh.
       if (
         finalAnswerComingRef.current &&
         !stopPacketSeenRef.current &&
-        isToolPacket(packet, false)
+        isActualToolCallPacket(packet)
       ) {
         setFinalAnswerComing(false);
         setDisplayComplete(false);
@@ -449,6 +511,19 @@ export default function AIMessage({
 
   const groupedPackets = groupedPacketsRef.current;
 
+  // Derive tool groups and display groups from grouped packets
+  const toolGroups = groupedPackets.filter(
+    (group) => group.packets[0] && isToolPacket(group.packets[0], false)
+  );
+
+  // Non-tools include messages AND image generation
+  const displayGroups =
+    finalAnswerComing || toolGroups.length === 0
+      ? groupedPackets.filter(
+          (group) => group.packets[0] && isDisplayPacket(group.packets[0])
+        )
+      : [];
+
   // Return a list of rendered message components, one for each ind
   return (
     <>
@@ -461,208 +536,203 @@ export default function AIMessage({
       <div
         // for e2e tests
         data-testid={displayComplete ? "onyx-ai-message" : undefined}
-        className="pb-5 md:pt-5 relative flex"
+        className="flex items-start pb-5 md:pt-5"
       >
-        <div className="mx-auto w-[min(50rem,100%)] px-4 max-w-message-max">
-          <div className="flex items-start">
-            <AgentAvatar agent={chatState.assistant} size={24} />
-            {/* w-full ensures the MultiToolRenderer non-expanded state takes up the full width */}
-            <div className="max-w-message-max break-words pl-4 w-full">
-              <div
-                ref={markdownRef}
-                className="overflow-x-visible max-w-content-max focus:outline-none select-text"
-                onCopy={(e) => {
-                  if (markdownRef.current) {
-                    handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
-                  }
-                }}
-              >
-                {groupedPackets.length === 0 ? (
-                  // Show blinking dot when no content yet but message is generating
-                  <BlinkingDot addMargin />
+        {/* w-full ensures the MultiToolRenderer non-expanded state takes up the full width */}
+        <div className="break-words w-full">
+          <div
+            ref={markdownRef}
+            className="overflow-x-visible focus:outline-none select-text"
+            onCopy={(e) => {
+              if (markdownRef.current) {
+                handleCopy(e, markdownRef as RefObject<HTMLDivElement>);
+              }
+            }}
+          >
+            {groupedPackets.length === 0 ? (
+              // Show blinking dot when no content yet, or stopped message if user cancelled
+              <div className="flex items-center gap-2">
+                <AgentAvatar agent={chatState.assistant} size={24} />
+                {stopReason === StopReason.USER_CANCELLED ? (
+                  <Text as="p" secondaryBody text04>
+                    User has stopped generation
+                  </Text>
                 ) : (
-                  (() => {
-                    // Simple split: tools vs non-tools
-                    const toolGroups = groupedPackets.filter(
-                      (group) =>
-                        group.packets[0] &&
-                        isToolPacket(group.packets[0], false)
-                    );
-
-                    // Non-tools include messages AND image generation
-                    const displayGroups =
-                      finalAnswerComing || toolGroups.length === 0
-                        ? groupedPackets.filter(
-                            (group) =>
-                              group.packets[0] &&
-                              isDisplayPacket(group.packets[0])
-                          )
-                        : [];
-
-                    return (
-                      <>
-                        {/* Render tool groups in multi-tool renderer */}
-                        {toolGroups.length > 0 && (
-                          <MultiToolRenderer
-                            packetGroups={toolGroups}
-                            chatState={effectiveChatState}
-                            isComplete={finalAnswerComing}
-                            isFinalAnswerComing={finalAnswerComingRef.current}
-                            stopPacketSeen={stopPacketSeen}
-                            isStreaming={globalChatState === "streaming"}
-                            onAllToolsDisplayed={() =>
-                              setFinalAnswerComing(true)
-                            }
-                            expectedBranchesPerTurn={
-                              expectedBranchesRef.current
-                            }
-                          />
-                        )}
-
-                        {/* Render all display groups (messages + image generation) in main area */}
-                        {displayGroups.map((displayGroup, index) => (
-                          <RendererComponent
-                            key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-                            packets={displayGroup.packets}
-                            chatState={effectiveChatState}
-                            onComplete={() => {
-                              // if we've reverted to final answer not coming, don't set display complete
-                              // this happens when using claude and a tool calling packet comes after
-                              // some message packets
-                              // Only mark complete on the last display group
-                              if (
-                                finalAnswerComingRef.current &&
-                                index === displayGroups.length - 1
-                              ) {
-                                setDisplayComplete(true);
-                              }
-                            }}
-                            animate={false}
-                            stopPacketSeen={stopPacketSeen}
-                          >
-                            {({ content }) => <div>{content}</div>}
-                          </RendererComponent>
-                        ))}
-                      </>
-                    );
-                  })()
+                  <BlinkingDot addMargin />
                 )}
               </div>
-
-              {/* Feedback buttons - only show when streaming is complete */}
-              {stopPacketSeen && displayComplete && (
-                <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
-                  <TooltipGroup>
-                    <div className="flex items-center gap-x-0.5">
-                      {includeMessageSwitcher && (
-                        <div className="-mx-1">
-                          <MessageSwitcher
-                            currentPage={(currentMessageInd ?? 0) + 1}
-                            totalPages={otherMessagesCanSwitchTo?.length || 0}
-                            handlePrevious={() => {
-                              const prevMessage = getPreviousMessage();
-                              if (
-                                prevMessage !== undefined &&
-                                onMessageSelection
-                              ) {
-                                onMessageSelection(prevMessage);
-                              }
-                            }}
-                            handleNext={() => {
-                              const nextMessage = getNextMessage();
-                              if (
-                                nextMessage !== undefined &&
-                                onMessageSelection
-                              ) {
-                                onMessageSelection(nextMessage);
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <CopyIconButton
-                        getCopyText={() =>
-                          convertMarkdownTablesToTsv(getTextContent(rawPackets))
-                        }
-                        getHtmlContent={() =>
-                          markdownRef.current?.innerHTML || ""
-                        }
-                        tertiary
-                        data-testid="AIMessage/copy-button"
-                      />
-                      <IconButton
-                        icon={SvgThumbsUp}
-                        onClick={() => handleFeedbackClick("like")}
-                        tertiary
-                        transient={isFeedbackTransient("like")}
-                        tooltip={
-                          currentFeedback === "like"
-                            ? "Remove Like"
-                            : "Good Response"
-                        }
-                        data-testid="AIMessage/like-button"
-                      />
-                      <IconButton
-                        icon={SvgThumbsDown}
-                        onClick={() => handleFeedbackClick("dislike")}
-                        tertiary
-                        transient={isFeedbackTransient("dislike")}
-                        tooltip={
-                          currentFeedback === "dislike"
-                            ? "Remove Dislike"
-                            : "Bad Response"
-                        }
-                        data-testid="AIMessage/dislike-button"
-                      />
-
-                      {chatState.regenerate && llmManager && (
-                        <div data-testid="AIMessage/regenerate">
-                          <LLMPopover
-                            llmManager={llmManager}
-                            currentModelName={chatState.overriddenModel}
-                            onSelect={(modelName) => {
-                              const llmDescriptor =
-                                parseLlmDescriptor(modelName);
-                              chatState.regenerate!(llmDescriptor);
-                            }}
-                            folded
-                          />
-                        </div>
-                      )}
-
-                      {nodeId &&
-                        (citations.length > 0 || documentMap.size > 0) && (
-                          <CitedSourcesToggle
-                            citations={citations}
-                            documentMap={documentMap}
-                            nodeId={nodeId}
-                            onToggle={(toggledNodeId) => {
-                              // Toggle sidebar if clicking on the same message
-                              if (
-                                selectedMessageForDocDisplay ===
-                                  toggledNodeId &&
-                                documentSidebarVisible
-                              ) {
-                                updateCurrentDocumentSidebarVisible(false);
-                                updateCurrentSelectedNodeForDocDisplay(null);
-                              } else {
-                                updateCurrentSelectedNodeForDocDisplay(
-                                  toggledNodeId
-                                );
-                                updateCurrentDocumentSidebarVisible(true);
-                              }
-                            }}
-                          />
-                        )}
-                    </div>
-                  </TooltipGroup>
+            ) : (
+              <>
+                <div className="flex flex-wrap pb-4">
+                  <AgentAvatar agent={chatState.assistant} size={24} />
+                  {/* Render tool groups in multi-tool renderer */}
+                  {toolGroups.length > 0 && (
+                    <MultiToolRenderer
+                      packetGroups={toolGroups}
+                      chatState={effectiveChatState}
+                      isComplete={finalAnswerComing}
+                      isFinalAnswerComing={finalAnswerComingRef.current}
+                      stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
+                      isStreaming={globalChatState === "streaming"}
+                      onAllToolsDisplayed={() => setFinalAnswerComing(true)}
+                      expectedBranchesPerTurn={expectedBranchesRef.current}
+                    />
+                  )}
                 </div>
-              )}
-            </div>
+
+                {/* Render all display groups (messages + image generation) in main area */}
+                <div ref={finalAnswerRef}>
+                  {displayGroups.map((displayGroup, index) => (
+                    <RendererComponent
+                      key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+                      packets={displayGroup.packets}
+                      chatState={effectiveChatState}
+                      onComplete={() => {
+                        // if we've reverted to final answer not coming, don't set display complete
+                        // this happens when using claude and a tool calling packet comes after
+                        // some message packets
+                        // Only mark complete on the last display group
+                        if (
+                          finalAnswerComingRef.current &&
+                          index === displayGroups.length - 1
+                        ) {
+                          setDisplayComplete(true);
+                        }
+                      }}
+                      animate={false}
+                      stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
+                    >
+                      {({ content }) => <div>{content}</div>}
+                    </RendererComponent>
+                  ))}
+                  {/* Show stopped message when user cancelled and no display content */}
+                  {displayGroups.length === 0 &&
+                    stopReason === StopReason.USER_CANCELLED && (
+                      <Text as="p" secondaryBody text04>
+                        User has stopped generation
+                      </Text>
+                    )}
+                </div>
+              </>
+            )}
           </div>
+
+          {/* Feedback buttons - only show when streaming is complete */}
+          {stopPacketSeen && displayComplete && (
+            <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
+              <TooltipGroup>
+                <div className="flex items-center gap-x-0.5">
+                  {includeMessageSwitcher && (
+                    <div className="-mx-1">
+                      <MessageSwitcher
+                        currentPage={(currentMessageInd ?? 0) + 1}
+                        totalPages={otherMessagesCanSwitchTo?.length || 0}
+                        handlePrevious={() => {
+                          const prevMessage = getPreviousMessage();
+                          if (prevMessage !== undefined && onMessageSelection) {
+                            onMessageSelection(prevMessage);
+                          }
+                        }}
+                        handleNext={() => {
+                          const nextMessage = getNextMessage();
+                          if (nextMessage !== undefined && onMessageSelection) {
+                            onMessageSelection(nextMessage);
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  <CopyIconButton
+                    getCopyText={() =>
+                      convertMarkdownTablesToTsv(
+                        removeThinkingTokens(
+                          getTextContent(rawPackets)
+                        ) as string
+                      )
+                    }
+                    getHtmlContent={() =>
+                      finalAnswerRef.current?.innerHTML || ""
+                    }
+                    tertiary
+                    data-testid="AIMessage/copy-button"
+                  />
+                  <IconButton
+                    icon={SvgThumbsUp}
+                    onClick={() => handleFeedbackClick("like")}
+                    tertiary
+                    transient={isFeedbackTransient("like")}
+                    tooltip={
+                      currentFeedback === "like"
+                        ? "Remove Like"
+                        : "Good Response"
+                    }
+                    data-testid="AIMessage/like-button"
+                  />
+                  <IconButton
+                    icon={SvgThumbsDown}
+                    onClick={() => handleFeedbackClick("dislike")}
+                    tertiary
+                    transient={isFeedbackTransient("dislike")}
+                    tooltip={
+                      currentFeedback === "dislike"
+                        ? "Remove Dislike"
+                        : "Bad Response"
+                    }
+                    data-testid="AIMessage/dislike-button"
+                  />
+
+                  {onRegenerate &&
+                    messageId !== undefined &&
+                    parentMessage &&
+                    llmManager && (
+                      <div data-testid="AIMessage/regenerate">
+                        <LLMPopover
+                          llmManager={llmManager}
+                          currentModelName={chatState.overriddenModel}
+                          onSelect={(modelName) => {
+                            const llmDescriptor = parseLlmDescriptor(modelName);
+                            const regenerator = onRegenerate({
+                              messageId,
+                              parentMessage,
+                            });
+                            regenerator(llmDescriptor);
+                          }}
+                          folded
+                        />
+                      </div>
+                    )}
+
+                  {nodeId && (citations.length > 0 || documentMap.size > 0) && (
+                    <CitedSourcesToggle
+                      citations={citations}
+                      documentMap={documentMap}
+                      nodeId={nodeId}
+                      onToggle={(toggledNodeId) => {
+                        // Toggle sidebar if clicking on the same message
+                        if (
+                          selectedMessageForDocDisplay === toggledNodeId &&
+                          documentSidebarVisible
+                        ) {
+                          updateCurrentDocumentSidebarVisible(false);
+                          updateCurrentSelectedNodeForDocDisplay(null);
+                        } else {
+                          updateCurrentSelectedNodeForDocDisplay(toggledNodeId);
+                          updateCurrentDocumentSidebarVisible(true);
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              </TooltipGroup>
+            </div>
+          )}
         </div>
       </div>
     </>
   );
-}
+}, arePropsEqual);
+
+export default AIMessage;

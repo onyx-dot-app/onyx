@@ -14,7 +14,7 @@ export default function AlreadyPickedModal({
 }: AlreadyPickedModalProps) {
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgCheck}
           title={`${model.model_name} already chosen`}

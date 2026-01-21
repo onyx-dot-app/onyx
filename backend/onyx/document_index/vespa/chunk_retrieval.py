@@ -41,7 +41,6 @@ from onyx.document_index.vespa_constants import MAX_OR_CONDITIONS
 from onyx.document_index.vespa_constants import METADATA
 from onyx.document_index.vespa_constants import METADATA_SUFFIX
 from onyx.document_index.vespa_constants import PRIMARY_OWNERS
-from onyx.document_index.vespa_constants import RECENCY_BIAS
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SECONDARY_OWNERS
 from onyx.document_index.vespa_constants import SECTION_CONTINUATION
@@ -142,7 +141,6 @@ def _vespa_hit_to_inference_chunk(
         title=fields.get(TITLE),
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),
-        recency_bias=fields.get("matchfeatures", {}).get(RECENCY_BIAS, 1.0),
         score=None if null_score else hit.get("relevance", 0),
         hidden=fields.get(HIDDEN, False),
         primary_owners=fields.get(PRIMARY_OWNERS),

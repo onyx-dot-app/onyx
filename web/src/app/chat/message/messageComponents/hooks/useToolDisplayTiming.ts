@@ -241,7 +241,10 @@ export function useToolDisplayTiming(
     };
   }, []);
 
-  // Check if all tools are displayed + final answer is coming
+  // Check if all tools are displayed (visible and completed)
+  // Note: We intentionally do NOT require isFinalAnswerComing here to avoid a circular dependency.
+  // The parent component (AIMessage) relies on onAllToolsDisplayed callback to set finalAnswerComing,
+  // so requiring it here would create a deadlock where tools never report completion.
   const allToolsDisplayed = useMemo(() => {
     if (toolGroups.length === 0) return true;
 
@@ -264,17 +267,11 @@ export function useToolDisplayTiming(
       });
     }
 
-    return (
-      allVisible &&
-      allCompleted &&
-      hasAllExpectedBranches &&
-      isFinalAnswerComing
-    );
+    return allVisible && allCompleted && hasAllExpectedBranches;
   }, [
     toolGroups,
     visibleTools,
     completedToolInds,
-    isFinalAnswerComing,
     expectedBranchesPerTurn,
     toolsByTurnIndex,
   ]);
