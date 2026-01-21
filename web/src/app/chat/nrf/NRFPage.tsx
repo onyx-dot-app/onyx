@@ -345,26 +345,30 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           >
             {/* Chat area with messages */}
             {hasMessages && resolvedAssistant && (
-              <ChatScrollContainer
-                sessionId="nrf-session"
-                anchorSelector={anchorSelector}
-                autoScroll={autoScrollEnabled}
-                isStreaming={isStreaming}
-                disableFadeOverlay={!isSidePanel}
-              >
-                <MessageList
-                  liveAssistant={resolvedAssistant}
-                  llmManager={llmManager}
-                  currentMessageFiles={currentMessageFiles}
-                  setPresentingDocument={() => {}}
-                  onSubmit={onSubmit}
-                  onMessageSelection={() => {}}
-                  stopGenerating={stopGenerating}
-                  onResubmit={handleResubmitLastMessage}
-                  deepResearchEnabled={deepResearchEnabled}
-                  anchorNodeId={anchorNodeId}
-                />
-              </ChatScrollContainer>
+              <>
+                {/* Fake header */}
+                <Spacer rem={2} />
+                <ChatScrollContainer
+                  sessionId="nrf-session"
+                  anchorSelector={anchorSelector}
+                  autoScroll={autoScrollEnabled}
+                  isStreaming={isStreaming}
+                  disableFadeOverlay={!isSidePanel}
+                >
+                  <MessageList
+                    liveAssistant={resolvedAssistant}
+                    llmManager={llmManager}
+                    currentMessageFiles={currentMessageFiles}
+                    setPresentingDocument={() => {}}
+                    onSubmit={onSubmit}
+                    onMessageSelection={() => {}}
+                    stopGenerating={stopGenerating}
+                    onResubmit={handleResubmitLastMessage}
+                    deepResearchEnabled={deepResearchEnabled}
+                    anchorNodeId={anchorNodeId}
+                  />
+                </ChatScrollContainer>
+              </>
             )}
 
             {/* Welcome message - centered when no messages */}
@@ -416,7 +420,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 <Spacer rem={0.5} />
               </div>
             </div>
-            <div className="flex-1 w-full" />
+            {!hasMessages && <div className="flex-1 w-full" />}
           </div>
         )}
       </Dropzone>
