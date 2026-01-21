@@ -63,8 +63,8 @@ from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
-from onyx.server.features.build.api import nextjs_assets_router
-from onyx.server.features.build.api import router as build_router
+from onyx.server.features.build.api.api import nextjs_assets_router
+from onyx.server.features.build.api.api import router as build_router
 from onyx.server.features.build.v1_api import v1_router as build_v1_router
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
