@@ -639,7 +639,7 @@ function PromptShortcuts() {
               >
                 <InputTypeIn
                   prefixText="/"
-                  placeholder="Shortcut"
+                  placeholder="Summarize"
                   value={shortcut.prompt}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "prompt", e.target.value)
@@ -672,7 +672,7 @@ function PromptShortcuts() {
                   />
                 </Section>
                 <InputTextArea
-                  placeholder="Full prompt"
+                  placeholder="Provide a concise 1–2 sentence summary of the following:"
                   value={shortcut.content}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "content", e.target.value)
