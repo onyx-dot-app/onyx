@@ -22,7 +22,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
       <Text as="p" mainUiAction text03>
         Stopped Thinking
       </Text>
-      {collapsible && (
+      {collapsible && totalSteps > 0 && (
         <Button
           tertiary
           onClick={onToggle}
