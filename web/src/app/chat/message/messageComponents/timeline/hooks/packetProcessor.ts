@@ -415,6 +415,43 @@ export function processPackets(
 /**
  * Build GroupedPacket array from a set of group keys.
  * Filters to only include groups with meaningful content and sorts by turn/tab index.
+ *
+ * @example
+ * // Input: state.groupedPacketsMap + keys Set
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ groupedPacketsMap = {                               │
+ * // │   "0-0" → [packet1, packet2]                       │
+ * // │   "0-1" → [packet3]                                │
+ * // │   "1-0" → [packet4, packet5]                       │
+ * // │   "2-0" → [empty_packet]  ← no content packets     │
+ * // │ }                                                  │
+ * // │ keys = Set{"0-0", "0-1", "1-0", "2-0"}             │
+ * // └─────────────────────────────────────────────────────┘
+ * //
+ * // Step 1: Map keys → GroupedPacket (parse key, lookup packets)
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ "0-0" → { turn_index:0, tab_index:0, packets:[...] }│
+ * // │ "0-1" → { turn_index:0, tab_index:1, packets:[...] }│
+ * // │ "1-0" → { turn_index:1, tab_index:0, packets:[...] }│
+ * // │ "2-0" → { turn_index:2, tab_index:0, packets:[...] }│
+ * // └─────────────────────────────────────────────────────┘
+ * //
+ * // Step 2: Filter (hasContentPackets check)
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ ✓ "0-0" has MESSAGE_START        → keep            │
+ * // │ ✓ "0-1" has SEARCH_TOOL_START    → keep            │
+ * // │ ✓ "1-0" has PYTHON_TOOL_START    → keep            │
+ * // │ ✗ "2-0" no content packets       → filtered out    │
+ * // └─────────────────────────────────────────────────────┘
+ * //
+ * // Step 3: Sort by turn_index, then tab_index
+ * // ┌─────────────────────────────────────────────────────┐
+ * // │ Output: GroupedPacket[]                             │
+ * // ├─────────────────────────────────────────────────────┤
+ * // │ [0] turn_index=0, tab_index=0, packets=[...]       │
+ * // │ [1] turn_index=0, tab_index=1, packets=[...]       │
+ * // │ [2] turn_index=1, tab_index=0, packets=[...]       │
+ * // └─────────────────────────────────────────────────────┘
  */
 function buildGroupsFromKeys(
   state: ProcessorState,
