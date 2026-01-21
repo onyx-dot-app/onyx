@@ -195,7 +195,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Expansion state management
   const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
-    useTimelineExpansion(stopPacketSeen, lastTurnGroup);
+    useTimelineExpansion(stopPacketSeen, lastTurnGroup, hasDisplayContent);
 
   // Streaming duration tracking
   const streamingStartTime = useStreamingStartTime();
@@ -224,9 +224,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     );
   }, [parallelActiveStep]);
 
-  // Collapsed streaming: show compact content below header
+  // Collapsed streaming: show compact content below header (only during tool execution)
   const showCollapsedCompact =
     !stopPacketSeen &&
+    !hasDisplayContent &&
     !isExpanded &&
     lastStep &&
     !lastTurnGroup?.isParallel &&
@@ -234,8 +235,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepSupportsCompact;
 
   // Parallel tabs in header only when collapsed (expanded view has tabs in content)
+  // Only show during tool execution, not when message content is streaming
   const showParallelTabs =
     !stopPacketSeen &&
+    !hasDisplayContent &&
     !isExpanded &&
     lastTurnGroup?.isParallel &&
     lastTurnGroup.steps.length > 0;
@@ -249,8 +252,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     stopPacketSeen && isExpanded && !userStopped && !lastStepIsResearchAgent;
 
   // Header selection based on state
+  // Show streaming headers only when actively executing tools (no message content yet)
+  // Once hasDisplayContent is true, switch to collapsed/expanded headers
   const renderHeader = () => {
-    if (!stopPacketSeen) {
+    if (!stopPacketSeen && !hasDisplayContent) {
       if (showParallelTabs && lastTurnGroup) {
         return (
           <ParallelStreamingHeader
@@ -352,7 +357,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         <div
           className={cn(
             "flex w-full h-full items-center justify-between px-2",
-            (!stopPacketSeen || userStopped || isExpanded) &&
+            ((!stopPacketSeen && !hasDisplayContent) ||
+              userStopped ||
+              isExpanded) &&
               "bg-background-tint-00 rounded-t-12",
             !isExpanded &&
               !showCollapsedCompact &&

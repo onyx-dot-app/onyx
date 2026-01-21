@@ -776,6 +776,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                         : projectContextTokenCount
                     }
                     availableContextTokens={availableContextTokens}
+                    chatSessionId={currentChatSessionId}
                     selectedAssistant={selectedAssistant || liveAssistant}
                     handleFileUpload={handleMessageSpecificFileUpload}
                     setPresentingDocument={setPresentingDocument}
