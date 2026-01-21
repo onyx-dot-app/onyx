@@ -157,8 +157,7 @@ const SourceTagInner = ({
 
       <div className={cn("flex items-baseline", !inlineCitation && "pr-0.5")}>
         <Text
-          figureSmallValue={inlineCitation && !isOpen}
-          figureSmallLabel={inlineCitation && isOpen}
+          figureSmallValue={inlineCitation}
           secondaryBody={!inlineCitation}
           text05={isOpen}
           text03={!isOpen && inlineCitation}
