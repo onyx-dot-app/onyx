@@ -164,13 +164,14 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
           {...props}
         />
 
-        {showClearButton && value && !disabled && !isReadOnly && (
+        {showClearButton && !disabled && !isReadOnly && (
           <IconButton
             icon={SvgX}
             disabled={disabled}
             onClick={noProp(handleClear)}
             type="button"
             internal
+            className={value ? "" : "invisible"}
           />
         )}
 
