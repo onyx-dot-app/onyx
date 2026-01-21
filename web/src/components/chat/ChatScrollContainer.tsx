@@ -333,13 +333,6 @@ const ChatScrollContainer = React.memo(
           return;
         }
 
-        // Calculate spacer
-        if (!autoScrollRef.current) {
-          setSpacerHeight(calcSpacerHeight(anchorElement));
-        } else {
-          setSpacerHeight(0);
-        }
-
         // Determine scroll behavior
         // New session with existing content = instant, new anchor = smooth
         const isLoadingExistingContent =
@@ -348,12 +341,30 @@ const ChatScrollContainer = React.memo(
           ? "instant"
           : "smooth";
 
+        // Calculate spacer - not needed when loading existing content (scrolling to bottom)
+        if (isLoadingExistingContent) {
+          setSpacerHeight(0);
+        } else if (!autoScrollRef.current) {
+          setSpacerHeight(calcSpacerHeight(anchorElement));
+        } else {
+          setSpacerHeight(0);
+        }
+
         // Defer scroll to next tick so spacer height takes effect
         const timeoutId = setTimeout(() => {
-          const targetScrollTop = Math.max(
-            0,
-            anchorElement.offsetTop - anchorOffsetPx
-          );
+          let targetScrollTop: number;
+
+          // When loading an existing conversation, scroll to bottom
+          // Otherwise (e.g., anchor change during conversation), scroll to anchor
+          if (isLoadingExistingContent) {
+            targetScrollTop = container.scrollHeight - container.clientHeight;
+          } else {
+            targetScrollTop = Math.max(
+              0,
+              anchorElement.offsetTop - anchorOffsetPx
+            );
+          }
+
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Update prevScrollTopRef so scroll direction is measured from new position
@@ -361,9 +372,8 @@ const ChatScrollContainer = React.memo(
 
           updateScrollState();
 
-          // When autoScroll is on, assume we're "at bottom" after positioning
-          // so that MutationObserver will continue auto-scrolling
-          if (autoScrollRef.current) {
+          // Mark as "at bottom" after scrolling to bottom so auto-scroll continues
+          if (isLoadingExistingContent || autoScrollRef.current) {
             isAtBottomRef.current = true;
           }
 
