@@ -1248,8 +1248,11 @@ function AccountsAccessSettings() {
                     disabled={isSubmitting || !dirty || !isValid}
                     onClick={async () => {
                       setSubmitting(true);
-                      await handleChangePassword(values);
-                      setSubmitting(false);
+                      try {
+                        await handleChangePassword(values);
+                      } finally {
+                        setSubmitting(false);
+                      }
                     }}
                   >
                     {isSubmitting ? "Updating..." : "Update"}
