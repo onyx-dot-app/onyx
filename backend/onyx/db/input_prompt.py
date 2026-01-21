@@ -3,6 +3,8 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
@@ -16,36 +18,6 @@ from onyx.server.manage.models import UserInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def check_prompt_is_unique(
-    prompt: str,
-    user_id: UUID | None,
-    db_session: Session,
-    exclude_id: int | None = None,
-) -> bool:
-    """
-    Check if a prompt shortcut is unique for the given user.
-    Returns True if unique, False if a duplicate exists.
-
-    Args:
-        prompt: The prompt shortcut text to check
-        user_id: The user's ID (None for public prompts)
-        db_session: Database session
-        exclude_id: Optional ID to exclude from the check (for updates)
-    """
-    query = select(InputPrompt).where(InputPrompt.prompt == prompt)
-
-    if user_id is not None:
-        query = query.where(InputPrompt.user_id == user_id)
-    else:
-        query = query.where(InputPrompt.user_id.is_(None))
-
-    if exclude_id is not None:
-        query = query.where(InputPrompt.id != exclude_id)
-
-    existing = db_session.scalar(query)
-    return existing is None
 
 
 def insert_input_prompt_if_not_exists(
@@ -94,25 +66,36 @@ def insert_input_prompt(
     user: User | None,
     db_session: Session,
 ) -> InputPrompt:
-    user_id = user.id if user is not None else None
+    user_id = user.id if user else None
 
-    # Check for duplicate prompt shortcut
-    if not check_prompt_is_unique(prompt, user_id, db_session):
-        raise HTTPException(
-            status_code=409,
-            detail=f"A prompt shortcut with the name '{prompt}' already exists",
-        )
-
-    input_prompt = InputPrompt(
+    # Use atomic INSERT ... ON CONFLICT DO NOTHING with RETURNING
+    # to avoid race conditions with the uniqueness check
+    stmt = pg_insert(InputPrompt).values(
         prompt=prompt,
         content=content,
         active=True,
         is_public=is_public,
         user_id=user_id,
     )
-    db_session.add(input_prompt)
-    db_session.commit()
 
+    # Use the appropriate constraint based on whether this is a user-owned or public prompt
+    if user_id is not None:
+        stmt = stmt.on_conflict_do_nothing(constraint="uq_inputprompt_prompt_user_id")
+    else:
+        stmt = stmt.on_conflict_do_nothing(constraint="uq_inputprompt_prompt_public")
+
+    stmt = stmt.returning(InputPrompt)
+
+    result = db_session.execute(stmt)
+    input_prompt = result.scalar_one_or_none()
+
+    if input_prompt is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        )
+
+    db_session.commit()
     return input_prompt
 
 
@@ -133,22 +116,19 @@ def update_input_prompt(
     if not validate_user_prompt_authorization(user, input_prompt):
         raise HTTPException(status_code=401, detail="You don't own this prompt")
 
-    # Check for duplicate if the prompt shortcut name is being changed
-    if prompt != input_prompt.prompt:
-        user_id = user.id if user is not None else None
-        if not check_prompt_is_unique(
-            prompt, user_id, db_session, exclude_id=input_prompt_id
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail=f"A prompt shortcut with the name '{prompt}' already exists",
-            )
-
     input_prompt.prompt = prompt
     input_prompt.content = content
     input_prompt.active = active
 
-    db_session.commit()
+    try:
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        )
+
     return input_prompt
 
 
