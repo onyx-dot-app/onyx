@@ -36,7 +36,7 @@ export default function BuildV1Page() {
           outputPanelOpen ? "w-1/2" : "w-full"
         )}
       >
-        <BuildChatPanel />
+        <BuildChatPanel existingSessionId={sessionId} />
       </div>
 
       {/* Right panel - Output (Preview, Files, Artifacts) */}

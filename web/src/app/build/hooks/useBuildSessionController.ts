@@ -74,24 +74,11 @@ export function useBuildSessionController({
     const priorSessionId = priorSessionIdRef.current;
     priorSessionIdRef.current = existingSessionId;
 
-    console.log("[SessionController] Effect triggered", {
-      existingSessionId,
-      priorSessionId,
-      currentSessionId,
-      preProvisioningStatus: preProvisioning.status,
-    });
-
     // Handle navigation to "new build" (no session ID in URL)
     if (existingSessionId === null) {
-      console.log("[SessionController] No session in URL (new build page)");
       // Only reset currentSessionId if we're not in the middle of consuming a pre-provisioned session
       // This prevents the race condition where we set a session and it gets immediately reset
       if (currentSessionId !== null) {
-        console.log(
-          "[SessionController] Clearing currentSessionId (was:",
-          currentSessionId,
-          ")"
-        );
         setCurrentSession(null);
       }
 
@@ -103,19 +90,8 @@ export function useBuildSessionController({
         !hasTriggeredProvisioningRef.current &&
         preProvisioning.status === "idle"
       ) {
-        console.log(
-          "[SessionController] Triggering pre-provisioning (status was idle, first trigger for this visit)"
-        );
         hasTriggeredProvisioningRef.current = true;
         ensurePreProvisionedSession();
-      } else {
-        console.log(
-          "[SessionController] Pre-provisioning not triggered (alreadyTriggered:",
-          hasTriggeredProvisioningRef.current,
-          ", status:",
-          preProvisioning.status,
-          ")"
-        );
       }
       return;
     }

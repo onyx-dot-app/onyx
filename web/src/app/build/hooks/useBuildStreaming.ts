@@ -60,23 +60,11 @@ export function useBuildStreaming() {
    */
   const streamMessage = useCallback(
     async (sessionId: string, content: string): Promise<void> => {
-      console.log("[Streaming] streamMessage called", {
-        sessionId,
-        contentLength: content.length,
-      });
-
       // Access sessions via getState() to avoid dependency on sessions Map reference
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
-      console.log(
-        "[Streaming] Session exists in store:",
-        !!existingSession,
-        "currentSessionId:",
-        currentState.currentSessionId
-      );
 
       if (existingSession?.abortController) {
-        console.log("[Streaming] Aborting previous controller for session");
         existingSession.abortController.abort();
       }
 
@@ -85,7 +73,6 @@ export function useBuildStreaming() {
       setAbortController(sessionId, controller);
 
       // Set status to running and clear previous tool calls
-      console.log("[Streaming] Setting status to running");
       updateSessionData(sessionId, { status: "running" });
       clearToolCallsInSession(sessionId);
 
@@ -103,26 +90,14 @@ export function useBuildStreaming() {
       let accumulatedMessageContent = "";
 
       try {
-        console.log("[Streaming] Calling sendMessageStream API...");
         const response = await sendMessageStream(
           sessionId,
           content,
           controller.signal
         );
-        console.log(
-          "[Streaming] sendMessageStream returned response, status:",
-          response.status
-        );
-
-        console.log(
-          `[Streaming] Starting stream for session ${sessionId}, new assistant message ID: ${assistantMessageId}`
-        );
 
         await processSSEStream(response, (packet) => {
           const packetData = packet as any;
-
-          // Log all incoming packets for debugging
-          console.log("[Build] SSE Packet received:", packet.type, packet);
 
           // Helper to extract text from ACP content structure
           const extractText = (content: any): string => {
@@ -144,9 +119,6 @@ export function useBuildStreaming() {
               if (text) {
                 // Accumulate the delta and update the message with full accumulated content
                 accumulatedMessageContent += text;
-                console.log(
-                  `[Build] Received delta (${text.length} chars), accumulated length: ${accumulatedMessageContent.length}, updating message ${assistantMessageId}`
-                );
                 updateLastMessageInSession(
                   sessionId,
                   accumulatedMessageContent
@@ -186,7 +158,6 @@ export function useBuildStreaming() {
                 content: packetData.content,
                 startedAt: new Date(),
               };
-              console.log("[Build] Tool started:", toolCall);
               addToolCallToSession(sessionId, toolCall);
 
               // Also add as a message for the timeline
@@ -208,8 +179,6 @@ export function useBuildStreaming() {
                 status === "completed" ||
                 status === "failed" ||
                 status === "cancelled";
-
-              console.log("[Build] Tool progress:", packetData.kind, status);
 
               if (toolCallId) {
                 updateToolCallInSession(sessionId, toolCallId, {
@@ -290,9 +259,6 @@ export function useBuildStreaming() {
                     if (sessionData.sandbox?.nextjs_port) {
                       const webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
                       updateSessionData(sessionId, { webappUrl });
-                      console.log(
-                        `[Build] Webapp URL set to: ${webappUrl} (port ${sessionData.sandbox.nextjs_port})`
-                      );
                     }
                   })
                   .catch((err) => {
@@ -330,10 +296,6 @@ export function useBuildStreaming() {
               break;
           }
         });
-        console.log(
-          "[Streaming] SSE stream processing completed for session:",
-          sessionId
-        );
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           console.error("[Streaming] Stream error:", err);
@@ -341,14 +303,8 @@ export function useBuildStreaming() {
             status: "failed",
             error: (err as Error).message,
           });
-        } else {
-          console.log("[Streaming] Stream was aborted for session:", sessionId);
         }
       } finally {
-        console.log(
-          "[Streaming] Finally block - creating fresh abort controller for session:",
-          sessionId
-        );
         // Create a fresh abort controller for future use
         setAbortController(sessionId, new AbortController());
       }

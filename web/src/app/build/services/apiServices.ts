@@ -52,12 +52,6 @@ export async function processSSEStream(
         if (dataStr) {
           try {
             const data = JSON.parse(dataStr);
-            // Log raw SSE data for debugging
-            console.log("[SSE] Raw packet:", {
-              sseEvent: currentEventType,
-              dataType: data.type,
-              data,
-            });
             // The backend sends `event: message` for all events and puts the
             // actual type in data.type. Only use SSE event type as fallback
             // if data.type is not present and SSE event is not "message".
