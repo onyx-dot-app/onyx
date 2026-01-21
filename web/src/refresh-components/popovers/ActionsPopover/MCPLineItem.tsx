@@ -7,7 +7,6 @@ import {
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
@@ -18,6 +17,9 @@ import {
   SvgLock,
   SvgServer,
 } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import EnabledCount from "@/refresh-components/EnabledCount";
 
 export interface MCPServer {
   id: number;
@@ -100,37 +102,23 @@ export default function MCPLineItem({
       strikethrough={allToolsDisabled}
       selected={isActive}
       rightChildren={
-        <div className="flex flex-row items-center gap-1">
+        <Section gap={0.25} flexDirection="row">
           {isAuthenticated &&
             tools.length > 0 &&
             enabledTools.length > 0 &&
             tools.length !== enabledTools.length && (
-              <div className="flex flex-row items-center gap-1">
-                <Text
-                  as="p"
-                  secondaryBody
-                  nowrap
-                  className="text-action-link-05"
-                >
-                  {enabledTools.length}
-                </Text>
-                <Text as="p" secondaryBody nowrap>
-                  {` of ${tools.length}`}
-                </Text>
-              </div>
+              <EnabledCount
+                enabledCount={enabledTools.length}
+                totalCount={tools.length}
+              />
             )}
           {canClickIntoServer && (
-            <SvgChevronRight className="h-3.5 w-3.5 stroke-text-03" />
+            <IconButton icon={SvgChevronRight} internal onClick={onSelect} />
           )}
           {showReauthButton && (
-            <span
-              className="inline-flex h-6 w-6 items-center justify-center"
-              aria-hidden="true"
-            >
-              <SvgKey className="h-3.5 w-3.5 stroke-text-03" />
-            </span>
+            <IconButton icon={SvgKey} internal onClick={onAuthenticate} />
           )}
-        </div>
+        </Section>
       }
     >
       {server.name}

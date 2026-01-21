@@ -36,7 +36,10 @@ const iconClassNames = {
 } as const;
 
 export interface LineItemProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLButtonElement>> {
+  extends Omit<
+    WithoutStyles<React.HTMLAttributes<HTMLButtonElement>>,
+    "children"
+  > {
   // line-item variants
   strikethrough?: boolean;
   danger?: boolean;
@@ -50,6 +53,7 @@ export interface LineItemProps
   rightChildren?: React.ReactNode;
   href?: string;
   ref?: React.Ref<HTMLButtonElement>;
+  children?: string;
 }
 
 /**
