@@ -29,8 +29,6 @@ API_SERVER_HOST = os.environ.get("API_SERVER_HOST", "127.0.0.1")
 API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS = os.environ.get(
     "API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS"
 )
-# URL for the build webapp proxy endpoint
-BUILD_WEBAPP_URL = os.environ.get("BUILD_WEBAPP_URL", "")
 
 # Whether to send user metadata (user_id/email and session_id) to the LLM provider.
 # Disabled by default.

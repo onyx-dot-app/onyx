@@ -10,7 +10,9 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import SandboxBackend
 
 
 # Snapshot retention period in days
@@ -28,12 +30,22 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
 
     This task:
     1. Finds sandboxes that have been idle longer than SANDBOX_IDLE_TIMEOUT_SECONDS
-    2. Creates a snapshot of each idle sandbox (to preserve work)
+    2. Creates a snapshot of each idle sandbox (to preserve work) - kubernetes only
     3. Terminates the sandbox and cleans up resources
+
+    NOTE: This task is a no-op for local backend - sandboxes persist until
+    manually terminated or server restart.
 
     Args:
         tenant_id: The tenant ID for multi-tenant isolation
     """
+    # Skip cleanup for local backend - sandboxes persist until manual termination
+    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+        task_logger.debug(
+            "cleanup_idle_sandboxes_task skipped (local backend - cleanup disabled)"
+        )
+        return
+
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
     redis_client = get_redis_client(tenant_id=tenant_id)
@@ -50,9 +62,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
     try:
         # Import here to avoid circular imports
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
-        from onyx.server.features.build.sandbox.manager import SandboxManager
+        from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 
-        sandbox_manager = SandboxManager()
+        sandbox_manager = get_sandbox_manager()
 
         with get_session_with_current_tenant() as db_session:
             idle_sandboxes = get_idle_sandboxes(
@@ -112,9 +124,18 @@ def cleanup_old_snapshots_task(self: Task, *, tenant_id: str) -> None:
     This task cleans up old snapshots to manage storage usage.
     Snapshots older than SNAPSHOT_RETENTION_DAYS are deleted.
 
+    NOTE: This task is a no-op for local backend since snapshots are disabled.
+
     Args:
         tenant_id: The tenant ID for multi-tenant isolation
     """
+    # Skip for local backend - no snapshots to clean up
+    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+        task_logger.debug(
+            "cleanup_old_snapshots_task skipped (local backend - snapshots disabled)"
+        )
+        return
+
     task_logger.info(f"cleanup_old_snapshots_task starting for tenant {tenant_id}")
 
     redis_client = get_redis_client(tenant_id=tenant_id)

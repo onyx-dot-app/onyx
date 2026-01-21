@@ -39,6 +39,24 @@ All code is isolated within `/onyx/server/features/build/` except for SQLAlchemy
 - Scenarios where Docker is not available
 - Quick prototyping before implementing full container isolation
 
+### Backend Modes
+
+The `SANDBOX_BACKEND` environment variable controls the operational mode:
+
+**Local Backend** (`SANDBOX_BACKEND=local`, default):
+- Best for development and testing
+- Sandboxes persist until manually terminated or server restart
+- No snapshots created (faster iteration)
+- No automatic cleanup of idle sandboxes
+- Lower resource overhead (no file store writes)
+
+**Kubernetes Backend** (`SANDBOX_BACKEND=kubernetes`):
+- Best for production deployments
+- Full snapshot support for session persistence
+- Automatic cleanup of idle sandboxes (after `SANDBOX_IDLE_TIMEOUT_SECONDS`)
+- Automatic cleanup of old snapshots (30-day retention)
+- Session state persisted across pod restarts
+
 ### Existing Patterns to Follow
 
 Based on codebase exploration:
@@ -553,6 +571,12 @@ class ProcessManager:
 
 **Configuration** (add to `build/configs.py`):
 ```python
+from enum import Enum
+
+class SandboxBackend(str, Enum):
+    LOCAL = "local"        # Local development - no snapshots, no cleanup
+    KUBERNETES = "kubernetes"  # Production - full snapshots and cleanup
+
 # These already exist in configs.py - ensure they're defined:
 SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
 OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
@@ -560,6 +584,7 @@ VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get("PERSISTENT_DOCUMENT_STORAGE_PATH", "/data/documents")
 
 # New configs for sandbox module:
+SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))  # "local" or "kubernetes"
 OPENCODE_PATH = os.environ.get("OPENCODE_PATH", None)  # Auto-detected if not set
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "900"))
 SANDBOX_MAX_CONCURRENT_PER_ORG = int(os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10"))
@@ -567,6 +592,18 @@ SANDBOX_SNAPSHOTS_BUCKET = os.environ.get("SANDBOX_SNAPSHOTS_BUCKET", "sandbox-s
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
 ```
+
+**Backend Mode Behavior:**
+
+| Feature | Local | Kubernetes |
+|---------|-------|------------|
+| Directory creation | ✓ | ✓ |
+| Next.js server | ✓ | ✓ |
+| Agent subprocess | ✓ | ✓ |
+| Snapshots on terminate | ✗ | ✓ |
+| Idle sandbox cleanup | ✗ | ✓ |
+| Old snapshot cleanup | ✗ | ✓ |
+| Snapshot restore on provision | ✗ | ✓ |
 
 ---
 
@@ -942,10 +979,15 @@ class SandboxManager:
         self._directory_manager.setup_files_symlink(sandbox_path, Path(file_system_path))
 
         # Setup outputs (from snapshot or template)
-        if snapshot_id:
+        # NOTE: Snapshot restore is only supported in kubernetes backend
+        from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+
+        if snapshot_id and SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
             snapshot = get_latest_snapshot_for_session(db_session, session_id)
             if snapshot:
                 self._snapshot_manager.restore_snapshot(snapshot.storage_path, sandbox_path)
+            else:
+                self._directory_manager.setup_outputs_directory(sandbox_path)
         else:
             self._directory_manager.setup_outputs_directory(sandbox_path)
 
@@ -1029,8 +1071,17 @@ class SandboxManager:
         # Update status
         update_sandbox_status(db_session, sandbox_id, SandboxStatus.TERMINATED)
 
-    def create_snapshot(self, sandbox_id: str, db_session: Session) -> SnapshotInfo:
-        """Create a snapshot of the sandbox's outputs directory."""
+    def create_snapshot(self, sandbox_id: str, db_session: Session) -> SnapshotInfo | None:
+        """Create a snapshot of the sandbox's outputs directory.
+
+        Returns None if snapshots are disabled (local backend).
+        """
+        from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+
+        # Snapshots are disabled for local backend
+        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+            return None
+
         from onyx.server.features.build.db.sandbox import get_sandbox_by_id, create_snapshot
 
         sandbox = get_sandbox_by_id(db_session, sandbox_id)
@@ -1220,10 +1271,22 @@ from onyx.background.celery.apps.app_base import task_logger, TenantAwareTask
 @shared_task(name="cleanup_idle_sandboxes", base=TenantAwareTask)
 def cleanup_idle_sandboxes_task(tenant_id: str) -> None:
     """
+    Cleanup idle sandboxes by creating snapshots and terminating them.
+
+    NOTE: This task is a no-op for local backend - sandboxes persist until
+    manually terminated or server restart.
+
     1. Get sandboxes idle longer than SANDBOX_IDLE_TIMEOUT_SECONDS
-    2. Create snapshot for each
+    2. Create snapshot for each (kubernetes only)
     3. Terminate sandbox
     """
+    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+
+    # Skip cleanup for local backend - sandboxes persist until manual termination
+    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+        task_logger.debug("Skipping idle sandbox cleanup (local backend)")
+        return
+
     from onyx.db.engine import get_session_with_tenant
     from onyx.server.features.build.db.sandbox import get_idle_sandboxes
     from onyx.server.features.build.sandbox.manager import SandboxManager
@@ -1246,7 +1309,17 @@ def cleanup_idle_sandboxes_task(tenant_id: str) -> None:
 
 @shared_task(name="cleanup_old_snapshots", base=TenantAwareTask)
 def cleanup_old_snapshots_task(tenant_id: str) -> None:
-    """Delete snapshots older than retention period."""
+    """Delete snapshots older than retention period.
+
+    NOTE: This task is a no-op for local backend since snapshots are disabled.
+    """
+    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+
+    # Skip for local backend - no snapshots to clean up
+    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+        task_logger.debug("Skipping old snapshot cleanup (local backend)")
+        return
+
     from onyx.db.engine import get_session_with_tenant
     from onyx.server.features.build.db.sandbox import delete_old_snapshots
 

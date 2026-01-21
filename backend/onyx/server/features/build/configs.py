@@ -1,4 +1,23 @@
 import os
+from enum import Enum
+
+
+class SandboxBackend(str, Enum):
+    """Backend mode for sandbox operations.
+
+    LOCAL: Development mode - no snapshots, no automatic cleanup
+    KUBERNETES: Production mode - full snapshots and cleanup
+    """
+
+    LOCAL = "local"
+    KUBERNETES = "kubernetes"
+
+
+# Sandbox backend mode (controls snapshot and cleanup behavior)
+# "local" = no snapshots, no cleanup (for development)
+# "kubernetes" = full snapshots and cleanup (for production)
+SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
+
 
 # Persistent Document Storage Configuration
 # When enabled, indexed documents are written to local filesystem with hierarchical structure
@@ -45,6 +64,3 @@ SANDBOX_SNAPSHOTS_BUCKET = os.environ.get(
 # Next.js preview server port range
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
-
-# URL for the build webapp proxy endpoint
-BUILD_WEBAPP_URL = os.environ.get("BUILD_WEBAPP_URL", "")
