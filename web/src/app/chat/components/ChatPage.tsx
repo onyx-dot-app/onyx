@@ -641,7 +641,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root>
+      <AppLayouts.Root disableFooter>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -719,7 +719,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                 className={cn(
                   "flex justify-center",
                   currentChatSessionId
-                    ? "absolute bottom-0 left-0 right-0 pointer-events-none"
+                    ? "absolute bottom-6 left-0 right-0 pointer-events-none"
                     : "w-full"
                 )}
               >
@@ -806,6 +806,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                     )}
                 </div>
               )}
+              <AppLayouts.Footer />
             </div>
           )}
         </Dropzone>

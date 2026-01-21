@@ -10,8 +10,6 @@ import ChatInputBar, {
 } from "@/app/chat/components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
-import Text from "@/refresh-components/texts/Text";
-import { useNightTime } from "@/lib/dateUtils";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -30,9 +28,13 @@ import {
   useCurrentMessageHistory,
 } from "@/app/chat/stores/useChatSessionStore";
 import MessageList from "@/components/chat/MessageList";
+import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
+import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
+import * as AppLayouts from "@/layouts/app-layouts";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
+import Spacer from "@/refresh-components/Spacer";
 import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import {
@@ -41,7 +43,10 @@ import {
   SvgExternalLink,
   SvgAlertTriangle,
 } from "@opal/icons";
-import { ThemePreference } from "@/lib/types";
+import {
+  CHAT_BACKGROUND_NONE,
+  getBackgroundById,
+} from "@/lib/constants/chatBackgrounds";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -51,16 +56,10 @@ interface NRFPageProps {
 const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
 
 export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
-  const {
-    theme,
-    defaultLightBackgroundUrl,
-    defaultDarkBackgroundUrl,
-    setUseOnyxAsNewTab,
-  } = useNRFPreferences();
+  const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
   const filterManager = useFilters();
-  const { isNight } = useNightTime();
   const { user, authTypeMetadata } = useUser();
   const { setFolded } = useAppSidebarContext();
 
@@ -141,11 +140,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     }
   }, []);
 
-  const [backgroundUrl, setBackgroundUrl] = useState<string>(
-    theme === ThemePreference.LIGHT
-      ? defaultLightBackgroundUrl
-      : defaultDarkBackgroundUrl
-  );
+  // Chat background - shared with ChatPage
+  const chatBackgroundId = user?.preferences?.chat_background;
+  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
+  const hasBackground =
+    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
@@ -165,13 +164,14 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Resolved assistant to use throughout the component
   const resolvedAssistant = liveAssistant ?? undefined;
 
-  useEffect(() => {
-    setBackgroundUrl(
-      theme === ThemePreference.LIGHT
-        ? defaultLightBackgroundUrl
-        : defaultDarkBackgroundUrl
-    );
-  }, [theme, defaultLightBackgroundUrl, defaultDarkBackgroundUrl]);
+  // Auto-scroll preference from user settings (matches ChatPage pattern)
+  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  const isStreaming = currentChatState === "streaming";
+
+  // Anchor for scroll positioning (matches ChatPage pattern)
+  const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
+  const anchorNodeId = anchorMessage?.nodeId;
+  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
   useSendMessageToParent();
 
@@ -291,19 +291,28 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   return (
     <div
       className={cn(
-        "nrf-page",
-        isSidePanel ? "nrf-page--side-panel" : "nrf-page--with-background"
+        "relative w-full h-full flex flex-col overflow-hidden",
+        isSidePanel
+          ? "bg-background"
+          : hasBackground && "bg-cover bg-center bg-fixed"
       )}
       style={
-        isSidePanel ? undefined : { backgroundImage: `url(${backgroundUrl})` }
+        !isSidePanel && hasBackground
+          ? { backgroundImage: `url(${chatBackground.url})` }
+          : undefined
       }
     >
       {popup}
 
+      {/* Semi-transparent overlay for readability when background is set */}
+      {!isSidePanel && hasBackground && (
+        <div className="absolute inset-0 bg-background/80 pointer-events-none" />
+      )}
+
       {/* Side panel header */}
       {isSidePanel && (
-        <header className="nrf-side-panel-header">
-          <div className="nrf-logo-container">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-border-01 bg-background">
+          <div className="flex items-center gap-2">
             <Logo />
           </div>
           <Button
@@ -318,113 +327,75 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Settings button */}
       {!isSidePanel && (
-        <div className="nrf-settings-button-container">
+        <div className="absolute top-0 right-0 p-4 z-10">
           <IconButton
             icon={SvgMenu}
             onClick={toggleSettings}
             tertiary
             tooltip="Open settings"
-            className="nrf-settings-button"
+            className="bg-mask-02 backdrop-blur-[12px] rounded-full shadow-01 hover:bg-mask-03"
           />
         </div>
       )}
 
       <Dropzone onDrop={handleFileUpload} noClick>
         {({ getRootProps }) => (
-          <div {...getRootProps()} className="nrf-dropzone">
-            {/* Chat area with messages - centered container with background */}
-            {hasMessages ? (
-              <div
-                className={cn(
-                  "nrf-chat-area",
-                  isSidePanel && "nrf-chat-area--side-panel"
-                )}
-              >
-                {/* Centered chat container with semi-transparent background */}
-                <div
-                  className={cn(
-                    "nrf-chat-container",
-                    isSidePanel && "nrf-chat-container--side-panel"
-                  )}
+          <div
+            {...getRootProps()}
+            className="h-full w-full flex flex-col items-center outline-none"
+          >
+            {/* Chat area with messages */}
+            {hasMessages && resolvedAssistant && (
+              <>
+                {/* Fake header */}
+                <Spacer rem={2} />
+                <ChatScrollContainer
+                  sessionId="nrf-session"
+                  anchorSelector={anchorSelector}
+                  autoScroll={autoScrollEnabled}
+                  isStreaming={isStreaming}
+                  disableFadeOverlay={!isSidePanel}
                 >
-                  {/* Scrollable messages area */}
-                  <div className="nrf-messages-scroll">
-                    <div className="nrf-messages-content">
-                      {resolvedAssistant && (
-                        <MessageList
-                          liveAssistant={resolvedAssistant}
-                          llmManager={llmManager}
-                          currentMessageFiles={currentMessageFiles}
-                          setPresentingDocument={() => {}}
-                          onSubmit={onSubmit}
-                          onMessageSelection={() => {}}
-                          stopGenerating={stopGenerating}
-                          onResubmit={handleResubmitLastMessage}
-                          deepResearchEnabled={deepResearchEnabled}
-                        />
-                      )}
-                    </div>
-                  </div>
+                  <MessageList
+                    liveAssistant={resolvedAssistant}
+                    llmManager={llmManager}
+                    currentMessageFiles={currentMessageFiles}
+                    setPresentingDocument={() => {}}
+                    onSubmit={onSubmit}
+                    onMessageSelection={() => {}}
+                    stopGenerating={stopGenerating}
+                    onResubmit={handleResubmitLastMessage}
+                    deepResearchEnabled={deepResearchEnabled}
+                    anchorNodeId={anchorNodeId}
+                  />
+                </ChatScrollContainer>
+              </>
+            )}
 
-                  {/* Input area - inside the container */}
-                  <div
-                    ref={inputRef}
-                    className={cn(
-                      "nrf-input-area",
-                      isSidePanel && "nrf-input-area--side-panel"
-                    )}
-                  >
-                    <ChatInputBar
-                      ref={chatInputBarRef}
-                      deepResearchEnabled={deepResearchEnabled}
-                      toggleDeepResearch={toggleDeepResearch}
-                      toggleDocumentSidebar={() => {}}
-                      filterManager={filterManager}
-                      llmManager={llmManager}
-                      removeDocs={() => {}}
-                      retrievalEnabled={false}
-                      selectedDocuments={[]}
-                      initialMessage={message}
-                      stopGenerating={stopGenerating}
-                      onSubmit={handleChatInputSubmit}
-                      chatState={currentChatState}
-                      currentSessionFileTokenCount={
-                        currentSessionFileTokenCount
-                      }
-                      availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
-                      selectedAssistant={resolvedAssistant}
-                      handleFileUpload={handleFileUpload}
-                      disabled={
-                        !llmManager.isLoadingProviders &&
-                        !llmManager.hasAnyProvider
-                      }
-                    />
-                  </div>
-                </div>
+            {/* Welcome message - centered when no messages */}
+            {!hasMessages && (
+              <div className="w-full flex-1 flex flex-col items-center justify-end">
+                <WelcomeMessage isDefaultAgent />
+                <Spacer rem={1.5} />
               </div>
-            ) : (
-              /* Welcome/Input area - centered when no messages */
+            )}
+
+            {/* ChatInputBar container - absolutely positioned when in chat, centered when no messages */}
+            <div
+              ref={inputRef}
+              className={cn(
+                "flex justify-center",
+                hasMessages
+                  ? "absolute bottom-6 left-0 right-0 pointer-events-none"
+                  : "w-full"
+              )}
+            >
               <div
-                ref={inputRef}
                 className={cn(
-                  "nrf-welcome",
-                  isSidePanel && "nrf-welcome--side-panel"
+                  "w-[min(50rem,100%)] flex flex-col px-4",
+                  hasMessages && "pointer-events-auto"
                 )}
               >
-                <Text
-                  headingH3
-                  className={cn(
-                    "nrf-welcome-heading",
-                    isSidePanel || theme === "light"
-                      ? "text-text-04"
-                      : "text-text-light-05"
-                  )}
-                >
-                  {isNight
-                    ? "End your day with Onyx"
-                    : "Start your day with Onyx"}
-                </Text>
-
                 <ChatInputBar
                   ref={chatInputBarRef}
                   deepResearchEnabled={deepResearchEnabled}
@@ -447,8 +418,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
                   }
                 />
+                <Spacer rem={0.5} />
               </div>
-            )}
+            </div>
+            {!hasMessages && <div className="flex-1 w-full" />}
+            <AppLayouts.Footer />
           </div>
         )}
       </Dropzone>

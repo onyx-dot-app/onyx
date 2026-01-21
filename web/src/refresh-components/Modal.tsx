@@ -60,6 +60,8 @@ interface ModalContextValue {
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
   height: keyof typeof heightClasses;
+  hasDescription: boolean;
+  setHasDescription: (value: boolean) => void;
 }
 
 const ModalContext = React.createContext<ModalContextValue | null>(null);
@@ -136,6 +138,7 @@ const ModalContent = React.forwardRef<
   ) => {
     const closeButtonRef = React.useRef<HTMLDivElement>(null);
     const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
+    const [hasDescription, setHasDescription] = React.useState(false);
     const hasUserTypedRef = React.useRef(false);
 
     // Reset state when modal closes or opens
@@ -250,6 +253,8 @@ const ModalContent = React.forwardRef<
           hasAttemptedClose,
           setHasAttemptedClose,
           height,
+          hasDescription,
+          setHasDescription,
         }}
       >
         <DialogPrimitive.Portal>
@@ -292,6 +297,7 @@ const ModalContent = React.forwardRef<
             }}
             onEscapeKeyDown={handleInteractOutside}
             onPointerDownOutside={handleInteractOutside}
+            {...(!hasDescription && { "aria-describedby": undefined })}
             {...props}
           >
             {children}
@@ -329,7 +335,13 @@ interface ModalHeaderProps extends WithoutStyles<SectionProps> {
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
   ({ icon: Icon, title, description, onClose, children, ...props }, ref) => {
-    const { closeButtonRef } = useModalContext();
+    const { closeButtonRef, setHasDescription } = useModalContext();
+
+    // useLayoutEffect ensures aria-describedby is set before paint,
+    // so screen readers announce the description when the dialog opens
+    React.useLayoutEffect(() => {
+      setHasDescription(!!description);
+    }, [description, setHasDescription]);
 
     return (
       <Section ref={ref} padding={1} alignItems="start" {...props}>
@@ -355,11 +367,13 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
           <DialogPrimitive.Title asChild>
             <Text headingH3>{title}</Text>
           </DialogPrimitive.Title>
-          <DialogPrimitive.Description asChild>
-            <Text secondaryBody text03>
-              {description || title}
-            </Text>
-          </DialogPrimitive.Description>
+          {description && (
+            <DialogPrimitive.Description asChild>
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            </DialogPrimitive.Description>
+          )}
         </Section>
         {children}
       </Section>
