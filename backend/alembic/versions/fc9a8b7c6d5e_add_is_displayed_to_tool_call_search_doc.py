@@ -1,7 +1,7 @@
 """add is_displayed to tool_call__search_doc
 
 Revision ID: fc9a8b7c6d5e
-Revises: fb80bdd256de
+Revises: 41fa44bef321
 Create Date: 2026-01-21 10:40:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "fc9a8b7c6d5e"
-down_revision = "fb80bdd256de"
+down_revision = "41fa44bef321"
 branch_labels = None
 depends_on = None
 
