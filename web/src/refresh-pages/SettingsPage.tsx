@@ -1454,6 +1454,8 @@ function FederatedConnectorCard({
 }: FederatedConnectorCardProps) {
   const { popup, setPopup } = usePopup();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
+    useState(false);
   const sourceMetadata = getSourceMetadata(connector.source as ValidSources);
 
   const handleDisconnect = useCallback(async () => {
@@ -1469,6 +1471,7 @@ function FederatedConnectorCard({
           message: "Disconnected successfully",
           type: "success",
         });
+        setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
@@ -1487,6 +1490,31 @@ function FederatedConnectorCard({
     <>
       {popup}
 
+      {showDisconnectConfirmation && (
+        <ConfirmationModalLayout
+          icon={SvgUnplug}
+          title="Disconnect Connector"
+          onClose={() => setShowDisconnectConfirmation(false)}
+          submit={
+            <Button
+              danger
+              onClick={() => void handleDisconnect()}
+              disabled={isDisconnecting}
+            >
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          }
+        >
+          <Section gap={0.5} alignItems="start">
+            <Text>
+              Are you sure you want to disconnect{" "}
+              <Text className="!font-bold">{sourceMetadata.displayName}</Text>?
+            </Text>
+            <Text>You can reconnect at any time.</Text>
+          </Section>
+        </ConfirmationModalLayout>
+      )}
+
       <Card padding={0.5}>
         <LineItemLayout
           icon={sourceMetadata.icon}
@@ -1499,7 +1527,7 @@ function FederatedConnectorCard({
               <IconButton
                 icon={SvgUnplug}
                 internal
-                onClick={() => void handleDisconnect()}
+                onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}
               />
             ) : connector.authorize_url ? (
