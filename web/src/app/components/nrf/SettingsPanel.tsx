@@ -6,8 +6,8 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { ThemePreference } from "@/lib/types";
 import { useUser } from "@/components/user/UserProvider";
+import { useTheme } from "next-themes";
 import {
   CHAT_BACKGROUND_OPTIONS,
   CHAT_BACKGROUND_NONE,
@@ -93,13 +93,15 @@ export const SettingsPanel = ({
   toggleSettings: () => void;
   handleUseOnyxToggle: (checked: boolean) => void;
 }) => {
-  const { theme, setTheme, useOnyxAsNewTab } = useNRFPreferences();
+  const { useOnyxAsNewTab } = useNRFPreferences();
+  const { theme, setTheme } = useTheme();
   const { user, updateUserChatBackground } = useUser();
 
   const currentBackgroundId = user?.preferences?.chat_background ?? "none";
+  const isDark = theme === "dark";
 
-  const toggleTheme = (newTheme: ThemePreference) => {
-    setTheme(newTheme);
+  const toggleTheme = () => {
+    setTheme(isDark ? "light" : "dark");
   };
 
   const handleBackgroundChange = (backgroundId: string) => {
@@ -145,20 +147,10 @@ export const SettingsPanel = ({
             <div className="flex items-center gap-3">
               {/* Theme Toggle */}
               <IconButton
-                icon={theme === ThemePreference.LIGHT ? SvgSun : SvgMoon}
-                onClick={() =>
-                  toggleTheme(
-                    theme === ThemePreference.LIGHT
-                      ? ThemePreference.DARK
-                      : ThemePreference.LIGHT
-                  )
-                }
+                icon={isDark ? SvgMoon : SvgSun}
+                onClick={toggleTheme}
                 tertiary
-                tooltip={`Switch to ${
-                  theme === ThemePreference.LIGHT
-                    ? ThemePreference.DARK
-                    : ThemePreference.LIGHT
-                } theme`}
+                tooltip={`Switch to ${isDark ? "light" : "dark"} theme`}
               />
               <IconButton
                 icon={SvgX}
