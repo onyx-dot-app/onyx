@@ -375,9 +375,22 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
-            {/* ChatInputBar container */}
-            <div ref={inputRef} className="flex justify-center w-full">
-              <div className="w-[min(50rem,100%)] flex flex-col px-4">
+            {/* ChatInputBar container - absolutely positioned when in chat, centered when no messages */}
+            <div
+              ref={inputRef}
+              className={cn(
+                "flex justify-center",
+                hasMessages
+                  ? "absolute bottom-0 left-0 right-0 pointer-events-none"
+                  : "w-full"
+              )}
+            >
+              <div
+                className={cn(
+                  "w-[min(50rem,100%)] flex flex-col px-4",
+                  hasMessages && "pointer-events-auto"
+                )}
+              >
                 <ChatInputBar
                   ref={chatInputBarRef}
                   deepResearchEnabled={deepResearchEnabled}
@@ -403,7 +416,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 <Spacer rem={0.5} />
               </div>
             </div>
-            <div className="flex flex-1 flex-col items-center w-full" />
+            <div className="flex-1 w-full" />
           </div>
         )}
       </Dropzone>
