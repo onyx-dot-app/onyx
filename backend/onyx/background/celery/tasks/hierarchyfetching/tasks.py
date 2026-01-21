@@ -42,6 +42,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.models import ConnectorCredentialPair
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
+from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
@@ -255,6 +256,13 @@ def _run_hierarchy_extraction(
         )
         return 0
 
+    redis_client = get_redis_client(tenant_id=tenant_id)
+
+    # Ensure the SOURCE-type root node exists before processing hierarchy nodes.
+    # This is the root of the hierarchy tree - all other nodes for this source
+    # should ultimately have this as an ancestor.
+    ensure_source_node_exists(redis_client, db_session, source)
+
     # Determine time range: start from last hierarchy fetch, end at now
     last_fetch = cc_pair.last_time_hierarchy_fetch
     start_time = last_fetch.timestamp() if last_fetch else 0
@@ -262,7 +270,6 @@ def _run_hierarchy_extraction(
 
     total_nodes = 0
     node_batch: list[PydanticHierarchyNode] = []
-    redis_client = get_redis_client(tenant_id=tenant_id)
 
     def _process_batch() -> int:
         """Process accumulated hierarchy nodes batch."""

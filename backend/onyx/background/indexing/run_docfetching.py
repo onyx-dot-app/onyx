@@ -59,6 +59,7 @@ from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
+from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.indexing.persistent_document_writer import (
@@ -541,6 +542,13 @@ def connector_document_extraction(
         total_doc_batches_queued = 0
         total_failures = 0
         document_count = 0
+
+        # Ensure the SOURCE-type root hierarchy node exists before processing.
+        # This is the root of the hierarchy tree for this source - all other
+        # hierarchy nodes should ultimately have this as an ancestor.
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        with get_session_with_current_tenant() as db_session:
+            ensure_source_node_exists(redis_client, db_session, db_connector.source)
 
         # Main extraction loop
         while checkpoint.has_more:
