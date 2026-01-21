@@ -194,6 +194,7 @@ jobs:
               --set=minio.enabled=false \
               --set=vespa.enabled=false \
               --set=opensearch.enabled=true \
+              --set=auth.opensearch.enabled=true \
               --set=slackbot.enabled=false \
               --set=postgresql.enabled=true \
               --set=postgresql.nameOverride=cloudnative-pg \
