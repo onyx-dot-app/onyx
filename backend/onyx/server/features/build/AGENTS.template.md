@@ -75,11 +75,11 @@ Generally, you should use
 ### Web Applications / Dashboards
 
 Web applications and dashboards should be written as a Next.js app. Within the `outputs` directory,
-there is a folder called `web` that has the skeleton of a basic Next.js app in it. Use this.
+there is a folder called `web` that has the skeleton of a basic Next.js app in it. Use this. We do NOT use a `src` directory.
 
 Use NextJS 16.1.1, React v19, Tailwindcss, and recharts.
 
-The Next.js app is already running and accessible at http://localhost:3002. Do not run `npm run dev` yourself.
+The Next.js app is already running. Do not run `npm run dev` yourself.
 
 If the app needs any pre-computation, then create a bash script called `prepare.sh` at the root of the `web` directory.
 
