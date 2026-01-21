@@ -67,10 +67,7 @@ function Main() {
         API Keys allow you to access Onyx APIs programmatically. Click the
         button below to generate a new API Key.
       </Text>
-      <CreateButton
-        className="self-start"
-        onClick={() => setShowCreateUpdateForm(true)}
-      >
+      <CreateButton onClick={() => setShowCreateUpdateForm(true)}>
         Create API Key
       </CreateButton>
     </div>
