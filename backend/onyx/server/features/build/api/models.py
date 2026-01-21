@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -16,9 +17,18 @@ class SessionCreateRequest(BaseModel):
 
 
 class SessionUpdateRequest(BaseModel):
-    """Request to update a build session."""
+    """Request to update a build session.
+
+    If name is None, the session name will be auto-generated using LLM.
+    """
 
     name: str | None = None
+
+
+class SessionNameGenerateResponse(BaseModel):
+    """Response containing a generated session name."""
+
+    name: str
 
 
 class SandboxResponse(BaseModel):
@@ -118,6 +128,7 @@ class MessageResponse(BaseModel):
     session_id: str
     type: MessageType
     content: str
+    message_metadata: dict[str, Any] | None = None
     created_at: datetime
 
     @classmethod
@@ -128,6 +139,7 @@ class MessageResponse(BaseModel):
             session_id=str(message.session_id),
             type=message.type,
             content=message.content,
+            message_metadata=message.message_metadata,
             created_at=message.created_at,
         )
 
