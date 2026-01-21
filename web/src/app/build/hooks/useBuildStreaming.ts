@@ -60,10 +60,23 @@ export function useBuildStreaming() {
    */
   const streamMessage = useCallback(
     async (sessionId: string, content: string): Promise<void> => {
+      console.log("[Streaming] streamMessage called", {
+        sessionId,
+        contentLength: content.length,
+      });
+
       // Access sessions via getState() to avoid dependency on sessions Map reference
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
+      console.log(
+        "[Streaming] Session exists in store:",
+        !!existingSession,
+        "currentSessionId:",
+        currentState.currentSessionId
+      );
+
       if (existingSession?.abortController) {
+        console.log("[Streaming] Aborting previous controller for session");
         existingSession.abortController.abort();
       }
 
@@ -72,6 +85,7 @@ export function useBuildStreaming() {
       setAbortController(sessionId, controller);
 
       // Set status to running and clear previous tool calls
+      console.log("[Streaming] Setting status to running");
       updateSessionData(sessionId, { status: "running" });
       clearToolCallsInSession(sessionId);
 
@@ -89,14 +103,19 @@ export function useBuildStreaming() {
       let accumulatedMessageContent = "";
 
       try {
+        console.log("[Streaming] Calling sendMessageStream API...");
         const response = await sendMessageStream(
           sessionId,
           content,
           controller.signal
         );
+        console.log(
+          "[Streaming] sendMessageStream returned response, status:",
+          response.status
+        );
 
         console.log(
-          `[Build] Starting stream for session ${sessionId}, new assistant message ID: ${assistantMessageId}`
+          `[Streaming] Starting stream for session ${sessionId}, new assistant message ID: ${assistantMessageId}`
         );
 
         await processSSEStream(response, (packet) => {
@@ -311,15 +330,25 @@ export function useBuildStreaming() {
               break;
           }
         });
+        console.log(
+          "[Streaming] SSE stream processing completed for session:",
+          sessionId
+        );
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
-          console.error("Stream error:", err);
+          console.error("[Streaming] Stream error:", err);
           updateSessionData(sessionId, {
             status: "failed",
             error: (err as Error).message,
           });
+        } else {
+          console.log("[Streaming] Stream was aborted for session:", sessionId);
         }
       } finally {
+        console.log(
+          "[Streaming] Finally block - creating fresh abort controller for session:",
+          sessionId
+        );
         // Create a fresh abort controller for future use
         setAbortController(sessionId, new AbortController());
       }

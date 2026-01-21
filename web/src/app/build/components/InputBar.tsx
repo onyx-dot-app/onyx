@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn, isImageFile } from "@/lib/utils";
 import { LlmManager } from "@/lib/hooks";
 import {
@@ -18,7 +12,6 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import {
   SvgArrowUp,
-  SvgPlusCircle,
   SvgFileText,
   SvgImage,
   SvgLoader,
@@ -41,6 +34,8 @@ export interface InputBarProps {
   llmManager: LlmManager;
   /** Session ID for immediate file uploads. If provided, files upload immediately when attached. */
   sessionId?: string;
+  /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
+  sandboxInitializing?: boolean;
 }
 
 /**
@@ -92,6 +87,7 @@ const InputBar = React.memo(
         placeholder = "Describe your task...",
         llmManager,
         sessionId,
+        sandboxInitializing = false,
       },
       ref
     ) => {
@@ -118,10 +114,6 @@ const InputBar = React.memo(
           textAreaRef.current?.focus();
         },
       }));
-
-      const shouldCompactImages = useMemo(() => {
-        return currentMessageFiles.length > 1;
-      }, [currentMessageFiles]);
 
       // Auto-resize textarea based on content
       useEffect(() => {
@@ -181,7 +173,13 @@ const InputBar = React.memo(
       );
 
       const handleSubmit = useCallback(() => {
-        if (!message.trim() || disabled || isRunning || hasUploadingFiles)
+        if (
+          !message.trim() ||
+          disabled ||
+          isRunning ||
+          hasUploadingFiles ||
+          sandboxInitializing
+        )
           return;
         onSubmit(message.trim(), currentMessageFiles);
         setMessage("");
@@ -191,6 +189,7 @@ const InputBar = React.memo(
         disabled,
         isRunning,
         hasUploadingFiles,
+        sandboxInitializing,
         onSubmit,
         currentMessageFiles,
         clearFiles,
@@ -214,7 +213,8 @@ const InputBar = React.memo(
         message.trim().length > 0 &&
         !disabled &&
         !isRunning &&
-        !hasUploadingFiles;
+        !hasUploadingFiles &&
+        !sandboxInitializing;
 
       return (
         <div
@@ -301,10 +301,12 @@ const InputBar = React.memo(
 
               {/* Submit button */}
               <IconButton
-                icon={SvgArrowUp}
+                icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
                 onClick={handleSubmit}
                 disabled={!canSubmit}
-                tooltip="Send"
+                tooltip={
+                  sandboxInitializing ? "Initializing sandbox..." : "Send"
+                }
               />
             </div>
           </div>

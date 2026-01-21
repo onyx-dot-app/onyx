@@ -92,16 +92,6 @@ const BuildOutputPanel = memo(
     // Use polled artifacts if available, otherwise fall back to session store
     const artifacts = polledArtifacts ?? session?.artifacts ?? [];
 
-    // Debug logging
-    console.log("[OutputPanel] Debug:", {
-      hasWebapp,
-      webappUrl,
-      webappInfo,
-      sessionId: session?.id,
-      artifactsCount: artifacts.length,
-      isPolling: shouldFetchArtifacts,
-    });
-
     return (
       <div
         className={cn(

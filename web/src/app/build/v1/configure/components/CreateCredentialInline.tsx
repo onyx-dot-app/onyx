@@ -138,7 +138,7 @@ export default function CreateCredentialInline({
             })}
 
             {error && (
-              <Text secondaryBody className="text-red-500">
+              <Text secondaryBody className="text-status-error-05">
                 {error}
               </Text>
             )}

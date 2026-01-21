@@ -16,9 +16,12 @@ interface UseBuildSessionControllerProps {
  *
  * Responsibilities:
  * - Load session from API when URL changes
- * - Switch current session based on URL
- * - Abort active streams when navigating away
+ * - Switch current session based on URL (single source of truth)
+ * - Trigger pre-provisioning when on new build page
  * - Track session loading state
+ *
+ * IMPORTANT: This is the ONLY place that should call setCurrentSession.
+ * Other components should navigate to URLs and let this controller handle state.
  */
 export function useBuildSessionController({
   existingSessionId,
@@ -28,6 +31,9 @@ export function useBuildSessionController({
   // Refs to track previous session state
   const priorSessionIdRef = useRef<string | null>(null);
   const loadedSessionIdRef = useRef<string | null>(null);
+  // Track whether we've already triggered pre-provisioning for this "new build" visit
+  // Prevents re-triggering when consuming a session (state goes idle → triggers effect)
+  const hasTriggeredProvisioningRef = useRef(false);
 
   // Access store state and actions individually like chat does
   const currentSessionId = useBuildSessionStore(
@@ -37,7 +43,14 @@ export function useBuildSessionController({
     (state) => state.setCurrentSession
   );
   const loadSession = useBuildSessionStore((state) => state.loadSession);
-  const abortSession = useBuildSessionStore((state) => state.abortSession);
+
+  // Pre-provisioning state (discriminated union)
+  const preProvisioning = useBuildSessionStore(
+    (state) => state.preProvisioning
+  );
+  const ensurePreProvisionedSession = useBuildSessionStore(
+    (state) => state.ensurePreProvisionedSession
+  );
 
   // Compute derived state directly in selectors for efficiency
   const isLoading = useBuildSessionStore((state) => {
@@ -52,31 +65,64 @@ export function useBuildSessionController({
     return session?.status === "running" || session?.status === "creating";
   });
 
+  // Pre-provisioning derived state
+  const isPreProvisioning = preProvisioning.status === "provisioning";
+  const isPreProvisioningReady = preProvisioning.status === "ready";
+
   // Effect: Handle session changes based on URL
   useEffect(() => {
     const priorSessionId = priorSessionIdRef.current;
     priorSessionIdRef.current = existingSessionId;
 
-    const isNavigatingToNewSession =
-      priorSessionId !== null && existingSessionId === null;
-    const isSwitchingBetweenSessions =
-      priorSessionId !== null &&
-      existingSessionId !== null &&
-      priorSessionId !== existingSessionId;
+    console.log("[SessionController] Effect triggered", {
+      existingSessionId,
+      priorSessionId,
+      currentSessionId,
+      preProvisioningStatus: preProvisioning.status,
+    });
 
-    // Abort prior session's stream when switching away
-    if (
-      (isNavigatingToNewSession || isSwitchingBetweenSessions) &&
-      priorSessionId
-    ) {
-      abortSession(priorSessionId);
-    }
-
-    // Handle navigation to "new build" (no session ID)
+    // Handle navigation to "new build" (no session ID in URL)
     if (existingSessionId === null) {
-      setCurrentSession(null);
+      console.log("[SessionController] No session in URL (new build page)");
+      // Only reset currentSessionId if we're not in the middle of consuming a pre-provisioned session
+      // This prevents the race condition where we set a session and it gets immediately reset
+      if (currentSessionId !== null) {
+        console.log(
+          "[SessionController] Clearing currentSessionId (was:",
+          currentSessionId,
+          ")"
+        );
+        setCurrentSession(null);
+      }
+
+      // Trigger pre-provisioning if:
+      // 1. We haven't already triggered for this "visit" to new build page
+      // 2. Status is idle (not already provisioning or ready)
+      // This prevents re-triggering when consuming (state goes idle, effect runs, URL unchanged)
+      if (
+        !hasTriggeredProvisioningRef.current &&
+        preProvisioning.status === "idle"
+      ) {
+        console.log(
+          "[SessionController] Triggering pre-provisioning (status was idle, first trigger for this visit)"
+        );
+        hasTriggeredProvisioningRef.current = true;
+        ensurePreProvisionedSession();
+      } else {
+        console.log(
+          "[SessionController] Pre-provisioning not triggered (alreadyTriggered:",
+          hasTriggeredProvisioningRef.current,
+          ", status:",
+          preProvisioning.status,
+          ")"
+        );
+      }
       return;
     }
+
+    // Navigating to a session - reset the provisioning trigger flag
+    // so we can trigger again when returning to new build page
+    hasTriggeredProvisioningRef.current = false;
 
     // Handle navigation to existing session
     async function fetchSession() {
@@ -122,7 +168,8 @@ export function useBuildSessionController({
     currentSessionId,
     setCurrentSession,
     loadSession,
-    abortSession,
+    preProvisioning,
+    ensurePreProvisionedSession,
   ]);
 
   /**
@@ -139,14 +186,12 @@ export function useBuildSessionController({
 
   /**
    * Navigate to new build (clear session)
+   * Note: We intentionally don't abort the current session's stream,
+   * allowing it to continue in the background.
    */
   const navigateToNewBuild = useCallback(() => {
-    if (currentSessionId) {
-      abortSession(currentSessionId);
-    }
-    setCurrentSession(null);
     router.push("/build/v1");
-  }, [currentSessionId, abortSession, setCurrentSession, router]);
+  }, [router]);
 
   return {
     currentSessionId,
@@ -154,5 +199,9 @@ export function useBuildSessionController({
     isStreaming,
     navigateToSession,
     navigateToNewBuild,
+    // Pre-provisioning state
+    isPreProvisioning,
+    isPreProvisioningReady,
+    preProvisioning,
   };
 }
