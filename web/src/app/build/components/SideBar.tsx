@@ -21,6 +21,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { cn, noProp } from "@/lib/utils";
+import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgEditBig,
   SvgArrowLeft,
@@ -283,11 +284,40 @@ MemoizedBuildSidebarInner.displayName = "BuildSidebarInner";
 
 export default function BuildSidebar() {
   const { leftSidebarFolded, setLeftSidebarFolded } = useBuildContext();
+  const { isMobile } = useScreenSize();
+
+  if (!isMobile)
+    return (
+      <MemoizedBuildSidebarInner
+        folded={leftSidebarFolded}
+        onFoldClick={() => setLeftSidebarFolded((prev) => !prev)}
+      />
+    );
 
   return (
-    <MemoizedBuildSidebarInner
-      folded={leftSidebarFolded}
-      onFoldClick={() => setLeftSidebarFolded((prev) => !prev)}
-    />
+    <>
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
+          leftSidebarFolded ? "-translate-x-full" : "translate-x-0"
+        )}
+      >
+        <MemoizedBuildSidebarInner
+          folded={false}
+          onFoldClick={() => setLeftSidebarFolded(true)}
+        />
+      </div>
+
+      {/* Hitbox to close the sidebar if anything outside of it is touched */}
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
+          leftSidebarFolded
+            ? "opacity-0 pointer-events-none"
+            : "opacity-100 pointer-events-auto"
+        )}
+        onClick={() => setLeftSidebarFolded(true)}
+      />
+    </>
   );
 }
