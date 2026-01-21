@@ -52,7 +52,7 @@
       "entitlements": null,
       "exceptionDomain": "cloud.onyx.app",
       "minimumSystemVersion": "10.15",
-      "signingIdentity": "-",
+      "signingIdentity": null,
       "dmg": {
         "windowSize": {
           "width": 660,
