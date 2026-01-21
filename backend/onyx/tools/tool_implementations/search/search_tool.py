@@ -702,7 +702,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             top_sections = merge_individual_chunks(top_chunks)[
                 : override_kwargs.num_hits
             ]
-            
+
             # Convert InferenceSections to SearchDocs for emission
             search_docs = convert_inference_sections_to_search_docs(
                 top_sections, is_internet=False
