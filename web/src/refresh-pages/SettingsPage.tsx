@@ -216,6 +216,7 @@ function GeneralSettings() {
           type: "success",
         });
         await refreshChatSessions();
+        setShowDeleteConfirmation(false);
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
@@ -226,7 +227,6 @@ function GeneralSettings() {
       });
     } finally {
       setIsDeleting(false);
-      setShowDeleteConfirmation(false);
     }
   }, [pathname, router, setPopup, refreshChatSessions]);
 
@@ -1096,13 +1096,12 @@ function AccountsAccessSettings() {
           }
           await mutate();
           setPopup({ message: "Token deleted successfully", type: "success" });
+          setTokenToDelete(null);
         } else {
           setPopup({ message: "Failed to delete token", type: "error" });
         }
       } catch (error) {
         setPopup({ message: "Network error deleting token", type: "error" });
-      } finally {
-        setTokenToDelete(null);
       }
     },
     [newlyCreatedToken, mutate, setPopup]

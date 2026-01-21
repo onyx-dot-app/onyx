@@ -383,7 +383,7 @@ const ChatInputBar = React.memo(
     ]);
 
     function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-      if (!showPrompts) return;
+      if (!user?.preferences?.shortcut_enabled || !showPrompts) return;
 
       if (e.key === "Enter") {
         e.preventDefault();
