@@ -675,5 +675,6 @@ const ChatInputBar = React.memo(
     );
   }
 );
+ChatInputBar.displayName = "ChatInputBar";
 
 export default ChatInputBar;
