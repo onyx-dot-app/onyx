@@ -265,9 +265,20 @@ export default function ChatHeader() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 bg-background-tint-01 xl:bg-transparent">
+      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 relative">
+        {/* Fading blur overlay for mobile/tablet - hidden on xl+ */}
+        <div
+          className="absolute inset-0 backdrop-blur-md xl:hidden pointer-events-none"
+          style={{
+            maskImage:
+              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
+            WebkitMaskImage:
+              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
+          }}
+        />
+
         {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
-        <div className="flex-1">
+        <div className="flex-1 relative z-sticky">
           <IconButton
             icon={SvgSidebar}
             onClick={() => setFolded(false)}
@@ -277,7 +288,7 @@ export default function ChatHeader() {
         </div>
 
         {/* Center - contains the custom-header-content */}
-        <div className="flex-1 flex flex-col items-center overflow-hidden">
+        <div className="flex-1 flex flex-col items-center overflow-hidden relative z-sticky">
           <Text
             as="p"
             text03
@@ -289,7 +300,7 @@ export default function ChatHeader() {
         </div>
 
         {/* Right - contains the share and more-options buttons */}
-        <div className="flex-1 flex flex-row items-center justify-end px-1">
+        <div className="flex-1 flex flex-row items-center justify-end px-1 relative z-sticky">
           <Button
             leftIcon={SvgShare}
             transient={showShareModal}

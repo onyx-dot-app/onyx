@@ -93,9 +93,6 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
 
-export const NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-
 // Restrict markdown links to safe protocols
 export const ALLOWED_URL_PROTOCOLS = ["http:", "https:", "mailto:"] as const;
 

@@ -107,6 +107,7 @@ export { default as SvgPlayCircle } from "@opal/icons/play-circle";
 export { default as SvgPlug } from "@opal/icons/plug";
 export { default as SvgPlus } from "@opal/icons/plus";
 export { default as SvgPlusCircle } from "@opal/icons/plus-circle";
+export { default as SvgProgressCircle } from "@opal/icons/progress-circle";
 export { default as SvgQuestionMarkSmall } from "@opal/icons/question-mark-small";
 export { default as SvgQuoteEnd } from "@opal/icons/quote-end";
 export { default as SvgQuoteStart } from "@opal/icons/quote-start";

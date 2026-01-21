@@ -120,7 +120,18 @@ export function computeMaskedInputChange(
 }
 
 export interface PasswordInputTypeInProps
-  extends Omit<InputTypeInProps, "type" | "rightSection" | "leftSearchIcon"> {
+  extends Omit<
+    InputTypeInProps,
+    "type" | "rightSection" | "leftSearchIcon" | "variant"
+  > {
+  /**
+   * Whether the input is disabled.
+   */
+  disabled?: boolean;
+  /**
+   * Whether the input has an error.
+   */
+  error?: boolean;
   /**
    * When true, the reveal toggle is disabled.
    * Use this when displaying a stored/masked value from the backend
@@ -154,6 +165,7 @@ const PasswordInputTypeIn = React.forwardRef<
     onFocus,
     onBlur,
     disabled,
+    error,
     showClearButton = false,
     ...props
   },
@@ -269,7 +281,7 @@ const PasswordInputTypeIn = React.forwardRef<
       onBlur={handleBlur}
       onSelect={captureSelection}
       onKeyDown={captureSelection}
-      disabled={disabled}
+      variant={disabled ? "disabled" : error ? "error" : undefined}
       showClearButton={showClearButton}
       autoComplete="off"
       rightSection={

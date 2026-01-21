@@ -90,8 +90,13 @@ function VertexFormFields(
                 onChange={(e) => helper.setValue(e.target.value)}
                 onBlur={field.onBlur}
                 placeholder="global"
-                disabled={disabled}
-                error={state === "error"}
+                variant={
+                  disabled
+                    ? "disabled"
+                    : state === "error"
+                      ? "error"
+                      : undefined
+                }
               />
             </FormField.Control>
             <FormField.Description>

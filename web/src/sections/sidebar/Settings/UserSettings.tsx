@@ -30,6 +30,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import {
+  SvgCheck,
   SvgCpu,
   SvgExternalLink,
   SvgMoon,
@@ -38,6 +39,10 @@ import {
   SvgTrash,
   SvgXOctagon,
 } from "@opal/icons";
+import {
+  CHAT_BACKGROUND_NONE,
+  CHAT_BACKGROUND_OPTIONS,
+} from "@/lib/constants/chatBackgrounds";
 import Modal from "@/refresh-components/Modal";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 
@@ -57,6 +62,7 @@ export default function UserSettings() {
     updateUserTemperatureOverrideEnabled,
     updateUserPersonalization,
     updateUserThemePreference,
+    updateUserChatBackground,
   } = useUser();
   const { llmProviders } = useLLMProviders();
   const authType = useAuthType();
@@ -426,6 +432,59 @@ export default function UserSettings() {
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium">Chat Background</h3>
+                    <SubLabel>Choose a background for your chat</SubLabel>
+                    <div className="grid grid-cols-4 gap-2 mt-3">
+                      {CHAT_BACKGROUND_OPTIONS.map((bg) => {
+                        const isSelected =
+                          (user?.preferences?.chat_background ?? "none") ===
+                          bg.id;
+                        return (
+                          <button
+                            key={bg.id}
+                            onClick={() => {
+                              updateUserChatBackground(
+                                bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+                              );
+                            }}
+                            className="group relative aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all hover:scale-105"
+                            style={{
+                              borderColor: isSelected
+                                ? "var(--accent)"
+                                : "transparent",
+                            }}
+                            title={bg.label}
+                            aria-label={`${bg.label} background${
+                              isSelected ? " (selected)" : ""
+                            }`}
+                          >
+                            {bg.url === CHAT_BACKGROUND_NONE ? (
+                              <div className="w-full h-full bg-background-01 flex items-center justify-center">
+                                <span className="text-xs text-text-03">
+                                  None
+                                </span>
+                              </div>
+                            ) : (
+                              <div
+                                className="w-full h-full bg-cover bg-center"
+                                style={{
+                                  backgroundImage: `url(${bg.thumbnail})`,
+                                }}
+                              />
+                            )}
+                            {isSelected && (
+                              <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center">
+                                  <SvgCheck className="w-3 h-3 stroke-white" />
+                                </div>
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>

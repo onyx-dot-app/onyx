@@ -161,6 +161,7 @@ export default function ActionLineItem({
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}
+
               {isUnavailable && showAdminConfigure && adminConfigureHref && (
                 <IconButton
                   icon={SvgSettings}
@@ -172,6 +173,7 @@ export default function ActionLineItem({
                   tooltip={adminConfigureTooltip}
                 />
               )}
+
               {/* Source count for internal search - show when some but not all sources selected AND tool is pinned */}
               {shouldShowSourceCount && (
                 <span className="relative flex items-center whitespace-nowrap">
@@ -192,6 +194,7 @@ export default function ActionLineItem({
                   </span>
                 </span>
               )}
+
               {isSearchToolAndNotInProject &&
                 !isSearchToolWithNoDocumentSets && (
                   <IconButton

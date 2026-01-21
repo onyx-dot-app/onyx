@@ -126,7 +126,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     if (!href) return content;
     return (
-      <Link href={href as Route} target={target}>
+      <Link
+        href={href as Route}
+        target={target}
+        rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      >
         {content}
       </Link>
     );

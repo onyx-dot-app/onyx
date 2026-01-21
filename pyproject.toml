@@ -73,7 +73,6 @@ backend = [
     "mcp[cli]==1.25.0",
     "msal==1.34.0",
     "msoffcrypto-tool==5.4.2",
-    "nltk==3.9.1",
     "Office365-REST-Python-Client==2.5.9",
     "oauthlib==3.2.2",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147

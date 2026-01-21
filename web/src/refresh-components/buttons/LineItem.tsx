@@ -36,7 +36,10 @@ const iconClassNames = {
 } as const;
 
 export interface LineItemProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLButtonElement>> {
+  extends Omit<
+    WithoutStyles<React.HTMLAttributes<HTMLButtonElement>>,
+    "children"
+  > {
   // line-item variants
   strikethrough?: boolean;
   danger?: boolean;
@@ -50,6 +53,7 @@ export interface LineItemProps
   rightChildren?: React.ReactNode;
   href?: string;
   ref?: React.Ref<HTMLButtonElement>;
+  children: string;
 }
 
 /**
@@ -147,7 +151,11 @@ export default function LineItem({
           >
             {children}
           </Truncated>
-          {rightChildren && <Section alignItems="end">{rightChildren}</Section>}
+          {rightChildren && (
+            <Section alignItems="end" width="fit">
+              {rightChildren}
+            </Section>
+          )}
         </Section>
         {description && (
           <Text secondaryBody text03 className="text-left w-full">
