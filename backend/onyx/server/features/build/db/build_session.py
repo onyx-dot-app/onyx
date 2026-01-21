@@ -27,14 +27,18 @@ def create_build_session(
     db_session: Session,
     name: str | None = None,
 ) -> BuildSession:
-    """Create a new build session for the given user."""
+    """Create a new build session for the given user.
+
+    NOTE: This function uses flush() instead of commit(). The caller is
+    responsible for committing the transaction when ready.
+    """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
     )
     db_session.add(session)
-    db_session.commit()
+    db_session.flush()
     db_session.refresh(session)
 
     logger.info(f"Created build session {session.id} for user {user_id}")
@@ -133,13 +137,17 @@ def delete_build_session(
     user_id: UUID,
     db_session: Session,
 ) -> bool:
-    """Delete a build session and all related data."""
+    """Delete a build session and all related data.
+
+    NOTE: This function uses flush() instead of commit(). The caller is
+    responsible for committing the transaction when ready.
+    """
     session = get_build_session(session_id, user_id, db_session)
     if not session:
         return False
 
     db_session.delete(session)
-    db_session.commit()
+    db_session.flush()
     logger.info(f"Deleted build session {session_id}")
     return True
 

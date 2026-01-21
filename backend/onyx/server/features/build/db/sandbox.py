@@ -22,14 +22,19 @@ def create_sandbox(
     session_id: UUID,
     nextjs_port: int | None = None,
 ) -> Sandbox:
-    """Create a new sandbox record."""
+    """Create a new sandbox record.
+
+    NOTE: This function uses flush() instead of commit(). The caller is
+    responsible for committing the transaction when ready.
+    """
     sandbox = Sandbox(
         session_id=session_id,
         status=SandboxStatus.PROVISIONING,
         nextjs_port=nextjs_port,
     )
     db_session.add(sandbox)
-    db_session.commit()
+    db_session.flush()
+    db_session.refresh(sandbox)
     return sandbox
 
 
@@ -46,15 +51,21 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
 
 
 def update_sandbox_status(
-    db_session: Session, sandbox_id: UUID, status: SandboxStatus
+    db_session: Session,
+    sandbox_id: UUID,
+    status: SandboxStatus,
 ) -> Sandbox:
-    """Update sandbox status."""
+    """Update sandbox status.
+
+    NOTE: This function uses flush() instead of commit(). The caller is
+    responsible for committing the transaction when ready.
+    """
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
     if not sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.status = status
-    db_session.commit()
+    db_session.flush()
     return sandbox
 
 
