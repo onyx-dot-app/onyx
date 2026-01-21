@@ -33,6 +33,7 @@ export interface UsePacketProcessorResult {
   hasSteps: boolean;
   expectedBranchesPerTurn: Map<number, number>;
   uniqueToolNames: string[];
+  isGeneratingImage: boolean;
 
   // Completion: stopPacketSeen && renderComplete
   isComplete: boolean;
@@ -142,6 +143,7 @@ export function usePacketProcessor(
     hasSteps: toolTurnGroups.length > 0,
     expectedBranchesPerTurn: state.expectedBranches,
     uniqueToolNames: state.uniqueToolNamesArray,
+    isGeneratingImage: state.isGeneratingImage,
 
     // Completion: stopPacketSeen && renderComplete
     isComplete: state.stopPacketSeen && renderComplete,

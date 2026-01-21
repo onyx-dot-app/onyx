@@ -157,7 +157,7 @@ export function getToolIconByName(name: string): JSX.Element {
       return <FiCode className="w-3.5 h-3.5" />;
     case "Open URLs":
       return <FiLink className="w-3.5 h-3.5" />;
-    case "Generate Image":
+    case "Image Generation":
       return <FiImage className="w-3.5 h-3.5" />;
     case "Generate plan":
       return <FiList className="w-3.5 h-3.5" />;

@@ -33,7 +33,7 @@ export const CollapsedHeader = React.memo(function CollapsedHeader({
           </div>
         ))}
       </div>
-      {collapsible && (
+      {collapsible && totalSteps > 0 && (
         <Button
           tertiary
           onClick={onToggle}

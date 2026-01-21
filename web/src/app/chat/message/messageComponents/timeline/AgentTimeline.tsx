@@ -137,6 +137,8 @@ export interface AgentTimelineProps {
   uniqueToolNames?: string[];
   /** Processing duration in seconds (for completed messages) */
   processingDurationSeconds?: number;
+  /** Whether image generation is in progress */
+  isGeneratingImage?: boolean;
 }
 
 /**
@@ -158,7 +160,8 @@ function areAgentTimelinePropsEqual(
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.className === next.className &&
-    prev.chatState.assistant?.id === next.chatState.assistant?.id
+    prev.chatState.assistant?.id === next.chatState.assistant?.id &&
+    prev.isGeneratingImage === next.isGeneratingImage
   );
 }
 
@@ -175,11 +178,13 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   "data-testid": testId,
   uniqueToolNames = [],
   processingDurationSeconds,
+  isGeneratingImage = false,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
-    stopReason
+    stopReason,
+    isGeneratingImage
   );
 
   // Memoized metrics derived from turn groups
@@ -254,8 +259,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   // Header selection based on state
   // Show streaming headers only when actively executing tools (no message content yet)
   // Once hasDisplayContent is true, switch to collapsed/expanded headers
+  // Exception: show streaming header when generating image (even if hasDisplayContent is true)
   const renderHeader = () => {
-    if (!stopPacketSeen && !hasDisplayContent) {
+    if (!stopPacketSeen && (!hasDisplayContent || isGeneratingImage)) {
       if (showParallelTabs && lastTurnGroup) {
         return (
           <ParallelStreamingHeader
@@ -311,8 +317,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     );
   };
 
-  // Empty state: no packets, still streaming
-  if (!hasPackets && !hasDisplayContent) {
+  // Empty state: no packets, still streaming, and not stopped
+  if (!hasPackets && !hasDisplayContent && !stopPacketSeen) {
     return (
       <div className={cn("flex flex-col", className)}>
         <div className="flex w-full h-9">
@@ -334,8 +340,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     );
   }
 
-  // Display content only (no timeline steps)
-  if (hasDisplayContent && !hasPackets) {
+  // Display content only (no timeline steps) - but show header for image generation
+  if (hasDisplayContent && !hasPackets && !isGeneratingImage) {
     return (
       <div className={cn("flex flex-col", className)}>
         <div className="flex w-full h-9">
@@ -357,9 +363,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         <div
           className={cn(
             "flex w-full h-full items-center justify-between px-2",
-            ((!stopPacketSeen && !hasDisplayContent) ||
-              userStopped ||
-              isExpanded) &&
+            ((!stopPacketSeen && !hasDisplayContent) || isExpanded) &&
               "bg-background-tint-00 rounded-t-12",
             !isExpanded &&
               !showCollapsedCompact &&
