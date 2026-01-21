@@ -134,6 +134,8 @@ export interface AgentTimelineProps {
   "data-testid"?: string;
   /** Unique tool names (pre-computed for performance) */
   uniqueToolNames?: string[];
+  /** Processing duration in seconds (for completed messages) */
+  processingDurationSeconds?: number;
 }
 
 export function AgentTimeline({
@@ -148,6 +150,7 @@ export function AgentTimeline({
   className,
   "data-testid": testId,
   uniqueToolNames = [],
+  processingDurationSeconds,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
@@ -266,7 +269,13 @@ export function AgentTimeline({
       );
     }
 
-    return <ExpandedHeader collapsible={collapsible} onToggle={handleToggle} />;
+    return (
+      <ExpandedHeader
+        collapsible={collapsible}
+        onToggle={handleToggle}
+        processingDurationSeconds={processingDurationSeconds}
+      />
+    );
   };
 
   // Empty state: no packets, still streaming

@@ -147,6 +147,9 @@ export interface Message {
 
   // feedback state
   currentFeedback?: FeedbackType | null;
+
+  // Duration in seconds for processing this message (assistant messages only)
+  processingDurationSeconds?: number;
 }
 
 export interface BackendChatSession {
