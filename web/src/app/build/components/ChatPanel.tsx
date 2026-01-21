@@ -107,45 +107,45 @@ export default function BuildChatPanel() {
         console.log(
           "[ChatPanel] New session flow - attempting to consume pre-provisioned session"
         );
-        const preProvisionedResult = await consumePreProvisionedSession();
+        const newSessionId = await consumePreProvisionedSession();
         console.log(
           "[ChatPanel] consumePreProvisionedSession returned:",
-          preProvisionedResult
+          newSessionId
         );
 
-        if (!preProvisionedResult) {
+        if (!newSessionId) {
           // Fallback: createNewSession handles everything including navigation
           console.log(
             "[ChatPanel] No pre-provisioned session, falling back to createNewSession"
           );
-          const newSessionId = await createNewSession(message);
-          console.log("[ChatPanel] createNewSession returned:", newSessionId);
-          if (newSessionId) {
+          const fallbackSessionId = await createNewSession(message);
+          console.log(
+            "[ChatPanel] createNewSession returned:",
+            fallbackSessionId
+          );
+          if (fallbackSessionId) {
             if (files.length > 0) {
               console.log("[ChatPanel] Uploading", files.length, "files");
               await Promise.all(
                 files
                   .filter((f) => f.file)
-                  .map((f) => uploadFile(newSessionId, f.file!))
+                  .map((f) => uploadFile(fallbackSessionId, f.file!))
               );
               console.log("[ChatPanel] File upload complete");
             }
             console.log(
               "[ChatPanel] Starting streamMessage for new session (fallback)"
             );
-            await streamMessage(newSessionId, message);
+            await streamMessage(fallbackSessionId, message);
             console.log("[ChatPanel] streamMessage completed (fallback)");
           }
         } else {
           // Pre-provisioned session flow:
           // The backend session already exists (created during pre-provisioning).
           // Here we initialize the LOCAL Zustand store entry with the right state.
-          const { sessionId: newSessionId, sandbox } = preProvisionedResult;
           console.log(
             "[ChatPanel] Using pre-provisioned session:",
-            newSessionId,
-            "sandbox:",
-            sandbox?.status
+            newSessionId
           );
           const userMessage = {
             id: `msg-${Date.now()}`,
@@ -156,16 +156,13 @@ export default function BuildChatPanel() {
           // Initialize local state (NOT an API call - backend session already exists)
           // - isLoaded: true prevents loadSession from overwriting with server data
           // - status: "running" disables input immediately
-          // - sandbox: pass through sandbox info for correct status indicator
-          console.log(
-            "[ChatPanel] Creating local session state with sandbox:",
-            sandbox?.status
-          );
+          // Note: sandbox status indicator will optimistically show "running" for sessions
+          // without sandbox info (see deriveSandboxStatus)
+          console.log("[ChatPanel] Creating local session state");
           createSession(newSessionId, {
             isLoaded: true,
             messages: [userMessage],
             status: "running",
-            sandbox,
           });
 
           // 2. Upload files before navigation

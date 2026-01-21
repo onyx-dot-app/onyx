@@ -37,6 +37,11 @@ const STATUS_CONFIG = {
     pulse: false,
     label: "Sandbox ready",
   },
+  loading: {
+    color: "bg-neutral-400",
+    pulse: true,
+    label: "Finding sandbox...",
+  },
 } as const;
 
 type Status = keyof typeof STATUS_CONFIG;
@@ -47,25 +52,40 @@ interface SandboxStatusIndicatorProps {}
  * Derives the current sandbox status from session state or pre-provisioning state.
  *
  * Priority:
- * 1. Actual sandbox status (if session exists with sandbox)
- * 2. Pre-provisioning state (provisioning/ready)
- * 3. Default to provisioning
+ * 1. Actual sandbox status from backend (if session has sandbox info)
+ * 2. Session exists but no sandbox info → "running" (optimistic for consumed pre-provisioned sessions)
+ * 3. Pre-provisioning in progress → "provisioning" (only when no session - welcome page)
+ * 4. Pre-provisioning ready (not yet consumed) → "ready"
+ * 5. Default → "loading" (gray, finding sandbox)
+ *
+ * IMPORTANT: Pre-provisioning state is checked AFTER session existence because
+ * pre-provisioning is for NEW sessions. When viewing an existing session, we
+ * should show that session's status, not the background pre-provisioning state.
  */
 function deriveSandboxStatus(
   session: ReturnType<typeof useSession>,
   isPreProvisioning: boolean,
   isReady: boolean
 ): Status {
+  // 1. Backend is source of truth when available
   if (session?.sandbox) {
     return session.sandbox.status as Status;
   }
+  // 2. Session exists but no sandbox info - assume running
+  // (This handles consumed pre-provisioned sessions before sandbox loads)
+  if (session) {
+    return "running";
+  }
+  // 3. No session - check pre-provisioning state (welcome page)
   if (isPreProvisioning) {
     return "provisioning";
   }
+  // 4. Pre-provisioning ready but not consumed
   if (isReady) {
     return "ready";
   }
-  return "provisioning";
+  // 5. No session, no pre-provisioning state - loading
+  return "loading";
 }
 
 /**

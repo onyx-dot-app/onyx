@@ -253,6 +253,8 @@ export interface IconButtonProps
   tooltip?: string;
   toolTipPosition?: "top" | "bottom" | "left" | "right";
   tooltipSize?: "sm" | "md" | "lg";
+  /** Additional className to apply to the icon element */
+  iconClassName?: string;
 }
 
 export default function IconButton({
@@ -272,6 +274,7 @@ export default function IconButton({
   onClick,
   icon: Icon,
   className,
+  iconClassName,
   tooltip,
   toolTipPosition = "top",
   tooltipSize = "lg",
@@ -327,7 +330,7 @@ export default function IconButton({
       disabled={disabled}
       {...props}
     >
-      <Icon className={cn("h-[1rem] w-[1rem]", iconClass)} />
+      <Icon className={cn("h-[1rem] w-[1rem]", iconClass, iconClassName)} />
     </button>
   );
 

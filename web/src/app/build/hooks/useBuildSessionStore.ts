@@ -41,20 +41,11 @@ export type {
 // Store Types (mirrors chat's useChatSessionStore pattern)
 // =============================================================================
 
-/** Pre-provisioned session result including sandbox info */
-export interface PreProvisionedSessionResult {
-  sessionId: string;
-  sandbox: ApiSandboxResponse | null;
-}
-
 /** Pre-provisioning state machine - exactly one of these states at a time */
 export type PreProvisioningState =
   | { status: "idle" }
-  | {
-      status: "provisioning";
-      promise: Promise<PreProvisionedSessionResult | null>;
-    }
-  | { status: "ready"; sessionId: string; sandbox: ApiSandboxResponse | null };
+  | { status: "provisioning"; promise: Promise<string | null> }
+  | { status: "ready"; sessionId: string };
 
 export interface BuildSessionData {
   id: string;
@@ -135,8 +126,8 @@ interface BuildSessionStore {
   cleanupOldSessions: (maxSessions?: number) => void;
 
   // Pre-provisioning Actions
-  ensurePreProvisionedSession: () => Promise<PreProvisionedSessionResult | null>;
-  consumePreProvisionedSession: () => Promise<PreProvisionedSessionResult | null>;
+  ensurePreProvisionedSession: () => Promise<string | null>;
+  consumePreProvisionedSession: () => Promise<string | null>;
 }
 
 // =============================================================================
@@ -733,10 +724,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         "[PreProvision] Already ready, returning sessionId:",
         preProvisioning.sessionId
       );
-      return {
-        sessionId: preProvisioning.sessionId,
-        sandbox: preProvisioning.sandbox,
-      };
+      return preProvisioning.sessionId;
     }
 
     // Already provisioning - return existing promise
@@ -749,25 +737,22 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Start new provisioning
     console.log("[PreProvision] Starting new provisioning...");
-    const promise = (async (): Promise<PreProvisionedSessionResult | null> => {
+    const promise = (async (): Promise<string | null> => {
       try {
         console.log("[PreProvision] Calling apiCreateSession...");
         const sessionData = await apiCreateSession();
         console.log(
           "[PreProvision] apiCreateSession returned, sessionId:",
-          sessionData.id,
-          "sandbox:",
-          sessionData.sandbox?.status
+          sessionData.id
         );
         set({
           preProvisioning: {
             status: "ready",
             sessionId: sessionData.id,
-            sandbox: sessionData.sandbox,
           },
         });
         console.log("[PreProvision] State set to ready");
-        return { sessionId: sessionData.id, sandbox: sessionData.sandbox };
+        return sessionData.id;
       } catch (err) {
         console.error("[PreProvision] Failed to pre-provision session:", err);
         set({ preProvisioning: { status: "idle" } });
@@ -799,13 +784,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     console.log("[PreProvision] After await, state is:", currentState.status);
 
     if (currentState.status === "ready") {
-      const { sessionId, sandbox } = currentState;
-      console.log(
-        "[PreProvision] Consuming session:",
-        sessionId,
-        "sandbox:",
-        sandbox?.status
-      );
+      const { sessionId } = currentState;
+      console.log("[PreProvision] Consuming session:", sessionId);
 
       // Optimistically add to session history so it appears in sidebar immediately
       // (Backend excludes empty sessions, but we're about to send a message)
@@ -822,13 +802,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         });
       }
 
-      // Reset to idle and return the session result
+      // Reset to idle and return the session ID
       set({ preProvisioning: { status: "idle" } });
       console.log(
         "[PreProvision] State reset to idle, returning sessionId:",
         sessionId
       );
-      return { sessionId, sandbox };
+      return sessionId;
     }
 
     // No session available

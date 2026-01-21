@@ -307,6 +307,7 @@ const InputBar = React.memo(
                 tooltip={
                   sandboxInitializing ? "Initializing sandbox..." : "Send"
                 }
+                iconClassName={sandboxInitializing ? "animate-spin" : undefined}
               />
             </div>
           </div>
