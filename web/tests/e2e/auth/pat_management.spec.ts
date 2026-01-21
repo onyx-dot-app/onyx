@@ -22,13 +22,10 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await page.locator("#onyx-user-dropdown").click();
   await page.getByText("User Settings").first().click();
 
-  // Wait for settings modal to appear (first page has Theme section)
-  await expect(page.getByText("Theme")).toBeVisible();
+  // Wait for settings modal to appear (first page has "Full Name" section)
+  await expect(page.getByText("Full Name")).toBeVisible();
 
-  const accessTokensTab = page
-    .locator("text=Access Tokens")
-    .or(page.locator('button:has-text("Access Tokens")'))
-    .first();
+  const accessTokensTab = page.getByRole("link", { name: "Accounts & Access" });
   await accessTokensTab.click();
 
   // Wait for PAT page to load
@@ -156,13 +153,10 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   await page.locator("#onyx-user-dropdown").click();
   await page.getByText("User Settings").first().click();
 
-  // Wait for settings modal to appear (first page has Theme section)
-  await expect(page.getByText("Theme")).toBeVisible();
+  // Wait for settings modal to appear (first page has "Full Name" section)
+  await expect(page.getByText("Full Name")).toBeVisible();
 
-  const accessTokensTab = page
-    .locator("text=Access Tokens")
-    .or(page.locator('button:has-text("Access Tokens")'))
-    .first();
+  const accessTokensTab = page.getByRole("link", { name: "Accounts & Access" });
   await accessTokensTab.click();
 
   // Wait for PAT page to load
