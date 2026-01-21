@@ -44,7 +44,7 @@ import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 
 const widthClasses = {
   md: "w-[min(50rem,100%)]",
-  full: "w-full px-[4rem]",
+  lg: "w-[min(60rem,100%)]",
 };
 
 /**

@@ -24,7 +24,7 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <AppLayouts.Root>
-      <SettingsLayouts.Root width="full">
+      <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header icon={SvgSliders} title="Settings" separator />
 
         <SettingsLayouts.Body>
