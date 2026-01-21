@@ -641,7 +641,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root DEPRECATEDDisableFooter>
+      <AppLayouts.Root disableFooter>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)

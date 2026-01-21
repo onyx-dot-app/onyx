@@ -180,11 +180,14 @@ function Footer() {
  * ```
  */
 export interface AppRootProps {
-  DEPRECATEDDisableFooter?: boolean;
+  /**
+   * @deprecated This prop should rarely be used. Prefer letting the Footer render.
+   */
+  disableFooter?: boolean;
   children?: React.ReactNode;
 }
 
-function AppRoot({ children, DEPRECATEDDisableFooter }: AppRootProps) {
+function AppRoot({ children, disableFooter }: AppRootProps) {
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
       breakout of their immediate containers using cqw units.
@@ -192,7 +195,7 @@ function AppRoot({ children, DEPRECATEDDisableFooter }: AppRootProps) {
     <div className="@container flex flex-col h-full w-full">
       <AppHeader />
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
-      {!DEPRECATEDDisableFooter && <Footer />}
+      {!disableFooter && <Footer />}
     </div>
   );
 }
