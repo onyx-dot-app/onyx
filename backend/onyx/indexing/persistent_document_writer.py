@@ -8,19 +8,28 @@ import json
 from pathlib import Path
 
 from onyx.connectors.models import Document
+from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 class PersistentDocumentWriter:
-    """Writes indexed documents to local filesystem with hierarchical structure"""
+    """Writes indexed documents to local filesystem with hierarchical structure.
+
+    Documents are stored in user-segregated paths:
+    {base_path}/{user_id}/{source}/{hierarchy}/document.json
+
+    This enables per-user isolation for sandbox access control.
+    """
 
     def __init__(
         self,
         base_path: str,
+        user_id: str,
     ):
         self.base_path = Path(base_path)
+        self.user_id = user_id
 
     def write_documents(self, documents: list[Document]) -> list[str]:
         """Write documents to local filesystem, returns written file paths"""
@@ -63,8 +72,19 @@ class PersistentDocumentWriter:
         return written_paths
 
     def _build_directory_path(self, doc: Document) -> Path:
-        """Build directory path from document metadata"""
-        parts = [doc.source.value]
+        """Build directory path from document metadata.
+
+        Documents are stored under user-segregated paths:
+        {base_path}/{user_id}/{source}/{hierarchy}/
+
+        This enables per-user isolation for sandbox access control.
+        """
+        parts: list[str] = []
+
+        # Add user_id as the first path component for user segregation
+        parts.append(self.user_id)
+
+        parts.append(doc.source.value)
 
         # Get hierarchy from doc_metadata
         hierarchy = doc.doc_metadata.get("hierarchy", {}) if doc.doc_metadata else {}
@@ -132,10 +152,17 @@ class PersistentDocumentWriter:
         logger.debug(f"Wrote document to {path}")
 
 
-def get_persistent_document_writer() -> PersistentDocumentWriter:
-    """Factory function to create a PersistentDocumentWriter with default configuration"""
-    from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+def get_persistent_document_writer(
+    user_id: str,
+) -> PersistentDocumentWriter:
+    """Factory function to create a PersistentDocumentWriter with default configuration.
 
+    Args:
+        user_id: User ID for user-segregated storage paths.
+                 Documents are stored under {base_path}/{user_id}/...
+                 for sandbox access control isolation.
+    """
     return PersistentDocumentWriter(
         base_path=PERSISTENT_DOCUMENT_STORAGE_PATH,
+        user_id=user_id,
     )

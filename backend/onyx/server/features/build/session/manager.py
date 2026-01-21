@@ -181,11 +181,22 @@ class SessionManager:
         session_id = str(build_session.id)
         logger.info(f"Created build session {session_id} for user {user_id}")
 
+        # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
+        # Each user's sandbox can only access documents they created
+        if PERSISTENT_DOCUMENT_STORAGE_PATH and user_id:
+            user_file_system_path = str(
+                Path(PERSISTENT_DOCUMENT_STORAGE_PATH) / str(user_id)
+            )
+            # Ensure the user's document directory exists
+            Path(user_file_system_path).mkdir(parents=True, exist_ok=True)
+        else:
+            user_file_system_path = "/tmp/onyx-files"
+
         # Provision sandbox
         self._sandbox_manager.provision(
             session_id=session_id,
             tenant_id=tenant_id,
-            file_system_path=PERSISTENT_DOCUMENT_STORAGE_PATH or "/tmp/onyx-files",
+            file_system_path=user_file_system_path,
             db_session=self._db_session,
         )
 
