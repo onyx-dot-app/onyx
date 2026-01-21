@@ -317,6 +317,12 @@ const ChatInputBar = React.memo(
     const { filtered: filteredPrompts, setQuery: setPromptFilterQuery } =
       useFilter(activePromptShortcuts, (prompt) => prompt.prompt);
 
+    // Memoize sorted prompts to avoid re-sorting on every render
+    const sortedFilteredPrompts = useMemo(
+      () => [...filteredPrompts].sort((a, b) => a.id - b.id),
+      [filteredPrompts]
+    );
+
     // Sync the filter query when message changes
     useEffect(() => {
       setPromptFilterQuery(promptFilterQuery);
@@ -464,25 +470,23 @@ const ChatInputBar = React.memo(
           >
             <Popover.Menu>
               {[
-                ...[...filteredPrompts]
-                  .sort((a, b) => a.id - b.id)
-                  .map((prompt, index) => (
-                    <LineItem
-                      key={prompt.id}
-                      selected={tabbingIconIndex === index}
-                      emphasized={tabbingIconIndex === index}
-                      description={prompt.content?.trim()}
-                      onClick={() => updateInputPrompt(prompt)}
-                    >
-                      {prompt.prompt}
-                    </LineItem>
-                  )),
-                filteredPrompts.length > 0 ? null : undefined,
+                ...sortedFilteredPrompts.map((prompt, index) => (
+                  <LineItem
+                    key={prompt.id}
+                    selected={tabbingIconIndex === index}
+                    emphasized={tabbingIconIndex === index}
+                    description={prompt.content?.trim()}
+                    onClick={() => updateInputPrompt(prompt)}
+                  >
+                    {prompt.prompt}
+                  </LineItem>
+                )),
+                sortedFilteredPrompts.length > 0 ? null : undefined,
                 <LineItem
                   key="create-new"
                   icon={SvgPlus}
-                  selected={tabbingIconIndex === filteredPrompts.length}
-                  emphasized={tabbingIconIndex === filteredPrompts.length}
+                  selected={tabbingIconIndex === sortedFilteredPrompts.length}
+                  emphasized={tabbingIconIndex === sortedFilteredPrompts.length}
                 >
                   Create New Prompt
                 </LineItem>,
