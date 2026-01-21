@@ -45,6 +45,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotInfo
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -340,17 +341,23 @@ class LocalSandboxManager(SandboxManager):
 
         session_uuid = UUID(session_id)
 
-        # Check limit
-        logger.debug(f"Checking concurrent sandbox limit for tenant {tenant_id}")
-        running_count = get_running_sandbox_count_by_tenant(db_session, tenant_id)
-        logger.debug(
-            f"Current running sandboxes: {running_count}, "
-            f"max: {SANDBOX_MAX_CONCURRENT_PER_ORG}"
-        )
-        if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
-            raise ValueError(
-                f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) "
-                f"reached for tenant"
+        # Check limit (only enforce on cloud deployments)
+        if MULTI_TENANT:
+            logger.debug(f"Checking concurrent sandbox limit for tenant {tenant_id}")
+            running_count = get_running_sandbox_count_by_tenant(db_session, tenant_id)
+            logger.debug(
+                f"Current running sandboxes: {running_count}, "
+                f"max: {SANDBOX_MAX_CONCURRENT_PER_ORG}"
+            )
+            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
+                raise ValueError(
+                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) "
+                    f"reached for tenant"
+                )
+        else:
+            logger.debug(
+                f"Skipping sandbox limit check for tenant {tenant_id} "
+                "(self-hosted deployment)"
             )
 
         # Create directory structure
