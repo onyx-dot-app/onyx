@@ -307,20 +307,19 @@ const ChatInputBar = React.memo(
       setMessage(`${prompt.content}`);
     }
 
-    // Extract everything after the last `/` for filtering
-    const promptFilterQuery = useMemo(() => {
-      if (!message.startsWith("/")) return "";
-      // Get everything after the `/`
-      return message.slice(1);
-    }, [message]);
-
     const { filtered: filteredPrompts, setQuery: setPromptFilterQuery } =
       useFilter(activePromptShortcuts, (prompt) => prompt.prompt);
 
-    // Sync the filter query when message changes
+    // Memoize sorted prompts to avoid re-sorting on every render
+    const sortedFilteredPrompts = useMemo(
+      () => [...filteredPrompts].sort((a, b) => a.id - b.id),
+      [filteredPrompts]
+    );
+
+    // Reset tabbingIconIndex when filtered prompts change to avoid out-of-bounds
     useEffect(() => {
-      setPromptFilterQuery(promptFilterQuery);
-    }, [promptFilterQuery, setPromptFilterQuery]);
+      setTabbingIconIndex(0);
+    }, [filteredPrompts]);
 
     const handlePromptInput = useCallback(
       (text: string) => {
@@ -338,8 +337,11 @@ const ChatInputBar = React.memo(
         const text = event.target.value;
         setMessage(text);
         handlePromptInput(text);
+
+        const promptFilterQuery = text.startsWith("/") ? text.slice(1) : "";
+        setPromptFilterQuery(promptFilterQuery);
       },
-      [setMessage, handlePromptInput]
+      [setMessage, handlePromptInput, setPromptFilterQuery]
     );
 
     // Determine if we should hide processing state based on context limits
@@ -444,13 +446,12 @@ const ChatInputBar = React.memo(
 
         {/* Input area */}
         <Popover
-          open={user?.preferences.shortcut_enabled && showPrompts}
+          open={user?.preferences?.shortcut_enabled && showPrompts}
           onOpenChange={setShowPrompts}
         >
           <Popover.Anchor asChild>
             <textarea
               onPaste={handlePaste}
-              onKeyDownCapture={handleKeyDown}
               onChange={handleInputChange}
               ref={textAreaRef}
               id="onyx-chat-input-textarea"
@@ -501,26 +502,23 @@ const ChatInputBar = React.memo(
           >
             <Popover.Menu>
               {[
-                ...[...filteredPrompts]
-                  .sort((a, b) => a.id - b.id)
-                  .map((prompt, index) => (
-                    <LineItem
-                      key={prompt.id}
-                      selected={tabbingIconIndex === index}
-                      emphasized={tabbingIconIndex === index}
-                      description={prompt.content?.trim()}
-                      onClick={() => updateInputPrompt(prompt)}
-                    >
-                      {prompt.prompt}
-                    </LineItem>
-                  )),
-                filteredPrompts.length > 0 ? null : undefined,
+                ...sortedFilteredPrompts.map((prompt, index) => (
+                  <LineItem
+                    key={prompt.id}
+                    selected={tabbingIconIndex === index}
+                    emphasized={tabbingIconIndex === index}
+                    description={prompt.content?.trim()}
+                    onClick={() => updateInputPrompt(prompt)}
+                  >
+                    {prompt.prompt}
+                  </LineItem>
+                )),
+                sortedFilteredPrompts.length > 0 ? null : undefined,
                 <LineItem
                   key="create-new"
                   icon={SvgPlus}
-                  href="/chat/settings/chat-preferences"
-                  selected={tabbingIconIndex === filteredPrompts.length}
-                  emphasized={tabbingIconIndex === filteredPrompts.length}
+                  selected={tabbingIconIndex === sortedFilteredPrompts.length}
+                  emphasized={tabbingIconIndex === sortedFilteredPrompts.length}
                 >
                   Create New Prompt
                 </LineItem>,
