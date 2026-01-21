@@ -15,11 +15,11 @@
     {
       "name": "Run All Onyx Services",
       "configurations": [
-        "Web Server",
+        //"Web Server",
         "Model Server",
         "API Server",
-        "MCP Server",
-        "Slack Bot",
+        //"MCP Server",
+        //"Slack Bot",
         "Celery primary",
         "Celery light",
         "Celery heavy",
