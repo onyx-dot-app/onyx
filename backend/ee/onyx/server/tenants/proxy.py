@@ -35,7 +35,7 @@ from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.utils.license import is_license_valid
 from ee.onyx.utils.license import verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -189,8 +189,8 @@ def fetch_and_store_license(tenant_id: str, license_data: str) -> None:
         # Verify before storing
         payload = verify_license_signature(license_data)
 
-        # Store in database
-        with get_session_with_current_tenant() as db_session:
+        # Store in database using the specific tenant's schema
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             upsert_license(db_session, license_data)
 
         # Update Redis cache
