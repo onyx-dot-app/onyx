@@ -389,7 +389,7 @@ const ChatInputBar = React.memo(
         e.preventDefault();
         if (tabbingIconIndex === filteredPrompts.length) {
           // "Create a new prompt" is selected
-          window.open("/chat/settings", "_self");
+          window.open("/chat/settings/chat-preferences", "_self");
         } else {
           const selectedPrompt =
             filteredPrompts[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
@@ -452,6 +452,7 @@ const ChatInputBar = React.memo(
           <Popover.Anchor asChild>
             <textarea
               onPaste={handlePaste}
+              onKeyDownCapture={handleKeyDown}
               onChange={handleInputChange}
               ref={textAreaRef}
               id="onyx-chat-input-textarea"
@@ -516,6 +517,7 @@ const ChatInputBar = React.memo(
                 sortedFilteredPrompts.length > 0 ? null : undefined,
                 <LineItem
                   key="create-new"
+                  href="/chat/settings/chat-preferences"
                   icon={SvgPlus}
                   selected={tabbingIconIndex === sortedFilteredPrompts.length}
                   emphasized={tabbingIconIndex === sortedFilteredPrompts.length}

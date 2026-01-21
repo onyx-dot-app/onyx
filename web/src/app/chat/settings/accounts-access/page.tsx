@@ -13,17 +13,20 @@ export default function AccountsAccessPage() {
   const authType = useAuthType();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType && authType !== AuthType.DISABLED;
+  const showTokensSection = authType !== null && authType !== AuthType.DISABLED;
   const hasAccess = showPasswordSection || showTokensSection;
 
+  // Only redirect after authType has loaded to avoid redirecting during loading state
+  const isAuthTypeLoaded = authType !== null;
+
   useEffect(() => {
-    if (!hasAccess) {
+    if (isAuthTypeLoaded && !hasAccess) {
       router.replace("/chat/settings/general");
     }
-  }, [hasAccess, router]);
+  }, [isAuthTypeLoaded, hasAccess, router]);
 
-  // Don't render content if user doesn't have access
-  if (!hasAccess) {
+  // Don't render content until authType is loaded and access is determined
+  if (!isAuthTypeLoaded || !hasAccess) {
     return null;
   }
 
