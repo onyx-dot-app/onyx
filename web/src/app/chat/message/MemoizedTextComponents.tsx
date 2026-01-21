@@ -160,7 +160,12 @@ export const MemoizedLink = memo(
       );
     }
 
-    let url = ensureHrefProtocol(href || rest.children?.toString());
+    let url = href || rest.children?.toString();
+    if (url && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url)) {
+      url = `mailto:${url}`;
+    } else {
+      url = ensureHrefProtocol(url);
+    }
 
     return (
       <a
