@@ -217,9 +217,10 @@ def save_chat_turn(
     # Process tool calls and their search docs
     for tool_call_info in tool_calls:
         if tool_call_info.search_docs:
-            # Get displayed document_ids upfront for easy lookup
-            displayed_document_ids = {
-                doc.document_id for doc in (tool_call_info.displayed_docs or [])
+            # Get displayed search doc keys upfront for easy lookup
+            displayed_doc_keys = {
+                _create_search_doc_key(doc)
+                for doc in (tool_call_info.displayed_docs or [])
             }
 
             search_doc_ids_for_tool: list[int] = []
@@ -233,7 +234,7 @@ def save_chat_turn(
                 if search_doc_key in search_doc_key_to_id:
                     search_doc_ids_for_tool.append(search_doc_key_to_id[search_doc_key])
                     # Track if this doc was displayed
-                    if search_doc_py.document_id in displayed_document_ids:
+                    if search_doc_key in displayed_doc_keys:
                         displayed_doc_ids_for_tool.add(
                             search_doc_key_to_id[search_doc_key]
                         )
@@ -247,7 +248,7 @@ def save_chat_turn(
                     search_doc_key_to_id[search_doc_key] = db_search_doc.id
                     search_doc_ids_for_tool.append(db_search_doc.id)
                     # Track if this doc was displayed
-                    if search_doc_py.document_id in displayed_document_ids:
+                    if search_doc_key in displayed_doc_keys:
                         displayed_doc_ids_for_tool.add(db_search_doc.id)
 
             tool_call_to_search_doc_ids[tool_call_info.tool_call_id] = list(
