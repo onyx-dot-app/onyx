@@ -2,7 +2,7 @@ import {
   CredentialBase,
   CredentialWithPrivateKey,
 } from "./connectors/credentials";
-import { AccessType } from "@/lib/types";
+import { AccessType, ProcessingMode } from "@/lib/types";
 import { TypedFile } from "./connectors/fileTypes";
 import {
   CREDENTIAL_NAME,
@@ -90,7 +90,8 @@ export function linkCredential(
   name?: string,
   accessType?: AccessType,
   groups?: number[],
-  autoSyncOptions?: Record<string, any>
+  autoSyncOptions?: Record<string, any>,
+  processingMode?: ProcessingMode
 ) {
   return fetch(
     `/api/manage/connector/${connectorId}/credential/${credentialId}`,
@@ -104,6 +105,7 @@ export function linkCredential(
         access_type: accessType !== undefined ? accessType : "public",
         groups: groups || null,
         auto_sync_options: autoSyncOptions || null,
+        processing_mode: processingMode || "regular",
       }),
     }
   );

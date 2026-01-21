@@ -28,6 +28,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs_for
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import ProcessingMode
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import User
 
@@ -804,6 +805,7 @@ def get_build_connectors(
         get_editable=False,
         eager_load_connector=True,
         eager_load_credential=True,
+        processing_mode=ProcessingMode.FILE_SYSTEM,  # Only show FILE_SYSTEM connectors
     )
 
     connectors: list[BuildConnectorInfo] = []

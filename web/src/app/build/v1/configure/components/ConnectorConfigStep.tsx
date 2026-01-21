@@ -72,13 +72,16 @@ function ConnectorConfigForm({
         throw new Error(connectorError || "Failed to create connector");
       }
 
-      // Link credential to connector
+      // Link credential to connector with file_system processing mode
+      // Build mode connectors write documents to the file system for CLI agent access
       const linkResponse = await linkCredential(
         connector.id,
         credential.id,
         connector_name,
         "private",
-        [] // No groups for build mode connectors
+        [], // No groups for build mode connectors
+        undefined, // No auto sync options
+        "file_system" // Use file system processing mode for build connectors
       );
 
       if (!linkResponse.ok) {
