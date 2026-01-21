@@ -20,45 +20,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def insert_input_prompt_if_not_exists(
-    user: User | None,
-    input_prompt_id: int | None,
-    prompt: str,
-    content: str,
-    active: bool,
-    is_public: bool,
-    db_session: Session,
-    commit: bool = True,
-) -> InputPrompt:
-    if input_prompt_id is not None:
-        input_prompt = (
-            db_session.query(InputPrompt).filter_by(id=input_prompt_id).first()
-        )
-    else:
-        query = db_session.query(InputPrompt).filter(InputPrompt.prompt == prompt)
-        if user:
-            query = query.filter(InputPrompt.user_id == user.id)
-        else:
-            query = query.filter(InputPrompt.user_id.is_(None))
-        input_prompt = query.first()
-
-    if input_prompt is None:
-        input_prompt = InputPrompt(
-            id=input_prompt_id,
-            prompt=prompt,
-            content=content,
-            active=active,
-            is_public=is_public or user is None,
-            user_id=user.id if user else None,
-        )
-        db_session.add(input_prompt)
-
-    if commit:
-        db_session.commit()
-
-    return input_prompt
-
-
 def insert_input_prompt(
     prompt: str,
     content: str,

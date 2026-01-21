@@ -749,6 +749,10 @@ JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
+
+PROMPT_CACHE_CHAT_HISTORY = (
+    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
+)
 # If set to `true` will enable additional logs about Vespa query performance
 # (time spent on finding the right docs + time spent fetching summaries from disk)
 LOG_VESPA_TIMING_INFORMATION = (

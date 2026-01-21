@@ -6,7 +6,6 @@ from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
-from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
@@ -43,7 +42,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.llm_provider_options import get_openai_model_names
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from onyx.seeding.load_yamls import load_input_prompts_from_yaml
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
@@ -290,10 +288,6 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_public_credential(db_session)
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
-
-    # Load input prompts and user folders from YAML
-    logger.notice("Loading input prompts and user folders")
-    load_input_prompts_from_yaml(db_session, INPUT_PROMPT_YAML)
 
     if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
         # Only for dev flows

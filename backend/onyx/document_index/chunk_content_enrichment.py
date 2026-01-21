@@ -2,11 +2,16 @@ from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 
 
-def generate_enriched_content_for_chunk(chunk: DocMetadataAwareIndexChunk) -> str:
+def generate_enriched_content_for_chunk_text(chunk: DocMetadataAwareIndexChunk) -> str:
     return f"{chunk.title_prefix}{chunk.doc_summary}{chunk.content}{chunk.chunk_context}{chunk.metadata_suffix_keyword}"
+
+
+def generate_enriched_content_for_chunk_embedding(chunk: DocAwareChunk) -> str:
+    return f"{chunk.title_prefix}{chunk.doc_summary}{chunk.content}{chunk.chunk_context}{chunk.metadata_suffix_semantic}"
 
 
 def cleanup_content_for_chunks(
