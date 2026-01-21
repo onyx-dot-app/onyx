@@ -26,7 +26,7 @@ except ImportError:
 def build_nextjs_template(output_path: Path) -> None:
     """Build Next.js app template.
 
-    Creates a minimal Next.js 16.1.1 app with React 19, Tailwindcss, and recharts.
+    Creates a minimal Next.js 16.1.1 app with React 19, Tailwind CSS v4, and recharts.
 
     Args:
         output_path: Path where the outputs template should be created (will create web/ subdirectory)
@@ -52,12 +52,13 @@ def build_nextjs_template(output_path: Path) -> None:
             "recharts": "^2.12.0",
         },
         "devDependencies": {
+            "@tailwindcss/postcss": "^4.1.18",
             "@types/node": "^20",
             "@types/react": "^19",
             "@types/react-dom": "^19",
             "autoprefixer": "^10.4.20",
             "postcss": "^8.4.47",
-            "tailwindcss": "^3.4.1",
+            "tailwindcss": "^4.1.18",
             "typescript": "^5",
         },
     }
@@ -92,7 +93,7 @@ module.exports = {
     # postcss.config.js
     postcss_config = """module.exports = {
   plugins: {
-    tailwindcss: {},
+    "@tailwindcss/postcss": {},
     autoprefixer: {},
   },
 }
