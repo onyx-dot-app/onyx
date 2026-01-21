@@ -880,6 +880,7 @@ function ChatPreferencesSettings() {
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
+    updateUserDefaultModel,
   } = useUser();
   const llmManager = useLlmManager();
 
@@ -909,22 +910,9 @@ function ChatPreferencesSettings() {
           >
             <LLMPopover
               llmManager={llmManager}
-              // TODO (@raunakab)
-              // Update saving default model.
-              //
-              // onSelect={(selected) => {
-              //   if (selected === null) {
-              //     void handleChangeDefaultModel(null);
-              //   } else {
-              //     const { modelName, provider, name } =
-              //       parseLlmDescriptor(selected);
-              //     if (modelName && name) {
-              //       void handleChangeDefaultModel(
-              //         structureValue(name, provider, modelName)
-              //       );
-              //     }
-              //   }
-              // }}
+              onSelect={(selected) => {
+                void updateUserDefaultModel(selected);
+              }}
             />
           </InputLayouts.Horizontal>
 

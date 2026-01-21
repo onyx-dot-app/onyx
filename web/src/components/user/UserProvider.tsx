@@ -44,6 +44,7 @@ interface UserContextType {
     themePreference: ThemePreference
   ) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
+  updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -398,6 +399,39 @@ export function UserProvider({
     }
   };
 
+  const updateUserDefaultModel = async (defaultModel: string | null) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              default_model: defaultModel,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/user/default-model`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ default_model: defaultModel }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update default model");
+      }
+    } catch (error) {
+      console.error("Error updating default model:", error);
+      throw error;
+    }
+  };
+
   const refreshUser = async () => {
     await fetchUser();
   };
@@ -414,6 +448,7 @@ export function UserProvider({
         updateUserPersonalization,
         updateUserThemePreference,
         updateUserChatBackground,
+        updateUserDefaultModel,
         toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator
