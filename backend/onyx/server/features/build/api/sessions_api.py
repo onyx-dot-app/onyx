@@ -36,10 +36,12 @@ def list_sessions(
     db_session: Session = Depends(get_session),
 ) -> SessionListResponse:
     """List all build sessions for the current user."""
-    user_id = user.id if user is not None else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     session_manager = SessionManager(db_session)
 
-    sessions = session_manager.list_sessions(user_id)
+    sessions = session_manager.list_sessions(user.id)
 
     return SessionListResponse(
         sessions=[SessionResponse.from_model(session) for session in sessions]
@@ -58,12 +60,14 @@ def create_session(
     Creates a sandbox with the necessary file structure and returns a session ID.
     Uses SessionManager for session and sandbox provisioning.
     """
-    user_id = user.id if user else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     session_manager = SessionManager(db_session)
 
     try:
         build_session = session_manager.create_session(
-            user_id=user_id,
+            user_id=user.id,
             name=request.name,
         )
     except ValueError as e:
@@ -92,10 +96,12 @@ def get_session_details(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    user_id = user.id if user is not None else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     session_manager = SessionManager(db_session)
 
-    session = session_manager.get_session(session_uuid, user_id)
+    session = session_manager.get_session(session_uuid, user.id)
 
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -119,10 +125,12 @@ def update_session_name(
     if request.name is None:
         raise HTTPException(status_code=400, detail="Name is required")
 
-    user_id = user.id if user is not None else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     session_manager = SessionManager(db_session)
 
-    session = session_manager.update_session_name(session_uuid, user_id, request.name)
+    session = session_manager.update_session_name(session_uuid, user.id, request.name)
 
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -142,10 +150,12 @@ def delete_session(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    user_id = user.id if user is not None else None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     session_manager = SessionManager(db_session)
 
-    success = session_manager.delete_session(session_uuid, user_id)
+    success = session_manager.delete_session(session_uuid, user.id)
 
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")

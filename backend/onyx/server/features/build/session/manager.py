@@ -143,7 +143,7 @@ class SessionManager:
 
     def list_sessions(
         self,
-        user_id: int | None,
+        user_id: UUID,
     ) -> list[BuildSession]:
         """Get all build sessions for a user.
 
@@ -157,7 +157,7 @@ class SessionManager:
 
     def create_session(
         self,
-        user_id: int | None,
+        user_id: UUID,
         name: str | None = None,
     ) -> BuildSession:
         """
@@ -183,7 +183,7 @@ class SessionManager:
 
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
-        if PERSISTENT_DOCUMENT_STORAGE_PATH and user_id:
+        if PERSISTENT_DOCUMENT_STORAGE_PATH:
             user_file_system_path = str(
                 Path(PERSISTENT_DOCUMENT_STORAGE_PATH) / str(user_id)
             )
@@ -207,7 +207,7 @@ class SessionManager:
     def get_session(
         self,
         session_id: UUID,
-        user_id: int | None,
+        user_id: UUID,
     ) -> BuildSession | None:
         """
         Get a specific build session.
@@ -230,7 +230,7 @@ class SessionManager:
     def update_session_name(
         self,
         session_id: UUID,
-        user_id: int | None,
+        user_id: UUID,
         name: str,
     ) -> BuildSession | None:
         """
@@ -256,7 +256,7 @@ class SessionManager:
     def delete_session(
         self,
         session_id: UUID,
-        user_id: int | None,
+        user_id: UUID,
     ) -> bool:
         """
         Delete a build session and all associated data.
@@ -291,7 +291,7 @@ class SessionManager:
     def list_messages(
         self,
         session_id: UUID,
-        user_id: int | None,
+        user_id: UUID,
     ) -> list[BuildMessage] | None:
         """
         Get all messages for a session.
@@ -311,7 +311,7 @@ class SessionManager:
     def send_message(
         self,
         session_id: UUID,
-        user_id: int | None,
+        user_id: UUID,
         content: str,
     ) -> Generator[str, None, None]:
         """
@@ -334,7 +334,7 @@ class SessionManager:
         self,
         session_id: UUID,
         user_message_content: str,
-        user_id: int | None,
+        user_id: UUID,
     ) -> Generator[str, None, None]:
         """
         Stream the CLI agent's response using SSE format.
