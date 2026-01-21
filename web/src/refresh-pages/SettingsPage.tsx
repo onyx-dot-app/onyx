@@ -1247,6 +1247,7 @@ function AccountsAccessSettings() {
                   <Button
                     disabled={isSubmitting || !dirty || !isValid}
                     onClick={async () => {
+                      setSubmitting(true);
                       await handleChangePassword(values);
                       setSubmitting(false);
                     }}
