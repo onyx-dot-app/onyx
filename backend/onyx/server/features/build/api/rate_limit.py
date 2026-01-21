@@ -15,7 +15,7 @@ from onyx.server.features.build.v1_api import RateLimitResponse
 
 
 def get_user_rate_limit_status(
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> RateLimitResponse:
     """

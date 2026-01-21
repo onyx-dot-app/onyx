@@ -28,7 +28,6 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
-from onyx.db.models import User
 from onyx.server.features.build.api.models import ArtifactInfo
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import FileSystemEntry
@@ -54,6 +53,22 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+# Build session naming prompts (similar to chat naming)
+BUILD_NAMING_SYSTEM_PROMPT = """
+Given the user's build request, provide a SHORT name for the build session. \
+Focus on the main task or goal the user wants to accomplish.
+
+IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. \
+NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
+""".strip()
+
+BUILD_NAMING_USER_PROMPT = """
+User's request: {user_message}
+
+Provide a short name for this build session.
+""".strip()
 
 
 # Hidden directories/files to filter from listings
@@ -112,17 +127,17 @@ class SessionManager:
     # Rate Limiting
     # =========================================================================
 
-    def check_rate_limit(self, user: User | None) -> None:
+    def check_rate_limit(self, user_id: UUID) -> None:
         """
         Check build mode rate limits for a user.
 
         Args:
-            user: The user to check rate limits for
+            user_id: The user ID to check rate limits for
 
         Raises:
             RateLimitError: If rate limit is exceeded
         """
-        rate_limit_status = get_user_rate_limit_status(user, self._db_session)
+        rate_limit_status = get_user_rate_limit_status(user_id, self._db_session)
         if rate_limit_status.is_limited:
             raise RateLimitError(
                 message=(
@@ -227,6 +242,27 @@ class SessionManager:
             self._db_session.refresh(session)
         return session
 
+    def generate_session_name(
+        self,
+        session_id: UUID,
+        user_id: UUID | None,
+    ) -> str | None:
+        """
+        Generate a session name using LLM based on the first user message.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID (for ownership verification)
+
+        Returns:
+            Generated session name or None if session not found
+        """
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
+        return self._generate_session_name(session_id)
+
     def update_session_name(
         self,
         session_id: UUID,
@@ -236,10 +272,13 @@ class SessionManager:
         """
         Update the name of a build session.
 
+        If name is None, auto-generates a name using LLM based on the first
+        user message in the session.
+
         Args:
             session_id: The session UUID
             user_id: The user ID
-            name: The new session name
+            name: The new session name (if None, auto-generates using LLM)
 
         Returns:
             Updated BuildSession model or None if not found
@@ -248,10 +287,42 @@ class SessionManager:
         if session is None:
             return None
 
-        session.name = name
+        if name is not None:
+            # Manual rename
+            session.name = name
+        else:
+            # Auto-generate name from first user message using LLM
+            session.name = self._generate_session_name(session_id)
+
+        update_session_activity(session_id, self._db_session)
         self._db_session.commit()
         self._db_session.refresh(session)
         return session
+
+    def _generate_session_name(self, session_id: UUID) -> str:
+        """
+        Generate a session name based on the first user message.
+
+        Args:
+            session_id: The session UUID
+
+        Returns:
+            Generated session name or fallback name
+        """
+        # Get messages to find first user message
+        messages = get_session_messages(session_id, self._db_session)
+        first_user_msg = next(
+            (m for m in messages if m.type == MessageType.USER and m.content), None
+        )
+
+        if not first_user_msg:
+            return f"Build Session {str(session_id)[:8]}"
+
+        user_message = first_user_msg.content
+
+        # For now, just use first 40 chars of user message
+        # TODO: Implement LLM-based name generation
+        return user_message[:40].strip() + ("..." if len(user_message) > 40 else "")
 
     def delete_session(
         self,
@@ -627,16 +698,23 @@ class SessionManager:
     def list_artifacts(
         self,
         session_id: UUID,
+        user_id: UUID | None,
     ) -> list[ArtifactInfo] | None:
         """
         List artifacts generated in a session.
 
         Args:
             session_id: The session UUID
+            user_id: The user ID to verify ownership
 
         Returns:
-            List of ArtifactInfo or None if session not found
+            List of ArtifactInfo or None if session not found or user doesn't own session
         """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
         sandbox = get_sandbox_by_session_id(self._db_session, session_id)
         if sandbox is None:
             return None
@@ -695,6 +773,7 @@ class SessionManager:
     def download_artifact(
         self,
         session_id: UUID,
+        user_id: UUID | None,
         path: str,
     ) -> tuple[bytes, str, str] | None:
         """
@@ -702,6 +781,7 @@ class SessionManager:
 
         Args:
             session_id: The session UUID
+            user_id: The user ID to verify ownership
             path: Relative path to the artifact
 
         Returns:
@@ -710,6 +790,11 @@ class SessionManager:
         Raises:
             ValueError: If path traversal attempted or path is a directory
         """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
         sandbox = get_sandbox_by_session_id(self._db_session, session_id)
         if sandbox is None:
             return None
@@ -744,6 +829,7 @@ class SessionManager:
     def list_directory(
         self,
         session_id: UUID,
+        user_id: UUID | None,
         path: str,
     ) -> DirectoryListing | None:
         """
@@ -751,6 +837,7 @@ class SessionManager:
 
         Args:
             session_id: The session UUID
+            user_id: The user ID to verify ownership
             path: Relative path from sandbox root (empty string for root)
 
         Returns:
@@ -759,6 +846,11 @@ class SessionManager:
         Raises:
             ValueError: If path traversal attempted or path is not a directory
         """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
         sandbox = get_sandbox_by_session_id(self._db_session, session_id)
         if sandbox is None:
             return None
