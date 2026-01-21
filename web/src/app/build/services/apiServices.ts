@@ -79,13 +79,21 @@ export async function processSSEStream(
 // Session API
 // =============================================================================
 
+export interface CreateSessionOptions {
+  name?: string | null;
+  demoDataEnabled?: boolean;
+}
+
 export async function createSession(
-  name?: string | null
+  options?: CreateSessionOptions
 ): Promise<ApiSessionResponse> {
   const res = await fetch(`${API_BASE}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: name || null }),
+    body: JSON.stringify({
+      name: options?.name || null,
+      demo_data_enabled: options?.demoDataEnabled ?? true,
+    }),
   });
 
   if (!res.ok) {

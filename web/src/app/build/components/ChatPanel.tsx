@@ -15,7 +15,6 @@ import {
 import { useBuildStreaming } from "@/app/build/hooks/useBuildStreaming";
 import { BuildFile } from "@/app/build/contexts/UploadFilesContext";
 import { uploadFile } from "@/app/build/services/apiServices";
-import { useLlmManager } from "@/lib/hooks";
 import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import InputBar from "@/app/build/components/InputBar";
@@ -72,10 +71,11 @@ export default function BuildChatPanel({
   );
   const { streamMessage } = useBuildStreaming();
   const isPreProvisioning = useIsPreProvisioning();
-  const llmManager = useLlmManager();
 
   const handleSubmit = useCallback(
-    async (message: string, files: BuildFile[]) => {
+    async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
+      // TODO: Pass demoDataEnabled to createSession when backend is implemented
+      console.log("Demo data enabled:", demoDataEnabled);
       if (hasSession && sessionId) {
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
@@ -187,7 +187,6 @@ export default function BuildChatPanel({
           <BuildWelcome
             onSubmit={handleSubmit}
             isRunning={isRunning}
-            llmManager={llmManager}
             sandboxInitializing={isPreProvisioning}
           />
         ) : (
@@ -206,7 +205,6 @@ export default function BuildChatPanel({
               onSubmit={handleSubmit}
               isRunning={isRunning}
               placeholder="Continue the conversation..."
-              llmManager={llmManager}
               sessionId={sessionId ?? undefined}
             />
           </div>

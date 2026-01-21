@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import useSWR from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { LineItemLayout, Section } from "@/layouts/general-layouts";
+import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useLlmManager } from "@/lib/hooks";
+import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
@@ -23,6 +24,8 @@ import BackButton from "@/refresh-components/buttons/BackButton";
 import { useRouter } from "next/navigation";
 import { OAUTH_STATE_KEY } from "@/app/build/v1/constants";
 import Separator from "@/refresh-components/Separator";
+import Switch from "@/refresh-components/inputs/Switch";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 // Build mode connectors
 const BUILD_CONNECTORS: ValidSources[] = [
@@ -59,6 +62,31 @@ export default function BuildConfigPage() {
   const [connectorToDelete, setConnectorToDelete] =
     useState<BuildConnectorConfig | null>(null);
 
+  // Get store values - we use local state to defer updates until navigation
+  const storeDemoDataEnabled = useBuildSessionStore(
+    (state) => state.demoDataEnabled
+  );
+  const setStoreDemoDataEnabled = useBuildSessionStore(
+    (state) => state.setDemoDataEnabled
+  );
+
+  // Local state for demo data toggle - initialized from store
+  const [localDemoDataEnabled, setLocalDemoDataEnabled] =
+    useState(storeDemoDataEnabled);
+
+  // Sync local state if store value changes externally (e.g., on mount after refresh)
+  useEffect(() => {
+    setLocalDemoDataEnabled(storeDemoDataEnabled);
+  }, [storeDemoDataEnabled]);
+
+  // Handler for navigating back - syncs to store if value changed
+  const handleNavigateBack = () => {
+    if (localDemoDataEnabled !== storeDemoDataEnabled) {
+      setStoreDemoDataEnabled(localDemoDataEnabled);
+    }
+    router.push("/build/v1");
+  };
+
   const { data, mutate, isLoading } = useSWR<BuildConnectorListResponse>(
     "/api/build/v1/connectors",
     errorHandlingFetcher,
@@ -91,6 +119,11 @@ export default function BuildConfigPage() {
     config: data?.connectors?.find((c) => c.source === type) || null,
   }));
 
+  // Check if there are any enabled connectors
+  const hasEnabledConnectors = connectorStates.some(
+    ({ config }) => config !== null
+  );
+
   const handleDeleteConfirm = async () => {
     if (!connectorToDelete) return;
 
@@ -112,10 +145,8 @@ export default function BuildConfigPage() {
       <SettingsLayouts.Header
         icon={SvgPlug}
         title="Configure Build Mode"
-        description="Data sources available to the Build Mode agent"
-        rightChildren={
-          <BackButton behaviorOverride={() => router.push("/build/v1")} />
-        }
+        description="Select data sources and your build mode LLM"
+        rightChildren={<BackButton behaviorOverride={handleNavigateBack} />}
       />
       <SettingsLayouts.Body>
         {isLoading ? (
@@ -132,9 +163,33 @@ export default function BuildConfigPage() {
               gap={0.5}
               height="fit"
             >
-              <Text headingH3Muted text03>
-                Connectors
-              </Text>
+              <Card>
+                <InputLayouts.Horizontal
+                  title="Use Demo Data"
+                  description="Demo data set contains 3000 files across all available connectors"
+                  center
+                >
+                  <SimpleTooltip
+                    tooltip={
+                      !hasEnabledConnectors
+                        ? "Connect a data source to enable demo data"
+                        : undefined
+                    }
+                    disabled={hasEnabledConnectors}
+                  >
+                    <Switch
+                      checked={localDemoDataEnabled}
+                      onCheckedChange={setLocalDemoDataEnabled}
+                      disabled={!hasEnabledConnectors}
+                    />
+                  </SimpleTooltip>
+                </InputLayouts.Horizontal>
+              </Card>
+              <Separator />
+              <InputLayouts.Label
+                title="Connectors"
+                description="Connect your data sources to build mode"
+              />
               <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
                 {connectorStates.map(({ type, config }) => (
                   <ConnectorCard
@@ -156,13 +211,14 @@ export default function BuildConfigPage() {
             <Separator />
 
             <Section alignItems="start" gap={0.5} height="fit">
-              <Text headingH3Muted text03>
-                Default LLM
-              </Text>
+              <InputLayouts.Label
+                title="Advanced Options"
+                description="Configure advanced options for your build mode"
+              />
               <Card>
                 <InputLayouts.Horizontal
-                  title="Build Mode LLM"
-                  description="Select the language model for Build Mode"
+                  title="Default LLM"
+                  description="Select the language model for your build sessions"
                   center
                 >
                   <LLMPopover llmManager={llmManager} />
