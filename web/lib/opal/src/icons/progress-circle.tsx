@@ -1,16 +1,16 @@
 import { cn } from "@/lib/utils";
-import { SvgCheckCircle } from "@opal/icons";
-import { IconProps } from "@opal/types";
+import SvgCheckCircle from "@opal/icons/check-circle";
+import type { IconProps } from "@opal/types";
 
-export interface ProgressStepsProps extends IconProps {
+export interface SvgProgressCircleProps extends IconProps {
   value?: number;
 }
 
-export default function ProgressSteps({
+const SvgProgressCircle = ({
   value = 100,
   className,
   ...props
-}: ProgressStepsProps) {
+}: SvgProgressCircleProps) => {
   // Clamp value between 0 and 100
   const progress = Math.min(Math.max(value, 0), 100);
   const isComplete = progress >= 100;
@@ -40,7 +40,6 @@ export default function ProgressSteps({
           viewBox="0 0 16 16"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="animate-in fade-in duration-200"
         >
           {/* Outer circle - outline only */}
           <circle
@@ -63,8 +62,7 @@ export default function ProgressSteps({
             fill="none"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            strokeLinecap="butt"
-            className="text-brand-500 transition-all duration-500 ease-out -rotate-90 origin-center"
+            className="-rotate-90 origin-center"
             style={{
               transformOrigin: "center",
             }}
@@ -73,4 +71,6 @@ export default function ProgressSteps({
       )}
     </div>
   );
-}
+};
+
+export default SvgProgressCircle;

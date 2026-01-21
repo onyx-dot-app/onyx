@@ -355,13 +355,11 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
           <DialogPrimitive.Title asChild>
             <Text headingH3>{title}</Text>
           </DialogPrimitive.Title>
-          {description && (
-            <DialogPrimitive.Description asChild>
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            </DialogPrimitive.Description>
-          )}
+          <DialogPrimitive.Description asChild>
+            <Text secondaryBody text03>
+              {description || title}
+            </Text>
+          </DialogPrimitive.Description>
         </Section>
         {children}
       </Section>

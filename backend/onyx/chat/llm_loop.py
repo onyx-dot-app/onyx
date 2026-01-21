@@ -453,12 +453,16 @@ def run_llm_loop(
 
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
-            if persona and persona.replace_base_system_prompt and persona.system_prompt:
+            if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
-                system_prompt = ChatMessageSimple(
-                    message=persona.system_prompt,
-                    token_count=token_counter(persona.system_prompt),
-                    message_type=MessageType.SYSTEM,
+                system_prompt = (
+                    ChatMessageSimple(
+                        message=persona.system_prompt,
+                        token_count=token_counter(persona.system_prompt),
+                        message_type=MessageType.SYSTEM,
+                    )
+                    if persona.system_prompt
+                    else None
                 )
                 custom_agent_prompt_msg = None
             else:

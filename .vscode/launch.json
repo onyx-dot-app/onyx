@@ -22,7 +22,7 @@
         "Slack Bot",
         "Celery primary",
         "Celery light",
-        "Celery background",
+        "Celery heavy",
         "Celery docfetching",
         "Celery docprocessing",
         "Celery beat"
