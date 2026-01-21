@@ -12,7 +12,6 @@ from alembic import op
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import text
 
-
 # revision identifiers, used by Alembic.
 revision = "4d58345da04a"
 down_revision = "f1ca58b2f2ec"

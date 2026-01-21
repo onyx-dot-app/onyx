@@ -26,15 +26,13 @@ BATCH_SIZE = 100
 
 def _get_orphaned_document_ids(db_session: Session, limit: int) -> list[str]:
     """Get document IDs that don't have any entries in document_by_connector_credential_pair"""
-    query = text(
-        """
+    query = text("""
         SELECT d.id
         FROM document d
         LEFT JOIN document_by_connector_credential_pair dbcc ON d.id = dbcc.id
         WHERE dbcc.id IS NULL
         LIMIT :limit
-    """
-    )
+    """)
     orphaned_ids = [doc_id[0] for doc_id in db_session.execute(query, {"limit": limit})]
     print(f"Found {len(orphaned_ids)} orphaned documents in this batch")
     return orphaned_ids

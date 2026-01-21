@@ -40,7 +40,6 @@ from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

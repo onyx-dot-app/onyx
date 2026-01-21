@@ -8,7 +8,6 @@ Create Date: 2025-05-19 17:15:33.424584
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "238b84885828"
 down_revision = "a7688ab35c45"
@@ -18,12 +17,10 @@ depends_on = None
 
 def upgrade() -> None:
     # First, clean up any entries that don't have a valid cc_pair_id
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM user__external_user_group_id
         WHERE cc_pair_id NOT IN (SELECT id FROM connector_credential_pair)
-        """
-    )
+        """)
 
     # Add foreign key constraint with cascade delete
     op.create_foreign_key(

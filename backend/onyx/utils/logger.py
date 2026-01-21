@@ -16,7 +16,6 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
-
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
 pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(

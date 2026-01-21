@@ -41,8 +41,7 @@ def upgrade() -> None:
             )
 
             # Count relationships to migrate (asyncpg-compatible)
-            count_query = text(
-                """
+            count_query = text("""
                 SELECT COUNT(*)
                 FROM (
                     SELECT DISTINCT puf.persona_id, uf.id
@@ -55,8 +54,7 @@ def upgrade() -> None:
                         AND p2.user_file_id = uf.id
                     )
                 ) AS distinct_pairs
-            """
-            )
+            """)
             to_migrate = bind.execute(count_query).scalar_one()
 
             if to_migrate > 0:
@@ -69,8 +67,7 @@ def upgrade() -> None:
                 while True:
                     # Insert batch directly using subquery (asyncpg compatible)
                     result = bind.execute(
-                        text(
-                            """
+                        text("""
                         INSERT INTO persona__user_file (persona_id, user_file_id, user_file_id_uuid)
                         SELECT DISTINCT puf.persona_id, uf.id as file_id, uf.new_id
                         FROM persona__user_folder puf
@@ -82,8 +79,7 @@ def upgrade() -> None:
                             AND p2.user_file_id = uf.id
                         )
                         LIMIT :batch_size
-                    """
-                        ),
+                    """),
                         {"batch_size": batch_size},
                     )
 
@@ -126,8 +122,7 @@ def upgrade() -> None:
         logger.info("Populating project__user_file from folder relationships...")
 
         # Count relationships to create
-        count_query = text(
-            """
+        count_query = text("""
             SELECT COUNT(*)
             FROM user_file uf
             WHERE uf.folder_id IS NOT NULL
@@ -137,8 +132,7 @@ def upgrade() -> None:
                 WHERE puf.project_id = uf.folder_id
                 AND puf.user_file_id = uf.new_id
             )
-        """
-        )
+        """)
         to_create = bind.execute(count_query).scalar_one()
 
         if to_create > 0:
@@ -150,8 +144,7 @@ def upgrade() -> None:
 
             while True:
                 result = bind.execute(
-                    text(
-                        """
+                    text("""
                     INSERT INTO project__user_file (project_id, user_file_id)
                     SELECT uf.folder_id, uf.new_id
                     FROM user_file uf
@@ -164,8 +157,7 @@ def upgrade() -> None:
                     )
                     LIMIT :batch_size
                     ON CONFLICT (project_id, user_file_id) DO NOTHING
-                """
-                    ),
+                """),
                     {"batch_size": batch_size},
                 )
 
@@ -239,9 +231,7 @@ def downgrade() -> None:
     ):
         user_file_columns = [col["name"] for col in inspector.get_columns("user_file")]
         if "folder_id" in user_file_columns:
-            result = bind.execute(
-                text(
-                    """
+            result = bind.execute(text("""
                 DELETE FROM persona__user_file puf
                 WHERE EXISTS (
                     SELECT 1
@@ -251,9 +241,7 @@ def downgrade() -> None:
                     WHERE puf.persona_id = puf2.persona_id
                     AND puf.user_file_id = uf.id
                 )
-            """
-                )
-            )
+            """))
             logger.info(
                 f"Removed {result.rowcount} migrated persona__user_file relationships"
             )

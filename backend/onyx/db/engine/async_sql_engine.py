@@ -32,7 +32,6 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
 
-
 # Global so we don't create more than one engine per process
 _ASYNC_ENGINE: AsyncEngine | None = None
 

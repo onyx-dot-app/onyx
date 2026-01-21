@@ -12,7 +12,6 @@ from onyx.document_index.interfaces import IndexBatchParams
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

@@ -20,7 +20,6 @@ from shared_configs.configs import SKIP_USERFILE_THRESHOLD
 from shared_configs.configs import SKIP_USERFILE_THRESHOLD_TENANT_LIST
 from shared_configs.contextvars import get_current_tenant_id
 
-
 logger = setup_logger()
 FILE_TOKEN_COUNT_THRESHOLD = 100000
 UNKNOWN_FILENAME = "[unknown_file]"  # More descriptive than empty string

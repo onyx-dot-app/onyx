@@ -26,7 +26,6 @@ from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 PRUNING_CHECKPOINTED_BATCH_SIZE = 32
 

@@ -25,13 +25,11 @@ def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
     try:
         with get_session_with_shared_schema() as session:
             # First, verify the schema exists
-            check_schema_query = text(
-                """
+            check_schema_query = text("""
                 SELECT nspname
                 FROM pg_namespace
                 WHERE nspname = :schema_name
-            """
-            )
+            """)
 
             result = session.execute(
                 check_schema_query, {"schema_name": tenant_id}
@@ -52,12 +50,10 @@ def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
             print(f"Successfully dropped schema: {tenant_id}", file=sys.stderr)
 
             # Delete the tenant mapping from user_tenant_mapping table
-            delete_mapping_query = text(
-                """
+            delete_mapping_query = text("""
                 DELETE FROM user_tenant_mapping
                 WHERE tenant_id = :tenant_id
-                """
-            )
+                """)
             session.execute(delete_mapping_query, {"tenant_id": tenant_id})
             session.commit()
 

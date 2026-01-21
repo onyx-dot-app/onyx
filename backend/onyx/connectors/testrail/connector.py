@@ -26,7 +26,6 @@ from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
 
-
 logger = setup_logger()
 
 

@@ -13,7 +13,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.server.api_key.models import APIKeyArgs
 
-
 router = APIRouter(prefix="/admin/api-key")
 
 

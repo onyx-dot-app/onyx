@@ -23,7 +23,6 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

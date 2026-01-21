@@ -9,7 +9,6 @@ Create Date: 2025-12-18 16:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "c1d2e3f4a5b6"
 down_revision = "b8c9d0e1f2a3"
@@ -28,12 +27,10 @@ DEEP_RESEARCH_TOOL = {
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
             VALUES (:name, :display_name, :description, :in_code_tool_id, false)
-            """
-        ),
+            """),
         DEEP_RESEARCH_TOOL,
     )
 
@@ -41,11 +38,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             DELETE FROM tool
             WHERE in_code_tool_id = :in_code_tool_id
-            """
-        ),
+            """),
         {"in_code_tool_id": DEEP_RESEARCH_TOOL["in_code_tool_id"]},
     )

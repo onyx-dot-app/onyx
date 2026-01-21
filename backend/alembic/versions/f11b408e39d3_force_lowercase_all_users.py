@@ -17,12 +17,10 @@ def upgrade() -> None:
     # 1) Convert all existing user emails to lowercase
     from alembic import op
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE "user"
         SET email = LOWER(email)
-        """
-    )
+        """)
 
     # 2) Add a check constraint to ensure emails are always lowercase
     op.create_check_constraint("ensure_lowercase_email", "user", "email = LOWER(email)")

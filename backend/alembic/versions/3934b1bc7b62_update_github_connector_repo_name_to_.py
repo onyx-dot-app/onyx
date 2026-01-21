@@ -25,15 +25,11 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # First get all GitHub connectors
-    github_connectors = conn.execute(
-        sa.text(
-            """
+    github_connectors = conn.execute(sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'GITHUB'
-            """
-        )
-    ).fetchall()
+            """)).fetchall()
 
     # Update each connector's config
     updated_count = 0
@@ -57,13 +53,11 @@ def upgrade() -> None:
 
             # Update the connector with the new config
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     UPDATE connector
                     SET connector_specific_config = :new_config
                     WHERE id = :connector_id
-                    """
-                ),
+                    """),
                 {"connector_id": connector_id, "new_config": json.dumps(new_config)},
             )
             updated_count += 1
@@ -79,15 +73,11 @@ def downgrade() -> None:
         "Starting rollback of GitHub connectors from repositories to repo_name"
     )
 
-    github_connectors = conn.execute(
-        sa.text(
-            """
+    github_connectors = conn.execute(sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'GITHUB'
-            """
-        )
-    ).fetchall()
+            """)).fetchall()
 
     logger.debug(f"Found {len(github_connectors)} GitHub connectors to rollback")
 
@@ -112,13 +102,11 @@ def downgrade() -> None:
 
             # Update the connector with the new config
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     UPDATE connector
                     SET connector_specific_config = :new_config
                     WHERE id = :connector_id
-                    """
-                ),
+                    """),
                 {"new_config": json.dumps(new_config), "connector_id": connector_id},
             )
             reverted_count += 1

@@ -58,7 +58,6 @@ from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
 
-
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from httpx. By
 # default it emits INFO-level logs for every request.

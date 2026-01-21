@@ -21,7 +21,6 @@ from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

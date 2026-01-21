@@ -22,7 +22,6 @@ from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 
-
 logger = setup_logger()
 
 

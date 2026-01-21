@@ -8,7 +8,6 @@ Create Date: 2025-01-29 10:54:22.141765
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "33ea50e88f24"
 down_revision = "a6df6b88ef81"
@@ -18,18 +17,14 @@ depends_on = None
 
 def upgrade() -> None:
     # Safely drop constraints if exists
-    op.execute(
-        """
+    op.execute("""
         ALTER TABLE inputprompt__user
         DROP CONSTRAINT IF EXISTS inputprompt__user_input_prompt_id_fkey
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         ALTER TABLE inputprompt__user
         DROP CONSTRAINT IF EXISTS inputprompt__user_user_id_fkey
-        """
-    )
+        """)
 
     # Recreate with ON DELETE CASCADE
     op.create_foreign_key(

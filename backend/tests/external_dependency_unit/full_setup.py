@@ -16,7 +16,6 @@ from shared_configs import configs as shared_configs_module
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
-
 _SETUP_COMPLETE: bool = False
 
 

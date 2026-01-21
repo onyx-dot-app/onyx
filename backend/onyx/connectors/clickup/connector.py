@@ -20,7 +20,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.utils.retry_wrapper import retry_builder
 
-
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"
 
 

@@ -64,7 +64,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
-
 logger = setup_logger(__name__)
 
 

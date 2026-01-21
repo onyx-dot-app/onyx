@@ -8,7 +8,6 @@ from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 from onyx.prompts.constants import THOUGHT_PAT
 
-
 ONE_SHOT_SYSTEM_PROMPT = """
 You are a question answering system that is constantly learning and improving.
 You can process and comprehend vast amounts of text and utilize this knowledge to provide \

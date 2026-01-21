@@ -3,7 +3,6 @@ from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import RESEARCH_AGENT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
 
-
 # ruff: noqa: E501, W605 start
 CLARIFICATION_PROMPT = f"""
 You are a clarification agent that runs prior to deep research. Assess whether you need to ask clarifying questions, or if the user has already provided enough information for you to start research. \
@@ -107,9 +106,7 @@ Before calling {GENERATE_REPORT_TOOL_NAME}, double check that all aspects of the
 
 INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE = """
  If necessary, clarify if the research agent should focus mostly on organization internal searches, web searches, or a combination of both. If the task doesn't require a clear priority, don't add sourcing guidance.
-""".strip(
-    "\n"
-)
+""".strip("\n")
 
 
 USER_ORCHESTRATOR_PROMPT = """

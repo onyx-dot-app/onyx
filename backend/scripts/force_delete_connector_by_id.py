@@ -153,11 +153,9 @@ def _unsafe_deletion(
 
 
 def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
-    user_input = input(
-        "DO NOT USE THIS UNLESS YOU KNOW WHAT YOU ARE DOING. \
+    user_input = input("DO NOT USE THIS UNLESS YOU KNOW WHAT YOU ARE DOING. \
         IT MAY CAUSE ISSUES with your Onyx instance! \
-        Are you SURE you want to continue? (enter 'Y' to continue): "
-    )
+        Are you SURE you want to continue? (enter 'Y' to continue): ")
     if user_input != "Y":
         logger.notice(f"You entered {user_input}. Exiting!")
         return
@@ -173,10 +171,8 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         return
 
     if cc_pair.status == ConnectorCredentialPairStatus.ACTIVE:
-        logger.error(
-            f"Connector {cc_pair.connector.name} is active, cannot continue. \
-            Please navigate to the connector and pause before attempting again"
-        )
+        logger.error(f"Connector {cc_pair.connector.name} is active, cannot continue. \
+            Please navigate to the connector and pause before attempting again")
         return
 
     connector_id = cc_pair.connector_id

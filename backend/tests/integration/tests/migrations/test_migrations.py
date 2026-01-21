@@ -55,8 +55,7 @@ def test_fix_capitalization_migration() -> None:
     with get_session_with_current_tenant() as db_session:
         for doc in test_data:
             db_session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO document (
                         id,
                         external_user_group_ids,
@@ -75,8 +74,7 @@ def test_fix_capitalization_migration() -> None:
                         :from_ingestion_api,
                         :last_modified
                     )
-                    """
-                ),
+                    """),
                 {
                     "id": doc["id"],
                     "group_ids": doc["external_user_group_ids"],
@@ -91,16 +89,12 @@ def test_fix_capitalization_migration() -> None:
 
     # Verify the data was inserted correctly
     with get_session_with_current_tenant() as db_session:
-        results = db_session.execute(
-            text(
-                """
+        results = db_session.execute(text("""
                 SELECT id, external_user_group_ids
                 FROM document
                 WHERE id IN ('test_doc_1', 'test_doc_2')
                 ORDER BY id
-                """
-            )
-        ).fetchall()
+                """)).fetchall()
 
         # Verify initial state
         assert len(results) == 2
@@ -114,16 +108,12 @@ def test_fix_capitalization_migration() -> None:
 
     # Verify the fix was applied
     with get_session_with_current_tenant() as db_session:
-        results = db_session.execute(
-            text(
-                """
+        results = db_session.execute(text("""
                 SELECT id, external_user_group_ids
                 FROM document
                 WHERE id IN ('test_doc_1', 'test_doc_2')
                 ORDER BY id
-                """
-            )
-        ).fetchall()
+                """)).fetchall()
 
         # Verify all group IDs are lowercase
         assert len(results) == 2
@@ -180,8 +170,7 @@ def test_jira_connector_migration() -> None:
     with get_session_with_current_tenant() as db_session:
         for connector in test_data:
             db_session.execute(
-                text(
-                    """
+                text("""
                     INSERT INTO connector (
                         id,
                         name,
@@ -194,8 +183,7 @@ def test_jira_connector_migration() -> None:
                         :source,
                         :config
                     )
-                    """
-                ),
+                    """),
                 {
                     "id": connector["id"],
                     "name": connector["name"],
@@ -207,16 +195,12 @@ def test_jira_connector_migration() -> None:
 
     # Verify the data was inserted correctly
     with get_session_with_current_tenant() as db_session:
-        results = db_session.execute(
-            text(
-                """
+        results = db_session.execute(text("""
                 SELECT id, connector_specific_config
                 FROM connector
                 WHERE source = 'JIRA'
                 ORDER BY id
-                """
-            )
-        ).fetchall()
+                """)).fetchall()
 
         # Verify initial state
         assert len(results) == 3
@@ -240,16 +224,12 @@ def test_jira_connector_migration() -> None:
 
     # Verify the upgrade was applied correctly
     with get_session_with_current_tenant() as db_session:
-        results = db_session.execute(
-            text(
-                """
+        results = db_session.execute(text("""
                 SELECT id, connector_specific_config
                 FROM connector
                 WHERE source = 'JIRA'
                 ORDER BY id
-                """
-            )
-        ).fetchall()
+                """)).fetchall()
 
         # Verify new format
         assert len(results) == 3
@@ -285,16 +265,12 @@ def test_jira_connector_migration() -> None:
 
     # Verify the downgrade was applied correctly
     with get_session_with_current_tenant() as db_session:
-        results = db_session.execute(
-            text(
-                """
+        results = db_session.execute(text("""
                 SELECT id, connector_specific_config
                 FROM connector
                 WHERE source = 'JIRA'
                 ORDER BY id
-                """
-            )
-        ).fetchall()
+                """)).fetchall()
 
         # Verify reverted to old format
         assert len(results) == 3

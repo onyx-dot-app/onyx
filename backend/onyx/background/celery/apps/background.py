@@ -21,7 +21,6 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
-
 logger = setup_logger()
 
 celery_app = Celery(__name__)

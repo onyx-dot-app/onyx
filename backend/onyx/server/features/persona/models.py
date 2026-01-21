@@ -14,7 +14,6 @@ from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

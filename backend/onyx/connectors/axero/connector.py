@@ -25,7 +25,6 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
-
 logger = setup_logger()
 
 

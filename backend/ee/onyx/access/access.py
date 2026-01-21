@@ -17,7 +17,6 @@ from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

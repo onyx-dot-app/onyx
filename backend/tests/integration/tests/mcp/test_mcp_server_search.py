@@ -30,7 +30,6 @@ from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser
 
-
 # Constants
 MCP_SEARCH_TOOL = "search_indexed_documents"
 INDEXED_SOURCES_RESOURCE_URI = "resource://indexed_sources"

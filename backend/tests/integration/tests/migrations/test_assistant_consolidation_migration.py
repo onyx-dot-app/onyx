@@ -22,16 +22,12 @@ def test_cold_startup_default_assistant() -> None:
 
     with get_session_with_current_tenant() as db_session:
         # Check only default assistant exists
-        result = db_session.execute(
-            text(
-                """
+        result = db_session.execute(text("""
                 SELECT id, name, builtin_persona, is_default_persona, deleted
                 FROM persona
                 WHERE builtin_persona = true
                 ORDER BY id
-                """
-            )
-        )
+                """))
         assistants = result.fetchall()
 
         # Should have exactly one builtin assistant
@@ -44,17 +40,13 @@ def test_cold_startup_default_assistant() -> None:
         assert default[4] is False, "Should not be deleted"
 
         # Check tools are properly associated
-        result = db_session.execute(
-            text(
-                """
+        result = db_session.execute(text("""
                 SELECT t.name, t.display_name
                 FROM tool t
                 JOIN persona__tool pt ON t.id = pt.tool_id
                 WHERE pt.persona_id = 0
                 ORDER BY t.name
-                """
-            )
-        )
+                """))
         tool_associations = result.fetchall()
         tool_names = [row[0] for row in tool_associations]
         tool_display_names = [row[1] for row in tool_associations]

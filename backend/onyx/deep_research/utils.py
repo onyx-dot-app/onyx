@@ -11,7 +11,6 @@ from onyx.llm.model_response import Delta
 from onyx.llm.model_response import FunctionCall
 from onyx.tools.models import ToolCallKickoff
 
-
 # JSON prefixes to detect in think_tool arguments
 # The schema is: {"reasoning": "...content..."}
 JSON_PREFIX_WITH_SPACE = '{"reasoning": "'

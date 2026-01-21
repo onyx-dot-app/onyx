@@ -10,7 +10,6 @@ from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import LanguageModelInput
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

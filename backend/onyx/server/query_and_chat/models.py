@@ -24,7 +24,6 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import Packet
 
-
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
 

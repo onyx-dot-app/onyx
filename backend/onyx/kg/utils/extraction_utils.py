@@ -294,7 +294,7 @@ def kg_implied_extraction(
                 if process_results is None:
                     continue
 
-                (implied_entity, implied_relationship, _, _) = process_results
+                implied_entity, implied_relationship, _, _ = process_results
                 implied_entities.add(implied_entity)
                 implied_relationships.add(implied_relationship)
             else:

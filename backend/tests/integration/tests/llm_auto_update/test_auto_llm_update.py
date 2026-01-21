@@ -20,7 +20,6 @@ import requests
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestUser
 
-
 # How long to wait for the celery task to run and sync models
 # This should be longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS
 MAX_WAIT_TIME_SECONDS = 120

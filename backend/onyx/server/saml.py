@@ -30,7 +30,6 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 router = APIRouter(prefix="/auth/saml")
 

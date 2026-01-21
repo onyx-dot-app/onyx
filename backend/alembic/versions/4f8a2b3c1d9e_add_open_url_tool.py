@@ -9,7 +9,6 @@ Create Date: 2025-11-24 12:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "4f8a2b3c1d9e"
 down_revision = "a852cbe15577"
@@ -41,26 +40,22 @@ def upgrade() -> None:
         tool_id = existing[0]
         # Update existing tool
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE tool
                 SET name = :name,
                     display_name = :display_name,
                     description = :description
                 WHERE in_code_tool_id = :in_code_tool_id
-                """
-            ),
+                """),
             OPEN_URL_TOOL,
         )
     else:
         # Insert new tool
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
                 VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
-                """
-            ),
+                """),
             OPEN_URL_TOOL,
         )
         # Get the newly inserted tool's id
@@ -77,23 +72,19 @@ def upgrade() -> None:
     for (persona_id,) in persona_ids:
         # Check if association already exists
         exists = conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 SELECT 1 FROM persona__tool
                 WHERE persona_id = :persona_id AND tool_id = :tool_id
-                """
-            ),
+                """),
             {"persona_id": persona_id, "tool_id": tool_id},
         ).fetchone()
 
         if not exists:
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     INSERT INTO persona__tool (persona_id, tool_id)
                     VALUES (:persona_id, :tool_id)
-                    """
-                ),
+                    """),
                 {"persona_id": persona_id, "tool_id": tool_id},
             )
 

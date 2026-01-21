@@ -4,7 +4,6 @@ import socket
 from enum import auto
 from enum import Enum
 
-
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
 ONYX_UTM_SOURCE = "onyx_app"
@@ -162,6 +161,7 @@ TMP_DRALPHA_PERSONA_NAME = "KG Beta"
 
 class DocumentSource(str, Enum):
     # Special case, document passed in via Onyx APIs without specifying a source type
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     INGESTION_API = "ingestion_api"
     SLACK = "slack"
     WEB = "web"

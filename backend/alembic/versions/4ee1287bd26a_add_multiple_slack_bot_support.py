@@ -84,26 +84,20 @@ def upgrade() -> None:
 
     # Create a default bot if none exists
     # This is in case there are no slack tokens but there are channels configured
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             INSERT INTO slack_bot (name, enabled, bot_token, app_token)
             SELECT 'Default Bot', true, '', ''
             WHERE NOT EXISTS (SELECT 1 FROM slack_bot)
             RETURNING id;
-            """
-        )
-    )
+            """))
 
     # Get the bot ID to use (either from existing migration or newly created)
-    bot_id_query = sa.text(
-        """
+    bot_id_query = sa.text("""
         SELECT COALESCE(
             :first_row_id,
             (SELECT id FROM slack_bot ORDER BY id ASC LIMIT 1)
         ) as bot_id;
-        """
-    )
+        """)
     result = op.get_bind().execute(bot_id_query, {"first_row_id": first_row_id})
     bot_id = result.scalar()
 
@@ -199,9 +193,7 @@ def downgrade() -> None:
 
     # Migrate data back to the old format
     # Group by persona_id to combine channel names back into arrays
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             INSERT INTO slack_bot_config (
                 persona_id,
                 channel_config,
@@ -226,9 +218,7 @@ def downgrade() -> None:
                 enable_auto_filters
             FROM slack_channel_config scc
             WHERE persona_id IS NOT NULL;
-            """
-        )
-    )
+            """))
 
     # Rename the table back
     op.rename_table(

@@ -33,7 +33,6 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     TenantNotFoundInControlPlaneError,
 )
 
-
 # Global lock for thread-safe operations
 _print_lock: Lock = Lock()
 _csv_lock: Lock = Lock()

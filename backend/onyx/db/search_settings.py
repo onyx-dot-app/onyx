@@ -19,7 +19,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import PRESERVED_SEARCH_FIELDS
 from shared_configs.enums import EmbeddingProvider
 
-
 logger = setup_logger()
 
 

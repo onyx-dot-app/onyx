@@ -15,7 +15,6 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

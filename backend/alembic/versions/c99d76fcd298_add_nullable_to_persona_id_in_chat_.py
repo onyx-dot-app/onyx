@@ -36,42 +36,34 @@ def downgrade() -> None:
     """
 
     # Delete dependent records first
-    op.execute(
-        f"""
+    op.execute(f"""
         DELETE FROM document_retrieval_feedback
         WHERE chat_message_id IN (
             {chat_messages_query}
         )
-    """
-    )
-    op.execute(
-        f"""
+    """)
+    op.execute(f"""
         DELETE FROM chat_message__search_doc
         WHERE chat_message_id IN (
             {chat_messages_query}
         )
-    """
-    )
+    """)
 
     # Delete chat messages
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM chat_message
         WHERE chat_session_id IN (
             SELECT id
             FROM chat_session
             WHERE persona_id IS NULL
         )
-    """
-    )
+    """)
 
     # Now we can safely delete the chat sessions
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM chat_session
         WHERE persona_id IS NULL
-    """
-    )
+    """)
 
     op.alter_column(
         "chat_session",

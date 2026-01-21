@@ -9,7 +9,6 @@ Create Date: 2025-11-30 12:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "5e6f7a8b9c0d"
 down_revision = "4f8a2b3c1d9e"
@@ -38,13 +37,11 @@ You can use Markdown tables to format your responses for data, lists, and other 
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE persona
             SET system_prompt = :system_prompt
             WHERE id = :persona_id
-            """
-        ),
+            """),
         {"system_prompt": DEFAULT_SYSTEM_PROMPT, "persona_id": DEFAULT_PERSONA_ID},
     )
 
