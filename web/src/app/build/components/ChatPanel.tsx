@@ -23,6 +23,11 @@ import BuildWelcome from "@/app/build/components/BuildWelcome";
 import BuildMessageList from "@/app/build/components/BuildMessageList";
 import OutputPanelTab from "@/app/build/components/OutputPanelTab";
 import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicator";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgSidebar } from "@opal/icons";
+import { useBuildContext } from "@/app/build/contexts/BuildContext";
+import useScreenSize from "@/hooks/useScreenSize";
+import { cn } from "@/lib/utils";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -49,6 +54,8 @@ export default function BuildChatPanel({
   const sessionId = useSessionId();
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
+  const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
+  const { isMobile } = useScreenSize();
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -176,7 +183,17 @@ export default function BuildChatPanel({
       {popup}
       {/* Chat header */}
       <div className="flex flex-row items-center justify-between pl-4 py-3">
-        <SandboxStatusIndicator />
+        <div className="flex flex-row items-center gap-2">
+          {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
+          {isMobile && leftSidebarFolded && (
+            <IconButton
+              icon={SvgSidebar}
+              onClick={() => setLeftSidebarFolded(false)}
+              internal
+            />
+          )}
+          <SandboxStatusIndicator />
+        </div>
         {/* Output panel tab in header */}
         <OutputPanelTab isOpen={outputPanelOpen} onClick={toggleOutputPanel} />
       </div>
