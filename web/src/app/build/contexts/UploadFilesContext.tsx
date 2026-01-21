@@ -10,6 +10,10 @@ import React, {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import {
+  uploadFile as uploadFileApi,
+  deleteFile as deleteFileApi,
+} from "@/app/build/services/apiServices";
 
 /**
  * Upload File Status - tracks the state of files being uploaded
@@ -33,6 +37,8 @@ export interface BuildFile {
   created_at: string;
   // Original File object for upload
   file?: File;
+  // Path in sandbox after upload (e.g., "user_uploaded_files/doc.pdf")
+  path?: string;
 }
 
 // Helper to generate unique temp IDs
@@ -66,8 +72,8 @@ interface UploadFilesContextValue {
   // Upload files - returns optimistic files immediately
   uploadFiles: (files: File[], sessionId?: string) => Promise<BuildFile[]>;
 
-  // Remove a file from current message
-  removeFile: (fileId: string) => void;
+  // Remove a file from current message (and delete from sandbox if uploaded)
+  removeFile: (fileId: string, sessionId?: string) => void;
 
   // Clear all current message files
   clearFiles: () => void;
@@ -101,41 +107,39 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       // Add to current message files immediately
       setCurrentMessageFiles((prev) => [...prev, ...optimisticFiles]);
 
-      // TODO: Actually upload to /api/build/session/{sessionId}/files/upload
-      // For now, simulate upload completion after a delay
       if (sessionId) {
-        try {
-          // const formData = new FormData();
-          // files.forEach((file) => formData.append("files", file));
-          // const response = await fetch(
-          //   `/api/build/session/${sessionId}/files/upload`,
-          //   { method: "POST", body: formData }
-          // );
-          // if (!response.ok) throw new Error("Upload failed");
-          // const result = await response.json();
-
-          // Simulate success - update status to completed
-          setTimeout(() => {
+        // Upload each file to the session's sandbox
+        for (const optimisticFile of optimisticFiles) {
+          try {
+            const result = await uploadFileApi(sessionId, optimisticFile.file!);
+            // Update status to completed with path
             setCurrentMessageFiles((prev) =>
               prev.map((f) =>
-                optimisticFiles.some((of) => of.id === f.id)
-                  ? { ...f, status: UploadFileStatus.COMPLETED }
+                f.id === optimisticFile.id
+                  ? {
+                      ...f,
+                      status: UploadFileStatus.COMPLETED,
+                      path: result.path,
+                      name: result.filename,
+                    }
                   : f
               )
             );
-          }, 500);
-        } catch (error) {
-          // Mark as failed
-          setCurrentMessageFiles((prev) =>
-            prev.map((f) =>
-              optimisticFiles.some((of) => of.id === f.id)
-                ? { ...f, status: UploadFileStatus.FAILED }
-                : f
-            )
-          );
+          } catch (error) {
+            console.error("File upload failed:", error);
+            // Mark as failed
+            setCurrentMessageFiles((prev) =>
+              prev.map((f) =>
+                f.id === optimisticFile.id
+                  ? { ...f, status: UploadFileStatus.FAILED }
+                  : f
+              )
+            );
+          }
         }
       } else {
-        // No session yet - just mark as completed (will upload when session starts)
+        // No session yet - mark as pending (will upload when session is created)
+        // Keep status as UPLOADING until we have a session to upload to
         setTimeout(() => {
           setCurrentMessageFiles((prev) =>
             prev.map((f) =>
@@ -152,9 +156,22 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     []
   );
 
-  const removeFile = useCallback((fileId: string) => {
-    setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
-  }, []);
+  const removeFile = useCallback(
+    (fileId: string, sessionId?: string) => {
+      // Find the file to check if it has been uploaded
+      const file = currentMessageFiles.find((f) => f.id === fileId);
+
+      // If file has a path and sessionId is provided, delete from sandbox
+      if (file?.path && sessionId) {
+        deleteFileApi(sessionId, file.path).catch((error) => {
+          console.error("Failed to delete file from sandbox:", error);
+        });
+      }
+
+      setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
+    },
+    [currentMessageFiles]
+  );
 
   const clearFiles = useCallback(() => {
     setCurrentMessageFiles([]);

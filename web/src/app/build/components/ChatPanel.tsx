@@ -13,6 +13,7 @@ import {
 } from "@/app/build/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/build/hooks/useBuildStreaming";
 import { BuildFile } from "@/app/build/contexts/UploadFilesContext";
+import { uploadFile } from "@/app/build/services/apiServices";
 import { useLlmManager } from "@/lib/hooks";
 import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
 import Logo from "@/refresh-components/Logo";
@@ -50,9 +51,9 @@ export default function BuildChatPanel() {
   const llmManager = useLlmManager();
 
   const handleSubmit = useCallback(
-    async (message: string, _files: BuildFile[]) => {
-      // TODO: Pass files to session/message when API supports it
+    async (message: string, files: BuildFile[]) => {
       if (hasSession && sessionId) {
+        // Files are already uploaded when attached to existing session
         // Add user message to state
         appendMessage({
           id: `msg-${Date.now()}`,
@@ -63,13 +64,24 @@ export default function BuildChatPanel() {
         // Stream the response
         await streamMessage(sessionId, message);
       } else {
-        // Create new session (adds user message internally)
+        // New session flow:
+        // 1. Create session
+        // 2. Upload files immediately after session creation
+        // 3. Then send message to agent
         const newSessionId = await createNewSession(message);
         if (newSessionId) {
+          // Upload files before sending message
+          if (files.length > 0) {
+            await Promise.all(
+              files
+                .filter((f) => f.file)
+                .map((f) => uploadFile(newSessionId, f.file!))
+            );
+          }
           router.push(
             `/build/v1?${BUILD_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
           );
-          // Stream the response after navigation
+          // Stream the response
           await streamMessage(newSessionId, message);
         }
       }
@@ -123,6 +135,7 @@ export default function BuildChatPanel() {
               isRunning={isRunning}
               placeholder="Continue the conversation..."
               llmManager={llmManager}
+              sessionId={sessionId ?? undefined}
             />
           </div>
         </div>

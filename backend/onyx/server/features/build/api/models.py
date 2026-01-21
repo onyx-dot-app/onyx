@@ -197,3 +197,12 @@ class WebappInfo(BaseModel):
     has_webapp: bool  # Whether a webapp exists in outputs/web
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
+
+
+# ===== File Upload Models =====
+class UploadResponse(BaseModel):
+    """Response after successful file upload."""
+
+    filename: str  # Sanitized filename
+    path: str  # Relative path in sandbox (e.g., "user_uploaded_files/doc.pdf")
+    size_bytes: int  # File size in bytes

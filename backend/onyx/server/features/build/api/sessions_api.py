@@ -4,8 +4,10 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -18,13 +20,16 @@ from onyx.server.features.build.api.models import SessionListResponse
 from onyx.server.features.build.api.models import SessionNameGenerateResponse
 from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
+from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.utils import sanitize_filename
+from onyx.server.features.build.utils import validate_file
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter()
+router = APIRouter(prefix="/sessions")
 
 
 # =============================================================================
@@ -32,7 +37,7 @@ router = APIRouter()
 # =============================================================================
 
 
-@router.get("/sessions", response_model=SessionListResponse)
+@router.get("", response_model=SessionListResponse)
 def list_sessions(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -47,7 +52,7 @@ def list_sessions(
     )
 
 
-@router.post("/sessions", response_model=SessionResponse)
+@router.post("", response_model=SessionResponse)
 def create_session(
     request: SessionCreateRequest,
     user: User = Depends(current_user),
@@ -76,9 +81,9 @@ def create_session(
     return SessionResponse.from_model(build_session)
 
 
-@router.get("/sessions/{session_id}", response_model=SessionResponse)
+@router.get("/{session_id}", response_model=SessionResponse)
 def get_session_details(
-    session_id: str,
+    session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> SessionResponse:
@@ -87,14 +92,9 @@ def get_session_details(
 
     If the sandbox is terminated, this will restore it synchronously.
     """
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     session_manager = SessionManager(db_session)
 
-    session = session_manager.get_session(session_uuid, user.id)
+    session = session_manager.get_session(session_id, user.id)
 
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -102,23 +102,16 @@ def get_session_details(
     return SessionResponse.from_model(session)
 
 
-@router.post(
-    "/sessions/{session_id}/generate-name", response_model=SessionNameGenerateResponse
-)
+@router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)
 def generate_session_name(
-    session_id: str,
+    session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> SessionNameGenerateResponse:
     """Generate a session name using LLM based on the first user message."""
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     session_manager = SessionManager(db_session)
 
-    generated_name = session_manager.generate_session_name(session_uuid, user.id)
+    generated_name = session_manager.generate_session_name(session_id, user.id)
 
     if generated_name is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -126,22 +119,17 @@ def generate_session_name(
     return SessionNameGenerateResponse(name=generated_name)
 
 
-@router.put("/sessions/{session_id}/name", response_model=SessionResponse)
+@router.put("/{session_id}/name", response_model=SessionResponse)
 def update_session_name(
-    session_id: str,
+    session_id: UUID,
     request: SessionUpdateRequest,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> SessionResponse:
     """Update the name of a build session."""
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     session_manager = SessionManager(db_session)
 
-    session = session_manager.update_session_name(session_uuid, user.id, request.name)
+    session = session_manager.update_session_name(session_id, user.id, request.name)
 
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -149,21 +137,16 @@ def update_session_name(
     return SessionResponse.from_model(session)
 
 
-@router.delete("/sessions/{session_id}", response_model=None)
+@router.delete("/{session_id}", response_model=None)
 def delete_session(
-    session_id: str,
+    session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Delete a build session and all associated data."""
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     session_manager = SessionManager(db_session)
 
-    success = session_manager.delete_session(session_uuid, user.id)
+    success = session_manager.delete_session(session_id, user.id)
 
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -176,31 +159,29 @@ def delete_session(
 # =============================================================================
 
 
-@router.get("/sessions/{session_id}/artifacts", response_model=list[ArtifactResponse])
+@router.get(
+    "/{session_id}/artifacts",
+    response_model=list[ArtifactResponse],
+)
 def list_artifacts(
-    session_id: str,
+    session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[dict]:
     """List artifacts generated in the session."""
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     user_id: UUID = user.id
     session_manager = SessionManager(db_session)
 
-    artifacts = session_manager.list_artifacts(session_uuid, user_id)
+    artifacts = session_manager.list_artifacts(session_id, user_id)
     if artifacts is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     return artifacts
 
 
-@router.get("/sessions/{session_id}/files", response_model=DirectoryListing)
+@router.get("/{session_id}/files", response_model=DirectoryListing)
 def list_directory(
-    session_id: str,
+    session_id: UUID,
     path: str = "",
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
@@ -215,16 +196,11 @@ def list_directory(
     Returns:
         DirectoryListing with sorted entries (directories first, then files)
     """
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     user_id: UUID = user.id
     session_manager = SessionManager(db_session)
 
     try:
-        listing = session_manager.list_directory(session_uuid, user_id, path)
+        listing = session_manager.list_directory(session_id, user_id, path)
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():
@@ -241,24 +217,19 @@ def list_directory(
     return listing
 
 
-@router.get("/sessions/{session_id}/artifacts/{path:path}")
+@router.get("/{session_id}/artifacts/{path:path}")
 def download_artifact(
-    session_id: str,
+    session_id: UUID,
     path: str,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Download a specific artifact file."""
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     user_id: UUID = user.id
     session_manager = SessionManager(db_session)
 
     try:
-        result = session_manager.download_artifact(session_uuid, user_id, path)
+        result = session_manager.download_artifact(session_id, user_id, path)
     except ValueError as e:
         error_message = str(e)
         if (
@@ -284,9 +255,9 @@ def download_artifact(
     )
 
 
-@router.get("/sessions/{session_id}/webapp", response_model=WebappInfo)
+@router.get("/{session_id}/webapp", response_model=WebappInfo)
 def get_webapp_info(
-    session_id: str,
+    session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> WebappInfo:
@@ -295,15 +266,10 @@ def get_webapp_info(
 
     Returns whether a webapp exists, its URL, and the sandbox status.
     """
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     user_id: UUID = user.id
     session_manager = SessionManager(db_session)
 
-    webapp_info = session_manager.get_webapp_info(session_uuid, user_id)
+    webapp_info = session_manager.get_webapp_info(session_id, user_id)
 
     if webapp_info is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -311,9 +277,9 @@ def get_webapp_info(
     return WebappInfo(**webapp_info)
 
 
-@router.get("/sessions/{session_id}/webapp/download")
+@router.get("/{session_id}/webapp/download")
 def download_webapp(
-    session_id: str,
+    session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -322,15 +288,10 @@ def download_webapp(
 
     Returns the entire outputs/web directory as a zip archive.
     """
-    try:
-        session_uuid = UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
     user_id: UUID = user.id
     session_manager = SessionManager(db_session)
 
-    result = session_manager.download_webapp_zip(session_uuid, user_id)
+    result = session_manager.download_webapp_zip(session_id, user_id)
 
     if result is None:
         raise HTTPException(status_code=404, detail="Webapp not found")
@@ -344,3 +305,85 @@ def download_webapp(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+@router.post("/{session_id}/upload", response_model=UploadResponse)
+async def upload_file_endpoint(
+    session_id: UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> UploadResponse:
+    """Upload a file to the session's sandbox.
+
+    The file will be placed in the sandbox's user_uploaded_files directory.
+    """
+    user_id: UUID = user.id
+    session_manager = SessionManager(db_session)
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File has no filename")
+
+    # Read file content
+    content = await file.read()
+
+    # Validate file (extension, mime type, size)
+    is_valid, error = validate_file(file.filename, file.content_type, len(content))
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error)
+
+    # Sanitize filename
+    safe_filename = sanitize_filename(file.filename)
+
+    try:
+        relative_path, _ = session_manager.upload_file(
+            session_id=session_id,
+            user_id=user_id,
+            filename=safe_filename,
+            content=content,
+        )
+    except ValueError as e:
+        error_message = str(e)
+        if "not found" in error_message.lower():
+            raise HTTPException(status_code=404, detail=error_message)
+        raise HTTPException(status_code=400, detail=error_message)
+
+    return UploadResponse(
+        filename=safe_filename,
+        path=relative_path,
+        size_bytes=len(content),
+    )
+
+
+@router.delete("/{session_id}/files/{path:path}", response_model=None)
+def delete_file_endpoint(
+    session_id: UUID,
+    path: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Delete a file from the session's sandbox.
+
+    Args:
+        session_id: The session ID
+        path: Relative path to the file (e.g., "user_uploaded_files/doc.pdf")
+    """
+    user_id: UUID = user.id
+    session_manager = SessionManager(db_session)
+
+    try:
+        deleted = session_manager.delete_file(session_id, user_id, path)
+    except ValueError as e:
+        error_message = str(e)
+        if "path traversal" in error_message.lower():
+            raise HTTPException(status_code=403, detail="Access denied")
+        elif "not found" in error_message.lower():
+            raise HTTPException(status_code=404, detail=error_message)
+        elif "directory" in error_message.lower():
+            raise HTTPException(status_code=400, detail="Cannot delete directory")
+        raise HTTPException(status_code=400, detail=error_message)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return Response(status_code=204)

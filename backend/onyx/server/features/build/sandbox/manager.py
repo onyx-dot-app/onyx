@@ -402,6 +402,11 @@ class LocalSandboxManager(SandboxManager):
             self._directory_manager.setup_skills(sandbox_path)
             logger.debug("Skills ready")
 
+            # Setup user uploads directory
+            logger.debug("Setting up user uploads directory")
+            self._directory_manager.setup_user_uploads_directory(sandbox_path)
+            logger.debug("User uploads directory ready")
+
             # Setup opencode.json with LLM provider configuration
             logger.debug("Fetching default LLM provider")
             llm_provider = fetch_default_provider(db_session)
