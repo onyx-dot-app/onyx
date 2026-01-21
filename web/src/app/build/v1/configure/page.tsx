@@ -119,9 +119,9 @@ export default function BuildConfigPage() {
     config: data?.connectors?.find((c) => c.source === type) || null,
   }));
 
-  // Check if there are any enabled connectors
-  const hasEnabledConnectors = connectorStates.some(
-    ({ config }) => config !== null
+  // Check if there's at least one connector in "connected" (active) state
+  const hasActiveConnector = connectorStates.some(
+    ({ config }) => config?.status === "connected"
   );
 
   const handleDeleteConfirm = async () => {
@@ -171,16 +171,16 @@ export default function BuildConfigPage() {
                 >
                   <SimpleTooltip
                     tooltip={
-                      !hasEnabledConnectors
-                        ? "Connect a data source to enable demo data"
+                      !hasActiveConnector
+                        ? "Connect and sync a data source to enable demo data"
                         : undefined
                     }
-                    disabled={hasEnabledConnectors}
+                    disabled={hasActiveConnector}
                   >
                     <Switch
                       checked={localDemoDataEnabled}
                       onCheckedChange={setLocalDemoDataEnabled}
-                      disabled={!hasEnabledConnectors}
+                      disabled={!hasActiveConnector}
                     />
                   </SimpleTooltip>
                 </InputLayouts.Horizontal>
