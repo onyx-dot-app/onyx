@@ -44,7 +44,7 @@ if __name__ == "__main__":
         ]
         response = client.chat.completions.create(
             model=model_version,
-            messages=messages,  # type:ignore
+            messages=messages,  # type: ignore
             max_tokens=5,
             temperature=2,
         )

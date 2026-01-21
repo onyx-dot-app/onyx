@@ -5,7 +5,6 @@ from .spans import Span
 from .spans import SpanError
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger(__name__)
 
 

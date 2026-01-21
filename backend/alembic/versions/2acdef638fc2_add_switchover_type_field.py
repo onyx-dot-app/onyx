@@ -11,7 +11,6 @@ import sqlalchemy as sa
 
 from onyx.db.enums import SwitchoverType
 
-
 # revision identifiers, used by Alembic.
 revision = "2acdef638fc2"
 down_revision = "a4f23d6b71c8"
@@ -33,15 +32,13 @@ def upgrade() -> None:
 
     # Migrate existing data: set switchover_type based on background_reindex_enabled
     # REINDEX where background_reindex_enabled=True, INSTANT where False
-    op.execute(
-        """
+    op.execute("""
         UPDATE search_settings
         SET switchover_type = CASE
             WHEN background_reindex_enabled = true THEN 'REINDEX'
             ELSE 'INSTANT'
         END
-        """
-    )
+        """)
 
     # Remove the background_reindex_enabled column (replaced by switchover_type)
     op.drop_column("search_settings", "background_reindex_enabled")
@@ -59,14 +56,12 @@ def downgrade() -> None:
         ),
     )
     # Set background_reindex_enabled based on switchover_type
-    op.execute(
-        """
+    op.execute("""
         UPDATE search_settings
         SET background_reindex_enabled = CASE
             WHEN switchover_type = 'INSTANT' THEN false
             ELSE true
         END
-        """
-    )
+        """)
     # Remove the switchover_type column
     op.drop_column("search_settings", "switchover_type")

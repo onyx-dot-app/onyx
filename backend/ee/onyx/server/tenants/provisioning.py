@@ -65,7 +65,6 @@ from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.enums import EmbeddingProvider
 
-
 logger = setup_logger()
 
 

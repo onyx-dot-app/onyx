@@ -1,7 +1,7 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import { Connector } from "./connectors/connectors";
+import { Credential } from "./connectors/credentials";
 
 export interface UserSpecificAssistantPreference {
   disabled_tool_ids?: number[];
@@ -463,6 +463,7 @@ export enum ValidSources {
   Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
+  JiraServiceManagement = "jira_service_management",
   Productboard = "productboard",
   Slab = "slab",
   Coda = "coda",

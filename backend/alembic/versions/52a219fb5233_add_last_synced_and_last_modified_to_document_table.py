@@ -38,12 +38,10 @@ def upgrade() -> None:
     )
 
     # Set last_synced to the same value as last_modified for existing rows
-    op.execute(
-        """
+    op.execute("""
         UPDATE document
         SET last_synced = last_modified
-        """
-    )
+        """)
 
     op.create_index(
         op.f("ix_document_last_modified"),

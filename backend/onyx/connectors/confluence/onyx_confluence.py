@@ -26,7 +26,7 @@ from typing import TypeVar
 from urllib.parse import quote
 
 import bs4
-from atlassian import Confluence  # type:ignore
+from atlassian import Confluence  # type: ignore
 from redis import Redis
 from requests import HTTPError
 
@@ -950,7 +950,7 @@ class OnyxConfluence:
         :return: Returns the user details
         """
 
-        from atlassian.errors import ApiPermissionError  # type:ignore
+        from atlassian.errors import ApiPermissionError  # type: ignore
 
         url = "rest/api/user/current"
         params = {}

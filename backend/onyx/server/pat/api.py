@@ -16,7 +16,6 @@ from onyx.server.pat.models import CreateTokenRequest
 from onyx.server.pat.models import TokenResponse
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 router = APIRouter(prefix="/user/pats")

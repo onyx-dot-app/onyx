@@ -91,15 +91,13 @@ def downgrade_postgres(
         cur = conn.cursor()
 
         # Close any existing connections to the schema before dropping
-        cur.execute(
-            f"""
+        cur.execute(f"""
             SELECT pg_terminate_backend(pg_stat_activity.pid)
             FROM pg_stat_activity
             WHERE pg_stat_activity.datname = '{database}'
             AND pg_stat_activity.state = 'idle in transaction'
             AND pid <> pg_backend_pid();
-        """
-        )
+        """)
 
         # Drop and recreate the public schema - this removes ALL objects
         cur.execute(f"DROP SCHEMA {schema} CASCADE;")
@@ -201,40 +199,34 @@ def drop_multitenant_postgres_task(dbname: str) -> None:
 
     logger.info("Selecting tenant schemas.")
     # Get all tenant schemas
-    cur.execute(
-        """
+    cur.execute("""
         SELECT schema_name
         FROM information_schema.schemata
         WHERE schema_name LIKE 'tenant_%'
-        """
-    )
+        """)
     tenant_schemas = cur.fetchall()
 
     # Drop all tenant schemas
     logger.info("Dropping all tenant schemas.")
     for schema in tenant_schemas:
         # Close any existing connections to the schema before dropping
-        cur.execute(
-            """
+        cur.execute("""
             SELECT pg_terminate_backend(pg_stat_activity.pid)
             FROM pg_stat_activity
             WHERE pg_stat_activity.datname = 'postgres'
             AND pg_stat_activity.state = 'idle in transaction'
             AND pid <> pg_backend_pid();
-        """
-        )
+        """)
 
         schema_name = schema[0]
         cur.execute(f'DROP SCHEMA "{schema_name}" CASCADE')
 
     # Drop tables in the public schema
     logger.info("Selecting public schema tables.")
-    cur.execute(
-        """
+    cur.execute("""
         SELECT tablename FROM pg_tables
         WHERE schemaname = 'public'
-        """
-    )
+        """)
     public_tables = cur.fetchall()
 
     logger.info("Dropping public schema tables.")

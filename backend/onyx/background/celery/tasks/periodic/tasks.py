@@ -92,16 +92,14 @@ def kombu_message_cleanup_task_helper(ctx: dict, db_session: Session) -> bool:
     if not inspector.has_table("kombu_message"):
         return False
 
-    query = text(
-        """
+    query = text("""
     SELECT id, timestamp, payload
     FROM kombu_message WHERE visible = 'false'
     AND timestamp < CURRENT_TIMESTAMP - INTERVAL :interval_days
     AND id > :last_processed_id
     ORDER BY id
     LIMIT :page_limit
-"""
-    )
+""")
     kombu_messages = db_session.execute(
         query,
         {

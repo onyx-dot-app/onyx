@@ -59,7 +59,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 
-
 logger = setup_logger()
 
 

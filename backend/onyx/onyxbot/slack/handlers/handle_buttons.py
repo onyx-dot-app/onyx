@@ -53,7 +53,6 @@ from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

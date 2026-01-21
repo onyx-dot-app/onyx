@@ -24,7 +24,6 @@ from onyx.document_index.factory import get_all_document_indices
 from onyx.key_value_store.factory import get_kv_store
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

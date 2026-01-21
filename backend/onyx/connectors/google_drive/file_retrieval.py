@@ -23,7 +23,6 @@ from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

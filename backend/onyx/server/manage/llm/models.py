@@ -13,7 +13,6 @@ from onyx.server.manage.llm.utils import extract_vendor_from_model_name
 from onyx.server.manage.llm.utils import filter_model_configurations
 from onyx.server.manage.llm.utils import is_reasoning_model
 
-
 if TYPE_CHECKING:
     from onyx.db.models import (
         LLMProvider as LLMProviderModel,

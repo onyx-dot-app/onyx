@@ -14,7 +14,6 @@ from uuid import UUID
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "505c488f6662"
 down_revision = "d09fc20a3c66"
@@ -93,8 +92,7 @@ def upgrade() -> None:
     if search_assistant:
         # Update existing Search assistant to be the unified assistant
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE persona
                 SET name = :name,
                     description = :description,
@@ -112,15 +110,13 @@ def upgrade() -> None:
                     datetime_aware = :datetime_aware,
                     starter_messages = null
                 WHERE id = 0
-            """
-            ),
+            """),
             INSERT_DICT,
         )
     else:
         # Create new unified assistant with ID 0
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO persona (
                     id, name, description, system_prompt, num_chunks,
                     is_default_persona, is_visible, deleted, display_priority,
@@ -133,21 +129,16 @@ def upgrade() -> None:
                     :llm_relevance_filter, :recency_bias, :chunks_above, :chunks_below,
                     :datetime_aware, null, true
                 )
-            """
-            ),
+            """),
             INSERT_DICT,
         )
 
     # Step 2: Mark ALL builtin assistants as deleted (except the unified assistant ID 0)
-    conn.execute(
-        sa.text(
-            """
+    conn.execute(sa.text("""
             UPDATE persona
             SET deleted = true, is_visible = false, is_default_persona = false
             WHERE builtin_persona = true AND id != 0
-        """
-        )
-    )
+        """))
 
     # Step 3: Add all built-in tools to the unified assistant
     # First, get the tool IDs for SearchTool, ImageGenerationTool, and WebSearchTool
@@ -179,74 +170,56 @@ def upgrade() -> None:
 
     # Add tools to the unified assistant
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO persona__tool (persona_id, tool_id)
             VALUES (0, :tool_id)
             ON CONFLICT DO NOTHING
-        """
-        ),
+        """),
         {"tool_id": search_tool[0]},
     )
 
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO persona__tool (persona_id, tool_id)
             VALUES (0, :tool_id)
             ON CONFLICT DO NOTHING
-        """
-        ),
+        """),
         {"tool_id": image_gen_tool[0]},
     )
 
     if web_search_tool:
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO persona__tool (persona_id, tool_id)
                 VALUES (0, :tool_id)
                 ON CONFLICT DO NOTHING
-            """
-            ),
+            """),
             {"tool_id": web_search_tool[0]},
         )
 
     # Step 4: Migrate existing chat sessions from all builtin assistants to unified assistant
-    conn.execute(
-        sa.text(
-            """
+    conn.execute(sa.text("""
             UPDATE chat_session
             SET persona_id = 0
             WHERE persona_id IN (
                 SELECT id FROM persona WHERE builtin_persona = true AND id != 0
             )
-        """
-        )
-    )
+        """))
 
     # Step 5: Migrate user preferences - remove references to all builtin assistants
     # First, get all builtin assistant IDs (except 0)
-    builtin_assistants_result = conn.execute(
-        sa.text(
-            """
+    builtin_assistants_result = conn.execute(sa.text("""
             SELECT id FROM persona
             WHERE builtin_persona = true AND id != 0
-        """
-        )
-    ).fetchall()
+        """)).fetchall()
     builtin_assistant_ids = [row[0] for row in builtin_assistants_result]
 
     # Get all users with preferences
-    users_result = conn.execute(
-        sa.text(
-            """
+    users_result = conn.execute(sa.text("""
             SELECT id, chosen_assistants, visible_assistants,
                    hidden_assistants, pinned_assistants
             FROM "user"
-        """
-        )
-    ).fetchall()
+        """)).fetchall()
 
     for user_row in users_result:
         user = UserRow(*user_row)
@@ -309,43 +282,35 @@ def downgrade() -> None:
 
     # Only restore General (ID -1) and Art (ID -3) assistants
     # Step 1: Keep Search assistant (ID 0) as default but restore original state
-    conn.execute(
-        sa.text(
-            """
+    conn.execute(sa.text("""
             UPDATE persona
             SET is_default_persona = true,
                 is_visible = true,
                 deleted = false
             WHERE id = 0
-        """
-        )
-    )
+        """))
 
     # Step 2: Restore General assistant (ID -1)
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE persona
             SET deleted = false,
                 is_visible = true,
                 is_default_persona = true
             WHERE id = :general_assistant_id
-        """
-        ),
+        """),
         {"general_assistant_id": GENERAL_ASSISTANT_ID},
     )
 
     # Step 3: Restore Art assistant (ID -3)
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE persona
             SET deleted = false,
                 is_visible = true,
                 is_default_persona = true
             WHERE id = :art_assistant_id
-        """
-        ),
+        """),
         {"art_assistant_id": ART_ASSISTANT_ID},
     )
 

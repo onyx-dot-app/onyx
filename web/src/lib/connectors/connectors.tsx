@@ -660,7 +660,7 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
-jira: {
+  jira: {
     description: "Configure Jira connector",
     subtext: `Configure which Jira content to index. You can index everything or specify a particular project.`,
     values: [

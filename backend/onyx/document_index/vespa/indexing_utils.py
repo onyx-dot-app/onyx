@@ -60,7 +60,6 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 
-
 logger = setup_logger()
 
 # Retry configuration constants

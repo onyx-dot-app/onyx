@@ -1,6 +1,5 @@
 from onyx.background.celery.apps.background import celery_app
 
-
 celery_app.autodiscover_tasks(
     [
         "ee.onyx.background.celery.tasks.doc_permission_syncing",

@@ -43,8 +43,7 @@ def upgrade() -> None:
         ),
     )
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE file_store
         SET file_origin = CASE
             WHEN file_name LIKE 'chat__%' THEN 'chat_upload'
@@ -58,8 +57,7 @@ def upgrade() -> None:
             WHEN file_name LIKE 'chat__%' THEN 'image/png'
             ELSE 'text/plain'
         END
-    """
-    )
+    """)
 
 
 def downgrade() -> None:

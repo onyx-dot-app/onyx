@@ -49,8 +49,7 @@ def upgrade() -> None:
 
             while True:
                 result = bind.execute(
-                    text(
-                        """
+                    text("""
                     UPDATE user_file
                     SET new_id = gen_random_uuid()
                     WHERE new_id IS NULL
@@ -59,8 +58,7 @@ def upgrade() -> None:
                         WHERE new_id IS NULL
                         LIMIT :batch_size
                     )
-                """
-                    ),
+                """),
                     {"batch_size": batch_size},
                 )
 
@@ -98,14 +96,10 @@ def upgrade() -> None:
         logger.info("Populating persona__user_file.user_file_id_uuid...")
 
         # Count rows needing update
-        null_count = bind.execute(
-            text(
-                """
+        null_count = bind.execute(text("""
             SELECT COUNT(*) FROM persona__user_file
             WHERE user_file_id IS NOT NULL AND user_file_id_uuid IS NULL
-        """
-            )
-        ).scalar_one()
+        """)).scalar_one()
 
         if null_count > 0:
             logger.info(f"Updating {null_count} persona__user_file records...")
@@ -116,8 +110,7 @@ def upgrade() -> None:
 
             while True:
                 result = bind.execute(
-                    text(
-                        """
+                    text("""
                     UPDATE persona__user_file p
                     SET user_file_id_uuid = uf.new_id
                     FROM user_file uf
@@ -129,8 +122,7 @@ def upgrade() -> None:
                         WHERE user_file_id_uuid IS NULL
                         LIMIT :batch_size
                     )
-                """
-                    ),
+                """),
                     {"batch_size": batch_size},
                 )
 
@@ -145,14 +137,10 @@ def upgrade() -> None:
             logger.info(f"Updated {total_updated} persona__user_file records")
 
         # Verify all records are populated
-        remaining_null = bind.execute(
-            text(
-                """
+        remaining_null = bind.execute(text("""
             SELECT COUNT(*) FROM persona__user_file
             WHERE user_file_id IS NOT NULL AND user_file_id_uuid IS NULL
-        """
-            )
-        ).scalar_one()
+        """)).scalar_one()
 
         if remaining_null > 0:
             raise Exception(
@@ -166,9 +154,7 @@ def upgrade() -> None:
     if "chat_folder" in inspector.get_table_names():
         logger.info("Creating user_project records from chat_folder...")
 
-        result = bind.execute(
-            text(
-                """
+        result = bind.execute(text("""
             INSERT INTO user_project (user_id, name)
             SELECT cf.user_id, cf.name
             FROM chat_folder cf
@@ -177,9 +163,7 @@ def upgrade() -> None:
                 FROM user_project up
                 WHERE up.user_id = cf.user_id AND up.name = cf.name
             )
-        """
-            )
-        )
+        """))
 
         logger.info(f"Created {result.rowcount} user_project records from chat_folder")
 
@@ -192,41 +176,29 @@ def upgrade() -> None:
         logger.info("Populating chat_session.project_id...")
 
         # Count sessions needing update
-        null_count = bind.execute(
-            text(
-                """
+        null_count = bind.execute(text("""
             SELECT COUNT(*) FROM chat_session
             WHERE project_id IS NULL AND folder_id IS NOT NULL
-        """
-            )
-        ).scalar_one()
+        """)).scalar_one()
 
         if null_count > 0:
             logger.info(f"Updating {null_count} chat_session records...")
 
-            result = bind.execute(
-                text(
-                    """
+            result = bind.execute(text("""
                 UPDATE chat_session cs
                 SET project_id = up.id
                 FROM chat_folder cf
                 JOIN user_project up ON up.user_id = cf.user_id AND up.name = cf.name
                 WHERE cs.folder_id = cf.id AND cs.project_id IS NULL
-            """
-                )
-            )
+            """))
 
             logger.info(f"Updated {result.rowcount} chat_session records")
 
         # Verify all records are populated
-        remaining_null = bind.execute(
-            text(
-                """
+        remaining_null = bind.execute(text("""
             SELECT COUNT(*) FROM chat_session
             WHERE project_id IS NULL AND folder_id IS NOT NULL
-        """
-            )
-        ).scalar_one()
+        """)).scalar_one()
 
         if remaining_null > 0:
             logger.warning(
@@ -240,46 +212,36 @@ def upgrade() -> None:
     logger.info("Updating plaintext FileRecord ids and display names to UUID scheme...")
 
     # Count legacy plaintext records that can be mapped to UUID user_file ids
-    count_query = text(
-        """
+    count_query = text("""
         SELECT COUNT(*)
         FROM file_record fr
         JOIN user_file uf ON fr.file_id = CONCAT('plaintext_', uf.id::text)
         WHERE LOWER(fr.file_origin::text) = 'plaintext_cache'
-        """
-    )
+        """)
     legacy_count = bind.execute(count_query).scalar_one()
 
     if legacy_count and legacy_count > 0:
         logger.info(f"Found {legacy_count} legacy plaintext file records to update")
 
         # Update display_name first for readability (safe regardless of rename)
-        bind.execute(
-            text(
-                """
+        bind.execute(text("""
                 UPDATE file_record fr
                 SET display_name = CONCAT('Plaintext for user file ', uf.new_id::text)
                 FROM user_file uf
                 WHERE LOWER(fr.file_origin::text) = 'plaintext_cache'
                     AND fr.file_id = CONCAT('plaintext_', uf.id::text)
-                """
-            )
-        )
+                """))
 
         # Remap file_id from 'plaintext_<int>' -> 'plaintext_<uuid>' using transitional new_id
         # Use a single UPDATE ... WHERE file_id LIKE 'plain_text_%'
         # and ensure it aligns to existing user_file ids to avoid renaming unrelated rows
-        result = bind.execute(
-            text(
-                """
+        result = bind.execute(text("""
                 UPDATE file_record fr
                 SET file_id = CONCAT('plaintext_', uf.new_id::text)
                 FROM user_file uf
                 WHERE LOWER(fr.file_origin::text) = 'plaintext_cache'
                     AND fr.file_id = CONCAT('plaintext_', uf.id::text)
-                """
-            )
-        )
+                """))
         logger.info(
             f"Updated {result.rowcount} plaintext file_record ids to UUID scheme"
         )
@@ -289,24 +251,18 @@ def upgrade() -> None:
     # Existing rows that had a legacy document_id should be marked as not migrated to be processed.
 
     # Backfill existing records: if document_id is not null, set to FALSE
-    bind.execute(
-        text(
-            """
+    bind.execute(text("""
             UPDATE user_file
             SET document_id_migrated = FALSE
             WHERE document_id IS NOT NULL
-            """
-        )
-    )
+            """))
 
     # === Step 7: Backfill user_file.status from index_attempt ===
     logger.info("Backfilling user_file.status from index_attempt...")
 
     # Update user_file status based on latest index attempt
     # Using CTEs instead of temp tables for asyncpg compatibility
-    result = bind.execute(
-        text(
-            """
+    result = bind.execute(text("""
         WITH latest_attempt AS (
             SELECT DISTINCT ON (ia.connector_credential_pair_id)
                 ia.connector_credential_pair_id,
@@ -334,9 +290,7 @@ def upgrade() -> None:
             ON la.connector_credential_pair_id = ufc.cc_pair_id
         WHERE uf.id = ufc.uf_id
         AND uf.status = 'PROCESSING'
-    """
-        )
-    )
+    """))
 
     logger.info(f"Updated status for {result.rowcount} user_file records")
 

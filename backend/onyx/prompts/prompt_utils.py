@@ -16,7 +16,6 @@ from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

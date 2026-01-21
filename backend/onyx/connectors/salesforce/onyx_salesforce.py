@@ -16,7 +16,6 @@ from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
-
 logger = setup_logger()
 
 

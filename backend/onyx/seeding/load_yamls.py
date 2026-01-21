@@ -5,7 +5,6 @@ from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

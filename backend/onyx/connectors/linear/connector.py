@@ -30,7 +30,6 @@ from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
-
 logger = setup_logger()
 
 _NUM_RETRIES = 5

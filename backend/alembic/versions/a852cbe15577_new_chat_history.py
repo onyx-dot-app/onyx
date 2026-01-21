@@ -81,14 +81,12 @@ def upgrade() -> None:
     )
 
     # Populate chat_session_id from the related chat_message
-    op.execute(
-        """
+    op.execute("""
         UPDATE tool_call
         SET chat_session_id = chat_message.chat_session_id
         FROM chat_message
         WHERE tool_call.message_id = chat_message.id
-    """
-    )
+    """)
 
     # Now make it NOT NULL and add FK
     op.alter_column("tool_call", "chat_session_id", nullable=False)
@@ -157,13 +155,11 @@ def upgrade() -> None:
     op.alter_column("tool_call", "tool_result", new_column_name="tool_call_response")
 
     # Change tool_call_response type from JSONB to Text
-    op.execute(
-        """
+    op.execute("""
         ALTER TABLE tool_call
         ALTER COLUMN tool_call_response TYPE TEXT
         USING tool_call_response::text
-    """
-    )
+    """)
 
     # Drop old columns
     op.drop_column("tool_call", "tool_name")
@@ -206,13 +202,11 @@ def downgrade() -> None:
     )
 
     # Change tool_call_response back to JSONB
-    op.execute(
-        """
+    op.execute("""
         ALTER TABLE tool_call
         ALTER COLUMN tool_call_response TYPE JSONB
         USING tool_call_response::jsonb
-    """
-    )
+    """)
 
     op.alter_column("tool_call", "tool_call_response", new_column_name="tool_result")
     op.alter_column(

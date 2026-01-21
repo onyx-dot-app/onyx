@@ -33,8 +33,7 @@ def upgrade() -> None:
     )
 
     # Populate the new connector_credential_pair_id column using existing connector_id and credential_id
-    op.execute(
-        """
+    op.execute("""
         UPDATE index_attempt ia
         SET connector_credential_pair_id = (
             SELECT id FROM connector_credential_pair ccp
@@ -44,16 +43,13 @@ def upgrade() -> None:
             LIMIT 1
         )
         WHERE ia.connector_id IS NOT NULL OR ia.credential_id IS NOT NULL
-        """
-    )
+        """)
 
     # For good measure
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM index_attempt
         WHERE connector_credential_pair_id IS NULL
-        """
-    )
+        """)
 
     # Make the new connector_credential_pair_id column non-nullable
     op.alter_column("index_attempt", "connector_credential_pair_id", nullable=False)
@@ -80,14 +76,12 @@ def downgrade() -> None:
     )
 
     # Populate the old connector_id and credential_id columns using the connector_credential_pair_id
-    op.execute(
-        """
+    op.execute("""
         UPDATE index_attempt ia
         SET connector_id = ccp.connector_id, credential_id = ccp.credential_id
         FROM connector_credential_pair ccp
         WHERE ia.connector_credential_pair_id = ccp.id
-        """
-    )
+        """)
 
     # Make the old connector_id and credential_id columns non-nullable
     op.alter_column("index_attempt", "connector_id", nullable=False)

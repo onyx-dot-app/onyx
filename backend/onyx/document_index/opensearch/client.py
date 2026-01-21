@@ -16,7 +16,6 @@ from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
 # opensearch. By default it emits INFO-level logs for every request.

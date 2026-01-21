@@ -12,7 +12,6 @@ from tests.daily.connectors.teams.models import TeamsThread
 from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 from tests.daily.connectors.utils import to_documents
 
-
 TEAMS_THREAD = [
     # Posted in "Public Channel"
     TeamsThread(

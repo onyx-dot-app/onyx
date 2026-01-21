@@ -21,7 +21,6 @@ from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
-
 logger = setup_logger()
 
 

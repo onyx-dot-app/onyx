@@ -100,18 +100,14 @@ def upgrade() -> None:
     logger.info("Identifying user-file documents to delete...")
 
     # Get document IDs to delete
-    doc_rows = bind.execute(
-        text(
-            """
+    doc_rows = bind.execute(text("""
         SELECT DISTINCT dcc.id AS document_id
         FROM document_by_connector_credential_pair dcc
         JOIN connector_credential_pair u
           ON u.connector_id = dcc.connector_id
          AND u.credential_id = dcc.credential_id
         WHERE u.is_user_file IS TRUE
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     doc_ids = [r[0] for r in doc_rows]
 
@@ -149,15 +145,11 @@ def upgrade() -> None:
     logger.info("Cleaning up user-file connector_credential_pairs...")
 
     # Get cc_pair IDs
-    cc_pair_rows = bind.execute(
-        text(
-            """
+    cc_pair_rows = bind.execute(text("""
         SELECT id AS cc_pair_id
         FROM connector_credential_pair
         WHERE is_user_file IS TRUE
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     cc_pair_ids = [r[0] for r in cc_pair_rows]
 
@@ -188,9 +180,7 @@ def upgrade() -> None:
     logger.info("Identifying orphaned connectors and credentials...")
 
     # Get connectors used only by user-file cc_pairs
-    connector_rows = bind.execute(
-        text(
-            """
+    connector_rows = bind.execute(text("""
         SELECT DISTINCT ccp.connector_id
         FROM connector_credential_pair ccp
         WHERE ccp.is_user_file IS TRUE
@@ -201,16 +191,12 @@ def upgrade() -> None:
             WHERE c2.connector_id = ccp.connector_id
               AND c2.is_user_file IS NOT TRUE
           )
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     userfile_only_connector_ids = [r[0] for r in connector_rows]
 
     # Get credentials used only by user-file cc_pairs
-    credential_rows = bind.execute(
-        text(
-            """
+    credential_rows = bind.execute(text("""
         SELECT DISTINCT ccp.credential_id
         FROM connector_credential_pair ccp
         WHERE ccp.is_user_file IS TRUE
@@ -221,18 +207,14 @@ def upgrade() -> None:
             WHERE c2.credential_id = ccp.credential_id
               AND c2.is_user_file IS NOT TRUE
           )
-    """
-        )
-    ).fetchall()
+    """)).fetchall()
 
     userfile_only_credential_ids = [r[0] for r in credential_rows]
 
     # === Step 4: Delete the cc_pairs themselves ===
     if cc_pair_ids:
         # Remove FK dependency from user_file first
-        bind.execute(
-            text(
-                """
+        bind.execute(text("""
             DO $$
             DECLARE r RECORD;
             BEGIN
@@ -248,9 +230,7 @@ def upgrade() -> None:
                 EXECUTE format('ALTER TABLE user_file DROP CONSTRAINT IF EXISTS %I', r.conname);
               END LOOP;
             END$$;
-        """
-            )
-        )
+        """))
 
         # Delete cc_pairs
         deleted = batch_delete(

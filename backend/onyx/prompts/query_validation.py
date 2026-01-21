@@ -7,7 +7,6 @@ from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 from onyx.prompts.constants import THOUGHT_PAT
 
-
 ANSWERABLE_PROMPT = f"""
 You are a helper tool to determine if a query is answerable using retrieval augmented generation.
 The main system will try to answer the user query based on ONLY the top 5 most relevant \

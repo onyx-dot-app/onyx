@@ -29,7 +29,6 @@ from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
-
 if TYPE_CHECKING:
     from onyx.server.manage.llm.models import LLMProviderView
 

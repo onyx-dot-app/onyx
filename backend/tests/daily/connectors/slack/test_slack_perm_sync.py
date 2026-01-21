@@ -9,7 +9,6 @@ from onyx.connectors.slack.connector import SlackConnector
 from onyx.utils.variable_functionality import global_version
 from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
-
 PUBLIC_CHANNEL_NAME = "#daily-connector-test-channel"
 PRIVATE_CHANNEL_NAME = "#private-channel"
 PRIVATE_CHANNEL_USERS = [

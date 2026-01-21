@@ -18,7 +18,7 @@ from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
 from playwright.sync_api import TimeoutError
-from requests_oauthlib import OAuth2Session  # type:ignore
+from requests_oauthlib import OAuth2Session  # type: ignore
 from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -304,8 +304,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     )
 
     # Add a script to modify navigator properties to avoid detection
-    context.add_init_script(
-        """
+    context.add_init_script("""
         Object.defineProperty(navigator, 'webdriver', {
             get: () => undefined
         });
@@ -315,8 +314,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
         Object.defineProperty(navigator, 'languages', {
             get: () => ['en-US', 'en']
         });
-    """
-    )
+    """)
 
     if (
         WEB_CONNECTOR_OAUTH_CLIENT_ID

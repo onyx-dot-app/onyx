@@ -17,7 +17,6 @@ from onyx.configs.app_configs import DB_READONLY_PASSWORD
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
-
 # revision identifiers, used by Alembic.
 revision = "495cb26ce93e"
 down_revision = "ca04500b9ee8"
@@ -44,9 +43,7 @@ def upgrade() -> None:
         if not (DB_READONLY_USER and DB_READONLY_PASSWORD):
             raise Exception("DB_READONLY_USER or DB_READONLY_PASSWORD is not set")
 
-        op.execute(
-            text(
-                f"""
+        op.execute(text(f"""
                 DO $$
                 BEGIN
                     -- Check if the read-only user already exists
@@ -61,14 +58,10 @@ def upgrade() -> None:
                     END IF;
                 END
                 $$;
-                """
-            )
-        )
+                """))
 
     # Grant usage on current schema to readonly user
-    op.execute(
-        text(
-            f"""
+    op.execute(text(f"""
             DO $$
             BEGIN
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
@@ -76,9 +69,7 @@ def upgrade() -> None:
                 END IF;
             END
             $$;
-            """
-        )
-    )
+            """))
 
     op.execute("DROP TABLE IF EXISTS kg_config CASCADE")
     op.create_table(
@@ -489,9 +480,7 @@ def upgrade() -> None:
     alphanum_pattern = r"[^a-z0-9]+"
     truncate_length = 1000
     function = "update_kg_entity_name"
-    op.execute(
-        text(
-            f"""
+    op.execute(text(f"""
             CREATE OR REPLACE FUNCTION {function}()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -522,26 +511,20 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """
-        )
-    )
+            """))
     trigger = f"{function}_trigger"
     op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON kg_entity")
-    op.execute(
-        f"""
+    op.execute(f"""
         CREATE TRIGGER {trigger}
             BEFORE INSERT OR UPDATE OF name
             ON kg_entity
             FOR EACH ROW
             EXECUTE FUNCTION {function}();
-        """
-    )
+        """)
 
     # Create kg_entity trigger to update kg_entity.name and its trigrams
     function = "update_kg_entity_name_from_doc"
-    op.execute(
-        text(
-            f"""
+    op.execute(text(f"""
             CREATE OR REPLACE FUNCTION {function}()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -568,27 +551,22 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """
-        )
-    )
+            """))
     trigger = f"{function}_trigger"
     op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON document")
-    op.execute(
-        f"""
+    op.execute(f"""
         CREATE TRIGGER {trigger}
             AFTER UPDATE OF semantic_id
             ON document
             FOR EACH ROW
             EXECUTE FUNCTION {function}();
-        """
-    )
+        """)
 
 
 def downgrade() -> None:
 
     #  Drop all views that start with 'kg_'
-    op.execute(
-        """
+    op.execute("""
                 DO $$
                 DECLARE
                     view_name text;
@@ -604,11 +582,9 @@ def downgrade() -> None:
                         EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
                     END LOOP;
                 END $$;
-            """
-    )
+            """)
 
-    op.execute(
-        """
+    op.execute("""
                 DO $$
                 DECLARE
                     view_name text;
@@ -624,8 +600,7 @@ def downgrade() -> None:
                         EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
                     END LOOP;
                 END $$;
-            """
-    )
+            """)
 
     for table, function in (
         ("kg_entity", "update_kg_entity_name"),
@@ -654,9 +629,7 @@ def downgrade() -> None:
     op.drop_table("kg_config")
 
     # Revoke usage on current schema for the readonly user
-    op.execute(
-        text(
-            f"""
+    op.execute(text(f"""
             DO $$
             BEGIN
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
@@ -664,17 +637,13 @@ def downgrade() -> None:
                 END IF;
             END
             $$;
-            """
-        )
-    )
+            """))
 
     if not MULTI_TENANT:
         # Drop read-only db user here only in single tenant mode. For multi-tenant mode,
         # the user is dropped in the alembic_tenants migration.
 
-        op.execute(
-            text(
-                f"""
+        op.execute(text(f"""
             DO $$
             BEGIN
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
@@ -685,7 +654,5 @@ def downgrade() -> None:
                 END IF;
             END
             $$;
-        """
-            )
-        )
+        """))
         op.execute(text("DROP EXTENSION IF EXISTS pg_trgm"))

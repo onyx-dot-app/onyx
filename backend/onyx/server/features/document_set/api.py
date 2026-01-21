@@ -25,7 +25,6 @@ from onyx.server.features.document_set.models import DocumentSetUpdateRequest
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
-
 router = APIRouter(prefix="/manage")
 
 

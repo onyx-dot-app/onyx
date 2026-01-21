@@ -19,7 +19,6 @@ from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.server.documents.models import ChunkInfo
 from onyx.server.documents.models import DocumentInfo
 
-
 router = APIRouter(prefix="/document")
 
 

@@ -863,11 +863,7 @@ export const JiraServiceManagementIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => (
-  <LogoIcon
-    size={size + 4}
-    className={`${className} -m-0.5`}
-    src={jiraSVG} 
-  />
+  <LogoIcon size={size + 4} className={`${className} -m-0.5`} src={jiraSVG} />
 );
 export const KimiIcon = createLogoIcon(kimiIcon);
 export const LinearIcon = createLogoIcon(linearIcon);

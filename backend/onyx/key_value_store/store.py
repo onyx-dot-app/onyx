@@ -11,7 +11,6 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
-
 logger = setup_logger()
 
 

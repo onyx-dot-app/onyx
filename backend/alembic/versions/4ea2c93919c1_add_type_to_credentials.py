@@ -39,20 +39,17 @@ def upgrade() -> None:
     # This is needed because a credential can be associated with multiple connectors,
     # but we want to assign a single source to each credential.
     # We use DISTINCT ON to ensure we only get one row per credential_id.
-    op.execute(
-        """
+    op.execute("""
     CREATE TEMPORARY TABLE temp_connector_credential AS
     SELECT DISTINCT ON (cc.credential_id)
         cc.credential_id,
         c.source AS connector_source
     FROM connector_credential_pair cc
     JOIN connector c ON cc.connector_id = c.id
-    """
-    )
+    """)
 
     # Update the 'source' column in the 'credential' table
-    op.execute(
-        """
+    op.execute("""
     UPDATE credential cred
     SET source = COALESCE(
         (SELECT connector_source
@@ -60,8 +57,7 @@ def upgrade() -> None:
          WHERE cred.id = temp.credential_id),
         'NOT_APPLICABLE'
     )
-    """
-    )
+    """)
 
     # Drop the temporary table to avoid conflicts if migration runs again
     # (e.g., during upgrade -> downgrade -> upgrade cycles in tests)

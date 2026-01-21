@@ -12,7 +12,6 @@ from onyx.db.oauth_config import get_user_oauth_token
 from onyx.db.oauth_config import upsert_user_oauth_token
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

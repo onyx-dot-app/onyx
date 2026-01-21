@@ -1,7 +1,6 @@
 import json
 import os
 
-
 IMAGE_GENERATION_OUTPUT_FORMAT = os.environ.get(
     "IMAGE_GENERATION_OUTPUT_FORMAT", "b64_json"
 )

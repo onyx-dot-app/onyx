@@ -18,7 +18,6 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 _LOGO_FILENAME = "__logo__"

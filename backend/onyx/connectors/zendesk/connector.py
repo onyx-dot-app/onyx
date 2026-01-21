@@ -37,7 +37,6 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.retry_wrapper import retry_builder
 
-
 MAX_PAGE_SIZE = 30  # Zendesk API maximum
 MAX_AUTHOR_MAP_SIZE = 50_000  # Reset author map cache if it gets too large
 _SLIM_BATCH_SIZE = 1000

@@ -6,7 +6,6 @@ from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.test_models import DATestUser
 
-
 STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
 
 

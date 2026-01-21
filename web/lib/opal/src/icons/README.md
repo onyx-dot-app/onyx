@@ -11,6 +11,7 @@ Therefore, we manually convert each SVG into a TSX file using SVGR CLI with a cu
 ### `scripts/icon-template.js`
 
 A custom SVGR template that generates icon components with the following features:
+
 - Imports `IconProps` from `@opal/types` for consistent typing
 - Supports the `size` prop for controlling icon dimensions
 - Includes `width` and `height` attributes bound to the `size` prop
@@ -21,6 +22,7 @@ This ensures all generated icons have a consistent API and type definitions.
 ### `scripts/convert-svg.sh`
 
 A convenience script that automates the SVG-to-TSX conversion process. It:
+
 - Validates the input file
 - Runs SVGR with the correct configuration and template
 - Post-processes the output to add `width`, `height`, and `stroke` attributes using perl (cross-platform compatible)
@@ -28,6 +30,7 @@ A convenience script that automates the SVG-to-TSX conversion process. It:
 - Provides error handling and user feedback
 
 **Usage:**
+
 ```sh
 ./scripts/convert-svg.sh <filename.svg>
 ```
@@ -51,6 +54,7 @@ bunx @svgr/cli ${SVG_FILE_NAME}.svg --typescript --svgo-config '{"plugins":[{"na
 ```
 
 This command:
+
 - Converts SVG files to TypeScript React components (`--typescript`)
 - Removes `stroke`, `stroke-opacity`, `width`, and `height` attributes from SVG elements (`--svgo-config` with `removeAttrs` plugin)
 - Uses the custom template (`icon-template.js`) to generate components with `IconProps` and `size` prop support

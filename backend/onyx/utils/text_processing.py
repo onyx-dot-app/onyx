@@ -6,7 +6,6 @@ from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger(__name__)
 
 ESCAPE_SEQUENCE_RE = re.compile(

@@ -13,7 +13,6 @@ from onyx.db.models import Credential
 from shared_configs.contextvars import get_current_tenant_id
 from tests.daily.connectors.confluence.models import ExternalUserGroupSet
 
-
 # In order to get these tests to run, use the credentials from Bitwarden.
 # Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.
 # Required env vars: JIRA_USER_EMAIL, JIRA_API_TOKEN

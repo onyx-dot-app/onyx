@@ -10,7 +10,6 @@ from alembic import op
 import sqlalchemy as sa
 from onyx.db.enums import ThemePreference
 
-
 # revision identifiers, used by Alembic.
 revision = "09995b8811eb"
 down_revision = "3d1cca026fe8"

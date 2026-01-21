@@ -16,8 +16,7 @@ depends_on: None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
     UPDATE slack_bot_config
     SET channel_config = jsonb_set(
         channel_config,
@@ -25,13 +24,11 @@ def upgrade() -> None:
         coalesce(channel_config->'respond_team_member_list', '[]'::jsonb) ||
         coalesce(channel_config->'respond_slack_group_list', '[]'::jsonb)
     ) - 'respond_team_member_list' - 'respond_slack_group_list'
-    """
-    )
+    """)
 
 
 def downgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
     UPDATE slack_bot_config
     SET channel_config = jsonb_set(
         jsonb_set(
@@ -42,5 +39,4 @@ def downgrade() -> None:
         '{respond_slack_group_list}',
         '[]'::jsonb
     )
-    """
-    )
+    """)

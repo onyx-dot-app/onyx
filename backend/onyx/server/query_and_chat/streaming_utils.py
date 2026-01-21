@@ -24,7 +24,6 @@ from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 
-
 _CANNOT_SHOW_STEP_RESULTS_STR = "[Cannot display step results]"
 
 

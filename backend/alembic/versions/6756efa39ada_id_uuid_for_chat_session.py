@@ -45,14 +45,12 @@ def upgrade() -> None:
         sa.Column("new_chat_session_id", sa.UUID(as_uuid=True), nullable=True),
     )
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE chat_message
         SET new_chat_session_id = cs.new_id
         FROM chat_session cs
         WHERE chat_message.chat_session_id = cs.id;
-        """
-    )
+        """)
 
     op.drop_constraint(
         "chat_message_chat_session_id_fkey", "chat_message", type_="foreignkey"
@@ -108,14 +106,12 @@ def downgrade() -> None:
         sa.Column("old_chat_session_id", sa.Integer, nullable=True),
     )
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE chat_message
         SET old_chat_session_id = cs.old_id
         FROM chat_session cs
         WHERE chat_message.chat_session_id = cs.id;
-        """
-    )
+        """)
 
     op.drop_column("chat_message", "chat_session_id")
     op.alter_column(

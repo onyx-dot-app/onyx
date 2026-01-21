@@ -54,7 +54,6 @@ from litellm.types.utils import ModelResponseStream
 from litellm.utils import verbose_logger
 from pydantic import BaseModel
 
-
 if extract_images_from_message is None:
 
     def extract_images_from_message(

@@ -93,7 +93,6 @@ from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
 from onyx.context.search.enums import RecencyBiasSetting
 
-
 logger = setup_logger()
 
 PROMPT_LENGTH = 5_000_000

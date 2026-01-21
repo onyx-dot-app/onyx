@@ -16,8 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE document
         SET
             external_user_group_ids = ARRAY(
@@ -29,8 +28,7 @@ def upgrade() -> None:
             AND external_user_group_ids::text[] <> ARRAY(
                 SELECT LOWER(unnest(external_user_group_ids))
             )::text[]
-    """
-    )
+    """)
 
 
 def downgrade() -> None:

@@ -16,7 +16,6 @@ from onyx.llm.constants import OLLAMA_MODEL_NAME_MAPPINGS
 from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 
-
 # Dynamic providers fetch models directly from source APIs (not LiteLLM)
 DYNAMIC_LLM_PROVIDERS = frozenset(
     {

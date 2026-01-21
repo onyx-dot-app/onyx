@@ -16,7 +16,6 @@ from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
 from onyx.utils.variable_functionality import global_version
 
-
 # In order to get these tests to run, use the credentials from Bitwarden.
 # Search up "ENV vars for local and Github tests", and find the Jira relevant key-value pairs.
 # Required env vars: JIRA_USER_EMAIL, JIRA_API_TOKEN

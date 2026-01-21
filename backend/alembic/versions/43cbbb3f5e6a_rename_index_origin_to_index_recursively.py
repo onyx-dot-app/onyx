@@ -16,8 +16,7 @@ depends_on: None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE connector
         SET connector_specific_config = jsonb_set(
             connector_specific_config,
@@ -25,13 +24,11 @@ def upgrade() -> None:
             'true'::jsonb
         ) - 'index_origin'
         WHERE connector_specific_config ? 'index_origin'
-    """
-    )
+    """)
 
 
 def downgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE connector
         SET connector_specific_config = jsonb_set(
             connector_specific_config,
@@ -39,5 +36,4 @@ def downgrade() -> None:
             connector_specific_config->'index_recursively'
         ) - 'index_recursively'
         WHERE connector_specific_config ? 'index_recursively'
-    """
-    )
+    """)

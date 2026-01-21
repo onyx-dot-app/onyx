@@ -32,13 +32,11 @@ def wipe_all_rows(database: str) -> None:
     cur.execute("SET session_replication_role = 'replica';")
 
     # Fetch all table names in the current database
-    cur.execute(
-        """
+    cur.execute("""
         SELECT tablename
         FROM pg_tables
         WHERE schemaname = 'public'
-    """
-    )
+    """)
 
     tables = cur.fetchall()
 

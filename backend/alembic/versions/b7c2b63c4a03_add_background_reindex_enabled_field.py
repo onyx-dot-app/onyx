@@ -11,7 +11,6 @@ import sqlalchemy as sa
 
 from onyx.db.enums import EmbeddingPrecision
 
-
 # revision identifiers, used by Alembic.
 revision = "b7c2b63c4a03"
 down_revision = "f11b408e39d3"

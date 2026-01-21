@@ -33,8 +33,7 @@ def upgrade() -> None:
     )
 
     # Update status of connector_credential_pair based on connector's disabled status
-    op.execute(
-        """
+    op.execute("""
         UPDATE connector_credential_pair
         SET status = CASE
             WHEN (
@@ -44,8 +43,7 @@ def upgrade() -> None:
             ) = FALSE THEN 'ACTIVE'
             ELSE 'PAUSED'
         END
-        """
-    )
+        """)
 
     # Make the status column not nullable after setting values
     op.alter_column("connector_credential_pair", "status", nullable=False)
@@ -60,8 +58,7 @@ def downgrade() -> None:
     )
 
     # Update disabled status of connector based on connector_credential_pair's status
-    op.execute(
-        """
+    op.execute("""
         UPDATE connector
         SET disabled = CASE
             WHEN EXISTS (
@@ -72,8 +69,7 @@ def downgrade() -> None:
             ) THEN FALSE
             ELSE TRUE
         END
-        """
-    )
+        """)
 
     # Make the disabled column not nullable after setting values
     op.alter_column("connector", "disabled", nullable=False)

@@ -251,6 +251,7 @@ function ContactForm() {
 **Reason:** Our custom color system uses CSS variables that automatically handle dark mode and maintain design consistency across the app. Standard Tailwind colors bypass this system.
 
 **Available color categories:**
+
 - **Text:** `text-01` through `text-05`, `text-inverted-XX`
 - **Backgrounds:** `background-neutral-XX`, `background-tint-XX` (and inverted variants)
 - **Borders:** `border-01` through `border-05`, `border-inverted-XX`

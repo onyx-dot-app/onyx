@@ -55,7 +55,6 @@ from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
 
-
 logger = setup_logger()
 
 

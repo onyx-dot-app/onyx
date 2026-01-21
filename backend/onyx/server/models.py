@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from onyx.auth.schemas import UserRole
 from onyx.db.models import User
 
-
 DataT = TypeVar("DataT")
 
 

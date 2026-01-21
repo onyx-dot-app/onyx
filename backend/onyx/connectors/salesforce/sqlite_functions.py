@@ -18,7 +18,6 @@ from onyx.connectors.salesforce.utils import validate_salesforce_id
 from onyx.utils.logger import setup_logger
 from shared_configs.utils import batch_list
 
-
 logger = setup_logger()
 
 
@@ -123,51 +122,43 @@ class OnyxSalesforceSQLite:
                 cursor.execute("PRAGMA cache_size=-2000000")  # Use 2GB memory for cache
 
             # Main table for storing Salesforce objects
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS salesforce_objects (
                     id TEXT PRIMARY KEY,
                     object_type TEXT NOT NULL,
                     data TEXT NOT NULL,  -- JSON serialized data
                     last_modified INTEGER DEFAULT (strftime('%s', 'now'))  -- Add timestamp for better cache management
                 ) WITHOUT ROWID  -- Optimize for primary key lookups
-            """
-            )
+            """)
 
             # NOTE(rkuo): this seems completely redundant with relationship_types
             # Table for parent-child relationships with covering index
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS relationships (
                     child_id TEXT NOT NULL,
                     parent_id TEXT NOT NULL,
                     PRIMARY KEY (child_id, parent_id)
                 ) WITHOUT ROWID  -- Optimize for primary key lookups
-            """
-            )
+            """)
 
             # New table for caching parent-child relationships with object types
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS relationship_types (
                     child_id TEXT NOT NULL,
                     parent_id TEXT NOT NULL,
                     parent_type TEXT NOT NULL,
                     PRIMARY KEY (child_id, parent_id, parent_type)
                 ) WITHOUT ROWID
-            """
-            )
+            """)
 
             # Create a table for User email to ID mapping if it doesn't exist
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_email_map (
                     email TEXT PRIMARY KEY,
                     user_id TEXT,  -- Nullable to allow for users without IDs
                     FOREIGN KEY (user_id) REFERENCES salesforce_objects(id)
                 ) WITHOUT ROWID
-            """
-            )
+            """)
 
             # Create indexes if they don't exist (SQLite ignores IF NOT EXISTS for indexes)
             def create_index_if_not_exists(
@@ -750,15 +741,13 @@ class OnyxSalesforceSQLite:
         Called internally by update_sf_db_with_csv when User objects are updated.
         """
 
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT OR REPLACE INTO user_email_map (email, user_id)
             SELECT json_extract(data, '$.Email'), id
             FROM salesforce_objects
             WHERE object_type = 'User'
             AND json_extract(data, '$.Email') IS NOT NULL
-            """
-        )
+            """)
 
     def make_basic_expert_info_from_record(
         self,

@@ -47,7 +47,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
-
 logger = setup_logger()
 
 # This is for the initial list call to get the thread ids

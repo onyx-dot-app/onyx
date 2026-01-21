@@ -19,7 +19,6 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 # Potential Improvements

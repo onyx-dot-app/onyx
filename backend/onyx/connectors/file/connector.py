@@ -23,7 +23,6 @@ from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

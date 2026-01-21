@@ -9,7 +9,6 @@ from onyx.db.models import OAuthUserToken
 from onyx.db.models import Tool
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

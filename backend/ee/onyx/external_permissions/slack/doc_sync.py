@@ -17,7 +17,6 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
-
 logger = setup_logger()
 
 

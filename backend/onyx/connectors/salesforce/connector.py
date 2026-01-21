@@ -40,7 +40,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
-
 logger = setup_logger()
 
 

@@ -33,7 +33,6 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
-
 logger = setup_logger()
 
 _EGNYTE_API_BASE = "https://{domain}.egnyte.com/pubapi/v1"

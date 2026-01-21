@@ -5,7 +5,9 @@ from unittest.mock import patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
+from onyx.connectors.jira_service_management.connector import (
+    JiraServiceManagementConnector,
+)
 from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
@@ -15,7 +17,7 @@ def _make_connector(scoped_token: bool = False) -> JiraServiceManagementConnecto
         jira_service_management_base_url="https://danswerai.atlassian.net",
         project_key="AS",
         comment_email_blacklist=[],
-        # JSM might not support scoped_token yet, or uses the same logic. 
+        # JSM might not support scoped_token yet, or uses the same logic.
         # Keeping it compatible with the base class logic if it exists.
     )
     connector.load_credentials(
@@ -63,7 +65,9 @@ def jsm_connector_with_jql() -> JiraServiceManagementConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_jsm_connector_basic(reset: None, jsm_connector: JiraServiceManagementConnector) -> None:
+def test_jsm_connector_basic(
+    reset: None, jsm_connector: JiraServiceManagementConnector
+) -> None:
     _test_jsm_connector_basic(jsm_connector)
 
 
@@ -97,7 +101,7 @@ def _test_jsm_connector_basic(jsm_connector: JiraServiceManagementConnector) -> 
 
     # Check source type - THIS IS THE CRITICAL ASSERTION
     assert story.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
-    
+
     # Basic metadata checks
     assert story.metadata["project"] == "AS"
     assert story.metadata["issuetype"] == "Story"

@@ -11,10 +11,10 @@ class JiraServiceManagementConnector(JiraConnector):
         jira_base_url: str | None = None,
         **kwargs: Any,
     ):
-        # The frontend sends 'jira_service_management_base_url', but the 
+        # The frontend sends 'jira_service_management_base_url', but the
         # parent JiraConnector expects 'jira_base_url'. We map it here.
         actual_url = jira_service_management_base_url or jira_base_url
-        
+
         if not actual_url:
             raise ValueError("Jira Service Management Base URL is required")
 

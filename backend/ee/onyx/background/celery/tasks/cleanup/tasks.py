@@ -11,7 +11,6 @@ from onyx.db.enums import TaskStatus
 from onyx.db.tasks import delete_task_with_id
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
