@@ -147,7 +147,11 @@ export default function LineItem({
           >
             {children}
           </Truncated>
-          {rightChildren && <Section alignItems="end">{rightChildren}</Section>}
+          {rightChildren && (
+            <Section alignItems="end" width="fit">
+              {rightChildren}
+            </Section>
+          )}
         </Section>
         {description && (
           <Text secondaryBody text03 className="text-left w-full">
