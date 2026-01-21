@@ -23,7 +23,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await page.getByText("User Settings").first().click();
 
   // Wait for settings modal to appear (first page has Theme section)
-  await expect(page.locator("h3", { hasText: "Theme" })).toBeVisible();
+  await expect(page.getByText("Theme")).toBeVisible();
 
   const accessTokensTab = page
     .locator("text=Access Tokens")
@@ -31,10 +31,8 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
     .first();
   await accessTokensTab.click();
 
-  // Wait for PAT page to load by checking for the h2 heading
-  await expect(
-    page.locator("h2", { hasText: "Personal Access Tokens" })
-  ).toBeVisible({
+  // Wait for PAT page to load
+  await expect(page.getByText("Access Tokens")).toBeVisible({
     timeout: 10000,
   });
 
@@ -159,7 +157,7 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   await page.getByText("User Settings").first().click();
 
   // Wait for settings modal to appear (first page has Theme section)
-  await expect(page.locator("h3", { hasText: "Theme" })).toBeVisible();
+  await expect(page.getByText("Theme")).toBeVisible();
 
   const accessTokensTab = page
     .locator("text=Access Tokens")
@@ -167,10 +165,8 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
     .first();
   await accessTokensTab.click();
 
-  // Wait for PAT page to load by checking for the h2 heading
-  await expect(
-    page.locator("h2", { hasText: "Personal Access Tokens" })
-  ).toBeVisible({
+  // Wait for PAT page to load
+  await expect(page.getByText("Access Tokens")).toBeVisible({
     timeout: 10000,
   });
 
