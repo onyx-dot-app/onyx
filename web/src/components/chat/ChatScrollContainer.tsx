@@ -424,9 +424,7 @@ const ChatScrollContainer = React.memo(
               <div ref={endDivRef} />
 
               {/* Spacer to allow scrolling anchor to top */}
-              {spacerHeight > 0 && (
-                <div style={{ height: spacerHeight }} aria-hidden="true" />
-              )}
+              {spacerHeight > 0 && <div aria-hidden="true" />}
             </div>
           </div>
         </div>
