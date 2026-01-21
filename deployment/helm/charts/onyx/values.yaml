@@ -76,9 +76,15 @@ opensearch:
     repository: "opensearchproject/opensearch"
     tag: ""  # Empty uses chart's appVersion (3.4.0).
 
-  # Security plugin is enabled by default with demo config (self-signed certs, admin/admin credentials).
-  # For production, provide custom security config via securityConfig.config values.
-  # See: https://opensearch.org/docs/latest/security/configuration/index/
+  # The security plugin requires OPENSEARCH_INITIAL_ADMIN_PASSWORD for
+  # OpenSearch 2.12+.
+  # See https://docs.opensearch.org/latest/install-and-configure/install-opensearch/helm/#prerequisites
+  extraEnvs:
+    - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: onyx-opensearch  # Must match auth.opensearch.secretName.
+          key: opensearch_admin_password  # Must match auth.opensearch.secretKeys value.
 
   resources:
     requests:
@@ -1085,10 +1091,12 @@ auth:
     # Secrets values IF existingSecret is empty. Key here must match the value
     # in secretKeys to be used. Values will be base64 encoded in the k8s
     # cluster.
-    # Default credentials match OpenSearch demo config. Change for production.
+    # Password must meet OpenSearch complexity requirements:
+    # min 8 chars, uppercase, lowercase, digit, and special character.
+    # CHANGE THIS FOR PRODUCTION.
     values:
       opensearch_admin_username: "admin"
-      opensearch_admin_password: "admin"
+      opensearch_admin_password: "OnyxDev1!"
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
