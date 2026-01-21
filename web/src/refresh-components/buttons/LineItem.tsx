@@ -1,5 +1,4 @@
 import React from "react";
-import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -158,9 +157,9 @@ export default function LineItem({
           )}
         </Section>
         {description && (
-          <Text secondaryBody text03 className="text-left w-full">
+          <Truncated secondaryBody text03 className="text-left w-full">
             {description}
-          </Text>
+          </Truncated>
         )}
       </Section>
     </button>
