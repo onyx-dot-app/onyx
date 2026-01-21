@@ -26,7 +26,7 @@ router = APIRouter()
 
 
 def check_build_rate_limits(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """
@@ -49,7 +49,7 @@ def check_build_rate_limits(
 @router.get("/sessions/{session_id}/messages", tags=PUBLIC_API_TAGS)
 def list_messages(
     session_id: UUID,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> MessageListResponse:
     """Get all messages for a build session."""
@@ -72,7 +72,7 @@ def list_messages(
 async def send_message(
     session_id: UUID,
     request: MessageRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
     _rate_limit_check: None = Depends(check_build_rate_limits),
 ):
