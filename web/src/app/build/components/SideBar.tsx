@@ -165,12 +165,6 @@ const MemoizedBuildSidebarInner = memo(
     const session = useSession();
     const sessionHistory = useSessionHistory();
     // Access actions directly like chat does - these don't cause re-renders
-    const setCurrentSession = useBuildSessionStore(
-      (state) => state.setCurrentSession
-    );
-    const abortCurrentSession = useBuildSessionStore(
-      (state) => state.abortCurrentSession
-    );
     const renameBuildSession = useBuildSessionStore(
       (state) => state.renameBuildSession
     );
@@ -195,11 +189,10 @@ const MemoizedBuildSidebarInner = memo(
       return "Sessions";
     }, [isEnabled, limits]);
 
+    // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
     const handleNewBuild = useCallback(() => {
-      abortCurrentSession();
-      setCurrentSession(null);
       router.push("/build/v1");
-    }, [abortCurrentSession, setCurrentSession, router]);
+    }, [router]);
 
     const handleLoadSession = useCallback(
       (sessionId: string) => {

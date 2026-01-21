@@ -82,7 +82,7 @@ class ProcessManager:
         self,
         web_dir: Path,
         port: int,
-        timeout: float = 60.0,
+        timeout: float = 180.0,
     ) -> subprocess.Popen[bytes]:
         """Start Next.js dev server.
 

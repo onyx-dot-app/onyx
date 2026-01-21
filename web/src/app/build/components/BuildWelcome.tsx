@@ -10,6 +10,8 @@ interface BuildWelcomeProps {
   onSubmit: (message: string, files: BuildFile[]) => void;
   isRunning: boolean;
   llmManager: LlmManager;
+  /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
+  sandboxInitializing?: boolean;
 }
 
 /**
@@ -21,6 +23,7 @@ export default function BuildWelcome({
   onSubmit,
   isRunning,
   llmManager,
+  sandboxInitializing = false,
 }: BuildWelcomeProps) {
   return (
     <div className="h-full flex flex-col items-center justify-center px-4">
@@ -40,6 +43,7 @@ export default function BuildWelcome({
           isRunning={isRunning}
           placeholder="Create a React app that shows a dashboard..."
           llmManager={llmManager}
+          sandboxInitializing={sandboxInitializing}
         />
       </div>
     </div>

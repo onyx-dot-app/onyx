@@ -59,18 +59,16 @@ def create_session(
     db_session: Session = Depends(get_session),
 ) -> SessionResponse:
     """
-    Create a new build session.
+    Create or get an existing empty build session.
 
-    Creates a sandbox with the necessary file structure and returns a session ID.
-    Uses SessionManager for session and sandbox provisioning.
+    Returns an existing empty (no messages) session if one exists and is recent,
+    otherwise creates a new one with a provisioned sandbox.
+    This supports pre-provisioning by reusing recent empty sessions.
     """
     session_manager = SessionManager(db_session)
 
     try:
-        build_session = session_manager.create_session(
-            user_id=user.id,
-            name=request.name,
-        )
+        build_session = session_manager.get_or_create_empty_session(user.id)
     except ValueError as e:
         # Max concurrent sandboxes reached
         raise HTTPException(status_code=429, detail=str(e))

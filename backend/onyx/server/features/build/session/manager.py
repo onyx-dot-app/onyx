@@ -47,6 +47,7 @@ from onyx.server.features.build.db.build_session import create_build_session
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session
 from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
@@ -227,6 +228,30 @@ class SessionManager:
         # Refresh to get the created sandbox
         self._db_session.refresh(build_session)
         return build_session
+
+    def get_or_create_empty_session(self, user_id: UUID) -> BuildSession:
+        """Get existing empty session or create a new one with provisioned sandbox.
+
+        Used for pre-provisioning sandboxes when user lands on /build/v1.
+        Returns existing recent empty session if one exists, otherwise creates new.
+
+        Args:
+            user_id: The user ID
+
+        Returns:
+            BuildSession (existing empty or newly created)
+
+        Raises:
+            ValueError: If max concurrent sandboxes reached
+            RuntimeError: If sandbox provisioning fails
+        """
+        existing = get_empty_session_for_user(user_id, self._db_session)
+        if existing:
+            logger.info(
+                f"Returning existing empty session {existing.id} for user {user_id}"
+            )
+            return existing
+        return self.create_session(user_id=user_id)
 
     def get_session(
         self,
