@@ -14,6 +14,12 @@ import { BlinkingDot } from "./BlinkingDot";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 
+// Simple regex to detect valid email addresses
+const isEmail = (value: string | undefined): boolean => {
+  if (!value) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+};
+
 export const MemoizedAnchor = memo(
   ({
     docs,
@@ -160,17 +166,21 @@ export const MemoizedLink = memo(
     }
 
     let url = href || rest.children?.toString();
-    if (url && !url.includes("://")) {
+
+    if (isEmail(url)) {
+      // For emails, use mailto:
+      url = `mailto:${url}`;
+    } else if (url && !url.includes("://")) {
       // Only add https:// if the URL doesn't already have a protocol
       const httpsUrl = `https://${url}`;
       try {
         new URL(httpsUrl);
         url = httpsUrl;
       } catch {
-        // If not a valid URL, don't modify original url
+    // If not a valid URL, don't modify original url
       }
     }
-
+    
     return (
       <a
         href={url}
