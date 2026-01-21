@@ -3,6 +3,7 @@
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -37,7 +38,7 @@ def get_user_rate_limit_status(
 
     # Set limits based on subscription
     limit = 50 if is_subscribed else 5
-    limit_type = "weekly" if is_subscribed else "total"
+    limit_type: Literal["weekly", "total"] = "weekly" if is_subscribed else "total"
 
     # Count messages
     user_id = user.id if user else None
