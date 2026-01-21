@@ -98,6 +98,7 @@ export interface ChatInputBarProps {
   chatState: ChatState;
   currentSessionFileTokenCount: number;
   availableContextTokens: number;
+  chatSessionId?: string | null;
 
   // assistants
   selectedAssistant: MinimalPersonaSnapshot | undefined;
@@ -127,6 +128,7 @@ const ChatInputBar = React.memo(
         chatState,
         currentSessionFileTokenCount,
         availableContextTokens,
+        chatSessionId,
         // assistants
         selectedAssistant,
 
@@ -514,7 +516,9 @@ const ChatInputBar = React.memo(
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder="How can I help you today"
+              placeholder={
+                chatSessionId ? "Reply..." : "How can I help you today"
+              }
               value={message}
               onKeyDown={(event) => {
                 if (

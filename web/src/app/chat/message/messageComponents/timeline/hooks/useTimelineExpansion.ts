@@ -10,11 +10,12 @@ export interface TimelineExpansionState {
 
 /**
  * Manages expansion state for the timeline.
- * Auto-collapses when streaming completes and syncs parallel tab selection.
+ * Auto-collapses when streaming completes or message content starts, and syncs parallel tab selection.
  */
 export function useTimelineExpansion(
   stopPacketSeen: boolean,
-  lastTurnGroup: TurnGroup | undefined
+  lastTurnGroup: TurnGroup | undefined,
+  hasDisplayContent: boolean = false
 ): TimelineExpansionState {
   const [isExpanded, setIsExpanded] = useState(!stopPacketSeen);
   const [parallelActiveTab, setParallelActiveTab] = useState<string>("");
@@ -23,12 +24,12 @@ export function useTimelineExpansion(
     setIsExpanded((prev) => !prev);
   }, []);
 
-  // Auto-collapse when streaming completes
+  // Auto-collapse when streaming completes or message content starts
   useEffect(() => {
-    if (stopPacketSeen) {
+    if (stopPacketSeen || hasDisplayContent) {
       setIsExpanded(false);
     }
-  }, [stopPacketSeen]);
+  }, [stopPacketSeen, hasDisplayContent]);
 
   // Sync active tab when parallel turn group changes
   useEffect(() => {
