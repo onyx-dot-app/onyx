@@ -98,57 +98,22 @@ def escape_quotes(original_json_str: str) -> str:
     return "".join(result)
 
 
-def extract_embedded_json(s: str) -> dict:
-    """Extract a single JSON object from text by finding first '{' to last '}'.
+def find_all_json_objects(text: str) -> list[dict]:
+    """Find all JSON objects in text using balanced brace matching.
 
-    Use this when you expect exactly ONE JSON object in the text, possibly surrounded
-    by other content. Falls back to quote escaping if initial parse fails.
+    Iterates through the text, and for each '{' found, attempts to find its
+    matching '}' by counting brace depth. Each balanced substring is then
+    validated as JSON. This includes nested JSON objects within other objects.
 
-    Note: This will fail or produce incorrect results if the text contains multiple
-    JSON objects. For that case, use find_json_objects_in_text() instead.
+    Use case: Parsing LLM output that may contain multiple JSON objects, or when
+    the LLM/serving layer outputs function calls in non-standard formats
+    (e.g. OpenAI's function.open_url style).
 
-    Returns:
-        The parsed JSON object as a dict, or a default dict if no JSON found.
-    """
-    first_brace_index = s.find("{")
-    last_brace_index = s.rfind("}")
-
-    if first_brace_index == -1 or last_brace_index == -1:
-        logger.warning("No valid json found, assuming answer is entire string")
-        return {"answer": s, "quotes": []}
-
-    json_str = s[first_brace_index : last_brace_index + 1]
-    try:
-        return json.loads(json_str, strict=False)
-
-    except json.JSONDecodeError:
-        try:
-            return json.loads(escape_quotes(json_str), strict=False)
-        except json.JSONDecodeError as e:
-            raise ValueError("Failed to parse JSON, even after escaping quotes") from e
-
-
-def find_json_objects_in_text(text: str) -> list[dict]:
-    """Find ALL JSON objects in a text string using balanced brace matching.
-
-    Use this when the text may contain multiple JSON objects, or when the simple
-    first-to-last brace approach of extract_embedded_json() would fail.
-
-    This function iterates through the text, and for each '{' found, attempts to
-    find its matching '}' by counting brace depth. Each balanced substring is
-    then validated as JSON.
-
-    Note: This looks for nested json objects in other json objects as well.
-    This is needed for some LLMs which may output function calls in another format
-    which is typically captured and processed by the serving layer. In this case, the
-    LLM or serving layer has failed so it may not match the outer json exactly for the
-    function calls. E.g. For OpenAI, the calls look like function.open_url.
-
-    Note: This is more robust but slower than extract_embedded_json(). Use
-    extract_embedded_json() if you know there's exactly one JSON object.
+    Args:
+        text: The text to search for JSON objects.
 
     Returns:
-        A list of successfully parsed JSON objects (dicts only).
+        A list of all successfully parsed JSON objects (dicts only).
     """
     json_objects: list[dict] = []
     i = 0
@@ -178,8 +143,53 @@ def find_json_objects_in_text(text: str) -> list[dict]:
     return json_objects
 
 
-def clean_up_code_blocks(model_out_raw: str) -> str:
-    return model_out_raw.strip().strip("```").strip().replace("\\xa0", "")
+def parse_llm_json_response(content: str) -> dict | None:
+    """Parse a single JSON object from LLM output, handling markdown code blocks.
+
+    Designed for LLM responses that typically contain exactly one JSON object,
+    possibly wrapped in markdown formatting.
+
+    Tries extraction in order:
+    1. JSON inside markdown code block (```json ... ``` or ``` ... ```)
+    2. Entire content as raw JSON
+    3. First '{' to last '}' in content (greedy match)
+
+    Args:
+        content: The LLM response text to parse.
+
+    Returns:
+        The parsed JSON dict if found, None otherwise.
+    """
+    # Try to find JSON in markdown code block first
+    # Use greedy .* (not .*?) to match nested objects correctly within code block bounds
+    json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
+    if json_match:
+        try:
+            result = json.loads(json_match.group(1))
+            if isinstance(result, dict):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    # Try to parse the entire content as JSON
+    try:
+        result = json.loads(content)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Try to find any JSON object in the content
+    json_match = re.search(r"\{.*\}", content, re.DOTALL)
+    if json_match:
+        try:
+            result = json.loads(json_match.group(0))
+            if isinstance(result, dict):
+                return result
+        except json.JSONDecodeError:
+            pass
+
+    return None
 
 
 def clean_model_quote(quote: str, trim_length: int) -> str:

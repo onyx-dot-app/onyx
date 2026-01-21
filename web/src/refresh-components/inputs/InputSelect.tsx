@@ -8,6 +8,7 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import {
   iconClasses,
+  MIN_WIDTH_CLASS,
   textClasses,
   Variants,
   wrapperClasses,
@@ -111,7 +112,11 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     },
     ref
   ) => {
-    const variant: Variants = disabled ? "disabled" : error ? "error" : "main";
+    const variant: Variants = disabled
+      ? "disabled"
+      : error
+        ? "error"
+        : "primary";
 
     // Support both controlled and uncontrolled modes
     const isControlled = value !== undefined;
@@ -156,7 +161,7 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     );
 
     return (
-      <div className="w-full relative">
+      <div className={cn("w-full relative", MIN_WIDTH_CLASS)}>
         <InputSelectContext.Provider value={contextValue}>
           <SelectPrimitive.Root
             {...(isControlled ? { value: currentValue } : { defaultValue })}
@@ -241,7 +246,7 @@ const InputSelectTrigger = React.forwardRef<
       className={cn(
         "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-none",
         wrapperClasses[variant],
-        variant === "main" && "data-[state=open]:border-border-05",
+        variant === "primary" && "data-[state=open]:border-border-05",
         className
       )}
       {...props}

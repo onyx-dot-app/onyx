@@ -5,7 +5,6 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import Text from "@/refresh-components/texts/Text";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
@@ -46,6 +45,8 @@ import {
   SvgDiscordMono,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+
 const connectors_items = () => [
   {
     name: "Existing Connectors",
@@ -361,7 +362,7 @@ export default function AdminSidebar({
                 {`Onyx version: ${settings.webVersion}`}
               </Text>
             )}
-            <Settings />
+            <UserAvatarPopover />
           </div>
         }
       >

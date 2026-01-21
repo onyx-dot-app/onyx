@@ -32,6 +32,7 @@ class SendSearchQueryRequest(BaseModel):
     filters: BaseFilters | None = None
     num_docs_fed_to_llm_selection: int | None = None
     run_query_expansion: bool = False
+    num_hits: int = 50
 
     include_content: bool = False
     stream: bool = False

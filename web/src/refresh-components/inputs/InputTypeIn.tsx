@@ -5,6 +5,9 @@ import { cn, noProp } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import {
   innerClasses,
+  MIN_WIDTH_CLASS,
+  textClasses,
+  Variants,
   wrapperClasses,
 } from "@/refresh-components/inputs/styles";
 import { SvgSearch, SvgX } from "@opal/icons";
@@ -34,13 +37,16 @@ import { SvgSearch, SvgX } from "@opal/icons";
  *
  * // With error state
  * <InputTypeIn
- *   error
+ *   variant="error"
  *   value={value}
  *   onChange={(e) => setValue(e.target.value)}
  * />
  *
  * // Disabled state
- * <InputTypeIn disabled value="Cannot edit" />
+ * <InputTypeIn variant="disabled" value="Cannot edit" />
+ *
+ * // Read-only state (non-editable, minimal styling)
+ * <InputTypeIn variant="readOnly" value="Read-only value" />
  *
  * // With custom right section
  * <InputTypeIn
@@ -59,12 +65,10 @@ import { SvgSearch, SvgX } from "@opal/icons";
  * ```
  */
 export interface InputTypeInProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {
-  // input-type-in variants
-  internal?: boolean;
-  error?: boolean;
-  disabled?: boolean;
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled"> {
+  variant?: Variants;
 
+  prefixText?: string;
   leftSearchIcon?: boolean;
   rightSection?: React.ReactNode;
   showClearButton?: boolean;
@@ -73,9 +77,8 @@ export interface InputTypeInProps
 const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
   (
     {
-      internal,
-      error,
-      disabled,
+      variant = "primary",
+      prefixText,
       leftSearchIcon,
       rightSection,
       showClearButton = true,
@@ -83,11 +86,15 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
       className,
       value,
       onChange,
+      readOnly,
       ...props
     },
     ref
   ) => {
     const localInputRef = React.useRef<HTMLInputElement | null>(null);
+    const disabled = variant === "disabled";
+    const isReadOnlyVariant = variant === "readOnly";
+    const isReadOnly = isReadOnlyVariant || readOnly;
 
     // Combine forwarded ref with local ref
     const setInputRef = React.useCallback(
@@ -102,14 +109,6 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
       },
       [ref]
     );
-
-    const variant = internal
-      ? "internal"
-      : error
-        ? "error"
-        : disabled
-          ? "disabled"
-          : "main";
 
     const handleClear = React.useCallback(() => {
       if (onClear) {
@@ -130,6 +129,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
       <div
         className={cn(
           "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 relative",
+          MIN_WIDTH_CLASS,
           wrapperClasses[variant],
           className
         )}
@@ -145,26 +145,35 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
           </div>
         )}
 
+        {prefixText && (
+          <span className="select-none pointer-events-none text-text-02 pl-0.5">
+            {prefixText}
+          </span>
+        )}
+
         <input
           ref={setInputRef}
           type="text"
           disabled={disabled}
+          readOnly={isReadOnly}
           value={value}
           onChange={onChange}
           className={cn(
             "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
-            innerClasses[variant]
+            innerClasses[variant],
+            textClasses[variant]
           )}
           {...props}
         />
 
-        {showClearButton && value && (
+        {showClearButton && !disabled && !isReadOnly && (
           <IconButton
             icon={SvgX}
             disabled={disabled}
             onClick={noProp(handleClear)}
             type="button"
             internal
+            className={value ? "" : "invisible"}
           />
         )}
 

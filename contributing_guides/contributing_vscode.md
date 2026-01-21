@@ -7,8 +7,6 @@ This guide explains how to set up and use VSCode's debugging capabilities with t
 1. **Environment Setup**:
    - Copy `.vscode/env_template.txt` to `.vscode/.env`
    - Fill in the necessary environment variables in `.vscode/.env`
-2. **launch.json**:
-   - Copy `.vscode/launch.template.jsonc` to `.vscode/launch.json`
 
 ## Using the Debugger
 

@@ -453,12 +453,16 @@ def run_llm_loop(
 
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
-            if persona and persona.replace_base_system_prompt and persona.system_prompt:
+            if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
-                system_prompt = ChatMessageSimple(
-                    message=persona.system_prompt,
-                    token_count=token_counter(persona.system_prompt),
-                    message_type=MessageType.SYSTEM,
+                system_prompt = (
+                    ChatMessageSimple(
+                        message=persona.system_prompt,
+                        token_count=token_counter(persona.system_prompt),
+                        message_type=MessageType.SYSTEM,
+                    )
+                    if persona.system_prompt
+                    else None
                 )
                 custom_agent_prompt_msg = None
             else:
@@ -669,6 +673,12 @@ def run_llm_loop(
                 ):
                     generated_images = tool_response.rich_response.generated_images
 
+                saved_response = (
+                    tool_response.rich_response
+                    if isinstance(tool_response.rich_response, str)
+                    else tool_response.llm_facing_response
+                )
+
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
                     turn_index=llm_cycle_count + reasoning_cycles,
@@ -678,7 +688,7 @@ def run_llm_loop(
                     tool_id=tool.id,
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
                     tool_call_arguments=tool_call.tool_args,
-                    tool_call_response=tool_response.llm_facing_response,
+                    tool_call_response=saved_response,
                     search_docs=search_docs,
                     generated_images=generated_images,
                 )

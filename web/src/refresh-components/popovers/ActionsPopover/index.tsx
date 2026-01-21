@@ -833,7 +833,7 @@ export default function ActionsPopover({
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
           autoFocus
-          internal
+          variant="internal"
         />,
 
         // Actions

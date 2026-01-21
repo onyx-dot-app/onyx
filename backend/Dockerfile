@@ -89,12 +89,6 @@ RUN uv pip install --system --no-cache-dir --upgrade \
 RUN python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
 
-# Pre-downloading NLTK for setups with limited egress
-RUN python -c "import nltk; \
-nltk.download('stopwords', quiet=True); \
-nltk.download('punkt_tab', quiet=True);"
-# nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
-
 # Pre-downloading tiktoken for setups with limited egress
 RUN python -c "import tiktoken; \
 tiktoken.get_encoding('cl100k_base')"

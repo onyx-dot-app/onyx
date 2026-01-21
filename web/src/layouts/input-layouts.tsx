@@ -102,13 +102,13 @@ function HorizontalInputLayout({
       <Section gap={0.25} alignItems="start">
         <Section
           flexDirection="row"
-          justifyContent="start"
+          justifyContent="between"
           alignItems={center ? "center" : "start"}
         >
-          <div className="flex-1">
-            <LabelLayout {...fieldLabelProps} />
-          </div>
-          <div className="flex-shrink-0">{children}</div>
+          <LabelLayout {...fieldLabelProps} />
+          <Section alignItems="end" width="fit">
+            {children}
+          </Section>
         </Section>
         {name && <ErrorLayout name={name} />}
       </Section>
