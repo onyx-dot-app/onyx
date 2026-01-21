@@ -181,6 +181,11 @@ jobs:
           trap cleanup EXIT
 
           # Run the actual installation with detailed logging
+          # Note that opensearch.enabled is true whereas others in this install
+          # are false. There is some work that needs to be done to get this
+          # entire step working in CI, enabling opensearch here is a small step
+          # in that direction. If this is causing issues, disabling it in this
+          # step should be ok in the short term.
           echo "=== Starting ct install ==="
           set +e
           ct install --all \
@@ -188,11 +193,6 @@ jobs:
               --set=nginx.enabled=false \
               --set=minio.enabled=false \
               --set=vespa.enabled=false \
-              # Note that this is true whereas others in this install are false.
-              # There is some work that needs to be done to get this entire step
-              # working in CI, enabling opensearch here is a small step in that
-              # direction. If this is causing issues, disabling it in this step
-              # should be ok in the short term.
               --set=opensearch.enabled=true \
               --set=slackbot.enabled=false \
               --set=postgresql.enabled=true \
