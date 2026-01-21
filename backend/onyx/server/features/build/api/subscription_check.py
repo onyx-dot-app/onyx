@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.models import User
-from onyx.server.settings.models import ApplicationStatus
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -49,16 +48,5 @@ def is_user_subscribed(user: User | None, db_session: Session) -> bool:
             logger.warning(f"Subscription check failed for tenant {tenant_id}: {e}")
             # Default to non-subscribed (safer/more restrictive)
             return False
-    else:
-        # Self-hosted: check license
-        try:
-            from ee.onyx.db.license import get_license_metadata
 
-            license_metadata = get_license_metadata(db_session)
-            if license_metadata is None:
-                return False
-            return license_metadata.status == ApplicationStatus.ACTIVE
-        except Exception as e:
-            logger.warning(f"License check failed: {e}")
-            # Default to non-subscribed (safer/more restrictive)
-            return False
+    return True
