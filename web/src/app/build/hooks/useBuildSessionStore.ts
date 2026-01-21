@@ -3,6 +3,7 @@
 import { create } from "zustand";
 
 import {
+  ApiSandboxResponse,
   Artifact,
   ArtifactType,
   BuildMessage,
@@ -49,6 +50,8 @@ export interface BuildSessionData {
   toolCalls: ToolCall[];
   error: string | null;
   webappUrl: string | null;
+  /** Sandbox info from backend */
+  sandbox: ApiSandboxResponse | null;
   abortController: AbortController;
   lastAccessed: Date;
   isLoaded: boolean;
@@ -60,6 +63,10 @@ interface BuildSessionStore {
   currentSessionId: string | null;
   sessions: Map<string, BuildSessionData>;
   sessionHistory: SessionHistoryItem[];
+
+  // Pre-provisioning state
+  preProvisionedSessionId: string | null;
+  preProvisioningPromise: Promise<string | null> | null;
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
@@ -112,6 +119,10 @@ interface BuildSessionStore {
 
   // Utilities
   cleanupOldSessions: (maxSessions?: number) => void;
+
+  // Pre-provisioning Actions
+  ensurePreProvisionedSession: () => Promise<string | null>;
+  consumePreProvisionedSession: () => Promise<string | null>;
 }
 
 // =============================================================================
@@ -129,6 +140,7 @@ const createInitialSessionData = (
   toolCalls: [],
   error: null,
   webappUrl: null,
+  sandbox: null,
   abortController: new AbortController(),
   lastAccessed: new Date(),
   isLoaded: false,
@@ -144,6 +156,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   currentSessionId: null,
   sessions: new Map<string, BuildSessionData>(),
   sessionHistory: [],
+
+  // Pre-provisioning state
+  preProvisionedSessionId: null,
+  preProvisioningPromise: null,
 
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
@@ -544,6 +560,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         messages,
         artifacts,
         webappUrl,
+        sandbox: sessionData.sandbox,
         error: null,
         isLoaded: true,
       });
@@ -654,6 +671,53 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sessions: new Map(sessionsToKeep),
       };
     });
+  },
+
+  // ===========================================================================
+  // Pre-provisioning Actions
+  // ===========================================================================
+
+  ensurePreProvisionedSession: async () => {
+    const state = get();
+
+    // Already have a pre-provisioned session
+    if (state.preProvisionedSessionId) {
+      return state.preProvisionedSessionId;
+    }
+
+    // Already provisioning - return existing promise
+    if (state.preProvisioningPromise) {
+      return state.preProvisioningPromise;
+    }
+
+    // Start new provisioning (createSession now reuses empty sessions)
+    const promise = (async () => {
+      try {
+        const sessionData = await apiCreateSession();
+        set({ preProvisionedSessionId: sessionData.id });
+        return sessionData.id;
+      } catch {
+        return null;
+      } finally {
+        set({ preProvisioningPromise: null });
+      }
+    })();
+
+    set({ preProvisioningPromise: promise });
+    return promise;
+  },
+
+  consumePreProvisionedSession: async () => {
+    const { preProvisioningPromise } = get();
+
+    // Wait for provisioning to complete if in progress
+    if (preProvisioningPromise) {
+      await preProvisioningPromise;
+    }
+
+    const { preProvisionedSessionId } = get();
+    set({ preProvisionedSessionId: null, preProvisioningPromise: null });
+    return preProvisionedSessionId;
   },
 }));
 

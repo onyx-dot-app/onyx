@@ -1,10 +1,12 @@
 """Database operations for Build Mode sessions."""
 
 from datetime import datetime
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import desc
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
@@ -60,13 +62,37 @@ def get_user_build_sessions(
     db_session: Session,
     limit: int = 100,
 ) -> list[BuildSession]:
-    """Get all build sessions for a user, ordered by most recent first."""
+    """Get all build sessions for a user that have at least 1 message.
+
+    Excludes empty (pre-provisioned) sessions from the listing.
+    """
     return (
         db_session.query(BuildSession)
+        .join(BuildMessage)  # Inner join excludes empty sessions
         .filter(BuildSession.user_id == user_id)
+        .group_by(BuildSession.id)
         .order_by(desc(BuildSession.created_at))
         .limit(limit)
         .all()
+    )
+
+
+def get_empty_session_for_user(
+    user_id: UUID,
+    db_session: Session,
+    max_age_minutes: int = 30,
+) -> BuildSession | None:
+    """Get the user's empty session (0 messages) if one exists and is recent."""
+    cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+
+    return (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            BuildSession.created_at > cutoff,
+            ~exists().where(BuildMessage.session_id == BuildSession.id),
+        )
+        .first()
     )
 
 

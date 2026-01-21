@@ -16,12 +16,11 @@ import { BuildFile } from "@/app/build/contexts/UploadFilesContext";
 import { uploadFile } from "@/app/build/services/apiServices";
 import { useLlmManager } from "@/lib/hooks";
 import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
-import Logo from "@/refresh-components/Logo";
-import Text from "@/refresh-components/texts/Text";
 import InputBar from "@/app/build/components/InputBar";
 import BuildWelcome from "@/app/build/components/BuildWelcome";
 import BuildMessageList from "@/app/build/components/BuildMessageList";
 import OutputPanelTab from "@/app/build/components/OutputPanelTab";
+import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicator";
 
 /**
  * BuildChatPanel - Center panel containing the chat interface
@@ -41,11 +40,23 @@ export default function BuildChatPanel() {
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   // Access actions directly like chat does - these don't cause re-renders
+  const consumePreProvisionedSession = useBuildSessionStore(
+    (state) => state.consumePreProvisionedSession
+  );
   const createNewSession = useBuildSessionStore(
     (state) => state.createNewSession
   );
   const appendMessage = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
+  );
+  const setCurrentSession = useBuildSessionStore(
+    (state) => state.setCurrentSession
+  );
+  const refreshSessionHistory = useBuildSessionStore(
+    (state) => state.refreshSessionHistory
+  );
+  const nameBuildSession = useBuildSessionStore(
+    (state) => state.nameBuildSession
   );
   const { streamMessage } = useBuildStreaming();
   const llmManager = useLlmManager();
@@ -65,17 +76,35 @@ export default function BuildChatPanel() {
         await streamMessage(sessionId, message);
       } else {
         // New session flow:
-        // 1. Create session
+        // 1. Use pre-provisioned session (or fall back to creating new one)
         // 2. Upload files immediately after session creation
         // 3. Then send message to agent
-        const newSessionId = await createNewSession(message);
+        let newSessionId = await consumePreProvisionedSession();
+
+        // Fall back to creating a new session if no pre-provisioned session
+        if (!newSessionId) {
+          newSessionId = await createNewSession(message);
+        } else {
+          // For pre-provisioned session, we need to set it as current and add user message
+          setCurrentSession(newSessionId);
+          appendMessage({
+            id: `msg-${Date.now()}`,
+            type: "user",
+            content: message,
+            timestamp: new Date(),
+          });
+          // Name the session and refresh history
+          setTimeout(() => nameBuildSession(newSessionId!), 200);
+          await refreshSessionHistory();
+        }
+
         if (newSessionId) {
           // Upload files before sending message
           if (files.length > 0) {
             await Promise.all(
               files
                 .filter((f) => f.file)
-                .map((f) => uploadFile(newSessionId, f.file!))
+                .map((f) => uploadFile(newSessionId!, f.file!))
             );
           }
           router.push(
@@ -91,7 +120,11 @@ export default function BuildChatPanel() {
       sessionId,
       appendMessage,
       streamMessage,
+      consumePreProvisionedSession,
       createNewSession,
+      setCurrentSession,
+      refreshSessionHistory,
+      nameBuildSession,
       router,
     ]
   );
@@ -100,12 +133,7 @@ export default function BuildChatPanel() {
     <div className="flex flex-col h-full w-full">
       {/* Chat header */}
       <div className="flex flex-row items-center justify-between pl-4 py-3">
-        <div className="flex flex-row items-center gap-2">
-          <Logo folded size={24} />
-          <Text headingH3 text05>
-            Build
-          </Text>
-        </div>
+        <SandboxStatusIndicator />
         {/* Output panel tab in header */}
         <OutputPanelTab isOpen={outputPanelOpen} onClick={toggleOutputPanel} />
       </div>
