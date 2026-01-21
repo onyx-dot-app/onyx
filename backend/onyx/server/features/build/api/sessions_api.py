@@ -148,7 +148,6 @@ def update_session_name(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    user_id = user.id if user is not None else None
     session_manager = SessionManager(db_session)
 
     session = session_manager.update_session_name(session_uuid, user.id, request.name)

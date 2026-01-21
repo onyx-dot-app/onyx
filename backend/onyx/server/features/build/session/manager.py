@@ -267,7 +267,7 @@ class SessionManager:
         self,
         session_id: UUID,
         user_id: UUID,
-        name: str,
+        name: str | None = None,
     ) -> BuildSession | None:
         """
         Update the name of a build session.
