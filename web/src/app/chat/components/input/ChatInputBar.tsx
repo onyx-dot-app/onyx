@@ -307,13 +307,6 @@ const ChatInputBar = React.memo(
       setMessage(`${prompt.content}`);
     }
 
-    // Extract everything after the last `/` for filtering
-    const promptFilterQuery = useMemo(() => {
-      if (!message.startsWith("/")) return "";
-      // Get everything after the `/`
-      return message.slice(1);
-    }, [message]);
-
     const { filtered: filteredPrompts, setQuery: setPromptFilterQuery } =
       useFilter(activePromptShortcuts, (prompt) => prompt.prompt);
 
@@ -322,11 +315,6 @@ const ChatInputBar = React.memo(
       () => [...filteredPrompts].sort((a, b) => a.id - b.id),
       [filteredPrompts]
     );
-
-    // Sync the filter query when message changes
-    useEffect(() => {
-      setPromptFilterQuery(promptFilterQuery);
-    }, [promptFilterQuery, setPromptFilterQuery]);
 
     const handlePromptInput = useCallback(
       (text: string) => {
@@ -344,8 +332,11 @@ const ChatInputBar = React.memo(
         const text = event.target.value;
         setMessage(text);
         handlePromptInput(text);
+
+        const promptFilterQuery = text.startsWith("/") ? text.slice(1) : "";
+        setPromptFilterQuery(promptFilterQuery);
       },
-      [setMessage, handlePromptInput]
+      [setMessage, handlePromptInput, setPromptFilterQuery]
     );
 
     // Determine if we should hide processing state based on context limits
