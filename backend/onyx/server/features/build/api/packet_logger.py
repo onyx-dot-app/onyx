@@ -7,6 +7,7 @@ Log output: backend/onyx/server/features/build/packets.log
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ class PacketLogger:
             return
 
         self._initialized = True
-        self._enabled = True
+        self._enabled = os.getenv("LOG_LEVEL", "").upper() == "DEBUG"
         self._logger: logging.Logger | None = None
 
         if self._enabled:
