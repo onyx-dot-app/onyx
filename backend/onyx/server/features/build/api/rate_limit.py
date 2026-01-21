@@ -13,6 +13,7 @@ from onyx.server.features.build.db.rate_limit import count_user_messages_in_wind
 from onyx.server.features.build.db.rate_limit import count_user_messages_total
 from onyx.server.features.build.db.rate_limit import get_oldest_message_timestamp
 from onyx.server.features.build.v1_api import RateLimitResponse
+from shared_configs.configs import MULTI_TENANT
 
 
 def get_user_rate_limit_status(
@@ -23,8 +24,11 @@ def get_user_rate_limit_status(
     Get the rate limit status for a user.
 
     Rate limits:
-        - Subscribed users: 50 messages per week (rolling 7-day window)
-        - Non-subscribed users: 5 messages (lifetime total)
+        - Cloud (MULTI_TENANT=true):
+            - Subscribed users: 50 messages per week (rolling 7-day window)
+            - Non-subscribed users: 5 messages (lifetime total)
+        - Self-hosted (MULTI_TENANT=false):
+            - Unlimited (no rate limiting)
 
     Args:
         user: The user object (None for unauthenticated users)
@@ -33,6 +37,16 @@ def get_user_rate_limit_status(
     Returns:
         RateLimitResponse with current limit status
     """
+    # Self-hosted deployments have no rate limits
+    if not MULTI_TENANT:
+        return RateLimitResponse(
+            is_limited=False,
+            limit_type="weekly",
+            messages_used=0,
+            limit=0,  # 0 indicates unlimited
+            reset_timestamp=None,
+        )
+
     # Determine subscription status
     is_subscribed = is_user_subscribed(user, db_session)
 

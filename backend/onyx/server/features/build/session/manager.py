@@ -54,6 +54,7 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox.manager import get_sandbox_manager
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -141,6 +142,10 @@ class SessionManager:
         Raises:
             RateLimitError: If rate limit is exceeded
         """
+        # Skip rate limiting for self-hosted deployments
+        if not MULTI_TENANT:
+            return
+
         rate_limit_status = get_user_rate_limit_status(user, self._db_session)
         if rate_limit_status.is_limited:
             raise RateLimitError(
