@@ -27,8 +27,8 @@ const alignClassMap: Record<AlignItems, string> = {
   stretch: "items-stretch",
 };
 const widthClassmap: Record<Length, string> = {
-  auto: "w-auto",
-  fit: "w-fit",
+  auto: "w-auto flex-shrink-0",
+  fit: "w-fit flex-shrink-0",
   full: "w-full",
 };
 const heightClassmap: Record<Length, string> = {
@@ -225,6 +225,7 @@ function LineItemLayout({
         data-variant={variant}
         data-has-icon={Icon ? "true" : undefined}
         data-loading={loading ? "true" : undefined}
+        data-strikethrough={strikethrough ? "true" : undefined}
         data-reduced-padding={reducedPadding ? "true" : undefined}
       >
         {/* Row 1: Icon, Title */}
@@ -237,7 +238,7 @@ function LineItemLayout({
           <Text
             mainContentEmphasis={!isCompact}
             text03={isMuted}
-            className={cn(strikethrough && "line-through")}
+            className="line-item-layout-title"
           >
             {title}
           </Text>
@@ -247,11 +248,9 @@ function LineItemLayout({
         {loading && description ? (
           <div className="line-item-layout-skeleton-description" />
         ) : description ? (
-          <div className="line-item-layout-description">
-            <Text secondaryBody text03>
-              {description}
-            </Text>
-          </div>
+          <Text secondaryBody text03 className="line-item-layout-description">
+            {description}
+          </Text>
         ) : undefined}
       </div>
 

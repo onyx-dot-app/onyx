@@ -30,8 +30,6 @@ import {
   handleMoveOperation,
 } from "@/sections/sidebar/sidebarUtils";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import Truncated from "@/refresh-components/texts/Truncated";
-import Text from "@/refresh-components/texts/Text";
 import useAppFocus from "@/hooks/useAppFocus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -264,12 +262,7 @@ const ChatButton = memo(
                     handleCreateProjectAndMove(searchTerm.trim())
                   )}
                 >
-                  <Text as="p" text03 mainUiMuted className="-mr-1">
-                    Create
-                  </Text>
-                  <Truncated text03 mainUiAction>
-                    {searchTerm.trim()}
-                  </Truncated>
+                  {`Create ${searchTerm.trim()}`}
                 </LineItem>,
               ]
             : []),
