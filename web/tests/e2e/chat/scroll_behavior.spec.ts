@@ -37,8 +37,7 @@ async function setAutoScroll(page: Page, enabled: boolean) {
     await expect(autoScrollSwitch).toHaveAttribute("data-state", expectedState);
   }
 
-  // Navigate back to chat by clicking "New Session" button
-  await page.getByText("New Session").click();
+  await page.locator('a[href="/chat"]').click({ force: true });
 }
 
 /**
