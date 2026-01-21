@@ -190,7 +190,7 @@ def list_artifacts(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    user_id = user.id if user is not None else None
+    user_id: UUID = user.id
     session_manager = SessionManager(db_session)
 
     artifacts = session_manager.list_artifacts(session_uuid, user_id)
