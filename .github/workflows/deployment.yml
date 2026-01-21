@@ -226,6 +226,7 @@ jobs:
             APPLE_CERTIFICATE, deploy/apple-certificate
             APPLE_CERTIFICATE_PASSWORD, deploy/apple-certificate-password
             KEYCHAIN_PASSWORD, deploy/keychain-password
+            APPLE_TEAM_ID, deploy/apple-team-id
           parse-json-secrets: true
 
       - name: install dependencies (ubuntu only)
@@ -348,6 +349,7 @@ jobs:
           APPLE_ID: ${{ env.APPLE_ID }}
           APPLE_PASSWORD: ${{ env.APPLE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
+          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
         with:
           tagName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
           releaseName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
