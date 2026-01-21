@@ -37,9 +37,8 @@ async function setAutoScroll(page: Page, enabled: boolean) {
     await expect(autoScrollSwitch).toHaveAttribute("data-state", expectedState);
   }
 
-  // Close settings panel
-  await page.keyboard.press("Escape");
-  await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+  // Navigate back to chat by clicking "New Session" button
+  await page.getByText("New Session").click();
 }
 
 /**
