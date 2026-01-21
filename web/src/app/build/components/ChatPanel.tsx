@@ -24,6 +24,11 @@ import BuildMessageList from "@/app/build/components/BuildMessageList";
 import OutputPanelTab from "@/app/build/components/OutputPanelTab";
 import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicator";
 
+interface BuildChatPanelProps {
+  /** Session ID from URL - used to prevent welcome flash while loading */
+  existingSessionId?: string | null;
+}
+
 /**
  * BuildChatPanel - Center panel containing the chat interface
  *
@@ -33,7 +38,9 @@ import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicato
  * - Input bar at bottom
  * - Header with output panel toggle
  */
-export default function BuildChatPanel() {
+export default function BuildChatPanel({
+  existingSessionId,
+}: BuildChatPanelProps) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const outputPanelOpen = useOutputPanelOpen();
@@ -154,13 +161,10 @@ export default function BuildChatPanel() {
             timestamp: new Date(),
           };
           // Initialize local state (NOT an API call - backend session already exists)
-          // - isLoaded: true prevents loadSession from overwriting with server data
           // - status: "running" disables input immediately
-          // Note: sandbox status indicator will optimistically show "running" for sessions
-          // without sandbox info (see deriveSandboxStatus)
+          // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
           console.log("[ChatPanel] Creating local session state");
           createSession(newSessionId, {
-            isLoaded: true,
             messages: [userMessage],
             status: "running",
           });
@@ -233,7 +237,7 @@ export default function BuildChatPanel() {
 
       {/* Main content area */}
       <div className="flex-1 overflow-auto">
-        {!hasSession ? (
+        {!hasSession && !existingSessionId ? (
           <BuildWelcome
             onSubmit={handleSubmit}
             isRunning={isRunning}
@@ -249,7 +253,7 @@ export default function BuildChatPanel() {
       </div>
 
       {/* Input bar at bottom when session exists */}
-      {hasSession && (
+      {(hasSession || existingSessionId) && (
         <div className="px-4 pb-4 pt-2">
           <div className="max-w-2xl mx-auto">
             <InputBar

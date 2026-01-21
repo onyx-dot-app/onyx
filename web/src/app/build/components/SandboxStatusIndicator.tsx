@@ -38,7 +38,7 @@ const STATUS_CONFIG = {
     label: "Sandbox ready",
   },
   loading: {
-    color: "bg-neutral-400",
+    color: "bg-text-03",
     pulse: true,
     label: "Finding sandbox...",
   },

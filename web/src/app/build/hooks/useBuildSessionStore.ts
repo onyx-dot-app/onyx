@@ -589,9 +589,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
       }
 
+      // Re-fetch existing session to check for optimistic messages
+      const currentSession = get().sessions.get(sessionId);
+      const hasOptimisticMessages = (currentSession?.messages.length ?? 0) > 0;
+
       updateSessionData(sessionId, {
         status: sessionData.status === "active" ? "completed" : "idle",
-        messages,
+        // Preserve optimistic messages if they exist (e.g., from pre-provisioned flow)
+        messages: hasOptimisticMessages ? currentSession!.messages : messages,
         artifacts,
         webappUrl,
         sandbox: sessionData.sandbox,
