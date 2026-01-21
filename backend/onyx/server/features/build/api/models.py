@@ -46,9 +46,11 @@ class ArtifactResponse(BaseModel):
     """Artifact metadata in session response."""
 
     id: str
+    session_id: str
     type: ArtifactType
     name: str
     path: str
+    preview_url: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -57,9 +59,11 @@ class ArtifactResponse(BaseModel):
         """Convert Artifact ORM model to response."""
         return cls(
             id=str(artifact.id),
+            session_id=str(artifact.session_id),
             type=artifact.type,
             name=artifact.name,
             path=artifact.path,
+            preview_url=getattr(artifact, "preview_url", None),
             created_at=artifact.created_at,
             updated_at=artifact.updated_at,
         )

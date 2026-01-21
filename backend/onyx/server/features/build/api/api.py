@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.server.features.build.api.messages_api import router as messages_router
+from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
-from onyx.server.features.build.messages_api import router as messages_router
-from onyx.server.features.build.sessions_api import router as sessions_router
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

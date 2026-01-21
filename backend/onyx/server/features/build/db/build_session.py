@@ -1,6 +1,7 @@
 """Database operations for Build Mode sessions."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import desc
@@ -282,12 +283,22 @@ def create_message(
     message_type: MessageType,
     content: str,
     db_session: Session,
+    message_metadata: dict[str, Any] | None = None,
 ) -> BuildMessage:
-    """Create a new message in a build session."""
+    """Create a new message in a build session.
+
+    Args:
+        session_id: Session UUID
+        message_type: Type of message (USER, ASSISTANT, SYSTEM)
+        content: Text content (empty string for structured events)
+        db_session: Database session
+        message_metadata: Optional structured ACP event data (tool calls, thinking, plans, etc.)
+    """
     message = BuildMessage(
         session_id=session_id,
         type=message_type,
         content=content,
+        message_metadata=message_metadata,
     )
     db_session.add(message)
     db_session.commit()
@@ -295,6 +306,11 @@ def create_message(
 
     logger.info(
         f"Created {message_type.value} message {message.id} for session {session_id}"
+        + (
+            f" with metadata type={message_metadata.get('type')}"
+            if message_metadata
+            else ""
+        )
     )
     return message
 

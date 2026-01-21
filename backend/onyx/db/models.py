@@ -11,6 +11,7 @@ from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 from pydantic import ValidationError
 
+from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
@@ -4294,7 +4295,15 @@ class Snapshot(Base):
 
 
 class BuildMessage(Base):
-    """Stores messages exchanged in build sessions."""
+    """Stores messages exchanged in build sessions.
+
+    The metadata field stores structured ACP event data:
+    - tool_call_start: {type: "tool_call_start", tool_call_id, kind, title, raw_input, ...}
+    - tool_call_progress: {type: "tool_call_progress", tool_call_id, status, raw_output, ...}
+    - agent_thought_chunk: {type: "agent_thought_chunk", content: {...}}
+    - agent_plan_update: {type: "agent_plan_update", entries: [...]}
+    - agent_message_chunk: content is stored in content field, metadata is null
+    """
 
     __tablename__ = "build_message"
 
@@ -4310,6 +4319,9 @@ class BuildMessage(Base):
         Enum(MessageType, native_enum=False, name="messagetype"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    message_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB, nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

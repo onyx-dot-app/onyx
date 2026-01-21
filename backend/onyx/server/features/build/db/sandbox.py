@@ -7,43 +7,11 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
-
-
-def create_build_session(
-    db_session: Session,
-    user_id: UUID | None = None,
-) -> BuildSession:
-    """Create a new build session record.
-
-    Args:
-        db_session: Database session
-        user_id: Optional user ID to associate with the session
-
-    Returns:
-        The created BuildSession object
-    """
-    build_session = BuildSession(
-        user_id=user_id,
-        status=BuildSessionStatus.ACTIVE,
-    )
-    db_session.add(build_session)
-    db_session.commit()
-    return build_session
-
-
-def get_build_session_by_id(
-    db_session: Session, session_id: UUID
-) -> BuildSession | None:
-    """Get a build session by ID."""
-    stmt = select(BuildSession).where(BuildSession.id == session_id)
-    return db_session.execute(stmt).scalar_one_or_none()
 
 
 def create_sandbox(

@@ -1,6 +1,8 @@
 """API endpoints for Build Mode message management."""
 
 import json
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -22,25 +24,26 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_user
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.db.build_session import create_message
-from onyx.db.build_session import get_build_session
-from onyx.db.build_session import get_session_messages
-from onyx.db.build_session import update_session_activity
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
+from onyx.server.features.build.api.models import MessageListResponse
+from onyx.server.features.build.api.models import MessageRequest
+from onyx.server.features.build.api.models import MessageResponse
+from onyx.server.features.build.api.packets import ArtifactCreatedPacket
+from onyx.server.features.build.api.packets import ArtifactType
+from onyx.server.features.build.api.packets import BuildPacket
+from onyx.server.features.build.api.packets import create_artifact_from_file
+from onyx.server.features.build.api.packets import ErrorPacket
+from onyx.server.features.build.api.packets import FileWritePacket
+from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.db.build_session import create_message
+from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.build_session import get_session_messages
+from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
-from onyx.server.features.build.models import MessageListResponse
-from onyx.server.features.build.models import MessageRequest
-from onyx.server.features.build.models import MessageResponse
-from onyx.server.features.build.packets import ArtifactCreatedPacket
-from onyx.server.features.build.packets import ArtifactType
-from onyx.server.features.build.packets import BuildPacket
-from onyx.server.features.build.packets import create_artifact_from_file
-from onyx.server.features.build.packets import ErrorPacket
-from onyx.server.features.build.packets import FileWritePacket
 from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.utils.logger import setup_logger
 
@@ -59,7 +62,6 @@ def check_build_rate_limits(
     Raises HTTPException(429) if rate limit is exceeded.
     Follows the same pattern as chat's check_token_rate_limits.
     """
-    from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 
     # Create a temporary session just for rate limit check
     with get_session_with_current_tenant() as db_session:
@@ -136,15 +138,19 @@ async def stream_cli_agent_response(
     assistant_message_parts: list[str] = []
 
     def _serialize_acp_event(event: Any, event_type: str) -> str:
-        """Serialize an ACP event to SSE format, preserving ACP structure."""
+        """Serialize an ACP event to SSE format, preserving ALL ACP data."""
         # Convert Pydantic model to dict, handling nested models
+        # IMPORTANT: exclude_none=False to capture ALL fields from ACP
         if hasattr(event, "model_dump"):
-            data = event.model_dump(mode="json", by_alias=True, exclude_none=True)
+            data = event.model_dump(mode="json", by_alias=True, exclude_none=False)
         else:
             data = {"raw": str(event)}
 
         # Add type field for frontend routing
         data["type"] = event_type
+
+        # Add timestamp for frontend tracking
+        data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
 
         return f"event: message\ndata: {json.dumps(data)}\n\n"
 
@@ -167,6 +173,25 @@ async def stream_cli_agent_response(
                     texts.append(getattr(block, "text", "") or "")
             return "".join(texts)
         return ""
+
+    def _save_acp_event_to_db(
+        event_type: str, event_data: dict[str, Any], db_session: Session
+    ) -> None:
+        """Save an ACP event as a separate message in the database."""
+        # Save tool calls, thinking, and plan updates as separate messages
+        if event_type in [
+            "tool_call_start",
+            "tool_call_progress",
+            "agent_thought_chunk",
+            "agent_plan_update",
+        ]:
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.ASSISTANT,
+                content="",  # Empty content for structured events
+                db_session=db_session,
+                message_metadata=event_data,
+            )
 
     try:
         logger.warning(f"[STREAM] Starting stream for session {session_id}")
@@ -257,18 +282,36 @@ async def stream_cli_agent_response(
                     yield _serialize_acp_event(acp_event, "agent_message_chunk")
 
                 elif isinstance(acp_event, AgentThoughtChunk):
+                    # Save thinking step to DB
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "agent_thought_chunk"
+                    _save_acp_event_to_db("agent_thought_chunk", event_data, db_session)
                     yield _serialize_acp_event(acp_event, "agent_thought_chunk")
 
                 elif isinstance(acp_event, ToolCallStart):
                     logger.warning(
                         f"[STREAM] Tool started: {acp_event.kind} - {acp_event.title}"
                     )
+                    # Save tool call start to DB
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "tool_call_start"
+                    _save_acp_event_to_db("tool_call_start", event_data, db_session)
                     yield _serialize_acp_event(acp_event, "tool_call_start")
 
                 elif isinstance(acp_event, ToolCallProgress):
                     logger.warning(
                         f"[STREAM] Tool progress: {acp_event.kind} - {acp_event.status}"
                     )
+                    # Save tool call progress to DB
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "tool_call_progress"
+                    _save_acp_event_to_db("tool_call_progress", event_data, db_session)
                     yield _serialize_acp_event(acp_event, "tool_call_progress")
 
                     # Emit file_write packet for write/edit operations (custom packet)
@@ -300,6 +343,12 @@ async def stream_cli_agent_response(
 
                 elif isinstance(acp_event, AgentPlanUpdate):
                     logger.warning("[STREAM] Plan update received")
+                    # Save plan update to DB
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "agent_plan_update"
+                    _save_acp_event_to_db("agent_plan_update", event_data, db_session)
                     yield _serialize_acp_event(acp_event, "agent_plan_update")
 
                 elif isinstance(acp_event, CurrentModeUpdate):

@@ -53,6 +53,11 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
+            "message_metadata",
+            postgresql.JSONB(),
+            nullable=True,
+        ),
+        sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
