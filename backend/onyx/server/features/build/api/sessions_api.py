@@ -37,9 +37,6 @@ def list_sessions(
     db_session: Session = Depends(get_session),
 ) -> SessionListResponse:
     """List all build sessions for the current user."""
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     session_manager = SessionManager(db_session)
 
     sessions = session_manager.list_sessions(user.id)
@@ -61,9 +58,6 @@ def create_session(
     Creates a sandbox with the necessary file structure and returns a session ID.
     Uses SessionManager for session and sandbox provisioning.
     """
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     session_manager = SessionManager(db_session)
 
     try:
@@ -97,9 +91,6 @@ def get_session_details(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     session_manager = SessionManager(db_session)
 
     session = session_manager.get_session(session_uuid, user.id)
@@ -124,10 +115,9 @@ def generate_session_name(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    user_id = user.id if user is not None else None
     session_manager = SessionManager(db_session)
 
-    generated_name = session_manager.generate_session_name(session_uuid, user_id)
+    generated_name = session_manager.generate_session_name(session_uuid, user.id)
 
     if generated_name is None:
         raise HTTPException(status_code=404, detail="Session not found")
