@@ -54,9 +54,11 @@ export interface Artifact {
 
 export interface BuildMessage {
   id: string;
-  role: "user" | "assistant" | "system";
+  type: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
+  /** Structured ACP event data (tool calls, thinking, plans) */
+  message_metadata?: Record<string, any> | null;
   /** Tool calls associated with this message (for assistant messages) */
   toolCalls?: ToolCall[];
 }
@@ -85,6 +87,12 @@ export interface ToolCall {
   status: ToolCallStatus;
   /** Tool input parameters */
   input?: Record<string, unknown>;
+  /** Raw input from ACP (complete command/parameters) */
+  raw_input?: Record<string, any> | null;
+  /** Raw output from ACP (complete result) */
+  raw_output?: Record<string, any> | null;
+  /** Content block from ACP (description text) */
+  content?: any | null;
   /** Result content (when completed) */
   result?: string;
   /** Error message (when failed) */
@@ -121,22 +129,32 @@ export interface SessionHistoryItem {
 // API Response Types
 // =============================================================================
 
+export interface ApiSandboxResponse {
+  id: string;
+  status: "provisioning" | "running" | "idle" | "terminated" | "failed";
+  container_id: string | null;
+  created_at: string;
+  last_heartbeat: string | null;
+  nextjs_port: number | null;
+}
+
 export interface ApiSessionResponse {
   id: string;
-  org_id: string;
-  user_id: string;
-  sandbox_id: string | null;
+  user_id: string | null;
   name: string | null;
   status: "active" | "idle" | "archived";
   created_at: string;
   last_activity_at: string;
+  sandbox: ApiSandboxResponse | null;
+  artifacts: ApiArtifactResponse[];
 }
 
 export interface ApiMessageResponse {
   id: string;
   session_id: string;
-  role: "user" | "assistant";
+  type: "user" | "assistant";
   content: string;
+  message_metadata?: Record<string, any> | null;
   created_at: string;
 }
 
@@ -149,6 +167,25 @@ export interface ApiArtifactResponse {
   created_at: string;
   updated_at: string;
   preview_url?: string | null;
+}
+
+export interface ApiWebappInfoResponse {
+  has_webapp: boolean;
+  webapp_url: string | null;
+  status: string;
+}
+
+export interface FileSystemEntry {
+  name: string;
+  path: string;
+  is_directory: boolean;
+  size: number | null;
+  mime_type: string | null;
+}
+
+export interface DirectoryListing {
+  path: string;
+  entries: FileSystemEntry[];
 }
 
 // =============================================================================
@@ -325,8 +362,121 @@ export interface PermissionResponsePacket {
   timestamp: string;
 }
 
-// Union type for all packets
+// =============================================================================
+// Raw ACP Packets (sent directly from backend with ALL ACP fields)
+// =============================================================================
+
+// Content block types from ACP
+export interface TextContentBlock {
+  type: "text";
+  text: string;
+}
+
+export interface ImageContentBlock {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
+export type ContentBlock =
+  | TextContentBlock
+  | ImageContentBlock
+  | Record<string, any>;
+
+// Base ACP event fields
+export interface ACPBaseEvent {
+  field_meta?: Record<string, any> | null; // _meta field for extensibility
+  timestamp: string;
+}
+
+// ACP: agent_message_chunk - Agent's text/content output
+export interface AgentMessageChunkPacket extends ACPBaseEvent {
+  type: "agent_message_chunk";
+  content: ContentBlock;
+  session_update?: string;
+}
+
+// ACP: agent_thought_chunk - Agent's internal reasoning
+export interface AgentThoughtChunkPacket extends ACPBaseEvent {
+  type: "agent_thought_chunk";
+  content: ContentBlock;
+  session_update?: string;
+}
+
+// ACP: tool_call_start - Tool invocation started
+export interface ToolCallStartPacket extends ACPBaseEvent {
+  type: "tool_call_start";
+  tool_call_id: string;
+  kind: string | null;
+  title: string | null;
+  content: ContentBlock | null;
+  locations: string[] | null;
+  raw_input: Record<string, any> | null;
+  raw_output: Record<string, any> | null;
+  status: string | null;
+  session_update?: string;
+}
+
+// ACP: tool_call_progress - Tool execution progress/completion
+export interface ToolCallProgressPacket extends ACPBaseEvent {
+  type: "tool_call_progress";
+  tool_call_id: string;
+  kind: string | null;
+  title: string | null;
+  content: ContentBlock | null;
+  locations: string[] | null;
+  raw_input: Record<string, any> | null;
+  raw_output: Record<string, any> | null;
+  status: string | null;
+  session_update?: string;
+}
+
+// ACP: agent_plan_update - Agent's execution plan
+export interface AgentPlanUpdatePacket extends ACPBaseEvent {
+  type: "agent_plan_update";
+  entries: Array<{
+    id: string;
+    description: string;
+    status: string;
+    priority: string | number | null;
+  }> | null;
+  session_update?: string;
+}
+
+// ACP: current_mode_update - Agent mode change
+export interface CurrentModeUpdatePacket extends ACPBaseEvent {
+  type: "current_mode_update";
+  current_mode_id: string | null;
+  session_update?: string;
+}
+
+// ACP: prompt_response - Agent finished processing
+export interface PromptResponsePacket extends ACPBaseEvent {
+  type: "prompt_response";
+  stop_reason: string | null;
+}
+
+// ACP: error - Error from ACP
+export interface ACPErrorPacket {
+  type: "error";
+  code: string | null;
+  message: string;
+  data: Record<string, any> | null;
+  timestamp: string;
+}
+
+// Union type for all packets (including raw ACP packets)
 export type StreamPacket =
+  // Raw ACP packets with ALL fields
+  | AgentMessageChunkPacket
+  | AgentThoughtChunkPacket
+  | ToolCallStartPacket
+  | ToolCallProgressPacket
+  | AgentPlanUpdatePacket
+  | CurrentModeUpdatePacket
+  | PromptResponsePacket
+  | ACPErrorPacket
+  // Custom Onyx packets
   | StepStartPacket
   | StepDeltaPacket
   | StepEndPacket

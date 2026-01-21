@@ -3,11 +3,13 @@ import {
   ApiMessageResponse,
   ApiArtifactResponse,
   ApiUsageLimitsResponse,
+  ApiWebappInfoResponse,
   SessionHistoryItem,
   Artifact,
   BuildMessage,
   StreamPacket,
   UsageLimits,
+  DirectoryListing,
 } from "@/app/build/services/buildStreamingModels";
 
 // =============================================================================
@@ -126,6 +128,20 @@ export async function fetchSessionHistory(): Promise<SessionHistoryItem[]> {
   }));
 }
 
+export async function generateSessionName(sessionId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/generate-name`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to generate session name: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.name;
+}
+
 export async function updateSessionName(
   sessionId: string,
   name: string | null
@@ -167,8 +183,9 @@ export async function fetchMessages(
   const data = await res.json();
   return data.messages.map((m: ApiMessageResponse) => ({
     id: m.id,
-    role: m.role,
+    type: m.type,
     content: m.content,
+    message_metadata: m.message_metadata,
     timestamp: new Date(m.created_at),
   }));
 }
@@ -208,7 +225,8 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
   }
 
   const data = await res.json();
-  return data.artifacts.map((a: ApiArtifactResponse) => ({
+  // Backend returns a direct array, not wrapped in an object
+  return data.map((a: ApiArtifactResponse) => ({
     id: a.id,
     session_id: a.session_id,
     type: a.type,
@@ -218,6 +236,47 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
     created_at: new Date(a.created_at),
     updated_at: new Date(a.updated_at),
   }));
+}
+
+// =============================================================================
+// Webapp API
+// =============================================================================
+
+export async function fetchWebappInfo(
+  sessionId: string
+): Promise<ApiWebappInfoResponse> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/webapp`);
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch webapp info: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// =============================================================================
+// Files API
+// =============================================================================
+
+export async function fetchDirectoryListing(
+  sessionId: string,
+  path: string = ""
+): Promise<DirectoryListing> {
+  const url = new URL(
+    `${API_BASE}/sessions/${sessionId}/files`,
+    window.location.origin
+  );
+  if (path) {
+    url.searchParams.set("path", path);
+  }
+
+  const res = await fetch(url.toString());
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch directory listing: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 // =============================================================================

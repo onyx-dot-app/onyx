@@ -56,7 +56,7 @@ export default function BuildChatPanel() {
         // Add user message to state
         appendMessage({
           id: `msg-${Date.now()}`,
-          role: "user",
+          type: "user",
           content: message,
           timestamp: new Date(),
         });
