@@ -31,6 +31,7 @@ import {
   StoppedHeader,
   ParallelStreamingHeader,
 } from "@/app/chat/message/messageComponents/timeline/headers";
+import { useStreamingStartTime } from "@/app/chat/stores/useChatSessionStore";
 
 // =============================================================================
 // TimelineStep Component - Memoized to prevent re-renders
@@ -138,7 +139,30 @@ export interface AgentTimelineProps {
   processingDurationSeconds?: number;
 }
 
-export function AgentTimeline({
+/**
+ * Custom prop comparison for AgentTimeline memoization.
+ * Prevents unnecessary re-renders when parent renders but props haven't meaningfully changed.
+ */
+function areAgentTimelinePropsEqual(
+  prev: AgentTimelineProps,
+  next: AgentTimelineProps
+): boolean {
+  return (
+    prev.turnGroups === next.turnGroups &&
+    prev.stopPacketSeen === next.stopPacketSeen &&
+    prev.stopReason === next.stopReason &&
+    prev.finalAnswerComing === next.finalAnswerComing &&
+    prev.hasDisplayContent === next.hasDisplayContent &&
+    prev.uniqueToolNames === next.uniqueToolNames &&
+    prev.processingDurationSeconds === next.processingDurationSeconds &&
+    prev.collapsible === next.collapsible &&
+    prev.buttonTitle === next.buttonTitle &&
+    prev.className === next.className &&
+    prev.chatState.assistant?.id === next.chatState.assistant?.id
+  );
+}
+
+export const AgentTimeline = React.memo(function AgentTimeline({
   turnGroups,
   chatState,
   stopPacketSeen = false,
@@ -172,6 +196,9 @@ export function AgentTimeline({
   // Expansion state management
   const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
     useTimelineExpansion(stopPacketSeen, lastTurnGroup);
+
+  // Streaming duration tracking
+  const streamingStartTime = useStreamingStartTime();
 
   // Stable callbacks to avoid creating new functions on every render
   const noopComplete = useCallback(() => {}, []);
@@ -243,6 +270,7 @@ export function AgentTimeline({
           buttonTitle={buttonTitle}
           isExpanded={isExpanded}
           onToggle={handleToggle}
+          streamingStartTime={streamingStartTime}
         />
       );
     }
@@ -445,6 +473,6 @@ export function AgentTimeline({
       )}
     </div>
   );
-}
+}, areAgentTimelinePropsEqual);
 
 export default AgentTimeline;

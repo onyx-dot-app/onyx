@@ -9,3 +9,5 @@ export type { UsePacketProcessorResult } from "./usePacketProcessor";
 
 export { useTimelineHeader } from "./useTimelineHeader";
 export type { TimelineHeaderResult } from "./useTimelineHeader";
+
+export { useStreamingDuration } from "./useStreamingDuration";

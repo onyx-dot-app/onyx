@@ -1,4 +1,4 @@
-import React, { JSX } from "react";
+import React, { JSX, memo } from "react";
 import {
   ChatPacket,
   Packet,
@@ -122,17 +122,8 @@ export function findRenderer(
   return null;
 }
 
-// React component wrapper that directly uses renderer components
-export function RendererComponent({
-  packets,
-  chatState,
-  onComplete,
-  animate,
-  stopPacketSeen,
-  stopReason,
-  useShortRenderer = false,
-  children,
-}: {
+// Props interface for RendererComponent
+interface RendererComponentProps {
   packets: Packet[];
   chatState: FullChatState;
   onComplete: () => void;
@@ -141,7 +132,35 @@ export function RendererComponent({
   stopReason?: StopReason;
   useShortRenderer?: boolean;
   children: (result: RendererResult) => JSX.Element;
-}) {
+}
+
+// Custom comparison to prevent unnecessary re-renders
+function areRendererPropsEqual(
+  prev: RendererComponentProps,
+  next: RendererComponentProps
+): boolean {
+  return (
+    prev.packets.length === next.packets.length &&
+    prev.stopPacketSeen === next.stopPacketSeen &&
+    prev.stopReason === next.stopReason &&
+    prev.animate === next.animate &&
+    prev.useShortRenderer === next.useShortRenderer &&
+    prev.chatState.assistant?.id === next.chatState.assistant?.id
+    // Skip: onComplete, children (function refs), chatState (memoized upstream)
+  );
+}
+
+// React component wrapper that directly uses renderer components
+export const RendererComponent = memo(function RendererComponent({
+  packets,
+  chatState,
+  onComplete,
+  animate,
+  stopPacketSeen,
+  stopReason,
+  useShortRenderer = false,
+  children,
+}: RendererComponentProps) {
   const RendererFn = findRenderer({ packets });
   const renderType = useShortRenderer ? RenderType.HIGHLIGHT : RenderType.FULL;
 
@@ -162,4 +181,4 @@ export function RendererComponent({
       {children}
     </RendererFn>
   );
-}
+}, areRendererPropsEqual);
