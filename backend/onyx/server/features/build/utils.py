@@ -141,47 +141,44 @@ def validate_file_extension(filename: str) -> tuple[bool, str | None]:
     return True, None
 
 
-def validate_mime_type(content_type: str | None) -> tuple[bool, str | None]:
+def validate_mime_type(content_type: str | None) -> bool:
     """Validate MIME type against allowlist.
 
     Args:
         content_type: The Content-Type header value
 
     Returns:
-        Tuple of (is_valid, error_message)
+        True if the MIME type is allowed, False otherwise
     """
     if not content_type:
         # Allow missing content type - we'll validate by extension
-        return True, None
+        return True
 
     # Extract base MIME type (ignore charset etc.)
     mime_type = content_type.split(";")[0].strip().lower()
 
-    # Be permissive - if extension is valid, allow generic MIME types
     if mime_type not in ALLOWED_MIME_TYPES:
-        return True, None
+        return False
 
-    return True, None
+    return True
 
 
-def validate_file_size(size: int) -> tuple[bool, str | None]:
+def validate_file_size(size: int) -> bool:
     """Validate file size against limit.
 
     Args:
         size: File size in bytes
 
     Returns:
-        Tuple of (is_valid, error_message)
+        True if the file size is allowed, False otherwise
     """
     if size <= 0:
-        return False, "File is empty"
+        return False
 
     if size > MAX_UPLOAD_FILE_SIZE_BYTES:
-        max_mb = MAX_UPLOAD_FILE_SIZE_BYTES / (1024 * 1024)
-        actual_mb = size / (1024 * 1024)
-        return False, f"File size ({actual_mb:.1f}MB) exceeds limit ({max_mb:.0f}MB)"
+        return False
 
-    return True, None
+    return True
 
 
 def sanitize_filename(filename: str) -> str:
@@ -228,7 +225,7 @@ def validate_file(
     filename: str,
     content_type: str | None,
     size: int,
-) -> tuple[bool, str | None]:
+) -> bool:
     """Validate a file for upload.
 
     Performs all validation checks:
@@ -242,24 +239,15 @@ def validate_file(
         size: File size in bytes
 
     Returns:
-        Tuple of (is_valid, error_message)
+        True if the file is valid, False otherwise
     """
     # Validate extension
-    is_valid, error = validate_file_extension(filename)
-    if not is_valid:
-        return False, error
-
-    # Validate MIME type
-    is_valid, error = validate_mime_type(content_type)
-    if not is_valid:
-        return False, error
-
-    # Validate size
-    is_valid, error = validate_file_size(size)
-    if not is_valid:
-        return False, error
-
-    return True, None
+    is_valid = (
+        validate_file_extension(filename)
+        and validate_mime_type(content_type)
+        and validate_file_size(size)
+    )
+    return is_valid
 
 
 # =============================================================================
