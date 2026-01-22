@@ -84,9 +84,6 @@ async def send_message(
 
     Follows the same pattern as /chat/send-message for consistency.
     """
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     session_manager = SessionManager(db_session)
 
     # Stream the CLI agent's response

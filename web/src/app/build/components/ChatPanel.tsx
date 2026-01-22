@@ -27,6 +27,7 @@ import { SvgSidebar } from "@opal/icons";
 import { useBuildContext } from "@/app/build/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
+import VideoBackground from "@/app/build/v1/components/VideoBackground";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -179,60 +180,63 @@ export default function BuildChatPanel({
   );
 
   return (
-    <div className="flex flex-col h-full w-full">
-      {popup}
-      {/* Chat header */}
-      <div className="flex flex-row items-center justify-between pl-4 py-3">
-        <div className="flex flex-row items-center gap-2">
-          {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
-          {isMobile && leftSidebarFolded && (
-            <IconButton
-              icon={SvgSidebar}
-              onClick={() => setLeftSidebarFolded(false)}
-              internal
+    <div className="flex flex-col h-full w-full relative">
+      <VideoBackground />
+      <div className="relative z-10 flex flex-col h-full w-full">
+        {popup}
+        {/* Chat header */}
+        <div className="flex flex-row items-center justify-between pl-4 py-3">
+          <div className="flex flex-row items-center gap-2">
+            {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
+            {isMobile && leftSidebarFolded && (
+              <IconButton
+                icon={SvgSidebar}
+                onClick={() => setLeftSidebarFolded(false)}
+                internal
+              />
+            )}
+            <SandboxStatusIndicator />
+          </div>
+          {/* Output panel tab in header */}
+          <OutputPanelTab
+            isOpen={outputPanelOpen}
+            onClick={toggleOutputPanel}
+          />
+        </div>
+
+        {/* Main content area */}
+        <div className="flex-1 overflow-auto">
+          {!hasSession && !existingSessionId ? (
+            <div className="h-full">
+              <BuildWelcome
+                onSubmit={handleSubmit}
+                isRunning={isRunning}
+                sandboxInitializing={isPreProvisioning}
+              />
+            </div>
+          ) : (
+            <BuildMessageList
+              messages={session?.messages ?? []}
+              streamItems={session?.streamItems ?? []}
+              isStreaming={isRunning}
             />
           )}
-          <SandboxStatusIndicator />
         </div>
-        {/* Output panel tab in header */}
-        <OutputPanelTab isOpen={outputPanelOpen} onClick={toggleOutputPanel} />
-      </div>
 
-      {/* Main content area */}
-      <div className="flex-1 overflow-auto">
-        {!hasSession && !existingSessionId ? (
-          <div className="h-full flex items-center justify-center">
-            <BuildWelcome
-              onSubmit={handleSubmit}
-              isRunning={isRunning}
-              sandboxInitializing={isPreProvisioning}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center px-4 py-4">
-            <div className="w-full max-w-3xl mx-auto backdrop-blur-lg rounded-lg">
-              <BuildMessageList
-                messages={session?.messages ?? []}
-                isStreaming={isRunning}
+        {/* Input bar at bottom when session exists */}
+        {(hasSession || existingSessionId) && (
+          <div className="px-4 pb-8 pt-4">
+            <div className="max-w-2xl mx-auto">
+              <InputBar
+                onSubmit={handleSubmit}
+                isRunning={isRunning}
+                placeholder="Continue the conversation..."
+                sessionId={sessionId ?? undefined}
               />
             </div>
           </div>
         )}
       </div>
-
-      {/* Input bar at bottom when session exists */}
-      {(hasSession || existingSessionId) && (
-        <div className="px-4 pb-4 pt-2">
-          <div className="max-w-2xl mx-auto">
-            <InputBar
-              onSubmit={handleSubmit}
-              isRunning={isRunning}
-              placeholder="Continue the conversation..."
-              sessionId={sessionId ?? undefined}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
