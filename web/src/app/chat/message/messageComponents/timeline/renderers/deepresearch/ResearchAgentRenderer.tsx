@@ -156,7 +156,10 @@ export const ResearchAgentRenderer: MessageRenderer<
           header="Research Task"
           collapsible={true}
           isLastStep={
-            nestedToolGroups.length === 0 && !fullReportContent && !isComplete
+            !stopPacketSeen &&
+            nestedToolGroups.length === 0 &&
+            !fullReportContent &&
+            !isComplete
           }
           isHover={isHover}
         >
@@ -168,6 +171,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       {!showOnlyReport &&
         visibleNestedToolGroups.map((group, index) => {
           const isLastNestedStep =
+            !stopPacketSeen &&
             index === visibleNestedToolGroups.length - 1 &&
             !fullReportContent &&
             !isComplete;
@@ -184,7 +188,15 @@ export const ResearchAgentRenderer: MessageRenderer<
               isLastStep={isLastNestedStep}
               isHover={isHover}
             >
-              {({ icon, status, content, isExpanded, onToggle, isHover }) => (
+              {({
+                icon,
+                status,
+                content,
+                isExpanded,
+                onToggle,
+                isHover,
+                supportsCompact,
+              }) => (
                 <StepContainer
                   stepIcon={icon as FunctionComponent<IconProps> | undefined}
                   header={status}
@@ -194,6 +206,7 @@ export const ResearchAgentRenderer: MessageRenderer<
                   isLastStep={isLastNestedStep}
                   isFirstStep={!researchTask && index === 0}
                   isHover={isHover}
+                  supportsCompact={supportsCompact}
                 >
                   {content}
                 </StepContainer>
@@ -207,7 +220,7 @@ export const ResearchAgentRenderer: MessageRenderer<
         <StepContainer
           stepIcon={SvgCircle as FunctionComponent<IconProps>}
           header="Research Report"
-          isLastStep={!isComplete}
+          isLastStep={!stopPacketSeen && !isComplete}
           isFirstStep={!researchTask && nestedToolGroups.length === 0}
           isHover={isHover}
         >
@@ -225,7 +238,7 @@ export const ResearchAgentRenderer: MessageRenderer<
         <StepContainer
           stepIcon={SvgCheckCircle}
           header="Done"
-          isLastStep={isLastStep}
+          isLastStep={!stopPacketSeen && isLastStep}
           isFirstStep={false}
           isHover={isHover}
         />

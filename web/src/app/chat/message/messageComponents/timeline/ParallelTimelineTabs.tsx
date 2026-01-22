@@ -66,9 +66,17 @@ export function ParallelTimelineTabs({
       new Map(
         turnGroup.steps.map((step) => [
           step.key,
-          step.packets.length > 0 && !isToolComplete(step.packets),
+          !stopPacketSeen &&
+            step.packets.length > 0 &&
+            !isToolComplete(step.packets),
         ])
       ),
+    [turnGroup.steps, stopPacketSeen]
+  );
+
+  // Check if any step is a research agent (only research agents get collapse button)
+  const hasResearchAgent = useMemo(
+    () => turnGroup.steps.some((step) => isResearchAgentPackets(step.packets)),
     [turnGroup.steps]
   );
   //will be removed on cleanup
@@ -140,11 +148,13 @@ export function ParallelTimelineTabs({
                 "transition-colors duration-200"
               )}
               rightContent={
-                <IconButton
-                  tertiary
-                  onClick={handleToggle}
-                  icon={isExpanded ? SvgFold : SvgExpand}
-                />
+                hasResearchAgent ? (
+                  <IconButton
+                    tertiary
+                    onClick={handleToggle}
+                    icon={isExpanded ? SvgFold : SvgExpand}
+                  />
+                ) : undefined
               }
             >
               {turnGroup.steps.map((step) => (
@@ -166,7 +176,9 @@ export function ParallelTimelineTabs({
         <div className="w-full">
           <TimelineRendererComponent
             key={`${activeTab}-${isExpanded}`}
-            packets={activeStep?.packets ?? []}
+            packets={
+              !isExpanded && stopPacketSeen ? [] : activeStep?.packets ?? []
+            }
             chatState={chatState}
             onComplete={noopComplete}
             animate={!stopPacketSeen}

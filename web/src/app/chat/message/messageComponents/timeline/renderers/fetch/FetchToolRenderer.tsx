@@ -77,7 +77,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               onClick={(doc: OnyxDocument) => {
                 if (doc.link) window.open(doc.link, "_blank");
               }}
-              emptyState={<BlinkingDot />}
+              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
             />
           ) : displayUrls ? (
             <SearchChipList
@@ -87,11 +87,11 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               getKey={(url: string) => url}
               toSourceInfo={urlToSourceInfo}
               onClick={(url: string) => window.open(url, "_blank")}
-              emptyState={<BlinkingDot />}
+              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
             />
           ) : (
             <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
-              <BlinkingDot />
+              {!stopPacketSeen && <BlinkingDot />}
             </div>
           ))}
 
@@ -112,7 +112,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 onClick={(doc: OnyxDocument) => {
                   if (doc.link) window.open(doc.link, "_blank");
                 }}
-                emptyState={<BlinkingDot />}
+                emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
               />
             ) : (
               <SearchChipList
@@ -124,7 +124,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 }
                 toSourceInfo={urlToSourceInfo}
                 onClick={(url: string) => window.open(url, "_blank")}
-                emptyState={<BlinkingDot />}
+                emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
               />
             )}
           </>

@@ -79,7 +79,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             expansionCount={QUERIES_PER_EXPANSION}
             getKey={(_, index) => index}
             toSourceInfo={queryToSourceInfo}
-            emptyState={<BlinkingDot />}
+            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
             showDetailsCard={false}
           />
         )}
@@ -102,7 +102,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
                   window.open(doc.link, "_blank");
                 }
               }}
-              emptyState={<BlinkingDot />}
+              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
             />
           </>
         )}
