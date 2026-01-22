@@ -26,9 +26,9 @@ from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
-from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
-from onyx.server.features.build.sandbox.manager import get_sandbox_manager
-from onyx.server.features.build.sandbox.manager import LocalSandboxManager
+from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.local import LocalSandboxManager
+from onyx.server.features.build.sandbox.local.internal.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotInfo

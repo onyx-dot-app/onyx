@@ -51,7 +51,7 @@ from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.sandbox.manager import get_sandbox_manager
+from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id

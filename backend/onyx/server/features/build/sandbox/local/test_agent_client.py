@@ -3,13 +3,13 @@
 
 Usage:
   # From backend directory:
-  PYTHONPATH=. python onyx/server/features/build/sandbox/internal/test_agent_client.py
+  PYTHONPATH=. python onyx/server/features/build/sandbox/local/test_agent_client.py
 
   # Or with specific message:
-  PYTHONPATH=. python onyx/server/features/build/sandbox/internal/test_agent_client.py "What files are in this directory?"
+  PYTHONPATH=. python onyx/server/features/build/sandbox/local/test_agent_client.py "What files are in this directory?"
 
   # With specific working directory:
-  PYTHONPATH=. python onyx/server/features/build/sandbox/internal/test_agent_client.py --dir /path/to/project "List files"
+  PYTHONPATH=. python onyx/server/features/build/sandbox/local/test_agent_client.py --dir /path/to/project "List files"
 """
 
 import argparse
@@ -27,9 +27,11 @@ from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 
 try:
-    from onyx.server.features.build.sandbox.internal.agent_client import ACPAgentClient
+    from onyx.server.features.build.sandbox.local.internal.agent_client import (
+        ACPAgentClient,
+    )
 except ImportError:
-    from agent_client import ACPAgentClient  # type: ignore
+    from internal.agent_client import ACPAgentClient  # type: ignore
 
 
 def test_with_opencode_acp(message: str, working_dir: str | None = None) -> None:

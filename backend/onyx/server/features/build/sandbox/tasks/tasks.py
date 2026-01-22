@@ -62,7 +62,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
     try:
         # Import here to avoid circular imports
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
-        from onyx.server.features.build.sandbox.manager import get_sandbox_manager
+        from onyx.server.features.build.sandbox import get_sandbox_manager
 
         sandbox_manager = get_sandbox_manager()
 

@@ -16,6 +16,7 @@ class PacketLogger:
     """Simple packet logger - outputs raw JSON for each packet."""
 
     _instance: "PacketLogger | None" = None
+    _initialized: bool
 
     def __new__(cls) -> "PacketLogger":
         if cls._instance is None:

@@ -9,7 +9,7 @@ Key features:
 - Cluster-native service discovery
 - RBAC-controlled resource management
 
-Use get_sandbox_manager() from manager.py to get the appropriate implementation.
+Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
 import json
@@ -21,9 +21,9 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
-from kubernetes import client
+from kubernetes import client  # type: ignore
 from kubernetes import config
-from kubernetes.client.rest import ApiException
+from kubernetes.client.rest import ApiException  # type: ignore
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
@@ -35,17 +35,21 @@ from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
-from onyx.server.features.build.db.sandbox import create_sandbox as db_create_sandbox
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit as db_create_sandbox__no_commit,
+)
 from onyx.server.features.build.db.sandbox import create_snapshot as db_create_snapshot
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status
-from onyx.server.features.build.sandbox.internal.acp_http_client import (
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
     ACPEvent,
 )
-from onyx.server.features.build.sandbox.internal.acp_http_client import ACPHttpClient
-from onyx.server.features.build.sandbox.manager import SandboxManager
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
+    ACPHttpClient,
+)
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotInfo
@@ -114,7 +118,7 @@ class KubernetesSandboxManager(SandboxManager):
         self._acp_clients: dict[str, ACPHttpClient] = {}
 
         # Load AGENTS.md template
-        build_dir = Path(__file__).parent.parent  # /onyx/server/features/build/
+        build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         logger.info(
@@ -250,7 +254,7 @@ echo "File sync complete"
         )
 
         # Build opencode config JSON
-        opencode_config = {
+        opencode_config: dict[str, str | list[str]] = {
             "provider": llm_provider,
             "model": llm_model,
             "apiKey": llm_api_key,
@@ -564,13 +568,16 @@ echo "File sync complete"
 
             # 5. Create DB record
             logger.debug("Creating sandbox database record")
-            sandbox = db_create_sandbox(
+            sandbox = db_create_sandbox__no_commit(
                 db_session=db_session,
                 session_id=session_uuid,
                 nextjs_port=NEXTJS_PORT,  # Always 3000 within cluster
             )
 
-            update_sandbox_status(db_session, sandbox.id, SandboxStatus.RUNNING)
+            update_sandbox_status__no_commit(
+                db_session, sandbox.id, SandboxStatus.RUNNING
+            )
+            db_session.commit()
 
             logger.info(
                 f"Provisioned Kubernetes sandbox {sandbox.id} for session {session_id}, "
@@ -661,7 +668,10 @@ echo "File sync complete"
         self._cleanup_kubernetes_resources(session_id)
 
         # Update status
-        update_sandbox_status(db_session, UUID(sandbox_id), SandboxStatus.TERMINATED)
+        update_sandbox_status__no_commit(
+            db_session, UUID(sandbox_id), SandboxStatus.TERMINATED
+        )
+        db_session.commit()
 
         logger.info(f"Terminated Kubernetes sandbox {sandbox_id}")
 
