@@ -307,14 +307,9 @@ def refresh_hierarchy_cache_from_db(
         return
 
     try:
-        # Double-check: cache might have been populated while we waited
-        if is_cache_populated(redis_client, source):
-            logger.debug(
-                f"Hierarchy cache for {source.value} was populated "
-                "while waiting for lock, skipping refresh"
-            )
-            return
-
+        # Always refresh from DB when called - new nodes may have been added
+        # since the cache was last populated. The lock ensures only one worker
+        # does the refresh at a time.
         logger.info(f"Refreshing hierarchy cache for source {source.value} from DB")
 
         # Load all nodes for this source from DB
