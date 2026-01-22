@@ -838,7 +838,7 @@ class ConfluenceConnector(
 if __name__ == "__main__":
     import os
     from onyx.utils.variable_functionality import global_version
-    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+    from tests.daily.connectors.utils import load_all_from_connector
 
     # For connector permission testing, set EE to true.
     global_version.set_ee()
@@ -880,9 +880,9 @@ if __name__ == "__main__":
         print(slim_doc)
 
     # Fetch all `Documents`.
-    for doc in load_all_docs_from_checkpoint_connector(
+    for doc in load_all_from_connector(
         connector=confluence_connector,
         start=start,
         end=end,
-    ):
+    ).documents:
         print(doc)

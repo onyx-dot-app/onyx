@@ -16,6 +16,25 @@ from onyx.db.utils import SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_hierarchy_nodes_match_expected,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_shared_drives,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ACCESS_MAPPING,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import PUBLIC_RANGE
 
 
@@ -192,3 +211,46 @@ def test_gdrive_perm_sync_with_real_data(
     )
 
     print(f"Checked permissions for {checked_files} files from drive_id_mapping.json")
+
+    # Verify hierarchy nodes are returned with correct structure
+    hierarchy_connector = _build_connector(google_drive_service_acct_connector_factory)
+    output = load_connector_outputs(hierarchy_connector)
+
+    # Verify the expected shared drives hierarchy
+    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
+        include_drive_1=True,
+        include_drive_2=True,
+        include_restricted_folder=False,
+    )
+    assert_hierarchy_nodes_match_expected(
+        retrieved_nodes=output.hierarchy_nodes,
+        expected_node_ids=expected_ids,
+        expected_parent_mapping=expected_parents,
+    )
+
+    # Verify the perm sync drives are included in the hierarchy
+    # These drives should have external_access set on their hierarchy nodes
+    perm_sync_drive_nodes = [
+        node
+        for node in output.hierarchy_nodes
+        if node.raw_node_id
+        in {
+            PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
+            PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+            PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+        }
+    ]
+
+    # Verify permissions on perm sync drive hierarchy nodes
+    for node in perm_sync_drive_nodes:
+        assert (
+            node.external_access is not None
+        ), f"Hierarchy node {node.raw_node_id} has no external access"
+        expected_emails = PERM_SYNC_DRIVE_ACCESS_MAPPING.get(node.raw_node_id, set())
+        actual_emails = node.external_access.external_user_emails
+        assert actual_emails == expected_emails, (
+            f"Permission mismatch for perm sync drive {node.raw_node_id} ({node.display_name}): "
+            f"expected {expected_emails}, got {actual_emails}"
+        )
+
+    print(f"Verified {len(output.hierarchy_nodes)} hierarchy nodes")

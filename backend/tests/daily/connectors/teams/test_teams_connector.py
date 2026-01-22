@@ -5,13 +5,11 @@ from collections.abc import Generator
 import pytest
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.teams.connector import TeamsConnector
 from onyx.utils.variable_functionality import global_version
 from tests.daily.connectors.teams.models import TeamsThread
-from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
-from tests.daily.connectors.utils import to_documents
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 TEAMS_THREAD = [
@@ -134,15 +132,11 @@ def test_loading_all_docs_from_teams_connector(
     expected_teams_threads: list[TeamsThread],
 ) -> None:
     docs = list(
-        to_documents(
-            iterator=iter(
-                load_everything_from_checkpoint_connector(
-                    connector=teams_connector,
-                    start=0.0,
-                    end=time.time(),
-                )
-            )
-        )
+        load_all_from_connector(
+            connector=teams_connector,
+            start=0.0,
+            end=time.time(),
+        ).documents
     )
     actual_teams_threads = [TeamsThread.from_doc(doc) for doc in docs]
     actual_teams_threads_map = _build_map(threads=actual_teams_threads)
@@ -191,21 +185,18 @@ def test_load_from_checkpoint_with_perm_sync(
 
     This verifies the CheckpointedConnectorWithPermSync interface is properly implemented.
     """
-    docs = load_everything_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=teams_connector,
         start=0.0,
         end=time.time(),
         include_permissions=True,  # Uses load_from_checkpoint_with_perm_sync
-    )
-
-    documents = [doc for doc in docs if isinstance(doc, Document)]
+    ).documents
 
     # We should have at least some documents
-    assert len(documents) > 0, "Expected to find at least one document"
+    assert len(docs) > 0, "Expected to find at least one document"
 
-    for doc in documents:
+    for doc in docs:
         assert (
             doc.external_access is not None
         ), f"Document {doc.id} should have external_access when using perm sync"
-
         _assert_is_valid_external_access(external_access=doc.external_access)
