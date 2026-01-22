@@ -299,20 +299,21 @@ echo "File sync complete"
                 requests={"cpu": "500m", "memory": "1Gi"},
                 limits={"cpu": "2000m", "memory": "4Gi"},
             ),
-            readiness_probe=client.V1Probe(
-                http_get=client.V1HTTPGetAction(path="/", port=NEXTJS_PORT),
-                initial_delay_seconds=10,
-                period_seconds=5,
-                timeout_seconds=3,
-                failure_threshold=6,
-            ),
-            liveness_probe=client.V1Probe(
-                http_get=client.V1HTTPGetAction(path="/health", port=AGENT_PORT),
-                initial_delay_seconds=30,
-                period_seconds=30,
-                timeout_seconds=5,
-                failure_threshold=3,
-            ),
+            # TODO: Re-enable probes when sandbox container runs actual services
+            # readiness_probe=client.V1Probe(
+            #     http_get=client.V1HTTPGetAction(path="/", port=NEXTJS_PORT),
+            #     initial_delay_seconds=10,
+            #     period_seconds=5,
+            #     timeout_seconds=3,
+            #     failure_threshold=6,
+            # ),
+            # liveness_probe=client.V1Probe(
+            #     http_get=client.V1HTTPGetAction(path="/health", port=AGENT_PORT),
+            #     initial_delay_seconds=30,
+            #     period_seconds=30,
+            #     timeout_seconds=5,
+            #     failure_threshold=3,
+            # ),
             security_context=client.V1SecurityContext(
                 allow_privilege_escalation=False,
                 read_only_root_filesystem=False,

@@ -14,9 +14,9 @@ Run with:
 import time
 
 import pytest
-from kubernetes import client
+from kubernetes import client  # type: ignore[import-untyped]
 from kubernetes import config
-from kubernetes.client.rest import ApiException
+from kubernetes.client.rest import ApiException  # type: ignore[import-untyped]
 from sqlalchemy import func
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -66,7 +66,7 @@ def _get_kubernetes_client() -> client.CoreV1Api:
     not _is_kubernetes_available(),
     reason="Kubernetes cluster not available",
 )
-def test_kubernetes_sandbox_provision_happy_path() -> None:
+def test_kubernetes_sandbox_provision() -> None:
     """Test that provision() creates a sandbox pod and DB record successfully.
 
     This is a happy path test that:
@@ -91,9 +91,11 @@ def test_kubernetes_sandbox_provision_happy_path() -> None:
     try:
         with get_session_with_current_tenant() as db_session:
             # Get a random user from the database
+            # Access table columns directly via __table__.c to get proper SQLAlchemy column types
+            is_active_col = User.__table__.c.is_active
             random_user = (
                 db_session.query(User)
-                .filter(User.is_active == True)  # noqa: E712
+                .filter(is_active_col.is_(True))
                 .order_by(func.random())
                 .first()
             )
