@@ -6,7 +6,7 @@ import Modal from "@/refresh-components/Modal";
 import { ValidSources, ConfigurableSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SvgPlug } from "@opal/icons";
-import { Credential } from "@/lib/connectors/credentials";
+import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import CredentialStep from "./CredentialStep";
@@ -17,15 +17,14 @@ import { connectorConfigs } from "@/lib/connectors/connectors";
 
 type ModalStep = "credential" | "configure";
 
-/**
- * Determines if a connector requires a configuration step beyond just credentials.
- * Returns false if the connector only needs credentials (single-step flow).
- */
+function connectorNeedsCredentials(connectorType: ValidSources): boolean {
+  return credentialTemplates[connectorType] != null;
+}
+
 function connectorNeedsConfigStep(connectorType: ValidSources): boolean {
   const config = connectorConfigs[connectorType as ConfigurableSources];
   if (!config) return false;
 
-  // Check if there are any non-hidden configuration values
   const hasVisibleValues = config.values.some(
     (field) => !("hidden" in field && field.hidden)
   );
@@ -61,11 +60,13 @@ export default function ConfigureConnectorModal({
     : null;
   const isConfigured = !!existingConfig;
 
-  // Determine if this connector needs a configuration step
+  const needsCredentials = connectorType
+    ? connectorNeedsCredentials(connectorType)
+    : true;
   const needsConfigStep = connectorType
     ? connectorNeedsConfigStep(connectorType)
     : false;
-  const isSingleStep = !needsConfigStep;
+  const isSingleStep = needsCredentials && !needsConfigStep;
 
   // Fetch credentials for this connector type
   const { data: credentials, mutate: refreshCredentials } = useSWR<
@@ -77,7 +78,6 @@ export default function ConfigureConnectorModal({
     errorHandlingFetcher
   );
 
-  // Reset state when modal opens/closes or connector type changes
   useEffect(() => {
     if (open && !isConfigured) {
       setStep("credential");
