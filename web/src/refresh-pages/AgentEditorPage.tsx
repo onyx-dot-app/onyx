@@ -456,15 +456,15 @@ export default function AgentEditorPage({
     (values: any, llmProviders: any) =>
       values.llm_model_version_override && values.llm_model_provider_override
         ? (() => {
-            const provider = llmProviders?.find(
-              (p: any) => p.name === values.llm_model_provider_override
-            );
-            return structureValue(
-              values.llm_model_provider_override,
-              provider?.provider || "",
-              values.llm_model_version_override
-            );
-          })()
+          const provider = llmProviders?.find(
+            (p: any) => p.name === values.llm_model_provider_override
+          );
+          return structureValue(
+            values.llm_model_provider_override,
+            provider?.provider || "",
+            values.llm_model_version_override
+          );
+        })()
         : null,
     []
   );
@@ -494,8 +494,9 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData } = useMcpServers();
-  const { openApiTools: openApiToolsRaw } = useOpenApiTools();
+  const { mcpData, isLoading: isMcpLoading } = useMcpServers();
+  const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
+    useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -505,7 +506,10 @@ export default function AgentEditorPage({
   // - image-gen
   // - web-search
   // - code-interpreter
-  const { tools: availableTools } = useAvailableTools();
+  const { tools: availableTools, isLoading: isToolsLoading } =
+    useAvailableTools();
+
+  const isPageLoading = isMcpLoading || isOpenApiLoading || isToolsLoading;
   const searchTool = availableTools?.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -833,9 +837,8 @@ export default function AgentEditorPage({
           : "No response received";
         setPopup({
           type: "error",
-          message: `Failed to ${
-            existingAgent ? "update" : "create"
-          } agent - ${error}`,
+          message: `Failed to ${existingAgent ? "update" : "create"
+            } agent - ${error}`,
         });
         return;
       }
@@ -844,9 +847,8 @@ export default function AgentEditorPage({
       const agent = await personaResponse.json();
       setPopup({
         type: "success",
-        message: `Agent "${agent.name}" ${
-          existingAgent ? "updated" : "created"
-        } successfully`,
+        message: `Agent "${agent.name}" ${existingAgent ? "updated" : "created"
+          } successfully`,
       });
 
       // Refresh agents list and the specific agent
@@ -966,10 +968,21 @@ export default function AgentEditorPage({
         aria-label="Agents Editor Page"
         className="h-full w-full"
       >
+        {isPageLoading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-sm">
+            <SettingsLayouts.Body>
+              <div className="flex flex-col items-center gap-4">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                <Text>Loading tools...</Text>
+              </div>
+            </SettingsLayouts.Body>
+          </div>
+        )}
         <Formik
           initialValues={initialValues}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
+          enableReinitialize={true}
           validateOnChange
           validateOnBlur
           validateOnMount
@@ -1434,8 +1447,8 @@ export default function AgentEditorPage({
                             {/* render the separator if there is at least one mcp-server or open-api-tool */}
                             {(mcpServers.length > 0 ||
                               openApiTools.length > 0) && (
-                              <Separator noPadding className="py-1" />
-                            )}
+                                <Separator noPadding className="py-1" />
+                              )}
 
                             {/* MCP tools */}
                             {mcpServersWithTools.length > 0 && (

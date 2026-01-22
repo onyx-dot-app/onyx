@@ -77,13 +77,17 @@ export const MemoizedAnchor = memo(
               />
             );
           }
-          const associatedDocInfo = associatedDoc
-            ? {
-                ...associatedDoc,
-                icon: icon as any,
-                link: associatedDoc.link,
-              }
-            : undefined;
+          const associatedDocInfo = useMemo(
+            () =>
+              associatedDoc
+                ? {
+                  ...associatedDoc,
+                  icon: icon as any,
+                  link: associatedDoc.link,
+                }
+                : undefined,
+            [associatedDoc, icon]
+          );
 
           return (
             <MemoizedLink
@@ -124,22 +128,28 @@ export const MemoizedLink = memo(
     [key: string]: any;
   }) => {
     const value = rest.children;
-    const questionCardProps: QuestionCardProps | undefined =
-      question && openQuestion
-        ? {
+    const questionCardProps: QuestionCardProps | undefined = useMemo(
+      () =>
+        question && openQuestion
+          ? {
             question: question,
             openQuestion: openQuestion,
           }
-        : undefined;
+          : undefined,
+      [question, openQuestion]
+    );
 
-    const documentCardProps: DocumentCardProps | undefined =
-      document && updatePresentingDocument
-        ? {
+    const documentCardProps: DocumentCardProps | undefined = useMemo(
+      () =>
+        document && updatePresentingDocument
+          ? {
             url: document.link,
             document: document as LoadedOnyxDocument,
             updatePresentingDocument: updatePresentingDocument!,
           }
-        : undefined;
+          : undefined,
+      [document, updatePresentingDocument]
+    );
 
     if (value?.toString().startsWith("*")) {
       return <BlinkingDot addMargin />;
