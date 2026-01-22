@@ -86,7 +86,6 @@ class ProcessManager:
         if not self._wait_for_server(server_url, timeout=timeout, process=process):
             # Check if process died
             if process.poll() is not None:
-                # Note: stdout/stderr are DEVNULL so we can't capture output
                 logger.error(
                     f"Next.js server process died with code {process.returncode}. "
                     f"Check the terminal or logs in {web_dir} for details."
