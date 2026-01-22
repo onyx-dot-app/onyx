@@ -887,7 +887,10 @@ def _db_mcp_server_to_api_mcp_server(
 
         if user_authenticated and user_config:
             # Avoid hitting the MCP server when assembling response data.
-            if db_server.auth_type != MCPAuthenticationType.OAUTH:
+            if (
+                include_auth_config
+                and db_server.auth_type != MCPAuthenticationType.OAUTH
+            ):
                 user_credentials = user_config.config.get(HEADER_SUBSTITUTIONS, {})
 
         if (
@@ -975,7 +978,6 @@ def get_mcp_servers_for_assistant(
 
     logger.info(f"Fetching MCP servers for assistant: {assistant_id}")
 
-    user.email if user else ""
     try:
         persona_id = int(assistant_id)
         db_mcp_servers = get_mcp_servers_for_persona(persona_id, db, user)
@@ -1006,16 +1008,12 @@ def get_mcp_servers_for_user(
     can attach MCP actions to assistants. Sensitive admin credentials are never
     returned.
     """
-    try:
-        db_mcp_servers = get_all_mcp_servers(db)
-        mcp_servers = [
-            _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
-            for db_server in db_mcp_servers
-        ]
-        return MCPServersResponse(mcp_servers=mcp_servers)
-    except Exception as e:
-        logger.error(f"Failed to fetch MCP servers for user: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
+    db_mcp_servers = get_all_mcp_servers(db)
+    mcp_servers = [
+        _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
+        for db_server in db_mcp_servers
+    ]
+    return MCPServersResponse(mcp_servers=mcp_servers)
 
 
 def _get_connection_config(
