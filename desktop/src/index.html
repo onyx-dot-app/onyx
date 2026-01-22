@@ -54,6 +54,18 @@
       .settings-container {
         max-width: 500px;
         width: 100%;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition:
+          opacity 0.18s ease,
+          transform 0.18s ease;
+      }
+
+      body.show-settings .settings-container {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
       }
 
       .settings-panel {
@@ -360,6 +372,10 @@
       const errorMessage = document.getElementById("errorMessage");
       const saveBtn = document.getElementById("saveBtn");
 
+      function showSettings() {
+        document.body.classList.add("show-settings");
+      }
+
       // Initialize the app
       async function init() {
         try {
@@ -378,6 +394,7 @@
           // If user explicitly opened settings, show modal
           if (isExplicitSettings) {
             // Modal is already visible, user can edit and save
+            showSettings();
             return;
           }
 
@@ -385,6 +402,7 @@
           // First launch = config doesn't exist
           if (!bootstrap.config_exists || !currentServerUrl) {
             // First launch - show modal, require user to configure
+            showSettings();
             return;
           }
 
@@ -394,6 +412,7 @@
         } catch (error) {
           // On error, default to cloud
           domainInput.value = DEFAULT_DOMAIN;
+          showSettings();
         }
       }
 
