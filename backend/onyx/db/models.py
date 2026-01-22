@@ -4308,12 +4308,15 @@ class Snapshot(Base):
 class BuildMessage(Base):
     """Stores messages exchanged in build sessions.
 
-    The metadata field stores structured ACP event data:
-    - tool_call_start: {type: "tool_call_start", tool_call_id, kind, title, raw_input, ...}
-    - tool_call_progress: {type: "tool_call_progress", tool_call_id, status, raw_output, ...}
-    - agent_thought_chunk: {type: "agent_thought_chunk", content: {...}}
-    - agent_plan_update: {type: "agent_plan_update", entries: [...]}
-    - agent_message_chunk: content is stored in content field, metadata is null
+    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    The turn_index groups all assistant responses under the user prompt they respond to.
+
+    Packet types stored in message_metadata:
+    - user_message: {type: "user_message", content: {...}}
+    - agent_message: {type: "agent_message", content: {...}} (accumulated from chunks)
+    - agent_thought: {type: "agent_thought", content: {...}} (accumulated from chunks)
+    - tool_call_progress: {type: "tool_call_progress", status: "completed", ...} (only completed)
+    - agent_plan_update: {type: "agent_plan_update", entries: [...]} (upserted, latest only)
     """
 
     __tablename__ = "build_message"
@@ -4326,13 +4329,11 @@ class BuildMessage(Base):
         ForeignKey("build_session.id", ondelete="CASCADE"),
         nullable=False,
     )
+    turn_index: Mapped[int] = mapped_column(Integer, nullable=False)
     type: Mapped[MessageType] = mapped_column(
         Enum(MessageType, native_enum=False, name="messagetype"), nullable=False
     )
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    message_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        PGJSONB, nullable=True
-    )
+    message_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -4343,5 +4344,7 @@ class BuildMessage(Base):
     )
 
     __table_args__ = (
-        Index("ix_build_message_session_created", "session_id", desc("created_at")),
+        Index(
+            "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
+        ),
     )

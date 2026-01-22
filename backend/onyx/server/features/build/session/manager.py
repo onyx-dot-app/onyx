@@ -24,7 +24,7 @@ from acp.schema import Error as ACPError
 from acp.schema import PromptResponse
 from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as DBSession
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
@@ -48,6 +48,7 @@ from onyx.server.features.build.db.build_session import get_empty_session_for_us
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
+from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox.manager import get_sandbox_manager
@@ -56,6 +57,120 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class BuildStreamingState:
+    """Container for accumulating state during ACP streaming.
+
+    Similar to ChatStateContainer but adapted for ACP packet types.
+    Accumulates chunks and tracks pending tool calls until completion.
+
+    Usage:
+        state = BuildStreamingState(turn_index=0)
+
+        # During streaming:
+        for packet in stream:
+            if packet.type == "agent_message_chunk":
+                state.add_message_chunk(packet.content.text)
+            elif packet.type == "tool_call_progress" and packet.status == "completed":
+                state.add_completed_tool_call(packet_data)
+            # etc.
+
+        # At end of streaming, call finalize methods and save
+    """
+
+    def __init__(self, turn_index: int) -> None:
+        """Initialize streaming state for a turn.
+
+        Args:
+            turn_index: The 0-indexed user message number this turn belongs to
+        """
+        self.turn_index = turn_index
+
+        # Accumulated text chunks (similar to answer_tokens in ChatStateContainer)
+        self.message_chunks: list[str] = []
+        self.thought_chunks: list[str] = []
+
+        # For upserting agent_plan_update - track ID so we can update in place
+        self.plan_message_id: UUID | None = None
+
+        # Track what type of chunk we were last receiving
+        self._last_chunk_type: str | None = None
+
+    def add_message_chunk(self, text: str) -> None:
+        """Accumulate message text."""
+        self.message_chunks.append(text)
+        self._last_chunk_type = "message"
+
+    def add_thought_chunk(self, text: str) -> None:
+        """Accumulate thought text."""
+        self.thought_chunks.append(text)
+        self._last_chunk_type = "thought"
+
+    def finalize_message_chunks(self) -> dict[str, Any] | None:
+        """Build a synthetic packet with accumulated message text.
+
+        Returns:
+            A synthetic agent_message packet or None if no chunks accumulated
+        """
+        if not self.message_chunks:
+            return None
+
+        full_text = "".join(self.message_chunks)
+        result = {
+            "type": "agent_message",
+            "content": {"type": "text", "text": full_text},
+            "sessionUpdate": "agent_message",
+        }
+        self.message_chunks.clear()
+        return result
+
+    def finalize_thought_chunks(self) -> dict[str, Any] | None:
+        """Build a synthetic packet with accumulated thought text.
+
+        Returns:
+            A synthetic agent_thought packet or None if no chunks accumulated
+        """
+        if not self.thought_chunks:
+            return None
+
+        full_text = "".join(self.thought_chunks)
+        result = {
+            "type": "agent_thought",
+            "content": {"type": "text", "text": full_text},
+            "sessionUpdate": "agent_thought",
+        }
+        self.thought_chunks.clear()
+        return result
+
+    def should_finalize_chunks(self, new_packet_type: str) -> bool:
+        """Check if we should finalize pending chunks before processing new packet.
+
+        We finalize when the packet type changes from message/thought chunks
+        to something else (or to a different chunk type).
+        """
+        if self._last_chunk_type is None:
+            return False
+
+        # If we were receiving message chunks and now get something else
+        if (
+            self._last_chunk_type == "message"
+            and new_packet_type != "agent_message_chunk"
+        ):
+            return True
+
+        # If we were receiving thought chunks and now get something else
+        if (
+            self._last_chunk_type == "thought"
+            and new_packet_type != "agent_thought_chunk"
+        ):
+            return True
+
+        return False
+
+    def clear_last_chunk_type(self) -> None:
+        """Clear the last chunk type tracking after finalization."""
+        self._last_chunk_type = None
 
 
 # Build session naming prompts (similar to chat naming)
@@ -117,7 +232,7 @@ class SessionManager:
         sessions = session_manager.list_sessions(user_id)
     """
 
-    def __init__(self, db_session: Session) -> None:
+    def __init__(self, db_session: DBSession) -> None:
         """Initialize the SessionManager with a database session.
 
         Args:
@@ -350,14 +465,25 @@ class SessionManager:
         """
         # Get messages to find first user message
         messages = get_session_messages(session_id, self._db_session)
-        first_user_msg = next(
-            (m for m in messages if m.type == MessageType.USER and m.content), None
-        )
+        first_user_msg = next((m for m in messages if m.type == MessageType.USER), None)
 
         if not first_user_msg:
             return f"Build Session {str(session_id)[:8]}"
 
-        user_message = first_user_msg.content
+        # Extract text from message_metadata
+        metadata = first_user_msg.message_metadata
+        if not metadata:
+            return f"Build Session {str(session_id)[:8]}"
+
+        # Handle user_message packet structure: {type: "user_message", content: {type: "text", text: "..."}}
+        content = metadata.get("content", {})
+        if isinstance(content, dict):
+            user_message = content.get("text", "")
+        else:
+            user_message = str(content) if content else ""
+
+        if not user_message:
+            return f"Build Session {str(session_id)[:8]}"
 
         # For now, just use first 40 chars of user message
         # TODO: Implement LLM-based name generation
@@ -458,11 +584,17 @@ class SessionManager:
         Stream the CLI agent's response using SSE format.
 
         Executes the agent via SandboxManager and streams events back to the client.
-        The assistant's response is accumulated during streaming and saved to the
-        database only AFTER the full response is generated.
+        Uses BuildStreamingState to accumulate chunks and track tool calls.
+        At the end of streaming, saves accumulated state to the database.
+
+        Storage behavior:
+        - User message: Saved immediately at start
+        - agent_message_chunk: Accumulated, saved as one synthetic packet at end/type change
+        - agent_thought_chunk: Accumulated, saved as one synthetic packet at end/type change
+        - tool_call_start: Streamed to frontend only, not saved
+        - tool_call_progress: Only saved when status="completed"
+        - agent_plan_update: Upserted (only latest plan kept per turn)
         """
-        # Accumulate assistant message content
-        assistant_message_parts: list[str] = []
 
         def _serialize_acp_event(event: Any, event_type: str) -> str:
             """Serialize an ACP event to SSE format, preserving ALL ACP data."""
@@ -494,21 +626,39 @@ class SessionManager:
                 return "".join(texts)
             return ""
 
-        def _save_acp_event_to_db(event_type: str, event_data: dict[str, Any]) -> None:
-            """Save an ACP event as a separate message in the database."""
-            if event_type in [
-                "tool_call_start",
-                "tool_call_progress",
-                "agent_thought_chunk",
-                "agent_plan_update",
-            ]:
+        def _save_pending_chunks(state: BuildStreamingState) -> None:
+            """Save any pending accumulated chunks to the database."""
+            # Finalize message chunks
+            message_packet = state.finalize_message_chunks()
+            if message_packet:
                 create_message(
                     session_id=session_id,
                     message_type=MessageType.ASSISTANT,
-                    content="",
+                    turn_index=state.turn_index,
+                    message_metadata=message_packet,
                     db_session=self._db_session,
-                    message_metadata=event_data,
                 )
+
+            # Finalize thought chunks
+            thought_packet = state.finalize_thought_chunks()
+            if thought_packet:
+                create_message(
+                    session_id=session_id,
+                    message_type=MessageType.ASSISTANT,
+                    turn_index=state.turn_index,
+                    message_metadata=thought_packet,
+                    db_session=self._db_session,
+                )
+
+            state.clear_last_chunk_type()
+
+        def _save_build_turn(state: BuildStreamingState) -> None:
+            """Save all accumulated state at the end of streaming.
+
+            Similar to save_chat_turn() in the main chat flow.
+            """
+            # 1. Save any remaining accumulated chunks
+            _save_pending_chunks(state)
 
         # Initialize packet logging
         packet_logger = get_packet_logger()
@@ -534,13 +684,35 @@ class SessionManager:
             # Update last activity timestamp
             update_session_activity(session_id, self._db_session)
 
+            # Calculate turn_index BEFORE saving user message
+            # turn_index = count of existing USER messages (this will be the Nth user message)
+
+            # Get count of user messages to determine turn index
+            existing_user_count = (
+                self._db_session.query(BuildMessage)
+                .filter(
+                    BuildMessage.session_id == session_id,
+                    BuildMessage.type == MessageType.USER,
+                )
+                .count()
+            )
+            turn_index = existing_user_count  # This user message is the Nth (0-indexed)
+
             # Save user message to database
+            user_message_metadata = {
+                "type": "user_message",
+                "content": {"type": "text", "text": user_message_content},
+            }
             create_message(
                 session_id=session_id,
                 message_type=MessageType.USER,
-                content=user_message_content,
+                turn_index=turn_index,
+                message_metadata=user_message_metadata,
                 db_session=self._db_session,
             )
+
+            # Initialize streaming state for this turn
+            state = BuildStreamingState(turn_index=turn_index)
 
             # Get sandbox
             sandbox = get_sandbox_by_session_id(self._db_session, session_id)
@@ -556,11 +728,20 @@ class SessionManager:
             for acp_event in self._sandbox_manager.send_message(
                 sandbox_id, user_message_content, self._db_session
             ):
+                # Check if we need to finalize pending chunks before processing
+                event_type = self._get_event_type(acp_event)
+                if state.should_finalize_chunks(event_type):
+                    _save_pending_chunks(state)
+
                 # Pass through ACP events with snake_case type names
                 if isinstance(acp_event, AgentMessageChunk):
                     text = _extract_text_from_content(acp_event.content)
                     if text:
-                        assistant_message_parts.append(text)
+                        state.add_message_chunk(text)
+                    packet_logger.log(
+                        "agent_message_chunk",
+                        acp_event.model_dump(mode="json", by_alias=True),
+                    )
                     event_data = acp_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
@@ -569,21 +750,21 @@ class SessionManager:
                     yield _serialize_acp_event(acp_event, "agent_message_chunk")
 
                 elif isinstance(acp_event, AgentThoughtChunk):
-                    event_data = acp_event.model_dump(
-                        mode="json", by_alias=True, exclude_none=False
+                    text = _extract_text_from_content(acp_event.content)
+                    if text:
+                        state.add_thought_chunk(text)
+                    packet_logger.log(
+                        "agent_thought_chunk",
+                        acp_event.model_dump(mode="json", by_alias=True),
                     )
-                    event_data["type"] = "agent_thought_chunk"
-                    _save_acp_event_to_db("agent_thought_chunk", event_data)
-                    packet_logger.log("agent_thought_chunk", event_data)
                     yield _serialize_acp_event(acp_event, "agent_thought_chunk")
 
                 elif isinstance(acp_event, ToolCallStart):
-                    event_data = acp_event.model_dump(
-                        mode="json", by_alias=True, exclude_none=False
+                    # Stream to frontend but don't save - wait for completion
+                    packet_logger.log(
+                        "tool_call_start",
+                        acp_event.model_dump(mode="json", by_alias=True),
                     )
-                    event_data["type"] = "tool_call_start"
-                    _save_acp_event_to_db("tool_call_start", event_data)
-                    packet_logger.log("tool_call_start", event_data)
                     yield _serialize_acp_event(acp_event, "tool_call_start")
 
                 elif isinstance(acp_event, ToolCallProgress):
@@ -591,7 +772,18 @@ class SessionManager:
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "tool_call_progress"
-                    _save_acp_event_to_db("tool_call_progress", event_data)
+                    event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+
+                    # Only save when status is "completed"
+                    if acp_event.status == "completed":
+                        create_message(
+                            session_id=session_id,
+                            message_type=MessageType.ASSISTANT,
+                            turn_index=state.turn_index,
+                            message_metadata=event_data,
+                            db_session=self._db_session,
+                        )
+
                     packet_logger.log("tool_call_progress", event_data)
                     yield _serialize_acp_event(acp_event, "tool_call_progress")
 
@@ -600,7 +792,18 @@ class SessionManager:
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "agent_plan_update"
-                    _save_acp_event_to_db("agent_plan_update", event_data)
+                    event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+
+                    # Upsert plan immediately
+                    plan_msg = upsert_agent_plan(
+                        session_id=session_id,
+                        turn_index=state.turn_index,
+                        plan_metadata=event_data,
+                        db_session=self._db_session,
+                        existing_plan_id=state.plan_message_id,
+                    )
+                    state.plan_message_id = plan_msg.id
+
                     packet_logger.log("agent_plan_update", event_data)
                     yield _serialize_acp_event(acp_event, "agent_plan_update")
 
@@ -628,14 +831,8 @@ class SessionManager:
                     packet_logger.log("error", event_data)
                     yield _serialize_acp_event(acp_event, "error")
 
-            # Save the complete assistant response to database
-            if assistant_message_parts:
-                create_message(
-                    session_id=session_id,
-                    message_type=MessageType.ASSISTANT,
-                    content="".join(assistant_message_parts),
-                    db_session=self._db_session,
-                )
+            # Save all accumulated state at end of streaming
+            _save_build_turn(state)
 
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
@@ -652,6 +849,26 @@ class SessionManager:
             packet_logger.log("error", error_packet.model_dump())
             logger.exception("Unexpected error in build message streaming")
             yield _format_packet_event(error_packet)
+
+    def _get_event_type(self, acp_event: Any) -> str:
+        """Get the event type string for an ACP event."""
+        if isinstance(acp_event, AgentMessageChunk):
+            return "agent_message_chunk"
+        elif isinstance(acp_event, AgentThoughtChunk):
+            return "agent_thought_chunk"
+        elif isinstance(acp_event, ToolCallStart):
+            return "tool_call_start"
+        elif isinstance(acp_event, ToolCallProgress):
+            return "tool_call_progress"
+        elif isinstance(acp_event, AgentPlanUpdate):
+            return "agent_plan_update"
+        elif isinstance(acp_event, CurrentModeUpdate):
+            return "current_mode_update"
+        elif isinstance(acp_event, PromptResponse):
+            return "prompt_response"
+        elif isinstance(acp_event, ACPError):
+            return "error"
+        return "unknown"
 
     # =========================================================================
     # Artifact Operations

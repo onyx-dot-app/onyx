@@ -65,7 +65,7 @@ export default function BuildMessageList({
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
-      <div className="w-full max-w-2xl">
+      <div className="max-w-2xl backdrop-blur-md rounded-16 p-4">
         {/* Render user messages */}
         {userMessages.map((message) => (
           <UserMessage key={message.id} content={message.content} />

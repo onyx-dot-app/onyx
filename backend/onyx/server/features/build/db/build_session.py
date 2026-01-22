@@ -314,23 +314,25 @@ def get_session_snapshots(
 def create_message(
     session_id: UUID,
     message_type: MessageType,
-    content: str,
+    turn_index: int,
+    message_metadata: dict[str, Any],
     db_session: Session,
-    message_metadata: dict[str, Any] | None = None,
 ) -> BuildMessage:
     """Create a new message in a build session.
+
+    All message data is stored in message_metadata as JSON.
 
     Args:
         session_id: Session UUID
         message_type: Type of message (USER, ASSISTANT, SYSTEM)
-        content: Text content (empty string for structured events)
+        turn_index: 0-indexed user message number this message belongs to
+        message_metadata: Required structured data (the raw ACP packet JSON)
         db_session: Database session
-        message_metadata: Optional structured ACP event data (tool calls, thinking, plans, etc.)
     """
     message = BuildMessage(
         session_id=session_id,
+        turn_index=turn_index,
         type=message_type,
-        content=content,
         message_metadata=message_metadata,
     )
     db_session.add(message)
@@ -338,24 +340,111 @@ def create_message(
     db_session.refresh(message)
 
     logger.info(
-        f"Created {message_type.value} message {message.id} for session {session_id}"
-        + (
-            f" with metadata type={message_metadata.get('type')}"
-            if message_metadata
-            else ""
-        )
+        f"Created {message_type.value} message {message.id} for session {session_id} "
+        f"turn={turn_index} type={message_metadata.get('type')}"
     )
     return message
+
+
+def update_message(
+    message_id: UUID,
+    message_metadata: dict[str, Any],
+    db_session: Session,
+) -> BuildMessage | None:
+    """Update an existing message's metadata.
+
+    Used for upserting agent_plan_update messages.
+
+    Args:
+        message_id: The message UUID to update
+        message_metadata: New metadata to set
+        db_session: Database session
+
+    Returns:
+        Updated BuildMessage or None if not found
+    """
+    message = (
+        db_session.query(BuildMessage).filter(BuildMessage.id == message_id).first()
+    )
+    if message is None:
+        return None
+
+    message.message_metadata = message_metadata
+    db_session.commit()
+    db_session.refresh(message)
+
+    logger.info(
+        f"Updated message {message_id} metadata type={message_metadata.get('type')}"
+    )
+    return message
+
+
+def upsert_agent_plan(
+    session_id: UUID,
+    turn_index: int,
+    plan_metadata: dict[str, Any],
+    db_session: Session,
+    existing_plan_id: UUID | None = None,
+) -> BuildMessage:
+    """Upsert an agent plan - update if exists, create if not.
+
+    Each session/turn should only have one agent_plan_update message.
+    This function updates the existing plan message or creates a new one.
+
+    Args:
+        session_id: Session UUID
+        turn_index: Current turn index
+        plan_metadata: The agent_plan_update packet data
+        db_session: Database session
+        existing_plan_id: ID of existing plan message to update (if known)
+
+    Returns:
+        The created or updated BuildMessage
+    """
+    if existing_plan_id:
+        # Fast path: we know the plan ID
+        updated = update_message(existing_plan_id, plan_metadata, db_session)
+        if updated:
+            return updated
+
+    # Check if a plan already exists for this session/turn
+    existing_plan = (
+        db_session.query(BuildMessage)
+        .filter(
+            BuildMessage.session_id == session_id,
+            BuildMessage.turn_index == turn_index,
+            BuildMessage.message_metadata["type"].astext == "agent_plan_update",
+        )
+        .first()
+    )
+
+    if existing_plan:
+        existing_plan.message_metadata = plan_metadata
+        db_session.commit()
+        db_session.refresh(existing_plan)
+        logger.info(
+            f"Updated agent_plan_update message {existing_plan.id} for session {session_id}"
+        )
+        return existing_plan
+
+    # Create new plan message
+    return create_message(
+        session_id=session_id,
+        message_type=MessageType.ASSISTANT,
+        turn_index=turn_index,
+        message_metadata=plan_metadata,
+        db_session=db_session,
+    )
 
 
 def get_session_messages(
     session_id: UUID,
     db_session: Session,
 ) -> list[BuildMessage]:
-    """Get all messages for a session, ordered by creation time."""
+    """Get all messages for a session, ordered by turn index and creation time."""
     return (
         db_session.query(BuildMessage)
         .filter(BuildMessage.session_id == session_id)
-        .order_by(BuildMessage.created_at)
+        .order_by(BuildMessage.turn_index, BuildMessage.created_at)
         .all()
     )
