@@ -37,6 +37,13 @@ export const CHAT_BACKGROUND_OPTIONS: ChatBackgroundOption[] = [
     label: "Hills",
   },
   {
+    id: "plant",
+    url: "https://images.unsplash.com/photo-1692520883599-d543cfe6d43d?w=1920&q=80&auto=format",
+    thumbnail:
+      "https://images.unsplash.com/photo-1692520883599-d543cfe6d43d?w=200&h=150&fit=crop&q=70&auto=format",
+    label: "Plants",
+  },
+  {
     id: "mountains",
     url: "https://images.unsplash.com/photo-1496361751588-bdd9a3fcdd6f?w=1920&q=80&auto=format",
     thumbnail:
