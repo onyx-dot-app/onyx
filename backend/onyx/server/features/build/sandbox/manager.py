@@ -528,7 +528,12 @@ class LocalSandboxManager(SandboxManager):
                     f"Failed to stop ACP client for sandbox {sandbox_id}: {e}"
                 ) from e
 
-        # Cleanup directory (this will handle Next.js process cleanup)
+        # Clean up Next.js process
+        nextjs_proc = self._nextjs_processes.pop(str(sandbox.session_id), None)
+        if nextjs_proc:
+            self._process_manager.terminate_process(nextjs_proc.pid)
+
+        # Cleanup directory
         sandbox_path = self._get_sandbox_path(sandbox.session_id)
         try:
             self._directory_manager.cleanup_sandbox_directory(sandbox_path)
