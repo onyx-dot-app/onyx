@@ -489,7 +489,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           {stopPacketSeen && isExpanded && !userStopped && (
             <StepContainer
               stepIcon={SvgCheckCircle}
-              header="Done"
+              header="Generate Answer"
               isLastStep={true}
               isFirstStep={false}
             >
