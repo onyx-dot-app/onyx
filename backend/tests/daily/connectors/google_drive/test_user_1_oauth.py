@@ -24,7 +24,16 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    get_expected_hierarchy_for_shared_drives,
+    get_expected_hierarchy_for_test_user_1,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_test_user_1_my_drive_only,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_test_user_1_shared_drives_only,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_test_user_1_shared_with_me_only,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
@@ -93,14 +102,9 @@ def test_all(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - test_user_1 only has access to shared_drive_1
-    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
-        include_drive_1=True,
-        include_drive_2=False,
-        include_restricted_folder=False,
-    )
-    # Also include folder_3 which is shared with test_user_1
-    expected_ids.add(FOLDER_3_ID)
+    # Verify hierarchy nodes - test_user_1 has access to shared_drive_1, folder_3,
+    # perm sync drives, and additional drives/folders
+    expected_ids, expected_parents = get_expected_hierarchy_for_test_user_1()
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
@@ -142,11 +146,9 @@ def test_shared_drives_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - only shared_drive_1 since test_user_1 has access
-    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
-        include_drive_1=True,
-        include_drive_2=False,
-        include_restricted_folder=False,
+    # Verify hierarchy nodes - test_user_1 sees multiple shared drives/folders
+    expected_ids, expected_parents = (
+        get_expected_hierarchy_for_test_user_1_shared_drives_only()
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
@@ -185,11 +187,14 @@ def test_shared_with_me_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - folder_3 is shared with test_user_1
-    expected_ids = {FOLDER_3_ID}
+    # Verify hierarchy nodes - shared-with-me folders
+    expected_ids, expected_parents = (
+        get_expected_hierarchy_for_test_user_1_shared_with_me_only()
+    )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
+        expected_parent_mapping=expected_parents,
     )
 
 
@@ -220,11 +225,14 @@ def test_my_drive_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - test_user_1's My Drive has no subfolders
-    # Empty set - no folders in test_user_1's My Drive
+    # Verify hierarchy nodes - My Drive root + its folder(s)
+    expected_ids, expected_parents = (
+        get_expected_hierarchy_for_test_user_1_my_drive_only()
+    )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_node_ids=set(),
+        expected_node_ids=expected_ids,
+        expected_parent_mapping=expected_parents,
     )
 
 
@@ -291,9 +299,10 @@ def test_shared_drive_folder(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - folder_1 and its children
-    expected_ids = {FOLDER_1_ID, FOLDER_1_1_ID, FOLDER_1_2_ID}
+    # Verify hierarchy nodes - includes shared drive root + folder_1 subtree
+    expected_ids = {SHARED_DRIVE_1_ID, FOLDER_1_ID, FOLDER_1_1_ID, FOLDER_1_2_ID}
     expected_parents: dict[str, str | None] = {
+        SHARED_DRIVE_1_ID: None,
         FOLDER_1_ID: SHARED_DRIVE_1_ID,
         FOLDER_1_1_ID: FOLDER_1_ID,
         FOLDER_1_2_ID: FOLDER_1_ID,

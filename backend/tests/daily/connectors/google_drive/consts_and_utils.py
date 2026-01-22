@@ -271,6 +271,33 @@ PERM_SYNC_DRIVE_ADMIN_ONLY_ID = "0ACOrCU1EMD1hUk9PVA"
 PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID = "0ABec4pV29sMuUk9PVA"
 PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID = "0ANpbToRgjHD4Uk9PVA"
 
+# ============================================================================
+# ADDITIONAL DRIVES/FOLDERS ACCESSIBLE TO TEST_USER_1
+# ============================================================================
+# These are additional shared drives and folders that test_user_1 has access to.
+# They are returned as hierarchy nodes when running the connector as test_user_1.
+# ============================================================================
+
+# Additional shared drives accessible to test_user_1
+TEST_USER_1_DRIVE_A_ID = "0AFpeuWG1VyABUk9PVA"  # My Drive indicator for test_user_1
+TEST_USER_1_DRIVE_A_FOLDER_ID = (
+    "1tF10nDFND-GE_IT0f6PjEn2Du6m2k-DE"  # Child folder (partial sharing)
+)
+
+TEST_USER_1_DRIVE_B_ID = (
+    "0AFskk4zfZm86Uk9PVA"  # My_super_special_shared_drive_suuuuuuper_private
+)
+TEST_USER_1_DRIVE_B_FOLDER_ID = (
+    "1oIj7nigzvP5xI2F8BmibUA8R_J3AbBA-"  # Child folder (silliness)
+)
+
+# Other drives test_user_1 has access to
+TEST_USER_1_EXTRA_DRIVE_1_ID = "0AL67XRMq9reYUk9PVA"  # Okay_fine_admin_I_will_share
+TEST_USER_1_EXTRA_DRIVE_2_ID = "0ACeKoHrGKxCbUk9PVA"  # reee test
+TEST_USER_1_EXTRA_FOLDER_ID = (
+    "1i2Q1TNvUfZkH-A7RGyAqRuEI-3mHANku"  # read only no download test
+)
+
 PADDING_DRIVE_URLS = [
     "0AOorXE6AfJRAUk9PVA",
     "0ANn2MSqGi74JUk9PVA",
@@ -584,3 +611,93 @@ def get_expected_hierarchy_for_folder_2() -> tuple[set[str], dict[str, str | Non
             FOLDER_2_2_ID: FOLDER_2_ID,
         },
     )
+
+
+def get_expected_hierarchy_for_test_user_1() -> tuple[set[str], dict[str, str | None]]:
+    """
+    Get expected hierarchy for test_user_1's full access.
+
+    test_user_1 has access to:
+    - shared_drive_1 and its contents (folder_1, folder_1_1, folder_1_2)
+    - folder_3 (shared from admin's My Drive)
+    - PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A and PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B
+    - Additional drives/folders the user has access to
+    """
+    # Start with shared_drive_1 hierarchy
+    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
+        include_drive_1=True,
+        include_drive_2=False,
+        include_restricted_folder=False,
+    )
+
+    # folder_3 is shared from admin's My Drive
+    expected_ids.add(FOLDER_3_ID)
+
+    # Perm sync drives that test_user_1 has access to
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
+    expected_parents[PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID] = None
+
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
+    expected_parents[PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID] = None
+
+    # Additional drives/folders test_user_1 has access to
+    expected_ids.add(TEST_USER_1_DRIVE_A_ID)
+    expected_parents[TEST_USER_1_DRIVE_A_ID] = None
+
+    expected_ids.add(TEST_USER_1_DRIVE_A_FOLDER_ID)
+    expected_parents[TEST_USER_1_DRIVE_A_FOLDER_ID] = TEST_USER_1_DRIVE_A_ID
+
+    expected_ids.add(TEST_USER_1_DRIVE_B_ID)
+    expected_parents[TEST_USER_1_DRIVE_B_ID] = None
+
+    expected_ids.add(TEST_USER_1_DRIVE_B_FOLDER_ID)
+    expected_parents[TEST_USER_1_DRIVE_B_FOLDER_ID] = TEST_USER_1_DRIVE_B_ID
+
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
+    expected_parents[TEST_USER_1_EXTRA_DRIVE_1_ID] = None
+
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
+    expected_parents[TEST_USER_1_EXTRA_DRIVE_2_ID] = None
+
+    expected_ids.add(TEST_USER_1_EXTRA_FOLDER_ID)
+    # Parent unknown, skip adding to expected_parents
+
+    return expected_ids, expected_parents
+
+
+def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> (
+    tuple[set[str], dict[str, str | None]]
+):
+    """Expected hierarchy nodes when test_user_1 runs with include_shared_drives=True only."""
+    expected_ids, expected_parents = get_expected_hierarchy_for_test_user_1()
+
+    # This mode should not include My Drive roots/folders.
+    expected_ids.discard(TEST_USER_1_DRIVE_A_ID)
+    expected_ids.discard(TEST_USER_1_DRIVE_A_FOLDER_ID)
+
+    # don't include shared with me
+    expected_ids.discard(FOLDER_3_ID)
+    expected_ids.discard(TEST_USER_1_EXTRA_FOLDER_ID)
+
+    return expected_ids, expected_parents
+
+
+def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> (
+    tuple[set[str], dict[str, str | None]]
+):
+    """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only."""
+    expected_ids: set[str] = {FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID}
+    expected_parents: dict[str, str | None] = {}
+    return expected_ids, expected_parents
+
+
+def get_expected_hierarchy_for_test_user_1_my_drive_only() -> (
+    tuple[set[str], dict[str, str | None]]
+):
+    """Expected hierarchy nodes when test_user_1 runs with include_my_drives=True only."""
+    expected_ids: set[str] = {TEST_USER_1_DRIVE_A_ID, TEST_USER_1_DRIVE_A_FOLDER_ID}
+    expected_parents: dict[str, str | None] = {
+        TEST_USER_1_DRIVE_A_ID: None,
+        TEST_USER_1_DRIVE_A_FOLDER_ID: TEST_USER_1_DRIVE_A_ID,
+    }
+    return expected_ids, expected_parents
