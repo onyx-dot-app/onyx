@@ -53,6 +53,12 @@ import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
+import {
+  CHAT_BACKGROUND_OPTIONS,
+  CHAT_BACKGROUND_NONE,
+} from "@/lib/constants/chatBackgrounds";
+import { SvgCheck } from "@opal/icons";
+import { cn } from "@/lib/utils";
 
 interface PAT {
   id: number;
@@ -169,8 +175,12 @@ function PATModal({
 }
 
 function GeneralSettings() {
-  const { user, updateUserPersonalization, updateUserThemePreference } =
-    useUser();
+  const {
+    user,
+    updateUserPersonalization,
+    updateUserThemePreference,
+    updateUserChatBackground,
+  } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
   const { popup, setPopup } = usePopup();
   const { refreshChatSessions } = useChatSessions();
@@ -368,6 +378,56 @@ function GeneralSettings() {
                 </InputSelect.Content>
               </InputSelect>
             </InputLayouts.Horizontal>
+            <InputLayouts.Vertical title="Chat Background">
+              <div className="flex flex-wrap gap-2">
+                {CHAT_BACKGROUND_OPTIONS.map((bg) => {
+                  const currentBackgroundId =
+                    user?.preferences?.chat_background ?? "none";
+                  const isSelected = currentBackgroundId === bg.id;
+                  const isNone = bg.url === CHAT_BACKGROUND_NONE;
+
+                  return (
+                    <button
+                      key={bg.id}
+                      onClick={() =>
+                        updateUserChatBackground(
+                          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+                        )
+                      }
+                      className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
+                      title={bg.label}
+                      aria-label={`${bg.label} background${
+                        isSelected ? " (selected)" : ""
+                      }`}
+                    >
+                      {isNone ? (
+                        <div className="absolute inset-0 bg-background flex items-center justify-center">
+                          <span className="text-xs text-text-02">None</span>
+                        </div>
+                      ) : (
+                        <div
+                          className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+                          style={{ backgroundImage: `url(${bg.thumbnail})` }}
+                        />
+                      )}
+                      <div
+                        className={cn(
+                          "absolute inset-0 transition-all rounded-lg",
+                          isSelected
+                            ? "ring-2 ring-inset ring-theme-primary-05"
+                            : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
+                        )}
+                      />
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
+                          <SvgCheck className="w-2.5 h-2.5 stroke-text-inverted-05" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </InputLayouts.Vertical>
           </Card>
         </Section>
 
