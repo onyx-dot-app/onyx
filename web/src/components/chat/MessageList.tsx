@@ -120,9 +120,10 @@ const MessageList = React.memo(
 
     return (
       <div
-        className={`w-[min(50rem,100%)] h-full px-6 rounded-2xl ${
-          disableBlur ? "" : "backdrop-blur-md"
-        }`}
+        className={cn(
+          "w-[min(50rem,100%)] h-full px-6 rounded-2xl",
+          !disableBlur && "backdrop-blur-md"
+        )}
       >
         <Spacer />
         {messages.map((message, i) => {
