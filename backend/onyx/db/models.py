@@ -668,8 +668,9 @@ class HierarchyNode(Base):
     Represents a structural node in a connected source's hierarchy.
     Examples: folders, drives, spaces, projects, channels.
 
-    This is a LIGHTWEIGHT implementation that only stores hierarchy information.
-    Permission and sync fields remain on Document and are NOT moved here.
+    Stores hierarchy structure WITH permission information, using the same
+    permission model as Documents (external_user_emails, external_user_group_ids,
+    is_public). This enables user-scoped hierarchy browsing in the UI.
 
     Some hierarchy nodes (e.g., Confluence pages) can also be documents.
     In these cases, `document_id` will be set.
@@ -701,6 +702,20 @@ class HierarchyNode(Base):
     node_type: Mapped[HierarchyNodeType] = mapped_column(
         Enum(HierarchyNodeType, native_enum=False), nullable=False
     )
+
+    # ============= PERMISSION FIELDS (same pattern as Document) =============
+    # Email addresses of external users with access to this node in the source system
+    external_user_emails: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    # External group IDs with access (prefixed by source type)
+    external_user_group_ids: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    # Whether this node is publicly accessible (org-wide or world-public)
+    # SOURCE nodes are always public. Other nodes get this from source permissions.
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    # ==========================================================================
 
     # Foreign keys
     # For hierarchy nodes that are also documents (e.g., Confluence pages)

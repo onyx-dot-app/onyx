@@ -92,6 +92,18 @@ def upgrade() -> None:
         sa.Column("node_type", sa.String(), nullable=False),
         sa.Column("document_id", sa.String(), nullable=True),
         sa.Column("parent_id", sa.Integer(), nullable=True),
+        # Permission fields - same pattern as Document table
+        sa.Column(
+            "external_user_emails",
+            postgresql.ARRAY(sa.String()),
+            nullable=True,
+        ),
+        sa.Column(
+            "external_user_group_ids",
+            postgresql.ARRAY(sa.String()),
+            nullable=True,
+        ),
+        sa.Column("is_public", sa.Boolean(), nullable=False, server_default="false"),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["document_id"], ["document.id"]),
         sa.ForeignKeyConstraint(["parent_id"], ["hierarchy_node.id"]),
@@ -165,6 +177,7 @@ def upgrade() -> None:
     # We insert these so every existing document can have a parent hierarchy node
     # NOTE: SQLAlchemy's Enum with native_enum=False stores the enum NAME (e.g., 'GOOGLE_DRIVE'),
     # not the VALUE (e.g., 'google_drive'). We must use .name for source and node_type columns.
+    # SOURCE nodes are always public since they're just categorical roots.
     for source in DocumentSource:
         source_name = (
             source.name
@@ -176,8 +189,8 @@ def upgrade() -> None:
         op.execute(
             sa.text(
                 """
-                INSERT INTO hierarchy_node (raw_node_id, display_name, source, node_type, parent_id)
-                VALUES (:raw_node_id, :display_name, :source, 'SOURCE', NULL)
+                INSERT INTO hierarchy_node (raw_node_id, display_name, source, node_type, parent_id, is_public)
+                VALUES (:raw_node_id, :display_name, :source, 'SOURCE', NULL, true)
                 """
             ).bindparams(
                 raw_node_id=source_value,  # Use .value for raw_node_id (human-readable identifier)
