@@ -59,37 +59,23 @@ export const getAuthDisabledSS = async (): Promise<boolean> => {
 };
 
 const getOIDCAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
-  const url = UrlBuilder.fromInternalUrl("/auth/oidc/authorize");
+  const url = UrlBuilder.fromClientUrl("/api/auth/oidc/authorize");
   if (nextUrl) {
     url.addParam("next", nextUrl);
   }
+  url.addParam("redirect", true);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error("Failed to fetch data");
-  }
-
-  const data: { authorization_url: string } = await res.json();
-  return data.authorization_url;
+  return url.toString();
 };
 
 const getGoogleOAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
-  const url = UrlBuilder.fromInternalUrl("/auth/oauth/authorize");
+  const url = UrlBuilder.fromClientUrl("/api/auth/oauth/authorize");
   if (nextUrl) {
     url.addParam("next", nextUrl);
   }
+  url.addParam("redirect", true);
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      cookie: processCookies(await cookies()),
-    },
-  });
-  if (!res.ok) {
-    throw new Error("Failed to fetch data");
-  }
-
-  const data: { authorization_url: string } = await res.json();
-  return data.authorization_url;
+  return url.toString();
 };
 
 const getSAMLAuthUrlSS = async (nextUrl: string | null): Promise<string> => {

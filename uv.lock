@@ -1671,7 +1671,7 @@ wheels = [
 
 [[package]]
 name = "fastapi-users"
-version = "14.0.1"
+version = "15.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "email-validator" },
@@ -1681,22 +1681,22 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e4/26/7fe4e6a4f60d9cde2b95f58ba45ff03219b62bd03bea75d914b723ecfa2a/fastapi_users-14.0.1.tar.gz", hash = "sha256:8c032b3a75c6fb2b1f5eab8ffce5321176e9916efe1fe93e7c15ee55f0b02236", size = 120315, upload-time = "2025-01-04T13:20:05.95Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/d5/e8f7b598c6b81e3e2955506e47b4c778a858b994ac435c0c85dd37923f40/fastapi_users-15.0.2.tar.gz", hash = "sha256:4cdcc471a5b9e48de3ec4e7dc97e7b7afb610dda5ec6d022d3ddc0a0c0699323", size = 120625, upload-time = "2025-12-19T07:36:31.901Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/52/2821d3e95a92567d38f98a33d1ef89302aa3448866bf45ff19a48a5f28f8/fastapi_users-14.0.1-py3-none-any.whl", hash = "sha256:074df59676dccf79412d2880bdcb661ab1fabc2ecec1f043b4e6a23be97ed9e1", size = 38717, upload-time = "2025-01-04T13:20:04.441Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/c1/df04587c4125de11a10a663197c6715537eb16dffb9a6823417eeee675d5/fastapi_users-15.0.2-py3-none-any.whl", hash = "sha256:e52f7124f44ac3042b3b0866476bcd5818513609b225b4e485e8ac69f8d49161", size = 38594, upload-time = "2025-12-19T07:36:30.315Z" },
 ]
 
 [[package]]
 name = "fastapi-users-db-sqlalchemy"
-version = "5.0.0"
+version = "7.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi-users" },
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/f3/1147e1a45eeed1b794b4da65de2214c92e709a6e35480d349fb83d7ea2fb/fastapi_users_db_sqlalchemy-5.0.0.tar.gz", hash = "sha256:013c2800ce1cb5149acbd1d7eb8596e4aa7dd578395c40df951b666a121388c5", size = 10535, upload-time = "2023-02-13T16:13:57.248Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/12/bc9e6146ae31564741cefc87ee6e37fa5b566933f0afe8aa030779d60e60/fastapi_users_db_sqlalchemy-7.0.0.tar.gz", hash = "sha256:6823eeedf8a92f819276a2b2210ef1dcfd71fe8b6e37f7b4da8d1c60e3dfd595", size = 10877, upload-time = "2025-01-04T13:09:05.086Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/1c/24dc536af724f2e02ce8234dff8ab2ebc4091f3244321cea8ef3b79607ce/fastapi_users_db_sqlalchemy-5.0.0-py3-none-any.whl", hash = "sha256:7c9965555e94335d432f82f555b523809e1c37ed3ccd6ee1c7c9c0ae3240ea85", size = 6893, upload-time = "2023-02-13T16:13:59.863Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/08/9968963c1fb8c34627b7f1fbcdfe9438540f87dc7c9bfb59bb4fd19a4ecf/fastapi_users_db_sqlalchemy-7.0.0-py3-none-any.whl", hash = "sha256:5fceac018e7cfa69efc70834dd3035b3de7988eb4274154a0dbe8b14f5aa001e", size = 6891, upload-time = "2025-01-04T13:09:02.869Z" },
 ]
 
 [[package]]
@@ -4734,8 +4734,8 @@ requires-dist = [
     { name = "faker", marker = "extra == 'dev'", specifier = "==37.1.0" },
     { name = "fastapi", specifier = "==0.116.1" },
     { name = "fastapi-limiter", marker = "extra == 'backend'", specifier = "==0.1.6" },
-    { name = "fastapi-users", marker = "extra == 'backend'", specifier = "==14.0.1" },
-    { name = "fastapi-users-db-sqlalchemy", marker = "extra == 'backend'", specifier = "==5.0.0" },
+    { name = "fastapi-users", marker = "extra == 'backend'", specifier = "==15.0.2" },
+    { name = "fastapi-users-db-sqlalchemy", marker = "extra == 'backend'", specifier = "==7.0.0" },
     { name = "fastmcp", marker = "extra == 'backend'", specifier = "==2.14.2" },
     { name = "filelock", marker = "extra == 'backend'", specifier = "==3.20.3" },
     { name = "google-api-python-client", marker = "extra == 'backend'", specifier = "==2.86.0" },
@@ -4809,7 +4809,7 @@ requires-dist = [
     { name = "python-docx", marker = "extra == 'backend'", specifier = "==1.1.2" },
     { name = "python-dotenv", marker = "extra == 'backend'", specifier = "==1.1.1" },
     { name = "python-gitlab", marker = "extra == 'backend'", specifier = "==5.6.0" },
-    { name = "python-multipart", marker = "extra == 'backend'", specifier = "==0.0.20" },
+    { name = "python-multipart", marker = "extra == 'backend'", specifier = "==0.0.21" },
     { name = "python-pptx", marker = "extra == 'backend'", specifier = "==0.6.23" },
     { name = "python3-saml", marker = "extra == 'backend'", specifier = "==1.15.0" },
     { name = "pywikibot", marker = "extra == 'backend'", specifier = "==9.0.0" },
@@ -5775,11 +5775,11 @@ wheels = [
 
 [[package]]
 name = "pwdlib"
-version = "0.2.1"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/82/a0/9daed437a6226f632a25d98d65d60ba02bdafa920c90dcb6454c611ead6c/pwdlib-0.2.1.tar.gz", hash = "sha256:9a1d8a8fa09a2f7ebf208265e55d7d008103cbdc82b9e4902ffdd1ade91add5e", size = 11699, upload-time = "2024-08-19T06:48:59.58Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/41/a7c0d8a003c36ce3828ae3ed0391fe6a15aad65f082dbd6bec817ea95c0b/pwdlib-0.3.0.tar.gz", hash = "sha256:6ca30f9642a1467d4f5d0a4d18619de1c77f17dfccb42dd200b144127d3c83fc", size = 215810, upload-time = "2025-10-25T12:44:24.395Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/01/f3/0dae5078a486f0fdf4d4a1121e103bc42694a9da9bea7b0f2c63f29cfbd3/pwdlib-0.2.1-py3-none-any.whl", hash = "sha256:1823dc6f22eae472b540e889ecf57fd424051d6a4023ec0bcf7f0de2d9d7ef8c", size = 8082, upload-time = "2024-08-19T06:49:00.997Z" },
+    { url = "https://files.pythonhosted.org/packages/62/0c/9086a357d02a050fbb3270bf5043ac284dbfb845670e16c9389a41defc9e/pwdlib-0.3.0-py3-none-any.whl", hash = "sha256:f86c15c138858c09f3bba0a10984d4f9178158c55deaa72eac0210849b1a140d", size = 8633, upload-time = "2025-10-25T12:44:23.406Z" },
 ]
 
 [package.optional-dependencies]
@@ -6354,11 +6354,11 @@ wheels = [
 
 [[package]]
 name = "python-multipart"
-version = "0.0.20"
+version = "0.0.21"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f3/87/f44d7c9f274c7ee665a29b885ec97089ec5dc034c7f3fafa03da9e39a09e/python_multipart-0.0.20.tar.gz", hash = "sha256:8dd0cab45b8e23064ae09147625994d090fa46f5b0d1e13af944c331a7fa9d13", size = 37158, upload-time = "2024-12-16T19:45:46.972Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/78/96/804520d0850c7db98e5ccb70282e29208723f0964e88ffd9d0da2f52ea09/python_multipart-0.0.21.tar.gz", hash = "sha256:7137ebd4d3bbf70ea1622998f902b97a29434a9e8dc40eb203bbcf7c2a2cba92", size = 37196, upload-time = "2025-12-17T09:24:22.446Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/45/58/38b5afbc1a800eeea951b9285d3912613f2603bdf897a4ab0f4bd7f405fc/python_multipart-0.0.20-py3-none-any.whl", hash = "sha256:8a62d3a8335e06589fe01f2a3e178cdcc632f3fbe0d492ad9ee0ec35aab1f104", size = 24546, upload-time = "2024-12-16T19:45:44.423Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/76/03af049af4dcee5d27442f71b6924f01f3efb5d2bd34f23fcd563f2cc5f5/python_multipart-0.0.21-py3-none-any.whl", hash = "sha256:cf7a6713e01c87aa35387f4774e812c4361150938d20d232800f75ffcf266090", size = 24541, upload-time = "2025-12-17T09:24:21.153Z" },
 ]
 
 [[package]]
