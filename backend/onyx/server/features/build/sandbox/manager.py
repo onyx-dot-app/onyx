@@ -255,9 +255,11 @@ class LocalSandboxManager(SandboxManager):
     def _initialize(self) -> None:
         """Initialize managers."""
         # Paths for templates
-        build_dir = Path(__file__).parent.parent  # /onyx/server/features/build/
-        skills_path = build_dir / "skills"
-        agent_instructions_template_path = build_dir / "AGENTS.template.md"
+        build_dir = Path(
+            __file__
+        ).parent.parent.resolve()  # /onyx/server/features/build/
+        skills_path = (build_dir / "skills").resolve()
+        agent_instructions_template_path = (build_dir / "AGENTS.template.md").resolve()
 
         self._directory_manager = DirectoryManager(
             base_path=Path(SANDBOX_BASE_PATH),
@@ -638,12 +640,22 @@ class LocalSandboxManager(SandboxManager):
 
         # Get or create ACP client for this sandbox
         client = self._acp_clients.get(sandbox_id)
-        if client is None or not client.is_running:
+        if client is None or not client.is_running or client.session_id is None:
             sandbox_path = self._get_sandbox_path(sandbox.session_id)
 
             # Create and start ACP client
             client = ACPAgentClient(cwd=str(sandbox_path))
             self._acp_clients[sandbox_id] = client
+
+            # Verify session was created
+            if client.session_id is None:
+                raise RuntimeError(
+                    f"Failed to create agent session for sandbox {sandbox_id}"
+                )
+
+        # Validate message is not empty
+        if not message or not message.strip():
+            raise ValueError("Message cannot be empty")
 
         # Update heartbeat on message send
         update_sandbox_heartbeat(db_session, UUID(sandbox_id))

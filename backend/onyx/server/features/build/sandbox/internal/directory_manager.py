@@ -5,6 +5,10 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
 
 class DirectoryManager:
     """Manages sandbox directory creation and cleanup.
@@ -132,13 +136,41 @@ class DirectoryManager:
     def setup_skills(self, sandbox_path: Path) -> None:
         """Copy skills directory to .agent/skills.
 
+        Copies all skills from the source skills directory to the sandbox's
+        .agent/skills directory. If the destination already exists, it will
+        be removed and recreated to ensure skills are up-to-date.
+
         Args:
             sandbox_path: Path to the sandbox directory
         """
         skills_dest = sandbox_path / ".agent" / "skills"
-        if self._skills_path.exists() and not skills_dest.exists():
+
+        if not self._skills_path.exists():
+            logger.warning(
+                f"Skills path {self._skills_path} does not exist, skipping skills setup"
+            )
+            return
+
+        try:
+            # Remove existing skills directory if it exists to ensure fresh copy
+            if skills_dest.exists():
+                shutil.rmtree(skills_dest)
+
+            # Create parent directory and copy skills
             skills_dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(self._skills_path, skills_dest)
+
+            # Verify the copy succeeded
+            if not skills_dest.exists():
+                logger.error(
+                    f"Skills copy failed: destination {skills_dest} does not exist after copy"
+                )
+        except Exception as e:
+            logger.error(
+                f"Failed to copy skills from {self._skills_path} to {skills_dest}: {e}",
+                exc_info=True,
+            )
+            raise
 
     def setup_opencode_config(
         self,
@@ -185,33 +217,31 @@ class DirectoryManager:
             provider_config["api"] = api_base
 
         # Build model configuration with thinking/reasoning options
-        model_config: dict[str, Any] = {}
+        options: dict[str, Any] = {}
 
         if provider == "openai":
-            model_config["reasoningEffort"] = "high"
+            options["reasoningEffort"] = "high"
         elif provider == "anthropic":
-            model_config["thinking"] = {
+            options["thinking"] = {
                 "type": "enabled",
-                "budget_tokens": 16000,
+                "budgetTokens": 16000,
             }
         elif provider == "google":
-            model_config["thinking_budget"] = 16000
-            model_config["thinking_level"] = "high"
+            options["thinking_budget"] = 16000
+            options["thinking_level"] = "high"
         elif provider == "bedrock":
-            model_config["thinking"] = {
+            options["thinking"] = {
                 "type": "enabled",
-                "budget_tokens": 16000,
+                "budgetTokens": 16000,
             }
         elif provider == "azure":
-            model_config["reasoningEffort"] = "high"
+            options["reasoningEffort"] = "high"
 
         # Add model configuration to provider
-        if model_config:
+        if options:
             provider_config["models"] = {
                 model_name: {
-                    "id": model_name,
-                    "name": model_name,
-                    "config": model_config,
+                    "options": options,
                 }
             }
 
@@ -250,7 +280,9 @@ class DirectoryManager:
             for tool in disabled_tools:
                 config["permission"][tool] = "deny"
 
-        config_path.write_text(json.dumps(config, indent=2))
+        config_json = json.dumps(config, indent=2)
+        config_path.write_text(config_json)
+        logger.debug(f"Created opencode.json at {config_path}:\n{config_json}")
 
     def cleanup_sandbox_directory(self, sandbox_path: Path) -> None:
         """Remove sandbox directory and all contents.

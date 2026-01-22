@@ -99,8 +99,8 @@ class TestSetupOpencodeConfig:
         # Verify OpenAI reasoning configuration in model config
         assert "models" in config["provider"]["openai"]
         assert "gpt-4o" in config["provider"]["openai"]["models"]
-        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
-        assert model_config["reasoningEffort"] == "high"
+        model_options = config["provider"]["openai"]["models"]["gpt-4o"]["options"]
+        assert model_options["reasoningEffort"] == "high"
 
     def test_anthropic_config_with_thinking(
         self,
@@ -133,12 +133,12 @@ class TestSetupOpencodeConfig:
         # Verify Anthropic thinking configuration in model config
         assert "models" in config["provider"]["anthropic"]
         assert "claude-sonnet-4-5" in config["provider"]["anthropic"]["models"]
-        model_config = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
-            "config"
+        model_options = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
+            "options"
         ]
-        assert "thinking" in model_config
-        assert model_config["thinking"]["type"] == "enabled"
-        assert model_config["thinking"]["budget_tokens"] == 16000
+        assert "thinking" in model_options
+        assert model_options["thinking"]["type"] == "enabled"
+        assert model_options["thinking"]["budgetTokens"] == 16000
 
     def test_google_config_with_thinking(
         self,
@@ -171,9 +171,11 @@ class TestSetupOpencodeConfig:
         # Verify Google thinking configuration in model config
         assert "models" in config["provider"]["google"]
         assert "gemini-3-pro" in config["provider"]["google"]["models"]
-        model_config = config["provider"]["google"]["models"]["gemini-3-pro"]["config"]
-        assert model_config["thinking_budget"] == 16000
-        assert model_config["thinking_level"] == "high"
+        model_options = config["provider"]["google"]["models"]["gemini-3-pro"][
+            "options"
+        ]
+        assert model_options["thinking_budget"] == 16000
+        assert model_options["thinking_level"] == "high"
 
     def test_bedrock_config_with_thinking(
         self,
@@ -207,10 +209,10 @@ class TestSetupOpencodeConfig:
         assert "models" in config["provider"]["bedrock"]
         model_name = "anthropic.claude-v3-5-sonnet-20250219-v1:0"
         assert model_name in config["provider"]["bedrock"]["models"]
-        model_config = config["provider"]["bedrock"]["models"][model_name]["config"]
-        assert "thinking" in model_config
-        assert model_config["thinking"]["type"] == "enabled"
-        assert model_config["thinking"]["budget_tokens"] == 16000
+        model_options = config["provider"]["bedrock"]["models"][model_name]["options"]
+        assert "thinking" in model_options
+        assert model_options["thinking"]["type"] == "enabled"
+        assert model_options["thinking"]["budgetTokens"] == 16000
 
     def test_azure_config_with_thinking(
         self,
@@ -243,8 +245,8 @@ class TestSetupOpencodeConfig:
         # Verify Azure reasoning configuration in model config (same as OpenAI)
         assert "models" in config["provider"]["azure"]
         assert "gpt-4o" in config["provider"]["azure"]["models"]
-        model_config = config["provider"]["azure"]["models"]["gpt-4o"]["config"]
-        assert model_config["reasoningEffort"] == "high"
+        model_options = config["provider"]["azure"]["models"]["gpt-4o"]["options"]
+        assert model_options["reasoningEffort"] == "high"
 
     def test_openai_config_with_api_base(
         self,
@@ -269,8 +271,10 @@ class TestSetupOpencodeConfig:
         # Verify API base is included
         assert config["provider"]["openai"]["api"] == "https://custom.api.endpoint"
 
-        # Verify thinking config is still present
-        assert config["options"]["reasoningEffort"] == "high"
+        # Verify thinking config is still present in model options
+        assert "models" in config["provider"]["openai"]
+        model_options = config["provider"]["openai"]["models"]["gpt-4o"]["options"]
+        assert model_options["reasoningEffort"] == "high"
 
     def test_anthropic_config_with_api_base(
         self,
@@ -298,8 +302,12 @@ class TestSetupOpencodeConfig:
             == "https://custom.anthropic.endpoint"
         )
 
-        # Verify thinking config is still present
-        assert config["options"]["thinking"]["type"] == "enabled"
+        # Verify thinking config is still present in model options
+        assert "models" in config["provider"]["anthropic"]
+        model_options = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
+            "options"
+        ]
+        assert model_options["thinking"]["type"] == "enabled"
 
     def test_config_with_disabled_tools(
         self,
@@ -334,10 +342,10 @@ class TestSetupOpencodeConfig:
         assert "bash" in config["permission"]
         assert config["permission"]["bash"]["rm"] == "deny"
 
-        # Verify thinking config is still present in model config
+        # Verify thinking config is still present in model options
         assert "models" in config["provider"]["openai"]
-        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
-        assert model_config["reasoningEffort"] == "high"
+        model_options = config["provider"]["openai"]["models"]["gpt-4o"]["options"]
+        assert model_options["reasoningEffort"] == "high"
 
     def test_config_without_api_key(
         self,
@@ -363,11 +371,11 @@ class TestSetupOpencodeConfig:
         # Should not have options (API key) without API key
         assert "options" not in config["provider"]["openai"]
 
-        # But should still have thinking config in model config
+        # But should still have thinking config in model options
         assert "models" in config["provider"]["openai"]
         assert "gpt-4o" in config["provider"]["openai"]["models"]
-        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
-        assert model_config["reasoningEffort"] == "high"
+        model_options = config["provider"]["openai"]["models"]["gpt-4o"]["options"]
+        assert model_options["reasoningEffort"] == "high"
 
     def test_other_provider_no_thinking(
         self,
@@ -402,7 +410,7 @@ class TestSetupOpencodeConfig:
         directory_manager: DirectoryManager,
         temp_base_path: Path,
     ) -> None:
-        """Test that existing opencode.json is not overwritten."""
+        """Test that existing opencode.json is overwritten with new config."""
         session_id = "test_existing_config"
         sandbox_path = directory_manager.create_sandbox_directory(session_id)
 
@@ -419,9 +427,11 @@ class TestSetupOpencodeConfig:
             api_key="test-api-key",
         )
 
-        # Verify original config is unchanged
+        # Verify config is overwritten with new config
         config = json.loads(config_path.read_text())
-        assert config == existing_config
+        assert config["model"] == "openai/gpt-4o"
+        assert "custom" not in config  # Old config is replaced
+        assert config["provider"]["openai"]["options"]["apiKey"] == "test-api-key"
 
     def test_full_config_structure_openai(
         self,
@@ -450,8 +460,8 @@ class TestSetupOpencodeConfig:
         assert config["provider"]["openai"]["options"]["apiKey"] == "test-openai-key"
         assert config["provider"]["openai"]["api"] == "https://api.openai.com/v1"
         assert "models" in config["provider"]["openai"]
-        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
-        assert model_config["reasoningEffort"] == "high"
+        model_options = config["provider"]["openai"]["models"]["gpt-4o"]["options"]
+        assert model_options["reasoningEffort"] == "high"
         assert config["permission"]["webfetch"] == "deny"
 
     def test_full_config_structure_anthropic(
@@ -483,11 +493,11 @@ class TestSetupOpencodeConfig:
         )
         assert config["provider"]["anthropic"]["api"] == "https://api.anthropic.com"
         assert "models" in config["provider"]["anthropic"]
-        model_config = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
-            "config"
+        model_options = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
+            "options"
         ]
-        assert model_config["thinking"]["type"] == "enabled"
-        assert model_config["thinking"]["budget_tokens"] == 16000
+        assert model_options["thinking"]["type"] == "enabled"
+        assert model_options["thinking"]["budgetTokens"] == 16000
         assert config["permission"]["question"] == "deny"
 
     def test_full_config_structure_google(
@@ -520,9 +530,11 @@ class TestSetupOpencodeConfig:
             == "https://generativelanguage.googleapis.com"
         )
         assert "models" in config["provider"]["google"]
-        model_config = config["provider"]["google"]["models"]["gemini-3-pro"]["config"]
-        assert model_config["thinking_budget"] == 16000
-        assert model_config["thinking_level"] == "high"
+        model_options = config["provider"]["google"]["models"]["gemini-3-pro"][
+            "options"
+        ]
+        assert model_options["thinking_budget"] == 16000
+        assert model_options["thinking_level"] == "high"
         assert config["permission"]["webfetch"] == "deny"
 
     def test_full_config_structure_bedrock(
@@ -551,9 +563,9 @@ class TestSetupOpencodeConfig:
         assert config["provider"]["bedrock"]["options"]["apiKey"] == "test-bedrock-key"
         model_name = "anthropic.claude-v3-5-sonnet-20250219-v1:0"
         assert "models" in config["provider"]["bedrock"]
-        model_config = config["provider"]["bedrock"]["models"][model_name]["config"]
-        assert model_config["thinking"]["type"] == "enabled"
-        assert model_config["thinking"]["budget_tokens"] == 16000
+        model_options = config["provider"]["bedrock"]["models"][model_name]["options"]
+        assert model_options["thinking"]["type"] == "enabled"
+        assert model_options["thinking"]["budgetTokens"] == 16000
         assert config["permission"]["question"] == "deny"
 
     def test_full_config_structure_azure(
@@ -585,8 +597,8 @@ class TestSetupOpencodeConfig:
             config["provider"]["azure"]["api"] == "https://myresource.openai.azure.com"
         )
         assert "models" in config["provider"]["azure"]
-        model_config = config["provider"]["azure"]["models"]["gpt-4o"]["config"]
-        assert model_config["reasoningEffort"] == "high"
+        model_options = config["provider"]["azure"]["models"]["gpt-4o"]["options"]
+        assert model_options["reasoningEffort"] == "high"
         assert config["permission"]["bash"] == "deny"
 
 
@@ -625,4 +637,43 @@ class TestSandboxDirectoryStructure:
 
         # Verify opencode.json has thinking config
         config = json.loads((sandbox_path / "opencode.json").read_text())
-        assert config["options"]["thinking"]["type"] == "enabled"
+        model_options = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
+            "options"
+        ]
+        assert model_options["thinking"]["type"] == "enabled"
+
+    def test_setup_skills_copies_and_overwrites(
+        self,
+        directory_manager: DirectoryManager,
+        temp_base_path: Path,
+        temp_templates: dict[str, Path],
+    ) -> None:
+        """Test that setup_skills copies skills and overwrites existing ones."""
+        session_id = "test_skills_setup"
+        sandbox_path = directory_manager.create_sandbox_directory(session_id)
+        skills_dest = sandbox_path / ".agent" / "skills"
+
+        # Create a test skill in the source directory
+        test_skill_dir = temp_templates["skills"] / "test-skill"
+        test_skill_dir.mkdir()
+        test_skill_file = test_skill_dir / "SKILL.md"
+        test_skill_file.write_text("# Test Skill\nOriginal content")
+
+        # First call - should copy skills
+        directory_manager.setup_skills(sandbox_path)
+        assert skills_dest.exists()
+        assert (skills_dest / "test-skill" / "SKILL.md").exists()
+        assert (
+            skills_dest / "test-skill" / "SKILL.md"
+        ).read_text() == "# Test Skill\nOriginal content"
+
+        # Update the source skill
+        test_skill_file.write_text("# Test Skill\nUpdated content")
+
+        # Second call - should overwrite existing skills
+        directory_manager.setup_skills(sandbox_path)
+        assert skills_dest.exists()
+        assert (skills_dest / "test-skill" / "SKILL.md").exists()
+        assert (
+            skills_dest / "test-skill" / "SKILL.md"
+        ).read_text() == "# Test Skill\nUpdated content"
