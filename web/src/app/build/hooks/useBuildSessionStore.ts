@@ -14,7 +14,11 @@ import {
   ToolCallStatus,
 } from "@/app/build/services/buildStreamingModels";
 
-import { StreamItem, ToolCallState } from "@/app/build/types/displayTypes";
+import {
+  StreamItem,
+  ToolCallState,
+  TodoListState,
+} from "@/app/build/types/displayTypes";
 
 import {
   createSession as apiCreateSession,
@@ -26,6 +30,160 @@ import {
   fetchMessages,
   fetchArtifacts,
 } from "@/app/build/services/apiServices";
+
+import {
+  genId,
+  extractText,
+  getToolTitle,
+  normalizeKind,
+  normalizeStatus,
+  getDescription,
+  getCommand,
+  getSubagentType,
+  getRawOutput,
+  isTodoWriteTool,
+  extractTodos,
+  isNewFileOperation,
+  extractDiffData,
+} from "@/app/build/utils/streamItemHelpers";
+
+/**
+ * Convert loaded messages (with message_metadata) to StreamItem[] format.
+ *
+ * The backend stores messages with these packet types in message_metadata:
+ * - user_message: {type: "user_message", content: {type: "text", text: "..."}}
+ * - agent_message: {type: "agent_message", content: {type: "text", text: "..."}}
+ * - agent_thought: {type: "agent_thought", content: {type: "text", text: "..."}}
+ * - tool_call_progress: Full tool call data with status="completed"
+ * - agent_plan_update: Plan entries (not rendered as stream items)
+ *
+ * This function converts assistant messages to StreamItem[] for rendering.
+ */
+function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
+  const streamItems: StreamItem[] = [];
+
+  for (const message of messages) {
+    // Skip user messages (rendered separately)
+    if (message.type === "user") continue;
+
+    const metadata = message.message_metadata;
+    if (!metadata || typeof metadata !== "object") continue;
+
+    const packetType = metadata.type as string;
+
+    switch (packetType) {
+      case "agent_message": {
+        const text = extractText(metadata.content);
+        if (text) {
+          streamItems.push({
+            type: "text",
+            id: message.id || genId("text"),
+            content: text,
+            isStreaming: false,
+          });
+        }
+        break;
+      }
+
+      case "agent_thought": {
+        const text = extractText(metadata.content);
+        if (text) {
+          streamItems.push({
+            type: "thinking",
+            id: message.id || genId("thinking"),
+            content: text,
+            isStreaming: false,
+          });
+        }
+        break;
+      }
+
+      case "tool_call_progress": {
+        const toolCallId =
+          (metadata.tool_call_id as string) ||
+          (metadata.toolCallId as string) ||
+          message.id ||
+          genId("tool");
+        const kind = metadata.kind as string | null;
+        const toolName = metadata.title as string | null;
+
+        // Handle TodoWrite separately
+        // Pass full metadata to detect TodoWrite even when title changes (e.g., "todowrite" -> "6 todos")
+        if (isTodoWriteTool(metadata as Record<string, unknown>)) {
+          const todos = extractTodos(metadata as Record<string, unknown>);
+
+          // Check if we already have a todo_list item with this ID
+          // If so, update it (keeps latest state); otherwise, add new
+          const existingIndex = streamItems.findIndex(
+            (item) =>
+              item.type === "todo_list" && item.todoList.id === toolCallId
+          );
+
+          if (existingIndex >= 0) {
+            // Update existing todo list with latest todos
+            const existingItem = streamItems[existingIndex];
+            if (existingItem && existingItem.type === "todo_list") {
+              streamItems[existingIndex] = {
+                type: "todo_list",
+                id: existingItem.id,
+                todoList: { ...existingItem.todoList, todos },
+              };
+            }
+          } else {
+            // Add new todo list (collapsed by default when loaded from history)
+            streamItems.push({
+              type: "todo_list",
+              id: toolCallId,
+              todoList: {
+                id: toolCallId,
+                todos,
+                isOpen: false,
+              },
+            });
+          }
+          break;
+        }
+
+        // Extract diff data for edit operations (write vs edit distinction)
+        const isNewFile = isNewFileOperation(
+          metadata as Record<string, unknown>
+        );
+        const diffData =
+          kind === "edit"
+            ? extractDiffData(metadata.content)
+            : { oldText: "", newText: "", isNewFile: true };
+
+        const toolCall: ToolCallState = {
+          id: toolCallId,
+          kind: normalizeKind(kind, toolName),
+          title: getToolTitle(kind, toolName, isNewFile),
+          description: getDescription(metadata as Record<string, unknown>),
+          command: getCommand(metadata as Record<string, unknown>),
+          status: normalizeStatus(metadata.status as string | null),
+          rawOutput: getRawOutput(metadata as Record<string, unknown>),
+          subagentType: getSubagentType(metadata as Record<string, unknown>),
+          // Edit operation fields
+          isNewFile: isNewFile ?? true,
+          oldContent: diffData.oldText,
+          newContent: diffData.newText,
+        };
+
+        streamItems.push({
+          type: "tool_call",
+          id: toolCallId,
+          toolCall,
+        });
+        break;
+      }
+
+      // agent_plan_update and other packet types are not rendered as stream items
+      default:
+        break;
+    }
+  }
+
+  return streamItems;
+}
 
 // Re-export types for consumers
 export type {
@@ -141,6 +299,16 @@ interface BuildSessionStore {
     sessionId: string,
     toolCallId: string,
     updates: Partial<ToolCallState>
+  ) => void;
+  updateTodoListStreamItem: (
+    sessionId: string,
+    todoListId: string,
+    updates: Partial<TodoListState>
+  ) => void;
+  upsertTodoListStreamItem: (
+    sessionId: string,
+    todoListId: string,
+    todoList: TodoListState
   ) => void;
   clearStreamItems: (sessionId: string) => void;
 
@@ -635,6 +803,85 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
+  updateTodoListStreamItem: (
+    sessionId: string,
+    todoListId: string,
+    updates: Partial<TodoListState>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const streamItems = session.streamItems.map((item) => {
+        if (item.type === "todo_list" && item.todoList.id === todoListId) {
+          return {
+            ...item,
+            todoList: { ...item.todoList, ...updates },
+          };
+        }
+        return item;
+      }) as StreamItem[];
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  upsertTodoListStreamItem: (
+    sessionId: string,
+    todoListId: string,
+    todoList: TodoListState
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      // Check if a todo_list with this ID already exists
+      const existingIndex = session.streamItems.findIndex(
+        (item) => item.type === "todo_list" && item.todoList.id === todoListId
+      );
+
+      let streamItems: StreamItem[];
+      if (existingIndex >= 0) {
+        // Update existing todo_list
+        streamItems = session.streamItems.map((item, index) => {
+          if (index === existingIndex && item.type === "todo_list") {
+            return {
+              ...item,
+              todoList: { ...item.todoList, ...todoList },
+            };
+          }
+          return item;
+        }) as StreamItem[];
+      } else {
+        // Create new todo_list item
+        streamItems = [
+          ...session.streamItems,
+          {
+            type: "todo_list" as const,
+            id: todoListId,
+            todoList,
+          },
+        ];
+      }
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
   clearStreamItems: (sessionId: string) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
@@ -776,10 +1023,20 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const currentSession = get().sessions.get(sessionId);
       const hasOptimisticMessages = (currentSession?.messages.length ?? 0) > 0;
 
+      // Convert loaded messages to stream items for rendering
+      // If there are optimistic messages (active streaming), preserve current streamItems
+      const messagesToUse = hasOptimisticMessages
+        ? currentSession!.messages
+        : messages;
+      const streamItemsToUse = hasOptimisticMessages
+        ? currentSession!.streamItems
+        : convertMessagesToStreamItems(messages);
+
       updateSessionData(sessionId, {
         status: sessionData.status === "active" ? "completed" : "idle",
         // Preserve optimistic messages if they exist (e.g., from pre-provisioned flow)
-        messages: hasOptimisticMessages ? currentSession!.messages : messages,
+        messages: messagesToUse,
+        streamItems: streamItemsToUse,
         artifacts,
         webappUrl,
         sandbox: sessionData.sandbox,

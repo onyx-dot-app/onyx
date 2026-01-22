@@ -738,10 +738,6 @@ class SessionManager:
                     text = _extract_text_from_content(acp_event.content)
                     if text:
                         state.add_message_chunk(text)
-                    packet_logger.log(
-                        "agent_message_chunk",
-                        acp_event.model_dump(mode="json", by_alias=True),
-                    )
                     event_data = acp_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
@@ -774,8 +770,22 @@ class SessionManager:
                     event_data["type"] = "tool_call_progress"
                     event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
 
-                    # Only save when status is "completed"
-                    if acp_event.status == "completed":
+                    # Check if this is a TodoWrite tool call
+                    tool_name = (event_data.get("title") or "").lower()
+                    is_todo_write = tool_name in ("todowrite", "todo_write")
+
+                    # Check if this is a Task (subagent) tool call
+                    raw_input = event_data.get("rawInput") or {}
+                    is_task_tool = (
+                        tool_name == "task"
+                        or raw_input.get("subagent_type") is not None
+                        or raw_input.get("subagentType") is not None
+                    )
+
+                    # Save to DB:
+                    # - For TodoWrite: Save every progress update (todos change frequently)
+                    # - For other tools: Only save when status="completed"
+                    if is_todo_write or acp_event.status == "completed":
                         create_message(
                             session_id=session_id,
                             message_type=MessageType.ASSISTANT,
@@ -783,6 +793,35 @@ class SessionManager:
                             message_metadata=event_data,
                             db_session=self._db_session,
                         )
+
+                    # For completed Task tools, also save the output as an agent_message
+                    # This allows the task output to be rendered as assistant text on reload
+                    if is_task_tool and acp_event.status == "completed":
+                        raw_output = event_data.get("rawOutput") or {}
+                        task_output = raw_output.get("output")
+                        if task_output and isinstance(task_output, str):
+                            # Strip task_metadata from the output
+                            metadata_idx = task_output.find("<task_metadata>")
+                            if metadata_idx >= 0:
+                                task_output = task_output[:metadata_idx].strip()
+
+                            if task_output:
+                                # Create agent_message packet for the task output
+                                task_output_packet = {
+                                    "type": "agent_message",
+                                    "content": {"type": "text", "text": task_output},
+                                    "source": "task_output",
+                                    "timestamp": datetime.now(
+                                        tz=timezone.utc
+                                    ).isoformat(),
+                                }
+                                create_message(
+                                    session_id=session_id,
+                                    message_type=MessageType.ASSISTANT,
+                                    turn_index=state.turn_index,
+                                    message_metadata=task_output_packet,
+                                    db_session=self._db_session,
+                                )
 
                     packet_logger.log("tool_call_progress", event_data)
                     yield _serialize_acp_event(acp_event, "tool_call_progress")
@@ -830,6 +869,17 @@ class SessionManager:
                     event_data["type"] = "error"
                     packet_logger.log("error", event_data)
                     yield _serialize_acp_event(acp_event, "error")
+
+                else:
+                    # Unrecognized packet type - log it but don't stream to frontend
+                    event_type_name = type(acp_event).__name__
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = f"unrecognized_{event_type_name.lower()}"
+                    packet_logger.log(
+                        f"unrecognized_{event_type_name.lower()}", event_data
+                    )
 
             # Save all accumulated state at end of streaming
             _save_build_turn(state)
