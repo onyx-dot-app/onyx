@@ -561,10 +561,11 @@ class SessionManager:
                     text = _extract_text_from_content(acp_event.content)
                     if text:
                         assistant_message_parts.append(text)
-                    packet_logger.log(
-                        "agent_message_chunk",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
                     )
+                    event_data["type"] = "agent_message_chunk"
+                    packet_logger.log("agent_message_chunk", event_data)
                     yield _serialize_acp_event(acp_event, "agent_message_chunk")
 
                 elif isinstance(acp_event, AgentThoughtChunk):
@@ -604,24 +605,27 @@ class SessionManager:
                     yield _serialize_acp_event(acp_event, "agent_plan_update")
 
                 elif isinstance(acp_event, CurrentModeUpdate):
-                    packet_logger.log(
-                        "current_mode_update",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
                     )
+                    event_data["type"] = "current_mode_update"
+                    packet_logger.log("current_mode_update", event_data)
                     yield _serialize_acp_event(acp_event, "current_mode_update")
 
                 elif isinstance(acp_event, PromptResponse):
-                    packet_logger.log(
-                        "prompt_response",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
                     )
+                    event_data["type"] = "prompt_response"
+                    packet_logger.log("prompt_response", event_data)
                     yield _serialize_acp_event(acp_event, "prompt_response")
 
                 elif isinstance(acp_event, ACPError):
-                    packet_logger.log(
-                        "error",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
                     )
+                    event_data["type"] = "error"
+                    packet_logger.log("error", event_data)
                     yield _serialize_acp_event(acp_event, "error")
 
             # Save the complete assistant response to database

@@ -201,28 +201,23 @@ export default function BuildChatPanel({
       {/* Main content area */}
       <div className="flex-1 overflow-auto">
         {!hasSession && !existingSessionId ? (
-          <div className="h-full flex items-center justify-center">
-            <BuildWelcome
-              onSubmit={handleSubmit}
-              isRunning={isRunning}
-              sandboxInitializing={isPreProvisioning}
-            />
-          </div>
+          <BuildWelcome
+            onSubmit={handleSubmit}
+            isRunning={isRunning}
+            sandboxInitializing={isPreProvisioning}
+          />
         ) : (
-          <div className="flex items-center px-4 py-4">
-            <div className="w-full max-w-3xl mx-auto backdrop-blur-lg rounded-lg">
-              <BuildMessageList
-                messages={session?.messages ?? []}
-                isStreaming={isRunning}
-              />
-            </div>
-          </div>
+          <BuildMessageList
+            messages={session?.messages ?? []}
+            streamItems={session?.streamItems ?? []}
+            isStreaming={isRunning}
+          />
         )}
       </div>
 
       {/* Input bar at bottom when session exists */}
       {(hasSession || existingSessionId) && (
-        <div className="px-4 pb-4 pt-2">
+        <div className="px-4 pb-8 pt-4">
           <div className="max-w-2xl mx-auto">
             <InputBar
               onSubmit={handleSubmit}
