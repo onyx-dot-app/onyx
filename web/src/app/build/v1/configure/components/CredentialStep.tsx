@@ -16,7 +16,7 @@ import {
   useOAuthDetails,
   getConnectorOauthRedirectUrl,
 } from "@/lib/connectors/oauth";
-import { deleteCredential } from "@/lib/credential";
+import { deleteCredential, linkCredential } from "@/lib/credential";
 import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
@@ -29,6 +29,9 @@ import {
 } from "@/lib/constants";
 import { BUILD_MODE_OAUTH_COOKIE_NAME } from "@/app/build/v1/constants";
 import Cookies from "js-cookie";
+import { createConnector } from "@/lib/connector";
+import { connectorConfigs, isLoadState } from "@/lib/connectors/connectors";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 interface CredentialStepProps {
   connectorType: ValidSources;
@@ -40,6 +43,12 @@ interface CredentialStepProps {
   onContinue: () => void;
   onOAuthRedirect: () => void;
   refresh?: () => void;
+  /** When true, this is a single-step flow - connect button creates the connector directly */
+  isSingleStep?: boolean;
+  /** Callback when connector is successfully created (for single-step flow) */
+  onConnectorSuccess?: () => void;
+  /** Popup setter for error messages */
+  setPopup?: (popup: PopupSpec | null) => void;
 }
 
 export default function CredentialStep({
@@ -52,10 +61,14 @@ export default function CredentialStep({
   onContinue,
   onOAuthRedirect,
   refresh = () => {},
+  isSingleStep = false,
+  onConnectorSuccess,
+  setPopup,
 }: CredentialStepProps) {
   const [createCredentialFormToggle, setCreateCredentialFormToggle] =
     useState(false);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
     useOAuthDetails(connectorType);
@@ -76,6 +89,63 @@ export default function CredentialStep({
     } else {
       setIsAuthorizing(false);
       console.error("Failed to get OAuth redirect URL");
+    }
+  };
+
+  /**
+   * For single-step connectors, directly create the connector with default values
+   */
+  const handleConnect = async () => {
+    if (!selectedCredential || !isSingleStep) return;
+
+    setIsConnecting(true);
+
+    try {
+      const config =
+        connectorConfigs[connectorType as keyof typeof connectorConfigs];
+      const connectorName = `build-mode-${connectorType}`;
+
+      // Create connector with empty/default config (single-step connectors don't need config)
+      const [connectorError, connector] = await createConnector({
+        name: connectorName,
+        source: connectorType,
+        input_type: isLoadState(connectorType) ? "load_state" : "poll",
+        connector_specific_config: {},
+        refresh_freq: config?.overrideDefaultFreq || 1800, // 30 minutes default
+        prune_freq: 2592000, // 30 days default
+        indexing_start: null,
+        access_type: "private",
+      });
+
+      if (connectorError || !connector) {
+        throw new Error(connectorError || "Failed to create connector");
+      }
+
+      // Link credential to connector with file_system processing mode
+      const linkResponse = await linkCredential(
+        connector.id,
+        selectedCredential.id,
+        connectorName,
+        "private",
+        [], // No groups for build mode connectors
+        undefined, // No auto sync options
+        "file_system" // Use file system processing mode for build connectors
+      );
+
+      if (!linkResponse.ok) {
+        const linkError = await linkResponse.json();
+        throw new Error(linkError.detail || "Failed to link credential");
+      }
+
+      onConnectorSuccess?.();
+    } catch (err) {
+      setPopup?.({
+        message:
+          err instanceof Error ? err.message : "Failed to create connector",
+        type: "error",
+      });
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -180,10 +250,14 @@ export default function CredentialStep({
                 {hasCredentials && (
                   <Button
                     primary
-                    onClick={onContinue}
-                    disabled={!selectedCredential}
+                    onClick={isSingleStep ? handleConnect : onContinue}
+                    disabled={!selectedCredential || isConnecting}
                   >
-                    Continue
+                    {isSingleStep
+                      ? isConnecting
+                        ? "Connecting..."
+                        : "Connect"
+                      : "Continue"}
                   </Button>
                 )}
               </div>
