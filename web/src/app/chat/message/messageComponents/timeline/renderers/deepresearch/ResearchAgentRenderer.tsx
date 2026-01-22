@@ -116,14 +116,6 @@ export const ResearchAgentRenderer: MessageRenderer<
   const isComplete = parentPackets.some(
     (p) => p.obj.type === PacketType.SECTION_END
   );
-  const hasCalledCompleteRef = useRef(false);
-
-  useEffect(() => {
-    if (isComplete && !hasCalledCompleteRef.current) {
-      hasCalledCompleteRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
 
   // Build report content from parent packets
   const fullReportContent = parentPackets
@@ -134,6 +126,14 @@ export const ResearchAgentRenderer: MessageRenderer<
       return "";
     })
     .join("");
+
+  // Compact mode: show only the currently active/streaming section
+  const isCompact = renderType === RenderType.COMPACT;
+  // Report takes priority if it has content (means tools are done, report is streaming)
+  const showOnlyReport =
+    isCompact && fullReportContent && visibleNestedToolGroups.length > 0;
+  const showOnlyTools =
+    isCompact && !fullReportContent && visibleNestedToolGroups.length > 0;
 
   // Markdown renderer for ExpandableTextDisplay
   const { renderedContent } = useMarkdownRenderer(
@@ -149,8 +149,8 @@ export const ResearchAgentRenderer: MessageRenderer<
   // Build content using StepContainer pattern
   const researchAgentContent = (
     <div className="flex flex-col">
-      {/* Research Task - using StepContainer (collapsible) */}
-      {researchTask && (
+      {/* Research Task - hidden in compact mode when tools/report are active */}
+      {researchTask && !showOnlyReport && !showOnlyTools && (
         <StepContainer
           stepIcon={FiTarget as FunctionComponent<IconProps>}
           header="Research Task"
@@ -164,45 +164,46 @@ export const ResearchAgentRenderer: MessageRenderer<
         </StepContainer>
       )}
 
-      {/* Nested tool calls - using TimelineRendererComponent + StepContainer */}
-      {visibleNestedToolGroups.map((group, index) => {
-        const isLastNestedStep =
-          index === visibleNestedToolGroups.length - 1 &&
-          !fullReportContent &&
-          !isComplete;
+      {/* Nested tool calls - hidden when report is streaming in compact mode */}
+      {!showOnlyReport &&
+        visibleNestedToolGroups.map((group, index) => {
+          const isLastNestedStep =
+            index === visibleNestedToolGroups.length - 1 &&
+            !fullReportContent &&
+            !isComplete;
 
-        return (
-          <TimelineRendererComponent
-            key={group.sub_turn_index}
-            packets={group.packets}
-            chatState={state}
-            onComplete={noopComplete}
-            animate={!stopPacketSeen && !group.isComplete}
-            stopPacketSeen={stopPacketSeen}
-            defaultExpanded={true}
-            isLastStep={isLastNestedStep}
-            isHover={isHover}
-          >
-            {({ icon, status, content, isExpanded, onToggle, isHover }) => (
-              <StepContainer
-                stepIcon={icon as FunctionComponent<IconProps> | undefined}
-                header={status}
-                isExpanded={isExpanded}
-                onToggle={onToggle}
-                collapsible={true}
-                isLastStep={isLastNestedStep}
-                isFirstStep={!researchTask && index === 0}
-                isHover={isHover}
-              >
-                {content}
-              </StepContainer>
-            )}
-          </TimelineRendererComponent>
-        );
-      })}
+          return (
+            <TimelineRendererComponent
+              key={group.sub_turn_index}
+              packets={group.packets}
+              chatState={state}
+              onComplete={noopComplete}
+              animate={!stopPacketSeen && !group.isComplete}
+              stopPacketSeen={stopPacketSeen}
+              defaultExpanded={true}
+              isLastStep={isLastNestedStep}
+              isHover={isHover}
+            >
+              {({ icon, status, content, isExpanded, onToggle, isHover }) => (
+                <StepContainer
+                  stepIcon={icon as FunctionComponent<IconProps> | undefined}
+                  header={status}
+                  isExpanded={isExpanded}
+                  onToggle={onToggle}
+                  collapsible={true}
+                  isLastStep={isLastNestedStep}
+                  isFirstStep={!researchTask && index === 0}
+                  isHover={isHover}
+                >
+                  {content}
+                </StepContainer>
+              )}
+            </TimelineRendererComponent>
+          );
+        })}
 
-      {/* Intermediate report - using ExpandableTextDisplay */}
-      {fullReportContent && (
+      {/* Intermediate report - hidden when tools are active in compact mode */}
+      {fullReportContent && !showOnlyTools && (
         <StepContainer
           stepIcon={SvgCircle as FunctionComponent<IconProps>}
           header="Research Report"
@@ -219,8 +220,8 @@ export const ResearchAgentRenderer: MessageRenderer<
         </StepContainer>
       )}
 
-      {/* Done indicator at end of research agent */}
-      {isComplete && !isLastStep && (
+      {/* Done indicator - hidden in compact mode when active content */}
+      {isComplete && !isLastStep && !showOnlyReport && !showOnlyTools && (
         <StepContainer
           stepIcon={SvgCheckCircle}
           header="Done"
@@ -237,5 +238,6 @@ export const ResearchAgentRenderer: MessageRenderer<
     icon: null,
     status: null,
     content: researchAgentContent,
+    supportsCompact: true,
   });
 };
