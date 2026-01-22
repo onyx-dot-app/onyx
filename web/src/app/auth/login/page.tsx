@@ -50,8 +50,7 @@ export default async function Page(props: PageProps) {
     authTypeMetadata &&
     !authTypeMetadata.hasUsers &&
     !autoRedirectToSignupDisabled &&
-    (authTypeMetadata.authType === AuthType.BASIC ||
-      authTypeMetadata.authType === AuthType.CLOUD)
+    authTypeMetadata.authType === AuthType.BASIC
   ) {
     return redirect("/auth/signup");
   }
