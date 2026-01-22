@@ -121,7 +121,7 @@ export const ReasoningRenderer: MessageRenderer<
 
   const reasoningContent = (
     <ExpandableTextDisplay
-      title="Thinking"
+      title="Full text"
       content={content}
       maxLines={5}
       renderContent={renderMarkdown}

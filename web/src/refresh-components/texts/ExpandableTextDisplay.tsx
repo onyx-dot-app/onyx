@@ -32,7 +32,7 @@ export interface ExpandableTextDisplayProps {
 /** Calculate content size in human-readable format */
 function getContentSize(text: string): string {
   const bytes = new Blob([text]).size;
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${bytes} Bytes`;
   return `${(bytes / 1024).toFixed(2)} KB`;
 }
 
