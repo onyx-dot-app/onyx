@@ -24,6 +24,7 @@ from uuid import uuid4
 from kubernetes import client  # type: ignore
 from kubernetes import config
 from kubernetes.client.rest import ApiException  # type: ignore
+from kubernetes.stream import stream as k8s_stream  # type: ignore
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
@@ -73,7 +74,6 @@ class KubernetesSandboxManager(SandboxManager):
     - Init containers for S3 file sync (snapshots, knowledge files, uploads)
     - Main sandbox container running Next.js + opencode agent
     - ClusterIP services for network access
-    - ConfigMaps for agent instructions
 
     This is a singleton class - use get_sandbox_manager() to get the instance.
     """
@@ -117,7 +117,7 @@ class KubernetesSandboxManager(SandboxManager):
         # Track ACP HTTP clients in memory
         self._acp_clients: dict[str, ACPHttpClient] = {}
 
-        # Load AGENTS.md template
+        # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
@@ -134,10 +134,6 @@ class KubernetesSandboxManager(SandboxManager):
         """Generate service name from session ID."""
         return self._get_pod_name(session_id)
 
-    def _get_configmap_name(self, session_id: str) -> str:
-        """Generate configmap name from session ID."""
-        return f"sandbox-instructions-{str(session_id)[:8]}"
-
     def _get_agent_url(self, session_id: str) -> str:
         """Get the internal cluster URL for the agent HTTP server."""
         service_name = self._get_service_name(session_id)
@@ -150,41 +146,11 @@ class KubernetesSandboxManager(SandboxManager):
             f"http://{service_name}.{self._namespace}.svc.cluster.local:{NEXTJS_PORT}"
         )
 
-    def _create_instructions_configmap(
-        self,
-        session_id: str,
-        tenant_id: str,
-    ) -> client.V1ConfigMap:
-        """Create ConfigMap with agent instructions (AGENTS.md)."""
-        # Load and render AGENTS.md template
+    def _load_agent_instructions(self) -> str:
+        """Load agent instructions from template file."""
         if self._agent_instructions_template_path.exists():
-            template_content = self._agent_instructions_template_path.read_text()
-            # For now, use template as-is (can add variable substitution later)
-            instructions_content = template_content
-        else:
-            instructions_content = (
-                "# Agent Instructions\n\nNo custom instructions provided."
-            )
-
-        configmap_name = self._get_configmap_name(session_id)
-
-        return client.V1ConfigMap(
-            api_version="v1",
-            kind="ConfigMap",
-            metadata=client.V1ObjectMeta(
-                name=configmap_name,
-                namespace=self._namespace,
-                labels={
-                    "app.kubernetes.io/component": "sandbox",
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/session-id": session_id,
-                    "onyx.app/tenant-id": tenant_id,
-                },
-            ),
-            data={
-                "AGENTS.md": instructions_content,
-            },
-        )
+            return self._agent_instructions_template_path.read_text()
+        return "# Agent Instructions\n\nNo custom instructions provided."
 
     def _create_sandbox_pod(
         self,
@@ -199,7 +165,9 @@ class KubernetesSandboxManager(SandboxManager):
     ) -> client.V1Pod:
         """Create Pod specification for sandbox."""
         pod_name = self._get_pod_name(session_id)
-        configmap_name = self._get_configmap_name(session_id)
+
+        # Load agent instructions
+        agent_instructions = self._load_agent_instructions()
 
         # Environment variables for init container
         init_env = [
@@ -207,6 +175,7 @@ class KubernetesSandboxManager(SandboxManager):
             client.V1EnvVar(name="TENANT_ID", value=tenant_id),
             client.V1EnvVar(name="USER_ID", value=user_id),
             client.V1EnvVar(name="S3_BUCKET", value=self._s3_bucket),
+            client.V1EnvVar(name="AGENT_INSTRUCTIONS", value=agent_instructions),
         ]
         if snapshot_id:
             init_env.append(client.V1EnvVar(name="SNAPSHOT_ID", value=snapshot_id))
@@ -220,6 +189,10 @@ class KubernetesSandboxManager(SandboxManager):
             args=[
                 """
 set -e
+
+# Write agent instructions to file
+echo "Writing agent instructions"
+printf '%s' "$AGENT_INSTRUCTIONS" > /workspace/AGENTS.md
 
 # Restore from snapshot if provided
 if [ -n "$SNAPSHOT_ID" ]; then
@@ -241,6 +214,7 @@ echo "File sync complete"
 """
             ],
             volume_mounts=[
+                client.V1VolumeMount(name="workspace", mount_path="/workspace"),
                 client.V1VolumeMount(name="outputs", mount_path="/workspace/outputs"),
                 client.V1VolumeMount(name="files", mount_path="/workspace/files"),
                 client.V1VolumeMount(
@@ -280,6 +254,7 @@ echo "File sync complete"
             ],
             env=sandbox_env,
             volume_mounts=[
+                client.V1VolumeMount(name="workspace", mount_path="/workspace"),
                 client.V1VolumeMount(name="outputs", mount_path="/workspace/outputs"),
                 client.V1VolumeMount(
                     name="files", mount_path="/workspace/files", read_only=True
@@ -287,11 +262,6 @@ echo "File sync complete"
                 client.V1VolumeMount(
                     name="user-uploads",
                     mount_path="/workspace/user_uploaded_files",
-                    read_only=True,
-                ),
-                client.V1VolumeMount(
-                    name="instructions",
-                    mount_path="/workspace/instructions",
                     read_only=True,
                 ),
             ],
@@ -325,6 +295,10 @@ echo "File sync complete"
         # Volumes
         volumes = [
             client.V1Volume(
+                name="workspace",
+                empty_dir=client.V1EmptyDirVolumeSource(size_limit="10Mi"),
+            ),
+            client.V1Volume(
                 name="outputs",
                 empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
             ),
@@ -335,10 +309,6 @@ echo "File sync complete"
             client.V1Volume(
                 name="user-uploads",
                 empty_dir=client.V1EmptyDirVolumeSource(size_limit="1Gi"),
-            ),
-            client.V1Volume(
-                name="instructions",
-                config_map=client.V1ConfigMapVolumeSource(name=configmap_name),
             ),
         ]
 
@@ -493,11 +463,10 @@ echo "File sync complete"
         """Provision a new sandbox as a Kubernetes pod.
 
         1. Check concurrent sandbox limit for tenant
-        2. Create ConfigMap for agent instructions
-        3. Create Pod (init container handles S3 file sync)
-        4. Create Service for pod
-        5. Wait for pod to be ready
-        6. Store sandbox record in DB
+        2. Create Pod (init container handles S3 file sync)
+        3. Create Service for pod
+        4. Wait for pod to be ready
+        5. Store sandbox record in DB
         """
         logger.info(
             f"Starting Kubernetes sandbox provisioning for session {session_id}, "
@@ -528,15 +497,7 @@ echo "File sync complete"
         user_id = str(uuid4())  # Placeholder - should come from session
 
         try:
-            # 1. Create ConfigMap for agent instructions
-            logger.debug(f"Creating ConfigMap {self._get_configmap_name(session_id)}")
-            configmap = self._create_instructions_configmap(session_id, tenant_id)
-            self._core_api.create_namespaced_config_map(
-                namespace=self._namespace,
-                body=configmap,
-            )
-
-            # 2. Create Pod
+            # 1. Create Pod
             logger.debug(f"Creating Pod {pod_name}")
             pod = self._create_sandbox_pod(
                 session_id=session_id,
@@ -553,7 +514,7 @@ echo "File sync complete"
                 body=pod,
             )
 
-            # 3. Create Service
+            # 2. Create Service
             logger.debug(f"Creating Service {self._get_service_name(session_id)}")
             service = self._create_sandbox_service(session_id, tenant_id)
             self._core_api.create_namespaced_service(
@@ -561,14 +522,14 @@ echo "File sync complete"
                 body=service,
             )
 
-            # 4. Wait for pod to be ready
+            # 3. Wait for pod to be ready
             logger.info(f"Waiting for pod {pod_name} to become ready...")
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
-            # 5. Create DB record
+            # 4. Create DB record
             logger.debug("Creating sandbox database record")
             sandbox = db_create_sandbox__no_commit(
                 db_session=db_session,
@@ -608,7 +569,6 @@ echo "File sync complete"
         """Clean up Kubernetes resources for a session."""
         pod_name = self._get_pod_name(session_id)
         service_name = self._get_service_name(session_id)
-        configmap_name = self._get_configmap_name(session_id)
 
         # Delete in reverse order of creation
         try:
@@ -631,23 +591,12 @@ echo "File sync complete"
             if e.status != 404:
                 logger.warning(f"Error deleting Pod {pod_name}: {e}")
 
-        try:
-            self._core_api.delete_namespaced_config_map(
-                name=configmap_name,
-                namespace=self._namespace,
-            )
-            logger.debug(f"Deleted ConfigMap {configmap_name}")
-        except ApiException as e:
-            if e.status != 404:
-                logger.warning(f"Error deleting ConfigMap {configmap_name}: {e}")
-
     def terminate(self, sandbox_id: str, db_session: Session) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
 
         1. Close ACP HTTP client
-        2. Create snapshot to S3 (optional)
-        3. Delete Service, Pod, ConfigMap
-        4. Update DB status
+        2. Delete Service, Pod
+        3. Update DB status
         """
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
@@ -707,7 +656,7 @@ echo "File sync complete"
 
         try:
             # Use exec to run snapshot command in sandbox container
-            resp = client.stream.stream(
+            resp = k8s_stream(
                 self._core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
@@ -826,7 +775,7 @@ echo "File sync complete"
         ]
 
         try:
-            resp = client.stream.stream(
+            resp = k8s_stream(
                 self._core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
@@ -920,7 +869,7 @@ echo "File sync complete"
         ]
 
         try:
-            resp = client.stream.stream(
+            resp = k8s_stream(
                 self._core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,

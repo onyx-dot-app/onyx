@@ -17,6 +17,7 @@ import pytest
 from kubernetes import client  # type: ignore[import-untyped]
 from kubernetes import config
 from kubernetes.client.rest import ApiException  # type: ignore[import-untyped]
+from kubernetes.stream import stream as k8s_stream  # type: ignore[import-untyped]
 from sqlalchemy import func
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -139,7 +140,6 @@ def test_kubernetes_sandbox_provision() -> None:
             k8s_client = _get_kubernetes_client()
             pod_name = f"sandbox-{session_id[:8]}"
             service_name = pod_name
-            configmap_name = f"sandbox-instructions-{session_id[:8]}"
 
             # Verify pod exists and is running
             pod = k8s_client.read_namespaced_pod(
@@ -157,13 +157,23 @@ def test_kubernetes_sandbox_provision() -> None:
             assert service is not None
             assert service.spec.type == "ClusterIP"
 
-            # Verify configmap exists
-            configmap = k8s_client.read_namespaced_config_map(
-                name=configmap_name,
+            # Verify AGENTS.md file exists in the pod (written by init container)
+            exec_command = ["/bin/sh", "-c", "cat /workspace/AGENTS.md"]
+            resp = k8s_stream(
+                k8s_client.connect_get_namespaced_pod_exec,
+                name=pod_name,
                 namespace=SANDBOX_NAMESPACE,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
             )
-            assert configmap is not None
-            assert "AGENTS.md" in configmap.data
+            assert resp is not None
+            assert len(resp) > 0, "AGENTS.md file should not be empty"
+            # Verify it contains expected content (from template or default)
+            assert "Agent" in resp or "Instructions" in resp or "#" in resp
 
     finally:
         # Clean up: terminate the sandbox

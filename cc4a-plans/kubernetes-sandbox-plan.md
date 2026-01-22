@@ -40,7 +40,7 @@ The existing plans mention Docker-out-of-Docker (DooD), but a Kubernetes-native 
 2. **Service Discovery**: Each sandbox needs a predictable service endpoint for HTTP communication
 3. **Ingress Routing**: Dynamic subpath or subdomain routing to sandbox pods
 4. **S3 Access for Init Container**: Init container needs S3 access for snapshot restore and knowledge file sync
-5. **RBAC Requirements**: API server needs permissions to create/delete pods, services, configmaps
+5. **RBAC Requirements**: API server needs permissions to create/delete pods, services
 
 ### Security Model (EKS)
 
@@ -73,7 +73,6 @@ Create `backend/onyx/server/features/build/sandbox/kubernetes_manager.py`:
 ```
 KubernetesSandboxManager
 ├── provision(session_id, tenant_id, ...)
-│   ├── Create ConfigMap for AGENTS.md
 │   ├── Create Pod with sandbox container (includes init container for S3 sync)
 │   ├── Create Service for pod
 │   └── Wait for pod ready + update DB
@@ -81,7 +80,6 @@ KubernetesSandboxManager
 │   ├── Create snapshot to S3 (if enabled)
 │   ├── Delete Service
 │   ├── Delete Pod
-│   ├── Delete ConfigMap
 │   └── Update DB status
 ├── get_agent_client(sandbox_id) → ACPHttpClient
 ├── get_sandbox_url(sandbox_id) → str
@@ -182,9 +180,6 @@ spec:
         - name: user-uploads
           mountPath: /workspace/user_uploaded_files
           readOnly: true
-        - name: instructions
-          mountPath: /workspace/instructions
-          readOnly: true
       resources:
         requests:
           cpu: 500m
@@ -215,9 +210,6 @@ spec:
     - name: user-uploads
       emptyDir:
         sizeLimit: 1Gi
-    - name: instructions
-      configMap:
-        name: sandbox-instructions-{session_id_short}
 
   restartPolicy: Never  # Don't restart failed sandboxes
   terminationGracePeriodSeconds: 30
@@ -381,14 +373,7 @@ class KubernetesSandboxManager(SandboxManager):
     def provision(self, ...) -> Sandbox:
         session_id_short = str(session_id)[:8]
 
-        # 1. Create instructions ConfigMap
-        configmap = self._create_instructions_configmap(session_id, session_id_short)
-        self._core_api.create_namespaced_config_map(
-            namespace=self._namespace,
-            body=configmap
-        )
-
-        # 2. Create sandbox Pod (init container handles S3 sync for snapshots/files)
+        # 1. Create sandbox Pod (init container handles S3 sync for snapshots/files)
         pod = self._create_sandbox_pod(
             session_id=session_id,
             session_id_short=session_id_short,
@@ -401,17 +386,17 @@ class KubernetesSandboxManager(SandboxManager):
             body=pod
         )
 
-        # 3. Create Service
+        # 2. Create Service
         service = self._create_sandbox_service(session_id, session_id_short)
         self._core_api.create_namespaced_service(
             namespace=self._namespace,
             body=service
         )
 
-        # 4. Wait for pod to be ready
+        # 3. Wait for pod to be ready
         self._wait_for_pod_ready(session_id_short)
 
-        # 5. Create DB record
+        # 4. Create DB record
         sandbox = create_sandbox(
             db_session=db_session,
             session_id=session_id,
@@ -443,13 +428,7 @@ class KubernetesSandboxManager(SandboxManager):
             namespace=self._namespace
         )
 
-        # 3. Delete ConfigMap
-        self._core_api.delete_namespaced_config_map(
-            name=f"sandbox-instructions-{session_id_short}",
-            namespace=self._namespace
-        )
-
-        # 4. Update DB
+        # 3. Update DB
         update_sandbox_status(db_session, sandbox_id, SandboxStatus.TERMINATED)
 
     def _create_snapshot_to_s3(self, sandbox: Sandbox) -> str:
@@ -771,9 +750,6 @@ rules:
     verbs: ["create"]  # For snapshot creation
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["create", "delete", "get", "list"]
-  - apiGroups: [""]
-    resources: ["configmaps"]
     verbs: ["create", "delete", "get", "list"]
   - apiGroups: ["batch"]
     resources: ["jobs"]
