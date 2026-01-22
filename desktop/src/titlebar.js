@@ -2,8 +2,6 @@
 // This script injects a draggable title bar that matches Onyx design system
 
 (function () {
-  console.log("[Onyx Desktop] Title bar script loaded");
-
   const TITLEBAR_ID = "onyx-desktop-titlebar";
   const TITLEBAR_HEIGHT = 36;
   const STYLE_ID = "onyx-desktop-titlebar-style";
@@ -31,12 +29,7 @@
       try {
         await invoke("start_drag_window");
         return;
-      } catch (err) {
-        console.error(
-          "[Onyx Desktop] Failed to start dragging via invoke:",
-          err,
-        );
-      }
+      } catch (err) {}
     }
 
     const appWindow =
@@ -46,14 +39,7 @@
     if (appWindow?.startDragging) {
       try {
         await appWindow.startDragging();
-      } catch (err) {
-        console.error(
-          "[Onyx Desktop] Failed to start dragging via appWindow:",
-          err,
-        );
-      }
-    } else {
-      console.error("[Onyx Desktop] No Tauri drag API available.");
+      } catch (err) {}
     }
   }
 
@@ -177,7 +163,6 @@
 
   function mountTitleBar() {
     if (!document.body) {
-      console.error("[Onyx Desktop] document.body not found");
       return;
     }
 
@@ -193,7 +178,6 @@
     const titleBar = buildTitleBar();
     document.body.insertBefore(titleBar, document.body.firstChild);
     injectStyles();
-    console.log("[Onyx Desktop] Title bar injected");
   }
 
   function syncViewportHeight() {
