@@ -123,9 +123,9 @@ export const ReasoningRenderer: MessageRenderer<
     <ExpandableTextDisplay
       title="Thinking"
       content={content}
-      displayContent={content}
       maxLines={5}
       renderContent={renderMarkdown}
+      isStreaming={!hasEnd}
     />
   );
 

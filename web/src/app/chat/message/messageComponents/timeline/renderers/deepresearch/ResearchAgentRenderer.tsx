@@ -132,6 +132,9 @@ export const ResearchAgentRenderer: MessageRenderer<
     (p) => p.obj.type === PacketType.SECTION_END
   );
 
+  // Determine if report is actively streaming
+  const isReportStreaming = !isComplete && !stopPacketSeen;
+
   // Build report content from parent packets
   const fullReportContent = parentPackets
     .map((packet) => {
@@ -179,6 +182,7 @@ export const ResearchAgentRenderer: MessageRenderer<
               content={fullReportContent}
               maxLines={5}
               renderContent={renderReport}
+              isStreaming={isReportStreaming}
             />
           </div>
         ),
@@ -323,6 +327,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             content={fullReportContent}
             maxLines={5}
             renderContent={renderReport}
+            isStreaming={isReportStreaming}
           />
         </StepContainer>
       )}
