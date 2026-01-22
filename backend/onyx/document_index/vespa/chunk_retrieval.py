@@ -167,25 +167,22 @@ def get_chunks_via_visit_api(
     url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
 
     # build the list of fields to retrieve
-    field_set_list = (
-        [f"{field_name}" for field_name in field_names] if field_names else []
-    )
-    acl_fieldset_entry = f"{ACCESS_CONTROL_LIST}"
-    if (
-        field_set_list
-        and filters.access_control_list
-        and acl_fieldset_entry not in field_set_list
-    ):
-        field_set_list.append(acl_fieldset_entry)
+    # NOTE: If field_names is None/empty, we want ALL fields (field_set=None).
+    # Only add ACL/tenant_id when specific fields are being requested.
+    if field_names:
+        field_set_list = [f"{field_name}" for field_name in field_names]
+        acl_fieldset_entry = f"{ACCESS_CONTROL_LIST}"
+        if filters.access_control_list and acl_fieldset_entry not in field_set_list:
+            field_set_list.append(acl_fieldset_entry)
 
-    if MULTI_TENANT:
-        tenant_id_fieldset_entry = f"{TENANT_ID}"
-        if tenant_id_fieldset_entry not in field_set_list:
-            field_set_list.append(tenant_id_fieldset_entry)
+        if MULTI_TENANT:
+            tenant_id_fieldset_entry = f"{TENANT_ID}"
+            if tenant_id_fieldset_entry not in field_set_list:
+                field_set_list.append(tenant_id_fieldset_entry)
 
-    if field_set_list:
         field_set = f"{index_name}:" + ",".join(field_set_list)
     else:
+        # No specific fields requested - return all fields
         field_set = None
 
     # build filters

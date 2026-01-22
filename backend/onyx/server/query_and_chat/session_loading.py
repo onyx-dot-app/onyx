@@ -414,8 +414,8 @@ def translate_assistant_message_to_packets(
                         queries = cast(
                             list[str], tool_call.tool_call_arguments.get("queries", [])
                         )
-                        # Query only displayed docs from junction table
-                        displayed_docs = (
+                        # Query docs from junction table
+                        tool_call_docs = (
                             db_session.query(SearchDocDB)
                             .join(
                                 ToolCall__SearchDoc,
@@ -423,13 +423,12 @@ def translate_assistant_message_to_packets(
                             )
                             .filter(
                                 ToolCall__SearchDoc.tool_call_id == tool_call.id,
-                                ToolCall__SearchDoc.is_displayed.is_(True),
                             )
                             .all()
                         )
                         search_docs: list[SavedSearchDoc] = [
                             translate_db_search_doc_to_saved_search_doc(doc)
-                            for doc in displayed_docs
+                            for doc in tool_call_docs
                         ]
                         turn_tool_packets.extend(
                             create_search_packets(

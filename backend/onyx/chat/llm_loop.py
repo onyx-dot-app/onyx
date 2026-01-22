@@ -653,6 +653,8 @@ def run_llm_loop(
                     )
 
                 # Extract search_docs if this is a search tool response
+                # search_docs = full retrieval set (for assistant message sources)
+                # displayed_docs = LLM-selected subset (for tool call saving)
                 search_docs = None
                 displayed_docs = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):

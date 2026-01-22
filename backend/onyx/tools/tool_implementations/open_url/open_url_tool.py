@@ -580,6 +580,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         return ToolResponse(
             rich_response=SearchDocsResponse(
                 search_docs=search_docs,
+                # For open URL, all docs are displayed
                 displayed_docs=search_docs,
                 citation_mapping=citation_mapping,
             ),
