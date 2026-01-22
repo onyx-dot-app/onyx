@@ -222,14 +222,16 @@ def save_chat_turn(
                     )
                     search_doc_key_to_id[search_doc_key] = db_search_doc.id
 
-        # Collect displayed_docs IDs for tool call linking
+        # Collect displayed_docs IDs for tool call linking (deduplicated)
         if tool_call_info.displayed_docs:
-            displayed_ids: list[int] = []
+            displayed_ids: set[int] = set()
             for search_doc_py in tool_call_info.displayed_docs:
                 search_doc_key = _create_search_doc_key(search_doc_py)
                 if search_doc_key in search_doc_key_to_id:
-                    displayed_ids.append(search_doc_key_to_id[search_doc_key])
-            tool_call_to_displayed_doc_ids[tool_call_info.tool_call_id] = displayed_ids
+                    displayed_ids.add(search_doc_key_to_id[search_doc_key])
+            tool_call_to_displayed_doc_ids[tool_call_info.tool_call_id] = list(
+                displayed_ids
+            )
 
     # 3. Collect all unique SearchDoc IDs for ChatMessage (full set from all tool calls)
     all_search_doc_ids_set: set[int] = set(search_doc_key_to_id.values())
