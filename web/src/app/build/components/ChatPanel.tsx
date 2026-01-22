@@ -201,13 +201,11 @@ export default function BuildChatPanel({
       {/* Main content area */}
       <div className="flex-1 overflow-auto">
         {!hasSession && !existingSessionId ? (
-          <div className="h-full flex items-center justify-center">
-            <BuildWelcome
-              onSubmit={handleSubmit}
-              isRunning={isRunning}
-              sandboxInitializing={isPreProvisioning}
-            />
-          </div>
+          <BuildWelcome
+            onSubmit={handleSubmit}
+            isRunning={isRunning}
+            sandboxInitializing={isPreProvisioning}
+          />
         ) : (
           <BuildMessageList
             messages={session?.messages ?? []}

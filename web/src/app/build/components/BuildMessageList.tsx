@@ -15,7 +15,7 @@ import { StreamItem } from "@/app/build/types/displayTypes";
  */
 function BlinkingDot() {
   return (
-    <span className="animate-pulse flex-none bg-theme-primary-05 inline-block rounded-full h-3 w-3 ml-2" />
+    <span className="animate-pulse flex-none bg-theme-primary-05 inline-block rounded-full h-3 w-3 ml-2 mt-2" />
   );
 }
 
