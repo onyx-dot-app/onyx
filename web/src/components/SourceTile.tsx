@@ -28,13 +28,10 @@ export default function SourceTile({
               w-40
               cursor-pointer
               shadow-md
+              bg-background-tint-00
               hover:bg-background-tint-02
               relative
-              ${
-                preSelect
-                  ? "bg-background-tint-01 subtle-pulse"
-                  : "bg-background-tint-00"
-              }
+              ${preSelect ? "subtle-pulse" : ""}
             `}
       href={navigationUrl as Route}
     >
