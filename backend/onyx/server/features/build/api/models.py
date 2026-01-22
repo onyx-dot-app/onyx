@@ -127,13 +127,24 @@ class MessageRequest(BaseModel):
 
 
 class MessageResponse(BaseModel):
-    """Response containing message details."""
+    """Response containing message details.
+
+    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    The turn_index groups all assistant responses under the user prompt they respond to.
+
+    Packet types in message_metadata:
+    - user_message: {type: "user_message", content: {...}}
+    - agent_message: {type: "agent_message", content: {...}}
+    - agent_thought: {type: "agent_thought", content: {...}}
+    - tool_call_progress: {type: "tool_call_progress", status: "completed", ...}
+    - agent_plan_update: {type: "agent_plan_update", entries: [...]}
+    """
 
     id: str
     session_id: str
+    turn_index: int
     type: MessageType
-    content: str
-    message_metadata: dict[str, Any] | None = None
+    message_metadata: dict[str, Any]
     created_at: datetime
 
     @classmethod
@@ -142,8 +153,8 @@ class MessageResponse(BaseModel):
         return cls(
             id=str(message.id),
             session_id=str(message.session_id),
+            turn_index=message.turn_index,
             type=message.type,
-            content=message.content,
             message_metadata=message.message_metadata,
             created_at=message.created_at,
         )
