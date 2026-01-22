@@ -96,8 +96,8 @@ const AgentMessage = React.memo(function AgentMessage({
     hasSteps,
     stopPacketSeen,
     stopReason,
-    uniqueToolNames,
     isGeneratingImage,
+    generatedImageCount,
     isComplete,
     onRenderComplete,
   } = usePacketProcessor(rawPackets, nodeId);
@@ -156,9 +156,9 @@ const AgentMessage = React.memo(function AgentMessage({
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}
         hasDisplayContent={displayGroups.length > 0}
-        uniqueToolNames={uniqueToolNames}
         processingDurationSeconds={processingDurationSeconds}
         isGeneratingImage={isGeneratingImage}
+        generatedImageCount={generatedImageCount}
       />
 
       {/* Row 2: Display content + MessageToolbar */}

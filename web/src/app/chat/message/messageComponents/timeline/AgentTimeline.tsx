@@ -176,12 +176,12 @@ export interface AgentTimelineProps {
   className?: string;
   /** Test ID for e2e testing */
   "data-testid"?: string;
-  /** Unique tool names (pre-computed for performance) */
-  uniqueToolNames?: string[];
   /** Processing duration in seconds (for completed messages) */
   processingDurationSeconds?: number;
   /** Whether image generation is in progress */
   isGeneratingImage?: boolean;
+  /** Number of images generated */
+  generatedImageCount?: number;
 }
 
 /**
@@ -198,13 +198,13 @@ function areAgentTimelinePropsEqual(
     prev.stopReason === next.stopReason &&
     prev.finalAnswerComing === next.finalAnswerComing &&
     prev.hasDisplayContent === next.hasDisplayContent &&
-    prev.uniqueToolNames === next.uniqueToolNames &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.className === next.className &&
     prev.chatState.assistant?.id === next.chatState.assistant?.id &&
-    prev.isGeneratingImage === next.isGeneratingImage
+    prev.isGeneratingImage === next.isGeneratingImage &&
+    prev.generatedImageCount === next.generatedImageCount
   );
 }
 
@@ -219,9 +219,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   buttonTitle,
   className,
   "data-testid": testId,
-  uniqueToolNames = [],
   processingDurationSeconds,
   isGeneratingImage = false,
+  generatedImageCount = 0,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
@@ -234,12 +234,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const {
     totalSteps,
     isSingleStep,
-    uniqueTools,
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
     lastStepSupportsCompact,
-  } = useTimelineMetrics(turnGroups, uniqueToolNames, userStopped);
+  } = useTimelineMetrics(turnGroups, userStopped);
 
   // Expansion state management
   const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
@@ -339,10 +338,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     if (!isExpanded) {
       return (
         <CollapsedHeader
-          uniqueTools={uniqueTools}
           totalSteps={totalSteps}
           collapsible={collapsible}
           onToggle={handleToggle}
+          processingDurationSeconds={processingDurationSeconds}
+          generatedImageCount={generatedImageCount}
         />
       );
     }

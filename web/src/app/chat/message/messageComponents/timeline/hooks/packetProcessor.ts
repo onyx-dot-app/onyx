@@ -8,8 +8,7 @@ import {
   FetchToolDocuments,
   TopLevelBranching,
   Stop,
-  SearchToolStart,
-  CustomToolStart,
+  ImageGenerationToolDelta,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -49,11 +48,9 @@ export interface ProcessorState {
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
-  // Unique tool names tracking (populated during packet processing)
-  uniqueToolNames: Set<string>;
-
   // Image generation status
   isGeneratingImage: boolean;
+  generatedImageCount: number;
 
   // Streaming status
   finalAnswerComing: boolean;
@@ -63,7 +60,6 @@ export interface ProcessorState {
   // Result arrays (built at end of processPackets)
   toolGroups: GroupedPacket[];
   potentialDisplayGroups: GroupedPacket[];
-  uniqueToolNamesArray: string[];
 }
 
 export interface GroupedPacket {
@@ -90,14 +86,13 @@ export function createInitialState(nodeId: number): ProcessorState {
     expectedBranches: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
-    uniqueToolNames: new Set(),
     isGeneratingImage: false,
+    generatedImageCount: 0,
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
     toolGroups: [],
     potentialDisplayGroups: [],
-    uniqueToolNamesArray: [],
   };
 }
 
@@ -149,37 +144,6 @@ function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) =>
     CONTENT_PACKET_TYPES_SET.has(packet.obj.type as PacketType)
   );
-}
-
-/**
- * Extract tool name from a packet for unique tool tracking.
- * Returns null for non-tool packets.
- */
-function getToolNameFromPacket(packet: Packet): string | null {
-  switch (packet.obj.type) {
-    case PacketType.SEARCH_TOOL_START: {
-      const searchPacket = packet.obj as SearchToolStart;
-      return searchPacket.is_internet_search ? "Web Search" : "Internal Search";
-    }
-    case PacketType.PYTHON_TOOL_START:
-      return "Code Interpreter";
-    case PacketType.FETCH_TOOL_START:
-      return "Open URLs";
-    case PacketType.CUSTOM_TOOL_START: {
-      const customPacket = packet.obj as CustomToolStart;
-      return customPacket.tool_name || "Custom Tool";
-    }
-    case PacketType.IMAGE_GENERATION_TOOL_START:
-      return "Generate Image";
-    case PacketType.DEEP_RESEARCH_PLAN_START:
-      return "Generate plan";
-    case PacketType.RESEARCH_AGENT_START:
-      return "Research agent";
-    case PacketType.REASONING_START:
-      return "Thinking";
-    default:
-      return null;
-  }
 }
 
 /**
@@ -367,21 +331,21 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   if (isFirstPacket) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
-      // Track unique tool name
-      const toolName = getToolNameFromPacket(packet);
-      if (toolName) {
-        state.uniqueToolNames.add(toolName);
-      }
     }
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
     }
 
-    // Track image generation for header display + collapsed tag
+    // Track image generation for header display
     if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
       state.isGeneratingImage = true;
-      state.uniqueToolNames.add("Image Generation");
     }
+  }
+
+  // Count generated images from DELTA packets
+  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA) {
+    const delta = packet.obj as ImageGenerationToolDelta;
+    state.generatedImageCount += delta.images?.length ?? 0;
   }
 
   // Handle specific packet types
@@ -423,7 +387,6 @@ export function processPackets(
       state,
       state.displayGroupKeys
     );
-    state.uniqueToolNamesArray = Array.from(state.uniqueToolNames);
   }
 
   return state;
