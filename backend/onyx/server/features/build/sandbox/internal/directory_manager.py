@@ -181,6 +181,80 @@ class DirectoryManager:
                 provider_config["api"] = api_base
             config["provider"] = {provider: provider_config}
 
+        # Add thinking configuration based on provider
+        if provider == "openai":
+            if "options" not in config:
+                config["options"] = {}
+            config["options"].update(
+                {
+                    "reasoningEffort": "high",
+                    "textVerbosity": "low",
+                    "reasoningSummary": "auto",
+                    "include": ["reasoning.encrypted_content"],
+                }
+            )
+        elif provider == "anthropic":
+            if "options" not in config:
+                config["options"] = {}
+            config["options"]["thinking"] = {
+                "type": "enabled",
+                "budgetTokens": 16000,
+            }
+        elif provider == "google":
+            if "options" not in config:
+                config["options"] = {}
+            config["options"].update(
+                {
+                    "thinking_budget": 16000,
+                    "thinking_level": "high",
+                }
+            )
+        elif provider == "bedrock":
+            if "options" not in config:
+                config["options"] = {}
+            config["options"]["thinking"] = {
+                "type": "enabled",
+                "budgetTokens": 16000,
+            }
+        elif provider == "azure":
+            if "options" not in config:
+                config["options"] = {}
+            config["options"].update(
+                {
+                    "reasoningEffort": "high",
+                    "textVerbosity": "low",
+                    "reasoningSummary": "auto",
+                    "include": ["reasoning.encrypted_content"],
+                }
+            )
+
+        # Set default tool permission
+        config["permission"] = {
+            "bash": {
+                "rm": "deny",
+                "curl": "deny",
+                "wget": "deny",
+                "ssh": "deny",
+                "scp": "deny",
+                "sftp": "deny",
+                "ftp": "deny",
+                "telnet": "deny",
+                "nc": "deny",
+                "netcat": "deny",
+            },
+            "edit": "allow",
+            "write": "allow",
+            "read": "allow",
+            "grep": "allow",
+            "glob": "allow",
+            "list": "allow",
+            "lsp": "allow",
+            "patch": "allow",
+            "skill": "allow",
+            "question": "allow",
+            "webfetch": "allow",
+        }
+
         # Disable specified tools via permissions
         if disabled_tools:
             config["permission"] = {tool: "deny" for tool in disabled_tools}
