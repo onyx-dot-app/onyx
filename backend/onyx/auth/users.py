@@ -11,6 +11,7 @@ from typing import Any
 from typing import cast
 from typing import Dict
 from typing import List
+from typing import Literal
 from typing import Optional
 from typing import Protocol
 from typing import Tuple
@@ -1513,7 +1514,7 @@ def get_oauth_router(
     csrf_token_cookie_domain: Optional[str] = None,
     csrf_token_cookie_secure: Optional[bool] = None,
     csrf_token_cookie_httponly: bool = True,
-    csrf_token_cookie_samesite: str = "lax",
+    csrf_token_cookie_samesite: Optional[Literal["lax", "strict", "none"]] = "lax",
 ) -> APIRouter:
     """Generate a router with the OAuth routes."""
     router = APIRouter()
