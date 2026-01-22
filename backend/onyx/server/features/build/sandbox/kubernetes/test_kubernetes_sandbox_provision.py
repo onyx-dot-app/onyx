@@ -12,15 +12,17 @@ Run with:
 """
 
 import time
-from uuid import UUID
 
 import pytest
 from kubernetes import client
 from kubernetes import config
 from kubernetes.client.rest import ApiException
+from sqlalchemy import func
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import User
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
@@ -30,8 +32,6 @@ from onyx.server.features.build.sandbox.kubernetes.manager import (
     KubernetesSandboxManager,
 )
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
 
 
 def _is_kubernetes_available() -> bool:
@@ -66,10 +66,7 @@ def _get_kubernetes_client() -> client.CoreV1Api:
     not _is_kubernetes_available(),
     reason="Kubernetes cluster not available",
 )
-def test_kubernetes_sandbox_provision_happy_path(
-    admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
-) -> None:
+def test_kubernetes_sandbox_provision_happy_path() -> None:
     """Test that provision() creates a sandbox pod and DB record successfully.
 
     This is a happy path test that:
@@ -78,6 +75,9 @@ def test_kubernetes_sandbox_provision_happy_path(
     3. Verifies the sandbox is created with RUNNING status
     4. Cleans up by terminating the sandbox
     """
+    # Initialize the database engine
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+
     # Set up tenant context (required for multi-tenant operations)
     tenant_id = "public"
     CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -90,8 +90,18 @@ def test_kubernetes_sandbox_provision_happy_path(
 
     try:
         with get_session_with_current_tenant() as db_session:
+            # Get a random user from the database
+            random_user = (
+                db_session.query(User)
+                .filter(User.is_active == True)  # noqa: E712
+                .order_by(func.random())
+                .first()
+            )
+            if not random_user:
+                raise RuntimeError("No active users found in database")
+
             # Create a BuildSession (required since Sandbox has FK to BuildSession)
-            user_id = UUID(admin_user.id)
+            user_id = random_user.id
             build_session = create_build_session__no_commit(
                 user_id=user_id,
                 db_session=db_session,

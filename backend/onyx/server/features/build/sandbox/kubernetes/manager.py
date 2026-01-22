@@ -273,6 +273,7 @@ echo "File sync complete"
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
+            image_pull_policy="IfNotPresent",
             ports=[
                 client.V1ContainerPort(name="nextjs", container_port=NEXTJS_PORT),
                 client.V1ContainerPort(name="agent", container_port=AGENT_PORT),

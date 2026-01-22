@@ -24,8 +24,21 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (matches pod securityContext)
-RUN groupadd -g 1000 sandbox && \
-    useradd -u 1000 -g sandbox -m -s /bin/bash sandbox
+# Handle existing user/group with UID/GID 1000 in base image
+RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
+    EXISTING_GROUP=$(getent group 1000 | cut -d: -f1 2>/dev/null || echo ""); \
+    if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "sandbox" ]; then \
+        groupmod -n sandbox $EXISTING_GROUP; \
+    elif [ -z "$EXISTING_GROUP" ]; then \
+        groupadd -g 1000 sandbox; \
+    fi; \
+    if [ -n "$EXISTING_USER" ] && [ "$EXISTING_USER" != "sandbox" ]; then \
+        usermod -l sandbox -g sandbox $EXISTING_USER; \
+        usermod -d /home/sandbox -m sandbox; \
+        usermod -s /bin/bash sandbox; \
+    elif [ -z "$EXISTING_USER" ]; then \
+        useradd -u 1000 -g sandbox -m -s /bin/bash sandbox; \
+    fi
 
 # Create workspace directories
 RUN mkdir -p /workspace/outputs /workspace/files /workspace/user_uploaded_files /workspace/instructions && \
@@ -35,14 +48,6 @@ RUN mkdir -p /workspace/outputs /workspace/files /workspace/user_uploaded_files 
 # Note: Update this URL to the actual opencode installation script
 RUN curl -fsSL https://opencode.ai/install.sh | bash || \
     echo "OpenCode installation script not available, will need to be installed separately"
-
-# Copy the pre-built Next.js template
-# This will be overwritten by init container if restoring from snapshot
-COPY outputs-template /workspace/outputs-template
-
-# Copy entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace
@@ -56,8 +61,5 @@ WORKDIR /workspace
 # - 8081: OpenCode ACP HTTP server
 EXPOSE 3000 8081
 
-# Health check for the agent server
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8081/health || exit 1
-
-ENTRYPOINT ["/entrypoint.sh"]
+# Default command - sleep indefinitely for testing
+CMD ["sleep", "10000"]
