@@ -21,6 +21,10 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeartbeat
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
@@ -39,12 +43,67 @@ from tests.external_dependency_unit.mock_content_provider import MockWebContent
 from tests.external_dependency_unit.mock_content_provider import (
     use_mock_content_provider,
 )
+from tests.external_dependency_unit.mock_image_provider import (
+    use_mock_image_generation_provider,
+)
 from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
 from tests.external_dependency_unit.mock_llm import LLMReasoningResponse
 from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
+from tests.external_dependency_unit.mock_llm import MockLLMController
 from tests.external_dependency_unit.mock_llm import use_mock_llm
 from tests.external_dependency_unit.mock_search_provider import MockWebSearchResult
 from tests.external_dependency_unit.mock_search_provider import use_mock_web_provider
+
+
+class HandleCase:
+    def __init__(self, llm_controller: MockLLMController):
+        self._llm_controller = llm_controller
+
+        # List of (expected_packet, forward_count) tuples
+        self._expected_packets_queue: list[tuple[Packet, int]] = []
+
+    def add_response(self, response) -> HandleCase:
+        self._llm_controller.add_response(response)
+
+        return self
+
+    def expect(self, expected_pkt, forward: int | bool = True) -> HandleCase:
+        """
+        Add an expected packet to the queue.
+
+        Args:
+            expected_pkt: The packet to expect
+            forward: Number of tokens to forward before expecting this packet.
+                     True = 1 token, False = 0 tokens, int = that many tokens.
+        """
+        forward_count = 1 if forward is True else (0 if forward is False else forward)
+        self._expected_packets_queue.append((expected_pkt, forward_count))
+
+        return self
+
+    def expect_packets(self, packets, forward: int | bool = True) -> HandleCase:
+        """
+        Add multiple expected packets to the queue.
+
+        Args:
+            packets: List of packets to expect
+            forward: Number of tokens to forward before expecting EACH packet.
+                     True = 1 token per packet, False = 0 tokens, int = that many tokens per packet.
+        """
+        forward_count = 1 if forward is True else (0 if forward is False else forward)
+        for pkt in packets:
+            self._expected_packets_queue.append((pkt, forward_count))
+
+        return self
+
+    def run_and_validate(self, stream: Iterator[AnswerStreamPart]) -> None:
+        while self._expected_packets_queue:
+            expected_pkt, forward_count = self._expected_packets_queue.pop(0)
+            if forward_count > 0:
+                self._llm_controller.forward(forward_count)
+            received_pkt = next(stream)
+
+            assert_answer_stream_part_correct(received_pkt, expected_pkt)
 
 
 def create_placement(
@@ -107,6 +166,45 @@ def create_packet_with_reasoning_delta(token: str, turn_index: int) -> Packet:
     )
 
 
+def create_web_search_doc(
+    semantic_identifier: str,
+    link: str,
+    blurb: str,
+) -> SearchDoc:
+    return SearchDoc(
+        document_id=f"WEB_SEARCH_DOC_{link}",
+        chunk_ind=0,
+        semantic_identifier=semantic_identifier,
+        link=link,
+        blurb=blurb,
+        source_type=DocumentSource.WEB,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+
+
+def mock_web_search_result_to_search_doc(result: MockWebSearchResult) -> SearchDoc:
+    return create_web_search_doc(
+        semantic_identifier=result.title,
+        link=result.link,
+        blurb=result.snippet,
+    )
+
+
+def mock_web_content_to_search_doc(content: MockWebContent) -> SearchDoc:
+    return create_web_search_doc(
+        semantic_identifier=content.title,
+        link=content.url,
+        blurb=content.title,
+    )
+
+
+def tokenise(test: str) -> list[str]:
+    return [(token + " ") for token in test.split(" ")]
+
+
 def assert_answer_stream_part_correct(
     received: AnswerStreamPart, expected: AnswerStreamPart
 ) -> None:
@@ -126,6 +224,9 @@ def assert_answer_stream_part_correct(
             return
         elif isinstance(r_packet.obj, AgentResponseStart):
             assert is_agent_response_start_equal(r_packet.obj, e_packet.obj)
+            return
+        elif isinstance(r_packet.obj, ImageGenerationFinal):
+            assert is_image_generation_final_equal(r_packet.obj, e_packet.obj)
             return
 
         assert r_packet.obj == e_packet.obj
@@ -219,6 +320,30 @@ def is_agent_response_start_equal(
     return _are_search_docs_equal(received_documents, expected_documents)
 
 
+def is_image_generation_final_equal(
+    received: ImageGenerationFinal,
+    expected: ImageGenerationFinal,
+) -> bool:
+    """
+    What we care about:
+     - Number of images are the same
+     - On each image, url and file_id are aligned such that url=/api/chat/file/{file_id}
+     - Revised prompt is expected
+     - Shape is expected
+    """
+    if len(received.images) != len(expected.images):
+        return False
+
+    for received_image, expected_image in zip(received.images, expected.images):
+        if received_image.url != f"/api/chat/file/{received_image.file_id}":
+            return False
+        if received_image.revised_prompt != expected_image.revised_prompt:
+            return False
+        if received_image.shape != expected_image.shape:
+            return False
+    return True
+
+
 def test_stream_chat_with_answer(
     db_session: Session,
     full_deployment_setup: None,
@@ -233,7 +358,7 @@ def test_stream_chat_with_answer(
     query = "What is the capital of France?"
     answer = "The capital of France is Paris."
 
-    answer_tokens = [(token + " ") for token in answer.split(" ")]
+    answer_tokens = tokenise(answer)
 
     with use_mock_llm() as mock_llm:
         mock_llm.add_response(LLMAnswerResponse(answer_tokens=answer_tokens))
@@ -263,9 +388,8 @@ def test_stream_chat_with_answer(
 
         assert_answer_stream_part_correct(packet2, expected_packet2)
 
-        for word in answer.split(" "):
-            expected_token = word + " "
-            expected_packet = create_packet_with_agent_response_delta(expected_token, 0)
+        for token in tokenise(answer):
+            expected_packet = create_packet_with_agent_response_delta(token, 0)
 
             packet = next(answer_stream)
             assert_answer_stream_part_correct(packet, expected_packet)
@@ -355,435 +479,386 @@ def test_stream_chat_with_search_and_openurl_tools(
     full_deployment_setup: None,
     mock_external_deps: None,
 ) -> None:
-    """
-    Test flow:
-    1. User queries for the weather in Sydney
-    2. LLM thinks and decides to run a search
-    3. Search is ran with some websites + content provided
-    4. LLM decides which websites it will want to read from
-    4. Tool reads those websites
-    5. LLM summarizes the websites and returns the answer
-    """
     ensure_default_llm_provider(db_session)
     test_user = create_test_user(
         db_session, email_prefix="test_stream_chat_with_search_tool"
     )
 
-    query = "What is the weather in Sydney?"
+    QUERY = "What is the weather in Sydney?"
+
+    REASOING_RESPONSE_1 = (
+        "I need to perform a web search to get current weather details. "
+        "I can use the search tool to do this."
+    )
+
+    WEB_QUERY_1 = "weather in sydney"
+    WEB_QUERY_2 = "current weather in sydney"
+
+    RESULTS1 = [
+        MockWebSearchResult(
+            title="Official Weather",
+            link="www.weather.com.au",
+            snippet="The current weather in Sydney is 20 degrees Celsius.",
+        ),
+        MockWebSearchResult(
+            title="Weather CHannel",
+            link="www.wc.com.au",
+            snippet="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
+        ),
+    ]
+
+    RESULTS2 = [
+        MockWebSearchResult(
+            title="Weather Now!",
+            link="www.weathernow.com.au",
+            snippet="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+        )
+    ]
+
+    REASOING_RESPONSE_2 = "I like weathernow and the official weather site"
+
+    QUERY_URLS_1 = ["www.weathernow.com.au", "www.weather.com.au"]
+
+    CONTENT1 = [
+        MockWebContent(
+            title="Weather Now!",
+            url="www.weathernow.com.au",
+            content="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+        ),
+        MockWebContent(
+            title="Weather Official",
+            url="www.weather.com.au",
+            content="The current weather in Sydney is 20 degrees Celsius.",
+        ),
+    ]
+
+    REASONING_RESPONSE_3 = (
+        "I now know everything that I need to know. " "I can now answer the question."
+    )
+
+    ANSWER_RESPONSE_1 = (
+        "The weather in Sydney is sunny with a temperature of 22 degrees celsius."
+    )
 
     with (
         use_mock_llm() as mock_llm,
         use_mock_web_provider(db_session) as mock_web,
         use_mock_content_provider() as mock_content,
     ):
-        llm_thinking_response = (
-            "I need to perform a web search to get current weather details. "
-            "I can use the search tool to do this."
-        )
-        mock_llm.add_response(
-            LLMReasoningResponse(
-                reasoning_tokens=[
-                    (token + " ") for token in llm_thinking_response.split(" ")
-                ]
-            )
-        )
-
-        tool_call_query_dict = {
-            "queries": ["weather in sydney", "current weather in sydney"]
-        }
-        tool_call_query_string = json.dumps(tool_call_query_dict)
-        mock_llm.add_response(
-            LLMToolCallResponse(
-                tool_name="web_search",
-                tool_call_id="123",
-                tool_call_argument_tokens=[tool_call_query_string],
-            )
+        handler = HandleCase(
+            llm_controller=mock_llm,
         )
 
         chat_session = create_chat_session(db_session=db_session, user=test_user)
 
         answer_stream = submit_query(
-            query=query,
+            query=QUERY,
             chat_session_id=chat_session.id,
             db_session=db_session,
             user=test_user,
         )
 
-        # Part 0: Message is created
-        p1 = next(answer_stream)
-        ep1 = MessageResponseIDInfo(
-            user_message_id=1,
-            reserved_assistant_message_id=1,
-        )
-        assert_answer_stream_part_correct(p1, ep1)
-
-        # Part 1: Start reasoning about what to do
-        mock_llm.forward(len(llm_thinking_response.split(" ")) + 1)
-        p2 = next(answer_stream)
-        expected_packet2 = Packet(
-            placement=create_placement(0),
-            obj=ReasoningStart(),
-        )
-        assert_answer_stream_part_correct(p2, expected_packet2)
-
-        for token in llm_thinking_response.split(" "):
-            expected_token = token + " "
-            expected_packet = create_packet_with_reasoning_delta(expected_token, 0)
-
-            packet = next(answer_stream)
-            assert_answer_stream_part_correct(packet, expected_packet)
-
-        p3 = next(answer_stream)
-        expected_packet3 = Packet(
-            placement=create_placement(0),
-            obj=ReasoningDone(),
-        )
-        assert_answer_stream_part_correct(p3, expected_packet3)
-
-        # Part 2: Start the web search tool call
-        mock_llm.forward(len(tool_call_query_string.split(" ")))
-
-        p4 = next(answer_stream)
-        expected_packet4 = Packet(
-            placement=create_placement(1, 0),
-            obj=SearchToolStart(
-                is_internet_search=True,
+        assert_answer_stream_part_correct(
+            received=next(answer_stream),
+            expected=MessageResponseIDInfo(
+                user_message_id=1,
+                reserved_assistant_message_id=1,
             ),
         )
-        assert_answer_stream_part_correct(p4, expected_packet4)
 
-        QUERY1 = "weather in sydney"
-        QUERY2 = "current weather in sydney"
+        # LLM Stream Response 1
+        mock_web.add_results(WEB_QUERY_1, RESULTS1)
+        mock_web.add_results(WEB_QUERY_2, RESULTS2)
 
-        RESULTS1 = [
-            MockWebSearchResult(
-                title="Official Weather",
-                link="www.weather.com.au",
-                snippet="The current weather in Sydney is 20 degrees Celsius.",
-            ),
-            MockWebSearchResult(
-                title="Weather CHannel",
-                link="www.wc.com.au",
-                snippet="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
-            ),
-        ]
-
-        RESULTS2 = [
-            MockWebSearchResult(
-                title="Weather Now!",
-                link="www.weathernow.com.au",
-                snippet="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+        handler.add_response(
+            LLMReasoningResponse(reasoning_tokens=tokenise(REASOING_RESPONSE_1))
+        ).add_response(
+            LLMToolCallResponse(
+                tool_name="web_search",
+                tool_call_id="123",
+                tool_call_argument_tokens=[
+                    json.dumps({"queries": [WEB_QUERY_1, WEB_QUERY_2]})
+                ],
             )
-        ]
-
-        mock_web.add_results(QUERY1, RESULTS1)
-        mock_web.add_results(QUERY2, RESULTS2)
-
-        p5 = next(answer_stream)
-        expected_packet5 = Packet(
-            placement=create_placement(1, 0),
-            obj=SearchToolQueriesDelta(
-                queries=["weather in sydney", "current weather in sydney"],
-            ),
-        )
-        assert_answer_stream_part_correct(p5, expected_packet5)
-
-        DOCS1 = [
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weather.com.au",
-                chunk_ind=0,
-                semantic_identifier="The current weather in Sydney is 20 degrees Celsius.",
-                link="www.weather.com.au",
-                blurb="The current weather in Sydney is 20 degrees Celsius.",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.wc.com.au",
-                chunk_ind=0,
-                semantic_identifier="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
-                link="www.wc.com.au",
-                blurb="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
-                chunk_ind=0,
-                semantic_identifier="The weather right now is sunny with a temperature of 22 degrees Celsius.",
-                link="www.weathernow.com.au",
-                blurb="The weather right now is sunny with a temperature of 22 degrees Celsius.",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-        ]
-
-        p6 = next(answer_stream)
-        expected_packet6 = Packet(
-            placement=create_placement(1, 0),
-            obj=SearchToolDocumentsDelta(
-                documents=DOCS1,
-            ),
-        )
-
-        assert_answer_stream_part_correct(p6, expected_packet6)
-
-        p7 = next(answer_stream)
-        expected_packet7 = Packet(placement=create_placement(1, 0), obj=SectionEnd())
-        assert_answer_stream_part_correct(p7, expected_packet7)
-
-        REASONING_TEXT = "I like weathernow and the official weather site"
-        REASONING_TOKENS = [(token + " ") for token in REASONING_TEXT.split(" ")]
-        mock_llm.add_response(
-            LLMReasoningResponse(
-                reasoning_tokens=REASONING_TOKENS,
+        ).expect(
+            Packet(
+                placement=create_placement(0),
+                obj=ReasoningStart(),
             )
+        ).expect_packets(
+            [
+                create_packet_with_reasoning_delta(token, 0)
+                for token in tokenise(REASOING_RESPONSE_1)
+            ]
+        ).expect(
+            Packet(placement=create_placement(0), obj=ReasoningDone())
+        ).expect(
+            Packet(
+                placement=create_placement(1),
+                obj=SearchToolStart(
+                    is_internet_search=True,
+                ),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(1),
+                obj=SearchToolQueriesDelta(
+                    queries=[WEB_QUERY_1, WEB_QUERY_2],
+                ),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(1),
+                obj=SearchToolDocumentsDelta(
+                    documents=[
+                        mock_web_search_result_to_search_doc(result)
+                        for result in RESULTS1
+                    ]
+                    + [
+                        mock_web_search_result_to_search_doc(result)
+                        for result in RESULTS2
+                    ]
+                ),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(1),
+                obj=SectionEnd(),
+            )
+        ).run_and_validate(
+            stream=answer_stream
         )
 
-        tool_call_query_dict = {"urls": ["www.weathernow.com.au", "www.weather.com.au"]}
-        tool_call_query_string = json.dumps(tool_call_query_dict)
-        mock_llm.add_response(
+        # LLM Stream Response 2
+        for content in CONTENT1:
+            mock_content.add_content(content)
+
+        handler.add_response(
+            LLMReasoningResponse(reasoning_tokens=tokenise(REASOING_RESPONSE_2))
+        ).add_response(
             LLMToolCallResponse(
                 tool_name="open_url",
                 tool_call_id="123",
-                tool_call_argument_tokens=[tool_call_query_string],
+                tool_call_argument_tokens=[json.dumps({"urls": QUERY_URLS_1})],
             )
-        )
-
-        mock_llm.forward_till_end()
-
-        p8 = next(answer_stream)
-        expected_packet8 = Packet(
-            placement=create_placement(2),
-            obj=ReasoningStart(),
-        )
-        assert_answer_stream_part_correct(p8, expected_packet8)
-
-        for token in REASONING_TEXT.split(" "):
-            expected_token = token + " "
-            expected_packet = create_packet_with_reasoning_delta(expected_token, 2)
-
-            packet = next(answer_stream)
-            assert_answer_stream_part_correct(packet, expected_packet)
-
-        p9 = next(answer_stream)
-        expected_packet9 = Packet(
-            placement=create_placement(2),
-            obj=ReasoningDone(),
-        )
-        assert_answer_stream_part_correct(p9, expected_packet9)
-
-        CONTENT = [
-            MockWebContent(
-                title="Weather Now!",
-                url="www.weathernow.com.au",
-                content="The weather right now is sunny with a temperature of 22 degrees Celsius.",
-            ),
-            MockWebContent(
-                title="Weather Official",
-                url="www.weather.com.au",
-                content="The current weather in Sydney is 20 degrees Celsius.",
-            ),
-        ]
-
-        for content in CONTENT:
-            mock_content.add_content(content)
-
-        p10 = next(answer_stream)
-        expected_packet10 = Packet(
-            placement=create_placement(3),
-            obj=OpenUrlStart(),
-        )
-        assert_answer_stream_part_correct(p10, expected_packet10)
-
-        p11 = next(answer_stream)
-        expected_packet11 = Packet(
-            placement=create_placement(3),
-            obj=OpenUrlUrls(
-                urls=[content.url for content in CONTENT],
-            ),
-        )
-        assert_answer_stream_part_correct(p11, expected_packet11)
-
-        DOCS2 = [
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
-                chunk_ind=0,
-                semantic_identifier="Weather Now!",
-                link="www.weathernow.com.au",
-                blurb="Weather Now!",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weather.com.au",
-                chunk_ind=0,
-                semantic_identifier="Weather Official",
-                link="www.weather.com.au",
-                blurb="Weather Official",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-        ]
-
-        p12 = next(answer_stream)
-        expected_packet12 = Packet(
-            placement=create_placement(3),
-            obj=OpenUrlDocuments(
-                documents=DOCS2,
-            ),
-        )
-        assert_answer_stream_part_correct(p12, expected_packet12)
-
-        p13 = next(answer_stream)
-        expected_packet13 = Packet(
-            placement=create_placement(3),
-            obj=SectionEnd(),
-        )
-        assert_answer_stream_part_correct(p13, expected_packet13)
-
-        llm_thinking_response = (
-            "I now know everything that I need to know. "
-            "I can now answer the question."
-        )
-
-        mock_llm.add_response(
-            LLMReasoningResponse(
-                reasoning_tokens=[
-                    (token + " ") for token in llm_thinking_response.split(" ")
-                ]
+        ).expect(
+            Packet(
+                placement=create_placement(2),
+                obj=ReasoningStart(),
             )
+        ).expect_packets(
+            [
+                create_packet_with_reasoning_delta(token, 2)
+                for token in tokenise(REASOING_RESPONSE_2)
+            ]
+        ).expect(
+            Packet(
+                placement=create_placement(2),
+                obj=ReasoningDone(),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(3),
+                obj=OpenUrlStart(),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(3),
+                obj=OpenUrlUrls(urls=[content.url for content in CONTENT1]),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(3),
+                obj=OpenUrlDocuments(
+                    documents=[
+                        mock_web_content_to_search_doc(content) for content in CONTENT1
+                    ]
+                ),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(3),
+                obj=SectionEnd(),
+            )
+        ).run_and_validate(
+            stream=answer_stream
         )
 
-        answer_response = (
-            "The weather in Sydney is sunny with a temperature of 22 degrees Celsius."
+        # LLM Stream Response 3
+        handler.add_response(
+            LLMReasoningResponse(reasoning_tokens=tokenise(REASONING_RESPONSE_3))
+        ).add_response(
+            LLMAnswerResponse(answer_tokens=tokenise(ANSWER_RESPONSE_1))
+        ).expect(
+            Packet(
+                placement=create_placement(4),
+                obj=ReasoningStart(),
+            )
+        ).expect_packets(
+            [
+                create_packet_with_reasoning_delta(token, 4)
+                for token in tokenise(REASONING_RESPONSE_3)
+            ]
+        ).expect(
+            Packet(
+                placement=create_placement(4),
+                obj=ReasoningDone(),
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(5),
+                obj=AgentResponseStart(
+                    final_documents=[
+                        mock_web_search_result_to_search_doc(result)
+                        for result in RESULTS1
+                    ]
+                    + [
+                        mock_web_search_result_to_search_doc(result)
+                        for result in RESULTS2
+                    ]
+                    + [mock_web_content_to_search_doc(content) for content in CONTENT1]
+                ),
+            )
+        ).expect_packets(
+            [
+                create_packet_with_agent_response_delta(token, 5)
+                for token in tokenise(ANSWER_RESPONSE_1)
+            ]
+        ).expect(
+            Packet(
+                placement=create_placement(5),
+                obj=OverallStop(),
+            )
+        ).run_and_validate(
+            stream=answer_stream
         )
-        answer_response_tokens = [(token + " ") for token in answer_response.split(" ")]
-        mock_llm.add_response(
+
+        with pytest.raises(StopIteration):
+            next(answer_stream)
+
+
+def test_image_generation_tool_no_reasoning(
+    db_session: Session,
+    full_deployment_setup: None,
+    mock_external_deps: None,
+) -> None:
+    ensure_default_llm_provider(db_session)
+    test_user = create_test_user(db_session, email_prefix="test_image_generation_tool")
+
+    QUERY = "Create me an image of a dog on a rocketship"
+
+    IMAGE_DATA = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfF"
+        "cSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )  # pragma: allowlist secret
+    # Heartbeat interval is 5 seconds. A delay of 8 seconds ensures exactly 2 heartbeats:
+    IMAGE_DELAY = 8.0
+
+    ANSWER_RESPONSE = "Here is a dog on a rocketship"
+
+    with (
+        use_mock_llm() as mock_llm,
+        use_mock_image_generation_provider() as mock_image_gen,
+    ):
+        handler = HandleCase(
+            llm_controller=mock_llm,
+        )
+
+        chat_session = create_chat_session(db_session=db_session, user=test_user)
+
+        answer_stream = submit_query(
+            query=QUERY,
+            chat_session_id=chat_session.id,
+            db_session=db_session,
+            user=test_user,
+        )
+
+        assert_answer_stream_part_correct(
+            received=next(answer_stream),
+            expected=MessageResponseIDInfo(
+                user_message_id=1,
+                reserved_assistant_message_id=1,
+            ),
+        )
+
+        # LLM Stream Response 1
+        mock_image_gen.add_image(IMAGE_DATA, IMAGE_DELAY)
+        mock_llm.set_max_timeout(
+            IMAGE_DELAY + 5.0
+        )  # Give enough buffer for image generation
+
+        # The LLMToolCallResponse has 2 tokens (1 for tool name/id + 1 for arguments).
+        # We need to forward all 2 tokens before the tool starts executing and emitting packets.
+        # The tool then emits: start, heartbeats (during image generation), final, and section end.
+        handler.add_response(
+            LLMToolCallResponse(
+                tool_name="generate_image",
+                tool_call_id="123",
+                tool_call_argument_tokens=[json.dumps({"prompt": QUERY})],
+            )
+        ).expect(
+            Packet(
+                placement=create_placement(0),
+                obj=ImageGenerationToolStart(),
+            ),
+            forward=2,  # Forward both tool call tokens before expecting first packet
+        ).expect_packets(
+            [
+                Packet(
+                    placement=create_placement(0),
+                    obj=ImageGenerationToolHeartbeat(),
+                )
+            ]
+            * 2,
+            forward=False,
+        ).expect(
+            Packet(
+                placement=create_placement(0),
+                obj=ImageGenerationFinal(
+                    images=[
+                        GeneratedImage(
+                            file_id="123",
+                            url="/api/chat/file/123",
+                            revised_prompt=QUERY,
+                            shape="square",
+                        )
+                    ]
+                ),
+            ),
+            forward=False,
+        ).expect(
+            Packet(
+                placement=create_placement(0),
+                obj=SectionEnd(),
+            ),
+            forward=False,
+        ).run_and_validate(
+            stream=answer_stream
+        )
+
+        # LLM Stream Response 2 - the answer comes after the tool call, so turn_index=1
+        handler.add_response(
             LLMAnswerResponse(
-                answer_tokens=answer_response_tokens,
+                answer_tokens=tokenise(ANSWER_RESPONSE),
             )
+        ).expect(
+            Packet(
+                placement=create_placement(1),
+                obj=AgentResponseStart(final_documents=None),
+            )
+        ).expect_packets(
+            [
+                create_packet_with_agent_response_delta(token, 1)
+                for token in tokenise(ANSWER_RESPONSE)
+            ]
+        ).expect(
+            Packet(
+                placement=create_placement(1),
+                obj=OverallStop(),
+            )
+        ).run_and_validate(
+            stream=answer_stream
         )
 
-        mock_llm.forward_till_end()
-
-        p14 = next(answer_stream)
-        expected_packet14 = Packet(
-            placement=create_placement(4),
-            obj=ReasoningStart(),
-        )
-        assert_answer_stream_part_correct(p14, expected_packet14)
-
-        for token in llm_thinking_response.split(" "):
-            expected_token = token + " "
-            expected_packet = create_packet_with_reasoning_delta(expected_token, 4)
-
-            packet = next(answer_stream)
-            assert_answer_stream_part_correct(packet, expected_packet)
-
-        p15 = next(answer_stream)
-        expected_packet15 = Packet(
-            placement=create_placement(4),
-            obj=ReasoningDone(),
-        )
-        assert_answer_stream_part_correct(p15, expected_packet15)
-
-        FINAL_DOCS = [
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weather.com.au",
-                chunk_ind=0,
-                semantic_identifier="Weather Official",
-                link="www.weather.com.au",
-                blurb="The current weather in Sydney is 20 degrees Celsius.",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
-                chunk_ind=0,
-                semantic_identifier="Weather Now!",
-                link="www.weathernow.com.au",
-                blurb="The weather right now is sunny with a temperature of 22 degrees Celsius.",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.wc.com.au",
-                chunk_ind=0,
-                semantic_identifier="Weather Channel",
-                link="www.wc.com.au",
-                blurb="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
-                chunk_ind=0,
-                semantic_identifier="Weather Now!",
-                link="www.weathernow.com.au",
-                blurb="Weather Now!",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-            SearchDoc(
-                document_id="WEB_SEARCH_DOC_www.weather.com.au",
-                chunk_ind=0,
-                semantic_identifier="Weather Official",
-                link="www.weather.com.au",
-                blurb="Weather Official",
-                source_type=DocumentSource.WEB,
-                boost=1,
-                hidden=False,
-                metadata={},
-                match_highlights=[],
-            ),
-        ]
-
-        p16 = next(answer_stream)
-        expected_packet16 = Packet(
-            placement=create_placement(5),
-            obj=AgentResponseStart(
-                final_documents=FINAL_DOCS,
-            ),
-        )
-        assert_answer_stream_part_correct(p16, expected_packet16)
-
-        for token in answer_response.split(" "):
-            expected_token = token + " "
-            expected_packet = create_packet_with_agent_response_delta(expected_token, 5)
-            packet = next(answer_stream)
-            assert_answer_stream_part_correct(packet, expected_packet)
-
-        p17 = next(answer_stream)
-        expected_packet17 = Packet(
-            placement=create_placement(5),
-            obj=OverallStop(),
-        )
-        assert_answer_stream_part_correct(p17, expected_packet17)
+        with pytest.raises(StopIteration):
+            next(answer_stream)

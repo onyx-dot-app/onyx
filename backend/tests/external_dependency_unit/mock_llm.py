@@ -31,18 +31,28 @@ class LLMResponseType(str, Enum):
     TOOL_CALL = "tool_call"
 
 
-class LLMResponse(BaseModel):
+class LLMResponse(abc.ABC, BaseModel):
     type: LLMResponseType = ""
+
+    @abc.abstractmethod
+    def num_tokens(self) -> int:
+        raise NotImplementedError
 
 
 class LLMReasoningResponse(LLMResponse):
     type: LLMResponseType = LLMResponseType.REASONING
     reasoning_tokens: list[str]
 
+    def num_tokens(self) -> int:
+        return len(self.reasoning_tokens)
+
 
 class LLMAnswerResponse(LLMResponse):
     type: LLMResponseType = LLMResponseType.ANSWER
     answer_tokens: list[str]
+
+    def num_tokens(self) -> int:
+        return len(self.answer_tokens)
 
 
 class LLMToolCallResponse(LLMResponse):
@@ -50,6 +60,11 @@ class LLMToolCallResponse(LLMResponse):
     tool_name: str
     tool_call_id: str
     tool_call_argument_tokens: list[str]
+
+    def num_tokens(self) -> int:
+        return (
+            len(self.tool_call_argument_tokens) + 1
+        )  # +1 for the tool_call_id and tool_name
 
 
 class StreamItem(BaseModel):
@@ -145,6 +160,10 @@ class MockLLMController(abc.ABC):
     def forward_till_end(self) -> None:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def set_max_timeout(self, timeout: float = 5.0):
+        raise NotImplementedError
+
 
 class MockLLM(LLM, MockLLMController):
     def __init__(self):
@@ -165,6 +184,9 @@ class MockLLM(LLM, MockLLMController):
             self.stream_controller.forward_till_end()
         else:
             raise ValueError("No response set")
+
+    def set_max_timeout(self, timeout: float = 5.0):
+        self.stream_controller.timeout = timeout
 
     @property
     def config(self) -> LLMConfig:
