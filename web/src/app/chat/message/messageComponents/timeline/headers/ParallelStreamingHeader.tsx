@@ -44,6 +44,7 @@ export const ParallelStreamingHeader = React.memo(
       <Tabs value={activeTab} onValueChange={onTabChange}>
         <Tabs.List
           variant="pill"
+          enableScrollArrows
           rightContent={
             collapsible ? (
               <IconButton

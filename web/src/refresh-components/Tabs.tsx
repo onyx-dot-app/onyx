@@ -1,13 +1,21 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn, mergeRefs } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
+import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import Text from "./texts/Text";
+import IconButton from "./buttons/IconButton";
 
 /* =============================================================================
    CONTEXT
@@ -63,7 +71,7 @@ const useTabsContext = () => {
 /** Style classes for TabsList variants */
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex items-center pb-[4px] bg-background-tint-00 px-1",
+  pill: "relative flex items-center pb-[4px] bg-background-tint-00 px-1 overflow-hidden min-w-0",
 } as const;
 
 /** Base style classes for TabsTrigger variants */
@@ -77,6 +85,16 @@ const iconVariants = {
   contained: "stroke-text-03",
   pill: "stroke-current",
 } as const;
+
+/* =============================================================================
+   CONSTANTS
+   ============================================================================= */
+
+/** Pixel tolerance for detecting scroll boundaries (accounts for rounding) */
+const SCROLL_TOLERANCE_PX = 1;
+
+/** Pixel amount to scroll when clicking scroll arrows */
+const SCROLL_AMOUNT_PX = 200;
 
 /* =============================================================================
    HOOKS
@@ -101,13 +119,16 @@ interface IndicatorStyle {
  */
 function usePillIndicator(
   listRef: React.RefObject<HTMLElement | null>,
-  enabled: boolean
-): IndicatorStyle {
+  enabled: boolean,
+  scrollContainerRef?: React.RefObject<HTMLElement | null>
+): { style: IndicatorStyle; isScrolling: boolean } {
   const [style, setStyle] = useState<IndicatorStyle>({
     left: 0,
     width: 0,
     opacity: 0,
   });
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -130,29 +151,136 @@ function usePillIndicator(
       }
     };
 
+    const handleScroll = () => {
+      setIsScrolling(true);
+      updateIndicator();
+
+      // Clear existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      // Reset scrolling state after scroll ends
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 150);
+    };
+
     updateIndicator();
 
     // Watch for size changes on ANY tab (sibling size changes affect active tab position)
-    const resizeObserver = new ResizeObserver(updateIndicator);
+    const resizeObserver = new ResizeObserver(() => updateIndicator());
     list.querySelectorAll<HTMLElement>('[role="tab"]').forEach((tab) => {
       resizeObserver.observe(tab);
     });
 
     // Watch for data-state changes (tab switches)
-    const mutationObserver = new MutationObserver(updateIndicator);
+    const mutationObserver = new MutationObserver(() => updateIndicator());
     mutationObserver.observe(list, {
       attributes: true,
       subtree: true,
       attributeFilter: ["data-state"],
     });
 
+    // Listen for scroll events on scroll container
+    const scrollContainer = scrollContainerRef?.current;
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll);
+    }
+
     return () => {
       mutationObserver.disconnect();
       resizeObserver.disconnect();
+      if (scrollContainer) {
+        scrollContainer.removeEventListener("scroll", handleScroll);
+      }
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
     };
-  }, [enabled, listRef]);
+  }, [enabled, listRef, scrollContainerRef]);
 
-  return style;
+  return { style, isScrolling };
+}
+
+/** State for horizontal scroll arrows */
+interface ScrollState {
+  canScrollLeft: boolean;
+  canScrollRight: boolean;
+  scrollLeft: () => void;
+  scrollRight: () => void;
+}
+
+/**
+ * Hook to manage horizontal scrolling with arrow navigation.
+ *
+ * Tracks scroll position and overflow state of a container, providing
+ * scroll functions and boolean flags for arrow visibility.
+ *
+ * @param containerRef - Ref to the scrollable container element
+ * @param enabled - Whether scroll tracking is enabled
+ * @returns Object with canScrollLeft, canScrollRight, and scroll functions
+ */
+function useHorizontalScroll(
+  containerRef: React.RefObject<HTMLElement | null>,
+  enabled: boolean
+): ScrollState {
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = container;
+    setCanScrollLeft(scrollLeft > 0);
+    setCanScrollRight(
+      scrollLeft + clientWidth < scrollWidth - SCROLL_TOLERANCE_PX
+    );
+  }, [containerRef]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Delay initial measurement until after layout
+    const rafId = requestAnimationFrame(() => {
+      updateScrollState();
+    });
+
+    container.addEventListener("scroll", updateScrollState);
+
+    const resizeObserver = new ResizeObserver(updateScrollState);
+    resizeObserver.observe(container);
+
+    // Also observe children for size changes
+    Array.from(container.children).forEach((child) => {
+      resizeObserver.observe(child);
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      container.removeEventListener("scroll", updateScrollState);
+      resizeObserver.disconnect();
+    };
+  }, [enabled, containerRef, updateScrollState]);
+
+  const scrollLeft = useCallback(() => {
+    containerRef.current?.scrollBy({
+      left: -SCROLL_AMOUNT_PX,
+      behavior: "smooth",
+    });
+  }, [containerRef]);
+
+  const scrollRight = useCallback(() => {
+    containerRef.current?.scrollBy({
+      left: SCROLL_AMOUNT_PX,
+      behavior: "smooth",
+    });
+  }, [containerRef]);
+
+  return { canScrollLeft, canScrollRight, scrollLeft, scrollRight };
 }
 
 /* =============================================================================
@@ -180,7 +308,7 @@ function PillIndicator({
         style={{ right: rightOffset }}
       />
       <div
-        className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 transition-all duration-200 ease-out pointer-events-none"
+        className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 pointer-events-none transition-all duration-200 ease-out"
         style={{
           left: style.left,
           width: style.width,
@@ -247,6 +375,13 @@ interface TabsListProps
    * ```
    */
   rightContent?: React.ReactNode;
+
+  /**
+   * Enable horizontal scroll arrows when tabs overflow.
+   * Only applies to the `pill` variant.
+   * @default false
+   */
+  enableScrollArrows?: boolean;
 }
 
 /**
@@ -265,15 +400,36 @@ const TabsList = React.forwardRef<
   TabsListProps
 >(
   (
-    { variant = "contained", rightContent, children, className, ...props },
+    {
+      variant = "contained",
+      rightContent,
+      enableScrollArrows = false,
+      children,
+      className,
+      ...props
+    },
     ref
   ) => {
     const listRef = useRef<HTMLDivElement>(null);
+    const tabsContainerRef = useRef<HTMLDivElement>(null);
     const rightContentRef = useRef<HTMLDivElement>(null);
     const [rightContentWidth, setRightContentWidth] = useState(0);
     const isPill = variant === "pill";
-    const indicatorStyle = usePillIndicator(listRef, isPill);
+    const { style: indicatorStyle } = usePillIndicator(
+      listRef,
+      isPill,
+      enableScrollArrows ? tabsContainerRef : undefined
+    );
     const contextValue = useMemo(() => ({ variant }), [variant]);
+    const {
+      canScrollLeft,
+      canScrollRight,
+      scrollLeft: handleScrollLeft,
+      scrollRight: handleScrollRight,
+    } = useHorizontalScroll(tabsContainerRef, isPill && enableScrollArrows);
+
+    const showScrollArrows =
+      isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
 
     // Track right content width to offset the border line
     useEffect(() => {
@@ -314,13 +470,44 @@ const TabsList = React.forwardRef<
       >
         <TabsContext.Provider value={contextValue}>
           {isPill ? (
-            <div className="flex items-center gap-2 pt-1">{children}</div>
+            enableScrollArrows ? (
+              <div
+                ref={tabsContainerRef}
+                className="flex items-center gap-2 pt-1 overflow-x-auto scrollbar-hide flex-1 min-w-0"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                {children}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pt-1">{children}</div>
+            )
           ) : (
             children
           )}
 
+          {showScrollArrows && (
+            <div className="flex items-center gap-1 pl-2 flex-shrink-0">
+              <IconButton
+                main
+                internal
+                icon={SvgChevronLeft}
+                onClick={handleScrollLeft}
+                disabled={!canScrollLeft}
+                tooltip="Scroll tabs left"
+              />
+              <IconButton
+                main
+                internal
+                icon={SvgChevronRight}
+                onClick={handleScrollRight}
+                disabled={!canScrollRight}
+                tooltip="Scroll tabs right"
+              />
+            </div>
+          )}
+
           {isPill && rightContent && (
-            <div ref={rightContentRef} className="ml-auto pl-2">
+            <div ref={rightContentRef} className="ml-auto pl-2 flex-shrink-0">
               {rightContent}
             </div>
           )}
@@ -454,7 +641,9 @@ const TabsTrigger = React.forwardRef<
       >
         {tooltip && !disabled ? (
           <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
-            {inner}
+            <span className="inline-flex items-center gap-inherit">
+              {inner}
+            </span>
           </SimpleTooltip>
         ) : (
           inner

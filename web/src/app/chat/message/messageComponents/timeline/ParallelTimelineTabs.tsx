@@ -140,9 +140,10 @@ export function ParallelTimelineTabs({
           </div>
 
           {/* Right column: Tabs + collapse button */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <Tabs.List
               variant="pill"
+              enableScrollArrows
               className={cn(
                 isHover && "bg-background-tint-02",
                 "transition-colors duration-200"

@@ -392,7 +392,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       headerContent={
         <div
           className={cn(
-            "flex w-full h-full items-center justify-between pl-2 pr-1",
+            "flex w-full min-w-0 h-full items-center justify-between pl-2 pr-1",
             ((!stopPacketSeen && !hasDisplayContent) || isExpanded) &&
               "bg-background-tint-00 rounded-t-12",
             !isExpanded &&
