@@ -1,15 +1,17 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { cn, isImageFile } from "@/lib/utils";
-import { LlmManager } from "@/lib/hooks";
 import {
   useUploadFilesContext,
   BuildFile,
   UploadFileStatus,
 } from "@/app/build/contexts/UploadFilesContext";
+import { useDemoDataEnabled } from "@/app/build/hooks/useBuildSessionStore";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
+import SelectButton from "@/refresh-components/buttons/SelectButton";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   SvgArrowUp,
   SvgFileText,
@@ -17,6 +19,7 @@ import {
   SvgLoader,
   SvgX,
   SvgPaperclip,
+  SvgOrganization,
 } from "@opal/icons";
 
 const MAX_INPUT_HEIGHT = 200;
@@ -27,11 +30,14 @@ export interface InputBarHandle {
 }
 
 export interface InputBarProps {
-  onSubmit: (message: string, files: BuildFile[]) => void;
+  onSubmit: (
+    message: string,
+    files: BuildFile[],
+    demoDataEnabled: boolean
+  ) => void;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
-  llmManager: LlmManager;
   /** Session ID for immediate file uploads. If provided, files upload immediately when attached. */
   sessionId?: string;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
@@ -85,12 +91,13 @@ const InputBar = React.memo(
         isRunning,
         disabled = false,
         placeholder = "Describe your task...",
-        llmManager,
         sessionId,
         sandboxInitializing = false,
       },
       ref
     ) => {
+      const router = useRouter();
+      const demoDataEnabled = useDemoDataEnabled();
       const [message, setMessage] = useState("");
       const textAreaRef = useRef<HTMLTextAreaElement>(null);
       const containerRef = useRef<HTMLDivElement>(null);
@@ -181,7 +188,7 @@ const InputBar = React.memo(
           sandboxInitializing
         )
           return;
-        onSubmit(message.trim(), currentMessageFiles);
+        onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
         setMessage("");
         clearFiles();
       }, [
@@ -193,6 +200,7 @@ const InputBar = React.memo(
         onSubmit,
         currentMessageFiles,
         clearFiles,
+        demoDataEnabled,
       ]);
 
       const handleKeyDown = useCallback(
@@ -281,7 +289,7 @@ const InputBar = React.memo(
           {/* Bottom controls */}
           <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
             {/* Bottom left controls */}
-            <div className="flex flex-row items-center">
+            <div className="flex flex-row items-center gap-1">
               {/* (+) button for file upload */}
               <IconButton
                 icon={SvgPaperclip}
@@ -290,15 +298,29 @@ const InputBar = React.memo(
                 disabled={disabled}
                 onClick={() => fileInputRef.current?.click()}
               />
+              {/* Demo Data indicator pill */}
+              <SimpleTooltip
+                tooltip="Switch to your data in the Configure panel!"
+                side="top"
+              >
+                <span>
+                  <SelectButton
+                    leftIcon={SvgOrganization}
+                    engaged={demoDataEnabled}
+                    action
+                    folded
+                    disabled={disabled}
+                    onClick={() => router.push("/build/v1/configure")}
+                    className="bg-action-link-01"
+                  >
+                    Demo Data
+                  </SelectButton>
+                </span>
+              </SimpleTooltip>
             </div>
 
             {/* Bottom right controls */}
             <div className="flex flex-row items-center gap-1">
-              {/* LLM popover */}
-              <div className={cn(llmManager.isLoadingProviders && "invisible")}>
-                <LLMPopover llmManager={llmManager} disabled={disabled} />
-              </div>
-
               {/* Submit button */}
               <IconButton
                 icon={sandboxInitializing ? SvgLoader : SvgArrowUp}

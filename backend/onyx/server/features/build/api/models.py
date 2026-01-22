@@ -14,6 +14,9 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
+    demo_data_enabled: bool = (
+        True  # Whether to mount demo data files in sandbox (not yet implemented)
+    )
 
 
 class SessionUpdateRequest(BaseModel):

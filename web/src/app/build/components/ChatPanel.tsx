@@ -15,7 +15,6 @@ import {
 import { useBuildStreaming } from "@/app/build/hooks/useBuildStreaming";
 import { BuildFile } from "@/app/build/contexts/UploadFilesContext";
 import { uploadFile } from "@/app/build/services/apiServices";
-import { useLlmManager } from "@/lib/hooks";
 import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import InputBar from "@/app/build/components/InputBar";
@@ -23,6 +22,11 @@ import BuildWelcome from "@/app/build/components/BuildWelcome";
 import BuildMessageList from "@/app/build/components/BuildMessageList";
 import OutputPanelTab from "@/app/build/components/OutputPanelTab";
 import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicator";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import { SvgSidebar } from "@opal/icons";
+import { useBuildContext } from "@/app/build/contexts/BuildContext";
+import useScreenSize from "@/hooks/useScreenSize";
+import { cn } from "@/lib/utils";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -49,6 +53,8 @@ export default function BuildChatPanel({
   const sessionId = useSessionId();
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
+  const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
+  const { isMobile } = useScreenSize();
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -72,10 +78,11 @@ export default function BuildChatPanel({
   );
   const { streamMessage } = useBuildStreaming();
   const isPreProvisioning = useIsPreProvisioning();
-  const llmManager = useLlmManager();
 
   const handleSubmit = useCallback(
-    async (message: string, files: BuildFile[]) => {
+    async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
+      // TODO: Pass demoDataEnabled to createSession when backend is implemented
+      console.log("Demo data enabled:", demoDataEnabled);
       if (hasSession && sessionId) {
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
@@ -176,7 +183,17 @@ export default function BuildChatPanel({
       {popup}
       {/* Chat header */}
       <div className="flex flex-row items-center justify-between pl-4 py-3">
-        <SandboxStatusIndicator />
+        <div className="flex flex-row items-center gap-2">
+          {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
+          {isMobile && leftSidebarFolded && (
+            <IconButton
+              icon={SvgSidebar}
+              onClick={() => setLeftSidebarFolded(false)}
+              internal
+            />
+          )}
+          <SandboxStatusIndicator />
+        </div>
         {/* Output panel tab in header */}
         <OutputPanelTab isOpen={outputPanelOpen} onClick={toggleOutputPanel} />
       </div>
@@ -187,7 +204,6 @@ export default function BuildChatPanel({
           <BuildWelcome
             onSubmit={handleSubmit}
             isRunning={isRunning}
-            llmManager={llmManager}
             sandboxInitializing={isPreProvisioning}
           />
         ) : (
@@ -206,7 +222,6 @@ export default function BuildChatPanel({
               onSubmit={handleSubmit}
               isRunning={isRunning}
               placeholder="Continue the conversation..."
-              llmManager={llmManager}
               sessionId={sessionId ?? undefined}
             />
           </div>
