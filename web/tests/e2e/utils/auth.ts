@@ -52,9 +52,20 @@ export async function loginAs(
   console.log(`[loginAs] Navigating to /auth/login as ${userType}`);
   await page.goto("/auth/login");
 
-  await fillCredentials("loginAs primary form");
+  // Wait for navigation to settle (login page may redirect to signup if no users exist)
+  await page.waitForLoadState("networkidle");
 
-  // Click the login button
+  const currentUrl = page.url();
+  const isOnSignup = currentUrl.includes("/auth/signup");
+  console.log(
+    `[loginAs] After navigation, landed on: ${currentUrl} (isOnSignup: ${isOnSignup})`
+  );
+
+  await fillCredentials(
+    isOnSignup ? "loginAs signup form" : "loginAs login form"
+  );
+
+  // Click the submit button
   await page.click('button[type="submit"]');
   // Log any console errors during login
   page.on("console", (msg) => {
@@ -64,36 +75,38 @@ export async function loginAs(
   });
 
   try {
-    await page.waitForURL("/chat", { timeout: 10000 });
+    await page.waitForURL(/\/chat.*/, { timeout: 10000 });
     console.log(
       `[loginAs] Redirected to /chat for ${userType}. URL: ${page.url()}`
     );
   } catch {
     console.log(`[loginAs] Timeout to /chat. Current URL: ${page.url()}`);
 
-    // If redirect to /chat doesn't happen, go to /auth/login
-    console.log(`[loginAs] Navigating to /auth/signup as fallback`);
-    await page.goto("/auth/signup");
-    await logPageState(
-      page,
-      `[loginAs] Landed on /auth/signup fallback (${userType})`,
-      "[login-debug]"
-    );
-
-    await fillCredentials("loginAs fallback form");
-
-    // Click the login button
-    await page.click('button[type="submit"]');
-
-    try {
-      await page.waitForURL("/chat", { timeout: 10000 });
-      console.log(
-        `[loginAs] Fallback redirected to /chat for ${userType}. URL: ${page.url()}`
+    // If redirect to /chat doesn't happen and we were on login, try signup as fallback
+    if (!isOnSignup) {
+      console.log(`[loginAs] Navigating to /auth/signup as fallback`);
+      await page.goto("/auth/signup");
+      await logPageState(
+        page,
+        `[loginAs] Landed on /auth/signup fallback (${userType})`,
+        "[login-debug]"
       );
-    } catch {
-      console.log(
-        `[loginAs] Fallback timeout again. Current URL: ${page.url()}`
-      );
+
+      await fillCredentials("loginAs fallback form");
+
+      // Click the submit button
+      await page.click('button[type="submit"]');
+
+      try {
+        await page.waitForURL(/\/chat.*/, { timeout: 10000 });
+        console.log(
+          `[loginAs] Fallback redirected to /chat for ${userType}. URL: ${page.url()}`
+        );
+      } catch {
+        console.log(
+          `[loginAs] Fallback timeout again. Current URL: ${page.url()}`
+        );
+      }
     }
   }
 
@@ -232,6 +245,16 @@ export async function loginWithCredentials(
   }
 
   await page.goto("/auth/login");
+
+  // Wait for navigation to settle (login page may redirect to signup if no users exist)
+  await page.waitForLoadState("networkidle");
+
+  const currentUrl = page.url();
+  const isOnSignup = currentUrl.includes("/auth/signup");
+  console.log(
+    `[loginWithCredentials] After navigation, landed on: ${currentUrl} (isOnSignup: ${isOnSignup})`
+  );
+
   const emailInput = page.getByTestId("email");
   const passwordInput = page.getByTestId("password");
   await emailInput.waitFor({ state: "visible", timeout: 30000 });
