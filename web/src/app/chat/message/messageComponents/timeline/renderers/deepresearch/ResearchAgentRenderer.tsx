@@ -1,12 +1,5 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useCallback,
-  FunctionComponent,
-} from "react";
-import { FiTarget } from "react-icons/fi";
-import { SvgCircle, SvgCheckCircle } from "@opal/icons";
+import React, { useMemo, useCallback, FunctionComponent } from "react";
+import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
 import { IconProps } from "@opal/types";
 
 import {
@@ -23,10 +16,7 @@ import {
 } from "@/app/chat/message/messageComponents/interfaces";
 import { getToolName } from "@/app/chat/message/messageComponents/toolDisplayHelpers";
 import { StepContainer } from "@/app/chat/message/messageComponents/timeline/StepContainer";
-import {
-  TimelineRendererComponent,
-  TimelineRendererResult,
-} from "@/app/chat/message/messageComponents/timeline/TimelineRendererComponent";
+import { TimelineRendererComponent } from "@/app/chat/message/messageComponents/timeline/TimelineRendererComponent";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { useMarkdownRenderer } from "@/app/chat/message/messageComponents/markdownUtils";
@@ -250,7 +240,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       {/* Research Task - hidden in compact mode when tools/report are active */}
       {researchTask && !showOnlyReport && !showOnlyTools && (
         <StepContainer
-          stepIcon={FiTarget as FunctionComponent<IconProps>}
+          stepIcon={SvgCircle}
           header="Research Task"
           collapsible={true}
           isLastStep={
@@ -316,7 +306,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       {/* Intermediate report - hidden when tools are active in compact mode */}
       {fullReportContent && !showOnlyTools && (
         <StepContainer
-          stepIcon={SvgCircle as FunctionComponent<IconProps>}
+          stepIcon={SvgBookOpen}
           header="Research Report"
           isLastStep={!stopPacketSeen && !isComplete}
           isFirstStep={!researchTask && nestedToolGroups.length === 0}

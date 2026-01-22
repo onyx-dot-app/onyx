@@ -13,6 +13,10 @@ export const COMPACT_SUPPORTED_PACKET_TYPES = new Set<PacketType>([
 export const isResearchAgentPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 
+// Check if packets belong to a search tool
+export const isSearchToolPackets = (packets: Packet[]): boolean =>
+  packets.some((p) => p.obj.type === PacketType.SEARCH_TOOL_START);
+
 // Check if step supports compact rendering mode
 export const stepSupportsCompact = (packets: Packet[]): boolean =>
   packets.some((p) =>

@@ -22,6 +22,7 @@ import {
 } from "@/app/chat/message/messageComponents/timeline/hooks";
 import {
   isResearchAgentPackets,
+  isSearchToolPackets,
   stepSupportsCompact,
 } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
 import {
@@ -59,6 +60,16 @@ const TimelineStep = React.memo(function TimelineStep({
   isFirstStep,
   isSingleStep,
 }: TimelineStepProps) {
+  // Memoize packet type checks to avoid recomputing on every render
+  const isResearchAgent = useMemo(
+    () => isResearchAgentPackets(step.packets),
+    [step.packets]
+  );
+  const isSearchTool = useMemo(
+    () => isSearchToolPackets(step.packets),
+    [step.packets]
+  );
+
   // Stable render callback - doesn't need to change between renders
   const renderStep = useCallback(
     ({
@@ -70,7 +81,7 @@ const TimelineStep = React.memo(function TimelineStep({
       isLastStep: rendererIsLastStep,
       supportsCompact,
     }: TimelineRendererResult) =>
-      isResearchAgentPackets(step.packets) ? (
+      isResearchAgent ? (
         content
       ) : (
         <StepContainer
@@ -83,11 +94,14 @@ const TimelineStep = React.memo(function TimelineStep({
           isLastStep={rendererIsLastStep}
           isFirstStep={isFirstStep}
           hideHeader={isSingleStep}
+          collapsedIcon={
+            isSearchTool ? (icon as FunctionComponent<IconProps>) : undefined
+          }
         >
           {content}
         </StepContainer>
       ),
-    [step.packets, isFirstStep, isSingleStep]
+    [isResearchAgent, isSearchTool, step.packets, isFirstStep, isSingleStep]
   );
 
   return (

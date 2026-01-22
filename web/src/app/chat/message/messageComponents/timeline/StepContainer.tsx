@@ -33,6 +33,8 @@ export interface StepContainerProps {
   hideHeader?: boolean;
   /** Hover state from parent */
   isHover?: boolean;
+  /** Custom icon to show when collapsed (defaults to SvgExpand) */
+  collapsedIcon?: FunctionComponent<IconProps>;
 }
 
 /** Visual wrapper for timeline steps - icon, connector line, header, and content */
@@ -50,6 +52,7 @@ export function StepContainer({
   className,
   hideHeader = false,
   isHover = false,
+  collapsedIcon: CollapsedIconComponent,
 }: StepContainerProps) {
   const showCollapseControls = collapsible && supportsCompact && onToggle;
 
@@ -104,7 +107,9 @@ export function StepContainer({
                 <Button
                   tertiary
                   onClick={onToggle}
-                  rightIcon={isExpanded ? SvgFold : SvgExpand}
+                  rightIcon={
+                    isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
+                  }
                 >
                   {buttonTitle}
                 </Button>
@@ -112,7 +117,9 @@ export function StepContainer({
                 <IconButton
                   tertiary
                   onClick={onToggle}
-                  icon={isExpanded ? SvgFold : SvgExpand}
+                  icon={
+                    isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
+                  }
                 />
               ))}
           </div>
