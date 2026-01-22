@@ -6,6 +6,7 @@ LocalSandboxManager is the filesystem-based implementation for local/dev environ
 Use get_sandbox_manager() to get the appropriate implementation based on SANDBOX_BACKEND.
 """
 
+import subprocess
 import threading
 from abc import ABC
 from abc import abstractmethod
@@ -273,6 +274,11 @@ class LocalSandboxManager(SandboxManager):
             {}
         )  # sandbox_id -> ACPAgentClient
 
+        # Track Next.js processes to prevent garbage collection
+        self._nextjs_processes: dict[str, subprocess.Popen[bytes]] = (
+            {}
+        )  # session_id -> Popen
+
         # Validate templates exist (raises RuntimeError if missing)
         self._validate_templates()
 
@@ -450,8 +456,12 @@ class LocalSandboxManager(SandboxManager):
             web_dir = self._directory_manager.get_web_path(sandbox_path)
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
-            self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            nextjs_process = self._process_manager.start_nextjs_server(
+                web_dir, nextjs_port
+            )
             logger.info("Next.js server started successfully")
+            # Store process reference to prevent garbage collection
+            self._nextjs_processes[session_id] = nextjs_process
 
             # Create DB record (uses flush, caller commits)
             logger.debug("Creating sandbox database record")
@@ -592,10 +602,8 @@ class LocalSandboxManager(SandboxManager):
             return False
 
         # Check Next.js server is responsive on the sandbox's allocated port
-        if self._process_manager._wait_for_server(
-            f"http://localhost:{sandbox.nextjs_port}",
-            timeout=5.0,
-        ):
+        server_url = f"http://localhost:{sandbox.nextjs_port}"
+        if self._process_manager._wait_for_server(server_url, timeout=5.0):
             update_sandbox_heartbeat(db_session, UUID(sandbox_id))
             return True
 
