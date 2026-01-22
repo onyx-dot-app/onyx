@@ -750,7 +750,7 @@ def test_image_generation_tool_no_reasoning(
     IMAGE_DATA = (
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfF"
         "cSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-    )  # pragma: allowlist secret
+    )
     # Heartbeat interval is 5 seconds. A delay of 8 seconds ensures exactly 2 heartbeats:
     IMAGE_DELAY = 8.0
 
