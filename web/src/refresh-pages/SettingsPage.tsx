@@ -1493,7 +1493,7 @@ function FederatedConnectorCard({
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title="Disconnect Connector"
+          title={`Disconnect ${sourceMetadata.displayName}`}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
             <Button
@@ -1507,10 +1507,14 @@ function FederatedConnectorCard({
         >
           <Section gap={0.5} alignItems="start">
             <Text>
-              Are you sure you want to disconnect{" "}
-              <Text className="!font-bold">{sourceMetadata.displayName}</Text>?
+              Onyx will no longer be able to access or search content from your{" "}
+              <Text className="!font-bold">{sourceMetadata.displayName}</Text>{" "}
+              account.
             </Text>
-            <Text>You can reconnect at any time.</Text>
+            <Text>
+              You can still continue existing sessions referencing{" "}
+              {sourceMetadata.displayName} content.
+            </Text>
           </Section>
         </ConfirmationModalLayout>
       )}
