@@ -28,6 +28,7 @@ import {
   TimelineRendererResult,
 } from "@/app/chat/message/messageComponents/timeline/TimelineRendererComponent";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
+import Text from "@/refresh-components/texts/Text";
 import { useMarkdownRenderer } from "@/app/chat/message/messageComponents/markdownUtils";
 
 interface NestedToolGroup {
@@ -39,8 +40,18 @@ interface NestedToolGroup {
 }
 
 /**
- * Renderer for research agent steps in deep research.
+ * ResearchAgentRenderer - Renders research agent steps in deep research
+ *
  * Segregates packets by tool and uses StepContainer + TimelineRendererComponent.
+ *
+ * RenderType modes:
+ * - FULL: Shows all nested tool groups, research task, and report. Headers passed as `status` prop.
+ *         Used when step is expanded in timeline.
+ * - COMPACT: Shows only the latest active item (tool or report). Header passed as `status` prop.
+ *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ * - HIGHLIGHT: Shows only the latest active item with header embedded directly in content.
+ *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              Nested tools are rendered with HIGHLIGHT mode recursively.
  */
 export const ResearchAgentRenderer: MessageRenderer<
   ResearchAgentPacket,
@@ -102,12 +113,16 @@ export const ResearchAgentRenderer: MessageRenderer<
     return { parentPackets: parent, nestedToolGroups: groups };
   }, [packets]);
 
-  // Filter nested tool groups based on renderType (COMPACT shows only latest)
+  // Filter nested tool groups based on renderType (COMPACT and HIGHLIGHT show only latest)
   const visibleNestedToolGroups = useMemo(() => {
-    if (renderType !== RenderType.COMPACT || nestedToolGroups.length === 0) {
+    if (
+      (renderType !== RenderType.COMPACT &&
+        renderType !== RenderType.HIGHLIGHT) ||
+      nestedToolGroups.length === 0
+    ) {
       return nestedToolGroups;
     }
-    // COMPACT mode: show only the latest group (last in sorted array)
+    // COMPACT/HIGHLIGHT mode: show only the latest group (last in sorted array)
     const latestGroup = nestedToolGroups[nestedToolGroups.length - 1];
     return latestGroup ? [latestGroup] : [];
   }, [renderType, nestedToolGroups]);
@@ -127,13 +142,15 @@ export const ResearchAgentRenderer: MessageRenderer<
     })
     .join("");
 
-  // Compact mode: show only the currently active/streaming section
+  // Condensed modes: show only the currently active/streaming section
   const isCompact = renderType === RenderType.COMPACT;
+  const isHighlight = renderType === RenderType.HIGHLIGHT;
+  const isCondensedMode = isCompact || isHighlight;
   // Report takes priority if it has content (means tools are done, report is streaming)
   const showOnlyReport =
-    isCompact && fullReportContent && visibleNestedToolGroups.length > 0;
+    isCondensedMode && fullReportContent && visibleNestedToolGroups.length > 0;
   const showOnlyTools =
-    isCompact && !fullReportContent && visibleNestedToolGroups.length > 0;
+    isCondensedMode && !fullReportContent && visibleNestedToolGroups.length > 0;
 
   // Markdown renderer for ExpandableTextDisplay
   const { renderedContent } = useMarkdownRenderer(
@@ -145,6 +162,83 @@ export const ResearchAgentRenderer: MessageRenderer<
   // Stable callbacks to avoid creating new functions on every render
   const noopComplete = useCallback(() => {}, []);
   const renderReport = useCallback(() => renderedContent, [renderedContent]);
+
+  // HIGHLIGHT mode: return raw content with header embedded in content
+  if (isHighlight) {
+    if (showOnlyReport) {
+      return children({
+        icon: null,
+        status: null,
+        content: (
+          <div className="flex flex-col">
+            <Text as="p" text02 className="text-sm mb-1">
+              Research Report
+            </Text>
+            <ExpandableTextDisplay
+              title="Research Report"
+              content={fullReportContent}
+              maxLines={5}
+              renderContent={renderReport}
+            />
+          </div>
+        ),
+        supportsCompact: true,
+      });
+    }
+
+    if (showOnlyTools) {
+      const latestGroup = visibleNestedToolGroups[0];
+      if (latestGroup) {
+        return (
+          <TimelineRendererComponent
+            key={latestGroup.sub_turn_index}
+            packets={latestGroup.packets}
+            chatState={state}
+            onComplete={noopComplete}
+            animate={!stopPacketSeen && !latestGroup.isComplete}
+            stopPacketSeen={stopPacketSeen}
+            defaultExpanded={false}
+            renderTypeOverride={RenderType.HIGHLIGHT}
+            isLastStep={true}
+            isHover={isHover}
+          >
+            {({ content }) =>
+              children({
+                icon: null,
+                status: null,
+                content,
+                supportsCompact: true,
+              })
+            }
+          </TimelineRendererComponent>
+        );
+      }
+    }
+
+    // Fallback: research task with header embedded
+    if (researchTask) {
+      return children({
+        icon: null,
+        status: null,
+        content: (
+          <div className="flex flex-col">
+            <Text as="p" text02 className="text-sm mb-1">
+              Research Task
+            </Text>
+            <div className="text-text-600 text-sm">{researchTask}</div>
+          </div>
+        ),
+        supportsCompact: true,
+      });
+    }
+
+    return children({
+      icon: null,
+      status: null,
+      content: <></>,
+      supportsCompact: true,
+    });
+  }
 
   // Build content using StepContainer pattern
   const researchAgentContent = (

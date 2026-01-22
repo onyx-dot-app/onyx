@@ -162,11 +162,23 @@ function usePillIndicator(
 /**
  * Renders the bottom line and sliding indicator for the pill variant.
  * The indicator animates smoothly when switching between tabs.
+ *
+ * @param style - Position and opacity for the sliding indicator
+ * @param rightOffset - Distance from the right edge where the border line should stop (for rightContent)
  */
-function PillIndicator({ style }: { style: IndicatorStyle }) {
+function PillIndicator({
+  style,
+  rightOffset = 0,
+}: {
+  style: IndicatorStyle;
+  rightOffset?: number;
+}) {
   return (
     <>
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-border-02 pointer-events-none" />
+      <div
+        className="absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none"
+        style={{ right: rightOffset }}
+      />
       <div
         className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 transition-all duration-200 ease-out pointer-events-none"
         style={{
@@ -257,9 +269,33 @@ const TabsList = React.forwardRef<
     ref
   ) => {
     const listRef = useRef<HTMLDivElement>(null);
+    const rightContentRef = useRef<HTMLDivElement>(null);
+    const [rightContentWidth, setRightContentWidth] = useState(0);
     const isPill = variant === "pill";
     const indicatorStyle = usePillIndicator(listRef, isPill);
     const contextValue = useMemo(() => ({ variant }), [variant]);
+
+    // Track right content width to offset the border line
+    useEffect(() => {
+      if (!isPill || !rightContent) {
+        setRightContentWidth(0);
+        return;
+      }
+
+      const rightEl = rightContentRef.current;
+      if (!rightEl) return;
+
+      const updateWidth = () => {
+        setRightContentWidth(rightEl.offsetWidth);
+      };
+
+      updateWidth();
+
+      const resizeObserver = new ResizeObserver(updateWidth);
+      resizeObserver.observe(rightEl);
+
+      return () => resizeObserver.disconnect();
+    }, [isPill, rightContent]);
 
     return (
       <TabsPrimitive.List
@@ -284,10 +320,17 @@ const TabsList = React.forwardRef<
           )}
 
           {isPill && rightContent && (
-            <div className="ml-auto pl-2">{rightContent}</div>
+            <div ref={rightContentRef} className="ml-auto pl-2">
+              {rightContent}
+            </div>
           )}
 
-          {isPill && <PillIndicator style={indicatorStyle} />}
+          {isPill && (
+            <PillIndicator
+              style={indicatorStyle}
+              rightOffset={rightContentWidth}
+            />
+          )}
         </TabsContext.Provider>
       </TabsPrimitive.List>
     );

@@ -42,32 +42,36 @@ export const ParallelStreamingHeader = React.memo(
 
     return (
       <Tabs value={activeTab} onValueChange={onTabChange}>
-        <div className="flex items-center justify-between w-full gap-2">
-          <Tabs.List variant="pill">
-            {steps.map((step) => (
-              <Tabs.Trigger
-                key={step.key}
-                value={step.key}
-                variant="pill"
-                isLoading={loadingStates.get(step.key)}
-              >
-                <span className="flex items-center gap-1.5">
-                  {getToolIcon(step.packets)}
-                  {getToolName(step.packets)}
-                </span>
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
-          {collapsible && (
-            <IconButton
-              tertiary
-              onClick={onToggle}
-              icon={isExpanded ? SvgFold : SvgExpand}
-              aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
-              aria-expanded={isExpanded}
-            />
-          )}
-        </div>
+        <Tabs.List
+          variant="pill"
+          rightContent={
+            collapsible ? (
+              <IconButton
+                tertiary
+                onClick={onToggle}
+                icon={isExpanded ? SvgFold : SvgExpand}
+                aria-label={
+                  isExpanded ? "Collapse timeline" : "Expand timeline"
+                }
+                aria-expanded={isExpanded}
+              />
+            ) : undefined
+          }
+        >
+          {steps.map((step) => (
+            <Tabs.Trigger
+              key={step.key}
+              value={step.key}
+              variant="pill"
+              isLoading={loadingStates.get(step.key)}
+            >
+              <span className="flex items-center gap-1.5">
+                {getToolIcon(step.packets)}
+                {getToolName(step.packets)}
+              </span>
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
       </Tabs>
     );
   }

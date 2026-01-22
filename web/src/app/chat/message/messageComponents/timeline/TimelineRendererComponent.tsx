@@ -38,6 +38,8 @@ export interface TimelineRendererComponentProps {
   isLastStep?: boolean;
   /** Hover state from parent component */
   isHover?: boolean;
+  /** Override render type (if not set, derives from defaultExpanded) */
+  renderTypeOverride?: RenderType;
   /** Children render function - receives extended result with collapse state */
   children: (result: TimelineRendererResult) => JSX.Element;
 }
@@ -55,7 +57,8 @@ function arePropsEqual(
     prev.animate === next.animate &&
     prev.isLastStep === next.isLastStep &&
     prev.isHover === next.isHover &&
-    prev.defaultExpanded === next.defaultExpanded
+    prev.defaultExpanded === next.defaultExpanded &&
+    prev.renderTypeOverride === next.renderTypeOverride
     // Skipping chatState (memoized upstream)
   );
 }
@@ -71,12 +74,14 @@ export const TimelineRendererComponent = React.memo(
     defaultExpanded = true,
     isLastStep,
     isHover = false,
+    renderTypeOverride,
     children,
   }: TimelineRendererComponentProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
     const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
     const RendererFn = findRenderer({ packets });
-    const renderType = isExpanded ? RenderType.FULL : RenderType.COMPACT;
+    const renderType =
+      renderTypeOverride ?? (isExpanded ? RenderType.FULL : RenderType.COMPACT);
 
     if (!RendererFn) {
       return children({

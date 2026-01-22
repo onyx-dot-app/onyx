@@ -2,7 +2,7 @@
 
 import React, { FunctionComponent, useMemo, useCallback } from "react";
 import { StopReason } from "@/app/chat/services/streamingModels";
-import { FullChatState } from "../interfaces";
+import { FullChatState, RenderType } from "../interfaces";
 import { TurnGroup, TransformedStep } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -266,10 +266,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   const parallelActiveStepSupportsCompact = useMemo(() => {
     if (!parallelActiveStep) return false;
-    return (
-      stepSupportsCompact(parallelActiveStep.packets) &&
-      !isResearchAgentPackets(parallelActiveStep.packets)
-    );
+    return stepSupportsCompact(parallelActiveStep.packets);
   }, [parallelActiveStep]);
 
   // Collapsed streaming: show compact content below header (only during tool execution)
@@ -279,7 +276,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     !isExpanded &&
     lastStep &&
     !lastTurnGroup?.isParallel &&
-    !lastStepIsResearchAgent &&
     lastStepSupportsCompact;
 
   // Parallel tabs in header only when collapsed (expanded view has tabs in content)
@@ -421,6 +417,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             stopPacketSeen={false}
             stopReason={stopReason}
             defaultExpanded={false}
+            renderTypeOverride={
+              lastStepIsResearchAgent ? RenderType.HIGHLIGHT : undefined
+            }
             isLastStep={true}
           >
             {renderContentOnly}
@@ -440,6 +439,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             stopPacketSeen={false}
             stopReason={stopReason}
             defaultExpanded={false}
+            renderTypeOverride={RenderType.HIGHLIGHT}
             isLastStep={true}
           >
             {renderContentOnly}

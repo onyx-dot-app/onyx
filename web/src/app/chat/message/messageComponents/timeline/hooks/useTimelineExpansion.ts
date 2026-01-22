@@ -17,7 +17,7 @@ export function useTimelineExpansion(
   lastTurnGroup: TurnGroup | undefined,
   hasDisplayContent: boolean = false
 ): TimelineExpansionState {
-  const [isExpanded, setIsExpanded] = useState(!stopPacketSeen);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [parallelActiveTab, setParallelActiveTab] = useState<string>("");
 
   const handleToggle = useCallback(() => {

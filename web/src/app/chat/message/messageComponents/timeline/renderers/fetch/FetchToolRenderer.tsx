@@ -36,6 +36,17 @@ const documentToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
   },
 });
 
+/**
+ * FetchToolRenderer - Renders URL fetch/open tool execution steps
+ *
+ * RenderType modes:
+ * - FULL: Shows all details (URLs being opened + reading results). Header passed as `status` prop.
+ *         Used when step is expanded in timeline.
+ * - COMPACT: Shows only reading results (no URL list). Header passed as `status` prop.
+ *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ * - HIGHLIGHT: Shows URL list with header embedded directly in content.
+ *              No StepContainer wrapper. Used for parallel streaming preview.
+ */
 export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   packets,
   onComplete,
@@ -47,6 +58,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   const fetchState = constructCurrentFetchState(packets);
   const { urls, documents, hasStarted, isLoading, isComplete } = fetchState;
   const isCompact = renderType === RenderType.COMPACT;
+  const isHighlight = renderType === RenderType.HIGHLIGHT;
 
   if (!hasStarted) {
     return children({
@@ -59,6 +71,47 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
 
   const displayDocuments = documents.length > 0;
   const displayUrls = !displayDocuments && isComplete && urls.length > 0;
+
+  // HIGHLIGHT mode: header embedded in content, no StepContainer
+  if (isHighlight) {
+    return children({
+      icon: null,
+      status: null,
+      supportsCompact: true,
+      content: (
+        <div className="flex flex-col">
+          <Text as="p" text02 className="text-sm mb-1">
+            Opening URLs:
+          </Text>
+          {displayDocuments ? (
+            <SearchChipList
+              items={documents}
+              initialCount={INITIAL_URLS_TO_SHOW}
+              expansionCount={URLS_PER_EXPANSION}
+              getKey={(doc: OnyxDocument) => doc.document_id}
+              toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
+              onClick={(doc: OnyxDocument) => {
+                if (doc.link) window.open(doc.link, "_blank");
+              }}
+              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+            />
+          ) : displayUrls ? (
+            <SearchChipList
+              items={urls}
+              initialCount={INITIAL_URLS_TO_SHOW}
+              expansionCount={URLS_PER_EXPANSION}
+              getKey={(url: string) => url}
+              toSourceInfo={urlToSourceInfo}
+              onClick={(url: string) => window.open(url, "_blank")}
+              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+            />
+          ) : (
+            !stopPacketSeen && <BlinkingDot />
+          )}
+        </div>
+      ),
+    });
+  }
 
   return children({
     icon: FiLink,

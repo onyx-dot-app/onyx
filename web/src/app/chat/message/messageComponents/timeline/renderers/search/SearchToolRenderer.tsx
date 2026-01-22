@@ -38,6 +38,17 @@ const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
   },
 });
 
+/**
+ * SearchToolRenderer - Renders search tool execution steps
+ *
+ * RenderType modes:
+ * - FULL: Shows all details (queries list + results). Header passed as `status` prop.
+ *         Used when step is expanded in timeline.
+ * - COMPACT: Shows only results (no queries). Header passed as `status` prop.
+ *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ * - HIGHLIGHT: Shows only results with header embedded directly in content.
+ *              No StepContainer wrapper. Used for parallel streaming preview.
+ */
 export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   packets,
   onComplete,
@@ -51,6 +62,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     searchState;
 
   const isCompact = renderType === RenderType.COMPACT;
+  const isHighlight = renderType === RenderType.HIGHLIGHT;
 
   const icon = isInternetSearch ? SvgGlobe : SvgSearchMenu;
   const queriesHeader = isInternetSearch
@@ -63,6 +75,35 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
       status: null,
       content: <div />,
       supportsCompact: true,
+    });
+  }
+
+  // HIGHLIGHT mode: header embedded in content, no StepContainer
+  if (isHighlight) {
+    return children({
+      icon: null,
+      status: null,
+      supportsCompact: true,
+      content: (
+        <div className="flex flex-col">
+          <Text as="p" text02 className="text-sm mb-1">
+            {queriesHeader}
+          </Text>
+          <SearchChipList
+            items={results}
+            initialCount={INITIAL_RESULTS_TO_SHOW}
+            expansionCount={RESULTS_PER_EXPANSION}
+            getKey={(doc: OnyxDocument) => doc.document_id}
+            toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
+            onClick={(doc: OnyxDocument) => {
+              if (doc.link) {
+                window.open(doc.link, "_blank");
+              }
+            }}
+            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+          />
+        </div>
+      ),
     });
   }
 
