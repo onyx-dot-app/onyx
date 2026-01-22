@@ -55,19 +55,19 @@ from tests.external_dependency_unit.mock_search_provider import MockWebSearchRes
 from tests.external_dependency_unit.mock_search_provider import use_mock_web_provider
 
 
-class HandleCase:
+class StreamTestBuilder:
     def __init__(self, llm_controller: MockLLMController):
         self._llm_controller = llm_controller
 
         # List of (expected_packet, forward_count) tuples
         self._expected_packets_queue: list[tuple[Packet, int]] = []
 
-    def add_response(self, response) -> HandleCase:
+    def add_response(self, response) -> StreamTestBuilder:
         self._llm_controller.add_response(response)
 
         return self
 
-    def expect(self, expected_pkt, forward: int | bool = True) -> HandleCase:
+    def expect(self, expected_pkt, forward: int | bool = True) -> StreamTestBuilder:
         """
         Add an expected packet to the queue.
 
@@ -81,7 +81,7 @@ class HandleCase:
 
         return self
 
-    def expect_packets(self, packets, forward: int | bool = True) -> HandleCase:
+    def expect_packets(self, packets, forward: int | bool = True) -> StreamTestBuilder:
         """
         Add multiple expected packets to the queue.
 
@@ -545,7 +545,7 @@ def test_stream_chat_with_search_and_openurl_tools(
         use_mock_web_provider(db_session) as mock_web,
         use_mock_content_provider() as mock_content,
     ):
-        handler = HandleCase(
+        handler = StreamTestBuilder(
             llm_controller=mock_llm,
         )
 
@@ -760,7 +760,7 @@ def test_image_generation_tool_no_reasoning(
         use_mock_llm() as mock_llm,
         use_mock_image_generation_provider() as mock_image_gen,
     ):
-        handler = HandleCase(
+        handler = StreamTestBuilder(
             llm_controller=mock_llm,
         )
 
