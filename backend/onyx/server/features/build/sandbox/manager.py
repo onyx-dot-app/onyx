@@ -730,12 +730,9 @@ def get_sandbox_manager() -> SandboxManager:
     """Get the appropriate SandboxManager implementation based on SANDBOX_BACKEND.
 
     Returns:
-        SandboxManager instance (LocalSandboxManager for local backend,
-        future implementations for kubernetes backend)
-
-    Note:
-        Currently only LocalSandboxManager is implemented. When kubernetes
-        backend is needed, add KubernetesSandboxManager and update this factory.
+        SandboxManager instance:
+        - LocalSandboxManager for local backend (development)
+        - KubernetesSandboxManager for kubernetes backend (production)
     """
     global _sandbox_manager_instance
 
@@ -745,13 +742,12 @@ def get_sandbox_manager() -> SandboxManager:
                 if SANDBOX_BACKEND == SandboxBackend.LOCAL:
                     _sandbox_manager_instance = LocalSandboxManager()
                 elif SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                    # For now, use LocalSandboxManager for kubernetes too
-                    # TODO: Implement KubernetesSandboxManager when needed
-                    logger.warning(
-                        "Kubernetes sandbox backend not yet implemented, "
-                        "falling back to LocalSandboxManager"
+                    from onyx.server.features.build.sandbox.kubernetes_manager import (
+                        KubernetesSandboxManager,
                     )
-                    _sandbox_manager_instance = LocalSandboxManager()
+
+                    _sandbox_manager_instance = KubernetesSandboxManager()
+                    logger.info("Using KubernetesSandboxManager for sandbox operations")
                 else:
                     raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
 

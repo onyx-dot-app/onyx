@@ -69,3 +69,33 @@ SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
 MAX_UPLOAD_FILE_SIZE_MB = int(os.environ.get("BUILD_MAX_UPLOAD_FILE_SIZE_MB", "50"))
 MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 USER_UPLOADS_DIRECTORY = "user_uploaded_files"
+
+# ============================================================================
+# Kubernetes Sandbox Configuration
+# Only used when SANDBOX_BACKEND = "kubernetes"
+# ============================================================================
+
+# Namespace where sandbox pods are created
+SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
+
+# Container image for sandbox pods
+# Should include Next.js template and opencode CLI
+SANDBOX_CONTAINER_IMAGE = os.environ.get(
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:latest"
+)
+
+# S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)
+# Path structure: s3://{bucket}/{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz
+#                 s3://{bucket}/{tenant_id}/knowledge/{user_id}/
+#                 s3://{bucket}/{tenant_id}/uploads/{session_id}/
+SANDBOX_S3_BUCKET = os.environ.get("SANDBOX_S3_BUCKET", "onyx-sandbox-files")
+
+# Service account for sandbox pods (NO IRSA - no AWS API access)
+SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
+    "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-runner"
+)
+
+# Service account for init container (has IRSA for S3 access)
+SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
+    "SANDBOX_FILE_SYNC_SERVICE_ACCOUNT", "sandbox-file-sync"
+)
