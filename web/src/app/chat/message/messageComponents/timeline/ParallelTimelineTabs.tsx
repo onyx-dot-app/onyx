@@ -9,7 +9,11 @@ import React, {
 import { StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
-import { getToolName, getToolIcon } from "../toolDisplayHelpers";
+import {
+  getToolName,
+  getToolIcon,
+  isToolComplete,
+} from "../toolDisplayHelpers";
 import {
   TimelineRendererComponent,
   TimelineRendererResult,
@@ -52,6 +56,18 @@ export function ParallelTimelineTabs({
   const activeStep = useMemo(
     () => turnGroup.steps.find((step) => step.key === activeTab),
     [turnGroup.steps, activeTab]
+  );
+
+  // Memoized loading states for each step
+  const loadingStates = useMemo(
+    () =>
+      new Map(
+        turnGroup.steps.map((step) => [
+          step.key,
+          step.packets.length > 0 && !isToolComplete(step.packets),
+        ])
+      ),
+    [turnGroup.steps]
   );
   //will be removed on cleanup
   // Stable callbacks to avoid creating new functions on every render
@@ -109,7 +125,12 @@ export function ParallelTimelineTabs({
               }
             >
               {turnGroup.steps.map((step) => (
-                <Tabs.Trigger key={step.key} value={step.key} variant="pill">
+                <Tabs.Trigger
+                  key={step.key}
+                  value={step.key}
+                  variant="pill"
+                  isLoading={loadingStates.get(step.key)}
+                >
                   <span className="flex items-center gap-1.5">
                     {getToolIcon(step.packets)}
                     {getToolName(step.packets)}

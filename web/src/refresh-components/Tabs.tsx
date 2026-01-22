@@ -112,10 +112,10 @@ function usePillIndicator(
   useEffect(() => {
     if (!enabled) return;
 
-    const updateIndicator = () => {
-      const list = listRef.current;
-      if (!list) return;
+    const list = listRef.current;
+    if (!list) return;
 
+    const updateIndicator = () => {
       const activeTab = list.querySelector<HTMLElement>(
         '[data-state="active"]'
       );
@@ -132,16 +132,24 @@ function usePillIndicator(
 
     updateIndicator();
 
-    const observer = new MutationObserver(updateIndicator);
-    if (listRef.current) {
-      observer.observe(listRef.current, {
-        attributes: true,
-        subtree: true,
-        attributeFilter: ["data-state"],
-      });
-    }
+    // Watch for size changes on ANY tab (sibling size changes affect active tab position)
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    list.querySelectorAll<HTMLElement>('[role="tab"]').forEach((tab) => {
+      resizeObserver.observe(tab);
+    });
 
-    return () => observer.disconnect();
+    // Watch for data-state changes (tab switches)
+    const mutationObserver = new MutationObserver(updateIndicator);
+    mutationObserver.observe(list, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["data-state"],
+    });
+
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+    };
   }, [enabled, listRef]);
 
   return style;
@@ -357,7 +365,7 @@ const TabsTrigger = React.forwardRef<
         {typeof children === "string" ? <Text>{children}</Text> : children}
         {isLoading && (
           <span
-            className="inline-block w-3 h-3 border-2 border-text-03 border-t-transparent rounded-full animate-spin"
+            className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ml-1"
             aria-label="Loading"
           />
         )}

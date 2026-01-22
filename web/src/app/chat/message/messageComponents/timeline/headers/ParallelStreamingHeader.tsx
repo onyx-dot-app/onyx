@@ -1,9 +1,13 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Tabs from "@/refresh-components/Tabs";
 import { TurnGroup } from "../transformers";
-import { getToolIcon, getToolName } from "../../toolDisplayHelpers";
+import {
+  getToolIcon,
+  getToolName,
+  isToolComplete,
+} from "../../toolDisplayHelpers";
 
 export interface ParallelStreamingHeaderProps {
   steps: TurnGroup["steps"];
@@ -24,12 +28,29 @@ export const ParallelStreamingHeader = React.memo(
     isExpanded,
     onToggle,
   }: ParallelStreamingHeaderProps) {
+    // Memoized loading states for each step
+    const loadingStates = useMemo(
+      () =>
+        new Map(
+          steps.map((step) => [
+            step.key,
+            step.packets.length > 0 && !isToolComplete(step.packets),
+          ])
+        ),
+      [steps]
+    );
+
     return (
       <Tabs value={activeTab} onValueChange={onTabChange}>
         <div className="flex items-center justify-between w-full gap-2">
           <Tabs.List variant="pill">
             {steps.map((step) => (
-              <Tabs.Trigger key={step.key} value={step.key} variant="pill">
+              <Tabs.Trigger
+                key={step.key}
+                value={step.key}
+                variant="pill"
+                isLoading={loadingStates.get(step.key)}
+              >
                 <span className="flex items-center gap-1.5">
                   {getToolIcon(step.packets)}
                   {getToolName(step.packets)}
