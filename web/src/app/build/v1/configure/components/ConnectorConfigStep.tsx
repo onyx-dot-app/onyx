@@ -10,13 +10,11 @@ import { Credential } from "@/lib/connectors/credentials";
 import Separator from "@/refresh-components/Separator";
 import {
   connectorConfigs,
-  isLoadState,
   createConnectorInitialValues,
 } from "@/lib/connectors/connectors";
-import { createConnector } from "@/lib/connector";
-import { linkCredential } from "@/lib/credential";
 import CardSection from "@/components/admin/CardSection";
 import { RenderField } from "@/app/admin/connectors/[connector]/pages/FieldRendering";
+import { createBuildConnector } from "@/app/build/v1/configure/utils/createBuildConnector";
 
 interface ConnectorConfigStepProps {
   connectorType: ValidSources;
@@ -43,50 +41,17 @@ function ConnectorConfigForm({
     setIsSubmitting(true);
 
     try {
-      const { connector_name, access_type, ...connectorConfig } = values;
+      const { connector_name, ...connectorConfig } = values;
 
-      // Filter out empty values
-      const filteredConfig: Record<string, any> = {};
-      Object.entries(connectorConfig).forEach(([key, value]) => {
-        if (value !== "" && value !== null && value !== undefined) {
-          if (Array.isArray(value) && value.length === 0) {
-            return; // Skip empty arrays
-          }
-          filteredConfig[key] = value;
-        }
+      const result = await createBuildConnector({
+        connectorType,
+        credential,
+        connectorSpecificConfig: connectorConfig,
+        connectorName: connector_name,
       });
 
-      // Create connector
-      const [connectorError, connector] = await createConnector({
-        name: connector_name,
-        source: connectorType,
-        input_type: isLoadState(connectorType) ? "load_state" : "poll",
-        connector_specific_config: filteredConfig,
-        refresh_freq: config?.overrideDefaultFreq || 1800, // 30 minutes default
-        prune_freq: 2592000, // 30 days default
-        indexing_start: null,
-        access_type: "private",
-      });
-
-      if (connectorError || !connector) {
-        throw new Error(connectorError || "Failed to create connector");
-      }
-
-      // Link credential to connector with file_system processing mode
-      // Build mode connectors write documents to the file system for CLI agent access
-      const linkResponse = await linkCredential(
-        connector.id,
-        credential.id,
-        connector_name,
-        "private",
-        [], // No groups for build mode connectors
-        undefined, // No auto sync options
-        "file_system" // Use file system processing mode for build connectors
-      );
-
-      if (!linkResponse.ok) {
-        const linkError = await linkResponse.json();
-        throw new Error(linkError.detail || "Failed to link credential");
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       onSuccess();
@@ -101,7 +66,6 @@ function ConnectorConfigForm({
     }
   };
 
-  // Check if there are any config fields to show
   const hasConfigFields = config?.values && config.values.length > 0;
 
   return (
@@ -154,7 +118,6 @@ export default function ConnectorConfigStep({
   onBack,
   setPopup,
 }: ConnectorConfigStepProps) {
-  // Build initial values using the shared utility
   const baseInitialValues = createConnectorInitialValues(connectorType as any);
   const initialValues: Record<string, any> = {
     ...baseInitialValues,

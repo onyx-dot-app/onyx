@@ -3,18 +3,37 @@
 import { useState, useEffect } from "react";
 import useSWR from "swr";
 import Modal from "@/refresh-components/Modal";
-import { ValidSources } from "@/lib/types";
+import { ValidSources, ConfigurableSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SvgPlug } from "@opal/icons";
-import { Credential } from "@/lib/connectors/credentials";
+import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import CredentialStep from "./CredentialStep";
 import ConnectorConfigStep from "./ConnectorConfigStep";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { OAUTH_STATE_KEY } from "@/app/build/v1/constants";
+import { connectorConfigs } from "@/lib/connectors/connectors";
 
 type ModalStep = "credential" | "configure";
+
+function connectorNeedsCredentials(connectorType: ValidSources): boolean {
+  return credentialTemplates[connectorType] != null;
+}
+
+function connectorNeedsConfigStep(connectorType: ValidSources): boolean {
+  const config = connectorConfigs[connectorType as ConfigurableSources];
+  if (!config) return false;
+
+  const hasVisibleValues = config.values.some(
+    (field) => !("hidden" in field && field.hidden)
+  );
+  const hasVisibleAdvancedValues = config.advanced_values.some(
+    (field) => !("hidden" in field && field.hidden)
+  );
+
+  return hasVisibleValues || hasVisibleAdvancedValues;
+}
 
 interface ConfigureConnectorModalProps {
   connectorType: ValidSources | null;
@@ -41,6 +60,14 @@ export default function ConfigureConnectorModal({
     : null;
   const isConfigured = !!existingConfig;
 
+  const needsCredentials = connectorType
+    ? connectorNeedsCredentials(connectorType)
+    : true;
+  const needsConfigStep = connectorType
+    ? connectorNeedsConfigStep(connectorType)
+    : false;
+  const isSingleStep = needsCredentials && !needsConfigStep;
+
   // Fetch credentials for this connector type
   const { data: credentials, mutate: refreshCredentials } = useSWR<
     Credential<any>[]
@@ -51,7 +78,6 @@ export default function ConfigureConnectorModal({
     errorHandlingFetcher
   );
 
-  // Reset state when modal opens/closes or connector type changes
   useEffect(() => {
     if (open && !isConfigured) {
       setStep("credential");
@@ -108,16 +134,24 @@ export default function ConfigureConnectorModal({
     onSuccess();
   };
 
-  // Render content for new/unconfigured connector - Step flow
-  const stepTitle =
-    step === "credential"
+  // Dynamic title and description based on flow type
+  const getStepTitle = () => {
+    if (isSingleStep) {
+      return `Connect ${sourceMetadata.displayName}`;
+    }
+    return step === "credential"
       ? `Connect ${sourceMetadata.displayName}`
       : `Configure ${sourceMetadata.displayName}`;
+  };
 
-  const stepDescription =
-    step === "credential"
+  const getStepDescription = () => {
+    if (isSingleStep) {
+      return "Select or create a credential to connect";
+    }
+    return step === "credential"
       ? "Step 1: Select or create a credential"
       : "Step 2: Configure your connector";
+  };
 
   return (
     <>
@@ -125,8 +159,8 @@ export default function ConfigureConnectorModal({
         <Modal.Content width="md" height="fit">
           <Modal.Header
             icon={SvgPlug}
-            title={stepTitle}
-            description={stepDescription}
+            title={getStepTitle()}
+            description={getStepDescription()}
             onClose={onClose}
           />
           <Modal.Body>
@@ -141,6 +175,9 @@ export default function ConfigureConnectorModal({
                 onContinue={handleContinue}
                 onOAuthRedirect={handleOAuthRedirect}
                 refresh={refreshCredentials}
+                isSingleStep={isSingleStep}
+                onConnectorSuccess={handleConnectorSuccess}
+                setPopup={setPopup}
               />
             ) : selectedCredential ? (
               <ConnectorConfigStep

@@ -29,6 +29,8 @@ import {
 } from "@/lib/constants";
 import { BUILD_MODE_OAUTH_COOKIE_NAME } from "@/app/build/v1/constants";
 import Cookies from "js-cookie";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { createBuildConnector } from "@/app/build/v1/configure/utils/createBuildConnector";
 
 interface CredentialStepProps {
   connectorType: ValidSources;
@@ -40,6 +42,9 @@ interface CredentialStepProps {
   onContinue: () => void;
   onOAuthRedirect: () => void;
   refresh?: () => void;
+  isSingleStep?: boolean;
+  onConnectorSuccess?: () => void;
+  setPopup?: (popup: PopupSpec | null) => void;
 }
 
 export default function CredentialStep({
@@ -52,10 +57,14 @@ export default function CredentialStep({
   onContinue,
   onOAuthRedirect,
   refresh = () => {},
+  isSingleStep = false,
+  onConnectorSuccess,
+  setPopup,
 }: CredentialStepProps) {
   const [createCredentialFormToggle, setCreateCredentialFormToggle] =
     useState(false);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
     useOAuthDetails(connectorType);
@@ -76,6 +85,33 @@ export default function CredentialStep({
     } else {
       setIsAuthorizing(false);
       console.error("Failed to get OAuth redirect URL");
+    }
+  };
+
+  const handleConnect = async () => {
+    if (!selectedCredential || !isSingleStep) return;
+
+    setIsConnecting(true);
+
+    try {
+      const result = await createBuildConnector({
+        connectorType,
+        credential: selectedCredential,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      onConnectorSuccess?.();
+    } catch (err) {
+      setPopup?.({
+        message:
+          err instanceof Error ? err.message : "Failed to create connector",
+        type: "error",
+      });
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -144,7 +180,6 @@ export default function CredentialStep({
                           }
                         }
                       } else {
-                        // For Google Drive, set build mode flag for OAuth redirect
                         if (connectorType === ValidSources.GoogleDrive) {
                           Cookies.set(BUILD_MODE_OAUTH_COOKIE_NAME, "true", {
                             path: "/",
@@ -180,10 +215,14 @@ export default function CredentialStep({
                 {hasCredentials && (
                   <Button
                     primary
-                    onClick={onContinue}
-                    disabled={!selectedCredential}
+                    onClick={isSingleStep ? handleConnect : onContinue}
+                    disabled={!selectedCredential || isConnecting}
                   >
-                    Continue
+                    {isSingleStep
+                      ? isConnecting
+                        ? "Connecting..."
+                        : "Connect"
+                      : "Continue"}
                   </Button>
                 )}
               </div>
