@@ -133,7 +133,7 @@ class DirectoryManager:
         ):
             shutil.copy(self._agent_instructions_template_path, agent_md_path)
 
-    def setup_skills(self, sandbox_path: Path) -> None:
+    def setup_skills(self, sandbox_path: Path, overwrite: bool = True) -> None:
         """Copy skills directory to .agent/skills.
 
         Copies all skills from the source skills directory to the sandbox's
@@ -142,12 +142,19 @@ class DirectoryManager:
 
         Args:
             sandbox_path: Path to the sandbox directory
+            overwrite: If True, overwrite existing skills. If False, preserve existing skills.
         """
         skills_dest = sandbox_path / ".agent" / "skills"
 
         if not self._skills_path.exists():
             logger.warning(
                 f"Skills path {self._skills_path} does not exist, skipping skills setup"
+            )
+            return
+
+        if not overwrite and skills_dest.exists():
+            logger.debug(
+                f"Skills directory already exists at {skills_dest}, skipping skills setup"
             )
             return
 
@@ -180,6 +187,7 @@ class DirectoryManager:
         api_key: str | None = None,
         api_base: str | None = None,
         disabled_tools: list[str] | None = None,
+        overwrite: bool = True,
     ) -> None:
         """Create opencode.json configuration file for the agent.
 
@@ -193,8 +201,14 @@ class DirectoryManager:
             api_key: Optional API key for the provider
             api_base: Optional custom API base URL
             disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
+            overwrite: If True, overwrite existing config. If False, preserve existing config.
         """
         config_path = sandbox_path / "opencode.json"
+        if not overwrite and config_path.exists():
+            logger.debug(
+                f"opencode.json already exists at {config_path}, skipping config setup"
+            )
+            return
         # Build opencode model string: provider/model-name
         opencode_model = f"{provider}/{model_name}"
 
