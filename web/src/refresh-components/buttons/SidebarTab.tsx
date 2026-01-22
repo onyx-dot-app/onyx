@@ -50,23 +50,14 @@ export default function SidebarTab({
       )}
       onClick={onClick}
     >
-      {href && (
-        <Link
-          href={href as Route}
-          scroll={false}
-          className="absolute inset-0 rounded-08"
-          tabIndex={-1}
-        />
-      )}
       <div
         data-state={state}
         className={cn(
-          "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start",
-          !focused && "pointer-events-none"
+          "relative flex-1 h-[1.5rem] flex flex-row items-center px-1 py-0.5 gap-2 justify-start pointer-events-none"
         )}
       >
         {LeftIcon && (
-          <div className="w-[1rem] h-[1rem] flex items-center justify-center pointer-events-auto">
+          <div className="w-[1rem] h-[1rem] flex items-center justify-center">
             <LeftIcon
               data-state={state}
               className={`h-[1rem] w-[1rem] sidebar-tab-icon-${variant}`}
@@ -88,9 +79,17 @@ export default function SidebarTab({
           ))}
       </div>
       {!folded && (
-        <div className="relative h-[1.5rem] flex items-center">
+        <div className="relative h-[1.5rem] flex items-center pointer-events-none">
           {rightChildren}
         </div>
+      )}
+      {href && (
+        <Link
+          href={href as Route}
+          scroll={false}
+          className="absolute inset-0 rounded-08 z-10"
+          tabIndex={-1}
+        />
       )}
     </div>
   );
