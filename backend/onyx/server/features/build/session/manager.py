@@ -40,9 +40,9 @@ from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import USER_UPLOADS_DIRECTORY
-from onyx.server.features.build.db.build_session import create_build_session
+from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import delete_build_session
+from onyx.server.features.build.db.build_session import delete_build_session__no_commit
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
@@ -177,13 +177,17 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
-    def create_session(
+    def create_session__no_commit(
         self,
         user_id: UUID,
         name: str | None = None,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
+
+        NOTE: This method does NOT commit the transaction. The caller is
+        responsible for committing after this method returns successfully.
+        This allows the entire operation to be atomic at the endpoint level.
 
         Args:
             user_id: The user ID
@@ -198,11 +202,6 @@ class SessionManager:
         """
         tenant_id = get_current_tenant_id()
 
-        # Create BuildSession record first (required for Sandbox foreign key)
-        build_session = create_build_session(user_id, self._db_session, name=name)
-        session_id = str(build_session.id)
-        logger.info(f"Created build session {session_id} for user {user_id}")
-
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
         if PERSISTENT_DOCUMENT_STORAGE_PATH:
@@ -214,7 +213,14 @@ class SessionManager:
         else:
             user_file_system_path = "/tmp/onyx-files"
 
-        # Provision sandbox
+        # Create BuildSession record (uses flush, caller commits)
+        build_session = create_build_session__no_commit(
+            user_id, self._db_session, name=name
+        )
+        session_id = str(build_session.id)
+        logger.info(f"Created build session {session_id} for user {user_id}")
+
+        # Provision sandbox (uses flush, caller commits)
         self._sandbox_manager.provision(
             session_id=session_id,
             tenant_id=tenant_id,
@@ -222,8 +228,10 @@ class SessionManager:
             db_session=self._db_session,
         )
 
-        # Refresh to get the created sandbox
-        self._db_session.refresh(build_session)
+        logger.info(
+            f"Successfully created session {session_id} with sandbox for user {user_id}"
+        )
+
         return build_session
 
     def get_or_create_empty_session(self, user_id: UUID) -> BuildSession:
@@ -248,7 +256,7 @@ class SessionManager:
                 f"Returning existing empty session {existing.id} for user {user_id}"
             )
             return existing
-        return self.create_session(user_id=user_id)
+        return self.create_session__no_commit(user_id=user_id)
 
     def get_session(
         self,
@@ -363,7 +371,11 @@ class SessionManager:
         """
         Delete a build session and all associated data.
 
-        Terminates any running sandbox before deletion.
+        Terminates any running sandbox before deletion. This operation is atomic -
+        if sandbox termination fails, the session is NOT deleted.
+
+        NOTE: This method does NOT commit the transaction. The caller is
+        responsible for committing after this method returns successfully.
 
         Args:
             session_id: The session UUID
@@ -371,12 +383,15 @@ class SessionManager:
 
         Returns:
             True if deleted, False if not found
+
+        Raises:
+            RuntimeError: If sandbox termination fails
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
             return False
 
-        # Terminate sandbox if running
+        # Terminate sandbox if running - raises on failure
         if session.sandbox and session.sandbox.status in [
             SandboxStatus.RUNNING,
             SandboxStatus.PROVISIONING,
@@ -384,7 +399,8 @@ class SessionManager:
             logger.info(f"Terminating sandbox before deleting session {session_id}")
             self._sandbox_manager.terminate(str(session.sandbox.id), self._db_session)
 
-        return delete_build_session(session_id, user_id, self._db_session)
+        # Delete session (uses flush, caller commits)
+        return delete_build_session__no_commit(session_id, user_id, self._db_session)
 
     # =========================================================================
     # Message Operations
@@ -620,6 +636,7 @@ class SessionManager:
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
+            logger.exception("ValueError in build message streaming")
             yield _format_packet_event(error_packet)
         except RuntimeError as e:
             error_packet = ErrorPacket(message=str(e))

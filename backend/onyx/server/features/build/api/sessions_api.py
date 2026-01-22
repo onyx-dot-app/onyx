@@ -61,20 +61,29 @@ def create_session(
     """
     Create or get an existing empty build session.
 
-    Returns an existing empty (no messages) session if one exists and is recent,
-    otherwise creates a new one with a provisioned sandbox.
-    This supports pre-provisioning by reusing recent empty sessions.
+    Creates a sandbox with the necessary file structure and returns a session ID.
+    Uses SessionManager for session and sandbox provisioning.
+
+    This endpoint is atomic - if sandbox provisioning fails, no database
+    records are created (transaction is rolled back).
     """
     session_manager = SessionManager(db_session)
 
     try:
         build_session = session_manager.get_or_create_empty_session(user.id)
+        db_session.commit()
     except ValueError as e:
-        # Max concurrent sandboxes reached
+        # Max concurrent sandboxes reached or other validation error
+        db_session.rollback()
         raise HTTPException(status_code=429, detail=str(e))
-    except RuntimeError as e:
-        logger.error(f"Failed to provision sandbox: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create session")
+    except Exception as e:
+        # Sandbox provisioning failed - rollback to remove any uncommitted records
+        db_session.rollback()
+        logger.error(f"Sandbox provisioning failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Sandbox provisioning failed: {e}",
+        )
 
     return SessionResponse.from_model(build_session)
 
@@ -141,13 +150,29 @@ def delete_session(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    """Delete a build session and all associated data."""
+    """Delete a build session and all associated data.
+
+    This endpoint is atomic - if sandbox termination fails, the session
+    is NOT deleted (transaction is rolled back).
+    """
     session_manager = SessionManager(db_session)
 
-    success = session_manager.delete_session(session_id, user.id)
-
-    if not success:
-        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        success = session_manager.delete_session(session_id, user.id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        db_session.commit()
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404) without rollback
+        raise
+    except Exception as e:
+        # Sandbox termination failed - rollback to preserve session
+        db_session.rollback()
+        logger.error(f"Failed to delete session {session_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete session: {e}",
+        )
 
     return Response(status_code=204)
 

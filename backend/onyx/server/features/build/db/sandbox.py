@@ -17,19 +17,23 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def create_sandbox(
+def create_sandbox__no_commit(
     db_session: Session,
     session_id: UUID,
     nextjs_port: int | None = None,
 ) -> Sandbox:
-    """Create a new sandbox record."""
+    """Create a new sandbox record.
+
+    NOTE: This function uses flush() instead of commit(). The caller is
+    responsible for committing the transaction when ready.
+    """
     sandbox = Sandbox(
         session_id=session_id,
         status=SandboxStatus.PROVISIONING,
         nextjs_port=nextjs_port,
     )
     db_session.add(sandbox)
-    db_session.commit()
+    db_session.flush()
     return sandbox
 
 
@@ -45,16 +49,22 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def update_sandbox_status(
-    db_session: Session, sandbox_id: UUID, status: SandboxStatus
+def update_sandbox_status__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    status: SandboxStatus,
 ) -> Sandbox:
-    """Update sandbox status."""
+    """Update sandbox status.
+
+    NOTE: This function uses flush() instead of commit(). The caller is
+    responsible for committing the transaction when ready.
+    """
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
     if not sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.status = status
-    db_session.commit()
+    db_session.flush()
     return sandbox
 
 

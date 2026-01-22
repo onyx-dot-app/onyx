@@ -27,13 +27,15 @@ from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.db.sandbox import allocate_nextjs_port
-from onyx.server.features.build.db.sandbox import create_sandbox as db_create_sandbox
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit as db_create_sandbox,
+)
 from onyx.server.features.build.db.sandbox import create_snapshot as db_create_snapshot
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.internal.agent_client import ACPAgentClient
 from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.internal.directory_manager import (
@@ -74,6 +76,9 @@ class SandboxManager(ABC):
         snapshot_id: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a session.
+
+        NOTE: This method uses flush() instead of commit(). The caller is
+        responsible for committing the transaction when ready.
 
         Args:
             session_id: Unique identifier for the session
@@ -326,6 +331,9 @@ class LocalSandboxManager(SandboxManager):
     ) -> SandboxInfo:
         """Provision a new sandbox for a session.
 
+        NOTE: This method uses flush() instead of commit(). The caller is
+        responsible for committing the transaction when ready.
+
         1. Check concurrent sandbox limit for tenant
         2. Create sandbox directory structure
         3. Setup files symlink, outputs, venv, AGENTS.md, and skills
@@ -445,7 +453,7 @@ class LocalSandboxManager(SandboxManager):
             self._process_manager.start_nextjs_server(web_dir, nextjs_port)
             logger.info("Next.js server started successfully")
 
-            # Create DB record
+            # Create DB record (uses flush, caller commits)
             logger.debug("Creating sandbox database record")
             sandbox = db_create_sandbox(
                 db_session=db_session,
@@ -453,7 +461,9 @@ class LocalSandboxManager(SandboxManager):
                 nextjs_port=nextjs_port,
             )
 
-            update_sandbox_status(db_session, sandbox.id, SandboxStatus.RUNNING)
+            update_sandbox_status__no_commit(
+                db_session, sandbox.id, SandboxStatus.RUNNING
+            )
             logger.debug(f"Sandbox record created with ID {sandbox.id}")
 
             logger.info(
@@ -483,14 +493,20 @@ class LocalSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: str, db_session: Session) -> None:
         """Terminate a sandbox.
 
+        NOTE: This method uses flush() instead of commit(). The caller is
+        responsible for committing the transaction when ready.
+
         1. Stop ACP client (terminates agent subprocess)
         2. Cleanup sandbox directory (this will handle Next.js process cleanup)
         3. Update DB status to TERMINATED
+
+        Raises:
+            ValueError: If sandbox not found
+            RuntimeError: If termination fails
         """
         sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
         if not sandbox:
-            logger.warning(f"Sandbox {sandbox_id} not found for termination")
-            return
+            raise ValueError(f"Sandbox {sandbox_id} not found for termination")
 
         # Stop ACP client (this terminates the opencode subprocess)
         client = self._acp_clients.pop(sandbox_id, None)
@@ -498,16 +514,23 @@ class LocalSandboxManager(SandboxManager):
             try:
                 client.stop()
             except Exception as e:
-                logger.warning(
-                    f"Error stopping ACP client for sandbox {sandbox_id}: {e}"
-                )
+                raise RuntimeError(
+                    f"Failed to stop ACP client for sandbox {sandbox_id}: {e}"
+                ) from e
 
         # Cleanup directory (this will handle Next.js process cleanup)
         sandbox_path = self._get_sandbox_path(sandbox.session_id)
-        self._directory_manager.cleanup_sandbox_directory(sandbox_path)
+        try:
+            self._directory_manager.cleanup_sandbox_directory(sandbox_path)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to cleanup sandbox directory {sandbox_path}: {e}"
+            ) from e
 
-        # Update status
-        update_sandbox_status(db_session, UUID(sandbox_id), SandboxStatus.TERMINATED)
+        # Update status (uses flush, caller commits)
+        update_sandbox_status__no_commit(
+            db_session, UUID(sandbox_id), SandboxStatus.TERMINATED
+        )
 
         logger.info(f"Terminated sandbox {sandbox_id}")
 

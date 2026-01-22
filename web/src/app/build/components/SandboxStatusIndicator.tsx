@@ -6,6 +6,7 @@ import {
   useSession,
   useIsPreProvisioning,
   useIsPreProvisioningReady,
+  useIsPreProvisioningFailed,
 } from "@/app/build/hooks/useBuildSessionStore";
 import { Card } from "@/components/ui/card";
 import Text from "@/refresh-components/texts/Text";
@@ -30,7 +31,7 @@ const STATUS_CONFIG = {
   failed: {
     color: "bg-status-error-05",
     pulse: false,
-    label: "Sandbox failed",
+    label: "Failed to provision sandbox",
   },
   ready: {
     color: "bg-status-success-05",
@@ -54,9 +55,10 @@ interface SandboxStatusIndicatorProps {}
  * Priority:
  * 1. Actual sandbox status from backend (if session has sandbox info)
  * 2. Session exists but no sandbox info → "running" (optimistic for consumed pre-provisioned sessions)
- * 3. Pre-provisioning in progress → "provisioning" (only when no session - welcome page)
- * 4. Pre-provisioning ready (not yet consumed) → "ready"
- * 5. Default → "loading" (gray, finding sandbox)
+ * 3. Pre-provisioning failed → "failed"
+ * 4. Pre-provisioning in progress → "provisioning" (only when no session - welcome page)
+ * 5. Pre-provisioning ready (not yet consumed) → "ready"
+ * 6. Default → "loading" (gray, finding sandbox)
  *
  * IMPORTANT: Pre-provisioning state is checked AFTER session existence because
  * pre-provisioning is for NEW sessions. When viewing an existing session, we
@@ -65,7 +67,8 @@ interface SandboxStatusIndicatorProps {}
 function deriveSandboxStatus(
   session: ReturnType<typeof useSession>,
   isPreProvisioning: boolean,
-  isReady: boolean
+  isReady: boolean,
+  isFailed: boolean
 ): Status {
   // 1. Backend is source of truth when available
   if (session?.sandbox) {
@@ -76,15 +79,19 @@ function deriveSandboxStatus(
   if (session) {
     return "running";
   }
-  // 3. No session - check pre-provisioning state (welcome page)
+  // 3. Pre-provisioning failed
+  if (isFailed) {
+    return "failed";
+  }
+  // 4. No session - check pre-provisioning state (welcome page)
   if (isPreProvisioning) {
     return "provisioning";
   }
-  // 4. Pre-provisioning ready but not consumed
+  // 5. Pre-provisioning ready but not consumed
   if (isReady) {
     return "ready";
   }
-  // 5. No session, no pre-provisioning state - loading
+  // 6. No session, no pre-provisioning state - loading
   return "loading";
 }
 
@@ -100,8 +107,14 @@ export default function SandboxStatusIndicator(
   const session = useSession();
   const isPreProvisioning = useIsPreProvisioning();
   const isReady = useIsPreProvisioningReady();
+  const isFailed = useIsPreProvisioningFailed();
 
-  const status = deriveSandboxStatus(session, isPreProvisioning, isReady);
+  const status = deriveSandboxStatus(
+    session,
+    isPreProvisioning,
+    isReady,
+    isFailed
+  );
   const { color, pulse, label } = STATUS_CONFIG[status];
 
   return (

@@ -49,7 +49,8 @@ export type PreProvisioningState =
       promise: Promise<string | null>;
       demoDataEnabled: boolean;
     }
-  | { status: "ready"; sessionId: string; demoDataEnabled: boolean };
+  | { status: "ready"; sessionId: string; demoDataEnabled: boolean }
+  | { status: "failed"; error: string };
 
 export interface BuildSessionData {
   id: string;
@@ -732,7 +733,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         return sessionData.id;
       } catch (err) {
         console.error("[PreProvision] Failed to pre-provision session:", err);
-        set({ preProvisioning: { status: "idle" } });
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        set({
+          preProvisioning: {
+            status: "failed",
+            error: errorMessage,
+          },
+        });
         return null;
       }
     })();
@@ -927,6 +935,9 @@ export const useIsPreProvisioning = () =>
 
 export const useIsPreProvisioningReady = () =>
   useBuildSessionStore((state) => state.preProvisioning.status === "ready");
+
+export const useIsPreProvisioningFailed = () =>
+  useBuildSessionStore((state) => state.preProvisioning.status === "failed");
 
 // Demo data selectors
 export const useDemoDataEnabled = () =>
