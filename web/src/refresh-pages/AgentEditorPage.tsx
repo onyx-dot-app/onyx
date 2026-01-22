@@ -75,7 +75,7 @@ import {
   updatePersona,
   PersonaUpsertParameters,
 } from "@/app/admin/assistants/lib";
-import useMcpServers from "@/hooks/useMcpServers";
+import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
@@ -494,7 +494,7 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData } = useMcpServers();
+  const { mcpData } = useMcpServersForAgentEditor();
   const { openApiTools: openApiToolsRaw } = useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];

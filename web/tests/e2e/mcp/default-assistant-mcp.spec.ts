@@ -415,6 +415,59 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Basic user completed MCP tool management tests`);
   });
 
+  test("Basic user can create assistant with MCP actions attached", async ({
+    page,
+  }) => {
+    test.skip(!serverId, "MCP server must be configured first");
+    test.skip(!basicUserEmail, "Basic user must be created first");
+
+    await page.context().clearCookies();
+    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+
+    await page.goto("/chat");
+    await page.getByTestId("AppSidebar/more-agents").click();
+    await page.waitForURL("**/chat/agents");
+
+    await page
+      .getByTestId("AgentsPage/new-agent-button")
+      .getByRole("link", { name: "New Agent" })
+      .click();
+    await page.waitForURL("**/chat/agents/create");
+
+    const assistantName = `MCP Assistant ${Date.now()}`;
+    await page.locator('input[name="name"]').fill(assistantName);
+    await page
+      .locator('textarea[name="description"]')
+      .fill("Assistant with MCP actions attached.");
+    await page
+      .locator('textarea[name="instructions"]')
+      .fill("Use MCP actions when helpful.");
+
+    const mcpServerSwitch = page.locator(
+      `button[role="switch"][name="mcp_server_${serverId}.enabled"]`
+    );
+    await mcpServerSwitch.scrollIntoViewIfNeeded();
+    await mcpServerSwitch.click();
+    await expect(mcpServerSwitch).toHaveAttribute("data-state", "checked");
+
+    const firstToolToggle = page
+      .locator(`button[role="switch"][name^="mcp_server_${serverId}.tool_"]`)
+      .first();
+    await expect(firstToolToggle).toHaveAttribute("data-state", "checked");
+
+    await page.getByRole("button", { name: "Create" }).click();
+
+    await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+    const assistantIdMatch = page.url().match(/assistantId=(\d+)/);
+    expect(assistantIdMatch).toBeTruthy();
+    const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
+    expect(assistantId).not.toBeNull();
+
+    await page.goto(`/chat/agents/edit/${assistantId}`);
+    await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
+    await expect(mcpServerSwitch).toHaveAttribute("data-state", "checked");
+  });
+
   test("Admin can modify MCP tools in default assistant", async ({ page }) => {
     test.skip(!serverId, "MCP server must be configured first");
 
