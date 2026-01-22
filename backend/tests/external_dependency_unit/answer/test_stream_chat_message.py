@@ -13,25 +13,38 @@ from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.process_message import handle_stream_message_objects
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SearchDoc
 from onyx.db.models import User
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
+from onyx.server.query_and_chat.streaming_models import OpenUrlStart
+from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.mock_content_provider import MockWebContent
+from tests.external_dependency_unit.mock_content_provider import (
+    use_mock_content_provider,
+)
 from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
 from tests.external_dependency_unit.mock_llm import LLMReasoningResponse
 from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
 from tests.external_dependency_unit.mock_llm import use_mock_llm
+from tests.external_dependency_unit.mock_search_provider import MockWebSearchResult
+from tests.external_dependency_unit.mock_search_provider import use_mock_web_provider
 
 
 def create_placement(
@@ -76,18 +89,18 @@ def create_chat_session(
     )
 
 
-def create_packet_with_agent_response_delta(token: str) -> Packet:
+def create_packet_with_agent_response_delta(token: str, turn_index: int) -> Packet:
     return Packet(
-        placement=create_placement(0),
+        placement=create_placement(turn_index),
         obj=AgentResponseDelta(
             content=token,
         ),
     )
 
 
-def create_packet_with_reasoning_delta(token: str) -> Packet:
+def create_packet_with_reasoning_delta(token: str, turn_index: int) -> Packet:
     return Packet(
-        placement=create_placement(0),
+        placement=create_placement(turn_index),
         obj=ReasoningDelta(
             reasoning=token,
         ),
@@ -104,6 +117,17 @@ def assert_answer_stream_part_correct(
         e_packet = cast(Packet, expected)
 
         assert r_packet.placement == e_packet.placement
+
+        if isinstance(r_packet.obj, SearchToolDocumentsDelta):
+            assert is_search_tool_document_delta_equal(r_packet.obj, e_packet.obj)
+            return
+        elif isinstance(r_packet.obj, OpenUrlDocuments):
+            assert is_open_url_documents_equal(r_packet.obj, e_packet.obj)
+            return
+        elif isinstance(r_packet.obj, AgentResponseStart):
+            assert is_agent_response_start_equal(r_packet.obj, e_packet.obj)
+            return
+
         assert r_packet.obj == e_packet.obj
     elif isinstance(received, MessageResponseIDInfo):
         # We're not going to make assumptions about what the user id / assistant id should be
@@ -114,6 +138,85 @@ def assert_answer_stream_part_correct(
         return
     else:
         raise NotImplementedError("Not implemented")
+
+
+def _are_search_docs_equal(
+    received: list[SearchDoc],
+    expected: list[SearchDoc],
+) -> bool:
+    """
+    What we care about:
+     - All documents are present (order does not)
+     - Expected document_id, link, blurb, source_type and hidden
+    """
+    if len(received) != len(expected):
+        return False
+
+    received.sort(key=lambda x: x.document_id)
+    expected.sort(key=lambda x: x.document_id)
+
+    for received_document, expected_document in zip(received, expected):
+        if received_document.document_id != expected_document.document_id:
+            return False
+        if received_document.link != expected_document.link:
+            return False
+        if received_document.blurb != expected_document.blurb:
+            return False
+        if received_document.source_type != expected_document.source_type:
+            return False
+        if received_document.hidden != expected_document.hidden:
+            return False
+    return True
+
+
+def is_search_tool_document_delta_equal(
+    received: SearchToolDocumentsDelta,
+    expected: SearchToolDocumentsDelta,
+) -> bool:
+    """
+    What we care about:
+     - All documents are present (order does not)
+     - Expected document_id, link, blurb, source_type and hidden
+    """
+    received_documents = received.documents
+    expected_documents = expected.documents
+
+    return _are_search_docs_equal(received_documents, expected_documents)
+
+
+def is_open_url_documents_equal(
+    received: OpenUrlDocuments,
+    expected: OpenUrlDocuments,
+) -> bool:
+    """
+    What we care about:
+     - All documents are present (order does not)
+     - Expected document_id, link, blurb, source_type and hidden
+    """
+    received_documents = received.documents
+    expected_documents = expected.documents
+
+    return _are_search_docs_equal(received_documents, expected_documents)
+
+
+def is_agent_response_start_equal(
+    received: AgentResponseStart,
+    expected: AgentResponseStart,
+) -> bool:
+    """
+    What we care about:
+     - All documents are present (order does not)
+     - Expected document_id, link, blurb, source_type and hidden
+    """
+    received_documents = received.final_documents
+    expected_documents = expected.final_documents
+
+    if received_documents is None and expected_documents is None:
+        return True
+    if not received_documents or not expected_documents:
+        return False
+
+    return _are_search_docs_equal(received_documents, expected_documents)
 
 
 def test_stream_chat_with_answer(
@@ -162,7 +265,7 @@ def test_stream_chat_with_answer(
 
         for word in answer.split(" "):
             expected_token = word + " "
-            expected_packet = create_packet_with_agent_response_delta(expected_token)
+            expected_packet = create_packet_with_agent_response_delta(expected_token, 0)
 
             packet = next(answer_stream)
             assert_answer_stream_part_correct(packet, expected_packet)
@@ -268,7 +371,11 @@ def test_stream_chat_with_search_and_openurl_tools(
 
     query = "What is the weather in Sydney?"
 
-    with use_mock_llm() as mock_llm:
+    with (
+        use_mock_llm() as mock_llm,
+        use_mock_web_provider(db_session) as mock_web,
+        use_mock_content_provider() as mock_content,
+    ):
         llm_thinking_response = (
             "I need to perform a web search to get current weather details. "
             "I can use the search tool to do this."
@@ -321,7 +428,7 @@ def test_stream_chat_with_search_and_openurl_tools(
 
         for token in llm_thinking_response.split(" "):
             expected_token = token + " "
-            expected_packet = create_packet_with_reasoning_delta(expected_token)
+            expected_packet = create_packet_with_reasoning_delta(expected_token, 0)
 
             packet = next(answer_stream)
             assert_answer_stream_part_correct(packet, expected_packet)
@@ -345,6 +452,33 @@ def test_stream_chat_with_search_and_openurl_tools(
         )
         assert_answer_stream_part_correct(p4, expected_packet4)
 
+        QUERY1 = "weather in sydney"
+        QUERY2 = "current weather in sydney"
+
+        RESULTS1 = [
+            MockWebSearchResult(
+                title="Official Weather",
+                link="www.weather.com.au",
+                snippet="The current weather in Sydney is 20 degrees Celsius.",
+            ),
+            MockWebSearchResult(
+                title="Weather CHannel",
+                link="www.wc.com.au",
+                snippet="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
+            ),
+        ]
+
+        RESULTS2 = [
+            MockWebSearchResult(
+                title="Weather Now!",
+                link="www.weathernow.com.au",
+                snippet="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+            )
+        ]
+
+        mock_web.add_results(QUERY1, RESULTS1)
+        mock_web.add_results(QUERY2, RESULTS2)
+
         p5 = next(answer_stream)
         expected_packet5 = Packet(
             placement=create_placement(1, 0),
@@ -353,3 +487,303 @@ def test_stream_chat_with_search_and_openurl_tools(
             ),
         )
         assert_answer_stream_part_correct(p5, expected_packet5)
+
+        DOCS1 = [
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weather.com.au",
+                chunk_ind=0,
+                semantic_identifier="The current weather in Sydney is 20 degrees Celsius.",
+                link="www.weather.com.au",
+                blurb="The current weather in Sydney is 20 degrees Celsius.",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.wc.com.au",
+                chunk_ind=0,
+                semantic_identifier="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
+                link="www.wc.com.au",
+                blurb="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
+                chunk_ind=0,
+                semantic_identifier="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+                link="www.weathernow.com.au",
+                blurb="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+        ]
+
+        p6 = next(answer_stream)
+        expected_packet6 = Packet(
+            placement=create_placement(1, 0),
+            obj=SearchToolDocumentsDelta(
+                documents=DOCS1,
+            ),
+        )
+
+        assert_answer_stream_part_correct(p6, expected_packet6)
+
+        p7 = next(answer_stream)
+        expected_packet7 = Packet(placement=create_placement(1, 0), obj=SectionEnd())
+        assert_answer_stream_part_correct(p7, expected_packet7)
+
+        REASONING_TEXT = "I like weathernow and the official weather site"
+        REASONING_TOKENS = [(token + " ") for token in REASONING_TEXT.split(" ")]
+        mock_llm.add_response(
+            LLMReasoningResponse(
+                reasoning_tokens=REASONING_TOKENS,
+            )
+        )
+
+        tool_call_query_dict = {"urls": ["www.weathernow.com.au", "www.weather.com.au"]}
+        tool_call_query_string = json.dumps(tool_call_query_dict)
+        mock_llm.add_response(
+            LLMToolCallResponse(
+                tool_name="open_url",
+                tool_call_id="123",
+                tool_call_argument_tokens=[tool_call_query_string],
+            )
+        )
+
+        mock_llm.forward_till_end()
+
+        p8 = next(answer_stream)
+        expected_packet8 = Packet(
+            placement=create_placement(2),
+            obj=ReasoningStart(),
+        )
+        assert_answer_stream_part_correct(p8, expected_packet8)
+
+        for token in REASONING_TEXT.split(" "):
+            expected_token = token + " "
+            expected_packet = create_packet_with_reasoning_delta(expected_token, 2)
+
+            packet = next(answer_stream)
+            assert_answer_stream_part_correct(packet, expected_packet)
+
+        p9 = next(answer_stream)
+        expected_packet9 = Packet(
+            placement=create_placement(2),
+            obj=ReasoningDone(),
+        )
+        assert_answer_stream_part_correct(p9, expected_packet9)
+
+        CONTENT = [
+            MockWebContent(
+                title="Weather Now!",
+                url="www.weathernow.com.au",
+                content="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+            ),
+            MockWebContent(
+                title="Weather Official",
+                url="www.weather.com.au",
+                content="The current weather in Sydney is 20 degrees Celsius.",
+            ),
+        ]
+
+        for content in CONTENT:
+            mock_content.add_content(content)
+
+        p10 = next(answer_stream)
+        expected_packet10 = Packet(
+            placement=create_placement(3),
+            obj=OpenUrlStart(),
+        )
+        assert_answer_stream_part_correct(p10, expected_packet10)
+
+        p11 = next(answer_stream)
+        expected_packet11 = Packet(
+            placement=create_placement(3),
+            obj=OpenUrlUrls(
+                urls=[content.url for content in CONTENT],
+            ),
+        )
+        assert_answer_stream_part_correct(p11, expected_packet11)
+
+        DOCS2 = [
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
+                chunk_ind=0,
+                semantic_identifier="Weather Now!",
+                link="www.weathernow.com.au",
+                blurb="Weather Now!",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weather.com.au",
+                chunk_ind=0,
+                semantic_identifier="Weather Official",
+                link="www.weather.com.au",
+                blurb="Weather Official",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+        ]
+
+        p12 = next(answer_stream)
+        expected_packet12 = Packet(
+            placement=create_placement(3),
+            obj=OpenUrlDocuments(
+                documents=DOCS2,
+            ),
+        )
+        assert_answer_stream_part_correct(p12, expected_packet12)
+
+        p13 = next(answer_stream)
+        expected_packet13 = Packet(
+            placement=create_placement(3),
+            obj=SectionEnd(),
+        )
+        assert_answer_stream_part_correct(p13, expected_packet13)
+
+        llm_thinking_response = (
+            "I now know everything that I need to know. "
+            "I can now answer the question."
+        )
+
+        mock_llm.add_response(
+            LLMReasoningResponse(
+                reasoning_tokens=[
+                    (token + " ") for token in llm_thinking_response.split(" ")
+                ]
+            )
+        )
+
+        answer_response = (
+            "The weather in Sydney is sunny with a temperature of 22 degrees Celsius."
+        )
+        answer_response_tokens = [(token + " ") for token in answer_response.split(" ")]
+        mock_llm.add_response(
+            LLMAnswerResponse(
+                answer_tokens=answer_response_tokens,
+            )
+        )
+
+        mock_llm.forward_till_end()
+
+        p14 = next(answer_stream)
+        expected_packet14 = Packet(
+            placement=create_placement(4),
+            obj=ReasoningStart(),
+        )
+        assert_answer_stream_part_correct(p14, expected_packet14)
+
+        for token in llm_thinking_response.split(" "):
+            expected_token = token + " "
+            expected_packet = create_packet_with_reasoning_delta(expected_token, 4)
+
+            packet = next(answer_stream)
+            assert_answer_stream_part_correct(packet, expected_packet)
+
+        p15 = next(answer_stream)
+        expected_packet15 = Packet(
+            placement=create_placement(4),
+            obj=ReasoningDone(),
+        )
+        assert_answer_stream_part_correct(p15, expected_packet15)
+
+        FINAL_DOCS = [
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weather.com.au",
+                chunk_ind=0,
+                semantic_identifier="Weather Official",
+                link="www.weather.com.au",
+                blurb="The current weather in Sydney is 20 degrees Celsius.",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
+                chunk_ind=0,
+                semantic_identifier="Weather Now!",
+                link="www.weathernow.com.au",
+                blurb="The weather right now is sunny with a temperature of 22 degrees Celsius.",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.wc.com.au",
+                chunk_ind=0,
+                semantic_identifier="Weather Channel",
+                link="www.wc.com.au",
+                blurb="Morning is 10 degree Celsius, afternoon is 25 degrees Celsius.",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weathernow.com.au",
+                chunk_ind=0,
+                semantic_identifier="Weather Now!",
+                link="www.weathernow.com.au",
+                blurb="Weather Now!",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+            SearchDoc(
+                document_id="WEB_SEARCH_DOC_www.weather.com.au",
+                chunk_ind=0,
+                semantic_identifier="Weather Official",
+                link="www.weather.com.au",
+                blurb="Weather Official",
+                source_type=DocumentSource.WEB,
+                boost=1,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+            ),
+        ]
+
+        p16 = next(answer_stream)
+        expected_packet16 = Packet(
+            placement=create_placement(5),
+            obj=AgentResponseStart(
+                final_documents=FINAL_DOCS,
+            ),
+        )
+        assert_answer_stream_part_correct(p16, expected_packet16)
+
+        for token in answer_response.split(" "):
+            expected_token = token + " "
+            expected_packet = create_packet_with_agent_response_delta(expected_token, 5)
+            packet = next(answer_stream)
+            assert_answer_stream_part_correct(packet, expected_packet)
+
+        p17 = next(answer_stream)
+        expected_packet17 = Packet(
+            placement=create_placement(5),
+            obj=OverallStop(),
+        )
+        assert_answer_stream_part_correct(p17, expected_packet17)
