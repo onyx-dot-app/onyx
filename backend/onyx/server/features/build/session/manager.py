@@ -636,7 +636,7 @@ class SessionManager:
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
-            logger.exception(f"ValueError in build message streaming: {e}")
+            logger.exception("ValueError in build message streaming")
             yield _format_packet_event(error_packet)
         except RuntimeError as e:
             error_packet = ErrorPacket(message=str(e))
