@@ -280,6 +280,46 @@ class ACPAgentClient:
 
         return self._process
 
+    def _read_stderr(self, max_bytes: int = 2000) -> str:
+        """Read available stderr output from the process.
+
+        Args:
+            max_bytes: Maximum bytes to read
+
+        Returns:
+            Stderr output as string, or empty string if unavailable
+        """
+        if self._process is None or self._process.stderr is None:
+            return ""
+
+        try:
+            # Check if stderr has data available
+            stderr_fd = self._process.stderr.fileno()
+            readable, _, _ = select.select([stderr_fd], [], [], 0)
+            if not readable:
+                return ""
+
+            # Read available data (non-blocking)
+            try:
+                import fcntl
+
+                # Set stderr to non-blocking
+                flags = fcntl.fcntl(stderr_fd, fcntl.F_GETFL)
+                fcntl.fcntl(stderr_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+                try:
+                    data = self._process.stderr.read(max_bytes)
+                    return data if data else ""
+                finally:
+                    # Restore blocking mode
+                    fcntl.fcntl(stderr_fd, fcntl.F_SETFL, flags)
+            except ImportError:
+                # fcntl not available on Windows, try simple read
+                data = self._process.stderr.read(max_bytes)
+                return data if data else ""
+        except Exception:
+            return ""
+
     def _send_request(
         self,
         method: str,

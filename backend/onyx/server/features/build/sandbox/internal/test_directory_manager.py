@@ -91,16 +91,16 @@ class TestSetupOpencodeConfig:
 
         # Verify basic structure
         assert config["model"] == "openai/gpt-4o"
+        assert "$schema" in config
         assert "provider" in config
         assert "openai" in config["provider"]
         assert config["provider"]["openai"]["options"]["apiKey"] == "test-api-key"
 
-        # Verify OpenAI thinking configuration
-        assert "options" in config
-        assert config["options"]["reasoningEffort"] == "high"
-        assert config["options"]["textVerbosity"] == "low"
-        assert config["options"]["reasoningSummary"] == "auto"
-        assert config["options"]["include"] == ["reasoning.encrypted_content"]
+        # Verify OpenAI reasoning configuration in model config
+        assert "models" in config["provider"]["openai"]
+        assert "gpt-4o" in config["provider"]["openai"]["models"]
+        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
+        assert model_config["reasoningEffort"] == "high"
 
     def test_anthropic_config_with_thinking(
         self,
@@ -125,15 +125,20 @@ class TestSetupOpencodeConfig:
 
         # Verify basic structure
         assert config["model"] == "anthropic/claude-sonnet-4-5"
+        assert "$schema" in config
         assert "provider" in config
         assert "anthropic" in config["provider"]
         assert config["provider"]["anthropic"]["options"]["apiKey"] == "test-api-key"
 
-        # Verify Anthropic thinking configuration
-        assert "options" in config
-        assert "thinking" in config["options"]
-        assert config["options"]["thinking"]["type"] == "enabled"
-        assert config["options"]["thinking"]["budgetTokens"] == 16000
+        # Verify Anthropic thinking configuration in model config
+        assert "models" in config["provider"]["anthropic"]
+        assert "claude-sonnet-4-5" in config["provider"]["anthropic"]["models"]
+        model_config = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
+            "config"
+        ]
+        assert "thinking" in model_config
+        assert model_config["thinking"]["type"] == "enabled"
+        assert model_config["thinking"]["budget_tokens"] == 16000
 
     def test_google_config_with_thinking(
         self,
@@ -158,14 +163,17 @@ class TestSetupOpencodeConfig:
 
         # Verify basic structure
         assert config["model"] == "google/gemini-3-pro"
+        assert "$schema" in config
         assert "provider" in config
         assert "google" in config["provider"]
         assert config["provider"]["google"]["options"]["apiKey"] == "test-api-key"
 
-        # Verify Google thinking configuration
-        assert "options" in config
-        assert config["options"]["thinking_budget"] == 16000
-        assert config["options"]["thinking_level"] == "high"
+        # Verify Google thinking configuration in model config
+        assert "models" in config["provider"]["google"]
+        assert "gemini-3-pro" in config["provider"]["google"]["models"]
+        model_config = config["provider"]["google"]["models"]["gemini-3-pro"]["config"]
+        assert model_config["thinking_budget"] == 16000
+        assert model_config["thinking_level"] == "high"
 
     def test_bedrock_config_with_thinking(
         self,
@@ -190,15 +198,19 @@ class TestSetupOpencodeConfig:
 
         # Verify basic structure
         assert config["model"] == "bedrock/anthropic.claude-v3-5-sonnet-20250219-v1:0"
+        assert "$schema" in config
         assert "provider" in config
         assert "bedrock" in config["provider"]
         assert config["provider"]["bedrock"]["options"]["apiKey"] == "test-api-key"
 
-        # Verify Bedrock thinking configuration (same as Anthropic)
-        assert "options" in config
-        assert "thinking" in config["options"]
-        assert config["options"]["thinking"]["type"] == "enabled"
-        assert config["options"]["thinking"]["budgetTokens"] == 16000
+        # Verify Bedrock thinking configuration in model config (same as Anthropic)
+        assert "models" in config["provider"]["bedrock"]
+        model_name = "anthropic.claude-v3-5-sonnet-20250219-v1:0"
+        assert model_name in config["provider"]["bedrock"]["models"]
+        model_config = config["provider"]["bedrock"]["models"][model_name]["config"]
+        assert "thinking" in model_config
+        assert model_config["thinking"]["type"] == "enabled"
+        assert model_config["thinking"]["budget_tokens"] == 16000
 
     def test_azure_config_with_thinking(
         self,
@@ -223,16 +235,16 @@ class TestSetupOpencodeConfig:
 
         # Verify basic structure
         assert config["model"] == "azure/gpt-4o"
+        assert "$schema" in config
         assert "provider" in config
         assert "azure" in config["provider"]
         assert config["provider"]["azure"]["options"]["apiKey"] == "test-api-key"
 
-        # Verify Azure thinking configuration (same as OpenAI)
-        assert "options" in config
-        assert config["options"]["reasoningEffort"] == "high"
-        assert config["options"]["textVerbosity"] == "low"
-        assert config["options"]["reasoningSummary"] == "auto"
-        assert config["options"]["include"] == ["reasoning.encrypted_content"]
+        # Verify Azure reasoning configuration in model config (same as OpenAI)
+        assert "models" in config["provider"]["azure"]
+        assert "gpt-4o" in config["provider"]["azure"]["models"]
+        model_config = config["provider"]["azure"]["models"]["gpt-4o"]["config"]
+        assert model_config["reasoningEffort"] == "high"
 
     def test_openai_config_with_api_base(
         self,
@@ -314,8 +326,18 @@ class TestSetupOpencodeConfig:
         assert config["permission"]["question"] == "deny"
         assert config["permission"]["webfetch"] == "deny"
 
-        # Verify thinking config is still present
-        assert config["options"]["reasoningEffort"] == "high"
+        # Verify default permissions are still present
+        assert config["permission"]["read"] == "allow"
+        assert config["permission"]["write"] == "allow"
+        assert config["permission"]["edit"] == "allow"
+        assert config["permission"]["grep"] == "allow"
+        assert "bash" in config["permission"]
+        assert config["permission"]["bash"]["rm"] == "deny"
+
+        # Verify thinking config is still present in model config
+        assert "models" in config["provider"]["openai"]
+        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
+        assert model_config["reasoningEffort"] == "high"
 
     def test_config_without_api_key(
         self,
@@ -335,13 +357,17 @@ class TestSetupOpencodeConfig:
         config_path = sandbox_path / "opencode.json"
         config = json.loads(config_path.read_text())
 
-        # Should not have provider config without API key
-        assert "provider" not in config
+        # Should still have provider config structure even without API key
+        assert "provider" in config
+        assert "openai" in config["provider"]
+        # Should not have options (API key) without API key
+        assert "options" not in config["provider"]["openai"]
 
-        # But should still have thinking config
-        assert "options" in config
-        assert config["options"]["reasoningEffort"] == "high"
-        assert config["options"]["textVerbosity"] == "low"
+        # But should still have thinking config in model config
+        assert "models" in config["provider"]["openai"]
+        assert "gpt-4o" in config["provider"]["openai"]["models"]
+        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
+        assert model_config["reasoningEffort"] == "high"
 
     def test_other_provider_no_thinking(
         self,
@@ -364,14 +390,12 @@ class TestSetupOpencodeConfig:
 
         # Verify basic structure
         assert config["model"] == "cohere/command-r-plus"
+        assert "$schema" in config
         assert "provider" in config
+        assert "cohere" in config["provider"]
 
-        # Should not have thinking config for other providers
-        assert "options" not in config or (
-            "reasoningEffort" not in config.get("options", {})
-            and "thinking" not in config.get("options", {})
-            and "thinking_budget" not in config.get("options", {})
-        )
+        # Should not have model config (thinking) for other providers
+        assert "models" not in config["provider"]["cohere"]
 
     def test_config_not_overwritten_if_exists(
         self,
@@ -422,12 +446,12 @@ class TestSetupOpencodeConfig:
 
         # Verify key parts of structure (permission has defaults now)
         assert config["model"] == "openai/gpt-4o"
+        assert config["$schema"] == "https://opencode.ai/config.json"
         assert config["provider"]["openai"]["options"]["apiKey"] == "test-openai-key"
         assert config["provider"]["openai"]["api"] == "https://api.openai.com/v1"
-        assert config["options"]["reasoningEffort"] == "high"
-        assert config["options"]["textVerbosity"] == "low"
-        assert config["options"]["reasoningSummary"] == "auto"
-        assert config["options"]["include"] == ["reasoning.encrypted_content"]
+        assert "models" in config["provider"]["openai"]
+        model_config = config["provider"]["openai"]["models"]["gpt-4o"]["config"]
+        assert model_config["reasoningEffort"] == "high"
         assert config["permission"]["webfetch"] == "deny"
 
     def test_full_config_structure_anthropic(
@@ -453,12 +477,17 @@ class TestSetupOpencodeConfig:
 
         # Verify structure (permission has defaults now, so we check for overrides)
         assert config["model"] == "anthropic/claude-sonnet-4-5"
+        assert config["$schema"] == "https://opencode.ai/config.json"
         assert (
             config["provider"]["anthropic"]["options"]["apiKey"] == "test-anthropic-key"
         )
         assert config["provider"]["anthropic"]["api"] == "https://api.anthropic.com"
-        assert config["options"]["thinking"]["type"] == "enabled"
-        assert config["options"]["thinking"]["budgetTokens"] == 16000
+        assert "models" in config["provider"]["anthropic"]
+        model_config = config["provider"]["anthropic"]["models"]["claude-sonnet-4-5"][
+            "config"
+        ]
+        assert model_config["thinking"]["type"] == "enabled"
+        assert model_config["thinking"]["budget_tokens"] == 16000
         assert config["permission"]["question"] == "deny"
 
     def test_full_config_structure_google(
@@ -484,13 +513,16 @@ class TestSetupOpencodeConfig:
 
         # Verify structure
         assert config["model"] == "google/gemini-3-pro"
+        assert config["$schema"] == "https://opencode.ai/config.json"
         assert config["provider"]["google"]["options"]["apiKey"] == "test-google-key"
         assert (
             config["provider"]["google"]["api"]
             == "https://generativelanguage.googleapis.com"
         )
-        assert config["options"]["thinking_budget"] == 16000
-        assert config["options"]["thinking_level"] == "high"
+        assert "models" in config["provider"]["google"]
+        model_config = config["provider"]["google"]["models"]["gemini-3-pro"]["config"]
+        assert model_config["thinking_budget"] == 16000
+        assert model_config["thinking_level"] == "high"
         assert config["permission"]["webfetch"] == "deny"
 
     def test_full_config_structure_bedrock(
@@ -515,9 +547,13 @@ class TestSetupOpencodeConfig:
 
         # Verify structure
         assert config["model"] == "bedrock/anthropic.claude-v3-5-sonnet-20250219-v1:0"
+        assert config["$schema"] == "https://opencode.ai/config.json"
         assert config["provider"]["bedrock"]["options"]["apiKey"] == "test-bedrock-key"
-        assert config["options"]["thinking"]["type"] == "enabled"
-        assert config["options"]["thinking"]["budgetTokens"] == 16000
+        model_name = "anthropic.claude-v3-5-sonnet-20250219-v1:0"
+        assert "models" in config["provider"]["bedrock"]
+        model_config = config["provider"]["bedrock"]["models"][model_name]["config"]
+        assert model_config["thinking"]["type"] == "enabled"
+        assert model_config["thinking"]["budget_tokens"] == 16000
         assert config["permission"]["question"] == "deny"
 
     def test_full_config_structure_azure(
@@ -543,14 +579,14 @@ class TestSetupOpencodeConfig:
 
         # Verify structure
         assert config["model"] == "azure/gpt-4o"
+        assert config["$schema"] == "https://opencode.ai/config.json"
         assert config["provider"]["azure"]["options"]["apiKey"] == "test-azure-key"
         assert (
             config["provider"]["azure"]["api"] == "https://myresource.openai.azure.com"
         )
-        assert config["options"]["reasoningEffort"] == "high"
-        assert config["options"]["textVerbosity"] == "low"
-        assert config["options"]["reasoningSummary"] == "auto"
-        assert config["options"]["include"] == ["reasoning.encrypted_content"]
+        assert "models" in config["provider"]["azure"]
+        model_config = config["provider"]["azure"]["models"]["gpt-4o"]["config"]
+        assert model_config["reasoningEffort"] == "high"
         assert config["permission"]["bash"] == "deny"
 
 

@@ -163,70 +163,60 @@ class DirectoryManager:
             disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
         """
         config_path = sandbox_path / "opencode.json"
-        if config_path.exists():
-            return
-
         # Build opencode model string: provider/model-name
         opencode_model = f"{provider}/{model_name}"
 
-        # Build configuration
+        # Build configuration with schema
         config: dict[str, Any] = {
+            "$schema": "https://opencode.ai/config.json",
             "model": opencode_model,
+            "provider": {},
         }
 
-        # Add provider-specific configuration if API key provided
-        if api_key:
-            provider_config: dict[str, Any] = {"options": {"apiKey": api_key}}
-            if api_base:
-                provider_config["api"] = api_base
-            config["provider"] = {provider: provider_config}
+        # Build provider configuration
+        provider_config: dict[str, Any] = {}
 
-        # Add thinking configuration based on provider
+        # Add API key if provided
+        if api_key:
+            provider_config["options"] = {"apiKey": api_key}
+
+        # Add API base if provided
+        if api_base:
+            provider_config["api"] = api_base
+
+        # Build model configuration with thinking/reasoning options
+        model_config: dict[str, Any] = {}
+
         if provider == "openai":
-            if "options" not in config:
-                config["options"] = {}
-            config["options"].update(
-                {
-                    "reasoningEffort": "high",
-                    "textVerbosity": "low",
-                    "reasoningSummary": "auto",
-                    "include": ["reasoning.encrypted_content"],
-                }
-            )
+            model_config["reasoningEffort"] = "high"
         elif provider == "anthropic":
-            if "options" not in config:
-                config["options"] = {}
-            config["options"]["thinking"] = {
+            model_config["thinking"] = {
                 "type": "enabled",
-                "budgetTokens": 16000,
+                "budget_tokens": 16000,
             }
         elif provider == "google":
-            if "options" not in config:
-                config["options"] = {}
-            config["options"].update(
-                {
-                    "thinking_budget": 16000,
-                    "thinking_level": "high",
-                }
-            )
+            model_config["thinking_budget"] = 16000
+            model_config["thinking_level"] = "high"
         elif provider == "bedrock":
-            if "options" not in config:
-                config["options"] = {}
-            config["options"]["thinking"] = {
+            model_config["thinking"] = {
                 "type": "enabled",
-                "budgetTokens": 16000,
+                "budget_tokens": 16000,
             }
         elif provider == "azure":
-            if "options" not in config:
-                config["options"] = {}
-            config["options"].update(
-                {
-                    "reasoningEffort": "high",
-                    "textVerbosity": "low",
-                    "reasoningSummary": "auto",
-                    "include": ["reasoning.encrypted_content"],
+            model_config["reasoningEffort"] = "high"
+
+        # Add model configuration to provider
+        if model_config:
+            provider_config["models"] = {
+                model_name: {
+                    "id": model_name,
+                    "name": model_name,
+                    "config": model_config,
                 }
-            )
+            }
+
+        # Add provider to config
+        config["provider"][provider] = provider_config
 
         # Set default tool permission
         config["permission"] = {
@@ -257,7 +247,8 @@ class DirectoryManager:
 
         # Disable specified tools via permissions
         if disabled_tools:
-            config["permission"] = {tool: "deny" for tool in disabled_tools}
+            for tool in disabled_tools:
+                config["permission"][tool] = "deny"
 
         config_path.write_text(json.dumps(config, indent=2))
 
