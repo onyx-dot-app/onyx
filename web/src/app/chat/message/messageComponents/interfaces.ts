@@ -54,5 +54,7 @@ export type MessageRenderer<
   stopReason?: StopReason;
   /** Whether this is the last step in the timeline (for connector line decisions) */
   isLastStep?: boolean;
+  /** Hover state from parent */
+  isHover?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }>;

@@ -15,6 +15,8 @@ export interface TimelineRendererResult extends RendererResult {
   renderType: RenderType;
   /** Whether this is the last step (passed through from props) */
   isLastStep: boolean;
+  /** Hover state from parent */
+  isHover: boolean;
 }
 
 export interface TimelineRendererComponentProps {
@@ -34,6 +36,8 @@ export interface TimelineRendererComponentProps {
   defaultExpanded?: boolean;
   /** Whether this is the last step in the timeline (for connector line decisions) */
   isLastStep?: boolean;
+  /** Hover state from parent component */
+  isHover?: boolean;
   /** Children render function - receives extended result with collapse state */
   children: (result: TimelineRendererResult) => JSX.Element;
 }
@@ -50,6 +54,7 @@ function arePropsEqual(
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
     prev.isLastStep === next.isLastStep &&
+    prev.isHover === next.isHover &&
     prev.defaultExpanded === next.defaultExpanded
     // Skipping chatState (memoized upstream)
   );
@@ -65,6 +70,7 @@ export const TimelineRendererComponent = React.memo(
     stopReason,
     defaultExpanded = true,
     isLastStep,
+    isHover = false,
     children,
   }: TimelineRendererComponentProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -82,6 +88,7 @@ export const TimelineRendererComponent = React.memo(
         onToggle: handleToggle,
         renderType,
         isLastStep: isLastStep ?? true,
+        isHover,
       });
     }
 
@@ -95,6 +102,7 @@ export const TimelineRendererComponent = React.memo(
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}
         isLastStep={isLastStep}
+        isHover={isHover}
       >
         {({ icon, status, content, expandedText, supportsCompact }) =>
           children({
@@ -107,6 +115,7 @@ export const TimelineRendererComponent = React.memo(
             onToggle: handleToggle,
             renderType,
             isLastStep: isLastStep ?? true,
+            isHover,
           })
         }
       </RendererFn>

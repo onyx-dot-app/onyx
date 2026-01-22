@@ -6,6 +6,7 @@ import React, {
   useCallback,
   FunctionComponent,
 } from "react";
+import { cn } from "@/lib/utils";
 import { StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup } from "./transformers";
@@ -50,6 +51,7 @@ export function ParallelTimelineTabs({
 }: ParallelTimelineTabsProps) {
   const [activeTab, setActiveTab] = useState(turnGroup.steps[0]?.key ?? "");
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isHover, setIsHover] = useState(false);
   const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
 
   // Find the active step based on selected tab
@@ -80,6 +82,7 @@ export function ParallelTimelineTabs({
       isExpanded,
       onToggle,
       isLastStep,
+      isHover,
     }: TimelineRendererResult) =>
       isResearchAgentPackets(activeStep?.packets ?? []) ? (
         content
@@ -92,6 +95,7 @@ export function ParallelTimelineTabs({
           collapsible={true}
           isLastStep={isLastStep}
           isFirstStep={false}
+          isHover={isHover}
         >
           {content}
         </StepContainer>
@@ -101,21 +105,40 @@ export function ParallelTimelineTabs({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <div className="flex flex-col w-full gap-1">
+      <div
+        className="flex flex-col w-full"
+        onMouseEnter={() => setIsHover(true)}
+        onMouseLeave={() => setIsHover(false)}
+      >
         <div className="flex w-full">
           {/* Left column: Icon + connector line */}
           <div className="flex flex-col items-center w-9 pt-2">
-            <div className="size-4 flex items-center justify-center stroke-text-02">
-              <SvgBranch className="w-4 h-4" />
+            <div
+              className={cn(
+                "size-5 flex items-center justify-center text-text-02",
+                isHover &&
+                  "text-text-inverted-05 bg-background-neutral-inverted-00 rounded-full"
+              )}
+            >
+              <SvgBranch className="w-3 h-3" />
             </div>
             {/* Connector line */}
-            <div className="w-px flex-1 bg-border-01" />
+            <div
+              className={cn(
+                "w-px flex-1 bg-border-01",
+                isHover && "bg-border-04"
+              )}
+            />
           </div>
 
           {/* Right column: Tabs + collapse button */}
           <div className="flex-1">
             <Tabs.List
               variant="pill"
+              className={cn(
+                isHover && "bg-background-tint-02",
+                "transition-colors duration-200"
+              )}
               rightContent={
                 <IconButton
                   tertiary
@@ -151,6 +174,7 @@ export function ParallelTimelineTabs({
             stopReason={stopReason}
             defaultExpanded={isExpanded}
             isLastStep={isLastTurnGroup}
+            isHover={isHover}
           >
             {renderTabContent}
           </TimelineRendererComponent>

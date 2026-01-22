@@ -52,6 +52,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   renderType,
   stopPacketSeen,
   isLastStep = true,
+  isHover = false,
   children,
 }) => {
   // Extract the research task from the start packet
@@ -157,6 +158,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           isLastStep={
             nestedToolGroups.length === 0 && !fullReportContent && !isComplete
           }
+          isHover={isHover}
         >
           <div className="text-text-600 text-sm">{researchTask}</div>
         </StepContainer>
@@ -179,8 +181,9 @@ export const ResearchAgentRenderer: MessageRenderer<
             stopPacketSeen={stopPacketSeen}
             defaultExpanded={true}
             isLastStep={isLastNestedStep}
+            isHover={isHover}
           >
-            {({ icon, status, content, isExpanded, onToggle }) => (
+            {({ icon, status, content, isExpanded, onToggle, isHover }) => (
               <StepContainer
                 stepIcon={icon as FunctionComponent<IconProps> | undefined}
                 header={status}
@@ -189,6 +192,7 @@ export const ResearchAgentRenderer: MessageRenderer<
                 collapsible={true}
                 isLastStep={isLastNestedStep}
                 isFirstStep={!researchTask && index === 0}
+                isHover={isHover}
               >
                 {content}
               </StepContainer>
@@ -204,6 +208,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           header="Research Report"
           isLastStep={!isComplete}
           isFirstStep={!researchTask && nestedToolGroups.length === 0}
+          isHover={isHover}
         >
           <ExpandableTextDisplay
             title="Research Report"
@@ -221,6 +226,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           header="Done"
           isLastStep={isLastStep}
           isFirstStep={false}
+          isHover={isHover}
         />
       )}
     </div>

@@ -207,8 +207,9 @@ TabsRoot.displayName = TabsPrimitive.Root.displayName;
  * Tabs List Props
  */
 interface TabsListProps
-  extends WithoutStyles<
-    React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
+  extends Omit<
+    React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
+    "style"
   > {
   /**
    * Visual variant of the tabs list.
@@ -250,43 +251,48 @@ interface TabsListProps
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   TabsListProps
->(({ variant = "contained", rightContent, children, ...props }, ref) => {
-  const listRef = useRef<HTMLDivElement>(null);
-  const isPill = variant === "pill";
-  const indicatorStyle = usePillIndicator(listRef, isPill);
-  const contextValue = useMemo(() => ({ variant }), [variant]);
+>(
+  (
+    { variant = "contained", rightContent, children, className, ...props },
+    ref
+  ) => {
+    const listRef = useRef<HTMLDivElement>(null);
+    const isPill = variant === "pill";
+    const indicatorStyle = usePillIndicator(listRef, isPill);
+    const contextValue = useMemo(() => ({ variant }), [variant]);
 
-  return (
-    <TabsPrimitive.List
-      ref={mergeRefs(listRef, ref)}
-      className={cn(listVariants[variant])}
-      style={
-        variant === "contained"
-          ? {
-              gridTemplateColumns: `repeat(${React.Children.count(
-                children
-              )}, 1fr)`,
-            }
-          : undefined
-      }
-      {...props}
-    >
-      <TabsContext.Provider value={contextValue}>
-        {isPill ? (
-          <div className="flex items-center gap-2">{children}</div>
-        ) : (
-          children
-        )}
+    return (
+      <TabsPrimitive.List
+        ref={mergeRefs(listRef, ref)}
+        className={cn(listVariants[variant], className)}
+        style={
+          variant === "contained"
+            ? {
+                gridTemplateColumns: `repeat(${React.Children.count(
+                  children
+                )}, 1fr)`,
+              }
+            : undefined
+        }
+        {...props}
+      >
+        <TabsContext.Provider value={contextValue}>
+          {isPill ? (
+            <div className="flex items-center gap-2 pt-1">{children}</div>
+          ) : (
+            children
+          )}
 
-        {isPill && rightContent && (
-          <div className="ml-auto pl-2">{rightContent}</div>
-        )}
+          {isPill && rightContent && (
+            <div className="ml-auto pl-2">{rightContent}</div>
+          )}
 
-        {isPill && <PillIndicator style={indicatorStyle} />}
-      </TabsContext.Provider>
-    </TabsPrimitive.List>
-  );
-});
+          {isPill && <PillIndicator style={indicatorStyle} />}
+        </TabsContext.Provider>
+      </TabsPrimitive.List>
+    );
+  }
+);
 TabsList.displayName = TabsPrimitive.List.displayName;
 
 /* -------------------------------------------------------------------------- */
@@ -397,7 +403,7 @@ const TabsTrigger = React.forwardRef<
             "data-[state=inactive]:border-transparent",
           ],
           variant === "pill" && [
-            "data-[state=inactive]:bg-transparent",
+            "data-[state=inactive]:bg-background-tint-00",
             "data-[state=inactive]:text-text-03",
           ]
         )}
