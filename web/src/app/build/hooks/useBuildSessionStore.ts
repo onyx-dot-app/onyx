@@ -14,6 +14,8 @@ import {
   ToolCallStatus,
 } from "@/app/build/services/buildStreamingModels";
 
+import { StreamItem, ToolCallState } from "@/app/build/types/displayTypes";
+
 import {
   createSession as apiCreateSession,
   fetchSession,
@@ -59,6 +61,12 @@ export interface BuildSessionData {
   artifacts: Artifact[];
   /** Active tool calls for the current response */
   toolCalls: ToolCall[];
+  /**
+   * FIFO stream items for the current assistant turn.
+   * Items are stored in chronological order as they arrive.
+   * Rendered directly without transformation.
+   */
+  streamItems: StreamItem[];
   error: string | null;
   webappUrl: string | null;
   /** Sandbox info from backend */
@@ -104,6 +112,11 @@ interface BuildSessionStore {
   // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
   appendMessageToSession: (sessionId: string, message: BuildMessage) => void;
   updateLastMessageInSession: (sessionId: string, content: string) => void;
+  updateMessageByIdInSession: (
+    sessionId: string,
+    messageId: string,
+    content: string
+  ) => void;
   addArtifactToSession: (sessionId: string, artifact: Artifact) => void;
 
   // Actions - Tool Call Management
@@ -114,6 +127,22 @@ interface BuildSessionStore {
     updates: Partial<ToolCall>
   ) => void;
   clearToolCallsInSession: (sessionId: string) => void;
+
+  // Actions - Stream Items (FIFO rendering)
+  appendStreamItem: (sessionId: string, item: StreamItem) => void;
+  updateStreamItem: (
+    sessionId: string,
+    itemId: string,
+    updates: Partial<StreamItem>
+  ) => void;
+  updateLastStreamingText: (sessionId: string, content: string) => void;
+  updateLastStreamingThinking: (sessionId: string, content: string) => void;
+  updateToolCallStreamItem: (
+    sessionId: string,
+    toolCallId: string,
+    updates: Partial<ToolCallState>
+  ) => void;
+  clearStreamItems: (sessionId: string) => void;
 
   // Actions - Abort Control
   setAbortController: (sessionId: string, controller: AbortController) => void;
@@ -154,6 +183,7 @@ const createInitialSessionData = (
   messages: [],
   artifacts: [],
   toolCalls: [],
+  streamItems: [],
   error: null,
   webappUrl: null,
   sandbox: null,
@@ -382,6 +412,29 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
+  updateMessageByIdInSession: (
+    sessionId: string,
+    messageId: string,
+    content: string
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const messages = session.messages.map((msg) =>
+        msg.id === messageId ? { ...msg, content } : msg
+      );
+      const updatedSession: BuildSessionData = {
+        ...session,
+        messages,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
   addArtifactToSession: (sessionId: string, artifact: Artifact) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
@@ -449,6 +502,147 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         toolCalls: [],
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  // ===========================================================================
+  // Stream Items (FIFO rendering)
+  // ===========================================================================
+
+  appendStreamItem: (sessionId: string, item: StreamItem) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems: [...session.streamItems, item],
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  updateStreamItem: (
+    sessionId: string,
+    itemId: string,
+    updates: Partial<StreamItem>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const streamItems = session.streamItems.map((item) =>
+        item.id === itemId ? { ...item, ...updates } : item
+      ) as StreamItem[];
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  updateLastStreamingText: (sessionId: string, content: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      // Find the last text item that is streaming
+      const items = [...session.streamItems];
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        if (item && item.type === "text" && item.isStreaming) {
+          items[i] = { ...item, content };
+          break;
+        }
+      }
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems: items,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  updateLastStreamingThinking: (sessionId: string, content: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      // Find the last thinking item that is streaming
+      const items = [...session.streamItems];
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        if (item && item.type === "thinking" && item.isStreaming) {
+          items[i] = { ...item, content };
+          break;
+        }
+      }
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems: items,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  updateToolCallStreamItem: (
+    sessionId: string,
+    toolCallId: string,
+    updates: Partial<ToolCallState>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const streamItems = session.streamItems.map((item) => {
+        if (item.type === "tool_call" && item.toolCall.id === toolCallId) {
+          return {
+            ...item,
+            toolCall: { ...item.toolCall, ...updates },
+          };
+        }
+        return item;
+      }) as StreamItem[];
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  clearStreamItems: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems: [],
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -945,3 +1139,11 @@ export const useDemoDataEnabled = () =>
 
 export const useSetDemoDataEnabled = () =>
   useBuildSessionStore((state) => state.setDemoDataEnabled);
+
+// Stream items selector
+export const useStreamItems = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return [];
+    return sessions.get(currentSessionId)?.streamItems ?? [];
+  });

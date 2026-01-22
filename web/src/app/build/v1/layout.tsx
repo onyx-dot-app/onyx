@@ -18,9 +18,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <BuildProvider>
         <div className="flex flex-row w-full h-full">
           <BuildSidebar />
-          <div className="relative flex-1 h-full overflow-hidden">
-            {children}
-          </div>
+          {children}
         </div>
       </BuildProvider>
     </UploadFilesProvider>

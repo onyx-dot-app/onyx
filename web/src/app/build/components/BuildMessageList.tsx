@@ -1,93 +1,123 @@
 "use client";
 
-import { useRef, useEffect, useMemo } from "react";
-import { BuildMessage } from "@/app/build/services/buildStreamingModels";
+import { useRef, useEffect } from "react";
+import Logo from "@/refresh-components/Logo";
+import TextChunk from "@/app/build/components/TextChunk";
+import ThinkingCard from "@/app/build/components/ThinkingCard";
+import ToolCallPill from "@/app/build/components/ToolCallPill";
 import UserMessage from "@/app/build/components/UserMessage";
-import AIMessageWithTools from "@/app/build/components/AIMessageWithTools";
+import { BuildMessage } from "@/app/build/services/buildStreamingModels";
+import { StreamItem } from "@/app/build/types/displayTypes";
+
+/**
+ * BlinkingDot - Pulsing gray circle for loading state
+ * Matches the main chat UI's loading indicator
+ */
+function BlinkingDot() {
+  return (
+    <span className="animate-pulse flex-none bg-theme-primary-05 inline-block rounded-full h-3 w-3 ml-2" />
+  );
+}
 
 interface BuildMessageListProps {
   messages: BuildMessage[];
+  streamItems: StreamItem[];
   isStreaming?: boolean;
 }
 
 /**
- * BuildMessageList - Displays the conversation history
+ * BuildMessageList - Displays the conversation history with FIFO rendering
  *
- * Shows:
- * - User messages (right-aligned bubbles)
- * - Assistant responses (left-aligned with logo, including tool calls)
- * - Agent activity timeline (tool calls, thinking, plans)
- *
- * Groups messages into display messages and event messages:
- * - Display messages: user messages and assistant messages with content
- * - Event messages: assistant messages with message_metadata (tool calls, thinking, plans)
+ * User messages are shown as right-aligned bubbles.
+ * Assistant responses render streamItems in exact chronological order:
+ * text, thinking, and tool calls appear exactly as they arrived.
  */
 export default function BuildMessageList({
   messages,
+  streamItems,
   isStreaming = false,
 }: BuildMessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Separate display messages from event messages
-  const { displayMessages, eventMessages, hasEventsOnly } = useMemo(() => {
-    const display: BuildMessage[] = [];
-    const events: BuildMessage[] = [];
-
-    for (const msg of messages) {
-      // Event messages have metadata and empty/no content
-      if (msg.message_metadata?.type && !msg.content) {
-        events.push(msg);
-      } else {
-        display.push(msg);
-      }
-    }
-
-    // Check if we have events but no assistant messages with content
-    const hasAssistantContent = display.some((m) => m.type === "assistant");
-    const hasEventsOnly = events.length > 0 && !hasAssistantContent;
-
-    return { displayMessages: display, eventMessages: events, hasEventsOnly };
-  }, [messages]);
-
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new content arrives
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, streamItems.length]);
+
+  // Get user messages only (we'll handle assistant content via streamItems)
+  const userMessages = messages.filter((msg) => msg.type === "user");
+
+  // Determine if we should show assistant response area
+  const hasStreamItems = streamItems.length > 0;
+  const hasUserMessages = userMessages.length > 0;
+  // Show loading if user sent a message but no response yet (survives navigation)
+  const isWaitingForResponse = hasUserMessages && !hasStreamItems;
+  const showAssistantArea =
+    hasStreamItems || isStreaming || isWaitingForResponse;
+
+  // Check for active tools (for "Working..." state)
+  const hasActiveTools = streamItems.some(
+    (item) =>
+      item.type === "tool_call" &&
+      (item.toolCall.status === "in_progress" ||
+        item.toolCall.status === "pending")
+  );
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
       <div className="w-full max-w-2xl">
-        {displayMessages.map((message, index) => {
-          const isLastMessage = index === displayMessages.length - 1;
-          const isStreamingThis =
-            isStreaming && isLastMessage && message.type === "assistant";
-          const isLastAssistantMessage =
-            message.type === "assistant" && isLastMessage;
+        {/* Render user messages */}
+        {userMessages.map((message) => (
+          <UserMessage key={message.id} content={message.content} />
+        ))}
 
-          if (message.type === "user") {
-            return <UserMessage key={message.id} content={message.content} />;
-          }
+        {/* Render assistant response with FIFO stream items */}
+        {showAssistantArea && (
+          <div className="flex items-start gap-3 py-4">
+            <div className="shrink-0 mt-0.5">
+              <Logo folded size={24} />
+            </div>
+            <div className="flex-1 flex flex-col gap-3 min-w-0">
+              {!hasStreamItems ? (
+                // Loading state - no content yet, show blinking dot like main chat
+                <BlinkingDot />
+              ) : (
+                <>
+                  {/* Render stream items in FIFO order */}
+                  {streamItems.map((item) => {
+                    switch (item.type) {
+                      case "text":
+                        return (
+                          <TextChunk key={item.id} content={item.content} />
+                        );
+                      case "thinking":
+                        return (
+                          <ThinkingCard
+                            key={item.id}
+                            content={item.content}
+                            isStreaming={item.isStreaming}
+                          />
+                        );
+                      case "tool_call":
+                        return (
+                          <ToolCallPill
+                            key={item.id}
+                            toolCall={item.toolCall}
+                          />
+                        );
+                      default:
+                        return null;
+                    }
+                  })}
 
-          // For assistant messages, only show event timeline on the last assistant message
-          // This avoids duplicating the timeline for multiple assistant responses
-          return (
-            <AIMessageWithTools
-              key={message.id}
-              content={message.content}
-              eventMessages={isLastAssistantMessage ? eventMessages : []}
-              isStreaming={isStreamingThis}
-            />
-          );
-        })}
-
-        {/* If we have event messages but no assistant message to attach them to, render them */}
-        {hasEventsOnly && (
-          <AIMessageWithTools
-            key="events-only"
-            content=""
-            eventMessages={eventMessages}
-            isStreaming={isStreaming}
-          />
+                  {/* Streaming indicator when actively streaming text */}
+                  {isStreaming && hasStreamItems && !hasActiveTools && (
+                    <BlinkingDot />
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Scroll anchor */}
