@@ -311,33 +311,6 @@ def get_session_snapshots(
 
 
 # Message operations
-def get_current_turn_index(
-    session_id: UUID,
-    db_session: Session,
-) -> int:
-    """Get the current turn index for a session.
-
-    The turn index is the count of USER messages in the session (0-indexed).
-    All assistant responses between user message N and N+1 have turn_index=N.
-
-    Returns:
-        Current turn index (0 for the first user message)
-    """
-    user_message_count = (
-        db_session.query(BuildMessage)
-        .filter(
-            BuildMessage.session_id == session_id,
-            BuildMessage.type == MessageType.USER,
-        )
-        .count()
-    )
-    # Return 0 if no user messages yet, otherwise count - 1 (0-indexed)
-    # But for assistant messages responding to the Nth user message, we want N-1
-    # Actually: turn_index = number of USER messages - 1 (after the current user msg is saved)
-    # For the user message itself, it should be the count before saving
-    return max(0, user_message_count - 1) if user_message_count > 0 else 0
-
-
 def create_message(
     session_id: UUID,
     message_type: MessageType,

@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import MessageType
 from onyx.db.models import BuildSession
 from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_current_turn_index
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.session.manager import BuildStreamingState
@@ -423,54 +422,3 @@ class TestBuildStreamingState:
 
         assert state.finalize_message_chunks() is None
         assert state.finalize_thought_chunks() is None
-
-
-class TestTurnIndexCalculation:
-    """Tests for turn index calculation."""
-
-    def test_get_current_turn_index_empty_session(
-        self,
-        db_session: Session,
-        build_session: BuildSession,
-        tenant_context: None,
-    ) -> None:
-        """Test turn index for empty session."""
-        turn_index = get_current_turn_index(build_session.id, db_session)
-        assert turn_index == 0
-
-    def test_get_current_turn_index_with_messages(
-        self,
-        db_session: Session,
-        build_session: BuildSession,
-        tenant_context: None,
-    ) -> None:
-        """Test turn index after adding user messages."""
-        # Add first user message
-        create_message(
-            session_id=build_session.id,
-            message_type=MessageType.USER,
-            turn_index=0,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": "First"},
-            },
-            db_session=db_session,
-        )
-
-        turn_index = get_current_turn_index(build_session.id, db_session)
-        assert turn_index == 0  # After 1 user message, current turn is 0
-
-        # Add second user message
-        create_message(
-            session_id=build_session.id,
-            message_type=MessageType.USER,
-            turn_index=1,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": "Second"},
-            },
-            db_session=db_session,
-        )
-
-        turn_index = get_current_turn_index(build_session.id, db_session)
-        assert turn_index == 1  # After 2 user messages, current turn is 1
