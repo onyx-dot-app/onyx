@@ -10,6 +10,7 @@ import {
 import { getSessionIdFromSearchParams } from "@/app/build/services/searchParams";
 import BuildChatPanel from "@/app/build/components/ChatPanel";
 import BuildOutputPanel from "@/app/build/components/OutputPanel";
+import VideoBackground from "@/app/build/v1/components/VideoBackground";
 
 /**
  * Build V1 Page - Entry point for builds
@@ -17,7 +18,7 @@ import BuildOutputPanel from "@/app/build/components/OutputPanel";
  * URL: /build/v1 (new build)
  * URL: /build/v1?sessionId=xxx (existing session)
  *
- * Renders the 2-panel layout (chat + output) and handles session controller setup.
+ * Renders the 2-panel layout (chat + output) with video background and handles session controller setup.
  */
 export default function BuildV1Page() {
   const searchParams = useSearchParams();
@@ -28,19 +29,27 @@ export default function BuildV1Page() {
   useBuildSessionController({ existingSessionId: sessionId });
 
   return (
-    <div className="flex flex-row flex-1 h-full overflow-hidden">
-      {/* Center panel - Chat */}
-      <div
-        className={cn(
-          "h-full transition-all duration-300 ease-in-out",
-          outputPanelOpen ? "w-1/2" : "w-full"
-        )}
-      >
-        <BuildChatPanel existingSessionId={sessionId} />
-      </div>
+    <div className="relative w-full h-full">
+      <VideoBackground />
+      <div className="relative z-10 w-full h-full">
+        <div className="flex flex-row flex-1 h-full overflow-hidden">
+          {/* Center panel - Chat */}
+          <div
+            className={cn(
+              "h-full transition-all duration-300 ease-in-out",
+              outputPanelOpen ? "w-1/2" : "w-full"
+            )}
+          >
+            <BuildChatPanel existingSessionId={sessionId} />
+          </div>
 
-      {/* Right panel - Output (Preview, Files, Artifacts) */}
-      <BuildOutputPanel onClose={toggleOutputPanel} isOpen={outputPanelOpen} />
+          {/* Right panel - Output (Preview, Files, Artifacts) */}
+          <BuildOutputPanel
+            onClose={toggleOutputPanel}
+            isOpen={outputPanelOpen}
+          />
+        </div>
+      </div>
     </div>
   );
 }
