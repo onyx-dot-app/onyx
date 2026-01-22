@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
   "productName": "Onyx",
+  "mainBinaryName": "onyx",
   "version": "0.0.0-dev",
   "identifier": "app.onyx.desktop",
   "build": {
@@ -38,7 +39,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "fileName": "onyx",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
