@@ -3,10 +3,12 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
+from typing import cast
 
 from googleapiclient.discovery import Resource  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
+from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
 from onyx.connectors.google_drive.models import DriveRetrievalStage
@@ -22,6 +24,10 @@ from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
+from onyx.utils.variable_functionality import noop_fallback
 
 
 logger = setup_logger()
@@ -51,6 +57,12 @@ SLIM_FILE_FIELDS = (
     "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
+
+HIERARCHY_FIELDS = "id, name, parents, webViewLink, mimeType"
+
+HIERARCHY_FIELDS_WITH_PERMISSIONS = (
+    "id, name, parents, webViewLink, mimeType, permissionIds"
+)
 
 
 def generate_time_range_filter(
@@ -108,6 +120,73 @@ def _get_folders_in_parent(
         q=query,
     ):
         yield file
+
+
+def get_folder_metadata(
+    service: Resource,
+    folder_id: str,
+    field_type: DriveFileFieldType,
+) -> GoogleDriveFileType | None:
+    """Fetch metadata for a folder by ID."""
+    fields = _get_hierarchy_fields_for_file_type(field_type)
+    try:
+        return (
+            service.files()
+            .get(
+                fileId=folder_id,
+                fields=fields,
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+    except HttpError as e:
+        if e.resp.status in (403, 404):
+            logger.debug(f"Cannot access folder {folder_id}: {e}")
+        else:
+            raise e
+    return None
+
+
+def _get_hierarchy_fields_for_file_type(field_type: DriveFileFieldType) -> str:
+    if field_type == DriveFileFieldType.WITH_PERMISSIONS:
+        return HIERARCHY_FIELDS_WITH_PERMISSIONS
+    else:
+        return HIERARCHY_FIELDS
+
+
+def get_external_access_for_folder(
+    folder: GoogleDriveFileType,
+    google_domain: str,
+    drive_service: GoogleDriveService,
+) -> ExternalAccess:
+    """
+    Extract ExternalAccess from a folder's permissions.
+
+    This fetches permissions using the Drive API (via permissionIds) and extracts
+    user emails, group emails, and public access status.
+
+    Uses the EE implementation if available, otherwise returns public access
+    (fallback for non-EE deployments).
+
+    Args:
+        folder: The folder metadata from Google Drive API (must include permissionIds field)
+        google_domain: The company's Google Workspace domain (e.g., "company.com")
+        drive_service: Google Drive service for fetching permission details
+
+    Returns:
+        ExternalAccess with extracted permission info
+    """
+    # Try to get the EE implementation
+    get_folder_access_fn = cast(
+        Callable[[GoogleDriveFileType, str, GoogleDriveService], ExternalAccess],
+        fetch_versioned_implementation_with_fallback(
+            "onyx.external_permissions.google_drive.doc_sync",
+            "get_external_access_for_folder",
+            noop_fallback,
+        ),
+    )
+
+    return get_folder_access_fn(folder, google_domain, drive_service)
 
 
 def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:

@@ -25,6 +25,7 @@ from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.document import upsert_document_external_perms
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import DocExternalAccess
+from onyx.access.models import ElementExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_queue_length
@@ -55,6 +56,9 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
+from onyx.db.hierarchy import (
+    update_hierarchy_node_permissions as db_update_hierarchy_node_permissions,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import complete_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
@@ -637,17 +641,24 @@ def connector_permission_sync_generator_task(
     ),
     stop=stop_after_delay(DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER),
 )
-def document_update_permissions(
+def element_update_permissions(
     tenant_id: str,
-    permissions: DocExternalAccess,
+    permissions: ElementExternalAccess,
     source_type_str: str,
     connector_id: int,
     credential_id: int,
 ) -> bool:
+    """Update permissions for a document or hierarchy node."""
     start = time.monotonic()
-
-    doc_id = permissions.doc_id
     external_access = permissions.external_access
+
+    # Determine element type and identifier for logging
+    if isinstance(permissions, DocExternalAccess):
+        element_id = permissions.doc_id
+        element_type = "doc"
+    else:
+        element_id = permissions.raw_node_id
+        element_type = "node"
 
     try:
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
@@ -657,39 +668,57 @@ def document_update_permissions(
                 emails=list(external_access.external_user_emails),
                 continue_on_error=True,
             )
-            # Then upsert the document's external permissions
-            created_new_doc = upsert_document_external_perms(
-                db_session=db_session,
-                doc_id=doc_id,
-                external_access=external_access,
-                source_type=DocumentSource(source_type_str),
-            )
 
-            if created_new_doc:
-                # If a new document was created, we associate it with the cc_pair
-                upsert_document_by_connector_credential_pair(
+            if isinstance(permissions, DocExternalAccess):
+                # Document permission update
+                created_new_doc = upsert_document_external_perms(
                     db_session=db_session,
-                    connector_id=connector_id,
-                    credential_id=credential_id,
-                    document_ids=[doc_id],
+                    doc_id=permissions.doc_id,
+                    external_access=external_access,
+                    source_type=DocumentSource(source_type_str),
+                )
+
+                if created_new_doc:
+                    # If a new document was created, we associate it with the cc_pair
+                    upsert_document_by_connector_credential_pair(
+                        db_session=db_session,
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                        document_ids=[permissions.doc_id],
+                    )
+            else:
+                # Hierarchy node permission update
+                db_update_hierarchy_node_permissions(
+                    db_session=db_session,
+                    raw_node_id=permissions.raw_node_id,
+                    source=DocumentSource(permissions.source),
+                    is_public=external_access.is_public,
+                    external_user_emails=(
+                        list(external_access.external_user_emails)
+                        if external_access.external_user_emails
+                        else None
+                    ),
+                    external_user_group_ids=(
+                        list(external_access.external_user_group_ids)
+                        if external_access.external_user_group_ids
+                        else None
+                    ),
                 )
 
             elapsed = time.monotonic() - start
             task_logger.info(
-                f"connector_id={connector_id} "
-                f"doc={doc_id} "
+                f"{element_type}={element_id} "
                 f"action=update_permissions "
                 f"elapsed={elapsed:.2f}"
             )
     except Exception as e:
         task_logger.exception(
-            f"document_update_permissions exceptioned: "
-            f"connector_id={connector_id} doc_id={doc_id}"
+            f"element_update_permissions exceptioned: {element_type}={element_id}, {connector_id=} {credential_id=}"
         )
         raise e
     finally:
         task_logger.info(
-            f"document_update_permissions completed: connector_id={connector_id} doc={doc_id}"
+            f"element_update_permissions completed: {element_type}={element_id}, {connector_id=} {credential_id=}"
         )
 
     return True

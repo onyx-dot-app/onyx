@@ -184,6 +184,24 @@ def upsert_hierarchy_node(
         else resolve_parent_hierarchy_node_id(db_session, node.raw_parent_id, source)
     )
 
+    # Extract permission fields from external_access if present
+    is_public = False
+    external_user_emails: list[str] | None = None
+    external_user_group_ids: list[str] | None = None
+
+    if node.external_access:
+        is_public = node.external_access.is_public
+        external_user_emails = (
+            list(node.external_access.external_user_emails)
+            if node.external_access.external_user_emails
+            else None
+        )
+        external_user_group_ids = (
+            list(node.external_access.external_user_group_ids)
+            if node.external_access.external_user_group_ids
+            else None
+        )
+
     # Check if node already exists
     existing_node = get_hierarchy_node_by_raw_id(db_session, node.raw_node_id, source)
 
@@ -194,6 +212,10 @@ def upsert_hierarchy_node(
         existing_node.node_type = node.node_type
         existing_node.document_id = node.document_id
         existing_node.parent_id = parent_id
+        # Update permission fields
+        existing_node.is_public = is_public
+        existing_node.external_user_emails = external_user_emails
+        existing_node.external_user_group_ids = external_user_group_ids
         hierarchy_node = existing_node
     else:
         # Create new node
@@ -205,6 +227,9 @@ def upsert_hierarchy_node(
             node_type=node.node_type,
             document_id=node.document_id,
             parent_id=parent_id,
+            is_public=is_public,
+            external_user_emails=external_user_emails,
+            external_user_group_ids=external_user_group_ids,
         )
         db_session.add(hierarchy_node)
 
@@ -333,3 +358,51 @@ def get_document_parent_hierarchy_node_ids(
     results = db_session.execute(stmt).all()
 
     return {doc_id: parent_id for doc_id, parent_id in results}
+
+
+def update_hierarchy_node_permissions(
+    db_session: Session,
+    raw_node_id: str,
+    source: DocumentSource,
+    is_public: bool,
+    external_user_emails: list[str] | None,
+    external_user_group_ids: list[str] | None,
+    commit: bool = True,
+) -> bool:
+    """
+    Update permissions for an existing hierarchy node.
+
+    This is used during permission sync to update folder permissions
+    without needing the full Pydantic HierarchyNode model.
+
+    Args:
+        db_session: SQLAlchemy session
+        raw_node_id: Raw node ID from the source system
+        source: Document source type
+        is_public: Whether the node is public
+        external_user_emails: List of user emails with access
+        external_user_group_ids: List of group IDs with access
+        commit: Whether to commit the transaction
+
+    Returns:
+        True if the node was found and updated, False if not found
+    """
+    existing_node = get_hierarchy_node_by_raw_id(db_session, raw_node_id, source)
+
+    if not existing_node:
+        logger.warning(
+            f"Hierarchy node not found for permission update: "
+            f"raw_node_id={raw_node_id}, source={source}"
+        )
+        return False
+
+    existing_node.is_public = is_public
+    existing_node.external_user_emails = external_user_emails
+    existing_node.external_user_group_ids = external_user_group_ids
+
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+
+    return True

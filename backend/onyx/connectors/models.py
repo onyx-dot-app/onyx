@@ -402,6 +402,9 @@ class HierarchyNode(BaseModel):
     # this is the document ID. Set by the connector when the node IS a document.
     document_id: str | None = None
 
+    # External access information for the node
+    external_access: ExternalAccess | None = None
+
 
 class IndexAttemptMetadata(BaseModel):
     connector_id: int
