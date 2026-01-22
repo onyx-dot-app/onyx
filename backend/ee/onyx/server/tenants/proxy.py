@@ -218,6 +218,8 @@ def fetch_and_store_license(tenant_id: str, license_data: str) -> None:
 class CreateCheckoutSessionRequest(BaseModel):
     billing_period: Literal["monthly", "annual"] = "monthly"
     email: str | None = None
+    # Redirect URL after checkout - self-hosted passes their instance URL
+    redirect_url: str | None = None
 
 
 class CreateCheckoutSessionResponse(BaseModel):
@@ -246,6 +248,8 @@ async def proxy_create_checkout_session(
         body["tenant_id"] = tenant_id
     if request_body.email:
         body["email"] = request_body.email
+    if request_body.redirect_url:
+        body["redirect_url"] = request_body.redirect_url
 
     result = forward_to_control_plane("POST", "/create-checkout-session", body=body)
     return CreateCheckoutSessionResponse(url=result["url"])
