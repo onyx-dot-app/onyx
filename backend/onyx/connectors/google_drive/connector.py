@@ -155,71 +155,6 @@ def _get_folder_metadata(
         raise
 
 
-def _get_new_ancestors_for_files(
-    service: GoogleDriveService,
-    files: list[RetrievedDriveFile],
-    seen_hierarchy_node_raw_ids: set[str],
-) -> list[HierarchyNode]:
-    """
-    Get all NEW ancestor hierarchy nodes for a batch of files.
-
-    For each file, walks up the parent chain until hitting a previously
-    seen node or reaching a root/drive. Returns HierarchyNode objects
-    for all new ancestors.
-
-    Args:
-        service: Google Drive service for fetching folder metadata
-        files: List of retrieved drive files to get ancestors for
-        seen_hierarchy_node_raw_ids: Set of already-yielded node IDs (modified in place)
-
-    Returns:
-        List of HierarchyNode objects for new ancestors (ordered parent-first)
-    """
-    new_nodes: list[HierarchyNode] = []
-
-    for file in files:
-        parent_id = _get_parent_id_from_file(file.drive_file)
-        if not parent_id:
-            continue
-
-        # Walk up the parent chain
-        ancestors_to_add: list[HierarchyNode] = []
-        current_id: str | None = parent_id
-
-        while current_id:
-            # Stop if we've already seen this node
-            if current_id in seen_hierarchy_node_raw_ids:
-                break
-
-            # Fetch folder metadata
-            folder = _get_folder_metadata(service, current_id)
-            if not folder:
-                # Can't access this folder - stop climbing
-                break
-
-            # Determine node type based on folder context
-            folder_parent_id = _get_parent_id_from_file(folder)
-
-            # Create hierarchy node for this folder
-            node = HierarchyNode(
-                raw_node_id=current_id,
-                raw_parent_id=folder_parent_id,
-                display_name=folder.get("name", "Unknown Folder"),
-                link=folder.get("webViewLink"),
-                node_type=HierarchyNodeType.FOLDER,
-            )
-            ancestors_to_add.append(node)
-            seen_hierarchy_node_raw_ids.add(current_id)
-
-            # Move to parent
-            current_id = folder_parent_id
-
-        # Add ancestors. ordering is tricky (need a topo sort if we really care) so let the caller handle it
-        new_nodes += ancestors_to_add
-
-    return new_nodes
-
-
 class CredentialedRetrievalMethod(Protocol):
     def __call__(
         self,
@@ -489,6 +424,70 @@ class GoogleDriveConnector(
                     if email not in user_emails:
                         user_emails.append(email)
         return user_emails
+
+    def _get_new_ancestors_for_files(
+        self,
+        files: list[RetrievedDriveFile],
+        seen_hierarchy_node_raw_ids: set[str],
+    ) -> list[HierarchyNode]:
+        """
+        Get all NEW ancestor hierarchy nodes for a batch of files.
+
+        For each file, walks up the parent chain until hitting a previously
+        seen node or reaching a root/drive. Returns HierarchyNode objects
+        for all new ancestors.
+
+        Args:
+            files: List of retrieved drive files to get ancestors for
+            seen_hierarchy_node_raw_ids: Set of already-yielded node IDs (modified in place)
+
+        Returns:
+            List of HierarchyNode objects for new ancestors (ordered parent-first)
+        """
+        service = get_drive_service(self.creds, self.primary_admin_email)
+        new_nodes: list[HierarchyNode] = []
+
+        for file in files:
+            parent_id = _get_parent_id_from_file(file.drive_file)
+            if not parent_id:
+                continue
+
+            # Walk up the parent chain
+            ancestors_to_add: list[HierarchyNode] = []
+            current_id: str | None = parent_id
+
+            while current_id:
+                # Stop if we've already seen this node
+                if current_id in seen_hierarchy_node_raw_ids:
+                    break
+
+                # Fetch folder metadata
+                folder = _get_folder_metadata(service, current_id)
+                if not folder:
+                    # Can't access this folder - stop climbing
+                    break
+
+                # Determine node type based on folder context
+                folder_parent_id = _get_parent_id_from_file(folder)
+
+                # Create hierarchy node for this folder
+                node = HierarchyNode(
+                    raw_node_id=current_id,
+                    raw_parent_id=folder_parent_id,
+                    display_name=folder.get("name", "Unknown Folder"),
+                    link=folder.get("webViewLink"),
+                    node_type=HierarchyNodeType.FOLDER,
+                )
+                ancestors_to_add.append(node)
+                seen_hierarchy_node_raw_ids.add(current_id)
+
+                # Move to parent
+                current_id = folder_parent_id
+
+            # Add ancestors. ordering is tricky (need a topo sort if we really care) so let the caller handle it
+            new_nodes += ancestors_to_add
+
+        return new_nodes
 
     def get_all_drive_ids(self) -> set[str]:
         return self._get_all_drives_for_user(self.primary_admin_email)
@@ -1297,8 +1296,6 @@ class GoogleDriveConnector(
         )
 
         try:
-            # Get drive service for hierarchy node fetching
-            drive_service = get_drive_service(self.creds, self.primary_admin_email)
 
             # Prepare a partial function with the credentials and admin email
             convert_func = partial(
@@ -1325,8 +1322,7 @@ class GoogleDriveConnector(
                 nonlocal batches_complete
 
                 # First, yield any new ancestor hierarchy nodes
-                new_ancestors = _get_new_ancestors_for_files(
-                    service=drive_service,
+                new_ancestors = self._get_new_ancestors_for_files(
                     files=files_batch,
                     seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
                 )
@@ -1473,9 +1469,6 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        # Get drive service for hierarchy node fetching
-        drive_service = get_drive_service(self.creds, self.primary_admin_email)
-
         files_batch: list[RetrievedDriveFile] = []
         slim_batch: list[SlimDocument | HierarchyNode] = []
 
@@ -1484,8 +1477,7 @@ class GoogleDriveConnector(
             nonlocal files_batch, slim_batch
 
             # Get new ancestor hierarchy nodes first
-            new_ancestors = _get_new_ancestors_for_files(
-                service=drive_service,
+            new_ancestors = self._get_new_ancestors_for_files(
                 files=files_batch,
                 seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
             )
