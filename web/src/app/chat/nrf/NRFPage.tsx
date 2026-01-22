@@ -367,6 +367,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
+                    disableBlur={!hasBackground}
                   />
                 </ChatScrollContainer>
               </>
