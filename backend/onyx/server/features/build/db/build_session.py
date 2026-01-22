@@ -22,7 +22,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def create_build_session(
+def create_build_session__no_commit(
     user_id: UUID,
     db_session: Session,
     name: str | None = None,
@@ -39,7 +39,6 @@ def create_build_session(
     )
     db_session.add(session)
     db_session.flush()
-    db_session.refresh(session)
 
     logger.info(f"Created build session {session.id} for user {user_id}")
     return session
@@ -132,7 +131,7 @@ def update_session_status(
         logger.info(f"Updated build session {session_id} status to {status}")
 
 
-def delete_build_session(
+def delete_build_session__no_commit(
     session_id: UUID,
     user_id: UUID,
     db_session: Session,

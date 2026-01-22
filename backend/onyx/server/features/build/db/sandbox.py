@@ -17,7 +17,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def create_sandbox(
+def create_sandbox__no_commit(
     db_session: Session,
     session_id: UUID,
     nextjs_port: int | None = None,
@@ -34,7 +34,6 @@ def create_sandbox(
     )
     db_session.add(sandbox)
     db_session.flush()
-    db_session.refresh(sandbox)
     return sandbox
 
 
@@ -50,7 +49,7 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def update_sandbox_status(
+def update_sandbox_status__no_commit(
     db_session: Session,
     sandbox_id: UUID,
     status: SandboxStatus,

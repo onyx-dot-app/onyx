@@ -27,13 +27,15 @@ from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.db.sandbox import allocate_nextjs_port
-from onyx.server.features.build.db.sandbox import create_sandbox as db_create_sandbox
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit as db_create_sandbox,
+)
 from onyx.server.features.build.db.sandbox import create_snapshot as db_create_snapshot
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.internal.agent_client import ACPAgentClient
 from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.internal.directory_manager import (
@@ -459,7 +461,9 @@ class LocalSandboxManager(SandboxManager):
                 nextjs_port=nextjs_port,
             )
 
-            update_sandbox_status(db_session, sandbox.id, SandboxStatus.RUNNING)
+            update_sandbox_status__no_commit(
+                db_session, sandbox.id, SandboxStatus.RUNNING
+            )
             logger.debug(f"Sandbox record created with ID {sandbox.id}")
 
             logger.info(
@@ -524,7 +528,9 @@ class LocalSandboxManager(SandboxManager):
             ) from e
 
         # Update status (uses flush, caller commits)
-        update_sandbox_status(db_session, UUID(sandbox_id), SandboxStatus.TERMINATED)
+        update_sandbox_status__no_commit(
+            db_session, UUID(sandbox_id), SandboxStatus.TERMINATED
+        )
 
         logger.info(f"Terminated sandbox {sandbox_id}")
 

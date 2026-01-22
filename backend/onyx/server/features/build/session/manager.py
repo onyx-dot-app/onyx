@@ -40,9 +40,9 @@ from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import USER_UPLOADS_DIRECTORY
-from onyx.server.features.build.db.build_session import create_build_session
+from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import delete_build_session
+from onyx.server.features.build.db.build_session import delete_build_session__no_commit
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
@@ -177,7 +177,7 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
-    def create_session(
+    def create_session__no_commit(
         self,
         user_id: UUID,
         name: str | None = None,
@@ -214,7 +214,9 @@ class SessionManager:
             user_file_system_path = "/tmp/onyx-files"
 
         # Create BuildSession record (uses flush, caller commits)
-        build_session = create_build_session(user_id, self._db_session, name=name)
+        build_session = create_build_session__no_commit(
+            user_id, self._db_session, name=name
+        )
         session_id = str(build_session.id)
         logger.info(f"Created build session {session_id} for user {user_id}")
 
@@ -230,8 +232,6 @@ class SessionManager:
             f"Successfully created session {session_id} with sandbox for user {user_id}"
         )
 
-        # Refresh to get the created sandbox
-        self._db_session.refresh(build_session)
         return build_session
 
     def get_or_create_empty_session(self, user_id: UUID) -> BuildSession:
@@ -256,7 +256,7 @@ class SessionManager:
                 f"Returning existing empty session {existing.id} for user {user_id}"
             )
             return existing
-        return self.create_session(user_id=user_id)
+        return self.create_session__no_commit(user_id=user_id)
 
     def get_session(
         self,
@@ -400,7 +400,7 @@ class SessionManager:
             self._sandbox_manager.terminate(str(session.sandbox.id), self._db_session)
 
         # Delete session (uses flush, caller commits)
-        return delete_build_session(session_id, user_id, self._db_session)
+        return delete_build_session__no_commit(session_id, user_id, self._db_session)
 
     # =========================================================================
     # Message Operations
