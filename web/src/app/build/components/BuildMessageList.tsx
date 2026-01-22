@@ -65,7 +65,6 @@ export default function BuildMessageList({
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
-      {/* Backdrop blur container - max-w-2xl constrains width, not full width */}
       <div className="max-w-2xl backdrop-blur-md rounded-16 p-4">
         {/* Render user messages */}
         {userMessages.map((message) => (
