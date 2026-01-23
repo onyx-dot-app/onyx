@@ -117,7 +117,7 @@ def extract_skill_description(skill_md_path: Path) -> str:
         lines = content.strip().split("\n")
 
         # Skip empty lines and the first heading
-        description_lines = []
+        description_lines: list[str] = []
         for line in lines:
             stripped = line.strip()
             if not stripped:
@@ -150,7 +150,7 @@ def build_skills_section(skills_path: Path) -> str:
     if not skills_path.exists():
         return "No skills available."
 
-    skills_list = []
+    skills_list: list[str] = []
     try:
         for skill_dir in skills_path.iterdir():
             if not skill_dir.is_dir():

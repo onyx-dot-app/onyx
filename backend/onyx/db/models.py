@@ -4233,7 +4233,7 @@ class Sandbox(Base):
     last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    nextjs_port: Mapped[int] = mapped_column(Integer, nullable=True)
 
     # Relationships
     user: Mapped[User] = relationship("User")

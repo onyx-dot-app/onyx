@@ -124,7 +124,7 @@ def build_connector_descriptions(files_path: Path) -> str:
     return header + "\n".join(descriptions) + footer
 
 
-def main():
+def main() -> None:
     # Read template from environment variable
     template = os.environ.get("AGENT_INSTRUCTIONS", "")
     if not template:

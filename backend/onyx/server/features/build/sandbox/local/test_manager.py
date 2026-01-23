@@ -211,6 +211,7 @@ def session_workspace(
         sandbox_id=sandbox_record.id,
         session_id=session_id,
         llm_config=llm_config,
+        nextjs_port=sandbox_record.nextjs_port,
     )
 
     yield sandbox_record, session_id

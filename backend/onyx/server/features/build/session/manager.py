@@ -45,6 +45,7 @@ from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
+from onyx.server.features.build.configs import KUBERNETES_NEXTJS_PORT
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
@@ -363,6 +364,8 @@ class SessionManager:
         nextjs_port: int | None = None
         if SANDBOX_BACKEND == SandboxBackend.LOCAL:
             nextjs_port = allocate_nextjs_port(self._db_session)
+        else:
+            nextjs_port = KUBERNETES_NEXTJS_PORT
 
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created

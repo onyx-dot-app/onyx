@@ -194,13 +194,6 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Sandbox directory created at {sandbox_path}")
 
         try:
-            # Setup files symlink (shared across all sessions)
-            logger.debug(f"Setting up files symlink to {file_system_path}")
-            self._directory_manager.setup_files_symlink(
-                sandbox_path, Path(file_system_path)
-            )
-            logger.debug("Files symlink created")
-
             logger.info(
                 f"Provisioned sandbox {sandbox_id} at {sandbox_path} "
                 f"(no sessions yet, Next.js port reserved: {nextjs_port})"
@@ -316,17 +309,16 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Session directory created at {session_path}")
 
         try:
-            logger.debug("Setting up agent instructions (AGENTS.md)")
-            self._directory_manager.setup_agent_instructions(
-                sandbox_path=sandbox_path,
-                provider=llm_config.provider,
-                model_name=llm_config.model_name,
-                nextjs_port=nextjs_port,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
-                user_name=user_name,
-                user_role=user_role,
+            # Setup files symlink within session workspace
+            logger.debug("Setting up files symlink in session workspace")
+            self._directory_manager.setup_session_files_symlink(
+                sandbox_path, session_path
             )
-            logger.debug("Agent instructions ready")
+            logger.debug("Files symlink ready")
+
+            logger.debug("Setting up outputs directory from template")
+            self._directory_manager.setup_outputs_directory(session_path)
+            logger.debug("Outputs directory ready")
 
             logger.debug("Setting up skills")
             self._directory_manager.setup_skills(sandbox_path)
@@ -359,21 +351,22 @@ class LocalSandboxManager(SandboxManager):
             self._process_manager.start_nextjs_server(web_dir, nextjs_port)
             logger.info("Next.js server started successfully")
 
-            logger.debug("Setting up outputs directory from template")
-            self._directory_manager.setup_outputs_directory(session_path)
-            logger.debug("Outputs directory ready")
-
             # Setup venv, AGENTS.md, and skills
             logger.debug("Setting up virtual environment")
             self._directory_manager.setup_venv(session_path)
             logger.debug("Virtual environment ready")
 
-            # Setup files symlink within session workspace
-            logger.debug("Setting up files symlink in session workspace")
-            self._directory_manager.setup_session_files_symlink(
-                sandbox_path, session_path
+            logger.debug("Setting up agent instructions (AGENTS.md)")
+            self._directory_manager.setup_agent_instructions(
+                sandbox_path=sandbox_path,
+                provider=llm_config.provider,
+                model_name=llm_config.model_name,
+                nextjs_port=nextjs_port,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                user_name=user_name,
+                user_role=user_role,
             )
-            logger.debug("Files symlink ready")
+            logger.debug("Agent instructions ready")
 
             logger.info(f"Set up session workspace {session_id} at {session_path}")
 
