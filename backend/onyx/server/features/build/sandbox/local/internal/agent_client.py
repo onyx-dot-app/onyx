@@ -50,6 +50,10 @@ DEFAULT_CLIENT_INFO = {
     "version": "1.0.0",
 }
 
+SESSION_CREATION_TIMEOUT = 30.0  # 30 seconds
+TIMEOUT = 900.0  # 15 minutes
+SINGLE_READ_TIMEOUT = 10.0  # 10 seconds
+
 
 # =============================================================================
 # Response Event Types (from acp.schema + custom completion/error types)
@@ -444,7 +448,7 @@ class ACPAgentClient:
                     )
                 return message.get("result", {})
 
-    def _initialize(self, timeout: float = 30.0) -> dict[str, Any]:
+    def _initialize(self, timeout: float = SESSION_CREATION_TIMEOUT) -> dict[str, Any]:
         """Initialize the ACP connection (internal).
 
         Args:
@@ -472,7 +476,7 @@ class ACPAgentClient:
         self,
         cwd: str,
         mcp_servers: list[dict[str, Any]] | None = None,
-        timeout: float = 30.0,
+        timeout: float = SESSION_CREATION_TIMEOUT,
     ) -> str:
         """Create a new ACP session (internal).
 
@@ -507,7 +511,7 @@ class ACPAgentClient:
     def send_message(
         self,
         message: str,
-        timeout: float = 300.0,
+        timeout: float = TIMEOUT,
     ) -> Generator[ACPEvent, None, None]:
         """Send a message and stream response events.
 
@@ -554,7 +558,9 @@ class ACPAgentClient:
                 yield Error(code=-1, message="Timeout waiting for response")
                 break
 
-            message_data = self._read_message(timeout=min(remaining, 1.0))
+            message_data = self._read_message(
+                timeout=min(remaining, SINGLE_READ_TIMEOUT)
+            )
 
             if message_data is None:
                 if process.poll() is not None:

@@ -44,13 +44,20 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
 RUN mkdir -p /workspace/outputs /workspace/files /workspace/user_uploaded_files /workspace/instructions && \
     chown -R sandbox:sandbox /workspace
 
-# Install opencode CLI
-# Note: Update this URL to the actual opencode installation script
-RUN curl -fsSL https://opencode.ai/install.sh | bash || \
-    echo "OpenCode installation script not available, will need to be installed separately"
+# Install opencode CLI as sandbox user so it goes to their home directory
+USER sandbox
+RUN curl -fsSL https://opencode.ai/install | bash
+USER root
+
+# Add opencode to PATH (installs to ~/.opencode/bin)
+ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Switch to non-root user
 USER sandbox
@@ -61,5 +68,5 @@ WORKDIR /workspace
 # - 8081: OpenCode ACP HTTP server
 EXPOSE 3000 8081
 
-# Default command - sleep indefinitely for testing
-CMD ["sleep", "10000"]
+# Start both Next.js and OpenCode ACP server
+ENTRYPOINT ["/entrypoint.sh"]

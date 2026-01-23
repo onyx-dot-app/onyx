@@ -250,22 +250,6 @@ class TestReadFile:
         assert result == b"Hello, World!"
 
 
-class TestCancelAgent:
-    """Tests for SandboxManager.cancel_agent()."""
-
-    def test_cancel_agent_no_client_is_noop(
-        self,
-        sandbox_manager: LocalSandboxManager,
-    ) -> None:
-        """Test that cancel_agent is a no-op when no client exists."""
-        fake_sandbox_id = uuid4()
-        sandbox_manager._acp_clients.pop(fake_sandbox_id, None)
-
-        sandbox_manager.cancel_agent(fake_sandbox_id)
-
-        # No exception means success
-
-
 class TestSendMessage:
     """Tests for SandboxManager.send_message()."""
 
@@ -294,12 +278,6 @@ class TestSendMessage:
         # Last event should be PromptResponse (success) or contain results
         last_event = events[-1]
         assert isinstance(last_event, PromptResponse)
-
-        # Cleanup: stop the ACP client
-        sandbox_manager.cancel_agent(sandbox_id)
-        client = sandbox_manager._acp_clients.pop(sandbox_id, None)
-        if client:
-            client.stop()
 
     def test_send_message_write_file(
         self,
@@ -336,12 +314,6 @@ class TestSendMessage:
         assert created_file.exists(), f"Expected file {created_file} to be created"
         assert "Hello" in created_file.read_text()
 
-        # Cleanup
-        sandbox_manager.cancel_agent(sandbox_id)
-        client = sandbox_manager._acp_clients.pop(sandbox_id, None)
-        if client:
-            client.stop()
-
     def test_send_message_read_file(
         self,
         sandbox_manager: LocalSandboxManager,
@@ -375,9 +347,3 @@ class TestSendMessage:
         # Last event should be PromptResponse
         last_event = events[-1]
         assert isinstance(last_event, PromptResponse)
-
-        # Cleanup
-        sandbox_manager.cancel_agent(sandbox_id)
-        client = sandbox_manager._acp_clients.pop(sandbox_id, None)
-        if client:
-            client.stop()
