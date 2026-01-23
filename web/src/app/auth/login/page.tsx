@@ -79,13 +79,14 @@ export default async function Page(props: PageProps) {
   let authUrl: string | null = null;
   if (authTypeMetadata) {
     try {
-      authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl);
       // For BASIC auth with OAuth enabled, fetch the OAuth URL
       if (
         authTypeMetadata.authType === AuthType.BASIC &&
         authTypeMetadata.oauthEnabled
       ) {
         authUrl = await getAuthUrlSS(AuthType.GOOGLE_OAUTH, nextUrl);
+      } else {
+        authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl);
       }
     } catch (e) {
       console.log(`Some fetch failed for the login page - ${e}`);

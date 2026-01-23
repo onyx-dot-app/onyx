@@ -723,6 +723,8 @@ def update_user_temperature_override_enabled_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     update_user_temperature_override_enabled(
         user.id, temperature_override_enabled, db_session
     )
@@ -738,6 +740,8 @@ def update_user_shortcut_enabled_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
 
 
@@ -747,6 +751,8 @@ def update_user_auto_scroll_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     update_user_auto_scroll(user.id, request.auto_scroll, db_session)
 
 
@@ -756,6 +762,8 @@ def update_user_theme_preference_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     update_user_theme_preference(user.id, request.theme_preference, db_session)
 
 
@@ -765,6 +773,8 @@ def update_user_chat_background_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     update_user_chat_background(user.id, request.chat_background, db_session)
 
 
@@ -774,6 +784,8 @@ def update_user_default_model_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     update_user_default_model(user.id, request.default_model, db_session)
 
 
@@ -783,6 +795,8 @@ def update_user_personalization_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     new_name = request.name if request.name is not None else user.personal_name
     new_role = request.role if request.role is not None else user.personal_role
     current_use_memories = user.use_memories
@@ -816,6 +830,8 @@ def update_user_pinned_assistants_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     ordered_assistant_ids = request.ordered_assistant_ids
     update_user_pinned_assistants(user.id, ordered_assistant_ids, db_session)
 
@@ -853,6 +869,8 @@ def update_user_assistant_visibility_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     user_preferences = UserInfo.from_model(user).preferences
     updated_preferences = update_assistant_visibility(
         user_preferences, assistant_id, show
@@ -874,6 +892,8 @@ def get_user_assistant_preferences(
     db_session: Session = Depends(get_session),
 ) -> UserSpecificAssistantPreferences | None:
     """Fetch all assistant preferences for the user."""
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot access user preferences")
     assistant_specific_configs = get_all_user_assistant_specific_configs(
         user.id, db_session
     )
@@ -892,6 +912,8 @@ def update_assistant_preferences_for_user_api(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if user.is_anonymous:
+        raise RuntimeError("Anonymous users cannot modify settings")
     update_assistant_preferences(
         assistant_id, user.id, new_assistant_preference, db_session
     )
