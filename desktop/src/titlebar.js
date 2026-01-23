@@ -117,14 +117,6 @@
     const titleBar = document.getElementById(TITLEBAR_ID);
     if (!titleBar) return;
 
-    // Debug logging
-    console.log("[Onyx Desktop Titlebar] Theme update:", {
-      isDark,
-      htmlClasses: document.documentElement.className,
-      bodyClasses: document.body?.className,
-      timestamp: new Date().toISOString(),
-    });
-
     if (isDark) {
       titleBar.style.background =
         "linear-gradient(180deg, rgba(18, 18, 18, 0.82) 0%, rgba(18, 18, 18, 0.72) 100%)";
