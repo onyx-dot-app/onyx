@@ -290,7 +290,7 @@ aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/
 # Copy and unzip output templates for this user/tenant
 echo "Copying output template zip for tenant: $TENANT_ID / user: $USER_ID"
 aws s3 cp "s3://$S3_BUCKET/craft-output-template/outputs.zip" /tmp/outputs.zip
-unzip -q /tmp/outputs.zip -d /workspace/
+python3 -c "import zipfile; zipfile.ZipFile('/tmp/outputs.zip').extractall('/workspace/')"
 rm /tmp/outputs.zip
 
 echo "File sync complete"
