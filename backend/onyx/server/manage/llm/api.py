@@ -448,8 +448,8 @@ def list_llm_provider_basics(
     logger.debug("Starting to fetch user-accessible LLM providers")
 
     all_providers = fetch_existing_llm_providers(db_session)
-    user_group_ids = fetch_user_group_ids(db_session, user) if user else set()
-    is_admin = user is not None and user.role == UserRole.ADMIN
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
 
     accessible_providers = []
 
@@ -489,7 +489,7 @@ def get_valid_model_names_for_persona(
     if not persona:
         return []
 
-    is_admin = user is not None and user.role == UserRole.ADMIN
+    is_admin = user.role == UserRole.ADMIN
     all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
@@ -536,7 +536,7 @@ def list_llm_providers_for_persona(
             detail="You don't have access to this assistant",
         )
 
-    is_admin = user is not None and user.role == UserRole.ADMIN
+    is_admin = user.role == UserRole.ADMIN
     all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 

@@ -69,7 +69,7 @@ def update_llm_provider_persona_relationships__no_commit(
         )
 
 
-def fetch_user_group_ids(db_session: Session, user: User | None) -> set[int]:
+def fetch_user_group_ids(db_session: Session, user: User) -> set[int]:
     """Fetch the set of user group IDs for a given user.
 
     Args:
@@ -79,9 +79,6 @@ def fetch_user_group_ids(db_session: Session, user: User | None) -> set[int]:
     Returns:
         Set of user group IDs. Empty set if user is None.
     """
-    if not user:
-        return set()
-
     return set(
         db_session.scalars(
             select(User__UserGroup.user_group_id).where(
