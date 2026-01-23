@@ -35,7 +35,7 @@ class MockLLMController(abc.ABC):
 
 
 class MockLLM(LLM, MockLLMController):
-    def __init__(self):
+    def __init__(self) -> None:
         self.stream_controller: SyncStreamController | None = None
 
     def set_response(self, response_tokens: list[str]) -> None:
@@ -86,6 +86,9 @@ class MockLLM(LLM, MockLLMController):
         reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
+        if not self.stream_controller:
+            return
+
         for idx, token in enumerate(self.stream_controller):
             yield ModelResponseStream(
                 id="chatcmp-123",
@@ -106,7 +109,7 @@ class StreamTimeoutError(Exception):
 
 
 class SyncStreamController:
-    def __init__(self, tokens: list[str], timeout: float = 5.0):
+    def __init__(self, tokens: list[str], timeout: float = 5.0) -> None:
         self.tokens = tokens
         self.position = 0
         self.pending: list[int] = []  # The indices of the tokens that are pending

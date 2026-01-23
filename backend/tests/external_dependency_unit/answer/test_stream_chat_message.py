@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.models import AnswerStreamPart
-from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.process_message import handle_stream_message_objects
+from onyx.db.models import ChatSession
 from onyx.db.models import User
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -50,7 +50,7 @@ def submit_query(
 def create_chat_session(
     db_session: Session,
     user: User,
-) -> CreateChatSessionID:
+) -> ChatSession:
     return create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(),
         user_id=user.id,
