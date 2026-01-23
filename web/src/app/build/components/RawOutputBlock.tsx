@@ -111,9 +111,10 @@ export default function RawOutputBlock({
     return (
       <div
         className={cn(
-          "p-3 rounded-08 border border-border-01",
-          "bg-background-neutral-inverted-03 text-text-inverted-03",
-          "text-xs"
+          "p-3 rounded-08 border",
+          // Match hljs theme: light=#fafafa, dark=#151617
+          "bg-[#fafafa] border-[#fafafa] dark:bg-[#151617] dark:border-[#151617]",
+          "text-text-03 text-xs"
         )}
         style={{ fontFamily: "var(--font-dm-mono)" }}
       >

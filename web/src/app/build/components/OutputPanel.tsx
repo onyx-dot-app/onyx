@@ -11,6 +11,8 @@ import {
   useActiveFilePreviewPath,
   useFilesTabState,
   useTabHistory,
+  usePreProvisionedSessionId,
+  useIsPreProvisioning,
   Artifact,
   OutputTabType,
 } from "@/app/build/hooks/useBuildSessionStore";
@@ -65,6 +67,8 @@ interface BuildOutputPanelProps {
  */
 const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const session = useSession();
+  const preProvisionedSessionId = usePreProvisionedSessionId();
+  const isPreProvisioning = useIsPreProvisioning();
 
   // Get active tab state from store
   const activeOutputTab = useActiveOutputTab();
@@ -74,6 +78,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   // Store actions
   const setActiveOutputTab = useBuildSessionStore(
     (state) => state.setActiveOutputTab
+  );
+  const setNoSessionActiveOutputTab = useBuildSessionStore(
+    (state) => state.setNoSessionActiveOutputTab
   );
   const openFilePreview = useBuildSessionStore(
     (state) => state.openFilePreview
@@ -92,6 +99,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const handlePinnedTabClick = (tab: TabValue) => {
     if (session?.id) {
       setActiveOutputTab(session.id, tab);
+    } else {
+      // No session - use temporary state for tab switching
+      setNoSessionActiveOutputTab(tab);
     }
   };
 
@@ -270,16 +280,26 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.value;
+            // Disable artifacts tab when no session
+            const isDisabled = tab.value === "artifacts" && !session;
             return (
               <button
                 key={tab.value}
-                onClick={() => handlePinnedTabClick(tab.value)}
+                onClick={() => !isDisabled && handlePinnedTabClick(tab.value)}
+                disabled={isDisabled}
+                title={
+                  isDisabled
+                    ? "Start building something to see artifacts!"
+                    : undefined
+                }
                 className={cn(
                   "relative inline-flex items-center justify-center gap-2 px-5",
                   "max-w-[15%] min-w-fit",
-                  isActive
-                    ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
-                    : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
+                  isDisabled
+                    ? "text-text-02 bg-transparent cursor-not-allowed py-1 mb-1"
+                    : isActive
+                      ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
+                      : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
                 )}
               >
                 {/* Left curved joint */}
@@ -298,10 +318,16 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                   size={16}
                   className={cn(
                     "stroke-current flex-shrink-0",
-                    isActive ? "stroke-text-04" : "stroke-text-03"
+                    isDisabled
+                      ? "stroke-text-02"
+                      : isActive
+                        ? "stroke-text-04"
+                        : "stroke-text-03"
                   )}
                 />
-                <Text className="truncate">{tab.label}</Text>
+                <Text className={cn("truncate", isDisabled && "text-text-02")}>
+                  {tab.label}
+                </Text>
                 {/* Right curved joint */}
                 {isActive && (
                   <div
@@ -397,9 +423,17 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
           isFilePreviewActive && activeFilePreviewPath
             ? `sandbox://files/${activeFilePreviewPath}`
             : activeOutputTab === "preview"
-              ? displayUrl || "Loading..."
+              ? session
+                ? displayUrl || "Loading..."
+                : "no-active-sandbox://"
               : activeOutputTab === "files"
-                ? "sandbox://"
+                ? session
+                  ? "sandbox://"
+                  : preProvisionedSessionId
+                    ? "pre-provisioned-sandbox://"
+                    : isPreProvisioning
+                      ? "provisioning-sandbox://..."
+                      : "no-sandbox://"
                 : "artifacts://"
         }
         showNavigation={true}
@@ -432,8 +466,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
               ))}
             {activeOutputTab === "files" && (
               <FilesTab
-                sessionId={session?.id ?? null}
-                onFileClick={handleFileClick}
+                sessionId={session?.id ?? preProvisionedSessionId}
+                onFileClick={session ? handleFileClick : undefined}
+                isPreProvisioned={!session && !!preProvisionedSessionId}
+                isProvisioning={!session && isPreProvisioning}
               />
             )}
             {activeOutputTab === "artifacts" && (
@@ -648,32 +684,116 @@ function FilePreviewContent({ sessionId, filePath }: FilePreviewContentProps) {
   );
 }
 
+/**
+ * InlineFilePreview - Simple file preview for pre-provisioned mode
+ * Same as FilePreviewContent but without the full height wrapper
+ */
+function InlineFilePreview({
+  sessionId,
+  filePath,
+}: {
+  sessionId: string;
+  filePath: string;
+}) {
+  const { data, error, isLoading } = useSWR(
+    `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
+    () => fetchFileContent(sessionId, filePath),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 5000,
+    }
+  );
+
+  if (isLoading) {
+    return (
+      <div className="p-4">
+        <Text secondaryBody text03>
+          Loading file...
+        </Text>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4">
+        <Text secondaryBody text02>
+          Error: {error.message}
+        </Text>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="p-4">
+        <Text secondaryBody text03>
+          No content
+        </Text>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap break-words">
+        {data.content}
+      </pre>
+    </div>
+  );
+}
+
 interface FilesTabProps {
   sessionId: string | null;
   onFileClick?: (path: string, fileName: string) => void;
+  /** True when showing pre-provisioned sandbox (read-only, no file clicks) */
+  isPreProvisioned?: boolean;
+  /** True when sandbox is still being provisioned */
+  isProvisioning?: boolean;
 }
 
-function FilesTab({ sessionId, onFileClick }: FilesTabProps) {
-  // Get persisted state from store
+function FilesTab({
+  sessionId,
+  onFileClick,
+  isPreProvisioned = false,
+  isProvisioning = false,
+}: FilesTabProps) {
+  // Get persisted state from store (only used when not pre-provisioned)
   const filesTabState = useFilesTabState();
   const updateFilesTabState = useBuildSessionStore(
     (state) => state.updateFilesTabState
   );
 
-  // Convert stored array to Set for efficient lookups
+  // Local state for pre-provisioned mode (no persistence needed)
+  const [localExpandedPaths, setLocalExpandedPaths] = useState<Set<string>>(
+    new Set()
+  );
+  const [localDirectoryCache, setLocalDirectoryCache] = useState<
+    Map<string, FileSystemEntry[]>
+  >(new Map());
+  const [previewingFile, setPreviewingFile] = useState<{
+    path: string;
+    fileName: string;
+  } | null>(null);
+
+  // Use local state for pre-provisioned, store state otherwise
   const expandedPaths = useMemo(
-    () => new Set(filesTabState.expandedPaths),
-    [filesTabState.expandedPaths]
+    () =>
+      isPreProvisioned
+        ? localExpandedPaths
+        : new Set(filesTabState.expandedPaths),
+    [isPreProvisioned, localExpandedPaths, filesTabState.expandedPaths]
   );
 
-  // Convert stored directory cache to Map for efficient lookups
   const directoryCache = useMemo(
     () =>
-      new Map(Object.entries(filesTabState.directoryCache)) as Map<
-        string,
-        FileSystemEntry[]
-      >,
-    [filesTabState.directoryCache]
+      isPreProvisioned
+        ? localDirectoryCache
+        : (new Map(Object.entries(filesTabState.directoryCache)) as Map<
+            string,
+            FileSystemEntry[]
+          >),
+    [isPreProvisioned, localDirectoryCache, filesTabState.directoryCache]
   );
 
   // Scroll container ref for position tracking
@@ -692,49 +812,81 @@ function FilesTab({ sessionId, onFileClick }: FilesTabProps) {
   // Update cache when root listing changes
   useEffect(() => {
     if (rootListing && sessionId) {
-      const newCache = {
-        ...filesTabState.directoryCache,
-        "": rootListing.entries,
-      };
-      updateFilesTabState(sessionId, { directoryCache: newCache });
+      if (isPreProvisioned) {
+        setLocalDirectoryCache((prev) => {
+          const newCache = new Map(prev);
+          newCache.set("", rootListing.entries);
+          return newCache;
+        });
+      } else {
+        const newCache = {
+          ...filesTabState.directoryCache,
+          "": rootListing.entries,
+        };
+        updateFilesTabState(sessionId, { directoryCache: newCache });
+      }
     }
-  }, [rootListing, sessionId]);
+  }, [rootListing, sessionId, isPreProvisioned]);
 
   const toggleFolder = useCallback(
     async (path: string) => {
       if (!sessionId) return;
 
-      const newExpanded = new Set(expandedPaths);
-      if (newExpanded.has(path)) {
-        // Collapse folder
-        newExpanded.delete(path);
-        updateFilesTabState(sessionId, {
-          expandedPaths: Array.from(newExpanded),
-        });
-      } else {
-        // Expand folder - fetch contents if not cached
-        newExpanded.add(path);
-        if (!directoryCache.has(path)) {
-          const listing = await fetchDirectoryListing(sessionId, path);
-          if (listing) {
-            const newCache = {
-              ...filesTabState.directoryCache,
-              [path]: listing.entries,
-            };
-            updateFilesTabState(sessionId, {
-              expandedPaths: Array.from(newExpanded),
-              directoryCache: newCache,
-            });
-            return;
+      if (isPreProvisioned) {
+        // Use local state for pre-provisioned mode
+        const newExpanded = new Set(localExpandedPaths);
+        if (newExpanded.has(path)) {
+          newExpanded.delete(path);
+          setLocalExpandedPaths(newExpanded);
+        } else {
+          newExpanded.add(path);
+          if (!localDirectoryCache.has(path)) {
+            const listing = await fetchDirectoryListing(sessionId, path);
+            if (listing) {
+              setLocalDirectoryCache((prev) => {
+                const newCache = new Map(prev);
+                newCache.set(path, listing.entries);
+                return newCache;
+              });
+            }
           }
+          setLocalExpandedPaths(newExpanded);
         }
-        updateFilesTabState(sessionId, {
-          expandedPaths: Array.from(newExpanded),
-        });
+      } else {
+        // Use store state for active sessions
+        const newExpanded = new Set(expandedPaths);
+        if (newExpanded.has(path)) {
+          newExpanded.delete(path);
+          updateFilesTabState(sessionId, {
+            expandedPaths: Array.from(newExpanded),
+          });
+        } else {
+          newExpanded.add(path);
+          if (!directoryCache.has(path)) {
+            const listing = await fetchDirectoryListing(sessionId, path);
+            if (listing) {
+              const newCache = {
+                ...filesTabState.directoryCache,
+                [path]: listing.entries,
+              };
+              updateFilesTabState(sessionId, {
+                expandedPaths: Array.from(newExpanded),
+                directoryCache: newCache,
+              });
+              return;
+            }
+          }
+          updateFilesTabState(sessionId, {
+            expandedPaths: Array.from(newExpanded),
+          });
+        }
       }
     },
     [
       sessionId,
+      isPreProvisioned,
+      localExpandedPaths,
+      localDirectoryCache,
       expandedPaths,
       directoryCache,
       filesTabState.directoryCache,
@@ -742,20 +894,36 @@ function FilesTab({ sessionId, onFileClick }: FilesTabProps) {
     ]
   );
 
+  // Handle file click for pre-provisioned mode (inline preview)
+  const handleLocalFileClick = useCallback(
+    (path: string, fileName: string) => {
+      if (isPreProvisioned) {
+        setPreviewingFile({ path, fileName });
+      } else if (onFileClick) {
+        onFileClick(path, fileName);
+      }
+    },
+    [isPreProvisioned, onFileClick]
+  );
+
   // Restore scroll position when component mounts or tab becomes active
   useEffect(() => {
-    if (scrollContainerRef.current && filesTabState.scrollTop > 0) {
+    if (
+      scrollContainerRef.current &&
+      filesTabState.scrollTop > 0 &&
+      !isPreProvisioned
+    ) {
       scrollContainerRef.current.scrollTop = filesTabState.scrollTop;
     }
   }, []); // Only on mount
 
   // Save scroll position on scroll (debounced via passive listener)
   const handleScroll = useCallback(() => {
-    if (scrollContainerRef.current && sessionId) {
+    if (scrollContainerRef.current && sessionId && !isPreProvisioned) {
       const scrollTop = scrollContainerRef.current.scrollTop;
       updateFilesTabState(sessionId, { scrollTop });
     }
-  }, [sessionId, updateFilesTabState]);
+  }, [sessionId, isPreProvisioned, updateFilesTabState]);
 
   const formatFileSize = (bytes: number | null): string => {
     if (bytes === null) return "";
@@ -774,10 +942,12 @@ function FilesTab({ sessionId, onFileClick }: FilesTabProps) {
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
         <Text headingH3 text03>
-          No files yet
+          {isProvisioning ? "Preparing sandbox..." : "No files yet"}
         </Text>
         <Text secondaryBody text02>
-          Files created during the build will appear here
+          {isProvisioning
+            ? "Setting up your development environment"
+            : "Files created during the build will appear here"}
         </Text>
       </Section>
     );
@@ -817,6 +987,34 @@ function FilesTab({ sessionId, onFileClick }: FilesTabProps) {
     );
   }
 
+  // Show inline file preview for pre-provisioned mode
+  if (isPreProvisioned && previewingFile && sessionId) {
+    return (
+      <div className="flex flex-col h-full">
+        {/* Header with back button */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border-01">
+          <button
+            onClick={() => setPreviewingFile(null)}
+            className="p-1 rounded hover:bg-background-tint-02 transition-colors"
+          >
+            <SvgArrowLeft size={16} className="stroke-text-03" />
+          </button>
+          <SvgFileText size={16} className="stroke-text-03" />
+          <Text secondaryBody text04 className="truncate">
+            {previewingFile.fileName}
+          </Text>
+        </div>
+        {/* File content */}
+        <div className="flex-1 overflow-auto">
+          <InlineFilePreview
+            sessionId={sessionId}
+            filePath={previewingFile.path}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div
@@ -845,7 +1043,7 @@ function FilesTab({ sessionId, onFileClick }: FilesTabProps) {
               expandedPaths={expandedPaths}
               directoryCache={directoryCache}
               onToggleFolder={toggleFolder}
-              onFileClick={onFileClick}
+              onFileClick={handleLocalFileClick}
               formatFileSize={formatFileSize}
             />
           </div>

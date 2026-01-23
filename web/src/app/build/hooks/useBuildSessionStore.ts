@@ -290,6 +290,9 @@ interface BuildSessionStore {
   // Temporary output panel state when no session exists (resets when session is created/cleared)
   noSessionOutputPanelOpen: boolean;
 
+  // Temporary active tab when no session exists (resets when session is created/cleared)
+  noSessionActiveOutputTab: OutputTabType;
+
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
   createSession: (
@@ -389,6 +392,8 @@ interface BuildSessionStore {
   closeFilePreview: (sessionId: string, path: string) => void;
   setActiveOutputTab: (sessionId: string, tab: OutputTabType) => void;
   setActiveFilePreviewPath: (sessionId: string, path: string | null) => void;
+  /** Set active tab when no session exists (for pre-provisioned sandbox viewing) */
+  setNoSessionActiveOutputTab: (tab: OutputTabType) => void;
 
   // Files Tab State Actions
   updateFilesTabState: (
@@ -451,6 +456,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
   // Temporary output panel state when no session exists (resets when session is created/cleared)
   noSessionOutputPanelOpen: false,
+
+  // Temporary active tab when no session exists
+  noSessionActiveOutputTab: "preview" as OutputTabType,
 
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
@@ -1554,6 +1562,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
+  setNoSessionActiveOutputTab: (tab: OutputTabType) => {
+    set({ noSessionActiveOutputTab: tab });
+  },
+
   // ===========================================================================
   // Files Tab State Actions
   // ===========================================================================
@@ -1670,6 +1682,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 // Selector Hooks (mirrors chat's pattern)
 // =============================================================================
 
+// Stable empty references for SSR hydration (prevents infinite loop)
+const EMPTY_ARRAY: never[] = [];
+const EMPTY_FILE_PREVIEW_TABS: FilePreviewTab[] = [];
+const EMPTY_FILES_TAB_STATE: FilesTabState = {
+  expandedPaths: [],
+  scrollTop: 0,
+  directoryCache: {},
+};
+const EMPTY_TAB_HISTORY: TabNavigationHistory = {
+  entries: [],
+  currentIndex: 0,
+};
+
 export const useCurrentSession = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
@@ -1704,22 +1729,22 @@ export const useIsRunning = () =>
 export const useMessages = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.messages ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.messages ?? EMPTY_ARRAY;
   });
 
 export const useArtifacts = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.artifacts ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.artifacts ?? EMPTY_ARRAY;
   });
 
 export const useToolCalls = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.toolCalls ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.toolCalls ?? EMPTY_ARRAY;
   });
 
 export const useSessionHistory = () =>
@@ -1752,6 +1777,13 @@ export const useIsPreProvisioningReady = () =>
 export const useIsPreProvisioningFailed = () =>
   useBuildSessionStore((state) => state.preProvisioning.status === "failed");
 
+export const usePreProvisionedSessionId = () =>
+  useBuildSessionStore((state) =>
+    state.preProvisioning.status === "ready"
+      ? state.preProvisioning.sessionId
+      : null
+  );
+
 // Demo data selectors
 export const useDemoDataEnabled = () =>
   useBuildSessionStore((state) => state.demoDataEnabled);
@@ -1763,8 +1795,8 @@ export const useSetDemoDataEnabled = () =>
 export const useStreamItems = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.streamItems ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.streamItems ?? EMPTY_ARRAY;
   });
 
 // Webapp refresh selector
@@ -1779,14 +1811,16 @@ export const useWebappNeedsRefresh = () =>
 export const useFilePreviewTabs = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.filePreviewTabs ?? [];
+    if (!currentSessionId) return EMPTY_FILE_PREVIEW_TABS;
+    return (
+      sessions.get(currentSessionId)?.filePreviewTabs ?? EMPTY_FILE_PREVIEW_TABS
+    );
   });
 
 export const useActiveOutputTab = () =>
   useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return "preview" as OutputTabType;
+    const { currentSessionId, sessions, noSessionActiveOutputTab } = state;
+    if (!currentSessionId) return noSessionActiveOutputTab;
     return sessions.get(currentSessionId)?.activeOutputTab ?? "preview";
   });
 
@@ -1800,25 +1834,15 @@ export const useActiveFilePreviewPath = () =>
 export const useFilesTabState = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId)
-      return { expandedPaths: [], scrollTop: 0, directoryCache: {} };
+    if (!currentSessionId) return EMPTY_FILES_TAB_STATE;
     return (
-      sessions.get(currentSessionId)?.filesTabState ?? {
-        expandedPaths: [],
-        scrollTop: 0,
-        directoryCache: {},
-      }
+      sessions.get(currentSessionId)?.filesTabState ?? EMPTY_FILES_TAB_STATE
     );
   });
 
 export const useTabHistory = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return { entries: [], currentIndex: 0 };
-    return (
-      sessions.get(currentSessionId)?.tabHistory ?? {
-        entries: [],
-        currentIndex: 0,
-      }
-    );
+    if (!currentSessionId) return EMPTY_TAB_HISTORY;
+    return sessions.get(currentSessionId)?.tabHistory ?? EMPTY_TAB_HISTORY;
   });
