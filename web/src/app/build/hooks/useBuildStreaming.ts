@@ -395,10 +395,19 @@ export function useBuildStreaming() {
             }
 
             // Agent finished
-            case "prompt_response":
+            case "prompt_response": {
               finalizeStreaming();
-              updateSessionData(sessionId, { status: "completed" });
+              // Check if we had a web/ file change - if so, open output panel
+              const session = useBuildSessionStore
+                .getState()
+                .sessions.get(sessionId);
+              const shouldOpenPanel = session?.webappNeedsRefresh === true;
+              updateSessionData(sessionId, {
+                status: "completed",
+                ...(shouldOpenPanel && { outputPanelOpen: true }),
+              });
               break;
+            }
 
             // Error
             case "error": {

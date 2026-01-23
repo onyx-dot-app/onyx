@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -17,36 +17,22 @@ interface ThinkingCardProps {
 /**
  * ThinkingCard - Expandable card for agent thinking content
  *
- * Auto-expands while streaming, auto-collapses when done.
- * User can manually toggle at any time.
+ * Starts open and stays open. User can manually toggle.
  */
 export default function ThinkingCard({
   content,
   isStreaming,
 }: ThinkingCardProps) {
-  const [isOpen, setIsOpen] = useState(isStreaming);
-  const [userToggled, setUserToggled] = useState(false);
-
-  // Auto-expand while streaming, auto-collapse when done
-  // But only if user hasn't manually toggled
-  useEffect(() => {
-    if (!userToggled) {
-      setIsOpen(isStreaming);
-    }
-  }, [isStreaming, userToggled]);
-
-  const handleToggle = (open: boolean) => {
-    setIsOpen(open);
-    setUserToggled(true);
-  };
+  const [isOpen, setIsOpen] = useState(true);
 
   if (!content) return null;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={handleToggle}>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
-          "w-full border rounded-lg overflow-hidden",
+          "w-full border rounded-lg overflow-hidden transition-colors",
+          "hover:bg-background-tint-02",
           isStreaming
             ? "border-theme-blue-03 bg-theme-blue-01"
             : "border-border-02 bg-background-neutral-01"
@@ -56,7 +42,7 @@ export default function ThinkingCard({
           <button
             className={cn(
               "w-full flex items-center justify-between gap-2 px-3 py-2",
-              "hover:bg-background-tint-02 transition-colors text-left"
+              "transition-colors text-left"
             )}
           >
             <div className="flex items-center gap-2">
