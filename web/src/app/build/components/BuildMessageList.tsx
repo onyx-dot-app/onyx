@@ -5,6 +5,7 @@ import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/build/components/TextChunk";
 import ThinkingCard from "@/app/build/components/ThinkingCard";
 import ToolCallPill from "@/app/build/components/ToolCallPill";
+import TodoListCard from "@/app/build/components/TodoListCard";
 import UserMessage from "@/app/build/components/UserMessage";
 import { BuildMessage } from "@/app/build/services/buildStreamingModels";
 import { StreamItem } from "@/app/build/types/displayTypes";
@@ -65,7 +66,7 @@ export default function BuildMessageList({
 
   return (
     <div className="flex flex-col items-center px-4 pb-4">
-      <div className="max-w-2xl backdrop-blur-md rounded-16 p-4">
+      <div className="w-full max-w-2xl backdrop-blur-md rounded-16 p-4">
         {/* Render user messages */}
         {userMessages.map((message) => (
           <UserMessage key={message.id} content={message.content} />
@@ -103,6 +104,14 @@ export default function BuildMessageList({
                           <ToolCallPill
                             key={item.id}
                             toolCall={item.toolCall}
+                          />
+                        );
+                      case "todo_list":
+                        return (
+                          <TodoListCard
+                            key={item.id}
+                            todoList={item.todoList}
+                            defaultOpen={item.todoList.isOpen}
                           />
                         );
                       default:

@@ -15,8 +15,10 @@ import {
   SvgLoader,
   SvgCheckCircle,
   SvgAlertCircle,
+  SvgBubbleText,
 } from "@opal/icons";
 import RawOutputBlock from "@/app/build/components/RawOutputBlock";
+import DiffView from "@/app/build/components/DiffView";
 import { ToolCallState, ToolCallKind } from "@/app/build/types/displayTypes";
 
 interface ToolCallPillProps {
@@ -32,6 +34,8 @@ function getToolIcon(kind: ToolCallKind) {
       return SvgTerminalSmall;
     case "read":
       return SvgFileText;
+    case "task":
+      return SvgBubbleText;
     case "other":
       return SvgEdit;
     default:
@@ -79,6 +83,33 @@ function getStatusDisplay(status: string) {
         bgClass: "bg-background-neutral-01 border-border-02",
         showSpinner: false,
       };
+  }
+}
+
+/**
+ * Get language hint for syntax highlighting based on tool kind and title
+ */
+function getLanguageHint(toolCall: ToolCallState): string | undefined {
+  // Search results (glob/grep) - no highlighting for file lists
+  if (
+    toolCall.title === "Searching files" ||
+    toolCall.title === "Searching content" ||
+    toolCall.title === "Searching"
+  ) {
+    return undefined;
+  }
+
+  switch (toolCall.kind) {
+    case "execute":
+      return "bash";
+    case "task":
+      return "markdown";
+    case "read":
+    case "other":
+      // Use description (file path) for syntax detection
+      return toolCall.description;
+    default:
+      return undefined;
   }
 }
 
@@ -166,17 +197,23 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
 
         <CollapsibleContent>
           <div className="px-3 pb-3 pt-0">
-            <RawOutputBlock
-              content={toolCall.rawOutput}
-              maxHeight="300px"
-              language={
-                toolCall.kind === "execute"
-                  ? "bash"
-                  : toolCall.kind === "read" || toolCall.kind === "other"
-                    ? toolCall.description // file path for syntax detection
-                    : "bash" // search results (file paths)
-              }
-            />
+            {/* Show diff view for edit operations (not new files) */}
+            {toolCall.title === "Editing file" &&
+            toolCall.oldContent !== undefined &&
+            toolCall.newContent !== undefined ? (
+              <DiffView
+                oldContent={toolCall.oldContent}
+                newContent={toolCall.newContent}
+                maxHeight="300px"
+                filePath={toolCall.description}
+              />
+            ) : (
+              <RawOutputBlock
+                content={toolCall.rawOutput}
+                maxHeight="300px"
+                language={getLanguageHint(toolCall)}
+              />
+            )}
           </div>
         </CollapsibleContent>
       </div>

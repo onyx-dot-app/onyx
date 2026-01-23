@@ -1,4 +1,4 @@
-"""Process management for CLI agent and Next.js server subprocesses."""
+"""Process management for Next.js server subprocesses."""
 
 import os
 import shutil
@@ -15,68 +15,13 @@ logger = setup_logger()
 
 
 class ProcessManager:
-    """Manages CLI agent and Next.js server subprocess lifecycle.
+    """Manages Next.js server subprocess lifecycle.
 
     Responsible for:
-    - Building virtual environment activation settings
-    - Starting agent processes with proper environment
     - Starting Next.js dev servers
     - Checking process status
     - Gracefully terminating processes
     """
-
-    def build_venv_env(self, venv_path: Path) -> dict[str, str]:
-        """Build environment variables dict with the virtual environment activated.
-
-        Args:
-            venv_path: Path to the virtual environment directory
-
-        Returns:
-            Environment variables dictionary with venv activated
-        """
-        env = os.environ.copy()
-        venv_bin = str(venv_path / "bin")
-        env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
-        env["VIRTUAL_ENV"] = str(venv_path)
-        # Unset PYTHONHOME if set (can interfere with venv)
-        env.pop("PYTHONHOME", None)
-        return env
-
-    def start_agent_process(
-        self,
-        sandbox_path: Path,
-        agent_command: list[str],
-        venv_path: Path | None = None,
-        env_vars: dict[str, str] | None = None,
-    ) -> subprocess.Popen[str]:
-        """Start CLI agent as subprocess.
-
-        Working directory is set to sandbox root.
-        Virtual environment is activated if provided.
-
-        Args:
-            sandbox_path: Path to the sandbox directory (working dir)
-            agent_command: Command and arguments to start the agent
-            venv_path: Optional path to virtual environment
-            env_vars: Optional additional environment variables
-
-        Returns:
-            The subprocess.Popen object for the agent process
-        """
-        env = self.build_venv_env(venv_path) if venv_path else os.environ.copy()
-        if env_vars:
-            env.update(env_vars)
-
-        process = subprocess.Popen(
-            agent_command,
-            cwd=sandbox_path,
-            env=env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        return process
 
     def start_nextjs_server(
         self,
@@ -120,11 +65,17 @@ class ProcessManager:
             raise RuntimeError(f"package.json not found in {web_dir}")
 
         logger.debug(f"Starting npm run dev command in {web_dir}")
+        # CRITICAL: Inherit stdout/stderr (None) to prevent pipe buffer overflow.
+        # When PIPE is used but never drained, the buffer fills up (64KB on most systems)
+        # and the subprocess blocks indefinitely on write, causing the server to freeze.
+        # This was the root cause of Next.js servers dying after a few minutes.
+        # Using None inherits from parent, so logs appear in the backend terminal.
+        # FIXME: ideally we should drain the pipe to avoid the buffer overflow, but not for v1
         process = subprocess.Popen(
             ["npm", "run", "dev", "--", "-p", str(port)],
             cwd=web_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=None,
+            stderr=None,
         )
         logger.info(f"Next.js process started with PID {process.pid}")
 
@@ -135,32 +86,13 @@ class ProcessManager:
         if not self._wait_for_server(server_url, timeout=timeout, process=process):
             # Check if process died
             if process.poll() is not None:
-                # Capture stdout/stderr for debugging
-                stdout_data = b""
-                stderr_data = b""
-                try:
-                    # Read available output (non-blocking since process is dead)
-                    if process.stdout:
-                        stdout_data = process.stdout.read()
-                    if process.stderr:
-                        stderr_data = process.stderr.read()
-                except Exception as e:
-                    logger.warning(f"Failed to read process output: {e}")
-
-                stdout_str = stdout_data.decode("utf-8", errors="replace")
-                stderr_str = stderr_data.decode("utf-8", errors="replace")
-
                 logger.error(
-                    f"Next.js server process died with code {process.returncode}"
+                    f"Next.js server process died with code {process.returncode}. "
+                    f"Check the terminal or logs in {web_dir} for details."
                 )
-                if stdout_str.strip():
-                    logger.error(f"Next.js stdout:\n{stdout_str}")
-                if stderr_str.strip():
-                    logger.error(f"Next.js stderr:\n{stderr_str}")
-
                 raise RuntimeError(
                     f"Next.js server process died with code {process.returncode}. "
-                    f"stderr: {stderr_str[:500]}"
+                    f"Check server logs for details."
                 )
 
             # Process still running but server not responding
@@ -168,16 +100,6 @@ class ProcessManager:
                 f"Next.js server failed to respond within {timeout} seconds "
                 f"(process still running with PID {process.pid})"
             )
-            # Try to get any available output
-            try:
-                if process.stdout:
-                    stdout_data = process.stdout.read1(4096)  # type: ignore
-                    if stdout_data:
-                        logger.error(
-                            f"Partial stdout: {stdout_data.decode('utf-8', errors='replace')}"
-                        )
-            except Exception:
-                pass
 
             raise RuntimeError(
                 f"Next.js server failed to start within {timeout} seconds"

@@ -16,373 +16,25 @@ import {
 } from "@/app/build/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
+import { StreamItem, ToolCallState } from "@/app/build/types/displayTypes";
+
 import {
-  StreamItem,
-  ToolCallState,
-  ToolCallKind,
-  ToolCallStatus,
-} from "@/app/build/types/displayTypes";
-
-/**
- * Generate a unique ID for stream items
- */
-function genId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/**
- * Extract text from ACP content structure
- */
-function extractText(content: unknown): string {
-  if (!content) return "";
-  if (typeof content === "string") return content;
-  if (typeof content === "object" && content !== null) {
-    const obj = content as Record<string, unknown>;
-    if (obj.type === "text" && typeof obj.text === "string") return obj.text;
-    if (Array.isArray(content)) {
-      return content
-        .filter((c) => c?.type === "text" && typeof c.text === "string")
-        .map((c) => c.text)
-        .join("");
-    }
-    if (typeof obj.text === "string") return obj.text;
-  }
-  return "";
-}
-
-/**
- * Strip sandbox path prefix to get clean relative path
- * e.g., "/Users/.../sandboxes/uuid/outputs/web/app/page.tsx" -> "web/app/page.tsx"
- */
-function getRelativePath(fullPath: string): string {
-  if (!fullPath) return "";
-  // Match /outputs/ and take everything after
-  const outputsMatch = fullPath.match(/\/outputs\/(.+)$/);
-  if (outputsMatch && outputsMatch[1]) return outputsMatch[1];
-  // Match /sandboxes/uuid/ and take everything after
-  const sandboxMatch = fullPath.match(/\/sandboxes\/[^/]+\/(.+)$/);
-  if (sandboxMatch && sandboxMatch[1]) return sandboxMatch[1];
-  // Fall back to just the filename
-  const lastSlash = fullPath.lastIndexOf("/");
-  return lastSlash >= 0 ? fullPath.slice(lastSlash + 1) : fullPath;
-}
-
-/**
- * Get human-readable title based on tool kind and name
- */
-function getToolTitle(
-  kind: string | null | undefined,
-  toolName: string | null | undefined
-): string {
-  // Normalize kind - backend sends "edit" for writes
-  const normalizedKind = kind === "edit" ? "other" : kind;
-  const normalizedToolName = toolName?.toLowerCase();
-
-  // First check tool name for specific mappings
-  switch (normalizedToolName) {
-    case "glob":
-      return "Searching files";
-    case "grep":
-      return "Searching content";
-    case "webfetch":
-      return "Fetching web content";
-    case "websearch":
-      return "Searching web";
-    case "bash":
-      return "Running command";
-    case "read":
-      return "Reading file";
-    case "write":
-      return "Writing file";
-    case "edit":
-      return "Writing file";
-  }
-
-  // Fall back to kind-based titles
-  switch (normalizedKind) {
-    case "execute":
-      return "Running command";
-    case "read":
-      return "Reading file";
-    case "other":
-      return "Writing file";
-    case "search":
-      return "Searching";
-    default:
-      return "Running tool";
-  }
-}
-
-/**
- * Normalize tool call kind
- */
-function normalizeKind(kind: string | null | undefined): ToolCallKind {
-  if (kind === "execute" || kind === "read" || kind === "other") return kind;
-  return "other";
-}
-
-/**
- * Normalize tool call status
- */
-function normalizeStatus(status: string | null | undefined): ToolCallStatus {
-  if (
-    status === "pending" ||
-    status === "in_progress" ||
-    status === "completed" ||
-    status === "failed"
-  ) {
-    return status;
-  }
-  return "pending";
-}
-
-/**
- * Extract file path from packet (for read/write tools)
- */
-function getFilePath(packet: Record<string, unknown>): string {
-  const rawInput = (packet.raw_input || packet.rawInput) as Record<
-    string,
-    unknown
-  > | null;
-  if (rawInput) {
-    const path = (rawInput.file_path || rawInput.filePath || rawInput.path) as
-      | string
-      | undefined;
-    if (path) return getRelativePath(path);
-  }
-  // Fall back to title if it looks like a path
-  const title = packet.title as string | undefined;
-  if (title && title.includes("/")) return getRelativePath(title);
-  return "";
-}
-
-/**
- * Extract description from tool call packet
- * For file operations, returns the relative file path
- * For execute, returns the description or "Running command"
- * For search tools (glob/grep), returns the pattern
- */
-function getDescription(packet: Record<string, unknown>): string {
-  const kind = packet.kind as string | null;
-  const normalizedKind = kind === "edit" ? "other" : kind;
-  const rawInput = (packet.raw_input || packet.rawInput) as Record<
-    string,
-    unknown
-  > | null;
-  // Backend uses "title" field for tool name
-  const toolName = (
-    (packet.tool_name || packet.toolName || packet.title) as string | undefined
-  )?.toLowerCase();
-
-  // For file operations (read/write), description is the file path
-  if (normalizedKind === "read" || normalizedKind === "other") {
-    const filePath = getFilePath(packet);
-    if (filePath) return filePath;
-  }
-
-  // For execute, use rawInput.description
-  if (normalizedKind === "execute") {
-    if (rawInput?.description && typeof rawInput.description === "string") {
-      return rawInput.description;
-    }
-    return "Running command";
-  }
-
-  // For glob/grep (search tools), use the pattern
-  if (
-    (toolName === "glob" ||
-      toolName === "grep" ||
-      normalizedKind === "search") &&
-    rawInput?.pattern &&
-    typeof rawInput.pattern === "string"
-  ) {
-    return rawInput.pattern;
-  }
-
-  // Fallback - use tool name for display
-  return getToolTitle(kind, toolName);
-}
-
-/**
- * Extract command/path from tool call packet
- * For execute: the command being run
- * For read/write: the file path
- * For glob/grep: the search pattern
- */
-function getCommand(packet: Record<string, unknown>): string {
-  const rawInput = (packet.raw_input || packet.rawInput) as Record<
-    string,
-    unknown
-  > | null;
-  const kind = packet.kind as string | null;
-  const normalizedKind = kind === "edit" ? "other" : kind;
-  // Backend uses "title" field for tool name
-  const toolName = (
-    (packet.tool_name || packet.toolName || packet.title) as string | undefined
-  )?.toLowerCase();
-
-  // For execute, return the command
-  if (normalizedKind === "execute" && rawInput) {
-    if (typeof rawInput.command === "string") return rawInput.command;
-  }
-
-  // For read/write, return the file path
-  if (normalizedKind === "read" || normalizedKind === "other") {
-    return getFilePath(packet);
-  }
-
-  // For glob/grep (search tools), return the pattern
-  if (
-    (toolName === "glob" ||
-      toolName === "grep" ||
-      normalizedKind === "search") &&
-    rawInput?.pattern &&
-    typeof rawInput.pattern === "string"
-  ) {
-    return rawInput.pattern;
-  }
-
-  return "";
-}
-
-/**
- * Extract file content from content array (for read operations)
- * Content comes in format: <file>...\n(End of file...)</file>
- */
-function extractFileContent(content: unknown): string {
-  if (!Array.isArray(content)) return "";
-
-  for (const item of content) {
-    if (item?.type === "content" && item?.content?.type === "text") {
-      const text = item.content.text as string;
-      // Strip <file> tags and "(End of file...)" suffix
-      const fileMatch = text.match(
-        /<file>\n?([\s\S]*?)\n?\(End of file[^)]*\)\n?<\/file>/
-      );
-      if (fileMatch && fileMatch[1]) {
-        // Remove line numbers (e.g., "00001| ")
-        return fileMatch[1].replace(/^\d{5}\| /gm, "");
-      }
-      // If no <file> tags, return as-is
-      return text;
-    }
-  }
-  return "";
-}
-
-/**
- * Extract newText from content array (for write operations)
- * The diff content has a newText field with the file contents
- */
-function extractNewText(content: unknown): string {
-  if (!Array.isArray(content)) return "";
-
-  for (const item of content) {
-    if (item?.type === "diff" && typeof item?.newText === "string") {
-      return item.newText;
-    }
-  }
-  return "";
-}
-
-/**
- * Extract raw output from tool call packet
- * For execute: command output
- * For read: file contents
- * For write: the content that was written
- * For glob/grep: search results
- */
-function getRawOutput(packet: Record<string, unknown>): string {
-  const kind = packet.kind as string | null;
-  const normalizedKind = kind === "edit" ? "other" : kind;
-  // Backend uses "title" field for tool name
-  const toolName = (
-    (packet.tool_name || packet.toolName || packet.title) as string | undefined
-  )?.toLowerCase();
-
-  // For execute, get command output
-  if (normalizedKind === "execute") {
-    const rawOutput = (packet.raw_output || packet.rawOutput) as Record<
-      string,
-      unknown
-    > | null;
-    if (!rawOutput) return "";
-    const metadata = rawOutput.metadata as Record<string, unknown> | null;
-    return (metadata?.output || rawOutput.output || "") as string;
-  }
-
-  // For read, get file content from content array
-  if (normalizedKind === "read") {
-    const content = packet.content;
-    const fileContent = extractFileContent(content);
-    if (fileContent) return fileContent;
-    // Fall back to rawOutput
-    const rawOutput = (packet.raw_output || packet.rawOutput) as Record<
-      string,
-      unknown
-    > | null;
-    return (rawOutput?.output || "") as string;
-  }
-
-  // For write/edit, get the content that was written
-  if (normalizedKind === "other") {
-    // First try content array for newText (diff)
-    const content = packet.content;
-    const newText = extractNewText(content);
-    if (newText) return newText;
-
-    // Fall back to rawInput.content (the content being written)
-    const rawInput = (packet.raw_input || packet.rawInput) as Record<
-      string,
-      unknown
-    > | null;
-    if (rawInput?.content && typeof rawInput.content === "string") {
-      return rawInput.content;
-    }
-    return "";
-  }
-
-  // For glob/grep (search tools), extract results from content or rawOutput
-  if (
-    toolName === "glob" ||
-    toolName === "grep" ||
-    normalizedKind === "search"
-  ) {
-    // Helper to clean up file paths in search results
-    const cleanSearchResults = (text: string): string => {
-      return text
-        .split("\n")
-        .map((line) =>
-          line.includes("/") ? getRelativePath(line.trim()) : line
-        )
-        .join("\n");
-    };
-
-    // Try content array first
-    const content = packet.content;
-    const textContent = extractText(content);
-    if (textContent) return cleanSearchResults(textContent);
-
-    // Fall back to rawOutput
-    const rawOutput = (packet.raw_output || packet.rawOutput) as Record<
-      string,
-      unknown
-    > | null;
-    if (rawOutput?.output && typeof rawOutput.output === "string") {
-      return cleanSearchResults(rawOutput.output);
-    }
-    // Try result field
-    if (rawOutput?.result && typeof rawOutput.result === "string") {
-      return cleanSearchResults(rawOutput.result);
-    }
-    // If result is an array of files, clean up each path
-    if (rawOutput?.result && Array.isArray(rawOutput.result)) {
-      return (rawOutput.result as string[]).map(getRelativePath).join("\n");
-    }
-  }
-
-  return "";
-}
+  genId,
+  extractText,
+  getToolTitle,
+  normalizeKind,
+  normalizeStatus,
+  getDescription,
+  getCommand,
+  getSubagentType,
+  getRawOutput,
+  getTaskOutput,
+  isTaskTool,
+  isTodoWriteTool,
+  extractTodos,
+  isNewFileOperation,
+  extractDiffData,
+} from "@/app/build/utils/streamItemHelpers";
 
 /**
  * Hook for handling message streaming in build sessions.
@@ -421,6 +73,9 @@ export function useBuildStreaming() {
   );
   const updateToolCallStreamItem = useBuildSessionStore(
     (state) => state.updateToolCallStreamItem
+  );
+  const upsertTodoListStreamItem = useBuildSessionStore(
+    (state) => state.upsertTodoListStreamItem
   );
   const clearStreamItems = useBuildSessionStore(
     (state) => state.clearStreamItems
@@ -534,7 +189,7 @@ export function useBuildStreaming() {
               break;
             }
 
-            // Tool call started - create new tool_call item
+            // Tool call started - create new tool_call item or todo_list item
             case "tool_call_start": {
               // Finalize any streaming text/thinking
               finalizeStreaming();
@@ -562,14 +217,34 @@ export function useBuildStreaming() {
                 toolName,
               });
 
+              // Check if this is a TodoWrite call
+              // Skip tool_call_start for TodoWrite - it has no todos yet
+              // The pill will be created on the first tool_call_progress with actual todo items
+              if (isTodoWriteTool(packetData)) {
+                lastItemType = "tool"; // Still track as tool for finalization
+                break;
+              }
+
+              // Extract diff data for edit operations (write vs edit distinction)
+              const isNewFile = isNewFileOperation(packetData);
+              const diffData =
+                kind === "edit"
+                  ? extractDiffData(packetData.content)
+                  : { oldText: "", newText: "", isNewFile: true };
+
               const toolCall: ToolCallState = {
                 id: toolCallId,
-                kind: normalizeKind(kind),
-                title: getToolTitle(kind, toolName),
+                kind: normalizeKind(kind, packetData), // Pass packet for proper task detection
+                title: getToolTitle(kind, toolName, isNewFile),
                 status: "pending",
-                description: getFilePath(packetData) || "",
-                command: "",
+                description: getDescription(packetData),
+                command: getCommand(packetData),
                 rawOutput: "",
+                subagentType: getSubagentType(packetData),
+                // Edit operation fields
+                isNewFile: isNewFile ?? true,
+                oldContent: diffData.oldText,
+                newContent: diffData.newText,
               };
 
               console.log("[tool_call_start] Created toolCall:", toolCall);
@@ -584,7 +259,7 @@ export function useBuildStreaming() {
               break;
             }
 
-            // Tool call progress - update existing tool_call item
+            // Tool call progress - update existing tool_call item or todo_list item
             case "tool_call_progress": {
               // DEBUG: Log full packet
               console.log(
@@ -596,16 +271,65 @@ export function useBuildStreaming() {
                 packetData.toolCallId) as string;
               if (!toolCallId) break;
 
+              // Check if this is a TodoWrite update
+              // Use upsert: creates todo_list on first progress, updates on subsequent
+              if (isTodoWriteTool(packetData)) {
+                const todos = extractTodos(packetData);
+                upsertTodoListStreamItem(sessionId, toolCallId, {
+                  id: toolCallId,
+                  todos,
+                  isOpen: true, // Open by default during streaming
+                });
+                break;
+              }
+
+              const status = normalizeStatus(
+                packetData.status as string | null
+              );
+              const kind = packetData.kind as string | null;
+
+              // Extract diff data for edit operations (write vs edit distinction)
+              const isNewFile = isNewFileOperation(packetData);
+              const diffData =
+                kind === "edit"
+                  ? extractDiffData(packetData.content)
+                  : { oldText: "", newText: "", isNewFile: true };
+
               const updates: Partial<ToolCallState> = {
-                status: normalizeStatus(packetData.status as string | null),
+                status,
                 description: getDescription(packetData),
                 command: getCommand(packetData),
                 rawOutput: getRawOutput(packetData),
+                subagentType: getSubagentType(packetData),
+                // Edit operation fields (update when diff data becomes available)
+                ...(kind === "edit" && {
+                  isNewFile: isNewFile ?? true,
+                  oldContent: diffData.oldText,
+                  newContent: diffData.newText,
+                }),
               };
 
               console.log("[tool_call_progress] Updates:", updates);
 
               updateToolCallStreamItem(sessionId, toolCallId, updates);
+
+              // If task tool completed, extract output and create text StreamItem
+              if (isTaskTool(packetData) && status === "completed") {
+                const taskOutput = getTaskOutput(packetData);
+                if (taskOutput) {
+                  // Create a new text item for the task output
+                  const textItem: StreamItem = {
+                    type: "text",
+                    id: genId("task-output"),
+                    content: taskOutput,
+                    isStreaming: false,
+                  };
+                  appendStreamItem(sessionId, textItem);
+                  // Reset tracking so subsequent text is a new item
+                  lastItemType = "text";
+                  accumulatedText = "";
+                }
+              }
               break;
             }
 
@@ -685,6 +409,7 @@ export function useBuildStreaming() {
       updateLastStreamingText,
       updateLastStreamingThinking,
       updateToolCallStreamItem,
+      upsertTodoListStreamItem,
       clearStreamItems,
       addArtifactToSession,
       appendMessageToSession,

@@ -173,6 +173,23 @@ export async function deleteSession(sessionId: string): Promise<void> {
 // Messages API
 // =============================================================================
 
+/**
+ * Extract text content from message_metadata.
+ * For user_message: {type: "user_message", content: {type: "text", text: "..."}}
+ */
+function extractContentFromMetadata(
+  metadata: Record<string, any> | null | undefined
+): string {
+  if (!metadata) return "";
+  const content = metadata.content;
+  if (!content) return "";
+  if (typeof content === "string") return content;
+  if (typeof content === "object" && content.type === "text" && content.text) {
+    return content.text;
+  }
+  return "";
+}
+
 export async function fetchMessages(
   sessionId: string
 ): Promise<BuildMessage[]> {
@@ -186,7 +203,8 @@ export async function fetchMessages(
   return data.messages.map((m: ApiMessageResponse) => ({
     id: m.id,
     type: m.type,
-    content: m.content,
+    // Content is stored in message_metadata, not as a separate field
+    content: m.content || extractContentFromMetadata(m.message_metadata),
     message_metadata: m.message_metadata,
     timestamp: new Date(m.created_at),
   }));
