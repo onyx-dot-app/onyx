@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { openDocument } from "@/lib/search/utils";
-import { SubQuestionDetail } from "@/app/chat/interfaces";
+import { SubQuestionDetail } from "@/app/app/interfaces";
 import { getSourceDisplayName } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 import Text from "@/refresh-components/texts/Text";

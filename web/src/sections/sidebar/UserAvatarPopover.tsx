@@ -218,7 +218,7 @@ export default function UserAvatarPopover({ folded }: SettingsProps) {
           <SettingsPopover
             onUserSettingsClick={() => {
               setPopupState(undefined);
-              router.push("/chat/settings");
+              router.push("/app/settings");
             }}
             onOpenNotifications={() => setPopupState("Notifications")}
           />

@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { Project } from "@/app/chat/projects/projectsService";
+import { Project } from "@/app/app/projects/projectsService";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export function useProjects() {

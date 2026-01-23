@@ -27,7 +27,7 @@ export default function ImpersonatePage() {
   }
 
   if (!isCloudSuperuser) {
-    redirect("/chat" as Route);
+    redirect("/app" as Route);
   }
 
   const handleImpersonate = async (
@@ -54,7 +54,7 @@ export default function ImpersonatePage() {
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
-        router.push("/chat" as Route);
+        router.push("/app" as Route);
       }
     } catch (error) {
       setPopup({

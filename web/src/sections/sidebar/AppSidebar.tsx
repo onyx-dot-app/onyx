@@ -36,9 +36,9 @@ import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarCo
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { removeChatSessionFromProject } from "@/app/chat/projects/projectsService";
-import type { Project } from "@/app/chat/projects/projectsService";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
+import type { Project } from "@/app/app/projects/projectsService";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -50,7 +50,7 @@ import {
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -358,8 +358,8 @@ const MemoizedAppSidebarInner = memo(
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
-          ? `/chat?assistantId=${currentAgent.id}`
-          : "/chat";
+          ? `/app?assistantId=${currentAgent.id}`
+          : "/app";
       return (
         <div data-testid="AppSidebar/new-session">
           <SidebarTab
@@ -382,7 +382,7 @@ const MemoizedAppSidebarInner = memo(
                 ? SvgOnyxOctagon
                 : SvgMoreHorizontal
             }
-            href="/chat/agents"
+            href="/app/agents"
             folded={folded}
             transient={activeSidebarTab.isMoreAgents()}
             lowlight={!folded}

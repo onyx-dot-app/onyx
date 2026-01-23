@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { InputPrompt } from "@/app/chat/interfaces";
+import { InputPrompt } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export default function usePromptShortcuts() {

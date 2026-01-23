@@ -308,7 +308,7 @@ export default function ShareAgentModal({
 
   function handleCopyLink() {
     if (!agent?.id) return;
-    const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
+    const url = `${window.location.origin}/app?assistantId=${agent.id}`;
     navigator.clipboard.writeText(url);
   }
 

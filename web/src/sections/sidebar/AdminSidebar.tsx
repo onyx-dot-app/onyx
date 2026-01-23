@@ -350,7 +350,7 @@ export default function AdminSidebar({
             leftIcon={({ className }) => (
               <CgArrowsExpandUpLeft className={className} size={16} />
             )}
-            href="/chat"
+            href="/app"
           >
             Exit Admin
           </SidebarTab>
