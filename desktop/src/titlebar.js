@@ -117,6 +117,14 @@
     const titleBar = document.getElementById(TITLEBAR_ID);
     if (!titleBar) return;
 
+    // Debug logging
+    console.log("[Onyx Desktop Titlebar] Theme update:", {
+      isDark,
+      htmlClasses: document.documentElement.className,
+      bodyClasses: document.body?.className,
+      timestamp: new Date().toISOString(),
+    });
+
     if (isDark) {
       titleBar.style.background =
         "linear-gradient(180deg, rgba(18, 18, 18, 0.82) 0%, rgba(18, 18, 18, 0.72) 100%)";
@@ -152,7 +160,9 @@
     });
 
     // Apply initial styles matching current theme
-    const isDark = document.documentElement.classList.contains("dark");
+    const htmlHasDark = document.documentElement.classList.contains("dark");
+    const bodyHasDark = document.body?.classList.contains("dark");
+    const isDark = htmlHasDark || bodyHasDark;
 
     // Apply styles matching Onyx design system with translucent glass effect
     titleBar.style.cssText = `
@@ -193,7 +203,9 @@
     const existing = document.getElementById(TITLEBAR_ID);
     if (existing?.parentElement === document.body) {
       // Update theme on existing titlebar
-      const isDark = document.documentElement.classList.contains("dark");
+      const htmlHasDark = document.documentElement.classList.contains("dark");
+      const bodyHasDark = document.body?.classList.contains("dark");
+      const isDark = htmlHasDark || bodyHasDark;
       updateTitleBarTheme(isDark);
       return;
     }
@@ -208,7 +220,9 @@
 
     // Ensure theme is applied immediately after mount
     setTimeout(() => {
-      const isDark = document.documentElement.classList.contains("dark");
+      const htmlHasDark = document.documentElement.classList.contains("dark");
+      const bodyHasDark = document.body?.classList.contains("dark");
+      const isDark = htmlHasDark || bodyHasDark;
       updateTitleBarTheme(isDark);
     }, 0);
   }
@@ -231,7 +245,11 @@
     let lastKnownTheme = null;
 
     function checkAndUpdateTheme() {
-      const isDark = document.documentElement.classList.contains("dark");
+      // Check both html and body for dark class (some apps use body)
+      const htmlHasDark = document.documentElement.classList.contains("dark");
+      const bodyHasDark = document.body?.classList.contains("dark");
+      const isDark = htmlHasDark || bodyHasDark;
+
       if (lastKnownTheme !== isDark) {
         lastKnownTheme = isDark;
         updateTitleBarTheme(isDark);
@@ -250,6 +268,17 @@
       attributes: true,
       attributeFilter: ["class"],
     });
+
+    // Also observe body if it exists
+    if (document.body) {
+      const bodyObserver = new MutationObserver(() => {
+        checkAndUpdateTheme();
+      });
+      bodyObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    }
 
     // Also check periodically in case classList is manipulated directly
     // or the theme loads asynchronously after page load

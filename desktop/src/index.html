@@ -401,15 +401,17 @@
       const errorMessage = document.getElementById("errorMessage");
       const saveBtn = document.getElementById("saveBtn");
 
-      // Theme detection
+      // Theme detection based on system preferences
       function applySystemTheme() {
         const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
         function updateTheme(e) {
           if (e.matches) {
             document.documentElement.classList.add("dark");
+            document.body.classList.add("dark");
           } else {
             document.documentElement.classList.remove("dark");
+            document.body.classList.remove("dark");
           }
         }
 
