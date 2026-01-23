@@ -38,11 +38,11 @@ from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPEvent,
 )
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
-    ACPHttpClient,
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
+    ACPExecClient,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
@@ -171,11 +171,6 @@ class KubernetesSandboxManager(SandboxManager):
     def _get_service_name(self, sandbox_id: str) -> str:
         """Generate service name from sandbox ID."""
         return self._get_pod_name(sandbox_id)
-
-    def _get_agent_url(self, sandbox_id: str) -> str:
-        """Get the internal cluster URL for the agent HTTP server."""
-        service_name = self._get_service_name(sandbox_id)
-        return f"http://{service_name}.{self._namespace}.svc.cluster.local:{AGENT_PORT}"
 
     def _get_nextjs_url(self, sandbox_id: str) -> str:
         """Get the internal cluster URL for the Next.js server."""
@@ -775,28 +770,32 @@ echo "File sync complete"
     def health_check(
         self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
     ) -> bool:
-        """Check if the sandbox pod and agent are healthy.
+        """Check if the sandbox pod is healthy (can exec into it).
 
         Args:
             sandbox_id: The sandbox ID to check
-            nextjs_port: Not used in kubernetes (always checks agent URL)
+            nextjs_port: Not used in kubernetes
             timeout: Health check timeout in seconds
 
         Returns:
             True if sandbox is healthy, False otherwise
         """
-        # Create a fresh client for each request - we can't assume requests
-        # always hit the same API server pod, so we don't cache clients
-        agent_url = self._get_agent_url(str(sandbox_id))
-        acp_client = ACPHttpClient(agent_url)
-        return acp_client.health_check(timeout=timeout)
+        pod_name = self._get_pod_name(str(sandbox_id))
+        exec_client = ACPExecClient(
+            pod_name=pod_name,
+            namespace=self._namespace,
+            container="sandbox",
+        )
+        return exec_client.health_check(timeout=timeout)
 
     def send_message(
         self,
         sandbox_id: UUID,
         message: str,
     ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent via HTTP and stream ACP events.
+        """Send a message to the CLI agent and stream ACP events.
+
+        Runs `opencode acp` via kubectl exec in the sandbox pod.
 
         Args:
             sandbox_id: The sandbox ID to send message to
@@ -805,16 +804,18 @@ echo "File sync complete"
         Yields:
             Typed ACP schema event objects
         """
-        # Create a fresh client for each request - we can't assume requests
-        # always hit the same API server pod, so we don't cache clients.
-        # The agent in the sandbox pod is the source of truth for its own state.
-        # initialize() must be idempotent on the agent side.
-        agent_url = self._get_agent_url(str(sandbox_id))
-        acp_client = ACPHttpClient(agent_url)
-        acp_client.initialize(cwd="/workspace")
-
-        for event in acp_client.send_message(message):
-            yield event
+        pod_name = self._get_pod_name(str(sandbox_id))
+        exec_client = ACPExecClient(
+            pod_name=pod_name,
+            namespace=self._namespace,
+            container="sandbox",
+        )
+        try:
+            exec_client.start(cwd="/workspace")
+            for event in exec_client.send_message(message):
+                yield event
+        finally:
+            exec_client.stop()
 
     def list_directory(self, sandbox_id: UUID, path: str) -> list[FilesystemEntry]:
         """List contents of a directory in the sandbox's outputs directory.

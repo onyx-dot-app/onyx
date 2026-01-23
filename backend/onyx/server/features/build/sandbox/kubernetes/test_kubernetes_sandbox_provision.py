@@ -26,11 +26,16 @@ from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.kubernetes.manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+# Test constants
+TEST_TENANT_ID = "test-tenant"
+TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
 
 def _is_kubernetes_available() -> None:
@@ -73,15 +78,12 @@ def test_kubernetes_sandbox_provision() -> None:
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
 
     # Set up tenant context (required for multi-tenant operations)
-    tenant_id = "test-tenant"
-
-    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
 
     # Get the manager instance
     manager = KubernetesSandboxManager()
 
     sandbox_id = uuid4()
-    user_id = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
     # Create a test LLM config (values don't matter for this test)
     llm_config = LLMProviderConfig(
@@ -95,8 +97,8 @@ def test_kubernetes_sandbox_provision() -> None:
         # Call provision (no longer needs db_session)
         sandbox_info = manager.provision(
             sandbox_id=sandbox_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
+            user_id=TEST_USER_ID,
+            tenant_id=TEST_TENANT_ID,
             file_system_path="/tmp/test-files",  # Not used by K8s manager
             llm_config=llm_config,
         )
@@ -267,24 +269,18 @@ def test_kubernetes_sandbox_send_message() -> None:
     from acp.schema import Error
     from acp.schema import PromptResponse
 
-    from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
-        ACPEvent,
-    )
-
     _is_kubernetes_available()
 
     # Initialize the database engine
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
 
     # Set up tenant context (required for multi-tenant operations)
-    tenant_id = "test-tenant"
-    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
 
     # Get the manager instance
     manager = KubernetesSandboxManager()
 
     sandbox_id = uuid4()
-    user_id = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
     # Create a test LLM config (values don't matter for this test)
     llm_config = LLMProviderConfig(
@@ -298,19 +294,22 @@ def test_kubernetes_sandbox_send_message() -> None:
         # Provision the sandbox
         sandbox_info = manager.provision(
             sandbox_id=sandbox_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
+            user_id=TEST_USER_ID,
+            tenant_id=TEST_TENANT_ID,
             file_system_path="/tmp/test-files",
             llm_config=llm_config,
         )
 
         assert sandbox_info.status == SandboxStatus.RUNNING
 
-        # Give the agent service time to start up
-        time.sleep(5)
-
         # Verify health check passes before sending message
-        is_healthy = manager.health_check(sandbox_id, nextjs_port=None)
+        is_healthy = False
+        for _ in range(10):
+            is_healthy = manager.health_check(sandbox_id, nextjs_port=None)
+            if is_healthy:
+                break
+            time.sleep(10)
+
         assert is_healthy, "Sandbox agent should be healthy before sending messages"
         print("DEBUG: Sandbox agent is healthy")
 
@@ -321,6 +320,9 @@ def test_kubernetes_sandbox_send_message() -> None:
 
         # Verify we received events
         assert len(events) > 0, "Should receive at least one event from send_message"
+
+        for event in events:
+            print(f"Recieved event: {event}")
 
         # Check for errors
         errors = [e for e in events if isinstance(e, Error)]
