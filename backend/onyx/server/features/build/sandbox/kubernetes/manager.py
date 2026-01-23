@@ -9,6 +9,9 @@ Key features:
 - Cluster-native service discovery
 - RBAC-controlled resource management
 
+IMPORTANT: This manager does NOT interface with the database directly.
+All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
+
 Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
@@ -25,25 +28,14 @@ from kubernetes import client  # type: ignore
 from kubernetes import config
 from kubernetes.client.rest import ApiException  # type: ignore
 from kubernetes.stream import stream as k8s_stream  # type: ignore
-from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.llm import fetch_default_provider
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
-from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
-from onyx.server.features.build.db.sandbox import (
-    create_sandbox__no_commit as db_create_sandbox__no_commit,
-)
-from onyx.server.features.build.db.sandbox import create_snapshot as db_create_snapshot
-from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
-from onyx.server.features.build.db.sandbox import get_sandbox_by_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
     ACPEvent,
@@ -52,11 +44,10 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client impo
     ACPHttpClient,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotInfo
+from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -74,6 +65,9 @@ class KubernetesSandboxManager(SandboxManager):
     - Init containers for S3 file sync (snapshots, knowledge files, uploads)
     - Main sandbox container running Next.js + opencode agent
     - ClusterIP services for network access
+
+    IMPORTANT: This manager does NOT interface with the database directly.
+    All database operations should be handled by the caller.
 
     This is a singleton class - use get_sandbox_manager() to get the instance.
     """
@@ -115,7 +109,7 @@ class KubernetesSandboxManager(SandboxManager):
         self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 
         # Track ACP HTTP clients in memory
-        self._acp_clients: dict[str, ACPHttpClient] = {}
+        self._acp_clients: dict[UUID, ACPHttpClient] = {}
 
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
@@ -126,22 +120,22 @@ class KubernetesSandboxManager(SandboxManager):
             f"namespace={self._namespace}, image={self._image}"
         )
 
-    def _get_pod_name(self, session_id: str) -> str:
-        """Generate pod name from session ID."""
-        return f"sandbox-{str(session_id)[:8]}"
+    def _get_pod_name(self, sandbox_id: str) -> str:
+        """Generate pod name from sandbox ID."""
+        return f"sandbox-{str(sandbox_id)[:8]}"
 
-    def _get_service_name(self, session_id: str) -> str:
-        """Generate service name from session ID."""
-        return self._get_pod_name(session_id)
+    def _get_service_name(self, sandbox_id: str) -> str:
+        """Generate service name from sandbox ID."""
+        return self._get_pod_name(sandbox_id)
 
-    def _get_agent_url(self, session_id: str) -> str:
+    def _get_agent_url(self, sandbox_id: str) -> str:
         """Get the internal cluster URL for the agent HTTP server."""
-        service_name = self._get_service_name(session_id)
+        service_name = self._get_service_name(sandbox_id)
         return f"http://{service_name}.{self._namespace}.svc.cluster.local:{AGENT_PORT}"
 
-    def _get_nextjs_url(self, session_id: str) -> str:
+    def _get_nextjs_url(self, sandbox_id: str) -> str:
         """Get the internal cluster URL for the Next.js server."""
-        service_name = self._get_service_name(session_id)
+        service_name = self._get_service_name(sandbox_id)
         return (
             f"http://{service_name}.{self._namespace}.svc.cluster.local:{NEXTJS_PORT}"
         )
@@ -154,7 +148,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _create_sandbox_pod(
         self,
-        session_id: str,
+        sandbox_id: str,
         tenant_id: str,
         user_id: str,
         llm_provider: str,
@@ -164,14 +158,14 @@ class KubernetesSandboxManager(SandboxManager):
         snapshot_id: str | None = None,
     ) -> client.V1Pod:
         """Create Pod specification for sandbox."""
-        pod_name = self._get_pod_name(session_id)
+        pod_name = self._get_pod_name(sandbox_id)
 
         # Load agent instructions
         agent_instructions = self._load_agent_instructions()
 
         # Environment variables for init container
         init_env = [
-            client.V1EnvVar(name="SESSION_ID", value=session_id),
+            client.V1EnvVar(name="SANDBOX_ID", value=sandbox_id),
             client.V1EnvVar(name="TENANT_ID", value=tenant_id),
             client.V1EnvVar(name="USER_ID", value=user_id),
             client.V1EnvVar(name="S3_BUCKET", value=self._s3_bucket),
@@ -197,7 +191,7 @@ printf '%s' "$AGENT_INSTRUCTIONS" > /workspace/AGENTS.md
 # Restore from snapshot if provided
 if [ -n "$SNAPSHOT_ID" ]; then
     echo "Restoring from snapshot: $SNAPSHOT_ID"
-    aws s3 cp "s3://$S3_BUCKET/$TENANT_ID/snapshots/$SESSION_ID/$SNAPSHOT_ID.tar.gz" /tmp/snapshot.tar.gz
+    aws s3 cp "s3://$S3_BUCKET/$TENANT_ID/snapshots/$SANDBOX_ID/$SNAPSHOT_ID.tar.gz" /tmp/snapshot.tar.gz
     tar -xzf /tmp/snapshot.tar.gz -C /workspace/outputs
     rm /tmp/snapshot.tar.gz
 fi
@@ -206,9 +200,9 @@ fi
 echo "Syncing knowledge files for tenant: $TENANT_ID / user: $USER_ID"
 aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/ --quiet || true
 
-# Sync user-uploaded files for this session
-echo "Syncing user uploads for session: $SESSION_ID"
-aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/uploads/$SESSION_ID/" /workspace/user_uploaded_files/ --quiet || true
+# Sync user-uploaded files for this sandbox
+echo "Syncing user uploads for sandbox: $SANDBOX_ID"
+aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/uploads/$SANDBOX_ID/" /workspace/user_uploaded_files/ --quiet || true
 
 echo "File sync complete"
 """
@@ -240,7 +234,7 @@ echo "File sync complete"
 
         # Main sandbox container
         sandbox_env = [
-            client.V1EnvVar(name="SESSION_ID", value=session_id),
+            client.V1EnvVar(name="SANDBOX_ID", value=sandbox_id),
             client.V1EnvVar(name="OPENCODE_CONFIG", value=json.dumps(opencode_config)),
         ]
 
@@ -352,7 +346,7 @@ echo "File sync complete"
                 labels={
                     "app.kubernetes.io/component": "sandbox",
                     "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/session-id": session_id,
+                    "onyx.app/sandbox-id": sandbox_id,
                     "onyx.app/tenant-id": tenant_id,
                 },
             ),
@@ -361,11 +355,15 @@ echo "File sync complete"
 
     def _create_sandbox_service(
         self,
-        session_id: str,
+        sandbox_id: UUID,
         tenant_id: str,
     ) -> client.V1Service:
         """Create ClusterIP Service for sandbox pod."""
-        service_name = self._get_service_name(session_id)
+        # Convert UUID objects to strings if needed (Kubernetes client requires strings)
+        sandbox_id_str: str = str(sandbox_id)
+        tenant_id_str: str = str(tenant_id)
+
+        service_name = self._get_service_name(sandbox_id_str)
 
         return client.V1Service(
             api_version="v1",
@@ -376,13 +374,13 @@ echo "File sync complete"
                 labels={
                     "app.kubernetes.io/component": "sandbox",
                     "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/session-id": session_id,
-                    "onyx.app/tenant-id": tenant_id,
+                    "onyx.app/sandbox-id": sandbox_id_str,
+                    "onyx.app/tenant-id": tenant_id_str,
                 },
             ),
             spec=client.V1ServiceSpec(
                 type="ClusterIP",
-                selector={"onyx.app/session-id": session_id},
+                selector={"onyx.app/sandbox-id": sandbox_id_str},
                 ports=[
                     client.V1ServicePort(
                         name="nextjs", port=NEXTJS_PORT, target_port=NEXTJS_PORT
@@ -454,60 +452,55 @@ echo "File sync complete"
 
     def provision(
         self,
-        session_id: str,
+        sandbox_id: UUID,
+        user_id: UUID,
         tenant_id: str,
         file_system_path: str,
-        db_session: Session,
-        snapshot_id: str | None = None,
+        llm_config: LLMProviderConfig,
+        nextjs_port: int | None = None,
+        snapshot_path: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod.
 
-        1. Check concurrent sandbox limit for tenant
-        2. Create Pod (init container handles S3 file sync)
-        3. Create Service for pod
-        4. Wait for pod to be ready
-        5. Store sandbox record in DB
+        1. Create Pod (init container handles S3 file sync)
+        2. Create Service for pod
+        3. Wait for pod to be ready
+        4. Return sandbox info
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+            user_id: User identifier who owns this sandbox
+            tenant_id: Tenant identifier for multi-tenant isolation
+            file_system_path: Path to the knowledge/source files (not used in k8s)
+            llm_config: LLM provider configuration
+            nextjs_port: Not used in kubernetes (always 3000 within cluster)
+            snapshot_path: Optional snapshot ID to restore from
+
+        Returns:
+            SandboxInfo with the provisioned sandbox details
+
+        Raises:
+            RuntimeError: If provisioning fails
         """
         logger.info(
-            f"Starting Kubernetes sandbox provisioning for session {session_id}, "
-            f"tenant {tenant_id}"
+            f"Starting Kubernetes sandbox provisioning for sandbox {sandbox_id}, "
+            f"user {user_id}, tenant {tenant_id}"
         )
 
-        session_uuid = UUID(session_id)
-        pod_name = self._get_pod_name(session_id)
-
-        # Check limit (only enforce on cloud deployments)
-        if MULTI_TENANT:
-            running_count = get_running_sandbox_count_by_tenant(db_session, tenant_id)
-            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
-                raise ValueError(
-                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) "
-                    f"reached for tenant"
-                )
-
-        # Fetch LLM provider configuration
-        llm_provider = fetch_default_provider(db_session)
-        if not llm_provider:
-            raise RuntimeError(
-                "No default LLM provider configured. "
-                "Please configure an LLM provider in admin settings."
-            )
-
-        # Get user ID from current context (simplified - you may need to pass this in)
-        user_id = str(uuid4())  # Placeholder - should come from session
+        pod_name = self._get_pod_name(str(sandbox_id))
 
         try:
             # 1. Create Pod
             logger.debug(f"Creating Pod {pod_name}")
             pod = self._create_sandbox_pod(
-                session_id=session_id,
+                sandbox_id=str(sandbox_id),
                 tenant_id=tenant_id,
-                user_id=user_id,
-                llm_provider=llm_provider.provider,
-                llm_model=llm_provider.default_model_name,
-                llm_api_key=llm_provider.api_key or "",
-                llm_api_base=llm_provider.api_base,
-                snapshot_id=snapshot_id,
+                user_id=str(user_id),
+                llm_provider=llm_config.provider,
+                llm_model=llm_config.model_name,
+                llm_api_key=llm_config.api_key or "",
+                llm_api_base=llm_config.api_base,
+                snapshot_id=snapshot_path,  # snapshot_path is used as snapshot_id
             )
             self._core_api.create_namespaced_pod(
                 namespace=self._namespace,
@@ -515,8 +508,8 @@ echo "File sync complete"
             )
 
             # 2. Create Service
-            logger.debug(f"Creating Service {self._get_service_name(session_id)}")
-            service = self._create_sandbox_service(session_id, tenant_id)
+            logger.debug(f"Creating Service {self._get_service_name(str(sandbox_id))}")
+            service = self._create_sandbox_service(sandbox_id, tenant_id)
             self._core_api.create_namespaced_service(
                 namespace=self._namespace,
                 body=service,
@@ -529,46 +522,32 @@ echo "File sync complete"
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
-            # 4. Create DB record
-            logger.debug("Creating sandbox database record")
-            sandbox = db_create_sandbox__no_commit(
-                db_session=db_session,
-                session_id=session_uuid,
-                nextjs_port=NEXTJS_PORT,  # Always 3000 within cluster
-            )
-
-            update_sandbox_status__no_commit(
-                db_session, sandbox.id, SandboxStatus.RUNNING
-            )
-            db_session.commit()
-
-            logger.info(
-                f"Provisioned Kubernetes sandbox {sandbox.id} for session {session_id}, "
-                f"pod: {pod_name}"
-            )
+            logger.info(f"Provisioned Kubernetes sandbox {sandbox_id}, pod: {pod_name}")
 
             return SandboxInfo(
-                id=str(sandbox.id),
-                session_id=session_id,
+                sandbox_id=sandbox_id,
                 directory_path=f"k8s://{self._namespace}/{pod_name}",
                 status=SandboxStatus.RUNNING,
-                created_at=sandbox.created_at,
                 last_heartbeat=None,
+                nextjs_port=NEXTJS_PORT,  # Always 3000 within cluster
             )
 
         except Exception as e:
             # Cleanup on failure
             logger.error(
-                f"Kubernetes sandbox provisioning failed for session {session_id}: {e}",
+                f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}",
                 exc_info=True,
             )
-            self._cleanup_kubernetes_resources(session_id)
+            self._cleanup_kubernetes_resources(str(sandbox_id))
             raise
 
-    def _cleanup_kubernetes_resources(self, session_id: str) -> None:
-        """Clean up Kubernetes resources for a session."""
-        pod_name = self._get_pod_name(session_id)
-        service_name = self._get_service_name(session_id)
+    def _cleanup_kubernetes_resources(self, sandbox_id: str) -> None:
+        """Clean up Kubernetes resources for a sandbox."""
+        # Convert UUID objects to strings if needed (Kubernetes client requires strings)
+        sandbox_id = str(sandbox_id)
+
+        pod_name = self._get_pod_name(sandbox_id)
+        service_name = self._get_service_name(sandbox_id)
 
         # Delete in reverse order of creation
         try:
@@ -591,60 +570,54 @@ echo "File sync complete"
             if e.status != 404:
                 logger.warning(f"Error deleting Pod {pod_name}: {e}")
 
-    def terminate(self, sandbox_id: str, db_session: Session) -> None:
+    def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
 
         1. Close ACP HTTP client
         2. Delete Service, Pod
-        3. Update DB status
+
+        Args:
+            sandbox_id: The sandbox ID to terminate
         """
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            logger.warning(f"Sandbox {sandbox_id} not found for termination")
-            return
-
-        session_id = str(sandbox.session_id)
-
         # Close ACP HTTP client
-        client = self._acp_clients.pop(sandbox_id, None)
-        if client:
+        acp_client = self._acp_clients.pop(sandbox_id, None)
+        if acp_client:
             try:
-                client.close()
+                acp_client.close()
             except Exception as e:
                 logger.warning(
                     f"Error closing ACP client for sandbox {sandbox_id}: {e}"
                 )
 
-        # Clean up Kubernetes resources
-        self._cleanup_kubernetes_resources(session_id)
-
-        # Update status
-        update_sandbox_status__no_commit(
-            db_session, UUID(sandbox_id), SandboxStatus.TERMINATED
-        )
-        db_session.commit()
+        # Clean up Kubernetes resources (needs string for pod/service names)
+        self._cleanup_kubernetes_resources(str(sandbox_id))
 
         logger.info(f"Terminated Kubernetes sandbox {sandbox_id}")
 
     def create_snapshot(
-        self, sandbox_id: str, db_session: Session
-    ) -> SnapshotInfo | None:
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> SnapshotResult | None:
         """Create a snapshot by running a Job that tars outputs and streams to S3.
 
         For Kubernetes backend, we exec into the pod to create the snapshot.
-        """
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
 
-        session_id = str(sandbox.session_id)
-        pod_name = self._get_pod_name(session_id)
-        tenant_id = get_current_tenant_id()
+        Args:
+            sandbox_id: The sandbox ID to snapshot
+            tenant_id: Tenant identifier for storage path
+
+        Returns:
+            SnapshotResult with storage path and size
+
+        Raises:
+            RuntimeError: If snapshot creation fails
+        """
+        sandbox_id_str = str(sandbox_id)  # Needed for pod names and S3 paths
+        pod_name = self._get_pod_name(sandbox_id_str)
         snapshot_id = str(uuid4())
 
         s3_path = (
             f"s3://{self._s3_bucket}/{tenant_id}/snapshots/"
-            f"{session_id}/{snapshot_id}.tar.gz"
+            f"{sandbox_id_str}/{snapshot_id}.tar.gz"
         )
 
         # Exec into pod to create and upload snapshot
@@ -677,91 +650,80 @@ echo "File sync complete"
         # In production, you might want to query S3 for the actual size
         size_bytes = 0
 
-        # Create DB record
         storage_path = (
-            f"sandbox-snapshots/{tenant_id}/{session_id}/{snapshot_id}.tar.gz"
+            f"sandbox-snapshots/{tenant_id}/{sandbox_id_str}/{snapshot_id}.tar.gz"
         )
-        snapshot = db_create_snapshot(
-            db_session=db_session,
-            session_id=sandbox.session_id,
+
+        logger.info(f"Created snapshot for sandbox {sandbox_id}")
+
+        return SnapshotResult(
             storage_path=storage_path,
             size_bytes=size_bytes,
         )
 
-        logger.info(f"Created snapshot {snapshot.id} for sandbox {sandbox_id}")
+    def health_check(self, sandbox_id: UUID, nextjs_port: int | None = None) -> bool:
+        """Check if the sandbox pod and agent are healthy.
 
-        return SnapshotInfo(
-            id=str(snapshot.id),
-            session_id=session_id,
-            storage_path=storage_path,
-            created_at=snapshot.created_at,
-            size_bytes=size_bytes,
-        )
+        Args:
+            sandbox_id: The sandbox ID to check
+            nextjs_port: Not used in kubernetes (always checks agent URL)
 
-    def health_check(self, sandbox_id: str, db_session: Session) -> bool:
-        """Check if the sandbox pod and agent are healthy."""
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            return False
-
-        session_id = str(sandbox.session_id)
-
+        Returns:
+            True if sandbox is healthy, False otherwise
+        """
         # Get or create ACP HTTP client
         acp_client = self._acp_clients.get(sandbox_id)
         if acp_client is None:
-            agent_url = self._get_agent_url(session_id)
+            agent_url = self._get_agent_url(str(sandbox_id))
             acp_client = ACPHttpClient(agent_url)
             self._acp_clients[sandbox_id] = acp_client
 
         # Check agent health
-        if acp_client.health_check(timeout=5.0):
-            update_sandbox_heartbeat(db_session, UUID(sandbox_id))
-            return True
-
-        return False
+        return acp_client.health_check(timeout=5.0)
 
     def send_message(
         self,
-        sandbox_id: str,
+        sandbox_id: UUID,
         message: str,
-        db_session: Session,
     ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent via HTTP and stream ACP events."""
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
+        """Send a message to the CLI agent via HTTP and stream ACP events.
 
-        session_id = str(sandbox.session_id)
+        Args:
+            sandbox_id: The sandbox ID to send message to
+            message: The message content to send
 
+        Yields:
+            Typed ACP schema event objects
+        """
         # Get or create ACP HTTP client
         acp_client = self._acp_clients.get(sandbox_id)
         if acp_client is None or not acp_client.is_initialized:
-            agent_url = self._get_agent_url(session_id)
+            # _get_agent_url needs string for service name
+            agent_url = self._get_agent_url(str(sandbox_id))
             acp_client = ACPHttpClient(agent_url)
             acp_client.initialize(cwd="/workspace")
             self._acp_clients[sandbox_id] = acp_client
 
-        # Update heartbeat on message send
-        update_sandbox_heartbeat(db_session, UUID(sandbox_id))
-
         for event in acp_client.send_message(message):
             yield event
-            # Update heartbeat on activity
-            update_sandbox_heartbeat(db_session, UUID(sandbox_id))
 
-    def list_directory(
-        self, sandbox_id: str, path: str, db_session: Session
-    ) -> list[FilesystemEntry]:
+    def list_directory(self, sandbox_id: UUID, path: str) -> list[FilesystemEntry]:
         """List contents of a directory in the sandbox's outputs directory.
 
         For Kubernetes backend, we exec into the pod to list files.
-        """
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
 
-        session_id = str(sandbox.session_id)
-        pod_name = self._get_pod_name(session_id)
+        Args:
+            sandbox_id: The sandbox ID
+            path: Relative path within the outputs directory
+
+        Returns:
+            List of FilesystemEntry objects sorted by directory first, then name
+
+        Raises:
+            ValueError: If path traversal attempted or path is not a directory
+        """
+        # _get_pod_name needs string
+        pod_name = self._get_pod_name(str(sandbox_id))
 
         # Security: sanitize path
         clean_path = path.lstrip("/").replace("..", "")
@@ -845,17 +807,23 @@ echo "File sync complete"
 
         return entries
 
-    def read_file(self, sandbox_id: str, path: str, db_session: Session) -> bytes:
+    def read_file(self, sandbox_id: UUID, path: str) -> bytes:
         """Read a file from the sandbox's outputs directory.
 
         For Kubernetes backend, we exec into the pod to read the file.
-        """
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
 
-        session_id = str(sandbox.session_id)
-        pod_name = self._get_pod_name(session_id)
+        Args:
+            sandbox_id: The sandbox ID
+            path: Relative path within the outputs directory
+
+        Returns:
+            File contents as bytes
+
+        Raises:
+            ValueError: If path traversal attempted or path is not a file
+        """
+        # _get_pod_name needs string
+        pod_name = self._get_pod_name(str(sandbox_id))
 
         # Security: sanitize path
         clean_path = path.lstrip("/").replace("..", "")
@@ -895,40 +863,21 @@ echo "File sync complete"
         except ApiException as e:
             raise RuntimeError(f"Failed to read file: {e}") from e
 
-    def get_sandbox_info(
-        self, sandbox_id: str, db_session: Session
-    ) -> SandboxInfo | None:
-        """Get information about a sandbox."""
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            return None
-
-        session_id = str(sandbox.session_id)
-        pod_name = self._get_pod_name(session_id)
-
-        return SandboxInfo(
-            id=str(sandbox.id),
-            session_id=session_id,
-            directory_path=f"k8s://{self._namespace}/{pod_name}",
-            status=sandbox.status,
-            created_at=sandbox.created_at,
-            last_heartbeat=sandbox.last_heartbeat,
-        )
-
-    def cancel_agent(self, sandbox_id: str) -> None:
+    def cancel_agent(self, sandbox_id: UUID) -> None:
         """Cancel the current agent operation."""
         acp_client = self._acp_clients.get(sandbox_id)
         if acp_client:
             acp_client.cancel()
 
-    def get_nextjs_url(self, sandbox_id: str, db_session: Session) -> str:
+    def get_nextjs_url(self, sandbox_id: UUID) -> str:
         """Get the Next.js URL for the sandbox.
 
         Used for proxying preview requests to the sandbox.
-        """
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
 
-        session_id = str(sandbox.session_id)
-        return self._get_nextjs_url(session_id)
+        Args:
+            sandbox_id: The sandbox ID
+
+        Returns:
+            Internal cluster URL for the Next.js server
+        """
+        return self._get_nextjs_url(str(sandbox_id))

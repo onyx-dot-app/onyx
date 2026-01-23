@@ -12,26 +12,23 @@ Run with:
 """
 
 import time
+from uuid import uuid4
 
 import pytest
 from kubernetes import client  # type: ignore[import-untyped]
 from kubernetes import config
 from kubernetes.client.rest import ApiException  # type: ignore[import-untyped]
 from kubernetes.stream import stream as k8s_stream  # type: ignore[import-untyped]
-from sqlalchemy import func
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import User
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.db.build_session import create_build_session__no_commit
-from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.sandbox.kubernetes.manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
@@ -81,109 +78,136 @@ def test_kubernetes_sandbox_provision() -> None:
 
     # Set up tenant context (required for multi-tenant operations)
     tenant_id = "public"
+
     CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
     # Get the manager instance
     manager = KubernetesSandboxManager()
 
-    sandbox_id: str | None = None
-    session_id: str | None = None
+    sandbox_id = uuid4()
+    user_id = uuid4()
+
+    # Create a test LLM config (values don't matter for this test)
+    llm_config = LLMProviderConfig(
+        provider="openai",
+        model_name="gpt-4",
+        api_key="test-key",
+        api_base=None,
+    )
 
     try:
-        with get_session_with_current_tenant() as db_session:
-            # Get a random user from the database
-            # Access table columns directly via __table__.c to get proper SQLAlchemy column types
-            is_active_col = User.__table__.c.is_active
-            random_user = (
-                db_session.query(User)
-                .filter(is_active_col.is_(True))
-                .order_by(func.random())
-                .first()
-            )
-            if not random_user:
-                raise RuntimeError("No active users found in database")
+        # Call provision (no longer needs db_session)
+        sandbox_info = manager.provision(
+            sandbox_id=sandbox_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            file_system_path="/tmp/test-files",  # Not used by K8s manager
+            llm_config=llm_config,
+        )
 
-            # Create a BuildSession (required since Sandbox has FK to BuildSession)
-            user_id = random_user.id
-            build_session = create_build_session__no_commit(
-                user_id=user_id,
-                db_session=db_session,
-                name="Test Kubernetes Sandbox Session",
-            )
-            db_session.commit()
-            session_id = str(build_session.id)
+        # Verify the return value
+        assert sandbox_info.sandbox_id == sandbox_id
+        assert sandbox_info.status == SandboxStatus.RUNNING
+        assert sandbox_info.directory_path.startswith("k8s://")
 
-            # Call provision
-            sandbox_info = manager.provision(
-                session_id=session_id,
-                tenant_id=tenant_id,
-                file_system_path="/tmp/test-files",  # Not used by K8s manager
-                db_session=db_session,
-                snapshot_id=None,
-            )
+        # Verify Kubernetes resources exist
+        k8s_client = _get_kubernetes_client()
+        pod_name = f"sandbox-{str(sandbox_id)[:8]}"
+        service_name = pod_name
 
-            # Store sandbox_id for cleanup
-            sandbox_id = sandbox_info.id
+        # Verify pod exists and is running
+        pod = k8s_client.read_namespaced_pod(
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+        )
+        assert pod is not None
+        assert pod.status.phase == "Running"
 
-            # Verify the return value
-            assert sandbox_info.id is not None
-            assert sandbox_info.session_id == session_id
-            assert sandbox_info.status == SandboxStatus.RUNNING
-            assert sandbox_info.directory_path.startswith("k8s://")
+        # Verify service exists
+        service = k8s_client.read_namespaced_service(
+            name=service_name,
+            namespace=SANDBOX_NAMESPACE,
+        )
+        assert service is not None
+        assert service.spec.type == "ClusterIP"
 
-            # Verify the sandbox exists in the database
-            db_sandbox = get_sandbox_by_session_id(db_session, build_session.id)
-            assert db_sandbox is not None
-            assert db_sandbox.status == SandboxStatus.RUNNING
+        # Verify AGENTS.md file exists in the pod (written by init container)
+        exec_command = ["/bin/sh", "-c", "cat /workspace/AGENTS.md"]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        assert len(resp) > 0, "AGENTS.md file should not be empty"
+        # Verify it contains expected content (from template or default)
+        assert "Agent" in resp or "Instructions" in resp or "#" in resp
 
-            # Verify Kubernetes resources exist
-            k8s_client = _get_kubernetes_client()
-            pod_name = f"sandbox-{session_id[:8]}"
-            service_name = pod_name
+        # Verify /workspace/outputs directory exists and contains expected files
+        exec_command = ["/bin/sh", "-c", "ls -la /workspace/outputs"]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        # TODO: Update with expected contents
+        # assert "EXPECTED_FILE_OR_DIR" in resp, "/workspace/outputs should contain EXPECTED_FILE_OR_DIR"
 
-            # Verify pod exists and is running
-            pod = k8s_client.read_namespaced_pod(
-                name=pod_name,
-                namespace=SANDBOX_NAMESPACE,
-            )
-            assert pod is not None
-            assert pod.status.phase == "Running"
+        # Verify /workspace/files directory exists and contains expected files
+        exec_command = ["/bin/sh", "-c", "ls -la /workspace/files"]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        # TODO: Update with expected contents
+        # assert "EXPECTED_FILE_OR_DIR" in resp, "/workspace/files should contain EXPECTED_FILE_OR_DIR"
 
-            # Verify service exists
-            service = k8s_client.read_namespaced_service(
-                name=service_name,
-                namespace=SANDBOX_NAMESPACE,
-            )
-            assert service is not None
-            assert service.spec.type == "ClusterIP"
-
-            # Verify AGENTS.md file exists in the pod (written by init container)
-            exec_command = ["/bin/sh", "-c", "cat /workspace/AGENTS.md"]
-            resp = k8s_stream(
-                k8s_client.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=SANDBOX_NAMESPACE,
-                container="sandbox",
-                command=exec_command,
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
-            assert resp is not None
-            assert len(resp) > 0, "AGENTS.md file should not be empty"
-            # Verify it contains expected content (from template or default)
-            assert "Agent" in resp or "Instructions" in resp or "#" in resp
+        # Verify /workspace/user_uploaded_files directory exists and contains expected files
+        exec_command = ["/bin/sh", "-c", "ls -la /workspace/user_uploaded_files"]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        # TODO: Update with expected contents
+        # assert "EXPECTED_FILE_OR_DIR" in resp, "/workspace/user_uploaded_files should contain EXPECTED_FILE_OR_DIR"
 
     finally:
-        # Clean up: terminate the sandbox
-        if sandbox_id and session_id:
-            with get_session_with_current_tenant() as db_session:
-                manager.terminate(sandbox_id, db_session)
+        # Clean up: terminate the sandbox (no longer needs db_session)
+        if sandbox_id:
+            manager.terminate(sandbox_id)
 
             # Verify Kubernetes resources are cleaned up
             k8s_client = _get_kubernetes_client()
-            pod_name = f"sandbox-{session_id[:8]}"
+            pod_name = f"sandbox-{str(sandbox_id)[:8]}"
 
             # Give K8s a moment to delete resources
             time.sleep(2)

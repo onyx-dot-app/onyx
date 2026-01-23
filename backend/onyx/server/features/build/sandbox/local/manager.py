@@ -2,6 +2,9 @@
 
 LocalSandboxManager manages sandboxes as directories on the local filesystem.
 Suitable for development, testing, and single-node deployments.
+
+IMPORTANT: This manager does NOT interface with the database directly.
+All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
 """
 
 import threading
@@ -10,28 +13,14 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy.orm import Session
-
 from onyx.db.enums import SandboxStatus
-from onyx.db.llm import fetch_default_provider
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
-from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
-from onyx.server.features.build.db.sandbox import allocate_nextjs_port
-from onyx.server.features.build.db.sandbox import (
-    create_sandbox__no_commit as db_create_sandbox,
-)
-from onyx.server.features.build.db.sandbox import create_snapshot as db_create_snapshot
-from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
-from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
-from onyx.server.features.build.db.sandbox import get_sandbox_by_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.internal.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.local.internal.agent_client import (
@@ -45,11 +34,10 @@ from onyx.server.features.build.sandbox.local.internal.process_manager import (
     ProcessManager,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotInfo
+from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -65,6 +53,9 @@ class LocalSandboxManager(SandboxManager):
     - No container isolation (process-level only)
     - Snapshots disabled by default (SANDBOX_BACKEND=local)
     - No automatic cleanup of idle sandboxes
+
+    IMPORTANT: This manager does NOT interface with the database directly.
+    All database operations should be handled by the caller.
 
     This is a singleton class - use get_sandbox_manager() to get the instance.
     """
@@ -98,7 +89,7 @@ class LocalSandboxManager(SandboxManager):
         self._snapshot_manager = SnapshotManager(get_default_file_store())
 
         # Track ACP clients in memory
-        self._acp_clients: dict[str, ACPAgentClient] = (
+        self._acp_clients: dict[UUID, ACPAgentClient] = (
             {}
         )  # sandbox_id -> ACPAgentClient
 
@@ -139,67 +130,63 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Outputs template found at {outputs_path}")
         logger.debug(f"Venv template found at {venv_path}")
 
-    def _get_sandbox_path(self, session_id: str | UUID) -> Path:
-        """Get the filesystem path for a sandbox based on session_id.
+    def _get_sandbox_path(self, sandbox_id: str | UUID) -> Path:
+        """Get the filesystem path for a sandbox based on sandbox_id.
 
         Args:
-            session_id: The session ID (can be string or UUID)
+            sandbox_id: The sandbox ID (can be string or UUID)
 
         Returns:
             Path to the sandbox directory
         """
-        return Path(SANDBOX_BASE_PATH) / str(session_id)
+        return Path(SANDBOX_BASE_PATH) / str(sandbox_id)
 
     def provision(
         self,
-        session_id: str,
+        sandbox_id: UUID,
+        user_id: UUID,
         tenant_id: str,
         file_system_path: str,
-        db_session: Session,
-        snapshot_id: str | None = None,
+        llm_config: LLMProviderConfig,
+        nextjs_port: int | None = None,
+        snapshot_path: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a session.
 
-        NOTE: This method uses flush() instead of commit(). The caller is
-        responsible for committing the transaction when ready.
+        1. Create sandbox directory structure
+        2. Setup files symlink, outputs, venv, AGENTS.md, and skills
+        3. If snapshot_path provided and kubernetes backend, restore outputs from snapshot
+        4. Start Next.js dev server on pre-allocated port
+        5. Return sandbox info (agent not started until first message)
 
-        1. Check concurrent sandbox limit for tenant
-        2. Create sandbox directory structure
-        3. Setup files symlink, outputs, venv, AGENTS.md, and skills
-        4. If snapshot_id provided and kubernetes backend, restore outputs from snapshot
-        5. Start Next.js dev server
-        6. Store sandbox record in DB
-        7. Return sandbox info (agent not started until first message)
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+            user_id: User identifier who owns this sandbox
+            tenant_id: Tenant identifier for multi-tenant isolation
+            file_system_path: Path to the knowledge/source files to link
+            llm_config: LLM provider configuration
+            nextjs_port: Pre-allocated port for Next.js server
+            snapshot_path: Optional storage path to restore from
+
+        Returns:
+            SandboxInfo with the provisioned sandbox details
+
+        Raises:
+            RuntimeError: If provisioning fails
         """
         logger.info(
-            f"Starting sandbox provisioning for session {session_id}, "
-            f"tenant {tenant_id}"
+            f"Starting sandbox provisioning for sandbox {sandbox_id}, "
+            f"user {user_id}, tenant {tenant_id}"
         )
 
-        session_uuid = UUID(session_id)
-
-        # Check limit (only enforce on cloud deployments)
-        if MULTI_TENANT:
-            logger.debug(f"Checking concurrent sandbox limit for tenant {tenant_id}")
-            running_count = get_running_sandbox_count_by_tenant(db_session, tenant_id)
-            logger.debug(
-                f"Current running sandboxes: {running_count}, "
-                f"max: {SANDBOX_MAX_CONCURRENT_PER_ORG}"
-            )
-            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
-                raise ValueError(
-                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) "
-                    f"reached for tenant"
-                )
-        else:
-            logger.debug(
-                f"Skipping sandbox limit check for tenant {tenant_id} "
-                "(self-hosted deployment)"
+        if nextjs_port is None:
+            raise RuntimeError(
+                "nextjs_port must be provided for local sandbox provisioning"
             )
 
         # Create directory structure
-        logger.info(f"Creating sandbox directory structure for session {session_id}")
-        sandbox_path = self._directory_manager.create_sandbox_directory(session_id)
+        logger.info(f"Creating sandbox directory structure for sandbox {sandbox_id}")
+        sandbox_path = self._directory_manager.create_sandbox_directory(str(sandbox_id))
         logger.debug(f"Sandbox directory created at {sandbox_path}")
 
         try:
@@ -212,21 +199,14 @@ class LocalSandboxManager(SandboxManager):
 
             # Setup outputs (from snapshot or template)
             # NOTE: Snapshot restore is only supported in kubernetes backend
-            if snapshot_id and SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                logger.debug(f"Restoring from snapshot {snapshot_id}")
-                snapshot = get_latest_snapshot_for_session(db_session, session_uuid)
-                if snapshot:
-                    self._snapshot_manager.restore_snapshot(
-                        snapshot.storage_path, sandbox_path
-                    )
-                    logger.debug("Snapshot restored")
-                else:
-                    logger.warning(f"Snapshot {snapshot_id} not found, using template")
-                    self._directory_manager.setup_outputs_directory(sandbox_path)
+            if snapshot_path and SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
+                logger.debug(f"Restoring from snapshot {snapshot_path}")
+                self._snapshot_manager.restore_snapshot(snapshot_path, sandbox_path)
+                logger.debug("Snapshot restored")
             else:
-                if snapshot_id and SANDBOX_BACKEND == SandboxBackend.LOCAL:
+                if snapshot_path and SANDBOX_BACKEND == SandboxBackend.LOCAL:
                     logger.debug(
-                        f"Ignoring snapshot {snapshot_id} (local backend - "
+                        f"Ignoring snapshot {snapshot_path} (local backend - "
                         "snapshots disabled)"
                     )
                 logger.debug("Setting up outputs directory from template")
@@ -252,91 +232,62 @@ class LocalSandboxManager(SandboxManager):
             logger.debug("User uploads directory ready")
 
             # Setup opencode.json with LLM provider configuration
-            logger.debug("Fetching default LLM provider")
-            llm_provider = fetch_default_provider(db_session)
-            if not llm_provider:
-                logger.error("No default LLM provider configured")
-                raise RuntimeError(
-                    "No default LLM provider configured. "
-                    "Please configure an LLM provider in admin settings."
-                )
             logger.debug(
-                f"Setting up opencode config with provider: {llm_provider.provider}, "
-                f"model: {llm_provider.default_model_name}"
+                f"Setting up opencode config with provider: {llm_config.provider}, "
+                f"model: {llm_config.model_name}"
             )
             self._directory_manager.setup_opencode_config(
                 sandbox_path=sandbox_path,
-                provider=llm_provider.provider,
-                model_name=llm_provider.default_model_name,
-                api_key=llm_provider.api_key,
-                api_base=llm_provider.api_base,
+                provider=llm_config.provider,
+                model_name=llm_config.model_name,
+                api_key=llm_config.api_key,
+                api_base=llm_config.api_base,
                 disabled_tools=OPENCODE_DISABLED_TOOLS,
             )
             logger.debug("Opencode config ready")
 
-            # Allocate Next.js port and start server
-            nextjs_port = allocate_nextjs_port(db_session)
+            # Start Next.js server on pre-allocated port
             web_dir = self._directory_manager.get_web_path(sandbox_path)
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
             self._process_manager.start_nextjs_server(web_dir, nextjs_port)
             logger.info("Next.js server started successfully")
 
-            # Create DB record (uses flush, caller commits)
-            logger.debug("Creating sandbox database record")
-            sandbox = db_create_sandbox(
-                db_session=db_session,
-                session_id=session_uuid,
-                nextjs_port=nextjs_port,
-            )
-
-            update_sandbox_status__no_commit(
-                db_session, sandbox.id, SandboxStatus.RUNNING
-            )
-            logger.debug(f"Sandbox record created with ID {sandbox.id}")
-
             logger.info(
-                f"Provisioned sandbox {sandbox.id} for session {session_id} "
-                f"at {sandbox_path}, Next.js on port {nextjs_port}"
+                f"Provisioned sandbox {sandbox_id} at {sandbox_path}, "
+                f"Next.js on port {nextjs_port}"
             )
 
             return SandboxInfo(
-                id=str(sandbox.id),
-                session_id=session_id,
-                directory_path=str(self._get_sandbox_path(session_id)),
+                sandbox_id=sandbox_id,
+                directory_path=str(self._get_sandbox_path(sandbox_id)),
                 status=SandboxStatus.RUNNING,
-                created_at=sandbox.created_at,
                 last_heartbeat=None,
+                nextjs_port=nextjs_port,
             )
 
         except Exception as e:
             # Cleanup on failure
             logger.error(
-                f"Sandbox provisioning failed for session {session_id}: {e}",
+                f"Sandbox provisioning failed for sandbox {sandbox_id}: {e}",
                 exc_info=True,
             )
             logger.info(f"Cleaning up sandbox directory at {sandbox_path}")
             self._directory_manager.cleanup_sandbox_directory(sandbox_path)
             raise
 
-    def terminate(self, sandbox_id: str, db_session: Session) -> None:
-        """Terminate a sandbox.
-
-        NOTE: This method uses flush() instead of commit(). The caller is
-        responsible for committing the transaction when ready.
+    def terminate(self, sandbox_id: UUID) -> None:
+        """Terminate a sandbox and clean up resources.
 
         1. Stop ACP client (terminates agent subprocess)
         2. Cleanup sandbox directory (this will handle Next.js process cleanup)
-        3. Update DB status to TERMINATED
+
+        Args:
+            sandbox_id: The sandbox ID to terminate
 
         Raises:
-            ValueError: If sandbox not found
             RuntimeError: If termination fails
         """
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found for termination")
-
         # Stop ACP client (this terminates the opencode subprocess)
         client = self._acp_clients.pop(sandbox_id, None)
         if client:
@@ -348,7 +299,7 @@ class LocalSandboxManager(SandboxManager):
                 ) from e
 
         # Cleanup directory (this will handle Next.js process cleanup)
-        sandbox_path = self._get_sandbox_path(sandbox.session_id)
+        sandbox_path = self._get_sandbox_path(sandbox_id)
         try:
             self._directory_manager.cleanup_sandbox_directory(sandbox_path)
         except Exception as e:
@@ -356,19 +307,22 @@ class LocalSandboxManager(SandboxManager):
                 f"Failed to cleanup sandbox directory {sandbox_path}: {e}"
             ) from e
 
-        # Update status (uses flush, caller commits)
-        update_sandbox_status__no_commit(
-            db_session, UUID(sandbox_id), SandboxStatus.TERMINATED
-        )
-
         logger.info(f"Terminated sandbox {sandbox_id}")
 
     def create_snapshot(
-        self, sandbox_id: str, db_session: Session
-    ) -> SnapshotInfo | None:
+        self, sandbox_id: UUID, tenant_id: str
+    ) -> SnapshotResult | None:
         """Create a snapshot of the sandbox's outputs directory.
 
         Returns None if snapshots are disabled (local backend).
+
+        Args:
+            sandbox_id: The sandbox ID to snapshot
+            tenant_id: Tenant identifier for storage path
+
+        Returns:
+            SnapshotResult with storage path and size, or None if
+            snapshots are disabled for this backend
         """
         # Snapshots are disabled for local backend
         if SANDBOX_BACKEND == SandboxBackend.LOCAL:
@@ -378,63 +332,47 @@ class LocalSandboxManager(SandboxManager):
             )
             return None
 
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
-
-        sandbox_path = self._get_sandbox_path(sandbox.session_id)
-        tenant_id = get_current_tenant_id()
-        snapshot_id, storage_path, size_bytes = self._snapshot_manager.create_snapshot(
+        sandbox_path = self._get_sandbox_path(sandbox_id)
+        # SnapshotManager expects string sandbox_id
+        _, storage_path, size_bytes = self._snapshot_manager.create_snapshot(
             sandbox_path,
-            str(sandbox.session_id),
+            str(sandbox_id),
             tenant_id,
         )
 
-        snapshot = db_create_snapshot(
-            db_session=db_session,
-            session_id=sandbox.session_id,
-            storage_path=storage_path,
-            size_bytes=size_bytes,
-        )
-
         logger.info(
-            f"Created snapshot {snapshot.id} for sandbox {sandbox_id}, "
-            f"size: {size_bytes} bytes"
+            f"Created snapshot for sandbox {sandbox_id}, size: {size_bytes} bytes"
         )
 
-        return SnapshotInfo(
-            id=str(snapshot.id),
-            session_id=str(sandbox.session_id),
+        return SnapshotResult(
             storage_path=storage_path,
-            created_at=snapshot.created_at,
             size_bytes=size_bytes,
         )
 
-    def health_check(self, sandbox_id: str, db_session: Session) -> bool:
-        """Check if the sandbox is healthy (Next.js server running)."""
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            return False
+    def health_check(self, sandbox_id: UUID, nextjs_port: int | None = None) -> bool:
+        """Check if the sandbox is healthy (Next.js server running).
 
+        Args:
+            sandbox_id: The sandbox ID to check
+            nextjs_port: The Next.js port to check
+
+        Returns:
+            True if sandbox is healthy, False otherwise
+        """
         # Cannot check health if port is not known
-        if sandbox.nextjs_port is None:
+        if nextjs_port is None:
             return False
 
         # Check Next.js server is responsive on the sandbox's allocated port
-        if self._process_manager._wait_for_server(
-            f"http://localhost:{sandbox.nextjs_port}",
+        return self._process_manager._wait_for_server(
+            f"http://localhost:{nextjs_port}",
             timeout=5.0,
-        ):
-            update_sandbox_heartbeat(db_session, UUID(sandbox_id))
-            return True
-
-        return False
+        )
 
     def send_message(
         self,
-        sandbox_id: str,
+        sandbox_id: UUID,
         message: str,
-        db_session: Session,
     ) -> Generator[ACPEvent, None, None]:
         """Send a message to the CLI agent and stream typed ACP events.
 
@@ -447,37 +385,40 @@ class LocalSandboxManager(SandboxManager):
         - CurrentModeUpdate: Agent mode change
         - PromptResponse: Agent finished (has stop_reason)
         - Error: An error occurred
-        """
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
 
+        Args:
+            sandbox_id: The sandbox ID to send message to
+            message: The message content to send
+
+        Yields:
+            Typed ACP schema event objects
+        """
         # Get or create ACP client for this sandbox
         client = self._acp_clients.get(sandbox_id)
         if client is None or not client.is_running:
-            sandbox_path = self._get_sandbox_path(sandbox.session_id)
+            sandbox_path = self._get_sandbox_path(sandbox_id)
 
             # Create and start ACP client
             client = ACPAgentClient(cwd=str(sandbox_path))
             self._acp_clients[sandbox_id] = client
 
-        # Update heartbeat on message send
-        update_sandbox_heartbeat(db_session, UUID(sandbox_id))
-
         for event in client.send_message(message):
             yield event
-            # Update heartbeat on activity
-            update_sandbox_heartbeat(db_session, UUID(sandbox_id))
 
-    def list_directory(
-        self, sandbox_id: str, path: str, db_session: Session
-    ) -> list[FilesystemEntry]:
-        """List contents of a directory in the sandbox's outputs directory."""
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
+    def list_directory(self, sandbox_id: UUID, path: str) -> list[FilesystemEntry]:
+        """List contents of a directory in the sandbox's outputs directory.
 
-        sandbox_path = self._get_sandbox_path(sandbox.session_id)
+        Args:
+            sandbox_id: The sandbox ID
+            path: Relative path within the outputs directory
+
+        Returns:
+            List of FilesystemEntry objects sorted by directory first, then name
+
+        Raises:
+            ValueError: If path traversal attempted or path is not a directory
+        """
+        sandbox_path = self._get_sandbox_path(sandbox_id)
         outputs_path = sandbox_path / "outputs"
         target_path = outputs_path / path.lstrip("/")
 
@@ -505,13 +446,20 @@ class LocalSandboxManager(SandboxManager):
 
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
-    def read_file(self, sandbox_id: str, path: str, db_session: Session) -> bytes:
-        """Read a file from the sandbox's outputs directory."""
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            raise ValueError(f"Sandbox {sandbox_id} not found")
+    def read_file(self, sandbox_id: UUID, path: str) -> bytes:
+        """Read a file from the sandbox's outputs directory.
 
-        sandbox_path = self._get_sandbox_path(sandbox.session_id)
+        Args:
+            sandbox_id: The sandbox ID
+            path: Relative path within the outputs directory
+
+        Returns:
+            File contents as bytes
+
+        Raises:
+            ValueError: If path traversal attempted or path is not a file
+        """
+        sandbox_path = self._get_sandbox_path(sandbox_id)
         outputs_path = sandbox_path / "outputs"
         target_path = outputs_path / path.lstrip("/")
 
@@ -526,24 +474,7 @@ class LocalSandboxManager(SandboxManager):
 
         return target_path.read_bytes()
 
-    def get_sandbox_info(
-        self, sandbox_id: str, db_session: Session
-    ) -> SandboxInfo | None:
-        """Get information about a sandbox."""
-        sandbox = get_sandbox_by_id(db_session, UUID(sandbox_id))
-        if not sandbox:
-            return None
-
-        return SandboxInfo(
-            id=str(sandbox.id),
-            session_id=str(sandbox.session_id),
-            directory_path=str(self._get_sandbox_path(sandbox.session_id)),
-            status=sandbox.status,
-            created_at=sandbox.created_at,
-            last_heartbeat=sandbox.last_heartbeat,
-        )
-
-    def cancel_agent(self, sandbox_id: str) -> None:
+    def cancel_agent(self, sandbox_id: UUID) -> None:
         """Cancel the current agent operation."""
         client = self._acp_clients.get(sandbox_id)
         if client:

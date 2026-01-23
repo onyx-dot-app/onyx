@@ -4184,9 +4184,6 @@ class BuildSession(Base):
     artifacts: Mapped[list["Artifact"]] = relationship(
         "Artifact", back_populates="session", cascade="all, delete-orphan"
     )
-    snapshots: Mapped[list["Snapshot"]] = relationship(
-        "Snapshot", back_populates="session", cascade="all, delete-orphan"
-    )
     messages: Mapped[list["BuildMessage"]] = relationship(
         "BuildMessage", back_populates="session", cascade="all, delete-orphan"
     )
@@ -4228,6 +4225,9 @@ class Sandbox(Base):
     # Relationships
     session: Mapped[BuildSession] = relationship(
         "BuildSession", back_populates="sandbox"
+    )
+    snapshots: Mapped[list["Snapshot"]] = relationship(
+        "Snapshot", back_populates="sandbox", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
@@ -4284,9 +4284,9 @@ class Snapshot(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    session_id: Mapped[UUID] = mapped_column(
+    sandbox_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("build_session.id", ondelete="CASCADE"),
+        ForeignKey("sandbox.id", ondelete="CASCADE"),
         nullable=False,
     )
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
@@ -4296,12 +4296,10 @@ class Snapshot(Base):
     )
 
     # Relationships
-    session: Mapped[BuildSession] = relationship(
-        "BuildSession", back_populates="snapshots"
-    )
+    sandbox: Mapped[Sandbox] = relationship("Sandbox", back_populates="snapshots")
 
     __table_args__ = (
-        Index("ix_snapshot_session_created", "session_id", desc("created_at")),
+        Index("ix_snapshot_sandbox_created", "sandbox_id", desc("created_at")),
     )
 
 

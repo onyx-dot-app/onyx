@@ -284,32 +284,6 @@ def create_snapshot(
     return snapshot
 
 
-def get_latest_snapshot(
-    session_id: UUID,
-    db_session: Session,
-) -> Snapshot | None:
-    """Get the most recent snapshot for a session."""
-    return (
-        db_session.query(Snapshot)
-        .filter(Snapshot.session_id == session_id)
-        .order_by(desc(Snapshot.created_at))
-        .first()
-    )
-
-
-def get_session_snapshots(
-    session_id: UUID,
-    db_session: Session,
-) -> list[Snapshot]:
-    """Get all snapshots for a session."""
-    return (
-        db_session.query(Snapshot)
-        .filter(Snapshot.session_id == session_id)
-        .order_by(desc(Snapshot.created_at))
-        .all()
-    )
-
-
 # Message operations
 def create_message(
     session_id: UUID,

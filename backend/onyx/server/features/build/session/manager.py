@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
+from onyx.db.llm import fetch_default_provider
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import User
@@ -38,7 +39,9 @@ from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import USER_UPLOADS_DIRECTORY
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -49,9 +52,14 @@ from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
+from onyx.server.features.build.db.sandbox import allocate_nextjs_port
+from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
+from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -312,10 +320,41 @@ class SessionManager:
             The created BuildSession model
 
         Raises:
-            ValueError: If max concurrent sandboxes reached
+            ValueError: If max concurrent sandboxes reached or no LLM provider
             RuntimeError: If sandbox provisioning fails
         """
         tenant_id = get_current_tenant_id()
+
+        # Check sandbox limits for multi-tenant deployments
+        if MULTI_TENANT:
+            from onyx.server.features.build.configs import (
+                SANDBOX_MAX_CONCURRENT_PER_ORG,
+            )
+
+            running_count = get_running_sandbox_count_by_tenant(
+                self._db_session, tenant_id
+            )
+            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
+                raise ValueError(
+                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
+                )
+
+        # Fetch LLM provider configuration
+        llm_provider = fetch_default_provider(self._db_session)
+        if not llm_provider:
+            raise ValueError("No default LLM provider configured")
+
+        llm_config = LLMProviderConfig(
+            provider=llm_provider.provider,
+            model_name=llm_provider.default_model_name,
+            api_key=llm_provider.api_key,
+            api_base=llm_provider.api_base,
+        )
+
+        # Allocate port for local backend
+        nextjs_port: int | None = None
+        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+            nextjs_port = allocate_nextjs_port(self._db_session)
 
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
@@ -335,13 +374,29 @@ class SessionManager:
         session_id = str(build_session.id)
         logger.info(f"Created build session {session_id} for user {user_id}")
 
-        # Provision sandbox (uses flush, caller commits)
-        self._sandbox_manager.provision(
-            session_id=session_id,
+        # Create Sandbox record (uses flush, caller commits)
+        sandbox = create_sandbox__no_commit(
+            db_session=self._db_session,
+            session_id=build_session.id,
+            nextjs_port=nextjs_port,
+        )
+        sandbox_id = sandbox.id
+        logger.info(f"Created sandbox record {sandbox_id} for session {session_id}")
+
+        # Provision sandbox (no DB operations inside)
+        sandbox_info = self._sandbox_manager.provision(
+            sandbox_id=sandbox_id,
+            user_id=user_id,
             tenant_id=tenant_id,
             file_system_path=user_file_system_path,
-            db_session=self._db_session,
+            llm_config=llm_config,
+            nextjs_port=nextjs_port,
         )
+
+        # Update sandbox record with status from provisioning
+        sandbox.nextjs_port = sandbox_info.nextjs_port
+        sandbox.status = sandbox_info.status
+        self._db_session.flush()
 
         logger.info(
             f"Successfully created session {session_id} with sandbox for user {user_id}"
@@ -523,7 +578,12 @@ class SessionManager:
             SandboxStatus.PROVISIONING,
         ]:
             logger.info(f"Terminating sandbox before deleting session {session_id}")
-            self._sandbox_manager.terminate(str(session.sandbox.id), self._db_session)
+            sandbox_id = session.sandbox.id
+            self._sandbox_manager.terminate(sandbox_id)
+            # Update status after termination (sandbox manager no longer does this)
+            update_sandbox_status__no_commit(
+                self._db_session, sandbox_id, SandboxStatus.TERMINATED
+            )
 
         # Delete session (uses flush, caller commits)
         return delete_build_session__no_commit(session_id, user_id, self._db_session)
@@ -722,11 +782,11 @@ class SessionManager:
                 yield _format_packet_event(error_packet)
                 return
 
-            sandbox_id = str(sandbox.id)
+            sandbox_id = sandbox.id
 
             # Stream ACP events directly to frontend
             for acp_event in self._sandbox_manager.send_message(
-                sandbox_id, user_message_content, self._db_session
+                sandbox_id, user_message_content
             ):
                 # Check if we need to finalize pending chunks before processing
                 event_type = self._get_event_type(acp_event)
@@ -834,6 +894,9 @@ class SessionManager:
             # Save all accumulated state at end of streaming
             _save_build_turn(state)
 
+            # Update heartbeat after successful message exchange
+            update_sandbox_heartbeat(self._db_session, sandbox_id)
+
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
@@ -902,7 +965,7 @@ class SessionManager:
         if sandbox is None:
             return None
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         artifacts: list[dict[str, Any]] = []
         output_dir = sandbox_path / "outputs"
 
@@ -958,7 +1021,7 @@ class SessionManager:
         if sandbox is None:
             return None
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         file_path = sandbox_path / path
 
         # Security check: ensure path doesn't escape sandbox
@@ -1006,7 +1069,7 @@ class SessionManager:
             return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
 
         # Check if web directory exists
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         web_dir = sandbox_path / "outputs" / "web"
         has_webapp = web_dir.exists()
 
@@ -1046,7 +1109,7 @@ class SessionManager:
             return None
 
         # Check if web directory exists
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         web_dir = sandbox_path / "outputs" / "web"
 
         if not web_dir.exists():
@@ -1108,7 +1171,7 @@ class SessionManager:
         if sandbox is None:
             return None
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         target_dir = sandbox_path / path if path else sandbox_path
 
         # Security check: ensure path doesn't escape sandbox via .. traversal
@@ -1184,7 +1247,7 @@ class SessionManager:
         safe_filename = filename
 
         # Get upload directory path
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         uploads_path = sandbox_path / USER_UPLOADS_DIRECTORY
 
         # Ensure uploads directory exists
@@ -1247,7 +1310,7 @@ class SessionManager:
         if sandbox is None:
             raise ValueError("Sandbox not found")
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         file_path = sandbox_path / path
 
         # Security check: ensure path doesn't escape sandbox

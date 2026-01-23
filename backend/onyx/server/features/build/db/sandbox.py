@@ -110,13 +110,13 @@ def get_running_sandbox_count_by_tenant(db_session: Session, tenant_id: str) -> 
 
 def create_snapshot(
     db_session: Session,
-    session_id: UUID,
+    sandbox_id: UUID,
     storage_path: str,
     size_bytes: int,
 ) -> Snapshot:
     """Create a snapshot record."""
     snapshot = Snapshot(
-        session_id=session_id,
+        sandbox_id=sandbox_id,
         storage_path=storage_path,
         size_bytes=size_bytes,
     )
@@ -125,24 +125,24 @@ def create_snapshot(
     return snapshot
 
 
-def get_latest_snapshot_for_session(
-    db_session: Session, session_id: UUID
+def get_latest_snapshot_for_sandbox(
+    db_session: Session, sandbox_id: UUID
 ) -> Snapshot | None:
-    """Get most recent snapshot for a session."""
+    """Get most recent snapshot for a sandbox."""
     stmt = (
         select(Snapshot)
-        .where(Snapshot.session_id == session_id)
+        .where(Snapshot.sandbox_id == sandbox_id)
         .order_by(Snapshot.created_at.desc())
         .limit(1)
     )
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Snapshot]:
-    """Get all snapshots for a session, ordered by creation time descending."""
+def get_snapshots_for_sandbox(db_session: Session, sandbox_id: UUID) -> list[Snapshot]:
+    """Get all snapshots for a sandbox, ordered by creation time descending."""
     stmt = (
         select(Snapshot)
-        .where(Snapshot.session_id == session_id)
+        .where(Snapshot.sandbox_id == sandbox_id)
         .order_by(Snapshot.created_at.desc())
     )
     return list(db_session.execute(stmt).scalars().all())
