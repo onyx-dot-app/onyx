@@ -1,6 +1,52 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
 import { loginAs } from "../utils/auth";
 import { createAssistant } from "../utils/assistantUtils";
+
+const DISABLE_DEFAULT_ASSISTANT_LABEL =
+  'label:has-text("Disable Default Assistant") input[type="checkbox"]';
+const MAX_SETTING_SAVE_ATTEMPTS = 5;
+const SETTING_SAVE_RETRY_DELAY_MS = 750;
+
+async function setDisableDefaultAssistantSetting(
+  page: Page,
+  isDisabled: boolean
+): Promise<void> {
+  let lastCheckedState = false;
+
+  for (let attempt = 0; attempt < MAX_SETTING_SAVE_ATTEMPTS; attempt += 1) {
+    await page.goto("/admin/settings");
+    await page.waitForURL("/admin/settings");
+
+    const disableDefaultAssistantCheckbox = page.locator(
+      DISABLE_DEFAULT_ASSISTANT_LABEL
+    );
+    lastCheckedState = await disableDefaultAssistantCheckbox.isChecked();
+
+    if (lastCheckedState === isDisabled) {
+      return;
+    }
+
+    await disableDefaultAssistantCheckbox.click();
+    if (isDisabled) {
+      await expect(disableDefaultAssistantCheckbox).toBeChecked();
+    } else {
+      await expect(disableDefaultAssistantCheckbox).not.toBeChecked();
+    }
+
+    await page.waitForTimeout(SETTING_SAVE_RETRY_DELAY_MS);
+    await page.reload();
+    await page.waitForURL("/admin/settings");
+    lastCheckedState = await disableDefaultAssistantCheckbox.isChecked();
+
+    if (lastCheckedState === isDisabled) {
+      return;
+    }
+  }
+
+  throw new Error(
+    `Failed to persist Disable Default Assistant setting after ${MAX_SETTING_SAVE_ATTEMPTS} attempts (expected ${isDisabled}, last=${lastCheckedState}).`
+  );
+}
 
 test.describe("Disable Default Assistant Setting @exclusive", () => {
   test.beforeEach(async ({ page }) => {
@@ -12,63 +58,23 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
   test.afterEach(async ({ page }) => {
     // Ensure default assistant is enabled (checkbox unchecked) after each test
     // to avoid interfering with other tests
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
-
-    const disableDefaultAssistantCheckbox = page.locator(
-      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
-    );
-    const isChecked = await disableDefaultAssistantCheckbox.isChecked();
-    if (isChecked) {
-      await disableDefaultAssistantCheckbox.click();
-      await expect(disableDefaultAssistantCheckbox).not.toBeChecked();
-    }
+    await setDisableDefaultAssistantSetting(page, false);
   });
 
   test("admin can enable and disable the setting in workspace settings", async ({
     page,
   }) => {
     // Navigate to settings page
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
-
-    // Find the "Disable Default Assistant" checkbox
-    const disableDefaultAssistantCheckbox = page.locator(
-      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
-    );
-
-    // Get initial state
-    const initialState = await disableDefaultAssistantCheckbox.isChecked();
-
-    // Toggle it on
-    if (!initialState) {
-      await disableDefaultAssistantCheckbox.click();
-      await expect(disableDefaultAssistantCheckbox).toBeChecked();
-    }
-
-    // Toggle it off
-    await disableDefaultAssistantCheckbox.click();
-    await expect(disableDefaultAssistantCheckbox).not.toBeChecked();
-
-    // Toggle it back on for subsequent tests
-    await disableDefaultAssistantCheckbox.click();
-    await expect(disableDefaultAssistantCheckbox).toBeChecked();
+    await setDisableDefaultAssistantSetting(page, true);
+    await setDisableDefaultAssistantSetting(page, false);
+    await setDisableDefaultAssistantSetting(page, true);
   });
 
   test("new session button uses current agent when setting is enabled", async ({
     page,
   }) => {
     // First enable the setting
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
-
-    const disableDefaultAssistantCheckbox = page.locator(
-      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
-    );
-    const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
-    if (!isEnabled) {
-      await disableDefaultAssistantCheckbox.click();
-    }
+    await setDisableDefaultAssistantSetting(page, true);
 
     // Navigate to chat and create a new assistant to ensure there's one besides the default
     await page.goto("/chat");
@@ -102,16 +108,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // First enable the setting
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
-
-    const disableDefaultAssistantCheckbox = page.locator(
-      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
-    );
-    const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
-    if (!isEnabled) {
-      await disableDefaultAssistantCheckbox.click();
-    }
+    await setDisableDefaultAssistantSetting(page, true);
 
     // Navigate directly to /chat
     await page.goto("/chat");
@@ -129,16 +126,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // First enable the setting
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
-
-    const disableDefaultAssistantCheckbox = page.locator(
-      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
-    );
-    const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
-    if (!isEnabled) {
-      await disableDefaultAssistantCheckbox.click();
-    }
+    await setDisableDefaultAssistantSetting(page, true);
 
     // Navigate to default assistant configuration page
     await page.goto("/admin/configuration/default-assistant");
@@ -167,16 +155,7 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     page,
   }) => {
     // Navigate to settings and ensure setting is disabled
-    await page.goto("/admin/settings");
-    await page.waitForURL("/admin/settings");
-
-    const disableDefaultAssistantCheckbox = page.locator(
-      'label:has-text("Disable Default Assistant") input[type="checkbox"]'
-    );
-    const isEnabled = await disableDefaultAssistantCheckbox.isChecked();
-    if (isEnabled) {
-      await disableDefaultAssistantCheckbox.click();
-    }
+    await setDisableDefaultAssistantSetting(page, false);
 
     // Navigate directly to /chat without parameters
     await page.goto("/chat");
