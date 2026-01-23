@@ -273,6 +273,7 @@ class DirectoryManager:
                 "telnet": "deny",
                 "nc": "deny",
                 "netcat": "deny",
+                "*": "allow",  # Allow other bash commands
             },
             "edit": "allow",
             "write": "allow",
@@ -285,6 +286,7 @@ class DirectoryManager:
             "skill": "allow",
             "question": "allow",
             "webfetch": "allow",
+            "external_directory": "allow",  # Allow access to symlinked files directory
         }
 
         # Disable specified tools via permissions
