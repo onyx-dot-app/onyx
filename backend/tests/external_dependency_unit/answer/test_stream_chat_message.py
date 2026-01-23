@@ -175,7 +175,7 @@ def test_stream_chat_with_search_and_openurl_tools(
 
     QUERY = "What is the weather in Sydney?"
 
-    REASOING_RESPONSE_1 = (
+    REASONING_RESPONSE_1 = (
         "I need to perform a web search to get current weather details. "
         "I can use the search tool to do this."
     )
@@ -204,7 +204,7 @@ def test_stream_chat_with_search_and_openurl_tools(
         )
     ]
 
-    REASOING_RESPONSE_2 = "I like weathernow and the official weather site"
+    REASONING_RESPONSE_2 = "I like weathernow and the official weather site"
 
     QUERY_URLS_1 = ["www.weathernow.com.au", "www.weather.com.au"]
 
@@ -260,7 +260,7 @@ def test_stream_chat_with_search_and_openurl_tools(
         mock_web.add_results(WEB_QUERY_2, RESULTS2)
 
         handler.add_response(
-            LLMReasoningResponse(reasoning_tokens=tokenise(REASOING_RESPONSE_1))
+            LLMReasoningResponse(reasoning_tokens=tokenise(REASONING_RESPONSE_1))
         ).add_response(
             LLMToolCallResponse(
                 tool_name="web_search",
@@ -277,7 +277,7 @@ def test_stream_chat_with_search_and_openurl_tools(
         ).expect_packets(
             [
                 create_packet_with_reasoning_delta(token, 0)
-                for token in tokenise(REASOING_RESPONSE_1)
+                for token in tokenise(REASONING_RESPONSE_1)
             ]
         ).expect(
             Packet(placement=create_placement(0), obj=ReasoningDone())
@@ -323,7 +323,7 @@ def test_stream_chat_with_search_and_openurl_tools(
             mock_content.add_content(content)
 
         handler.add_response(
-            LLMReasoningResponse(reasoning_tokens=tokenise(REASOING_RESPONSE_2))
+            LLMReasoningResponse(reasoning_tokens=tokenise(REASONING_RESPONSE_2))
         ).add_response(
             LLMToolCallResponse(
                 tool_name="open_url",
@@ -338,7 +338,7 @@ def test_stream_chat_with_search_and_openurl_tools(
         ).expect_packets(
             [
                 create_packet_with_reasoning_delta(token, 2)
-                for token in tokenise(REASOING_RESPONSE_2)
+                for token in tokenise(REASONING_RESPONSE_2)
             ]
         ).expect(
             Packet(
