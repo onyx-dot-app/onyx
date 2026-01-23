@@ -5,6 +5,9 @@ dependencies:
 - name: vespa
   repository: https://onyx-dot-app.github.io/vespa-helm-charts
   version: 0.2.25
+- name: opensearch
+  repository: https://opensearch-project.github.io/helm-charts
+  version: 3.4.0
 - name: ingress-nginx
   repository: https://kubernetes.github.io/ingress-nginx
   version: 4.13.3
@@ -17,5 +20,5 @@ dependencies:
 - name: code-interpreter
   repository: https://onyx-dot-app.github.io/code-interpreter/
   version: 0.2.0
-digest: sha256:57ee955a0205debd38dceb4902681b96c4ba1cd7e437e2c7c1f73d95f37f70ef
-generated: "2025-11-30T11:17:28.336304-08:00"
+digest: sha256:65e3aad0189907ff35e1532374ca0b4a5c32c7356c8af55f646a6e3c59e574cd
+generated: "2026-01-21T11:06:55.190114-08:00"

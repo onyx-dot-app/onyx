@@ -184,11 +184,6 @@ class MockLLMController(abc.ABC):
     @abc.abstractmethod
     def add_responses_together(self, *responses: LLMResponse) -> None:
         """Add multiple responses that should be emitted together in the same tick."""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def forward(self, n: int) -> None:
-        raise NotImplementedError
 
     @abc.abstractmethod
     def forward_till_end(self) -> None:
@@ -303,6 +298,9 @@ class MockLLM(LLM, MockLLMController):
         reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
+        if not self.stream_controller:
+            return
+
         for idx, item in enumerate(self.stream_controller):
             yield ModelResponseStream(
                 id="chatcmp-123",

@@ -465,8 +465,14 @@ def run_research_agent_call(
                             )
 
                         search_docs = None
+                        displayed_docs = None
                         if isinstance(tool_response.rich_response, SearchDocsResponse):
                             search_docs = tool_response.rich_response.search_docs
+                            displayed_docs = tool_response.rich_response.displayed_docs
+
+                            # Add ALL search docs to state container for DB persistence
+                            if search_docs:
+                                state_container.add_search_docs(search_docs)
 
                             # This is used for the Open URL reminder in the next cycle
                             # only do this if the web search tool yielded results
@@ -499,7 +505,7 @@ def run_research_agent_call(
                             or most_recent_reasoning,
                             tool_call_arguments=tool_call.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
-                            search_docs=search_docs,
+                            search_docs=displayed_docs or search_docs,
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)

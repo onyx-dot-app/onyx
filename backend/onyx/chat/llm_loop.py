@@ -453,12 +453,16 @@ def run_llm_loop(
 
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
-            if persona and persona.replace_base_system_prompt and persona.system_prompt:
+            if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
-                system_prompt = ChatMessageSimple(
-                    message=persona.system_prompt,
-                    token_count=token_counter(persona.system_prompt),
-                    message_type=MessageType.SYSTEM,
+                system_prompt = (
+                    ChatMessageSimple(
+                        message=persona.system_prompt,
+                        token_count=token_counter(persona.system_prompt),
+                        message_type=MessageType.SYSTEM,
+                    )
+                    if persona.system_prompt
+                    else None
                 )
                 custom_agent_prompt_msg = None
             else:
@@ -650,8 +654,15 @@ def run_llm_loop(
 
                 # Extract search_docs if this is a search tool response
                 search_docs = None
+                displayed_docs = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):
                     search_docs = tool_response.rich_response.search_docs
+                    displayed_docs = tool_response.rich_response.displayed_docs
+
+                    # Add ALL search docs to state container for DB persistence
+                    if search_docs:
+                        state_container.add_search_docs(search_docs)
+
                     if gathered_documents:
                         gathered_documents.extend(search_docs)
                     else:
@@ -685,7 +696,7 @@ def run_llm_loop(
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=saved_response,
-                    search_docs=search_docs,
+                    search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,
                 )
                 # Add to state container for partial save support

@@ -101,7 +101,7 @@ function Main() {
   };
 
   return (
-    <Section alignItems="stretch">
+    <Section alignItems="stretch" justifyContent="start" height="auto">
       {popup}
 
       <Text>

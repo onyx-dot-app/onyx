@@ -255,11 +255,11 @@ fastapi==0.116.1
     #   onyx
 fastapi-limiter==0.1.6
     # via onyx
-fastapi-users==14.0.1
+fastapi-users==15.0.2
     # via
     #   fastapi-users-db-sqlalchemy
     #   onyx
-fastapi-users-db-sqlalchemy==5.0.0
+fastapi-users-db-sqlalchemy==7.0.0
     # via onyx
 fastavro==1.12.1
     # via cohere
@@ -782,7 +782,7 @@ psycopg2-binary==2.9.9
     # via onyx
 puremagic==1.28
     # via onyx
-pwdlib==0.2.1
+pwdlib==0.3.0
     # via fastapi-users
 py==1.11.0
     # via retry
@@ -902,7 +902,7 @@ python-json-logger==4.0.0
     # via pydocket
 python-magic==0.4.27
     # via unstructured
-python-multipart==0.0.20
+python-multipart==0.0.21
     # via
     #   fastapi-users
     #   mcp
