@@ -497,28 +497,6 @@
       }
     },
     {
-      "name": "Clean restore seeded database dump (destructive)",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "run",
-        "--with",
-        "onyx-devtools",
-        "ods",
-        "db",
-        "restore",
-        "--fetch-seeded",
-        "--clean",
-        "--yes"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "presentation": {
-        "group": "3"
-      }
-    },
-    {
       "name": "Clear and Restart External Volumes and Containers",
       "type": "node",
       "request": "launch",
@@ -597,6 +575,99 @@
       "console": "integratedTerminal",
       "presentation": {
         "group": "3"
+      }
+    },
+    {
+      // Dummy entry used to label the group
+      "name": "--- Database ---",
+      "type": "node",
+      "request": "launch",
+      "presentation": {
+        "group": "4",
+        "order": 0
+      }
+    },
+    {
+      "name": "Clean restore seeded database dump (destructive)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--fetch-seeded",
+        "--clean",
+        "--yes"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
+      "name": "Create database snapshot",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "dump",
+        "backup.dump"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
+      "name": "Clean restore database snapshot (destructive)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--clean",
+        "--yes",
+        "backup.dump"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
+      "name": "Upgrade database to head revision",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "upgrade"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
       }
     },
     {
