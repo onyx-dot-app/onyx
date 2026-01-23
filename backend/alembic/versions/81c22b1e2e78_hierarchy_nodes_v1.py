@@ -105,8 +105,12 @@ def upgrade() -> None:
         ),
         sa.Column("is_public", sa.Boolean(), nullable=False, server_default="false"),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(["document_id"], ["document.id"]),
-        sa.ForeignKeyConstraint(["parent_id"], ["hierarchy_node.id"]),
+        # When document is deleted, just unlink (node can exist without document)
+        sa.ForeignKeyConstraint(["document_id"], ["document.id"], ondelete="SET NULL"),
+        # When parent node is deleted, orphan children (cleanup via pruning)
+        sa.ForeignKeyConstraint(
+            ["parent_id"], ["hierarchy_node.id"], ondelete="SET NULL"
+        ),
         sa.UniqueConstraint(
             "raw_node_id", "source", name="uq_hierarchy_node_raw_id_source"
         ),
@@ -204,12 +208,14 @@ def upgrade() -> None:
         "document",
         sa.Column("parent_hierarchy_node_id", sa.Integer(), nullable=True),
     )
+    # When hierarchy node is deleted, just unlink the document (SET NULL)
     op.create_foreign_key(
         "fk_document_parent_hierarchy_node",
         "document",
         "hierarchy_node",
         ["parent_hierarchy_node_id"],
         ["id"],
+        ondelete="SET NULL",
     )
     op.create_index(
         "ix_document_parent_hierarchy_node_id",
@@ -266,6 +272,32 @@ def upgrade() -> None:
         ["hierarchy_node_id"],
     )
 
+    # Create the persona__document association table for attaching individual
+    # documents directly to assistants
+    op.create_table(
+        "persona__document",
+        sa.Column("persona_id", sa.Integer(), nullable=False),
+        sa.Column("document_id", sa.String(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["persona_id"],
+            ["persona.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["document.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("persona_id", "document_id"),
+    )
+
+    # Add index for efficient lookups by document_id
+    op.create_index(
+        "ix_persona__document_document_id",
+        "persona__document",
+        ["document_id"],
+    )
+
     # 6. Add last_time_hierarchy_fetch column to connector_credential_pair table
     op.add_column(
         "connector_credential_pair",
@@ -278,6 +310,12 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Remove last_time_hierarchy_fetch from connector_credential_pair
     op.drop_column("connector_credential_pair", "last_time_hierarchy_fetch")
+
+    # Drop persona__document table
+    op.drop_index("ix_persona__document_document_id", table_name="persona__document")
+    op.drop_table("persona__document")
+
+    # Drop persona__hierarchy_node table
     op.drop_index(
         "ix_persona__hierarchy_node_hierarchy_node_id",
         table_name="persona__hierarchy_node",

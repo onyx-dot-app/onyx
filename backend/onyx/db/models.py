@@ -719,13 +719,15 @@ class HierarchyNode(Base):
 
     # Foreign keys
     # For hierarchy nodes that are also documents (e.g., Confluence pages)
+    # SET NULL when document is deleted - node can exist without its document
     document_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document.id"), nullable=True
+        ForeignKey("document.id", ondelete="SET NULL"), nullable=True
     )
 
     # Self-referential FK for tree structure
+    # SET NULL when parent is deleted - orphan children for cleanup via pruning
     parent_id: Mapped[int | None] = mapped_column(
-        ForeignKey("hierarchy_node.id"), nullable=True, index=True
+        ForeignKey("hierarchy_node.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Relationships
@@ -825,8 +827,9 @@ class Document(Base):
 
     # Reference to parent hierarchy node (the folder/space containing this doc)
     # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
+    # SET NULL when hierarchy node is deleted - document should not be blocked by node deletion
     parent_hierarchy_node_id: Mapped[int | None] = mapped_column(
-        ForeignKey("hierarchy_node.id"), nullable=True, index=True
+        ForeignKey("hierarchy_node.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # tables for the knowledge graph data
@@ -865,6 +868,13 @@ class Document(Base):
         "HierarchyNode",
         back_populates="document",
         foreign_keys="HierarchyNode.document_id",
+    )
+    # Personas that have this document directly attached for scoped search
+    attached_personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="persona__document",
+        back_populates="attached_documents",
+        viewonly=True,
     )
 
     __table_args__ = (
@@ -3101,6 +3111,12 @@ class Persona(Base):
         secondary="persona__hierarchy_node",
         back_populates="personas",
     )
+    # Individual documents attached to this persona for scoped search
+    attached_documents: Mapped[list["Document"]] = relationship(
+        "Document",
+        secondary="persona__document",
+        back_populates="attached_personas",
+    )
 
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
@@ -3116,9 +3132,11 @@ class Persona(Base):
 class Persona__UserFile(Base):
     __tablename__ = "persona__user_file"
 
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
     user_file_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user_file.id"), primary_key=True
+        ForeignKey("user_file.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -3136,6 +3154,24 @@ class Persona__HierarchyNode(Base):
     )
     hierarchy_node_id: Mapped[int] = mapped_column(
         ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class Persona__Document(Base):
+    """Association table linking personas to individual documents.
+
+    This allows assistants to be configured with specific documents
+    for scoped search/retrieval. Complements hierarchy_nodes which
+    allow attaching folders/spaces.
+    """
+
+    __tablename__ = "persona__document"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"), primary_key=True
     )
 
 
