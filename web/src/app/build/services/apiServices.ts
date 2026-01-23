@@ -299,8 +299,9 @@ export async function fetchDirectoryListing(
 }
 
 export interface FileContentResponse {
-  content: string;
+  content: string; // For text files, this is the text content. For images, this is a blob URL
   mimeType: string;
+  isImage?: boolean; // True if the content is an image blob URL
 }
 
 /**
@@ -326,9 +327,16 @@ export async function fetchFileContent(
   }
 
   const mimeType = res.headers.get("Content-Type") || "text/plain";
-  const content = await res.text();
 
-  return { content, mimeType };
+  // For images, return blob URL instead of text
+  if (mimeType.startsWith("image/")) {
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    return { content: blobUrl, mimeType, isImage: true };
+  }
+
+  const content = await res.text();
+  return { content, mimeType, isImage: false };
 }
 
 // =============================================================================
