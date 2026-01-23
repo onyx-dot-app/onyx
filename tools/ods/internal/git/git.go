@@ -38,6 +38,28 @@ func RunCommand(args ...string) error {
 	return cmd.Run()
 }
 
+// RunCommandVerboseOnError executes a git command and returns an error with
+// stdout/stderr included if it fails. Useful for commands where hook output
+// or other diagnostics are important on failure.
+func RunCommandVerboseOnError(args ...string) error {
+	log.Debugf("Running: git %s", strings.Join(args, " "))
+	cmd := exec.Command("git", args...)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("%w\n%s", err, string(output))
+		}
+		return err
+	}
+
+	// Print output on success only if debug is enabled
+	if log.IsLevelEnabled(log.DebugLevel) && len(output) > 0 {
+		fmt.Print(string(output))
+	}
+	return nil
+}
+
 // GetCommitMessage gets the first line of a commit message
 func GetCommitMessage(commitSHA string) (string, error) {
 	cmd := exec.Command("git", "log", "-1", "--format=%s", commitSHA)

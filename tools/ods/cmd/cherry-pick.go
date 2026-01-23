@@ -124,19 +124,28 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		releases = []string{version}
 	}
 
-	// Get commit message(s) for PR title
+	// Get commit messages for PR title and body
+	commitMessages := make([]string, len(commitSHAs))
+	for i, sha := range commitSHAs {
+		msg, err := git.GetCommitMessage(sha)
+		if err != nil {
+			log.Warnf("Failed to get commit message for %s: %v", sha, err)
+			commitMessages[i] = ""
+		} else {
+			commitMessages[i] = msg
+		}
+	}
+
 	var prTitle string
 	if len(commitSHAs) == 1 {
-		commitMsg, err := git.GetCommitMessage(commitSHAs[0])
-		if err != nil {
-			log.Warnf("Failed to get commit message, using default title: %v", err)
+		if commitMessages[0] != "" {
+			prTitle = commitMessages[0]
+		} else {
 			shortSHA := commitSHAs[0]
 			if len(shortSHA) > 8 {
 				shortSHA = shortSHA[:8]
 			}
 			prTitle = fmt.Sprintf("chore(hotfix): cherry-pick %s", shortSHA)
-		} else {
-			prTitle = commitMsg
 		}
 	} else {
 		// For multiple commits, use a generic title
@@ -148,7 +157,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	for _, release := range releases {
 		log.Infof("Processing release %s", release)
 		prTitleWithRelease := fmt.Sprintf("%s to release %s", prTitle, release)
-		prURL, err := cherryPickToRelease(commitSHAs, branchSuffix, release, prTitleWithRelease, opts.DryRun)
+		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, opts.DryRun)
 		if err != nil {
 			// Switch back to original branch before exiting on error
 			if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
@@ -174,7 +183,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 }
 
 // cherryPickToRelease cherry-picks one or more commits to a specific release branch
-func cherryPickToRelease(commitSHAs []string, branchSuffix, version, prTitle string, dryRun bool) (string, error) {
+func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, version, prTitle string, dryRun bool) (string, error) {
 	releaseBranch := fmt.Sprintf("release/%s", version)
 	hotfixBranch := fmt.Sprintf("hotfix/%s-%s", branchSuffix, version)
 
@@ -199,7 +208,7 @@ func cherryPickToRelease(commitSHAs []string, branchSuffix, version, prTitle str
 
 	// Build git cherry-pick command with all commits
 	cherryPickArgs := append([]string{"cherry-pick"}, commitSHAs...)
-	if err := git.RunCommand(cherryPickArgs...); err != nil {
+	if err := git.RunCommandVerboseOnError(cherryPickArgs...); err != nil {
 		return "", fmt.Errorf("failed to cherry-pick commits: %w", err)
 	}
 
@@ -211,13 +220,13 @@ func cherryPickToRelease(commitSHAs []string, branchSuffix, version, prTitle str
 
 	// Push the hotfix branch
 	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
-	if err := git.RunCommand("push", "--quiet", "-u", "origin", hotfixBranch); err != nil {
+	if err := git.RunCommandVerboseOnError("push", "-u", "origin", hotfixBranch); err != nil {
 		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
 	}
 
 	// Create PR using GitHub CLI
 	log.Info("Creating PR...")
-	prURL, err := createCherryPickPR(hotfixBranch, releaseBranch, prTitle, commitSHAs)
+	prURL, err := createCherryPickPR(hotfixBranch, releaseBranch, prTitle, commitSHAs, commitMessages)
 	if err != nil {
 		return "", fmt.Errorf("failed to create PR: %w", err)
 	}
@@ -232,6 +241,13 @@ func normalizeVersion(version string) string {
 		return "v" + version
 	}
 	return version
+}
+
+// extractPRNumbers extracts GitHub PR numbers (e.g., #1234) from a commit message
+func extractPRNumbers(commitMsg string) []string {
+	re := regexp.MustCompile(`#(\d+)`)
+	matches := re.FindAllString(commitMsg, -1)
+	return matches
 }
 
 // findNearestStableTag finds the nearest tag matching v*.*.* pattern and returns major.minor
@@ -257,14 +273,29 @@ func findNearestStableTag(commitSHA string) (string, error) {
 }
 
 // createCherryPickPR creates a pull request for cherry-picks using the GitHub CLI
-func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs []string) (string, error) {
+func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commitMessages []string) (string, error) {
 	var body string
 	if len(commitSHAs) == 1 {
 		body = fmt.Sprintf("Cherry-pick of commit %s to %s branch.", commitSHAs[0], baseBranch)
+		// Extract and add original PR reference if present
+		if len(commitMessages) > 0 && commitMessages[0] != "" {
+			prNumbers := extractPRNumbers(commitMessages[0])
+			if len(prNumbers) > 0 {
+				body += fmt.Sprintf("\n\nOriginal PR: %s", strings.Join(prNumbers, ", "))
+			}
+		}
 	} else {
 		body = fmt.Sprintf("Cherry-pick of %d commits to %s branch:\n\n", len(commitSHAs), baseBranch)
-		for _, sha := range commitSHAs {
-			body += fmt.Sprintf("- %s\n", sha)
+		for i, sha := range commitSHAs {
+			// Include original PR reference if present
+			var prRef string
+			if i < len(commitMessages) && commitMessages[i] != "" {
+				prNumbers := extractPRNumbers(commitMessages[i])
+				if len(prNumbers) > 0 {
+					prRef = fmt.Sprintf(" (Original: %s)", strings.Join(prNumbers, ", "))
+				}
+			}
+			body += fmt.Sprintf("- %s%s\n", sha, prRef)
 		}
 	}
 
