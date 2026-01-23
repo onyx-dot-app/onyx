@@ -69,6 +69,7 @@ from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
 )
 from onyx.server.features.document_set.api import router as document_set_router
+from onyx.server.features.hierarchy.api import router as hierarchy_router
 from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
@@ -381,6 +382,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, nextjs_assets_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
+    include_router_with_global_prefix_prepended(application, hierarchy_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(
         application, slack_bot_management_router

@@ -1,7 +1,11 @@
 """CRUD operations for HierarchyNode."""
 
+from sqlalchemy import any_
+from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
@@ -331,6 +335,34 @@ def get_all_hierarchy_nodes_for_source(
         List of all HierarchyNode objects for the source
     """
     stmt = select(HierarchyNode).where(HierarchyNode.source == source)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def _build_hierarchy_access_filter(
+    user_email: str | None,
+    external_group_ids: list[str],
+) -> ColumnElement[bool]:
+    access_filters: list[ColumnElement[bool]] = [HierarchyNode.is_public.is_(True)]
+    if user_email:
+        access_filters.append(any_(HierarchyNode.external_user_emails) == user_email)
+    if external_group_ids:
+        access_filters.append(
+            HierarchyNode.external_user_group_ids.overlap(
+                postgresql.array(external_group_ids)
+            )
+        )
+    return or_(*access_filters)
+
+
+def get_accessible_hierarchy_nodes_for_source(
+    db_session: Session,
+    source: DocumentSource,
+    user_email: str | None,
+    external_group_ids: list[str],
+) -> list[HierarchyNode]:
+    stmt = select(HierarchyNode).where(HierarchyNode.source == source)
+    stmt = stmt.where(_build_hierarchy_access_filter(user_email, external_group_ids))
+    stmt = stmt.order_by(HierarchyNode.display_name)
     return list(db_session.execute(stmt).scalars().all())
 
 
