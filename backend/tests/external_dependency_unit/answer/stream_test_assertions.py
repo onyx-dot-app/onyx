@@ -25,15 +25,19 @@ def assert_answer_stream_part_correct(
         assert r_packet.placement == e_packet.placement
 
         if isinstance(r_packet.obj, SearchToolDocumentsDelta):
+            assert isinstance(e_packet.obj, SearchToolDocumentsDelta)
             assert is_search_tool_document_delta_equal(r_packet.obj, e_packet.obj)
             return
         elif isinstance(r_packet.obj, OpenUrlDocuments):
+            assert isinstance(e_packet.obj, OpenUrlDocuments)
             assert is_open_url_documents_equal(r_packet.obj, e_packet.obj)
             return
         elif isinstance(r_packet.obj, AgentResponseStart):
+            assert isinstance(e_packet.obj, AgentResponseStart)
             assert is_agent_response_start_equal(r_packet.obj, e_packet.obj)
             return
         elif isinstance(r_packet.obj, ImageGenerationFinal):
+            assert isinstance(e_packet.obj, ImageGenerationFinal)
             assert is_image_generation_final_equal(r_packet.obj, e_packet.obj)
             return
 

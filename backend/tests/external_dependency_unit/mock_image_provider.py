@@ -41,9 +41,10 @@ class MockImageGenerationProvider(
         self._images.append(data)
         self._delays.append(delay)
 
+    @classmethod
     def validate_credentials(
-        self,
-        _: ImageGenerationProviderCredentials,
+        cls,
+        credentials: ImageGenerationProviderCredentials,
     ) -> bool:
         return True
 

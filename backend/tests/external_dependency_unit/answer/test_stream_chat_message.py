@@ -726,23 +726,23 @@ def test_parallel_internal_and_web_search_tool_calls(
 
     expected_web_docs = []
     seen_web_results = set()
-    for results in WEB_RESULTS_1.values():
-        for result in results:
-            key = (result.title, result.link)
+    for web_results in WEB_RESULTS_1.values():
+        for web_result in web_results:
+            key = (web_result.title, web_result.link)
             if key in seen_web_results:
                 continue
             seen_web_results.add(key)
-            expected_web_docs.append(mock_web_search_result_to_search_doc(result))
+            expected_web_docs.append(mock_web_search_result_to_search_doc(web_result))
 
     expected_internal_docs = []
     seen_internal_results = set()
-    for results in INTERNAL_RESULTS_1.values():
-        for result in results:
-            key = (result.semantic_identifier, result.document_id)
+    for internal_results in INTERNAL_RESULTS_1.values():
+        for internal_result in internal_results:
+            key = (internal_result.semantic_identifier, internal_result.document_id)
             if key in seen_internal_results:
                 continue
             seen_internal_results.add(key)
-            expected_internal_docs.append(result.to_search_doc())
+            expected_internal_docs.append(internal_result.to_search_doc())
 
     with (
         use_mock_llm() as mock_llm,
@@ -752,11 +752,11 @@ def test_parallel_internal_and_web_search_tool_calls(
         use_mock_web_provider(db_session) as mock_web,
         use_mock_content_provider() as mock_content,
     ):
-        for query, results in WEB_RESULTS_1.items():
-            mock_web.add_results(query, results)
+        for query, web_results in WEB_RESULTS_1.items():
+            mock_web.add_results(query, web_results)
 
-        for query, results in INTERNAL_RESULTS_1.items():
-            mock_search_pipeline.add_search_results(query, results)
+        for query, internal_results in INTERNAL_RESULTS_1.items():
+            mock_search_pipeline.add_search_results(query, internal_results)
 
         handler = StreamTestBuilder(
             llm_controller=mock_llm,

@@ -19,28 +19,31 @@ from tests.external_dependency_unit.answer.stream_test_utils import (
     create_packet_with_reasoning_delta,
 )
 from tests.external_dependency_unit.answer.stream_test_utils import create_placement
+from tests.external_dependency_unit.mock_llm import LLMResponse
 from tests.external_dependency_unit.mock_llm import MockLLMController
 
 
 class StreamTestBuilder:
-    def __init__(self, llm_controller: MockLLMController):
+    def __init__(self, llm_controller: MockLLMController) -> None:
         self._llm_controller = llm_controller
 
         # List of (expected_packet, forward_count) tuples
         self._expected_packets_queue: list[tuple[Packet, int]] = []
 
-    def add_response(self, response) -> StreamTestBuilder:
+    def add_response(self, response: LLMResponse) -> StreamTestBuilder:
         self._llm_controller.add_response(response)
 
         return self
 
-    def add_responses_together(self, *responses) -> StreamTestBuilder:
+    def add_responses_together(self, *responses: LLMResponse) -> StreamTestBuilder:
         """Add multiple responses that should be emitted together in the same tick."""
         self._llm_controller.add_responses_together(*responses)
 
         return self
 
-    def expect(self, expected_pkt, forward: int | bool = True) -> StreamTestBuilder:
+    def expect(
+        self, expected_pkt: Packet, forward: int | bool = True
+    ) -> StreamTestBuilder:
         """
         Add an expected packet to the queue.
 
@@ -54,7 +57,9 @@ class StreamTestBuilder:
 
         return self
 
-    def expect_packets(self, packets, forward: int | bool = True) -> StreamTestBuilder:
+    def expect_packets(
+        self, packets: list[Packet], forward: int | bool = True
+    ) -> StreamTestBuilder:
         """
         Add multiple expected packets to the queue.
 

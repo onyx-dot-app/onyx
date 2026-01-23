@@ -9,7 +9,9 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any
 from typing import cast
+from typing import Generic
 from typing import Literal
+from typing import TypeVar
 from unittest.mock import patch
 
 from pydantic import BaseModel
@@ -27,6 +29,8 @@ from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import StreamingChoice
 
+T = TypeVar("T")
+
 
 class LLMResponseType(str, Enum):
     REASONING = "reasoning"
@@ -43,7 +47,7 @@ class LLMResponse(abc.ABC, BaseModel):
 
 
 class LLMReasoningResponse(LLMResponse):
-    type: Literal["resasoning"] = LLMResponseType.REASONING.value
+    type: Literal["reasoning"] = LLMResponseType.REASONING.value
     reasoning_tokens: list[str]
 
     def num_tokens(self) -> int:
@@ -199,19 +203,26 @@ class MockLLMController(abc.ABC):
     @abc.abstractmethod
     def add_responses_together(self, *responses: LLMResponse) -> None:
         """Add multiple responses that should be emitted together in the same tick."""
-
-    @abc.abstractmethod
-    def forward_till_end(self) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def set_max_timeout(self, timeout: float = 5.0):
+    def forward(self, n: int) -> None:
+        """Forward the stream by n tokens."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def forward_till_end(self) -> None:
+        """Forward the stream until the end."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_max_timeout(self, timeout: float = 5.0) -> None:
         raise NotImplementedError
 
 
 class MockLLM(LLM, MockLLMController):
     def __init__(self) -> None:
-        self.stream_controller = SyncStreamController()
+        self.stream_controller = SyncStreamController[StreamItem]()
 
     def add_response(self, response: LLMResponse) -> None:
         items = _response_to_stream_items(response)
@@ -277,7 +288,7 @@ class MockLLM(LLM, MockLLMController):
         else:
             raise ValueError("No response set")
 
-    def set_max_timeout(self, timeout: float = 5.0):
+    def set_max_timeout(self, timeout: float = 5.0) -> None:
         self.stream_controller.timeout = timeout
 
     @property
@@ -333,8 +344,8 @@ class StreamTimeoutError(Exception):
     """Raised when the stream controller times out waiting for tokens."""
 
 
-class SyncStreamController:
-    def __init__(self, items: list[Any] | None = None, timeout: float = 5.0):
+class SyncStreamController(Generic[T]):
+    def __init__(self, items: list[T] | None = None, timeout: float = 5.0) -> None:
         self.items = items if items is not None else []
         self.position = 0
         self.pending: list[int] = []  # The indices of the tokens that are pending
@@ -342,7 +353,7 @@ class SyncStreamController:
 
         self._has_pending = threading.Event()
 
-    def queue_items(self, new_items: list[Any]) -> None:
+    def queue_items(self, new_items: list[T]) -> None:
         """Queue additional tokens to the stream (for chaining responses like reasoning + tool calls)."""
         self.items.extend(new_items)
 
@@ -362,10 +373,10 @@ class SyncStreamController:
     def is_done(self) -> bool:
         return self.position >= len(self.items) and not self.pending
 
-    def __iter__(self) -> SyncStreamController:
+    def __iter__(self) -> SyncStreamController[T]:
         return self
 
-    def __next__(self) -> str:
+    def __next__(self) -> T:
         start_time = time.monotonic()
         while not self.is_done:
             if self.pending:
