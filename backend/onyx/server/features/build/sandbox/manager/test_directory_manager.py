@@ -632,7 +632,7 @@ class TestSandboxDirectoryStructure:
         assert (sandbox_path / "outputs").exists()
         assert (sandbox_path / ".venv").exists()
         assert (sandbox_path / "AGENTS.md").exists()
-        assert (sandbox_path / ".agent" / "skills").exists()
+        assert (sandbox_path / ".opencode" / "skills").exists()
         assert (sandbox_path / "user_uploaded_files").exists()
         assert (sandbox_path / "opencode.json").exists()
 
@@ -652,7 +652,7 @@ class TestSandboxDirectoryStructure:
         """Test that setup_skills copies skills and overwrites existing ones."""
         session_id = "test_skills_setup"
         sandbox_path = directory_manager.create_sandbox_directory(session_id)
-        skills_dest = sandbox_path / ".agent" / "skills"
+        skills_dest = sandbox_path / ".opencode" / "skills"
 
         # Create a test skill in the source directory
         test_skill_dir = temp_templates["skills"] / "test-skill"

@@ -20,6 +20,53 @@ PROVIDER_DISPLAY_NAMES = {
     "vertex": "Google Vertex AI",
 }
 
+# Connector directory structure descriptions
+# Keys are normalized (lowercase, underscores) directory names
+CONNECTOR_DESCRIPTIONS = {
+    "google_drive": (
+        "**Google Drive**: Copied over directly as is. "
+        "End files are stored as `FILE_NAME.json`."
+    ),
+    "gmail": (
+        "**Google Drive**: Copied over directly as is. "
+        "End files are stored as `FILE_NAME.json`."
+    ),
+    "linear": (
+        "**Linear**: Each project is a folder, and within each project, "
+        "individual tickets are stored as `[TICKET_ID]_TICKET_NAME.json`."
+    ),
+    "slack": (
+        "**Slack**: Each channel is a folder titled `[CHANNEL_NAME]`. "
+        "Within each channel, each thread is a single file called "
+        "`[INITIAL_AUTHOR]_in_[CHANNEL]__[FIRST_MESSAGE].json`."
+    ),
+    "github": (
+        "**Github**: Each organization is a folder titled `[ORG_NAME]`. "
+        "Within each organization, there is a folder for each repository "
+        "titled `[REPO_NAME]`. Within each repository there are up to two "
+        "folders: `pull_requests` and `issues`. Pull requests are structured "
+        "as `[PR_ID]__[PR_NAME].json` and issues as `[ISSUE_ID]__[ISSUE_NAME].json`."
+    ),
+    "fireflies": (
+        "**Fireflies**: All calls are in the root, each as a single file "
+        "titled `CALL_TITLE.json`."
+    ),
+    "hubspot": (
+        "**HubSpot**: Four folders in the root: `Tickets`, `Companies`, "
+        "`Deals`, and `Contacts`. Each object is stored as a file named "
+        "after its title/name (e.g., `[TICKET_SUBJECT].json`, `[COMPANY_NAME].json`)."
+    ),
+    "notion": (
+        "**Notion**: Pages and databases are organized hierarchically. "
+        "Each page is stored as `PAGE_TITLE.json`."
+    ),
+    "org_info": (
+        "**Org Info**: This directory contains various pieces of information about our organization. Contains: "
+        "`organizational_data_acme.json`: a json with our groups, managers, and their reports. "
+        "`my_identity_profile.txt`: Your identity and profile information."
+    ),
+}
+
 
 def get_provider_display_name(provider: str | None) -> str | None:
     """Get user-friendly display name for LLM provider.
@@ -123,6 +170,18 @@ def build_skills_section(skills_path: Path) -> str:
     return "\n".join(skills_list)
 
 
+def _normalize_connector_name(name: str) -> str:
+    """Normalize a connector directory name for lookup.
+
+    Args:
+        name: The directory name
+
+    Returns:
+        Normalized name (lowercase, spaces to underscores)
+    """
+    return name.lower().replace(" ", "_").replace("-", "_")
+
+
 def build_file_structure_section(files_path: Path) -> str:
     """Build the file structure section by scanning the files directory.
 
@@ -193,6 +252,55 @@ def build_file_structure_section(files_path: Path) -> str:
     return header + "\n".join(sources)
 
 
+def build_connector_descriptions_section(files_path: Path) -> str:
+    """Build connector-specific descriptions for available data sources.
+
+    Only includes descriptions for connectors that are actually present
+    in the files/ directory.
+
+    Args:
+        files_path: Path to the files directory (symlink to knowledge sources)
+
+    Returns:
+        Formatted connector descriptions section
+    """
+    if not files_path.exists():
+        return ""
+
+    # Resolve the symlink to get the actual path
+    try:
+        actual_path = files_path.resolve()
+        if not actual_path.exists():
+            return ""
+    except Exception:
+        actual_path = files_path
+
+    descriptions: list[str] = []
+    try:
+        for item in sorted(actual_path.iterdir()):
+            if not item.is_dir():
+                continue
+            if item.name.startswith("."):
+                continue
+
+            # Look up connector description
+            normalized_name = _normalize_connector_name(item.name)
+            if normalized_name in CONNECTOR_DESCRIPTIONS:
+                descriptions.append(f"- {CONNECTOR_DESCRIPTIONS[normalized_name]}")
+    except Exception as e:
+        logger.warning(
+            f"Error scanning files directory for connector descriptions: {e}"
+        )
+        return ""
+
+    if not descriptions:
+        return ""
+
+    header = "Each connector type organizes its data differently:\n\n"
+    footer = "\n\nAcross all names, spaces are replaced by `_`."
+    return header + "\n".join(descriptions) + footer
+
+
 def generate_agent_instructions(
     template_path: Path,
     skills_path: Path,
@@ -243,8 +351,12 @@ def generate_agent_instructions(
 
     # Build file structure section
     file_structure_section = ""
+    connector_descriptions_section = ""
     if files_path:
         file_structure_section = build_file_structure_section(files_path)
+        connector_descriptions_section = build_connector_descriptions_section(
+            files_path
+        )
 
     # Replace placeholders
     content = template_content
@@ -257,5 +369,8 @@ def generate_agent_instructions(
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
     content = content.replace("{{FILE_STRUCTURE_SECTION}}", file_structure_section)
+    content = content.replace(
+        "{{CONNECTOR_DESCRIPTIONS_SECTION}}", connector_descriptions_section
+    )
 
     return content

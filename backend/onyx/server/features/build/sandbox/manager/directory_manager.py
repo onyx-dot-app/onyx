@@ -62,7 +62,7 @@ class DirectoryManager:
         │   └── graphs/
         ├── .venv/                      # Python virtual environment
         ├── AGENTS.md                   # Agent instructions
-        └── .agent/
+        └── .opencode/
             └── skills/                 # Agent skills
 
         Args:
@@ -175,17 +175,17 @@ class DirectoryManager:
         logger.debug(f"Generated AGENTS.md at {agent_md_path}")
 
     def setup_skills(self, sandbox_path: Path, overwrite: bool = True) -> None:
-        """Copy skills directory to .agent/skills.
+        """Copy skills directory to .opencode/skills.
 
         Copies all skills from the source skills directory to the sandbox's
-        .agent/skills directory. If the destination already exists, it will
+        .opencode/skills directory. If the destination already exists, it will
         be removed and recreated to ensure skills are up-to-date.
 
         Args:
             sandbox_path: Path to the sandbox directory
             overwrite: If True, overwrite existing skills. If False, preserve existing skills.
         """
-        skills_dest = sandbox_path / ".agent" / "skills"
+        skills_dest = sandbox_path / ".opencode" / "skills"
 
         if not self._skills_path.exists():
             logger.warning(
