@@ -64,51 +64,27 @@ Feel free to write/edit anything you find in here.
 
 ## Outputs
 
-There should be four main types of outputs:
-1. Web Applications / Dashboards
-2. Slides
-3. Markdown Documents
-4. Graphs/Charts
-
-Generally, you should use 
+**All outputs should be interactive web applications/dashboards** built with Next.js, React, and shadcn/ui.
 
 ### Web Applications / Dashboards
 
 Web applications and dashboards should be written as a Next.js app. Within the `outputs` directory,
-there is a folder called `web` that has the skeleton of a basic Next.js app in it. Use this. We do NOT use a `src` directory.
+there is a folder called `web` that has the skeleton of a basic Next.js app in it.
 
-Use NextJS 16.1.1, React v19, Tailwindcss, and recharts.
+The Next.js app is already running at a dynamically allocated port. Do not run `npm run dev` yourself.
 
-The Next.js app is already running. Do not run `npm run dev` yourself.
+**See `outputs/web/AGENTS.md` for detailed technical specifications, architecture patterns, component usage guidelines, and styling rules.**
 
-If the app needs any pre-computation, then create a bash script called `prepare.sh` at the root of the `web` directory.
+### Other Output Formats (Coming Soon)
 
-### Slides
-
-Slides should be created using the nano-banana MCP. 
-
-The outputs should be placed within the `outputs/slides` directory, named `[SLIDE_NUMBER].png`.
-
-Before creating slides, create a `SLIDE_OUTLINE.md` file describing the overall message as well as the content and structure of each slide.
-
-### Markdown Documents
-
-Markdown documents should be placed within the `outputs/document` directory.
-If you want to have a single "Document" that has multiple distinct pages, then create a folder within
-the `outputs/document` directory, and name each page `1.MD`, `2.MD`, ...
-
-### Graphs/Charts
-
-Graphs and charts should be placed in the `outputs/charts` directory.
-
-Graphs and charts should be created with a python script. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+Additional output formats such as slides, markdown documents, and standalone graphs are coming soon. If the user requests these formats, let them know they're not yet available and suggest building an interactive web application instead, which can include:
+- Data visualizations and charts using recharts
+- Multi-page layouts with navigation
+- Exportable content (print-to-PDF functionality)
+- Interactive dashboards with real-time filtering and sorting
 
 ## Your Environment
 
-You are in an ephemeral virtual machine. 
+You are in an ephemeral virtual machine with Node v22.21.1 and Python 3.11.13 available.
 
-You currently have Python 3.11.13 and Node v22.21.1. 
-
-**Python Virtual Environment**: A Python virtual environment is pre-configured at `.venv/` with common data science and visualization packages already installed (numpy, pandas, matplotlib, scipy, PIL, etc.). The environment should be automatically activated, but if you run into issues with missing packages, you can explicitly use `.venv/bin/python` or `.venv/bin/pip`.
-
-If you need additional packages, install them with `pip install <package>` (or `.venv/bin/pip install <package>` if the venv isn't active). For javascript packages, use `npm` from within the `outputs/web` directory.  
+For JavaScript/TypeScript packages needed by your Next.js application, use `npm install <package>` from within the `outputs/web` directory. Common packages you might need are already available (recharts for charts, lucide-react for icons, etc.).  
