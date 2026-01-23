@@ -42,8 +42,8 @@ func (s *S3URL) HTTPEndpoint() string {
 }
 
 // FetchToFile downloads an S3 object to a local file.
-// It first tries an unsigned HTTP request (for IP-whitelisted buckets),
-// and if that fails, tries a signed request using AWS CLI.
+// It first tries an unsigned HTTP request and if that fails,
+// tries a signed request using AWS CLI.
 func FetchToFile(s3url string, destPath string) error {
 	parsed, err := ParseS3URL(s3url)
 	if err != nil {
@@ -56,7 +56,7 @@ func FetchToFile(s3url string, destPath string) error {
 	}
 
 	// Try unsigned HTTP request first
-	log.Info("Attempting unsigned download (IP-whitelisted access)...")
+	log.Info("Attempting unsigned download...")
 	if err := fetchUnsigned(parsed, destPath); err == nil {
 		return nil
 	} else {
@@ -64,9 +64,9 @@ func FetchToFile(s3url string, destPath string) error {
 	}
 
 	// Try signed request using AWS CLI
-	log.Info("Unsigned download failed, attempting signed download with AWS credentials...")
+	log.Info("Unsigned download failed, attempting signed download...")
 	if err := fetchWithAWSCLI(s3url, destPath); err != nil {
-		return fmt.Errorf("failed to download from S3: %w\n\nTo authenticate, run:\n  aws sso login\n\nOr configure AWS credentials with:\n  aws configure", err)
+		return fmt.Errorf("failed to download from S3: %w\n\nTo authenticate, run:\n  aws sso login\n\nOr configure AWS credentials with:\n  aws configure sso", err)
 	}
 
 	return nil

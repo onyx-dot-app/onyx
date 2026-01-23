@@ -109,7 +109,16 @@ func runDBRestoreSeeded(opts *DBRestoreOptions) {
 		log.Fatalf("Failed to download seeded snapshot: %v", err)
 	}
 
-	log.Infof("Downloaded seeded snapshot to: %s", destPath)
+	// Verify download is non-empty
+	info, err := os.Stat(destPath)
+	if err != nil {
+		log.Fatalf("Failed to stat downloaded snapshot: %v", err)
+	}
+	if info.Size() == 0 {
+		log.Fatalf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
+	}
+
+	log.Infof("Downloaded seeded snapshot to: %s (%d bytes)", destPath, info.Size())
 
 	// Restore the downloaded snapshot
 	runDBRestore(destPath, opts)
