@@ -214,7 +214,8 @@ class DocumentQuery:
         """
         filter_clauses = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
-            include_hidden=False,
+            # Delete hidden docs too.
+            include_hidden=True,
             access_control_list=None,
             source_types=[],
             tags=[],
