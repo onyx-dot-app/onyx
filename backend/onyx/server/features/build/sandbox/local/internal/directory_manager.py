@@ -266,8 +266,6 @@ class DirectoryManager:
         config["permission"] = {
             "bash": {
                 "rm": "deny",
-                "curl": "deny",
-                "wget": "deny",
                 "ssh": "deny",
                 "scp": "deny",
                 "sftp": "deny",
