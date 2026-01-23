@@ -22,6 +22,7 @@ from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
@@ -47,8 +48,11 @@ def list_sessions(
 
     sessions = session_manager.list_sessions(user.id)
 
+    # Get the user's sandbox (shared across all sessions)
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+
     return SessionListResponse(
-        sessions=[SessionResponse.from_model(session) for session in sessions]
+        sessions=[SessionResponse.from_model(session, sandbox) for session in sessions]
     )
 
 
@@ -74,6 +78,7 @@ def create_session(
         db_session.commit()
     except ValueError as e:
         # Max concurrent sandboxes reached or other validation error
+        logger.exception("Sandbox provisioning failed")
         db_session.rollback()
         raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
@@ -85,7 +90,9 @@ def create_session(
             detail=f"Sandbox provisioning failed: {e}",
         )
 
-    return SessionResponse.from_model(build_session)
+    # Get the user's sandbox to include in response
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    return SessionResponse.from_model(build_session, sandbox)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -106,7 +113,9 @@ def get_session_details(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    return SessionResponse.from_model(session)
+    # Get the user's sandbox to include in response
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    return SessionResponse.from_model(session, sandbox)
 
 
 @router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)
@@ -141,7 +150,9 @@ def update_session_name(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    return SessionResponse.from_model(session)
+    # Get the user's sandbox to include in response
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    return SessionResponse.from_model(session, sandbox)
 
 
 @router.delete("/{session_id}", response_model=None)

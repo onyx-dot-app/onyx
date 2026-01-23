@@ -62,8 +62,8 @@ from onyx.server.features.build.db.sandbox import allocate_nextjs_port
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
@@ -380,29 +380,59 @@ class SessionManager:
         session_id = str(build_session.id)
         logger.info(f"Created build session {session_id} for user {user_id}")
 
-        # Create Sandbox record (uses flush, caller commits)
-        sandbox = create_sandbox__no_commit(
-            db_session=self._db_session,
-            session_id=build_session.id,
-            nextjs_port=nextjs_port,
-        )
-        sandbox_id = sandbox.id
-        logger.info(f"Created sandbox record {sandbox_id} for session {session_id}")
+        # Check if user already has a sandbox (one sandbox per user model)
+        existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
 
-        # Provision sandbox (no DB operations inside)
-        sandbox_info = self._sandbox_manager.provision(
-            sandbox_id=sandbox_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            file_system_path=user_file_system_path,
-            llm_config=llm_config,
-            nextjs_port=nextjs_port,
-        )
+        if existing_sandbox:
+            # User already has a sandbox - check if it needs re-provisioning
+            sandbox = existing_sandbox
+            sandbox_id = sandbox.id
 
-        # Update sandbox record with status from provisioning
-        sandbox.nextjs_port = sandbox_info.nextjs_port
-        sandbox.status = sandbox_info.status
-        self._db_session.flush()
+            if sandbox.status == SandboxStatus.TERMINATED:
+                # Re-provision terminated sandbox
+                logger.info(
+                    f"Re-provisioning terminated sandbox {sandbox_id} for user {user_id}"
+                )
+                sandbox_info = self._sandbox_manager.provision(
+                    sandbox_id=sandbox_id,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    file_system_path=user_file_system_path,
+                    llm_config=llm_config,
+                    nextjs_port=sandbox.nextjs_port or nextjs_port,
+                )
+                sandbox.status = sandbox_info.status
+                sandbox.nextjs_port = sandbox_info.nextjs_port
+                self._db_session.flush()
+            else:
+                logger.info(
+                    f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
+                    f"for new session {session_id}"
+                )
+        else:
+            # Create new Sandbox record for the user (uses flush, caller commits)
+            sandbox = create_sandbox__no_commit(
+                db_session=self._db_session,
+                user_id=user_id,
+                nextjs_port=nextjs_port,
+            )
+            sandbox_id = sandbox.id
+            logger.info(f"Created sandbox record {sandbox_id} for session {session_id}")
+
+            # Provision sandbox (no DB operations inside)
+            sandbox_info = self._sandbox_manager.provision(
+                sandbox_id=sandbox_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                file_system_path=user_file_system_path,
+                llm_config=llm_config,
+                nextjs_port=nextjs_port,
+            )
+
+            # Update sandbox record with status from provisioning
+            sandbox.nextjs_port = sandbox_info.nextjs_port
+            sandbox.status = sandbox_info.status
+            self._db_session.flush()
 
         logger.info(
             f"Successfully created session {session_id} with sandbox for user {user_id}"
@@ -602,18 +632,10 @@ class SessionManager:
         if session is None:
             return False
 
-        # Terminate sandbox if running - raises on failure
-        if session.sandbox and session.sandbox.status in [
-            SandboxStatus.RUNNING,
-            SandboxStatus.PROVISIONING,
-        ]:
-            logger.info(f"Terminating sandbox before deleting session {session_id}")
-            sandbox_id = session.sandbox.id
-            self._sandbox_manager.terminate(sandbox_id)
-            # Update status after termination (sandbox manager no longer does this)
-            update_sandbox_status__no_commit(
-                self._db_session, sandbox_id, SandboxStatus.TERMINATED
-            )
+        # NOTE: We no longer terminate the sandbox when deleting a session.
+        # The sandbox is now user-owned (shared across all sessions).
+        # Session workspace cleanup will be handled in a future phase.
+        # TODO: Call sandbox_manager.cleanup_session_workspace() when implemented
 
         # Delete session (uses flush, caller commits)
         return delete_build_session__no_commit(session_id, user_id, self._db_session)
@@ -762,8 +784,11 @@ class SessionManager:
                 yield _format_packet_event(error_packet)
                 return
 
+            # Get the user's sandbox (now user-owned, not session-owned)
+            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+
             # Check if sandbox is running
-            if not session.sandbox or session.sandbox.status != SandboxStatus.RUNNING:
+            if not sandbox or sandbox.status != SandboxStatus.RUNNING:
                 error_packet = ErrorPacket(
                     message="Sandbox is not running. Please wait for it to start."
                 )

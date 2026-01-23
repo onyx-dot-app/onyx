@@ -152,31 +152,8 @@ def delete_build_session__no_commit(
 
 
 # Sandbox operations
-def create_sandbox(
-    session_id: UUID,
-    db_session: Session,
-) -> Sandbox:
-    """Create a new sandbox for a build session."""
-    sandbox = Sandbox(
-        session_id=session_id,
-        status=SandboxStatus.PROVISIONING,
-    )
-    db_session.add(sandbox)
-    db_session.commit()
-    db_session.refresh(sandbox)
-
-    logger.info(f"Created sandbox {sandbox.id} for session {session_id}")
-    return sandbox
-
-
-def get_sandbox_by_session(
-    session_id: UUID,
-    db_session: Session,
-) -> Sandbox | None:
-    """Get the sandbox for a given session."""
-    return (
-        db_session.query(Sandbox).filter(Sandbox.session_id == session_id).one_or_none()
-    )
+# NOTE: Most sandbox operations have moved to sandbox.py
+# These remain here for convenience in session-related workflows
 
 
 def update_sandbox_status(

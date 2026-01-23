@@ -97,8 +97,14 @@ class SessionResponse(BaseModel):
     artifacts: list[ArtifactResponse]
 
     @classmethod
-    def from_model(cls, session: Any) -> "SessionResponse":
-        """Convert BuildSession ORM model to response."""
+    def from_model(cls, session: Any, sandbox: Any | None = None) -> "SessionResponse":
+        """Convert BuildSession ORM model to response.
+
+        Args:
+            session: BuildSession ORM model
+            sandbox: Optional Sandbox ORM model. Since sandboxes are now user-owned
+                     (not session-owned), the sandbox must be passed separately.
+        """
         return cls(
             id=str(session.id),
             user_id=str(session.user_id) if session.user_id else None,
@@ -106,9 +112,7 @@ class SessionResponse(BaseModel):
             status=session.status,
             created_at=session.created_at,
             last_activity_at=session.last_activity_at,
-            sandbox=(
-                SandboxResponse.from_model(session.sandbox) if session.sandbox else None
-            ),
+            sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
         )
 

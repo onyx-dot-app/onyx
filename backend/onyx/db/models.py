@@ -4191,14 +4191,14 @@ class BuildSession(Base):
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
-    sandbox: Mapped["Sandbox | None"] = relationship(
-        "Sandbox", back_populates="session", uselist=False, cascade="all, delete-orphan"
-    )
     artifacts: Mapped[list["Artifact"]] = relationship(
         "Artifact", back_populates="session", cascade="all, delete-orphan"
     )
     messages: Mapped[list["BuildMessage"]] = relationship(
         "BuildMessage", back_populates="session", cascade="all, delete-orphan"
+    )
+    snapshots: Mapped[list["Snapshot"]] = relationship(
+        "Snapshot", back_populates="session", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
@@ -4208,16 +4208,16 @@ class BuildSession(Base):
 
 
 class Sandbox(Base):
-    """Stores sandbox container metadata for build sessions."""
+    """Stores sandbox container metadata for users (one sandbox per user)."""
 
     __tablename__ = "sandbox"
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    session_id: Mapped[UUID] = mapped_column(
+    user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("build_session.id", ondelete="CASCADE"),
+        ForeignKey("user.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
     )
@@ -4236,12 +4236,7 @@ class Sandbox(Base):
     nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
-    session: Mapped[BuildSession] = relationship(
-        "BuildSession", back_populates="sandbox"
-    )
-    snapshots: Mapped[list["Snapshot"]] = relationship(
-        "Snapshot", back_populates="sandbox", cascade="all, delete-orphan"
-    )
+    user: Mapped[User] = relationship("User")
 
     __table_args__ = (
         Index("ix_sandbox_status", "status"),
@@ -4290,16 +4285,16 @@ class Artifact(Base):
 
 
 class Snapshot(Base):
-    """Stores metadata about sandbox volume snapshots."""
+    """Stores metadata about session output snapshots."""
 
     __tablename__ = "snapshot"
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    sandbox_id: Mapped[UUID] = mapped_column(
+    session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("sandbox.id", ondelete="CASCADE"),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
         nullable=False,
     )
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
@@ -4309,10 +4304,12 @@ class Snapshot(Base):
     )
 
     # Relationships
-    sandbox: Mapped[Sandbox] = relationship("Sandbox", back_populates="snapshots")
+    session: Mapped[BuildSession] = relationship(
+        "BuildSession", back_populates="snapshots"
+    )
 
     __table_args__ = (
-        Index("ix_snapshot_sandbox_created", "sandbox_id", desc("created_at")),
+        Index("ix_snapshot_session_created", "session_id", desc("created_at")),
     )
 
 
