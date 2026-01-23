@@ -40,7 +40,11 @@ import {
  * Extract file path from a tool call packet.
  */
 function getFilePath(packet: Record<string, unknown>): string | null {
-  const rawInput = packet.raw_input as Record<string, unknown> | null;
+  // Handle both snake_case (raw_input) and camelCase (rawInput) variants
+  const rawInput = (packet.raw_input ?? packet.rawInput) as Record<
+    string,
+    unknown
+  > | null;
   return (rawInput?.file_path ?? rawInput?.filePath ?? rawInput?.path) as
     | string
     | null;
@@ -209,12 +213,6 @@ export function useBuildStreaming() {
               accumulatedText = "";
               accumulatedThinking = "";
 
-              // DEBUG: Log full packet
-              console.log(
-                "[tool_call_start] Full packet:",
-                JSON.stringify(packetData, null, 2)
-              );
-
               const toolCallId = (packetData.tool_call_id ||
                 packetData.toolCallId ||
                 genId("tc")) as string;
@@ -223,12 +221,6 @@ export function useBuildStreaming() {
               const toolName = (packetData.tool_name ||
                 packetData.toolName ||
                 packetData.title) as string | null;
-
-              console.log("[tool_call_start] Extracted:", {
-                toolCallId,
-                kind,
-                toolName,
-              });
 
               // Check if this is a TodoWrite call
               // Skip tool_call_start for TodoWrite - it has no todos yet
@@ -260,8 +252,6 @@ export function useBuildStreaming() {
                 newContent: diffData.newText,
               };
 
-              console.log("[tool_call_start] Created toolCall:", toolCall);
-
               const item: StreamItem = {
                 type: "tool_call",
                 id: toolCallId,
@@ -274,12 +264,6 @@ export function useBuildStreaming() {
 
             // Tool call progress - update existing tool_call item or todo_list item
             case "tool_call_progress": {
-              // DEBUG: Log full packet
-              console.log(
-                "[tool_call_progress] Full packet:",
-                JSON.stringify(packetData, null, 2)
-              );
-
               const toolCallId = (packetData.tool_call_id ||
                 packetData.toolCallId) as string;
               if (!toolCallId) break;
@@ -322,18 +306,19 @@ export function useBuildStreaming() {
                 }),
               };
 
-              console.log("[tool_call_progress] Updates:", updates);
-
               updateToolCallStreamItem(sessionId, toolCallId, updates);
 
-              // Check if this is a completed file operation in web/ directory
+              // Check if this is a file operation in web/ directory
+              // Match both absolute paths (/outputs/web/...) and relative paths (web/...)
               const filePath = getFilePath(packetData);
-              const isWebFileChange =
+              const isWebFile =
                 (kind === "edit" || kind === "write") &&
-                filePath?.includes("/web/") &&
-                status === "completed";
+                filePath &&
+                (filePath.includes("/web/") || filePath.startsWith("web/"));
 
-              if (isWebFileChange) {
+              // Trigger refresh when we see a web file being edited
+              // The output panel will open when streaming ends
+              if (isWebFile) {
                 triggerWebappRefresh(sessionId);
               }
 
