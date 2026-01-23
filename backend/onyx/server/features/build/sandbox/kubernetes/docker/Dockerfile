@@ -55,9 +55,10 @@ ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace
 
-# Copy entrypoint script
+# Copy scripts
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY generate_agents_md.py /usr/local/bin/generate_agents_md.py
+RUN chmod +x /entrypoint.sh /usr/local/bin/generate_agents_md.py
 
 # Switch to non-root user
 USER sandbox
