@@ -56,6 +56,8 @@ class SandboxManager(ABC):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None = None,
         snapshot_path: str | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a session.
 
@@ -67,6 +69,8 @@ class SandboxManager(ABC):
             llm_config: LLM provider configuration
             nextjs_port: Pre-allocated port for Next.js server (local backend only)
             snapshot_path: Optional storage path to restore from
+            user_name: User's name for personalization in AGENTS.md
+            user_role: User's role/title for personalization in AGENTS.md
 
         Returns:
             SandboxInfo with the provisioned sandbox details
