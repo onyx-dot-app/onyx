@@ -264,6 +264,17 @@ class DirectoryManager:
 
         # Set default tool permission
         config["permission"] = {
+            "bash": {
+                "rm": "deny",
+                "ssh": "deny",
+                "scp": "deny",
+                "sftp": "deny",
+                "ftp": "deny",
+                "telnet": "deny",
+                "nc": "deny",
+                "netcat": "deny",
+                "*": "allow",  # Allow other bash commands
+            },
             "edit": "allow",
             "write": "allow",
             "read": "allow",
@@ -275,6 +286,7 @@ class DirectoryManager:
             "skill": "allow",
             "question": "allow",
             "webfetch": "allow",
+            "external_directory": "allow",  # Allow access to symlinked files directory
         }
 
         # Disable specified tools via permissions
