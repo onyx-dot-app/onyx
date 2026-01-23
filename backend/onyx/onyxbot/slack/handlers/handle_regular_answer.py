@@ -7,6 +7,7 @@ from typing import TypeVar
 from retry import retry
 from slack_sdk import WebClient
 
+from onyx.auth.users import get_anonymous_user
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import handle_stream_message_objects
@@ -112,16 +113,20 @@ def handle_regular_answer(
         or message_info.is_slash_command
     ) and not message_info.is_bot_dm
 
-    # If the channel mis configured to respond with an ephemeral message,
+    # If the channel is configured to respond with an ephemeral message,
     # or the message is a dm to the Onyx bot, we should use the proper onyx user from the email.
     # This will make documents privately accessible to the user available to Onyx Bot answers.
-    # Otherwise - if not ephemeral or DM to Onyx Bot - we must use None as the user to restrict
+    # Otherwise - if not ephemeral or DM to Onyx Bot - we use anonymous user to restrict
     # to public docs.
 
-    user = None
     if message_info.email:
         with get_session_with_current_tenant() as db_session:
-            user = get_user_by_email(message_info.email, db_session)
+            user = (
+                get_user_by_email(message_info.email, db_session)
+                or get_anonymous_user()
+            )
+    else:
+        user = get_anonymous_user()
 
     target_thread_ts = (
         None
@@ -179,8 +184,7 @@ def handle_regular_answer(
     def _get_slack_answer(
         new_message_request: SendMessageRequest,
         slack_context_str: str | None,
-        # pass in `None` to make the answer based on public documents only
-        onyx_user: User | None,
+        onyx_user: User,
     ) -> ChatBasicResponse:
         with get_session_with_current_tenant() as db_session:
             packets = handle_stream_message_objects(
@@ -225,7 +229,7 @@ def handle_regular_answer(
         can_search_over_private_docs = message_info.is_bot_dm or send_as_ephemeral
         answer = _get_slack_answer(
             new_message_request=new_message_request,
-            onyx_user=user if can_search_over_private_docs else None,
+            onyx_user=user if can_search_over_private_docs else get_anonymous_user(),
             slack_context_str=slack_context_str,
         )
 
