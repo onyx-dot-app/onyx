@@ -293,7 +293,7 @@ class DocumentQuery:
                 # Applied to all the sub-queries. Source:
                 # https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
                 # Does AND for each filter in the list.
-                "filter": hybrid_search_filters,
+                "filter": {"bool": {"filter": hybrid_search_filters}},
             }
         }
 

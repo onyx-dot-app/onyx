@@ -12,6 +12,7 @@ from datetime import timezone
 
 import pytest
 
+from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
@@ -60,9 +61,9 @@ def _create_test_document_chunk(
         title_vector = [0.2] * 128
 
     now = datetime.now(timezone.utc)
-    # We only store millisecond precision, so to make sure asserts work in this
-    # test file manually lose some precision from datetime.now().
-    now = now.replace(microsecond=(now.microsecond // 1000) * 1000)
+    # We only store second precision, so to make sure asserts work in this test
+    # file manually lose some precision from datetime.now().
+    now = now.replace(microsecond=(now.microsecond // 1_000_000) * 1_000_000)
 
     return DocumentChunk(
         document_id=document_id,
@@ -471,6 +472,8 @@ class TestOpenSearchClient:
         search_query = DocumentQuery.get_from_document_id_query(
             document_id="delete-me",
             tenant_state=tenant_state,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -483,6 +486,8 @@ class TestOpenSearchClient:
         keep_query = DocumentQuery.get_from_document_id_query(
             document_id="keep-me",
             tenant_state=tenant_state,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -613,6 +618,9 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
+            # TODO
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
@@ -685,6 +693,9 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
+            # TODO
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
@@ -731,6 +742,9 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
+            # TODO
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
@@ -809,6 +823,9 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_x,
+            # TODO
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
@@ -914,6 +931,9 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_x,
+            # TODO
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
@@ -1014,6 +1034,8 @@ class TestOpenSearchClient:
         verify_query_x = DocumentQuery.get_from_document_id_query(
             document_id="doc-tenant-x",
             tenant_state=tenant_x,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -1026,6 +1048,8 @@ class TestOpenSearchClient:
         verify_query_y = DocumentQuery.get_from_document_id_query(
             document_id="doc-tenant-y",
             tenant_state=tenant_y,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -1113,6 +1137,8 @@ class TestOpenSearchClient:
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="doc-1",
             tenant_state=tenant_state,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
