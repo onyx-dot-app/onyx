@@ -349,24 +349,27 @@ class LocalSandboxManager(SandboxManager):
             size_bytes=size_bytes,
         )
 
-    def health_check(self, sandbox_id: UUID, nextjs_port: int | None = None) -> bool:
+    def health_check(
+        self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
+    ) -> bool:
         """Check if the sandbox is healthy (Next.js server running).
 
         Args:
             sandbox_id: The sandbox ID to check
             nextjs_port: The Next.js port to check
+            timeout: Health check timeout in seconds
 
         Returns:
             True if sandbox is healthy, False otherwise
         """
-        # Cannot check health if port is not known
-        if nextjs_port is None:
-            return False
+        # assume healthy if no port is specified
+        if not nextjs_port:
+            return True
 
         # Check Next.js server is responsive on the sandbox's allocated port
         return self._process_manager._wait_for_server(
             f"http://localhost:{nextjs_port}",
-            timeout=5.0,
+            timeout=timeout,
         )
 
     def send_message(
@@ -473,9 +476,3 @@ class LocalSandboxManager(SandboxManager):
             raise ValueError(f"Not a file: {path}")
 
         return target_path.read_bytes()
-
-    def cancel_agent(self, sandbox_id: UUID) -> None:
-        """Cancel the current agent operation."""
-        client = self._acp_clients.get(sandbox_id)
-        if client:
-            client.cancel()

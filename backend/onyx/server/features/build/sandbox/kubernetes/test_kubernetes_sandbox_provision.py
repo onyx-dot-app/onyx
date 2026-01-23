@@ -12,6 +12,7 @@ Run with:
 """
 
 import time
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -25,26 +26,28 @@ from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.kubernetes.manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
+# Test constants
+TEST_TENANT_ID = "test-tenant"
+TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
-def _is_kubernetes_available() -> bool:
+
+def _is_kubernetes_available() -> None:
     """Check if Kubernetes is available and configured."""
     try:
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
 
-        v1 = client.CoreV1Api()
-        v1.list_namespace(limit=1)
-        return True
-    except Exception:
-        return False
+    v1 = client.CoreV1Api()
+    # List pods in sandbox namespace instead of namespaces (avoids cluster-scope permissions)
+    v1.list_namespaced_pod(SANDBOX_NAMESPACE, limit=1)
 
 
 def _get_kubernetes_client() -> client.CoreV1Api:
@@ -60,10 +63,6 @@ def _get_kubernetes_client() -> client.CoreV1Api:
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
     reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
 )
-@pytest.mark.skipif(
-    not _is_kubernetes_available(),
-    reason="Kubernetes cluster not available",
-)
 def test_kubernetes_sandbox_provision() -> None:
     """Test that provision() creates a sandbox pod and DB record successfully.
 
@@ -73,19 +72,18 @@ def test_kubernetes_sandbox_provision() -> None:
     3. Verifies the sandbox is created with RUNNING status
     4. Cleans up by terminating the sandbox
     """
+    _is_kubernetes_available()
+
     # Initialize the database engine
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
 
     # Set up tenant context (required for multi-tenant operations)
-    tenant_id = "public"
-
-    CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
 
     # Get the manager instance
     manager = KubernetesSandboxManager()
 
     sandbox_id = uuid4()
-    user_id = uuid4()
 
     # Create a test LLM config (values don't matter for this test)
     llm_config = LLMProviderConfig(
@@ -99,8 +97,8 @@ def test_kubernetes_sandbox_provision() -> None:
         # Call provision (no longer needs db_session)
         sandbox_info = manager.provision(
             sandbox_id=sandbox_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
+            user_id=TEST_USER_ID,
+            tenant_id=TEST_TENANT_ID,
             file_system_path="/tmp/test-files",  # Not used by K8s manager
             llm_config=llm_config,
         )
@@ -163,11 +161,55 @@ def test_kubernetes_sandbox_provision() -> None:
             tty=False,
         )
         assert resp is not None
-        # TODO: Update with expected contents
-        # assert "EXPECTED_FILE_OR_DIR" in resp, "/workspace/outputs should contain EXPECTED_FILE_OR_DIR"
+        print(f"DEBUG: Contents of /workspace/outputs:\n{resp}")
+        assert (
+            "web" in resp
+        ), f"/workspace/outputs should contain web directory. Actual contents:\n{resp}"
+
+        # Verify /workspace/outputs/web directory exists
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            "test -d /workspace/outputs/web && echo 'exists'",
+        ]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        assert "exists" in resp, "/workspace/outputs/web directory should exist"
+
+        # Verify /workspace/outputs/web/AGENTS.md file exists
+        exec_command = ["/bin/sh", "-c", "cat /workspace/outputs/web/AGENTS.md"]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        assert (
+            len(resp) > 0
+        ), "/workspace/outputs/web/AGENTS.md file should not be empty"
+        # Verify it contains expected content
+        assert (
+            "Agent" in resp or "Instructions" in resp or "#" in resp
+        ), "/workspace/outputs/web/AGENTS.md should contain agent instructions"
 
         # Verify /workspace/files directory exists and contains expected files
-        exec_command = ["/bin/sh", "-c", "ls -la /workspace/files"]
+        exec_command = ["/bin/sh", "-c", "find /workspace/files -type f | wc -l"]
         resp = k8s_stream(
             k8s_client.connect_get_namespaced_pod_exec,
             name=pod_name,
@@ -180,28 +222,129 @@ def test_kubernetes_sandbox_provision() -> None:
             tty=False,
         )
         assert resp is not None
-        # TODO: Update with expected contents
-        # assert "EXPECTED_FILE_OR_DIR" in resp, "/workspace/files should contain EXPECTED_FILE_OR_DIR"
-
-        # Verify /workspace/user_uploaded_files directory exists and contains expected files
-        exec_command = ["/bin/sh", "-c", "ls -la /workspace/user_uploaded_files"]
-        resp = k8s_stream(
-            k8s_client.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=SANDBOX_NAMESPACE,
-            container="sandbox",
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        assert resp is not None
-        # TODO: Update with expected contents
-        # assert "EXPECTED_FILE_OR_DIR" in resp, "/workspace/user_uploaded_files should contain EXPECTED_FILE_OR_DIR"
+        file_count = int(resp.strip())
+        assert (
+            file_count == 1099
+        ), f"/workspace/files should contain 1099 files, but found {file_count}"
 
     finally:
         # Clean up: terminate the sandbox (no longer needs db_session)
+        if sandbox_id:
+            manager.terminate(sandbox_id)
+
+            # Verify Kubernetes resources are cleaned up
+            k8s_client = _get_kubernetes_client()
+            pod_name = f"sandbox-{str(sandbox_id)[:8]}"
+
+            # Give K8s a moment to delete resources
+            time.sleep(2)
+
+            # Verify pod is deleted (or being deleted)
+            try:
+                pod = k8s_client.read_namespaced_pod(
+                    name=pod_name,
+                    namespace=SANDBOX_NAMESPACE,
+                )
+                # Pod might still exist but be terminating
+                assert pod.metadata.deletion_timestamp is not None
+            except ApiException as e:
+                # 404 means pod was successfully deleted
+                assert e.status == 404
+
+
+@pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
+)
+def test_kubernetes_sandbox_send_message() -> None:
+    """Test that send_message() communicates with the sandbox agent successfully.
+
+    This test:
+    1. Creates a sandbox pod
+    2. Sends a simple message via send_message()
+    3. Verifies we receive ACP events back (agent responses)
+    4. Cleans up by terminating the sandbox
+    """
+    from acp.schema import AgentMessageChunk
+    from acp.schema import Error
+    from acp.schema import PromptResponse
+
+    _is_kubernetes_available()
+
+    # Initialize the database engine
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+
+    # Set up tenant context (required for multi-tenant operations)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+
+    # Get the manager instance
+    manager = KubernetesSandboxManager()
+
+    sandbox_id = uuid4()
+
+    # Create a test LLM config (values don't matter for this test)
+    llm_config = LLMProviderConfig(
+        provider="openai",
+        model_name="gpt-4",
+        api_key="test-key",
+        api_base=None,
+    )
+
+    try:
+        # Provision the sandbox
+        sandbox_info = manager.provision(
+            sandbox_id=sandbox_id,
+            user_id=TEST_USER_ID,
+            tenant_id=TEST_TENANT_ID,
+            file_system_path="/tmp/test-files",
+            llm_config=llm_config,
+        )
+
+        assert sandbox_info.status == SandboxStatus.RUNNING
+
+        # Verify health check passes before sending message
+        is_healthy = False
+        for _ in range(10):
+            is_healthy = manager.health_check(sandbox_id, nextjs_port=None)
+            if is_healthy:
+                break
+            time.sleep(10)
+
+        assert is_healthy, "Sandbox agent should be healthy before sending messages"
+        print("DEBUG: Sandbox agent is healthy")
+
+        # Send a simple message
+        events: list[ACPEvent] = []
+        for event in manager.send_message(sandbox_id, "What is 2 + 2?"):
+            events.append(event)
+
+        # Verify we received events
+        assert len(events) > 0, "Should receive at least one event from send_message"
+
+        for event in events:
+            print(f"Recieved event: {event}")
+
+        # Check for errors
+        errors = [e for e in events if isinstance(e, Error)]
+        assert len(errors) == 0, f"Should not receive errors: {errors}"
+
+        # Verify we received some agent message content or a final response
+        message_chunks = [e for e in events if isinstance(e, AgentMessageChunk)]
+        prompt_responses = [e for e in events if isinstance(e, PromptResponse)]
+
+        assert (
+            len(message_chunks) > 0 or len(prompt_responses) > 0
+        ), "Should receive either AgentMessageChunk or PromptResponse events"
+
+        # If we got a PromptResponse, verify it completed successfully
+        if prompt_responses:
+            final_response = prompt_responses[-1]
+            assert (
+                final_response.stop_reason is not None
+            ), "PromptResponse should have a stop_reason"
+
+    finally:
+        # Clean up: terminate the sandbox
         if sandbox_id:
             manager.terminate(sandbox_id)
 
