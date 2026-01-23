@@ -349,15 +349,6 @@ def generate_agent_instructions(
     # Build available skills section
     available_skills_section = build_skills_section(skills_path)
 
-    # Build file structure section
-    file_structure_section = ""
-    connector_descriptions_section = ""
-    if files_path:
-        file_structure_section = build_file_structure_section(files_path)
-        connector_descriptions_section = build_connector_descriptions_section(
-            files_path
-        )
-
     # Replace placeholders
     content = template_content
     content = content.replace("{{USER_CONTEXT}}", user_context)
@@ -368,9 +359,18 @@ def generate_agent_instructions(
     )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
-    content = content.replace("{{FILE_STRUCTURE_SECTION}}", file_structure_section)
-    content = content.replace(
-        "{{CONNECTOR_DESCRIPTIONS_SECTION}}", connector_descriptions_section
-    )
+
+    # Only replace file-related placeholders if files_path is provided.
+    # When files_path is None (e.g., Kubernetes), leave placeholders intact
+    # so the container can replace them after files are synced.
+    if files_path:
+        file_structure_section = build_file_structure_section(files_path)
+        connector_descriptions_section = build_connector_descriptions_section(
+            files_path
+        )
+        content = content.replace("{{FILE_STRUCTURE_SECTION}}", file_structure_section)
+        content = content.replace(
+            "{{CONNECTOR_DESCRIPTIONS_SECTION}}", connector_descriptions_section
+        )
 
     return content
