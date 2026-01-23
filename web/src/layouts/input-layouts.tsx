@@ -105,7 +105,7 @@ function HorizontalInputLayout({
   return (
     <label
       htmlFor={name}
-      className={cn(cursorPointer && "cursor-pointer", " w-full")}
+      className={cn(cursorPointer && "cursor-pointer", "w-full")}
     >
       <Section gap={0.25} alignItems="start">
         <Section
