@@ -25,6 +25,7 @@ from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
 from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
 from onyx.document_index.opensearch.schema import METADATA_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import PUBLIC_FIELD_NAME
+from onyx.document_index.opensearch.schema import set_or_convert_timezone_to_utc
 from onyx.document_index.opensearch.schema import SOURCE_TYPE_FIELD_NAME
 from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import TITLE_FIELD_NAME
@@ -274,6 +275,9 @@ class DocumentQuery:
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
             include_hidden=include_hidden,
+            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
+            # now. This should not cause any issues but it can introduce
+            # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
@@ -520,6 +524,9 @@ class DocumentQuery:
             return user_project_filter
 
         def _get_time_cutoff_filter(time_cutoff: datetime) -> dict[str, Any]:
+            # Convert to UTC if not already so the cutoff is comparable to the
+            # document data.
+            time_cutoff = set_or_convert_timezone_to_utc(time_cutoff)
             # Logical OR operator on its elements.
             time_cutoff_filter: dict[str, Any] = {"bool": {"should": []}}
             time_cutoff_filter["bool"]["should"].append(

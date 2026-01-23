@@ -77,11 +77,9 @@ def generate_opensearch_filtered_access_control_list(
 
     In the OpenSearch schema this is represented by PUBLIC_FIELD_NAME.
     """
-    access_control_list = list(access.to_acl())
-    filtered_access_control_list = [
-        acl for acl in access_control_list if acl != PUBLIC_DOC_PAT
-    ]
-    return filtered_access_control_list
+    access_control_list = access.to_acl()
+    access_control_list.discard(PUBLIC_DOC_PAT)
+    return list(access_control_list)
 
 
 def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
