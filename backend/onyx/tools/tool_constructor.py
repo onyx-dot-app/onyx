@@ -95,7 +95,7 @@ def construct_tools(
     persona: Persona,
     db_session: Session,
     emitter: Emitter,
-    user: User | None,
+    user: User,
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
@@ -116,7 +116,7 @@ def construct_tools(
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
     # Get user's OAuth token if available
     user_oauth_token = None
-    if user and user.oauth_accounts:
+    if user.oauth_accounts:
         user_oauth_token = user.oauth_accounts[0].access_token
 
     search_settings = get_current_search_settings(db_session)
