@@ -273,6 +273,8 @@ class DirectoryManager:
                 "telnet": "deny",
                 "nc": "deny",
                 "netcat": "deny",
+                # Allow read access to common file operations
+                "allowReadAccess": True,
             },
             "edit": "allow",
             "write": "allow",
