@@ -48,10 +48,10 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
-from onyx.server.features.build.sandbox.templates.agent_instructions import (
+from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
-from onyx.server.features.build.sandbox.templates.opencode_config import (
+from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
 from onyx.utils.logger import setup_logger

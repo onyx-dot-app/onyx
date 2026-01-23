@@ -5,10 +5,10 @@
 # - OpenCode ACP server for agent communication
 #
 # The image expects:
-# - /workspace/outputs to contain the Next.js app (mounted as emptyDir, populated by init container)
-# - /workspace/files to contain knowledge files (mounted as emptyDir, populated by init container)
-# - /workspace/user_uploaded_files to contain user uploads (mounted as emptyDir, populated by init container)
-# - /workspace/instructions to contain AGENTS.md (mounted from ConfigMap)
+# - /workspace/outputs to contain the Next.js app (copied by init container from backend image)
+# - /workspace/files to contain knowledge files (synced by init container from S3)
+# - /workspace/user_uploaded_files to contain user uploads (mounted as emptyDir)
+# - /workspace/AGENTS.md to contain agent instructions (written by init container)
 # - OPENCODE_CONFIG env var with JSON config for opencode
 
 FROM node:20-slim
