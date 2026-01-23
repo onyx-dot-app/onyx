@@ -497,6 +497,29 @@
       }
     },
     {
+      "name": "Clean restore seeded database dump (destructive)",
+      "type": "node",
+      "request": "launch",
+
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--fetch-seeded",
+        "--clean",
+        "--yes"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
+      }
+    },
+    {
       "name": "Clear and Restart External Volumes and Containers",
       "type": "node",
       "request": "launch",
