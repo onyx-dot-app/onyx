@@ -7,7 +7,7 @@ import {
   ArtifactType,
   ArtifactCreatedPacket,
   ErrorPacket,
-} from "@/app/build/services/buildStreamingModels";
+} from "@/app/build/types/streamingTypes";
 
 import {
   sendMessageStream,

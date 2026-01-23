@@ -212,6 +212,7 @@ HIDDEN_PATTERNS = {
     "__pycache__",
     "node_modules",
     ".DS_Store",
+    "opencode.json",
     ".env",
     ".gitignore",
 }
@@ -1117,6 +1118,10 @@ class SessionManager:
 
         if file_path.is_dir():
             raise ValueError("Cannot download directory")
+
+        # Filter out opencode.json files
+        if file_path.name == "opencode.json":
+            return None
 
         content = file_path.read_bytes()
         mime_type, _ = mimetypes.guess_type(str(file_path))
