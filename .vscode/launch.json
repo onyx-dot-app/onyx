@@ -500,7 +500,6 @@
       "name": "Clean restore seeded database dump (destructive)",
       "type": "node",
       "request": "launch",
-
       "runtimeExecutable": "uv",
       "runtimeArgs": [
         "run",
