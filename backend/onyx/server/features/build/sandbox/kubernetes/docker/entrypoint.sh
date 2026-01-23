@@ -12,6 +12,11 @@ set -e
 
 echo "Starting sandbox services..."
 
+# Generate AGENTS.md from template + scanned files
+# This runs AFTER the init container has synced files from S3
+echo "Generating AGENTS.md..."
+python3 /usr/local/bin/generate_agents_md.py
+
 # Change to the outputs/web directory for Next.js
 cd /workspace/outputs/web
 

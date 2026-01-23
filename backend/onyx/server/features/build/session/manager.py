@@ -32,6 +32,7 @@ from onyx.db.llm import fetch_default_provider
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import User
+from onyx.db.users import fetch_user_by_id
 from onyx.llm.factory import get_default_llm
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
@@ -211,6 +212,7 @@ HIDDEN_PATTERNS = {
     "__pycache__",
     "node_modules",
     ".DS_Store",
+    "opencode.json",
     ".env",
     ".gitignore",
 }
@@ -438,13 +440,20 @@ class SessionManager:
         logger.info(
             f"Setting up session workspace {session_id} in sandbox {sandbox.id}"
         )
+        # Fetch user data for personalization in AGENTS.md
+        user = fetch_user_by_id(self._db_session, user_id)
+        user_name = user.personal_name if user else None
+        user_role = user.personal_role if user else None
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
             llm_config=llm_config,
             snapshot_path=None,  # TODO: Support restoring from snapshot
+            nextjs_port=nextjs_port,
+            user_name=user_name,
+            user_role=user_role,
         )
-
+        sandbox_id = sandbox.id
         logger.info(
             f"Successfully created session {session_id} with workspace in sandbox {sandbox.id}"
         )
@@ -1160,6 +1169,10 @@ class SessionManager:
 
         if file_path.is_dir():
             raise ValueError("Cannot download directory")
+
+        # Filter out opencode.json files
+        if file_path.name == "opencode.json":
+            return None
 
         content = file_path.read_bytes()
         mime_type, _ = mimetypes.guess_type(str(file_path))

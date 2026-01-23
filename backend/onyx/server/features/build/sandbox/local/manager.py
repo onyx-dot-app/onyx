@@ -20,17 +20,13 @@ from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.internal.snapshot_manager import SnapshotManager
-from onyx.server.features.build.sandbox.local.internal.agent_client import (
-    ACPAgentClient,
-)
-from onyx.server.features.build.sandbox.local.internal.agent_client import ACPEvent
-from onyx.server.features.build.sandbox.local.internal.directory_manager import (
+from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
+from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
+from onyx.server.features.build.sandbox.local.process_manager import ProcessManager
+from onyx.server.features.build.sandbox.manager.directory_manager import (
     DirectoryManager,
 )
-from onyx.server.features.build.sandbox.local.internal.process_manager import (
-    ProcessManager,
-)
+from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
@@ -116,7 +112,7 @@ class LocalSandboxManager(SandboxManager):
             error_msg = (
                 "Sandbox templates are missing. "
                 "Please build templates using:\n"
-                "  python -m onyx.server.features.build.sandbox.build_templates\n"
+                "  python -m onyx.server.features.build.sandbox.util.build_venv_template\n"
                 "Or use Docker image built with Dockerfile.sandbox-templates.\n\n"
                 "Missing templates:\n"
             )
@@ -272,7 +268,10 @@ class LocalSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
+        nextjs_port: int,
         snapshot_path: str | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -292,6 +291,8 @@ class LocalSandboxManager(SandboxManager):
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
             snapshot_path: Optional storage path to restore outputs from
+            user_name: User's name for personalization in AGENTS.md
+            user_role: User's role/title for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -315,6 +316,49 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Session directory created at {session_path}")
 
         try:
+            logger.debug("Setting up agent instructions (AGENTS.md)")
+            self._directory_manager.setup_agent_instructions(
+                sandbox_path=sandbox_path,
+                provider=llm_config.provider,
+                model_name=llm_config.model_name,
+                nextjs_port=nextjs_port,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                user_name=user_name,
+                user_role=user_role,
+            )
+            logger.debug("Agent instructions ready")
+
+            logger.debug("Setting up skills")
+            self._directory_manager.setup_skills(sandbox_path)
+            logger.debug("Skills ready")
+
+            # Setup user uploads directory
+            logger.debug("Setting up user uploads directory")
+            self._directory_manager.setup_user_uploads_directory(sandbox_path)
+            logger.debug("User uploads directory ready")
+
+            # Setup opencode.json with LLM provider configuration
+            logger.debug(
+                f"Setting up opencode config with provider: {llm_config.provider}, "
+                f"model: {llm_config.model_name}"
+            )
+            self._directory_manager.setup_opencode_config(
+                sandbox_path=sandbox_path,
+                provider=llm_config.provider,
+                model_name=llm_config.model_name,
+                api_key=llm_config.api_key,
+                api_base=llm_config.api_base,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+            )
+            logger.debug("Opencode config ready")
+
+            # Start Next.js server on pre-allocated port
+            web_dir = self._directory_manager.get_web_path(sandbox_path)
+            logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
+
+            self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            logger.info("Next.js server started successfully")
+
             logger.debug("Setting up outputs directory from template")
             self._directory_manager.setup_outputs_directory(session_path)
             logger.debug("Outputs directory ready")
@@ -324,50 +368,12 @@ class LocalSandboxManager(SandboxManager):
             self._directory_manager.setup_venv(session_path)
             logger.debug("Virtual environment ready")
 
-            logger.debug("Setting up agent instructions (AGENTS.md)")
-            self._directory_manager.setup_agent_instructions(session_path)
-            logger.debug("Agent instructions ready")
-
-            logger.debug("Setting up skills")
-            self._directory_manager.setup_skills(session_path)
-            logger.debug("Skills ready")
-
-            # Setup user uploads directory
-            logger.debug("Setting up user uploads directory")
-            self._directory_manager.setup_user_uploads_directory(session_path)
-            logger.debug("User uploads directory ready")
-
             # Setup files symlink within session workspace
             logger.debug("Setting up files symlink in session workspace")
             self._directory_manager.setup_session_files_symlink(
                 sandbox_path, session_path
             )
             logger.debug("Files symlink ready")
-
-            # Setup opencode.json with LLM provider configuration
-            logger.debug(
-                f"Setting up opencode config with provider: {llm_config.provider}, "
-                f"model: {llm_config.model_name}"
-            )
-            self._directory_manager.setup_opencode_config(
-                sandbox_path=session_path,
-                provider=llm_config.provider,
-                model_name=llm_config.model_name,
-                api_key=llm_config.api_key,
-                api_base=llm_config.api_base,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
-            )
-            logger.debug("Opencode config ready")
-
-            # Start Next.js server for this session
-            web_dir = session_path / "outputs" / "web"
-            if web_dir.exists():
-                # Note: For now, we'll share the sandbox's Next.js port
-                # Future: Each session could have its own port
-                logger.debug(
-                    f"Session workspace {session_id} ready "
-                    f"(Next.js served from sandbox port)"
-                )
 
             logger.info(f"Set up session workspace {session_id} at {session_path}")
 

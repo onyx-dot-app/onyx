@@ -32,7 +32,7 @@ from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.db.sandbox import allocate_nextjs_port
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.local import LocalSandboxManager
-from onyx.server.features.build.sandbox.local.internal.agent_client import ACPEvent
+from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SnapshotResult

@@ -10,15 +10,14 @@ import {
   StreamPacket,
   UsageLimits,
   DirectoryListing,
-} from "@/app/build/services/buildStreamingModels";
+} from "@/app/build/types/streamingTypes";
 
 // =============================================================================
 // API Configuration
 // =============================================================================
 
 const API_BASE = "/api/build";
-const API_V1_BASE = "/api/build/v1"; // For v1 mock endpoints (limit, connectors, etc.)
-export const USAGE_LIMITS_ENDPOINT = `${API_V1_BASE}/limit`;
+export const USAGE_LIMITS_ENDPOINT = `${API_BASE}/limit`;
 
 // =============================================================================
 // SSE Stream Processing

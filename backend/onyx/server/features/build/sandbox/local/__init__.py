@@ -2,13 +2,16 @@
 
 This module provides the LocalSandboxManager for development and single-node
 deployments that run sandboxes as directories on the local filesystem.
-
-Internal implementation details (agent_client, directory_manager, process_manager)
-are in the internal/ subdirectory and should not be used directly.
 """
 
+from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
+from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.local.manager import LocalSandboxManager
+from onyx.server.features.build.sandbox.local.process_manager import ProcessManager
 
 __all__ = [
+    "ACPAgentClient",
+    "ACPEvent",
     "LocalSandboxManager",
+    "ProcessManager",
 ]

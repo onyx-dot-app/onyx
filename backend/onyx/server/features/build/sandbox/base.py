@@ -122,7 +122,10 @@ class SandboxManager(ABC):
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
+        nextjs_port: int,
         snapshot_path: str | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -139,6 +142,8 @@ class SandboxManager(ABC):
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
             snapshot_path: Optional storage path to restore outputs from
+            user_name: User's name for personalization in AGENTS.md
+            user_role: User's role/title for personalization in AGENTS.md
 
         Raises:
             RuntimeError: If workspace setup fails

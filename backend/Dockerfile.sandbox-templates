@@ -89,15 +89,16 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
 
 # Build sandbox templates
-# This must happen after Python dependencies are installed but before cleanup of build tools
-# Templates are built once per image and copied for each sandbox (much faster than generating)
-# Note: We copy just the files we need here since the full onyx directory isn't copied yet
+# Copy web template from the backend package (versioned with code)
+COPY --chown=onyx:onyx ./onyx/server/features/build/templates/outputs/web /templates/outputs/web
+
+# Build Python venv template
 COPY --chown=onyx:onyx ./onyx/server/features/build/initial-requirements.txt /tmp/sandbox-requirements.txt
-COPY --chown=onyx:onyx ./onyx/server/features/build/sandbox/build_templates.py /tmp/build_templates.py
+COPY --chown=onyx:onyx ./onyx/server/features/build/sandbox/util/build_venv_template.py /tmp/build_venv_template.py
 RUN mkdir -p /templates && \
-    python /tmp/build_templates.py --requirements /tmp/sandbox-requirements.txt && \
+    python /tmp/build_venv_template.py --requirements /tmp/sandbox-requirements.txt && \
     chown -R onyx:onyx /templates && \
-    rm -f /tmp/build_templates.py /tmp/sandbox-requirements.txt
+    rm -f /tmp/build_venv_template.py /tmp/sandbox-requirements.txt
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \

@@ -2,10 +2,7 @@
 
 import useSWR from "swr";
 
-import {
-  UsageLimits,
-  LimitType,
-} from "@/app/build/services/buildStreamingModels";
+import { UsageLimits, LimitType } from "@/app/build/types/streamingTypes";
 
 import {
   USAGE_LIMITS_ENDPOINT,
