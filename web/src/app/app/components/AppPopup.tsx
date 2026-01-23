@@ -25,7 +25,7 @@ const CustomLogoHeaderIcon = ({ className, size = 24 }: IconProps) => (
   />
 );
 
-export function ChatPopup() {
+export function AppPopup() {
   const [completedFlow, setCompletedFlow] = useState(true);
   const [showConsentError, setShowConsentError] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);

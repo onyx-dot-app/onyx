@@ -23,7 +23,7 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { useTags } from "@/lib/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
-import { ChatPopup } from "@/app/app/components/ChatPopup";
+import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
@@ -70,7 +70,7 @@ import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import ChatHeader from "@/app/app/components/ChatHeader";
+import AppHeader from "@/app/app/components/AppHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
@@ -83,7 +83,7 @@ export interface ChatPageProps {
   firstMessage?: string;
 }
 
-export default function ChatPage({ firstMessage }: ChatPageProps) {
+export default function AppPage({ firstMessage }: ChatPageProps) {
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
   // const renderCount = useRef(0);
@@ -595,7 +595,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
       Only used in the EE version of the app. */}
       {popup}
 
-      <ChatPopup />
+      <AppPopup />
 
       {retrievalEnabled && documentSidebarVisible && settings.isMobile && (
         <div className="md:hidden">
@@ -687,7 +687,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   disableFadeOverlay={hasBackground}
                 >
                   <AppLayouts.StickyHeader>
-                    <ChatHeader />
+                    <AppHeader />
                   </AppLayouts.StickyHeader>
                   <MessageList
                     liveAssistant={liveAssistant}

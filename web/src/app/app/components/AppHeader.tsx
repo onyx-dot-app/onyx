@@ -47,7 +47,7 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
  * - Mobile-responsive sidebar toggle
  * - Custom header content from enterprise settings
  */
-export default function ChatHeader() {
+export default function AppHeader() {
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
