@@ -302,7 +302,11 @@ export interface FileContentResponse {
   content: string; // For text files: text content. For images: data URL (base64-encoded)
   mimeType: string;
   isImage?: boolean; // True if the content is an image data URL
+  error?: string; // Error message if file can't be previewed
 }
+
+// Maximum file size for image preview (10MB)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
 /**
  * Fetch file content from the sandbox for preview.
@@ -331,16 +335,37 @@ export async function fetchFileContent(
   // For images, convert to data URL instead of blob URL (no cleanup needed)
   if (mimeType.startsWith("image/")) {
     const blob = await res.blob();
+
+    // Check file size limit for images
+    if (blob.size > MAX_IMAGE_SIZE) {
+      return {
+        content: "",
+        mimeType,
+        isImage: false,
+        error: `Image too large to preview (${(
+          blob.size /
+          (1024 * 1024)
+        ).toFixed(1)}MB). Maximum size is ${MAX_IMAGE_SIZE / (1024 * 1024)}MB.`,
+      };
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
+        // Verify result is a string
+        if (typeof reader.result !== "string") {
+          reject(new Error("FileReader returned unexpected type"));
+          return;
+        }
         resolve({
-          content: reader.result as string,
+          content: reader.result,
           mimeType,
           isImage: true,
         });
       };
-      reader.onerror = reject;
+      reader.onerror = () => {
+        reject(new Error(reader.error?.message || "Failed to read image file"));
+      };
       reader.readAsDataURL(blob);
     });
   }
