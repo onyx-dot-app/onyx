@@ -36,6 +36,7 @@ type KnowledgeView = "main" | "add" | "document-sets" | "sources" | "recent";
 
 interface KnowledgeSidebarProps {
   activeView: KnowledgeView;
+  activeSource?: ValidSources;
   connectedSources: ConnectedSource[];
   selectedSources: ValidSources[];
   selectedDocumentSetIds: number[];
@@ -47,6 +48,7 @@ interface KnowledgeSidebarProps {
 
 function KnowledgeSidebar({
   activeView,
+  activeSource,
   connectedSources,
   selectedSources,
   selectedDocumentSetIds,
@@ -84,8 +86,7 @@ function KnowledgeSidebar({
         const sourceMetadata = getSourceMetadata(connectedSource.source);
         const isSelected = selectedSources.includes(connectedSource.source);
         const isActive =
-          activeView === "sources" &&
-          selectedSources[0] === connectedSource.source;
+          activeView === "sources" && activeSource === connectedSource.source;
 
         return (
           <LineItem
@@ -141,7 +142,7 @@ function KnowledgeTable<T>({
   emptyMessage = "No items available.",
 }: KnowledgeTableProps<T>) {
   return (
-    <GeneralLayouts.Section gap={0} alignItems="stretch">
+    <GeneralLayouts.Section gap={0} alignItems="stretch" justifyContent="start">
       {/* Header with search and actions */}
       <GeneralLayouts.Section
         flexDirection="row"
@@ -534,6 +535,7 @@ function KnowledgeTwoColumnView({
     <GeneralLayouts.TwoColumnLayout minHeight={18.75}>
       <KnowledgeSidebar
         activeView={activeView}
+        activeSource={activeSource}
         connectedSources={connectedSources}
         selectedSources={selectedSources}
         selectedDocumentSetIds={selectedDocumentSetIds}

@@ -60,13 +60,26 @@
 
 /* Sidebar Layout
    Fixed-width navigation sidebar
+   Figma specs:
+   - Width: 200px (12.5rem)
+   - Gap: 4px (0.25rem)
 */
 .sidebar-layout {
   display: flex;
   flex-direction: column;
-  width: 10rem;
+  width: 12.5rem;
   flex-shrink: 0;
   gap: 0.25rem;
+}
+
+/* Fix for Truncated text containers in sidebar to prevent vertical clipping
+   The Truncated component wrapper has overflow-hidden which clips text
+   if the container doesn't have sufficient height for the line-height.
+   font-secondary-body uses line-height: 16px (1rem), but we add slightly more
+   (1.125rem = 18px) to accommodate text descenders (like 'p', 'g', 'd').
+*/
+.sidebar-layout .flex-grow.overflow-hidden {
+  min-height: 1.125rem;
 }
 
 /* Two Column Layout
@@ -82,6 +95,7 @@
 
 /* Content Column Layout
    Main content area that fills remaining space
+   Content should align to the top (start)
 */
 .content-column-layout {
   display: flex;
@@ -90,6 +104,7 @@
   min-width: 1px;
   min-height: 1px;
   overflow: hidden;
+  justify-content: flex-start;
 }
 
 /* Hidden Input
