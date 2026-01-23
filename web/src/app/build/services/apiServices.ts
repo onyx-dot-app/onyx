@@ -299,8 +299,9 @@ export async function fetchDirectoryListing(
 }
 
 export interface FileContentResponse {
-  content: string;
+  content: string; // For text files: text content. For images: data URL (base64-encoded)
   mimeType: string;
+  isImage?: boolean; // True if the content is an image data URL
 }
 
 /**
@@ -326,9 +327,26 @@ export async function fetchFileContent(
   }
 
   const mimeType = res.headers.get("Content-Type") || "text/plain";
-  const content = await res.text();
 
-  return { content, mimeType };
+  // For images, convert to data URL instead of blob URL (no cleanup needed)
+  if (mimeType.startsWith("image/")) {
+    const blob = await res.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve({
+          content: reader.result as string,
+          mimeType,
+          isImage: true,
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  const content = await res.text();
+  return { content, mimeType, isImage: false };
 }
 
 // =============================================================================

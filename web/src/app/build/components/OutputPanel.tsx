@@ -38,6 +38,7 @@ import {
   SvgX,
   SvgArrowLeft,
   SvgArrowRight,
+  SvgImage,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
@@ -269,7 +270,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       {/* Tab List - Chrome-style tabs */}
       <div className="flex flex-col w-full">
         {/* Tabs row */}
-        <div className="flex items-end gap-1.5 w-full pt-1.5 px-2 bg-background-tint-03">
+        <div className="flex items-end gap-1.5 w-full pt-1.5 px-2 bg-background-tint-03 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -444,7 +445,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       />
 
       {/* Tab Content */}
-      <div className="flex-1 min-h-screen h-full rounded-b-08">
+      <div className="flex-1 overflow-hidden rounded-b-08">
         {/* File preview content - shown when a preview tab is active */}
         {isFilePreviewActive && activeFilePreviewPath && session?.id && (
           <FilePreviewContent
@@ -673,6 +674,22 @@ function FilePreviewContent({ sessionId, filePath }: FilePreviewContentProps) {
     );
   }
 
+  // Display images
+  if (data.isImage) {
+    return (
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <img
+            src={data.content}
+            alt={filePath}
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Display text content
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-auto p-4">
@@ -734,6 +751,20 @@ function InlineFilePreview({
     );
   }
 
+  // Display images
+  if (data.isImage) {
+    return (
+      <div className="p-4 flex items-center justify-center min-h-full">
+        <img
+          src={data.content}
+          alt={filePath}
+          className="max-w-full max-h-full object-contain"
+        />
+      </div>
+    );
+  }
+
+  // Display text content
   return (
     <div className="p-4">
       <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap break-words">
@@ -774,6 +805,7 @@ function FilesTab({
   const [previewingFile, setPreviewingFile] = useState<{
     path: string;
     fileName: string;
+    mimeType: string | null;
   } | null>(null);
 
   // Use local state for pre-provisioned, store state otherwise
@@ -896,9 +928,9 @@ function FilesTab({
 
   // Handle file click for pre-provisioned mode (inline preview)
   const handleLocalFileClick = useCallback(
-    (path: string, fileName: string) => {
+    (path: string, fileName: string, mimeType: string | null) => {
       if (isPreProvisioned) {
-        setPreviewingFile({ path, fileName });
+        setPreviewingFile({ path, fileName, mimeType });
       } else if (onFileClick) {
         onFileClick(path, fileName);
       }
@@ -989,6 +1021,8 @@ function FilesTab({
 
   // Show inline file preview for pre-provisioned mode
   if (isPreProvisioned && previewingFile && sessionId) {
+    const isImage = previewingFile.mimeType?.startsWith("image/");
+
     return (
       <div className="flex flex-col h-full">
         {/* Header with back button */}
@@ -999,7 +1033,11 @@ function FilesTab({
           >
             <SvgArrowLeft size={16} className="stroke-text-03" />
           </button>
-          <SvgFileText size={16} className="stroke-text-03" />
+          {isImage ? (
+            <SvgImage size={16} className="stroke-text-03" />
+          ) : (
+            <SvgFileText size={16} className="stroke-text-03" />
+          )}
           <Text secondaryBody text04 className="truncate">
             {previewingFile.fileName}
           </Text>
@@ -1059,7 +1097,11 @@ interface FileTreeNodeProps {
   expandedPaths: Set<string>;
   directoryCache: Map<string, FileSystemEntry[]>;
   onToggleFolder: (path: string) => void;
-  onFileClick?: (path: string, fileName: string) => void;
+  onFileClick?: (
+    path: string,
+    fileName: string,
+    mimeType: string | null
+  ) => void;
   formatFileSize: (bytes: number | null) => string;
   parentIsLast?: boolean[];
 }
@@ -1101,7 +1143,7 @@ function FileTreeNode({
                 if (entry.is_directory) {
                   onToggleFolder(entry.path);
                 } else if (onFileClick) {
-                  onFileClick(entry.path, entry.name);
+                  onFileClick(entry.path, entry.name, entry.mime_type);
                 }
               }}
               className={cn(
@@ -1177,6 +1219,11 @@ function FileTreeNode({
                     className="stroke-text-03 flex-shrink-0 mx-1"
                   />
                 )
+              ) : entry.mime_type?.startsWith("image/") ? (
+                <SvgImage
+                  size={16}
+                  className="stroke-text-03 flex-shrink-0 mx-1"
+                />
               ) : (
                 <SvgFileText
                   size={16}
