@@ -16,6 +16,7 @@ from onyx.db.models import User
 from onyx.server.features.build.api.messages_api import router as messages_router
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
+from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -217,3 +218,44 @@ def get_nextjs_assets(
             detail="Could not determine session from request context",
         )
     return _proxy_request(f"_next/{path}", request, session_id, db_session)
+
+
+# =============================================================================
+# Sandbox Management Endpoints
+# =============================================================================
+
+
+@router.post("/sandbox/reset", response_model=None)
+def reset_sandbox(
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Reset the user's sandbox by terminating it and cleaning up all sessions.
+
+    This endpoint terminates the user's shared sandbox container/pod and
+    cleans up all session workspaces. Useful for "start fresh" functionality.
+
+    After calling this endpoint, the next session creation will provision a
+    new sandbox.
+    """
+    session_manager = SessionManager(db_session)
+
+    try:
+        success = session_manager.terminate_user_sandbox(user.id)
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail="No sandbox found for user",
+            )
+        db_session.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Failed to reset sandbox for user {user.id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reset sandbox: {e}",
+        )
+
+    return Response(status_code=204)

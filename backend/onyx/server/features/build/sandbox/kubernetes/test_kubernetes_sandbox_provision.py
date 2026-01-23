@@ -281,6 +281,7 @@ def test_kubernetes_sandbox_send_message() -> None:
     manager = KubernetesSandboxManager()
 
     sandbox_id = uuid4()
+    session_id = uuid4()
 
     # Create a test LLM config (values don't matter for this test)
     llm_config = LLMProviderConfig(
@@ -313,9 +314,11 @@ def test_kubernetes_sandbox_send_message() -> None:
         assert is_healthy, "Sandbox agent should be healthy before sending messages"
         print("DEBUG: Sandbox agent is healthy")
 
+        manager.setup_session_workspace(sandbox_id, session_id, llm_config)
+
         # Send a simple message
         events: list[ACPEvent] = []
-        for event in manager.send_message(sandbox_id, "What is 2 + 2?"):
+        for event in manager.send_message(sandbox_id, session_id, "What is 2 + 2?"):
             events.append(event)
 
         # Verify we received events

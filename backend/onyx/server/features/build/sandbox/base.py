@@ -5,6 +5,13 @@ Use get_sandbox_manager() to get the appropriate implementation based on SANDBOX
 
 IMPORTANT: SandboxManager implementations must NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
+
+Architecture Note (User-Shared Sandbox Model):
+- One sandbox (container/pod) is shared across all of a user's sessions
+- provision() creates the user's sandbox with shared files/ directory
+- setup_session_workspace() creates per-session workspace within the sandbox
+- cleanup_session_workspace() removes session workspace on session delete
+- terminate() destroys the entire sandbox (all sessions)
 """
 
 import threading
@@ -34,11 +41,27 @@ class SandboxManager(ABC):
     """Abstract interface for sandbox operations.
 
     Defines the contract for sandbox lifecycle management including:
-    - Provisioning and termination
-    - Snapshot creation
+    - Provisioning and termination (user-level)
+    - Session workspace setup and cleanup (session-level)
+    - Snapshot creation (session-level)
     - Health checks
-    - Agent communication
-    - Filesystem operations
+    - Agent communication (session-level)
+    - Filesystem operations (session-level)
+
+    Directory Structure:
+        $SANDBOX_ROOT/
+        ├── files/                     # SHARED - symlink to user's persistent documents
+        └── sessions/
+            ├── $session_id_1/         # Per-session workspace
+            │   ├── outputs/           # Agent output for this session
+            │   │   └── web/           # Next.js app
+            │   ├── venv/              # Python virtual environment
+            │   ├── skills/            # Opencode skills
+            │   ├── AGENTS.md          # Agent instructions
+            │   ├── opencode.json      # LLM config
+            │   └── user_uploaded_files/
+            └── $session_id_2/
+                └── ...
 
     IMPORTANT: Implementations must NOT interface with the database directly.
     All database operations should be handled by the caller.
@@ -55,18 +78,23 @@ class SandboxManager(ABC):
         file_system_path: str,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None = None,
-        snapshot_path: str | None = None,
     ) -> SandboxInfo:
-        """Provision a new sandbox for a session.
+        """Provision a new sandbox for a user.
+
+        Creates the sandbox container/directory with shared resources:
+        - files/ symlink to user's persistent documents
+        - sessions/ directory for per-session workspaces
+
+        NOTE: This does NOT set up session-specific workspaces.
+        Call setup_session_workspace() after provisioning to create a session workspace.
 
         Args:
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             file_system_path: Path to the knowledge/source files to link
-            llm_config: LLM provider configuration
+            llm_config: LLM provider configuration (for default config)
             nextjs_port: Pre-allocated port for Next.js server (local backend only)
-            snapshot_path: Optional storage path to restore from
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -78,7 +106,10 @@ class SandboxManager(ABC):
 
     @abstractmethod
     def terminate(self, sandbox_id: UUID) -> None:
-        """Terminate a sandbox and clean up resources.
+        """Terminate a sandbox and clean up all resources.
+
+        Destroys the entire sandbox including all session workspaces.
+        Use cleanup_session_workspace() to remove individual sessions.
 
         Args:
             sandbox_id: The sandbox ID to terminate
@@ -86,13 +117,69 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
-    def create_snapshot(
-        self, sandbox_id: UUID, tenant_id: str
-    ) -> SnapshotResult | None:
-        """Create a snapshot of the sandbox's outputs directory.
+    def setup_session_workspace(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        llm_config: LLMProviderConfig,
+        snapshot_path: str | None = None,
+    ) -> None:
+        """Set up a session workspace within an existing sandbox.
+
+        Creates the per-session directory structure:
+        - sessions/$session_id/outputs/ (from snapshot or template)
+        - sessions/$session_id/venv/
+        - sessions/$session_id/skills/
+        - sessions/$session_id/AGENTS.md
+        - sessions/$session_id/opencode.json
+        - sessions/$session_id/user_uploaded_files/
 
         Args:
-            sandbox_id: The sandbox ID to snapshot
+            sandbox_id: The sandbox ID (must be provisioned)
+            session_id: The session ID for this workspace
+            llm_config: LLM provider configuration for opencode.json
+            snapshot_path: Optional storage path to restore outputs from
+
+        Raises:
+            RuntimeError: If workspace setup fails
+        """
+        ...
+
+    @abstractmethod
+    def cleanup_session_workspace(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        """Clean up a session workspace (on session delete).
+
+        Removes the session directory: sessions/$session_id/
+        Does NOT terminate the sandbox - other sessions may still be using it.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to clean up
+        """
+        ...
+
+    @abstractmethod
+    def create_snapshot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        tenant_id: str,
+    ) -> SnapshotResult | None:
+        """Create a snapshot of a session's outputs directory.
+
+        Captures only the session-specific outputs:
+        sessions/$session_id/outputs/
+
+        Does NOT include: venv, skills, AGENTS.md, opencode.json, user_uploaded_files
+        Does NOT include: shared files/ directory
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to snapshot
             tenant_id: Tenant identifier for storage path
 
         Returns:
@@ -123,12 +210,17 @@ class SandboxManager(ABC):
     def send_message(
         self,
         sandbox_id: UUID,
+        session_id: UUID,
         message: str,
     ) -> Generator[ACPEvent, None, None]:
         """Send a message to the CLI agent and stream typed ACP events.
 
+        The agent runs in the session-specific workspace:
+        sessions/$session_id/
+
         Args:
-            sandbox_id: The sandbox ID to send message to
+            sandbox_id: The sandbox ID
+            session_id: The session ID (determines workspace directory)
             message: The message content to send
 
         Yields:
@@ -140,12 +232,15 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
-    def list_directory(self, sandbox_id: UUID, path: str) -> list[FilesystemEntry]:
-        """List contents of a directory in the sandbox's outputs directory.
+    def list_directory(
+        self, sandbox_id: UUID, session_id: UUID, path: str
+    ) -> list[FilesystemEntry]:
+        """List contents of a directory in the session's outputs directory.
 
         Args:
             sandbox_id: The sandbox ID
-            path: Relative path within the outputs directory
+            session_id: The session ID
+            path: Relative path within sessions/$session_id/outputs/
 
         Returns:
             List of FilesystemEntry objects sorted by directory first, then name
@@ -156,12 +251,13 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
-    def read_file(self, sandbox_id: UUID, path: str) -> bytes:
-        """Read a file from the sandbox's outputs directory.
+    def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
+        """Read a file from the session's outputs directory.
 
         Args:
             sandbox_id: The sandbox ID
-            path: Relative path within the outputs directory
+            session_id: The session ID
+            path: Relative path within sessions/$session_id/outputs/
 
         Returns:
             File contents as bytes

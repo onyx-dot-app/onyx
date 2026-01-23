@@ -1,6 +1,12 @@
-"""Directory management for sandbox lifecycle."""
+"""Directory management for sandbox lifecycle.
+
+Supports user-shared sandbox model where:
+- One sandbox per user with shared files/ directory
+- Per-session workspaces under sessions/$session_id/
+"""
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -14,10 +20,27 @@ class DirectoryManager:
     """Manages sandbox directory creation and cleanup.
 
     Responsible for:
-    - Creating sandbox directory structure
+    - Creating sandbox directory structure (user-level)
+    - Creating session workspace directories (session-level)
     - Setting up symlinks to knowledge files
     - Copying templates (outputs, venv, skills, AGENTS.md)
-    - Cleaning up sandbox directories on termination
+    - Cleaning up sandbox/session directories on termination
+
+    Directory Structure:
+        $base_path/$sandbox_id/
+        ├── files/                     # Symlink to knowledge/source files (SHARED)
+        └── sessions/
+            ├── $session_id_1/         # Per-session workspace
+            │   ├── outputs/           # Agent output (from template or snapshot)
+            │   │   └── web/           # Next.js app
+            │   ├── .venv/             # Python virtual environment
+            │   ├── .agent/skills/     # Opencode skills
+            │   ├── files/             # Symlink to sandbox-level files/ (SHARED)
+            │   ├── AGENTS.md          # Agent instructions
+            │   ├── opencode.json      # LLM config
+            │   └── user_uploaded_files/
+            └── $session_id_2/
+                └── ...
     """
 
     def __init__(
@@ -43,13 +66,34 @@ class DirectoryManager:
         self._skills_path = skills_path
         self._agent_instructions_template_path = agent_instructions_template_path
 
-    def create_sandbox_directory(self, session_id: str) -> Path:
-        """Create sandbox directory structure.
+    def create_sandbox_directory(self, sandbox_id: str) -> Path:
+        """Create sandbox directory structure (user-level).
 
-        Creates the base directory for a sandbox session:
-        {base_path}/{session_id}/
-        ├── files/                      # Symlink to knowledge/source files
-        ├── user_uploaded_files/        # User-uploaded files
+        Creates the base directory for a user's sandbox:
+        {base_path}/{sandbox_id}/
+        ├── files/                      # Symlink to knowledge/source files (set up separately)
+        └── sessions/                   # Container for per-session workspaces
+
+        NOTE: This only creates the sandbox-level structure.
+        Call create_session_directory() to create per-session workspaces.
+
+        Args:
+            sandbox_id: Unique identifier for the sandbox
+
+        Returns:
+            Path to the created sandbox directory
+        """
+        sandbox_path = self._base_path / sandbox_id
+        sandbox_path.mkdir(parents=True, exist_ok=True)
+        # Create sessions directory for per-session workspaces
+        (sandbox_path / "sessions").mkdir(exist_ok=True)
+        return sandbox_path
+
+    def create_session_directory(self, sandbox_path: Path, session_id: str) -> Path:
+        """Create session workspace directory structure.
+
+        Creates a per-session workspace within the sandbox:
+        {sandbox_path}/sessions/{session_id}/
         ├── outputs/                    # Working directory from template
         │   ├── web/                    # Next.js app
         │   ├── slides/
@@ -57,18 +101,48 @@ class DirectoryManager:
         │   └── graphs/
         ├── .venv/                      # Python virtual environment
         ├── AGENTS.md                   # Agent instructions
+        ├── opencode.json               # LLM config (set up separately)
+        ├── user_uploaded_files/        # User-uploaded files
         └── .agent/
             └── skills/                 # Agent skills
 
+        NOTE: This creates the directory structure but doesn't copy templates.
+        Call setup_outputs_directory(), setup_venv(), etc. to set up contents.
+
         Args:
+            sandbox_path: Path to the sandbox directory
             session_id: Unique identifier for the session
 
         Returns:
-            Path to the created sandbox directory
+            Path to the created session workspace directory
         """
-        sandbox_path = self._base_path / session_id
-        sandbox_path.mkdir(parents=True, exist_ok=True)
-        return sandbox_path
+        session_path = sandbox_path / "sessions" / session_id
+        session_path.mkdir(parents=True, exist_ok=True)
+        return session_path
+
+    def cleanup_session_directory(self, sandbox_path: Path, session_id: str) -> None:
+        """Remove session workspace directory and all contents.
+
+        Args:
+            sandbox_path: Path to the sandbox directory
+            session_id: Session ID to clean up
+        """
+        session_path = sandbox_path / "sessions" / session_id
+        if session_path.exists():
+            shutil.rmtree(session_path)
+            logger.info(f"Cleaned up session directory: {session_path}")
+
+    def get_session_path(self, sandbox_path: Path, session_id: str) -> Path:
+        """Get path to session workspace.
+
+        Args:
+            sandbox_path: Path to the sandbox directory
+            session_id: Session ID
+
+        Returns:
+            Path to sessions/$session_id/
+        """
+        return sandbox_path / "sessions" / session_id
 
     def setup_files_symlink(
         self,
@@ -84,6 +158,43 @@ class DirectoryManager:
         files_link = sandbox_path / "files"
         if not files_link.exists():
             files_link.symlink_to(file_system_path, target_is_directory=True)
+
+    def setup_session_files_symlink(
+        self,
+        sandbox_path: Path,
+        session_path: Path,
+    ) -> None:
+        """Create symlink to sandbox-level files directory within session workspace.
+
+        Creates a symlink at session_path/files/ that points to the sandbox-level
+        files/ directory. This allows the agent to access shared files from within
+        the session workspace.
+
+        Args:
+            sandbox_path: Path to the sandbox directory (contains files/ symlink)
+            session_path: Path to the session workspace directory
+        """
+        session_files_link = session_path / "files"
+        sandbox_files_path = sandbox_path / "files"
+
+        if not sandbox_files_path.exists():
+            raise ValueError(f"Sandbox files path {sandbox_files_path} does not exist")
+
+        # Create relative symlink for portability
+        # Calculate relative path from session_path to sandbox_files_path
+        try:
+            relative_target = os.path.relpath(
+                str(sandbox_files_path.resolve()), str(session_path.resolve())
+            )
+            session_files_link.symlink_to(relative_target, target_is_directory=True)
+        except (OSError, ValueError) as e:
+            logger.warning(
+                f"Failed to create relative symlink, using absolute path: {e}"
+            )
+            # Fallback to absolute symlink if relative path calculation fails
+            session_files_link.symlink_to(
+                sandbox_files_path.resolve(), target_is_directory=True
+            )
 
     def setup_outputs_directory(self, sandbox_path: Path) -> None:
         """Copy outputs template and create additional directories.
@@ -307,37 +418,48 @@ class DirectoryManager:
         if sandbox_path.exists():
             shutil.rmtree(sandbox_path)
 
-    def get_outputs_path(self, sandbox_path: Path) -> Path:
+    def get_outputs_path(
+        self, sandbox_path: Path, session_id: str | None = None
+    ) -> Path:
         """Return path to outputs directory.
 
         Args:
             sandbox_path: Path to the sandbox directory
+            session_id: Optional session ID for session-specific outputs
 
         Returns:
             Path to the outputs directory
         """
+        if session_id:
+            return sandbox_path / "sessions" / session_id / "outputs"
         return sandbox_path / "outputs"
 
-    def get_web_path(self, sandbox_path: Path) -> Path:
+    def get_web_path(self, sandbox_path: Path, session_id: str | None = None) -> Path:
         """Return path to Next.js web directory.
 
         Args:
             sandbox_path: Path to the sandbox directory
+            session_id: Optional session ID for session-specific web directory
 
         Returns:
             Path to the web directory
         """
+        if session_id:
+            return sandbox_path / "sessions" / session_id / "outputs" / "web"
         return sandbox_path / "outputs" / "web"
 
-    def get_venv_path(self, sandbox_path: Path) -> Path:
+    def get_venv_path(self, sandbox_path: Path, session_id: str | None = None) -> Path:
         """Return path to virtual environment.
 
         Args:
             sandbox_path: Path to the sandbox directory
+            session_id: Optional session ID for session-specific venv
 
         Returns:
             Path to the .venv directory
         """
+        if session_id:
+            return sandbox_path / "sessions" / session_id / ".venv"
         return sandbox_path / ".venv"
 
     def directory_exists(self, sandbox_path: Path) -> bool:
@@ -351,7 +473,22 @@ class DirectoryManager:
         """
         return sandbox_path.exists() and sandbox_path.is_dir()
 
-    def setup_user_uploads_directory(self, sandbox_path: Path) -> Path:
+    def session_exists(self, sandbox_path: Path, session_id: str) -> bool:
+        """Check if session workspace exists.
+
+        Args:
+            sandbox_path: Path to sandbox directory
+            session_id: Session ID to check
+
+        Returns:
+            True if session directory exists
+        """
+        session_path = sandbox_path / "sessions" / session_id
+        return session_path.exists() and session_path.is_dir()
+
+    def setup_user_uploads_directory(
+        self, sandbox_path: Path, session_id: str | None = None
+    ) -> Path:
         """Create user uploads directory at user_uploaded_files.
 
         This directory is used to store files uploaded by the user
@@ -359,21 +496,32 @@ class DirectoryManager:
 
         Args:
             sandbox_path: Path to the sandbox directory
+            session_id: Optional session ID for session-specific uploads
 
         Returns:
             Path to the user uploads directory
         """
-        uploads_path = sandbox_path / "user_uploaded_files"
+        if session_id:
+            uploads_path = (
+                sandbox_path / "sessions" / session_id / "user_uploaded_files"
+            )
+        else:
+            uploads_path = sandbox_path / "user_uploaded_files"
         uploads_path.mkdir(parents=True, exist_ok=True)
         return uploads_path
 
-    def get_user_uploads_path(self, sandbox_path: Path) -> Path:
+    def get_user_uploads_path(
+        self, sandbox_path: Path, session_id: str | None = None
+    ) -> Path:
         """Return path to user uploads directory.
 
         Args:
             sandbox_path: Path to the sandbox directory
+            session_id: Optional session ID for session-specific uploads
 
         Returns:
             Path to the user_uploaded_files directory
         """
+        if session_id:
+            return sandbox_path / "sessions" / session_id / "user_uploaded_files"
         return sandbox_path / "user_uploaded_files"

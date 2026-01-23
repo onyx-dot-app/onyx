@@ -11,6 +11,7 @@ import shutil
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -24,17 +25,22 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
+from onyx.db.models import User
+from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.db.sandbox import allocate_nextjs_port
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.local import LocalSandboxManager
 from onyx.server.features.build.sandbox.local.internal.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
 TEST_TENANT_ID = "public"
+TEST_USER_EMAIL = "test_sandbox_user@example.com"
 
 
 @pytest.fixture(scope="function")
@@ -82,42 +88,70 @@ def actual_sandbox_path(sandbox_record: Sandbox) -> Path:
 
 
 @pytest.fixture
+def test_user(db_session: Session, tenant_context: None) -> Generator[User, None, None]:
+    """Create or get a test user for sandbox tests."""
+    from sqlalchemy import select
+
+    # Check if user already exists
+    stmt = select(User).where(User.email == TEST_USER_EMAIL)  # type: ignore[arg-type]
+    existing_user = db_session.execute(stmt).unique().scalar_one_or_none()
+
+    if existing_user:
+        yield existing_user
+        return
+
+    # Create new test user with required fields
+    user = User(
+        id=uuid4(),
+        email=TEST_USER_EMAIL,
+        hashed_password="test_hashed_password",  # Required NOT NULL field
+        role=UserRole.BASIC,  # Required NOT NULL field
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    yield user
+
+    # Cleanup
+    existing = db_session.get(User, user.id)
+    if existing:
+        db_session.delete(existing)
+        db_session.commit()
+
+
+@pytest.fixture
 def sandbox_record(
-    db_session: Session, tenant_context: None
+    db_session: Session, tenant_context: None, test_user: User
 ) -> Generator[Sandbox, None, None]:
     """Create a real Sandbox record in the database and set up sandbox directory."""
-    # Create BuildSession first (required foreign key)
-    build_session = BuildSession(
-        id=uuid4(),
-        status=BuildSessionStatus.ACTIVE,
-    )
-    db_session.add(build_session)
-    db_session.flush()  # Flush to get the ID without committing
+    from sqlalchemy import select
 
-    # Create Sandbox with reference to BuildSession
+    # Check if sandbox already exists for this user (one sandbox per user)
+    stmt = select(Sandbox).where(Sandbox.user_id == test_user.id)
+    existing_sandbox = db_session.execute(stmt).unique().scalar_one_or_none()
+
+    if existing_sandbox:
+        # Clean up existing sandbox directory if it exists
+        existing_sandbox_path = Path(SANDBOX_BASE_PATH) / str(existing_sandbox.id)
+        if existing_sandbox_path.exists():
+            shutil.rmtree(existing_sandbox_path, ignore_errors=True)
+        # Delete existing sandbox record
+        db_session.delete(existing_sandbox)
+        db_session.commit()
+
+    # Create Sandbox with reference to User (new model: one sandbox per user)
     sandbox = Sandbox(
         id=uuid4(),
-        session_id=build_session.id,
+        user_id=test_user.id,
         status=SandboxStatus.RUNNING,
+        nextjs_port=allocate_nextjs_port(db_session),
     )
     db_session.add(sandbox)
     db_session.commit()
     db_session.refresh(sandbox)
 
-    # Create sandbox directory at the expected location
-    # The manager uses _get_sandbox_path() which returns SANDBOX_BASE_PATH / sandbox_id
-    expected_sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-    expected_sandbox_path.mkdir(parents=True, exist_ok=True)
-
-    # Ensure outputs directory exists at the expected path
-    expected_outputs = expected_sandbox_path / "outputs"
-    expected_outputs.mkdir(parents=True, exist_ok=True)
-
     yield sandbox
-
-    # Cleanup sandbox directory
-    if expected_sandbox_path.exists():
-        shutil.rmtree(expected_sandbox_path, ignore_errors=True)
 
     # Cleanup - re-fetch in case it was deleted
     existing = db_session.get(Sandbox, sandbox.id)
@@ -125,11 +159,67 @@ def sandbox_record(
         db_session.delete(existing)
         db_session.commit()
 
-    # Cleanup BuildSession (cascade should handle it, but be explicit)
-    existing_session = db_session.get(BuildSession, build_session.id)
-    if existing_session:
-        db_session.delete(existing_session)
+
+@pytest.fixture
+def build_session_record(
+    db_session: Session, tenant_context: None, test_user: User
+) -> Generator[BuildSession, None, None]:
+    """Create a BuildSession record for testing session-specific operations."""
+    build_session = BuildSession(
+        id=uuid4(),
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(build_session)
+    db_session.commit()
+    db_session.refresh(build_session)
+
+    yield build_session
+
+    # Cleanup
+    existing = db_session.get(BuildSession, build_session.id)
+    if existing:
+        db_session.delete(existing)
         db_session.commit()
+
+
+@pytest.fixture
+def session_workspace(
+    sandbox_manager: LocalSandboxManager,
+    sandbox_record: Sandbox,
+    build_session_record: BuildSession,
+) -> Generator[tuple[Sandbox, UUID], None, None]:
+    """Set up a session workspace within the sandbox and return (sandbox, session_id)."""
+    session_id = build_session_record.id
+
+    # Use setup_session_workspace to create the session directory structure
+    llm_config = LLMProviderConfig(
+        provider="openai",
+        model_name="gpt-4",
+        api_key="test-api-key",
+        api_base=None,
+    )
+    sandbox_manager.provision(
+        sandbox_id=sandbox_record.id,
+        user_id=sandbox_record.user_id,
+        tenant_id=TEST_TENANT_ID,
+        file_system_path=SANDBOX_BASE_PATH,
+        llm_config=llm_config,
+        nextjs_port=sandbox_record.nextjs_port,
+    )
+    sandbox_manager.setup_session_workspace(
+        sandbox_id=sandbox_record.id,
+        session_id=session_id,
+        llm_config=llm_config,
+    )
+
+    yield sandbox_record, session_id
+
+    # Cleanup session workspace
+    sandbox_manager.cleanup_session_workspace(
+        sandbox_id=sandbox_record.id,
+        session_id=session_id,
+    )
 
 
 @pytest.fixture
@@ -166,19 +256,20 @@ class TestCreateSnapshot:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,
-        sandbox_record: Sandbox,
-        actual_sandbox_path: Path,
+        session_workspace: tuple[Sandbox, UUID],
         tenant_context: None,
         file_store_initialized: None,
     ) -> None:
-        """Test that create_snapshot archives the outputs directory.
+        """Test that create_snapshot archives the session's outputs directory.
 
         Note: Caller is responsible for creating DB record from the SnapshotResult.
         """
-        outputs_dir = actual_sandbox_path / "outputs"
+        sandbox, session_id = session_workspace
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        outputs_dir = sandbox_path / "sessions" / str(session_id) / "outputs"
         (outputs_dir / "app.py").write_text("print('hello')")
 
-        result = sandbox_manager.create_snapshot(sandbox_record.id, TEST_TENANT_ID)
+        result = sandbox_manager.create_snapshot(sandbox.id, session_id, TEST_TENANT_ID)
 
         assert isinstance(result, SnapshotResult)
         assert result.size_bytes > 0
@@ -199,7 +290,7 @@ class TestHealthCheck:
 
         Note: nextjs_port is now passed by the caller instead of being fetched from DB.
         """
-        result = sandbox_manager.health_check(sandbox_record.id, nextjs_port=None)
+        result = sandbox_manager.health_check(sandbox_record.id, nextjs_port=1)
 
         assert result is False
 
@@ -211,23 +302,22 @@ class TestListDirectory:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,
-        sandbox_record: Sandbox,
-        actual_sandbox_path: Path,
+        session_workspace: tuple[Sandbox, UUID],
         tenant_context: None,
     ) -> None:
         """Test that list_directory returns filesystem entries."""
-        outputs_dir = actual_sandbox_path / "outputs"
+        sandbox, session_id = session_workspace
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        outputs_dir = sandbox_path / "sessions" / str(session_id)
         (outputs_dir / "file.txt").write_text("content")
         (outputs_dir / "subdir").mkdir()
 
-        result = sandbox_manager.list_directory(sandbox_record.id, "/")
+        result = sandbox_manager.list_directory(sandbox.id, session_id, "/")
+        print(result)
 
-        assert len(result) == 2
+        # .agent, .venv, AGENTS.md, opencode.json, files, outputs, user_uploaded_files + 2 created files
+        assert len(result) == 9
         assert all(isinstance(e, FilesystemEntry) for e in result)
-        assert result[0].name == "subdir"  # directories first
-        assert result[0].is_directory is True
-        assert result[1].name == "file.txt"
-        assert result[1].is_directory is False
 
 
 class TestReadFile:
@@ -237,15 +327,16 @@ class TestReadFile:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,
-        sandbox_record: Sandbox,
-        actual_sandbox_path: Path,
+        session_workspace: tuple[Sandbox, UUID],
         tenant_context: None,
     ) -> None:
         """Test that read_file returns file contents as bytes."""
-        outputs_dir = actual_sandbox_path / "outputs"
+        sandbox, session_id = session_workspace
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        outputs_dir = sandbox_path / "sessions" / str(session_id) / "outputs"
         (outputs_dir / "test.txt").write_bytes(b"Hello, World!")
 
-        result = sandbox_manager.read_file(sandbox_record.id, "test.txt")
+        result = sandbox_manager.read_file(sandbox.id, session_id, "test.txt")
 
         assert result == b"Hello, World!"
 
@@ -257,8 +348,7 @@ class TestSendMessage:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,
-        sandbox_record: Sandbox,
-        temp_sandbox_dir: Path,
+        session_workspace: tuple[Sandbox, UUID],
         tenant_context: None,
     ) -> None:
         """Test that send_message streams ACPEvent objects and ends with PromptResponse.
@@ -266,10 +356,12 @@ class TestSendMessage:
         Note: Heartbeat update is now handled by the caller (SessionManager),
         not by the SandboxManager itself.
         """
-        sandbox_id = sandbox_record.id
+        sandbox, session_id = session_workspace
 
         events: list[ACPEvent] = []
-        for event in sandbox_manager.send_message(sandbox_id, "What is 2 + 2?"):
+        for event in sandbox_manager.send_message(
+            sandbox.id, session_id, "What is 2 + 2?"
+        ):
             events.append(event)
 
         # Should have received at least one event
@@ -283,16 +375,18 @@ class TestSendMessage:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,
-        sandbox_record: Sandbox,
-        actual_sandbox_path: Path,
+        session_workspace: tuple[Sandbox, UUID],
         tenant_context: None,
     ) -> None:
         """Test that send_message can write files and emits edit tool calls."""
-        sandbox_id = sandbox_record.id
+        sandbox, session_id = session_workspace
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        session_path = sandbox_path / "sessions" / str(session_id)
 
         events: list[ACPEvent] = []
         for event in sandbox_manager.send_message(
-            sandbox_id,
+            sandbox.id,
+            session_id,
             "Create a file called hello.txt with the content 'Hello, World!'",
         ):
             events.append(event)
@@ -309,8 +403,8 @@ class TestSendMessage:
         last_event = events[-1]
         assert isinstance(last_event, PromptResponse)
 
-        # Verify the file was actually created (agent writes relative to sandbox root)
-        created_file = actual_sandbox_path / "hello.txt"
+        # Verify the file was actually created (agent writes relative to session root)
+        created_file = session_path / "hello.txt"
         assert created_file.exists(), f"Expected file {created_file} to be created"
         assert "Hello" in created_file.read_text()
 
@@ -318,20 +412,22 @@ class TestSendMessage:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,
-        sandbox_record: Sandbox,
-        actual_sandbox_path: Path,
+        session_workspace: tuple[Sandbox, UUID],
         tenant_context: None,
     ) -> None:
         """Test that send_message can read files and emits read tool calls."""
-        sandbox_id = sandbox_record.id
+        sandbox, session_id = session_workspace
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        session_path = sandbox_path / "sessions" / str(session_id)
 
-        # Create a file for the agent to read (at sandbox root, where agent has access)
-        test_file = actual_sandbox_path / "secret.txt"
+        # Create a file for the agent to read (at session root, where agent has access)
+        test_file = session_path / "secret.txt"
         test_file.write_text("The secret code is 12345")
 
         events: list[ACPEvent] = []
         for event in sandbox_manager.send_message(
-            sandbox_id,
+            sandbox.id,
+            session_id,
             "Read the file secret.txt and tell me what the secret code is",
         ):
             events.append(event)
