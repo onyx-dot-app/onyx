@@ -405,7 +405,7 @@ class TestSetupOpencodeConfig:
         # Should not have model config (thinking) for other providers
         assert "models" not in config["provider"]["cohere"]
 
-    def test_config_not_overwritten_if_exists(
+    def test_config_overwritten_if_exists(
         self,
         directory_manager: DirectoryManager,
         temp_base_path: Path,
