@@ -16,6 +16,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
 import json
+import os
 import threading
 import time
 from collections.abc import Generator
@@ -37,11 +38,11 @@ from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPEvent,
 )
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
-    ACPHttpClient,
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
+    ACPExecClient,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
@@ -62,6 +63,52 @@ NEXTJS_PORT = 3000
 AGENT_PORT = 8081
 POD_READY_TIMEOUT_SECONDS = 120
 POD_READY_POLL_INTERVAL_SECONDS = 2
+
+
+def _get_local_aws_credential_env_vars() -> list[client.V1EnvVar]:
+    """Get AWS credential environment variables from local environment.
+
+    Checks for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally
+    AWS_SESSION_TOKEN and AWS_DEFAULT_REGION in the local environment.
+    If credentials are found, returns V1EnvVar objects to pass them to containers.
+
+    This allows using local AWS credentials for development/testing while
+    IRSA (IAM Roles for Service Accounts) handles credentials in production EKS.
+
+    Returns:
+        List of V1EnvVar objects for AWS credentials, empty if not set locally.
+    """
+    env_vars: list[client.V1EnvVar] = []
+
+    aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+    # Only add credentials if both required values are present
+    if aws_access_key and aws_secret_key:
+        env_vars.append(client.V1EnvVar(name="AWS_ACCESS_KEY_ID", value=aws_access_key))
+        env_vars.append(
+            client.V1EnvVar(name="AWS_SECRET_ACCESS_KEY", value=aws_secret_key)
+        )
+
+        # Optional: session token for temporary credentials
+        aws_session_token = os.environ.get("AWS_SESSION_TOKEN")
+        if aws_session_token:
+            env_vars.append(
+                client.V1EnvVar(name="AWS_SESSION_TOKEN", value=aws_session_token)
+            )
+
+        # Optional: default region
+        aws_region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get(
+            "AWS_REGION"
+        )
+        if aws_region:
+            env_vars.append(
+                client.V1EnvVar(name="AWS_DEFAULT_REGION", value=aws_region)
+            )
+
+        logger.info("Using local AWS credentials for sandbox init container")
+
+    return env_vars
 
 
 class KubernetesSandboxManager(SandboxManager):
@@ -114,10 +161,7 @@ class KubernetesSandboxManager(SandboxManager):
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 
-        # Track ACP HTTP clients in memory
-        self._acp_clients: dict[UUID, ACPHttpClient] = {}
-
-        # Load paths for agent instructions
+        # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
         self._skills_path = build_dir / "skills"
@@ -134,11 +178,6 @@ class KubernetesSandboxManager(SandboxManager):
     def _get_service_name(self, sandbox_id: str) -> str:
         """Generate service name from sandbox ID."""
         return self._get_pod_name(sandbox_id)
-
-    def _get_agent_url(self, sandbox_id: str) -> str:
-        """Get the internal cluster URL for the agent HTTP server."""
-        service_name = self._get_service_name(sandbox_id)
-        return f"http://{service_name}.{self._namespace}.svc.cluster.local:{AGENT_PORT}"
 
     def _get_nextjs_url(self, sandbox_id: str) -> str:
         """Get the internal cluster URL for the Next.js server."""
@@ -223,6 +262,9 @@ class KubernetesSandboxManager(SandboxManager):
         if snapshot_id:
             init_env.append(client.V1EnvVar(name="SNAPSHOT_ID", value=snapshot_id))
 
+        # Add local AWS credentials if available (for dev/testing, IRSA handles prod)
+        init_env.extend(_get_local_aws_credential_env_vars())
+
         # Init container for S3 file sync
         init_container = client.V1Container(
             name="file-sync",
@@ -247,11 +289,13 @@ fi
 
 # Sync knowledge files for this user/tenant
 echo "Syncing knowledge files for tenant: $TENANT_ID / user: $USER_ID"
-aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/ --quiet || true
+aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/
 
-# Sync user-uploaded files for this sandbox
-echo "Syncing user uploads for sandbox: $SANDBOX_ID"
-aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/uploads/$SANDBOX_ID/" /workspace/user_uploaded_files/ --quiet || true
+# Copy and unzip output templates for this user/tenant
+echo "Copying output template zip for tenant: $TENANT_ID / user: $USER_ID"
+aws s3 cp "s3://$S3_BUCKET/craft-output-template/outputs.zip" /tmp/outputs.zip
+python3 -c "import zipfile; zipfile.ZipFile('/tmp/outputs.zip').extractall('/workspace/')"
+rm /tmp/outputs.zip
 
 echo "File sync complete"
 """
@@ -260,9 +304,6 @@ echo "File sync complete"
                 client.V1VolumeMount(name="workspace", mount_path="/workspace"),
                 client.V1VolumeMount(name="outputs", mount_path="/workspace/outputs"),
                 client.V1VolumeMount(name="files", mount_path="/workspace/files"),
-                client.V1VolumeMount(
-                    name="user-uploads", mount_path="/workspace/user_uploaded_files"
-                ),
             ],
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "100m", "memory": "256Mi"},
@@ -300,11 +341,6 @@ echo "File sync complete"
                 client.V1VolumeMount(
                     name="files", mount_path="/workspace/files", read_only=True
                 ),
-                client.V1VolumeMount(
-                    name="user-uploads",
-                    mount_path="/workspace/user_uploaded_files",
-                    read_only=True,
-                ),
             ],
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "500m", "memory": "1Gi"},
@@ -319,7 +355,7 @@ echo "File sync complete"
             #     failure_threshold=6,
             # ),
             # liveness_probe=client.V1Probe(
-            #     http_get=client.V1HTTPGetAction(path="/health", port=AGENT_PORT),
+            #     http_get=client.V1HTTPGetAction(path="/global/health", port=AGENT_PORT),
             #     initial_delay_seconds=30,
             #     period_seconds=30,
             #     timeout_seconds=5,
@@ -345,10 +381,6 @@ echo "File sync complete"
             ),
             client.V1Volume(
                 name="files",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="1Gi"),
-            ),
-            client.V1Volume(
-                name="user-uploads",
                 empty_dir=client.V1EmptyDirVolumeSource(size_limit="1Gi"),
             ),
         ]
@@ -439,6 +471,69 @@ echo "File sync complete"
             ),
         )
 
+    def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
+        """Get logs from an init container.
+
+        Args:
+            pod_name: Name of the pod
+            container_name: Name of the init container
+
+        Returns:
+            Log output from the init container, or error message if logs cannot be retrieved
+        """
+        try:
+            logs = self._core_api.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=self._namespace,
+                container=container_name,
+                tail_lines=100,  # Get last 100 lines
+            )
+            return logs if logs else "(no logs available)"
+        except ApiException as e:
+            return f"(failed to retrieve logs: {e})"
+
+    def _check_init_container_status(self, pod: client.V1Pod) -> str | None:
+        """Check if any init containers have failed.
+
+        Args:
+            pod: The pod object
+
+        Returns:
+            Error message if an init container failed, None otherwise
+        """
+        if not pod.status.init_container_statuses:
+            return None
+
+        for init_status in pod.status.init_container_statuses:
+            if init_status.state:
+                # Check for terminated state with non-zero exit code
+                if init_status.state.terminated:
+                    if init_status.state.terminated.exit_code != 0:
+                        container_name = init_status.name
+                        logs = self._get_init_container_logs(
+                            pod.metadata.name, container_name
+                        )
+                        return (
+                            f"Init container '{container_name}' failed with exit code "
+                            f"{init_status.state.terminated.exit_code}. "
+                            f"Logs:\n{logs}"
+                        )
+                # Check for waiting state with error reason
+                elif init_status.state.waiting:
+                    if init_status.state.waiting.reason in [
+                        "Error",
+                        "CrashLoopBackOff",
+                    ]:
+                        container_name = init_status.name
+                        reason = init_status.state.waiting.reason
+                        message = init_status.state.waiting.message or ""
+                        return (
+                            f"Init container '{container_name}' is in '{reason}' state. "
+                            f"Message: {message}"
+                        )
+
+        return None
+
     def _wait_for_pod_ready(
         self,
         pod_name: str,
@@ -465,11 +560,21 @@ echo "File sync complete"
                     namespace=self._namespace,
                 )
 
+                # Check init container status first (they run before main container)
+                init_error = self._check_init_container_status(pod)
+                if init_error:
+                    raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
+
                 phase = pod.status.phase
 
                 # Check for failure conditions
                 if phase == "Failed":
-                    raise RuntimeError(f"Pod {pod_name} failed to start")
+                    # Try to get more details about the failure
+                    init_error = self._check_init_container_status(pod)
+                    error_msg = f"Pod {pod_name} failed to start"
+                    if init_error:
+                        error_msg += f": {init_error}"
+                    raise RuntimeError(error_msg)
 
                 if phase == "Succeeded":
                     raise RuntimeError(
@@ -493,6 +598,18 @@ echo "File sync complete"
                 logger.warning(f"Error checking pod status: {e}")
 
             time.sleep(POD_READY_POLL_INTERVAL_SECONDS)
+
+        # On timeout, check one more time for init container failures
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+            )
+            init_error = self._check_init_container_status(pod)
+            if init_error:
+                raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
+        except ApiException:
+            pass  # Pod might be deleted, ignore
 
         logger.warning(f"Timeout waiting for pod {pod_name} to become ready")
         return False
@@ -626,22 +743,11 @@ echo "File sync complete"
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
 
-        1. Close ACP HTTP client
-        2. Delete Service, Pod
+        Deletes the Service and Pod for the sandbox.
 
         Args:
             sandbox_id: The sandbox ID to terminate
         """
-        # Close ACP HTTP client
-        acp_client = self._acp_clients.pop(sandbox_id, None)
-        if acp_client:
-            try:
-                acp_client.close()
-            except Exception as e:
-                logger.warning(
-                    f"Error closing ACP client for sandbox {sandbox_id}: {e}"
-                )
-
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
 
@@ -714,32 +820,35 @@ echo "File sync complete"
             size_bytes=size_bytes,
         )
 
-    def health_check(self, sandbox_id: UUID, nextjs_port: int | None = None) -> bool:
-        """Check if the sandbox pod and agent are healthy.
+    def health_check(
+        self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
+    ) -> bool:
+        """Check if the sandbox pod is healthy (can exec into it).
 
         Args:
             sandbox_id: The sandbox ID to check
-            nextjs_port: Not used in kubernetes (always checks agent URL)
+            nextjs_port: Not used in kubernetes
+            timeout: Health check timeout in seconds
 
         Returns:
             True if sandbox is healthy, False otherwise
         """
-        # Get or create ACP HTTP client
-        acp_client = self._acp_clients.get(sandbox_id)
-        if acp_client is None:
-            agent_url = self._get_agent_url(str(sandbox_id))
-            acp_client = ACPHttpClient(agent_url)
-            self._acp_clients[sandbox_id] = acp_client
-
-        # Check agent health
-        return acp_client.health_check(timeout=5.0)
+        pod_name = self._get_pod_name(str(sandbox_id))
+        exec_client = ACPExecClient(
+            pod_name=pod_name,
+            namespace=self._namespace,
+            container="sandbox",
+        )
+        return exec_client.health_check(timeout=timeout)
 
     def send_message(
         self,
         sandbox_id: UUID,
         message: str,
     ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent via HTTP and stream ACP events.
+        """Send a message to the CLI agent and stream ACP events.
+
+        Runs `opencode acp` via kubectl exec in the sandbox pod.
 
         Args:
             sandbox_id: The sandbox ID to send message to
@@ -748,17 +857,18 @@ echo "File sync complete"
         Yields:
             Typed ACP schema event objects
         """
-        # Get or create ACP HTTP client
-        acp_client = self._acp_clients.get(sandbox_id)
-        if acp_client is None or not acp_client.is_initialized:
-            # _get_agent_url needs string for service name
-            agent_url = self._get_agent_url(str(sandbox_id))
-            acp_client = ACPHttpClient(agent_url)
-            acp_client.initialize(cwd="/workspace")
-            self._acp_clients[sandbox_id] = acp_client
-
-        for event in acp_client.send_message(message):
-            yield event
+        pod_name = self._get_pod_name(str(sandbox_id))
+        exec_client = ACPExecClient(
+            pod_name=pod_name,
+            namespace=self._namespace,
+            container="sandbox",
+        )
+        try:
+            exec_client.start(cwd="/workspace")
+            for event in exec_client.send_message(message):
+                yield event
+        finally:
+            exec_client.stop()
 
     def list_directory(self, sandbox_id: UUID, path: str) -> list[FilesystemEntry]:
         """List contents of a directory in the sandbox's outputs directory.
@@ -915,12 +1025,6 @@ echo "File sync complete"
 
         except ApiException as e:
             raise RuntimeError(f"Failed to read file: {e}") from e
-
-    def cancel_agent(self, sandbox_id: UUID) -> None:
-        """Cancel the current agent operation."""
-        acp_client = self._acp_clients.get(sandbox_id)
-        if acp_client:
-            acp_client.cancel()
 
     def get_nextjs_url(self, sandbox_id: UUID) -> str:
         """Get the Next.js URL for the sandbox.

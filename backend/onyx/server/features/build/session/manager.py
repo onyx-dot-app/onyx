@@ -34,6 +34,7 @@ from onyx.db.models import BuildSession
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
 from onyx.llm.factory import get_default_llm
+from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
@@ -556,7 +557,7 @@ class SessionManager:
         # Use LLM to generate a concise session name
         try:
             llm = get_default_llm()
-            prompt_messages = [
+            prompt_messages: LanguageModelInput = [
                 SystemMessage(content=BUILD_NAMING_SYSTEM_PROMPT),
                 UserMessage(
                     content=BUILD_NAMING_USER_PROMPT.format(

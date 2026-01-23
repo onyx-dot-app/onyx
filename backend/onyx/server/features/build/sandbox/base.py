@@ -109,7 +109,9 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
-    def health_check(self, sandbox_id: UUID, nextjs_port: int | None = None) -> bool:
+    def health_check(
+        self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
+    ) -> bool:
         """Check if the sandbox is healthy.
 
         Args:
@@ -170,15 +172,6 @@ class SandboxManager(ABC):
 
         Raises:
             ValueError: If path traversal attempted or path is not a file
-        """
-        ...
-
-    @abstractmethod
-    def cancel_agent(self, sandbox_id: UUID) -> None:
-        """Cancel the current agent operation.
-
-        Args:
-            sandbox_id: The sandbox ID
         """
         ...
 

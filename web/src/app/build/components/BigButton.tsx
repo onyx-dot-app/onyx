@@ -72,6 +72,10 @@ const BigButton = React.forwardRef<HTMLButtonElement, BigButtonProps>(
         : textStyles[subvariant].normal;
     };
 
+    // Check if className contains text color override (for forcing white text)
+    const hasTextWhiteOverride =
+      className?.includes("!text-white") || className?.includes("text-white");
+
     return (
       <button
         ref={ref}
@@ -82,7 +86,10 @@ const BigButton = React.forwardRef<HTMLButtonElement, BigButtonProps>(
       >
         <Text
           mainContentEmphasis
-          className={cn("whitespace-nowrap", getTextStyle())}
+          className={cn(
+            "whitespace-nowrap",
+            hasTextWhiteOverride ? "!text-white" : getTextStyle()
+          )}
           as="span"
         >
           {children}

@@ -29,7 +29,7 @@ export default function BuildModeIntroContent({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.8 }}
         >
-          <Text headingH1 inverted className="!text-8xl">
+          <Text headingH1 className="!text-8xl !text-white">
             Build Mode
           </Text>
         </motion.div>
@@ -41,7 +41,7 @@ export default function BuildModeIntroContent({
         >
           <BigButton
             secondary
-            inverted
+            className="!border-white !text-white hover:!bg-white/10 active:!bg-white/20"
             onClick={(e) => {
               e.stopPropagation();
               onClose();
@@ -51,7 +51,7 @@ export default function BuildModeIntroContent({
           </BigButton>
           <BigButton
             primary
-            inverted
+            className="!bg-white !text-gray-900 hover:!bg-gray-200 active:!bg-gray-300"
             onClick={(e) => {
               e.stopPropagation();
               onTryBuildMode();
