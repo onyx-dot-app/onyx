@@ -100,18 +100,26 @@ const DocumentsSidebar = memo(
       ? currentMessageTree?.get(idOfMessageToDisplay)
       : null;
 
-    // Separate cited documents from other documents
-    const citedDocumentIds = useMemo(() => {
+    // Get citations in order and build a set of cited document IDs
+    const { citedDocumentIds, citationOrder } = useMemo(() => {
       if (!selectedMessage) {
-        return new Set<string>();
+        return {
+          citedDocumentIds: new Set<string>(),
+          citationOrder: new Map<string, number>(),
+        };
       }
 
       const citedDocumentIds = new Set<string>();
+      const citationOrder = new Map<string, number>();
       const citations = getCitations(selectedMessage.packets);
-      citations.forEach((citation) => {
+      citations.forEach((citation, index) => {
         citedDocumentIds.add(citation.document_id);
+        // Only set the order for the first occurrence
+        if (!citationOrder.has(citation.document_id)) {
+          citationOrder.set(citation.document_id, index);
+        }
       });
-      return citedDocumentIds;
+      return { citedDocumentIds, citationOrder };
     }, [idOfMessageToDisplay, selectedMessage?.packets.length]);
 
     // if these are missing for some reason, then nothing we can do. Just
@@ -129,12 +137,19 @@ const DocumentsSidebar = memo(
       selectedDocuments?.map((document) => document.document_id) || [];
     const currentDocuments = selectedMessage.documents || null;
     const dedupedDocuments = removeDuplicateDocs(currentDocuments || []);
-    const citedDocuments = dedupedDocuments.filter(
-      (doc) =>
-        doc.document_id !== null &&
-        doc.document_id !== undefined &&
-        citedDocumentIds.has(doc.document_id)
-    );
+    const citedDocuments = dedupedDocuments
+      .filter(
+        (doc) =>
+          doc.document_id !== null &&
+          doc.document_id !== undefined &&
+          citedDocumentIds.has(doc.document_id)
+      )
+      .sort((a, b) => {
+        // Sort by citation order (order citations appeared in the answer)
+        const orderA = citationOrder.get(a.document_id) ?? Infinity;
+        const orderB = citationOrder.get(b.document_id) ?? Infinity;
+        return orderA - orderB;
+      });
     const otherDocuments = dedupedDocuments.filter(
       (doc) =>
         doc.document_id === null ||

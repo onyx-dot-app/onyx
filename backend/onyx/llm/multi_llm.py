@@ -301,6 +301,12 @@ class LitellmLLM(LLM):
         )
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
+        is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
+        # Vertex Anthropic Opus 4.5 rejects output_config (LiteLLM maps reasoning_effort).
+        # Keep this guard until LiteLLM/Vertex accept the field for this model.
+        is_vertex_opus_4_5 = (
+            is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
+        )
 
         #########################
         # Build arguments
@@ -331,12 +337,16 @@ class LitellmLLM(LLM):
         # Temperature
         temperature = 1 if is_reasoning else self._temperature
 
-        if stream:
+        if stream and not is_vertex_opus_4_5:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Use configured default if not provided (if not set in env, low)
         reasoning_effort = reasoning_effort or ReasoningEffort(DEFAULT_REASONING_EFFORT)
-        if is_reasoning and reasoning_effort != ReasoningEffort.OFF:
+        if (
+            is_reasoning
+            and reasoning_effort != ReasoningEffort.OFF
+            and not is_vertex_opus_4_5
+        ):
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
                 # (neither reasoning nor reasoning_effort are accepted)

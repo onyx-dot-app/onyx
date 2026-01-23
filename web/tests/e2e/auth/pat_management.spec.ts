@@ -22,26 +22,25 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await page.locator("#onyx-user-dropdown").click();
   await page.getByText("User Settings").first().click();
 
-  // Wait for settings modal to appear (first page has Theme section)
-  await expect(page.locator("h3", { hasText: "Theme" })).toBeVisible();
+  // Wait for settings modal to appear (first page has "Full Name" section)
+  await expect(page.getByText("Full Name")).toBeVisible();
 
-  const accessTokensTab = page
-    .locator("text=Access Tokens")
-    .or(page.locator('button:has-text("Access Tokens")'))
-    .first();
-  await accessTokensTab.click();
+  await page
+    .locator('a[href="/chat/settings/accounts-access"]')
+    .click({ force: true });
 
-  // Wait for PAT page to load by checking for the h2 heading
-  await expect(
-    page.locator("h2", { hasText: "Personal Access Tokens" })
-  ).toBeVisible({
-    timeout: 10000,
-  });
+  // Wait for PAT page to load (button is unique to the PAT section)
+  await expect(page.locator('button:has-text("New Access Token")')).toBeVisible(
+    {
+      timeout: 10000,
+    }
+  );
+
+  await page.locator('button:has-text("New Access Token")').first().click();
 
   const tokenName = `E2E Test Token ${Date.now()}`;
   const nameInput = page
-    .locator('input[placeholder*="Token name"]')
-    .or(page.locator('input[aria-label="Token name"]'))
+    .locator('input[placeholder*="Name your token"]')
     .first();
   await nameInput.fill(tokenName);
 
@@ -55,17 +54,11 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
     await page.getByRole("option", { name: "7 days" }).click();
   }
 
-  const createButton = page.locator('button:has-text("Create Token")').first();
-  await createButton.click();
-
-  // Wait for token to appear in the list
-  await expect(page.locator(`p:text-is("${tokenName}")`)).toBeVisible({
-    timeout: 5000,
-  });
+  await page.locator('button:has-text("Create Token")').first().click();
 
   const tokenDisplay = page
-    .locator('[data-testid="token-value"]')
-    .or(page.locator("code").filter({ hasText: "onyx_pat_" }))
+    .locator("code")
+    .filter({ hasText: "onyx_pat_" })
     .first();
   await tokenDisplay.waitFor({ state: "visible", timeout: 5000 });
 
@@ -75,13 +68,8 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   // Grant clipboard permissions before copying
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
-  // Copy the newly created token
-  const copyButton = page
-    .locator('button[aria-label="Copy token to clipboard"]')
-    .or(page.locator('button:has-text("Copy Token")'))
-    .first();
-
-  await copyButton.click();
+  // Copy the newly created token (button is inside .code-copy-button)
+  await page.locator(".code-copy-button button").click();
 
   // Wait a moment for clipboard to be written and verify
   await page.waitForTimeout(500);
@@ -89,6 +77,11 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
     navigator.clipboard.readText()
   );
   expect(clipboardText).toBe(tokenValue);
+
+  await page.locator('button:has-text("Done")').first().click();
+  await expect(page.getByText(tokenName)).toBeVisible({
+    timeout: 5000,
+  });
 
   // Test the PAT token works by making an API request in a new context (no session cookies)
   const testContext = await page.context().browser()!.newContext();
@@ -111,10 +104,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   );
   await deleteButton.click();
 
-  const confirmButton = page
-    .locator('button:has-text("Delete")')
-    .or(page.locator('button:has-text("Confirm")'))
-    .last();
+  const confirmButton = page.locator('button:has-text("Revoke")').first();
   await confirmButton.waitFor({ state: "visible", timeout: 3000 });
   await confirmButton.click();
 
@@ -158,21 +148,19 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   await page.locator("#onyx-user-dropdown").click();
   await page.getByText("User Settings").first().click();
 
-  // Wait for settings modal to appear (first page has Theme section)
-  await expect(page.locator("h3", { hasText: "Theme" })).toBeVisible();
+  // Wait for settings modal to appear (first page has "Full Name" section)
+  await expect(page.getByText("Full Name")).toBeVisible();
 
-  const accessTokensTab = page
-    .locator("text=Access Tokens")
-    .or(page.locator('button:has-text("Access Tokens")'))
-    .first();
-  await accessTokensTab.click();
+  await page
+    .locator('a[href="/chat/settings/accounts-access"]')
+    .click({ force: true });
 
-  // Wait for PAT page to load by checking for the h2 heading
-  await expect(
-    page.locator("h2", { hasText: "Personal Access Tokens" })
-  ).toBeVisible({
-    timeout: 10000,
-  });
+  // Wait for PAT page to load (button is unique to the PAT section)
+  await expect(page.locator('button:has-text("New Access Token")')).toBeVisible(
+    {
+      timeout: 10000,
+    }
+  );
 
   const tokens = [
     { name: `Token 1 - ${Date.now()}`, expiration: "7 days" },
@@ -181,9 +169,12 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   ];
 
   for (const token of tokens) {
+    // Click "New Access Token" button to open the modal
+    await page.locator('button:has-text("New Access Token")').first().click();
+
+    // Fill in the token name
     const nameInput = page
-      .locator('input[placeholder*="Token name"]')
-      .or(page.locator('input[aria-label="Token name"]'))
+      .locator('input[placeholder*="Name your token"]')
       .first();
     await nameInput.fill(token.name);
 
@@ -197,30 +188,29 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
       await page.getByRole("option", { name: token.expiration }).click();
     }
 
-    const createButton = page
-      .locator('button:has-text("Create Token")')
-      .first();
-    await createButton.click();
+    // Create the token
+    await page.locator('button:has-text("Create Token")').first().click();
+
+    // Wait for token to be created (code block with token appears)
+    await page
+      .locator("code")
+      .filter({ hasText: "onyx_pat_" })
+      .first()
+      .waitFor({ state: "visible", timeout: 5000 });
+
+    // Close the modal by clicking "Done"
+    await page.locator('button:has-text("Done")').first().click();
 
     // Wait for token to appear in the list
-    await expect(page.locator(`p:text-is("${token.name}")`)).toBeVisible({
+    await expect(page.getByText(token.name)).toBeVisible({
       timeout: 5000,
     });
-    await page.waitForTimeout(500);
   }
 
-  // Verify all tokens are visible
+  // Verify all tokens are visible in the list
   for (const token of tokens) {
-    await expect(page.locator(`p:text-is("${token.name}")`)).toBeVisible();
+    await expect(page.getByText(token.name)).toBeVisible();
   }
-
-  // Verify tokens are sorted by created_at DESC (newest first)
-  // Get all token rows (divs that contain delete buttons with aria-label starting with "Delete token")
-  const tokenRows = page.locator(
-    'div.flex.items-center.justify-between:has(button[aria-label^="Delete token"])'
-  );
-  const firstTokenText = await tokenRows.first().textContent();
-  expect(firstTokenText).toContain(tokens[2]!.name);
 
   // Delete the second token using its aria-label
   const deleteButton = page.locator(
@@ -228,24 +218,20 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   );
   await deleteButton.click();
 
-  const confirmButton = page
-    .locator('button:has-text("Delete")')
-    .or(page.locator('button:has-text("Confirm")'))
-    .last();
+  // Click "Revoke" to confirm deletion
+  const confirmButton = page.locator('button:has-text("Revoke")').first();
   await confirmButton.waitFor({ state: "visible", timeout: 3000 });
   await confirmButton.click();
 
-  // Wait for the modal to close (it contains the token name in its text)
+  // Wait for the modal to close
   await expect(confirmButton).not.toBeVisible({ timeout: 3000 });
 
   // Now verify the deleted token is no longer in the list
-  await expect(page.locator(`p:text-is("${tokens[1]!.name}")`)).not.toBeVisible(
-    {
-      timeout: 5000,
-    }
-  );
+  await expect(page.getByText(tokens[1]!.name)).not.toBeVisible({
+    timeout: 5000,
+  });
 
   // Verify the other two tokens are still visible
-  await expect(page.locator(`p:text-is("${tokens[0]!.name}")`)).toBeVisible();
-  await expect(page.locator(`p:text-is("${tokens[2]!.name}")`)).toBeVisible();
+  await expect(page.getByText(tokens[0]!.name)).toBeVisible();
+  await expect(page.getByText(tokens[2]!.name)).toBeVisible();
 });

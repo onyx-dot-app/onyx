@@ -19,7 +19,6 @@ import { isImageFile } from "@/lib/utils";
 import {
   SvgExternalLink,
   SvgFileText,
-  SvgFiles,
   SvgImage,
   SvgLoader,
   SvgMoreHorizontal,
@@ -120,7 +119,7 @@ function FilePickerPopoverContents({
   const quickAccessFiles = recentFiles.slice(0, MAX_FILES_TO_SHOW);
 
   return (
-    <PopoverMenu md>
+    <PopoverMenu>
       {[
         // Action button to upload more files
         <LineItem
@@ -295,7 +294,7 @@ export default function FilePickerPopover({
         <Popover.Trigger asChild>
           {typeof trigger === "function" ? trigger(open) : trigger}
         </Popover.Trigger>
-        <Popover.Content align="start" side="bottom">
+        <Popover.Content align="start" side="bottom" width="lg">
           <FilePickerPopoverContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {

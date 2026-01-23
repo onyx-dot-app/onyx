@@ -9,6 +9,7 @@ from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
@@ -38,6 +39,7 @@ from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
+from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
@@ -51,6 +53,78 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _try_fallback_tool_extraction(
+    llm_step_result: LlmStepResult,
+    tool_choice: ToolChoiceOptions,
+    fallback_extraction_attempted: bool,
+    tool_defs: list[dict],
+    turn_index: int,
+) -> tuple[LlmStepResult, bool]:
+    """Attempt to extract tool calls from response text as a fallback.
+
+    This is a last resort fallback for low quality LLMs or those that don't have
+    tool calling from the serving layer. Also triggers if there's reasoning but
+    no answer and no tool calls.
+
+    Args:
+        llm_step_result: The result from the LLM step
+        tool_choice: The tool choice option used for this step
+        fallback_extraction_attempted: Whether fallback extraction was already attempted
+        tool_defs: List of tool definitions
+        turn_index: The current turn index for placement
+
+    Returns:
+        Tuple of (possibly updated LlmStepResult, whether fallback was attempted this call)
+    """
+    if fallback_extraction_attempted:
+        return llm_step_result, False
+
+    no_tool_calls = (
+        not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0
+    )
+    reasoning_but_no_answer_or_tools = (
+        llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
+    )
+    should_try_fallback = (
+        tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls
+    ) or reasoning_but_no_answer_or_tools
+
+    if not should_try_fallback:
+        return llm_step_result, False
+
+    # Try to extract from answer first, then fall back to reasoning
+    extracted_tool_calls: list[ToolCallKickoff] = []
+    if llm_step_result.answer:
+        extracted_tool_calls = extract_tool_calls_from_response_text(
+            response_text=llm_step_result.answer,
+            tool_definitions=tool_defs,
+            placement=Placement(turn_index=turn_index),
+        )
+    if not extracted_tool_calls and llm_step_result.reasoning:
+        extracted_tool_calls = extract_tool_calls_from_response_text(
+            response_text=llm_step_result.reasoning,
+            tool_definitions=tool_defs,
+            placement=Placement(turn_index=turn_index),
+        )
+
+    if extracted_tool_calls:
+        logger.info(
+            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text "
+            f"as fallback (tool_choice was REQUIRED but no tool calls returned)"
+        )
+        return (
+            LlmStepResult(
+                reasoning=llm_step_result.reasoning,
+                answer=llm_step_result.answer,
+                tool_calls=extracted_tool_calls,
+            ),
+            True,
+        )
+
+    return llm_step_result, True
+
 
 # Hardcoded oppinionated value, might breaks down to something like:
 # Cycle 1: Calls web_search for something
@@ -353,6 +427,7 @@ def run_llm_loop(
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
         has_called_search_tool: bool = False
+        fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         default_base_system_prompt: str = get_default_base_system_prompt(db_session)
@@ -379,12 +454,16 @@ def run_llm_loop(
 
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
-            if persona and persona.replace_base_system_prompt and persona.system_prompt:
+            if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
-                system_prompt = ChatMessageSimple(
-                    message=persona.system_prompt,
-                    token_count=token_counter(persona.system_prompt),
-                    message_type=MessageType.SYSTEM,
+                system_prompt = (
+                    ChatMessageSimple(
+                        message=persona.system_prompt,
+                        token_count=token_counter(persona.system_prompt),
+                        message_type=MessageType.SYSTEM,
+                    )
+                    if persona.system_prompt
+                    else None
                 )
                 custom_agent_prompt_msg = None
             else:
@@ -471,10 +550,11 @@ def run_llm_loop(
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
+            tool_defs = [tool.tool_definition() for tool in final_tools]
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=truncated_message_history,
-                tool_definitions=[tool.tool_definition() for tool in final_tools],
+                tool_definitions=tool_defs,
                 tool_choice=tool_choice,
                 llm=llm,
                 placement=Placement(turn_index=llm_cycle_count + reasoning_cycles),
@@ -488,6 +568,19 @@ def run_llm_loop(
             )
             if has_reasoned:
                 reasoning_cycles += 1
+
+            # Fallback extraction for LLMs that don't support tool calling natively or are lower quality
+            # and might incorrectly output tool calls in other channels
+            llm_step_result, attempted = _try_fallback_tool_extraction(
+                llm_step_result=llm_step_result,
+                tool_choice=tool_choice,
+                fallback_extraction_attempted=fallback_extraction_attempted,
+                tool_defs=tool_defs,
+                turn_index=llm_cycle_count + reasoning_cycles,
+            )
+            if attempted:
+                # To prevent the case of excessive looping with bad models, we only allow one fallback attempt
+                fallback_extraction_attempted = True
 
             # Save citation mapping after each LLM step for incremental state updates
             state_container.set_citation_mapping(citation_processor.citation_to_doc)
@@ -563,8 +656,15 @@ def run_llm_loop(
 
                 # Extract search_docs if this is a search tool response
                 search_docs = None
+                displayed_docs = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):
                     search_docs = tool_response.rich_response.search_docs
+                    displayed_docs = tool_response.rich_response.displayed_docs
+
+                    # Add ALL search docs to state container for DB persistence
+                    if search_docs:
+                        state_container.add_search_docs(search_docs)
+
                     if gathered_documents:
                         gathered_documents.extend(search_docs)
                     else:
@@ -582,6 +682,12 @@ def run_llm_loop(
                 ):
                     generated_images = tool_response.rich_response.generated_images
 
+                saved_response = (
+                    tool_response.rich_response
+                    if isinstance(tool_response.rich_response, str)
+                    else tool_response.llm_facing_response
+                )
+
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
                     turn_index=llm_cycle_count + reasoning_cycles,
@@ -591,8 +697,8 @@ def run_llm_loop(
                     tool_id=tool.id,
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
                     tool_call_arguments=tool_call.tool_args,
-                    tool_call_response=tool_response.llm_facing_response,
-                    search_docs=search_docs,
+                    tool_call_response=saved_response,
+                    search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,
                 )
                 # Add to state container for partial save support
@@ -647,7 +753,12 @@ def run_llm_loop(
                 should_cite_documents = True
 
         if not llm_step_result or not llm_step_result.answer:
-            raise RuntimeError("LLM did not return an answer.")
+            raise RuntimeError(
+                "The LLM did not return an answer. "
+                "Typically this is an issue with LLMs that do not support tool calling natively, "
+                "or the model serving API is not configured correctly. "
+                "This may also happen with models that are lower quality outputting invalid tool calls."
+            )
 
         emitter.emit(
             Packet(

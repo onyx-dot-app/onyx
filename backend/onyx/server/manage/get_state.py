@@ -13,6 +13,7 @@ from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
 from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import STABLE_VERSION_PATTERN
+from onyx.db.auth import get_user_count
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
@@ -28,12 +29,14 @@ def healthcheck() -> StatusResponse:
 
 
 @router.get("/auth/type", tags=PUBLIC_API_TAGS)
-def get_auth_type() -> AuthTypeResponse:
+async def get_auth_type() -> AuthTypeResponse:
+    user_count = await get_user_count()
     return AuthTypeResponse(
         auth_type=AUTH_TYPE,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
         password_min_length=PASSWORD_MIN_LENGTH,
+        has_users=user_count > 0,
     )
 
 

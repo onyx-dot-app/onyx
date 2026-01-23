@@ -17,7 +17,7 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.chunk_content_enrichment import (
-    generate_enriched_content_for_chunk,
+    generate_enriched_content_for_chunk_text,
 )
 from onyx.document_index.interfaces import DocumentIndex as OldDocumentIndex
 from onyx.document_index.interfaces import (
@@ -140,9 +140,12 @@ def _convert_onyx_chunk_to_opensearch_document(
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
-        title=chunk.source_document.title,
+        # Use get_title_for_document_index to match the logic used when creating
+        # the title_embedding in the embedder. This method falls back to
+        # semantic_identifier when title is None (but not empty string).
+        title=chunk.source_document.get_title_for_document_index(),
         title_vector=chunk.title_embedding,
-        content=generate_enriched_content_for_chunk(chunk),
+        content=generate_enriched_content_for_chunk_text(chunk),
         content_vector=chunk.embeddings.full_embedding,
         source_type=chunk.source_document.source.value,
         metadata_list=chunk.source_document.get_metadata_str_attributes(),
@@ -421,6 +424,24 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def verify_and_create_index_if_necessary(
         self, embedding_dim: int, embedding_precision: EmbeddingPrecision
     ) -> None:
+        """Verifies and creates the index if necessary.
+
+        Also puts the desired search pipeline state, creating the pipelines if
+        they do not exist and updating them otherwise.
+
+        Args:
+            embedding_dim: Vector dimensionality for the vector similarity part
+                of the search.
+            embedding_precision: Precision of the values of the vectors for the
+                similarity part of the search.
+
+        Raises:
+            RuntimeError: There was an error verifying or creating the index or
+                search pipelines.
+        """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary."
+        )
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
         )
@@ -450,6 +471,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,
     ) -> list[DocumentInsertionRecord]:
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} chunks for index {self._index_name}."
+        )
         # Set of doc IDs.
         unique_docs_to_be_indexed: set[str] = set()
         document_indexing_results: list[DocumentInsertionRecord] = []
@@ -494,6 +518,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def delete(self, document_id: str, chunk_count: int | None = None) -> int:
         """Deletes all chunks for a given document.
 
+        Does nothing if the specified document ID does not exist.
+
         TODO(andrei): Make this method require supplying source type.
         TODO(andrei): Consider implementing this method to delete on document
         chunk IDs vs querying for matching document chunks.
@@ -510,6 +536,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         Returns:
             The number of chunks successfully deleted.
         """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Deleting document {document_id} from index {self._index_name}."
+        )
         query_body = DocumentQuery.delete_from_document_id_query(
             document_id=document_id,
             tenant_state=self._tenant_state,
@@ -523,6 +552,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Updates some set of chunks.
 
+        NOTE: Will raise if the specified document chunks do not exist.
         NOTE: Requires document chunk count be known; will raise if it is not.
         NOTE: Each update request must have some field to update; if not it is
         assumed there is a bug in the caller and this will raise.
@@ -539,6 +569,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             RuntimeError: Failed to update some or all of the chunks for the
                 specified documents.
         """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Updating {len(update_requests)} chunks for index {self._index_name}."
+        )
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
             # TODO(andrei): Nit but consider if we can use DocumentChunk
@@ -604,6 +637,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         TODO(andrei): Consider implementing this method to retrieve on document
         chunk IDs vs querying for matching document chunks.
         """
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Retrieving {len(chunk_requests)} chunks for index {self._index_name}."
+        )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
             search_hits: list[SearchHit[DocumentChunk]] = []
@@ -643,6 +679,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         num_to_retrieve: int,
         offset: int = 0,
     ) -> list[InferenceChunk]:
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
+        )
         query_body = DocumentQuery.get_hybrid_search_query(
             query_text=query,
             query_vector=query_embedding,

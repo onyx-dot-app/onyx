@@ -3,14 +3,14 @@
 import { useContext, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
-import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
+import { Card } from "@/refresh-components/cards";
+import { LineItemLayout } from "@/layouts/general-layouts";
+
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
   source: string;
@@ -102,7 +102,6 @@ function useFederatedOauthModal() {
 
 export default function FederatedOAuthModal() {
   const settings = useContext(SettingsContext);
-  const router = useRouter();
 
   const {
     oAuthModalState: { hidden },
@@ -117,11 +116,6 @@ export default function FederatedOAuthModal() {
   if (needsAuth.length === 0 || hidden || !hasUnauthenticatedConnectors) {
     return null;
   }
-
-  const handleAuthorize = (authorizeUrl: string) => {
-    // Redirect to OAuth URL in the same window
-    router.push(authorizeUrl as Route);
-  };
 
   const applicationName =
     settings?.enterpriseSettings?.application_name || "Onyx";
@@ -141,37 +135,28 @@ export default function FederatedOAuthModal() {
             );
 
             return (
-              <div
-                key={connector.federated_connector_id}
-                className="flex items-center justify-between p-3 rounded-lg border border-border"
-              >
-                <div className="flex items-center gap-3">
-                  <SourceIcon
-                    sourceType={sourceMetadata.internalName}
-                    iconSize={20}
-                  />
-                  <span className="font-medium">
-                    {sourceMetadata.displayName}
-                  </span>
-                </div>
-                <Button
-                  onClick={() => {
-                    if (connector.authorize_url) {
-                      handleAuthorize(connector.authorize_url);
-                    }
-                  }}
-                  disabled={!connector.authorize_url}
-                >
-                  Connect
-                </Button>
-              </div>
+              <Card key={connector.federated_connector_id}>
+                <LineItemLayout
+                  icon={sourceMetadata.icon}
+                  title={sourceMetadata.displayName}
+                  description={sourceMetadata.category}
+                  rightChildren={
+                    <Button
+                      secondary
+                      target="_blank"
+                      href={connector.authorize_url}
+                    >
+                      Connect
+                    </Button>
+                  }
+                  center
+                />
+              </Card>
             );
           })}
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={handleOAuthModalSkip} className="w-full">
-            Skip for now
-          </Button>
+          <Button onClick={handleOAuthModalSkip}>Skip for now</Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

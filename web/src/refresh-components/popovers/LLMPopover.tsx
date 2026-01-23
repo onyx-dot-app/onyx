@@ -352,7 +352,6 @@ export default function LLMPopover({
           selected={isSelected}
           description={description}
           onClick={() => handleSelectModel(option)}
-          icon={() => null}
           rightChildren={
             isSelected ? (
               <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
@@ -389,13 +388,13 @@ export default function LLMPopover({
           </SelectButton>
         </div>
       </Popover.Trigger>
-      <Popover.Content side="top" align="end" lg>
+      <Popover.Content side="top" align="end" width="xl">
         <Section gap={0.5}>
           {/* Search Input */}
           <InputTypeIn
             ref={searchInputRef}
             leftSearchIcon
-            internal
+            variant="internal"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search models..."

@@ -474,12 +474,12 @@ export default function AgentsNavigationPage() {
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start">
-                <PopoverMenu md>
+                <PopoverMenu>
                   {[
                     <InputTypeIn
                       key="created-by"
                       placeholder="Created by..."
-                      internal
+                      variant="internal"
                       leftSearchIcon
                       value={creatorSearchQuery}
                       onChange={(e) => setCreatorSearchQuery(e.target.value)}
@@ -551,12 +551,12 @@ export default function AgentsNavigationPage() {
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start">
-                <PopoverMenu md>
+                <PopoverMenu>
                   {[
                     <InputTypeIn
                       key="actions"
                       placeholder="Filter actions..."
-                      internal
+                      variant="internal"
                       leftSearchIcon
                       value={actionsSearchQuery}
                       onChange={(e) => setActionsSearchQuery(e.target.value)}

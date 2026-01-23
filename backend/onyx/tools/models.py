@@ -36,6 +36,15 @@ class ToolCallException(Exception):
         self.llm_facing_message = llm_facing_message
 
 
+class ToolExecutionException(Exception):
+    """Exception raise for errors during tool execution."""
+
+    def __init__(self, message: str, emit_error_packet: bool = False):
+        super().__init__(message)
+
+        self.emit_error_packet = emit_error_packet
+
+
 class SearchToolUsage(str, Enum):
     DISABLED = "disabled"
     ENABLED = "enabled"
@@ -80,6 +89,8 @@ class ToolResponse(BaseModel):
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
         | CustomToolCallSummary
+        # If the rich response is a string, this is what's saved to the tool call in the DB
+        | str
         | None  # If nothing needs to be persisted outside of the string value passed to the LLM
     )
     # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history

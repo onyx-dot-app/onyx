@@ -48,7 +48,7 @@ Do not use the "site:" operator in your web search queries.
 OPEN_URLS_GUIDANCE = """
 
 ## open_url
-Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches.
+Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs.
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources.
 You should almost always use open_url after a web_search call. Use this tool when a user asks about a specific provided URL.
 """
@@ -69,6 +69,14 @@ GENERATE_IMAGE_GUIDANCE = """
 
 ## generate_image
 NEVER use generate_image unless the user specifically requests an image.
+"""
+
+MEMORY_GUIDANCE = """
+
+## add_memory
+Use the `add_memory` tool for facts shared by the user that should be remembered for future conversations. \
+Only add memories that are specific, likely to remain true, and likely to be useful later. \
+Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
 """
 
 TOOL_CALL_FAILURE_PROMPT = """

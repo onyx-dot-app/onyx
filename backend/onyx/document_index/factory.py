@@ -1,9 +1,8 @@
 import httpx
-from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_FOR_ONYX
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
 from onyx.db.models import SearchSettings
-from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchOldDocumentIndex,
@@ -17,17 +16,24 @@ def get_default_document_index(
     secondary_search_settings: SearchSettings | None,
     httpx_client: httpx.Client | None = None,
 ) -> DocumentIndex:
-    """Primary index is the index that is used for querying/updating etc.
-    Secondary index is for when both the currently used index and the upcoming
-    index both need to be updated, updates are applied to both indices"""
+    """Gets the default document index from env vars.
 
+    To be used for retrieval only. Indexing should be done through both indices
+    until Vespa is deprecated.
+
+    Pre-existing docstring for this function, although secondary indices are not
+    currently supported:
+    Primary index is the index that is used for querying/updating etc. Secondary
+    index is for when both the currently used index and the upcoming index both
+    need to be updated, updates are applied to both indices.
+    """
     secondary_index_name: str | None = None
     secondary_large_chunks_enabled: bool | None = None
     if secondary_search_settings:
         secondary_index_name = secondary_search_settings.index_name
         secondary_large_chunks_enabled = secondary_search_settings.large_chunks_enabled
 
-    if ENABLE_OPENSEARCH_FOR_ONYX:
+    if ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX:
         return OpenSearchOldDocumentIndex(
             index_name=search_settings.index_name,
             secondary_index_name=secondary_index_name,
@@ -47,12 +53,48 @@ def get_default_document_index(
         )
 
 
-def get_current_primary_default_document_index(db_session: Session) -> DocumentIndex:
+def get_all_document_indices(
+    search_settings: SearchSettings,
+    secondary_search_settings: SearchSettings | None,
+    httpx_client: httpx.Client | None = None,
+) -> list[DocumentIndex]:
+    """Gets all document indices.
+
+    NOTE: Will only return an OpenSearch index interface if
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX is True. This is so we don't break flows
+    where we know it won't be enabled.
+
+    Used for indexing only. Until Vespa is deprecated we will index into both
+    document indices. Retrieval is done through only one index however.
+
+    Large chunks and secondary indices are not currently supported so we
+    hardcode appropriate values.
     """
-    TODO: Use redis to cache this or something
-    """
-    search_settings = get_current_search_settings(db_session)
-    return get_default_document_index(
-        search_settings,
-        None,
+    vespa_document_index = VespaIndex(
+        index_name=search_settings.index_name,
+        secondary_index_name=(
+            secondary_search_settings.index_name if secondary_search_settings else None
+        ),
+        large_chunks_enabled=search_settings.large_chunks_enabled,
+        secondary_large_chunks_enabled=(
+            secondary_search_settings.large_chunks_enabled
+            if secondary_search_settings
+            else None
+        ),
+        multitenant=MULTI_TENANT,
+        httpx_client=httpx_client,
     )
+    opensearch_document_index: OpenSearchOldDocumentIndex | None = None
+    if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+        opensearch_document_index = OpenSearchOldDocumentIndex(
+            index_name=search_settings.index_name,
+            secondary_index_name=None,
+            large_chunks_enabled=False,
+            secondary_large_chunks_enabled=None,
+            multitenant=MULTI_TENANT,
+            httpx_client=httpx_client,
+        )
+    result: list[DocumentIndex] = [vespa_document_index]
+    if opensearch_document_index:
+        result.append(opensearch_document_index)
+    return result

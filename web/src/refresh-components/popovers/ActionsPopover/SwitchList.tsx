@@ -56,7 +56,7 @@ export default function SwitchList({
   }, [items, searchTerm]);
 
   return (
-    <PopoverMenu md footer={footer}>
+    <PopoverMenu footer={footer}>
       {[
         <div className="flex items-center gap-1" key="search">
           <IconButton
@@ -69,7 +69,7 @@ export default function SwitchList({
             }}
           />
           <InputTypeIn
-            internal
+            variant="internal"
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}

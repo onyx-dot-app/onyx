@@ -144,10 +144,6 @@ class BasicChunkRequest(BaseModel):
     # In case some queries favor recency more than other queries.
     recency_bias_multiplier: float = 1.0
 
-    # Sometimes we may want to extract specific keywords from a more semantic query for
-    # a better keyword search.
-    query_keywords: list[str] | None = None  # Not used currently
-
     limit: int | None = None
     offset: int | None = None  # This one is not set currently
 
@@ -165,6 +161,8 @@ class ChunkSearchRequest(BasicChunkRequest):
 class ChunkIndexRequest(BasicChunkRequest):
     # Calculated final filters
     filters: IndexFilters
+
+    query_keywords: list[str] | None = None
 
 
 class ContextExpansionType(str, Enum):
@@ -372,6 +370,10 @@ class SearchDocsResponse(BaseModel):
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
 
+    # For cases where the frontend only needs to display a subset of the search docs
+    # The whole list is typically still needed for later steps but this set should be saved separately
+    displayed_docs: list[SearchDoc] | None = None
+
 
 class SavedSearchDoc(SearchDoc):
     db_doc_id: int
@@ -428,11 +430,6 @@ class SavedSearchDoc(SearchDoc):
         self_score = self.score if self.score is not None else 0.0
         other_score = other.score if other.score is not None else 0.0
         return self_score < other_score
-
-
-class CitationDocInfo(BaseModel):
-    search_doc: SearchDoc
-    citation_number: int | None
 
 
 class SavedSearchDocWithContent(SavedSearchDoc):

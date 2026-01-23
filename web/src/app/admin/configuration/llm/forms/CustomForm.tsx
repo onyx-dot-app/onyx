@@ -282,13 +282,13 @@ export function CustomForm({
                               </div>
                             )
                           )}
-                          <CreateButton
-                            onClick={() => arrayHelpers.push(["", ""])}
-                            className="mt-3"
-                            type="button"
-                          >
-                            Add New
-                          </CreateButton>
+                          <div className="mt-3">
+                            <CreateButton
+                              onClick={() => arrayHelpers.push(["", ""])}
+                            >
+                              Add New
+                            </CreateButton>
+                          </div>
                         </div>
                       )}
                     />

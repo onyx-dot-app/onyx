@@ -51,7 +51,10 @@ import {
   useDocumentSidebarVisible,
 } from "@/app/chat/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
-import ChatUI, { ChatUIHandle } from "@/sections/ChatUI";
+import ChatScrollContainer, {
+  ChatScrollContainerHandle,
+} from "@/components/chat/ChatScrollContainer";
+import MessageList from "@/components/chat/MessageList";
 import WelcomeMessage from "@/app/chat/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/chat/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
@@ -67,9 +70,14 @@ import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
+import ChatHeader from "@/app/chat/components/ChatHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
+import {
+  CHAT_BACKGROUND_NONE,
+  getBackgroundById,
+} from "@/lib/constants/chatBackgrounds";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -268,7 +276,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     settings,
   });
 
-  const chatUiRef = useRef<ChatUIHandle>(null);
+  const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   // Reset scroll button when session changes
@@ -277,7 +285,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   }, [currentChatSessionId]);
 
   const handleScrollToBottom = useCallback(() => {
-    chatUiRef.current?.scrollToBottom();
+    scrollContainerRef.current?.scrollToBottom();
   }, []);
 
   const resetInputBar = useCallback(() => {
@@ -328,6 +336,15 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     (state) => state.updateCurrentDocumentSidebarVisible
   );
   const messageHistory = useCurrentMessageHistory();
+
+  // Determine anchor: second-to-last message (last user message before current response)
+  const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
+  const anchorNodeId = anchorMessage?.nodeId;
+  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+
+  // Auto-scroll preference from user settings
+  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  const isStreaming = currentChatState === "streaming";
 
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -562,6 +579,12 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     );
   }
 
+  // Chat background logic
+  const chatBackgroundId = user?.preferences?.chat_background;
+  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
+  const hasBackground =
+    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+
   if (!isReady) return <OnyxInitializingLoader />;
 
   return (
@@ -618,7 +641,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root>
+      <AppLayouts.Root disableFooter>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -627,9 +650,22 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full flex flex-col items-center outline-none relative"
+              className={cn(
+                "h-full w-full flex flex-col items-center outline-none relative",
+                hasBackground && "bg-cover bg-center bg-fixed"
+              )}
+              style={
+                hasBackground
+                  ? { backgroundImage: `url(${chatBackground.url})` }
+                  : undefined
+              }
               {...getRootProps({ tabIndex: -1 })}
             >
+              {/* Semi-transparent overlay for readability when background is set */}
+              {hasBackground && (
+                <div className="absolute inset-0 bg-background/80 pointer-events-none" />
+              )}
+
               {/* ProjectUI */}
               {!!currentProjectId && projectPanelVisible && (
                 <ProjectContextPanel
@@ -640,20 +676,33 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
               )}
 
               {/* ChatUI */}
-              {!!currentChatSessionId && (
-                <ChatUI
-                  ref={chatUiRef}
-                  liveAssistant={liveAssistant}
-                  llmManager={llmManager}
-                  deepResearchEnabled={deepResearchEnabled}
-                  currentMessageFiles={currentMessageFiles}
-                  setPresentingDocument={setPresentingDocument}
-                  onSubmit={onSubmit}
-                  onMessageSelection={onMessageSelection}
-                  stopGenerating={stopGenerating}
-                  handleResubmitLastMessage={handleResubmitLastMessage}
+              {!!currentChatSessionId && liveAssistant && (
+                <ChatScrollContainer
+                  ref={scrollContainerRef}
+                  sessionId={currentChatSessionId}
+                  anchorSelector={anchorSelector}
+                  autoScroll={autoScrollEnabled}
+                  isStreaming={isStreaming}
                   onScrollButtonVisibilityChange={setShowScrollButton}
-                />
+                  disableFadeOverlay={hasBackground}
+                >
+                  <AppLayouts.StickyHeader>
+                    <ChatHeader />
+                  </AppLayouts.StickyHeader>
+                  <MessageList
+                    liveAssistant={liveAssistant}
+                    llmManager={llmManager}
+                    deepResearchEnabled={deepResearchEnabled}
+                    currentMessageFiles={currentMessageFiles}
+                    setPresentingDocument={setPresentingDocument}
+                    onSubmit={onSubmit}
+                    onMessageSelection={onMessageSelection}
+                    stopGenerating={stopGenerating}
+                    onResubmit={handleResubmitLastMessage}
+                    anchorNodeId={anchorNodeId}
+                    disableBlur={!hasBackground}
+                  />
+                </ChatScrollContainer>
               )}
 
               {!currentChatSessionId && !currentProjectId && (
@@ -671,7 +720,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                 className={cn(
                   "flex justify-center",
                   currentChatSessionId
-                    ? "absolute bottom-0 left-0 right-0 pointer-events-none"
+                    ? "absolute bottom-6 left-0 right-0 pointer-events-none"
                     : "w-full"
                 )}
               >
@@ -758,6 +807,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                     )}
                 </div>
               )}
+              <AppLayouts.Footer />
             </div>
           )}
         </Dropzone>

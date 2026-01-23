@@ -227,7 +227,7 @@ export const AppearanceThemeSettings = forwardRef<
                 ref={applicationNameInputRef}
                 data-label="application-name-input"
                 showClearButton
-                error={!!errors.application_name}
+                variant={errors.application_name ? "error" : undefined}
                 value={values.application_name}
                 {...getPreviewHandlers("sidebar")}
                 onChange={(e) =>
@@ -359,7 +359,7 @@ export const AppearanceThemeSettings = forwardRef<
             ref={greetingMessageInputRef}
             data-label="greeting-message-input"
             showClearButton
-            error={!!errors.custom_greeting_message}
+            variant={errors.custom_greeting_message ? "error" : undefined}
             value={values.custom_greeting_message}
             {...getPreviewHandlers("greeting")}
             onChange={(e) =>
@@ -391,7 +391,7 @@ export const AppearanceThemeSettings = forwardRef<
             ref={headerContentInputRef}
             data-label="chat-header-input"
             showClearButton
-            error={!!errors.custom_header_content}
+            variant={errors.custom_header_content ? "error" : undefined}
             value={values.custom_header_content}
             {...getPreviewHandlers("chat_header")}
             onChange={(e) =>
@@ -423,7 +423,9 @@ export const AppearanceThemeSettings = forwardRef<
             data-label="chat-footer-textarea"
             rows={3}
             placeholder="Add markdown content"
-            error={!!errors.custom_lower_disclaimer_content}
+            variant={
+              errors.custom_lower_disclaimer_content ? "error" : undefined
+            }
             value={values.custom_lower_disclaimer_content}
             {...getPreviewHandlers("chat_footer")}
             onChange={(e) =>
@@ -480,7 +482,7 @@ export const AppearanceThemeSettings = forwardRef<
                   ref={noticeHeaderInputRef}
                   data-label="notice-header-input"
                   showClearButton
-                  error={!!errors.custom_popup_header}
+                  variant={errors.custom_popup_header ? "error" : undefined}
                   value={values.custom_popup_header}
                   onChange={(e) =>
                     setFieldValue("custom_popup_header", e.target.value)
@@ -510,7 +512,7 @@ export const AppearanceThemeSettings = forwardRef<
                   data-label="notice-content-textarea"
                   rows={3}
                   placeholder="Add markdown content"
-                  error={!!errors.custom_popup_content}
+                  variant={errors.custom_popup_content ? "error" : undefined}
                   value={values.custom_popup_content}
                   onChange={(e) =>
                     setFieldValue("custom_popup_content", e.target.value)
@@ -563,7 +565,7 @@ export const AppearanceThemeSettings = forwardRef<
                     data-label="consent-prompt-textarea"
                     rows={3}
                     placeholder="Add markdown content"
-                    error={!!errors.consent_screen_prompt}
+                    variant={errors.consent_screen_prompt ? "error" : undefined}
                     value={values.consent_screen_prompt}
                     onChange={(e) => {
                       setFieldValue("consent_screen_prompt", e.target.value);
