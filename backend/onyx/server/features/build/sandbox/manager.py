@@ -32,18 +32,23 @@ from onyx.server.features.build.db.sandbox import (
     create_sandbox__no_commit as db_create_sandbox,
 )
 from onyx.server.features.build.db.sandbox import create_snapshot as db_create_snapshot
-from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
+from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_sandbox
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
+from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
-from onyx.server.features.build.sandbox.internal.agent_client import ACPAgentClient
-from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
-from onyx.server.features.build.sandbox.internal.directory_manager import (
+from onyx.server.features.build.sandbox.internal.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.local.internal.agent_client import (
+    ACPAgentClient,
+)
+from onyx.server.features.build.sandbox.local.internal.agent_client import ACPEvent
+from onyx.server.features.build.sandbox.local.internal.directory_manager import (
     DirectoryManager,
 )
-from onyx.server.features.build.sandbox.internal.process_manager import ProcessManager
-from onyx.server.features.build.sandbox.internal.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.local.internal.process_manager import (
+    ProcessManager,
+)
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotInfo
@@ -393,7 +398,13 @@ class LocalSandboxManager(SandboxManager):
             # NOTE: Snapshot restore is only supported in kubernetes backend
             if snapshot_id and SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                 logger.debug(f"Restoring from snapshot {snapshot_id}")
-                snapshot = get_latest_snapshot_for_session(db_session, session_uuid)
+                # Get previous sandbox for this session (if exists)
+                previous_sandbox = get_sandbox_by_session_id(db_session, session_uuid)
+                snapshot = None
+                if previous_sandbox:
+                    snapshot = get_latest_snapshot_for_sandbox(
+                        db_session, previous_sandbox.id
+                    )
                 if snapshot:
                     self._snapshot_manager.restore_snapshot(
                         snapshot.storage_path, sandbox_path
@@ -484,12 +495,11 @@ class LocalSandboxManager(SandboxManager):
             )
 
             return SandboxInfo(
-                id=str(sandbox.id),
-                session_id=session_id,
+                sandbox_id=sandbox.id,
                 directory_path=str(self._get_sandbox_path(session_id)),
                 status=SandboxStatus.RUNNING,
-                created_at=sandbox.created_at,
                 last_heartbeat=None,
+                nextjs_port=nextjs_port,
             )
 
         except Exception as e:
@@ -580,7 +590,7 @@ class LocalSandboxManager(SandboxManager):
 
         snapshot = db_create_snapshot(
             db_session=db_session,
-            session_id=sandbox.session_id,
+            sandbox_id=UUID(sandbox_id),
             storage_path=storage_path,
             size_bytes=size_bytes,
         )
@@ -592,7 +602,7 @@ class LocalSandboxManager(SandboxManager):
 
         return SnapshotInfo(
             id=str(snapshot.id),
-            session_id=str(sandbox.session_id),
+            sandbox_id=sandbox_id,
             storage_path=storage_path,
             created_at=snapshot.created_at,
             size_bytes=size_bytes,
@@ -731,12 +741,11 @@ class LocalSandboxManager(SandboxManager):
             return None
 
         return SandboxInfo(
-            id=str(sandbox.id),
-            session_id=str(sandbox.session_id),
+            sandbox_id=sandbox.id,
             directory_path=str(self._get_sandbox_path(sandbox.session_id)),
             status=sandbox.status,
-            created_at=sandbox.created_at,
             last_heartbeat=sandbox.last_heartbeat,
+            nextjs_port=sandbox.nextjs_port,
         )
 
     def cancel_agent(self, sandbox_id: str) -> None:
