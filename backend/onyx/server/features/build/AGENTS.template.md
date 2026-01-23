@@ -147,7 +147,7 @@ Each JSON file follows this consistent format:
 ```json
 {
   "id": "afbec183-b0c5-46bf-b762-1ce88d003729",
-  "semantic_identifier": "[CS-17] [Company] Update system prompt doesn't work",
+  "semantic_identifier": "[CS-23] [Company] Update system prompt doesn't work",
   "title": "[Company] Update system prompt doesn't work",
   "source": "linear",
   "doc_updated_at": "2025-11-10T16:31:07.735000+00:00",
