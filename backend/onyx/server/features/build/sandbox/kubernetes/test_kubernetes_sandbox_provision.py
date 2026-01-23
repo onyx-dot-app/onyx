@@ -33,19 +33,16 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
-def _is_kubernetes_available() -> bool:
+def _is_kubernetes_available() -> None:
     """Check if Kubernetes is available and configured."""
     try:
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
 
-        v1 = client.CoreV1Api()
-        v1.list_namespace(limit=1)
-        return True
-    except Exception:
-        return False
+    v1 = client.CoreV1Api()
+    # List pods in sandbox namespace instead of namespaces (avoids cluster-scope permissions)
+    v1.list_namespaced_pod(SANDBOX_NAMESPACE, limit=1)
 
 
 def _get_kubernetes_client() -> client.CoreV1Api:
@@ -61,10 +58,6 @@ def _get_kubernetes_client() -> client.CoreV1Api:
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
     reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
 )
-@pytest.mark.skipif(
-    not _is_kubernetes_available(),
-    reason="Kubernetes cluster not available",
-)
 def test_kubernetes_sandbox_provision() -> None:
     """Test that provision() creates a sandbox pod and DB record successfully.
 
@@ -74,6 +67,8 @@ def test_kubernetes_sandbox_provision() -> None:
     3. Verifies the sandbox is created with RUNNING status
     4. Cleans up by terminating the sandbox
     """
+    _is_kubernetes_available()
+
     # Initialize the database engine
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
 
@@ -259,10 +254,6 @@ def test_kubernetes_sandbox_provision() -> None:
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
     reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
 )
-@pytest.mark.skipif(
-    not _is_kubernetes_available(),
-    reason="Kubernetes cluster not available",
-)
 def test_kubernetes_sandbox_send_message() -> None:
     """Test that send_message() communicates with the sandbox agent successfully.
 
@@ -279,6 +270,8 @@ def test_kubernetes_sandbox_send_message() -> None:
     from onyx.server.features.build.sandbox.kubernetes.internal.acp_http_client import (
         ACPEvent,
     )
+
+    _is_kubernetes_available()
 
     # Initialize the database engine
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
@@ -317,9 +310,9 @@ def test_kubernetes_sandbox_send_message() -> None:
         time.sleep(5)
 
         # Verify health check passes before sending message
-        is_healthy = manager.health_check(sandbox_id)
-        time.sleep(1000)
+        is_healthy = manager.health_check(sandbox_id, nextjs_port=None)
         assert is_healthy, "Sandbox agent should be healthy before sending messages"
+        print("DEBUG: Sandbox agent is healthy")
 
         # Send a simple message
         events: list[ACPEvent] = []

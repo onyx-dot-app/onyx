@@ -772,12 +772,15 @@ echo "File sync complete"
             size_bytes=size_bytes,
         )
 
-    def health_check(self, sandbox_id: UUID, nextjs_port: int | None = None) -> bool:
+    def health_check(
+        self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
+    ) -> bool:
         """Check if the sandbox pod and agent are healthy.
 
         Args:
             sandbox_id: The sandbox ID to check
             nextjs_port: Not used in kubernetes (always checks agent URL)
+            timeout: Health check timeout in seconds
 
         Returns:
             True if sandbox is healthy, False otherwise
@@ -786,7 +789,7 @@ echo "File sync complete"
         # always hit the same API server pod, so we don't cache clients
         agent_url = self._get_agent_url(str(sandbox_id))
         acp_client = ACPHttpClient(agent_url)
-        return acp_client.health_check(timeout=5.0)
+        return acp_client.health_check(timeout=timeout)
 
     def send_message(
         self,

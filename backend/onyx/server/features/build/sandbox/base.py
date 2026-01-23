@@ -105,7 +105,9 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
-    def health_check(self, sandbox_id: UUID, nextjs_port: int | None = None) -> bool:
+    def health_check(
+        self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
+    ) -> bool:
         """Check if the sandbox is healthy.
 
         Args:
