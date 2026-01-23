@@ -61,8 +61,13 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
 
     try:
         # Import here to avoid circular imports
+        from onyx.db.enums import SandboxStatus
+        from onyx.server.features.build.db.sandbox import create_snapshot
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
-        from onyx.server.features.build.sandbox.manager import get_sandbox_manager
+        from onyx.server.features.build.db.sandbox import (
+            update_sandbox_status__no_commit,
+        )
+        from onyx.server.features.build.sandbox import get_sandbox_manager
 
         sandbox_manager = get_sandbox_manager()
 
@@ -78,23 +83,41 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
             task_logger.info(f"Found {len(idle_sandboxes)} idle sandboxes to clean up")
 
             for sandbox in idle_sandboxes:
-                sandbox_id = str(sandbox.id)
-                task_logger.info(f"Cleaning up idle sandbox {sandbox_id}")
+                sandbox_id = sandbox.id
+                sandbox_id_str = str(sandbox_id)
+                task_logger.info(f"Cleaning up idle sandbox {sandbox_id_str}")
 
                 try:
                     # Create snapshot before terminating to preserve work
-                    task_logger.debug(f"Creating snapshot for sandbox {sandbox_id}")
-                    sandbox_manager.create_snapshot(sandbox_id, db_session)
-                    task_logger.debug(f"Snapshot created for sandbox {sandbox_id}")
+                    task_logger.debug(f"Creating snapshot for sandbox {sandbox_id_str}")
+                    snapshot_result = sandbox_manager.create_snapshot(
+                        sandbox_id, tenant_id
+                    )
+                    if snapshot_result:
+                        # Create DB record for the snapshot
+                        create_snapshot(
+                            db_session,
+                            sandbox_id,
+                            snapshot_result.storage_path,
+                            snapshot_result.size_bytes,
+                        )
+                        task_logger.debug(
+                            f"Snapshot created for sandbox {sandbox_id_str}"
+                        )
                 except Exception as e:
                     task_logger.warning(
-                        f"Failed to create snapshot for sandbox {sandbox_id}: {e}"
+                        f"Failed to create snapshot for sandbox {sandbox_id_str}: {e}"
                     )
                     # Continue with termination even if snapshot fails
 
                 try:
-                    sandbox_manager.terminate(sandbox_id, db_session)
-                    task_logger.info(f"Terminated idle sandbox {sandbox_id}")
+                    sandbox_manager.terminate(sandbox_id)
+                    # Update sandbox status after termination
+                    update_sandbox_status__no_commit(
+                        db_session, sandbox_id, SandboxStatus.TERMINATED
+                    )
+                    db_session.commit()
+                    task_logger.info(f"Terminated idle sandbox {sandbox_id_str}")
                 except Exception as e:
                     task_logger.error(
                         f"Failed to terminate sandbox {sandbox_id}: {e}",

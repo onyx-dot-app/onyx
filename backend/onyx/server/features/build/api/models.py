@@ -45,7 +45,7 @@ class SandboxResponse(BaseModel):
     nextjs_port: int | None
 
     @classmethod
-    def from_model(cls, sandbox) -> "SandboxResponse":
+    def from_model(cls, sandbox: Any) -> "SandboxResponse":
         """Convert Sandbox ORM model to response."""
         return cls(
             id=str(sandbox.id),
@@ -70,7 +70,7 @@ class ArtifactResponse(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, artifact) -> "ArtifactResponse":
+    def from_model(cls, artifact: Any) -> "ArtifactResponse":
         """Convert Artifact ORM model to response."""
         return cls(
             id=str(artifact.id),
@@ -97,7 +97,7 @@ class SessionResponse(BaseModel):
     artifacts: list[ArtifactResponse]
 
     @classmethod
-    def from_model(cls, session) -> "SessionResponse":
+    def from_model(cls, session: Any) -> "SessionResponse":
         """Convert BuildSession ORM model to response."""
         return cls(
             id=str(session.id),
@@ -148,7 +148,7 @@ class MessageResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_model(cls, message):
+    def from_model(cls, message: Any) -> "MessageResponse":
         """Convert BuildMessage ORM model to response."""
         return cls(
             id=str(message.id),

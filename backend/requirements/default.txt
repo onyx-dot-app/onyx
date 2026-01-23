@@ -116,6 +116,7 @@ certifi==2025.11.12
     #   httpcore
     #   httpx
     #   hubspot-api-client
+    #   kubernetes
     #   opensearch-py
     #   requests
     #   sentry-sdk
@@ -233,6 +234,8 @@ docutils==0.22.3
     # via rich-rst
 dropbox==12.0.2
     # via onyx
+durationpy==0.10
+    # via kubernetes
 email-validator==2.2.0
     # via
     #   fastapi-users
@@ -314,6 +317,7 @@ google-auth==2.43.0
     #   google-cloud-resource-manager
     #   google-cloud-storage
     #   google-genai
+    #   kubernetes
 google-auth-httplib2==0.1.0
     # via
     #   google-api-python-client
@@ -498,6 +502,8 @@ keyring==25.7.0
     # via py-key-value-aio
 kombu==5.5.4
     # via celery
+kubernetes==31.0.0
+    # via onyx
 langchain==0.3.23
     # via onyx
 langchain-core==0.3.81
@@ -626,6 +632,7 @@ numpy==2.4.1
 oauthlib==3.2.2
     # via
     #   atlassian-python-api
+    #   kubernetes
     #   onyx
     #   requests-oauthlib
 office365-rest-python-client==2.5.9
@@ -885,6 +892,7 @@ python-dateutil==2.8.2
     #   google-cloud-bigquery
     #   htmldate
     #   hubspot-api-client
+    #   kubernetes
     #   onyx
     #   opensearch-py
     #   pandas
@@ -946,6 +954,7 @@ pyyaml==6.0.3
     #   distributed
     #   huggingface-hub
     #   jsonschema-path
+    #   kubernetes
     #   langchain
     #   langchain-core
 rapidfuzz==3.13.0
@@ -984,6 +993,7 @@ requests==2.32.5
     #   huggingface-hub
     #   jira
     #   jsonschema-path
+    #   kubernetes
     #   langchain
     #   langchainhub
     #   langfuse
@@ -1017,6 +1027,7 @@ requests-oauthlib==1.3.1
     #   atlassian-python-api
     #   google-auth-oauthlib
     #   jira
+    #   kubernetes
     #   onyx
 requests-toolbelt==1.0.0
     # via
@@ -1068,6 +1079,7 @@ six==1.17.0
     #   google-auth-httplib2
     #   html5lib
     #   hubspot-api-client
+    #   kubernetes
     #   langdetect
     #   markdownify
     #   python-dateutil
@@ -1239,6 +1251,7 @@ urllib3==2.6.3
     #   distributed
     #   htmldate
     #   hubspot-api-client
+    #   kubernetes
     #   onyx
     #   opensearch-py
     #   pyairtable
@@ -1263,6 +1276,8 @@ wcwidth==0.2.14
     # via prompt-toolkit
 webencodings==0.5.1
     # via html5lib
+websocket-client==1.9.0
+    # via kubernetes
 websockets==15.0.1
     # via
     #   fastmcp

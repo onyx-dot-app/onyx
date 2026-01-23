@@ -75,7 +75,7 @@ async def send_message(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
     _rate_limit_check: None = Depends(check_build_rate_limits),
-):
+) -> StreamingResponse:
     """
     Send a message to the CLI agent and stream the response.
 

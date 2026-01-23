@@ -38,7 +38,7 @@ class SnapshotManager:
     def create_snapshot(
         self,
         sandbox_path: Path,
-        session_id: str,
+        sandbox_id: str,
         tenant_id: str,
     ) -> tuple[str, str, int]:
         """Create a snapshot of the outputs directory.
@@ -48,7 +48,7 @@ class SnapshotManager:
 
         Args:
             sandbox_path: Path to the sandbox directory
-            session_id: Session identifier for the sandbox
+            sandbox_id: Sandbox identifier
             tenant_id: Tenant identifier for multi-tenant isolation
 
         Returns:
@@ -80,11 +80,11 @@ class SnapshotManager:
             size_bytes = Path(tmp_path).stat().st_size
 
             # Generate storage path for file store
-            # Format: sandbox-snapshots/{tenant_id}/{session_id}/{snapshot_id}.tar.gz
+            # Format: sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz
             storage_path = (
-                f"sandbox-snapshots/{tenant_id}/{session_id}/{snapshot_id}.tar.gz"
+                f"sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz"
             )
-            display_name = f"sandbox-snapshot-{session_id}-{snapshot_id}.tar.gz"
+            display_name = f"sandbox-snapshot-{sandbox_id}-{snapshot_id}.tar.gz"
 
             # Upload to file store
             with open(tmp_path, "rb") as f:
@@ -95,21 +95,21 @@ class SnapshotManager:
                     file_type=SNAPSHOT_FILE_TYPE,
                     file_id=storage_path,
                     file_metadata={
-                        "session_id": session_id,
+                        "sandbox_id": sandbox_id,
                         "tenant_id": tenant_id,
                         "snapshot_id": snapshot_id,
                     },
                 )
 
             logger.info(
-                f"Created snapshot {snapshot_id} for session {session_id}, "
+                f"Created snapshot {snapshot_id} for sandbox {sandbox_id}, "
                 f"size: {size_bytes} bytes"
             )
 
             return snapshot_id, storage_path, size_bytes
 
         except Exception as e:
-            logger.error(f"Failed to create snapshot for session {session_id}: {e}")
+            logger.error(f"Failed to create snapshot for sandbox {sandbox_id}: {e}")
             raise RuntimeError(f"Failed to create snapshot: {e}") from e
         finally:
             # Cleanup temp file

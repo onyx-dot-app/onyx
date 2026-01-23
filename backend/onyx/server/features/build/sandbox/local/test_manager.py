@@ -26,12 +26,11 @@ from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
-from onyx.server.features.build.sandbox.internal.agent_client import ACPEvent
-from onyx.server.features.build.sandbox.manager import get_sandbox_manager
-from onyx.server.features.build.sandbox.manager import LocalSandboxManager
+from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.local import LocalSandboxManager
+from onyx.server.features.build.sandbox.local.internal.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotInfo
+from onyx.server.features.build.sandbox.models import SnapshotResult
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
@@ -79,7 +78,7 @@ def temp_sandbox_dir() -> Generator[Path, None, None]:
 @pytest.fixture
 def actual_sandbox_path(sandbox_record: Sandbox) -> Path:
     """Get the actual sandbox path where the manager expects it."""
-    return Path(SANDBOX_BASE_PATH) / str(sandbox_record.session_id)
+    return Path(SANDBOX_BASE_PATH) / str(sandbox_record.id)
 
 
 @pytest.fixture
@@ -106,8 +105,8 @@ def sandbox_record(
     db_session.refresh(sandbox)
 
     # Create sandbox directory at the expected location
-    # The manager uses _get_sandbox_path() which returns SANDBOX_BASE_PATH / session_id
-    expected_sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
+    # The manager uses _get_sandbox_path() which returns SANDBOX_BASE_PATH / sandbox_id
+    expected_sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
     expected_sandbox_path.mkdir(parents=True, exist_ok=True)
 
     # Ensure outputs directory exists at the expected path
@@ -143,7 +142,7 @@ def file_store_initialized() -> Generator[None, None, None]:
 class TestTerminate:
     """Tests for SandboxManager.terminate()."""
 
-    def test_terminate_updates_status(
+    def test_terminate_cleans_up_resources(
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,
@@ -151,13 +150,13 @@ class TestTerminate:
         temp_sandbox_dir: Path,
         tenant_context: None,
     ) -> None:
-        """Test that terminate updates sandbox status to TERMINATED."""
-        sandbox_id = str(sandbox_record.id)
+        """Test that terminate cleans up sandbox resources.
 
-        sandbox_manager.terminate(sandbox_id, db_session)
-
-        db_session.refresh(sandbox_record)
-        assert sandbox_record.status == SandboxStatus.TERMINATED
+        Note: Status update is now handled by the caller (SessionManager/tasks),
+        not by the SandboxManager itself.
+        """
+        sandbox_manager.terminate(sandbox_record.id)
+        # No exception means success - resources cleaned up
 
 
 class TestCreateSnapshot:
@@ -172,15 +171,18 @@ class TestCreateSnapshot:
         tenant_context: None,
         file_store_initialized: None,
     ) -> None:
-        """Test that create_snapshot archives the outputs directory."""
+        """Test that create_snapshot archives the outputs directory.
+
+        Note: Caller is responsible for creating DB record from the SnapshotResult.
+        """
         outputs_dir = actual_sandbox_path / "outputs"
         (outputs_dir / "app.py").write_text("print('hello')")
 
-        result = sandbox_manager.create_snapshot(str(sandbox_record.id), db_session)
+        result = sandbox_manager.create_snapshot(sandbox_record.id, TEST_TENANT_ID)
 
-        assert isinstance(result, SnapshotInfo)
-        assert result.session_id == str(sandbox_record.session_id)
+        assert isinstance(result, SnapshotResult)
         assert result.size_bytes > 0
+        assert result.storage_path is not None
 
 
 class TestHealthCheck:
@@ -193,8 +195,11 @@ class TestHealthCheck:
         sandbox_record: Sandbox,
         tenant_context: None,
     ) -> None:
-        """Test that health_check returns False when no processes are running."""
-        result = sandbox_manager.health_check(str(sandbox_record.id), db_session)
+        """Test that health_check returns False when no processes are running.
+
+        Note: nextjs_port is now passed by the caller instead of being fetched from DB.
+        """
+        result = sandbox_manager.health_check(sandbox_record.id, nextjs_port=None)
 
         assert result is False
 
@@ -215,7 +220,7 @@ class TestListDirectory:
         (outputs_dir / "file.txt").write_text("content")
         (outputs_dir / "subdir").mkdir()
 
-        result = sandbox_manager.list_directory(str(sandbox_record.id), "/", db_session)
+        result = sandbox_manager.list_directory(sandbox_record.id, "/")
 
         assert len(result) == 2
         assert all(isinstance(e, FilesystemEntry) for e in result)
@@ -240,31 +245,9 @@ class TestReadFile:
         outputs_dir = actual_sandbox_path / "outputs"
         (outputs_dir / "test.txt").write_bytes(b"Hello, World!")
 
-        result = sandbox_manager.read_file(
-            str(sandbox_record.id), "test.txt", db_session
-        )
+        result = sandbox_manager.read_file(sandbox_record.id, "test.txt")
 
         assert result == b"Hello, World!"
-
-
-class TestGetSandboxInfo:
-    """Tests for SandboxManager.get_sandbox_info()."""
-
-    def test_get_sandbox_info_returns_info(
-        self,
-        sandbox_manager: LocalSandboxManager,
-        db_session: Session,
-        sandbox_record: Sandbox,
-        tenant_context: None,
-    ) -> None:
-        """Test that get_sandbox_info returns SandboxInfo."""
-        result = sandbox_manager.get_sandbox_info(str(sandbox_record.id), db_session)
-
-        assert result is not None
-        assert isinstance(result, SandboxInfo)
-        assert result.id == str(sandbox_record.id)
-        assert result.session_id == str(sandbox_record.session_id)
-        assert result.status == SandboxStatus.RUNNING
 
 
 class TestCancelAgent:
@@ -275,7 +258,7 @@ class TestCancelAgent:
         sandbox_manager: LocalSandboxManager,
     ) -> None:
         """Test that cancel_agent is a no-op when no client exists."""
-        fake_sandbox_id = str(uuid4())
+        fake_sandbox_id = uuid4()
         sandbox_manager._acp_clients.pop(fake_sandbox_id, None)
 
         sandbox_manager.cancel_agent(fake_sandbox_id)
@@ -294,13 +277,15 @@ class TestSendMessage:
         temp_sandbox_dir: Path,
         tenant_context: None,
     ) -> None:
-        """Test that send_message streams ACPEvent objects and ends with PromptResponse."""
-        sandbox_id = str(sandbox_record.id)
+        """Test that send_message streams ACPEvent objects and ends with PromptResponse.
+
+        Note: Heartbeat update is now handled by the caller (SessionManager),
+        not by the SandboxManager itself.
+        """
+        sandbox_id = sandbox_record.id
 
         events: list[ACPEvent] = []
-        for event in sandbox_manager.send_message(
-            sandbox_id, "What is 2 + 2?", db_session
-        ):
+        for event in sandbox_manager.send_message(sandbox_id, "What is 2 + 2?"):
             events.append(event)
 
         # Should have received at least one event
@@ -309,10 +294,6 @@ class TestSendMessage:
         # Last event should be PromptResponse (success) or contain results
         last_event = events[-1]
         assert isinstance(last_event, PromptResponse)
-
-        # Verify heartbeat was updated
-        db_session.refresh(sandbox_record)
-        assert sandbox_record.last_heartbeat is not None
 
         # Cleanup: stop the ACP client
         sandbox_manager.cancel_agent(sandbox_id)
@@ -329,13 +310,12 @@ class TestSendMessage:
         tenant_context: None,
     ) -> None:
         """Test that send_message can write files and emits edit tool calls."""
-        sandbox_id = str(sandbox_record.id)
+        sandbox_id = sandbox_record.id
 
         events: list[ACPEvent] = []
         for event in sandbox_manager.send_message(
             sandbox_id,
             "Create a file called hello.txt with the content 'Hello, World!'",
-            db_session,
         ):
             events.append(event)
 
@@ -371,7 +351,7 @@ class TestSendMessage:
         tenant_context: None,
     ) -> None:
         """Test that send_message can read files and emits read tool calls."""
-        sandbox_id = str(sandbox_record.id)
+        sandbox_id = sandbox_record.id
 
         # Create a file for the agent to read (at sandbox root, where agent has access)
         test_file = actual_sandbox_path / "secret.txt"
@@ -381,7 +361,6 @@ class TestSendMessage:
         for event in sandbox_manager.send_message(
             sandbox_id,
             "Read the file secret.txt and tell me what the secret code is",
-            db_session,
         ):
             events.append(event)
 

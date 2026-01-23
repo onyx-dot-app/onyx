@@ -1,10 +1,23 @@
 """Pydantic models for sandbox module communication."""
 
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.db.enums import SandboxStatus
+
+
+class LLMProviderConfig(BaseModel):
+    """LLM provider configuration for sandbox provisioning.
+
+    Passed to SandboxManager.provision() to configure the LLM.
+    """
+
+    provider: str
+    model_name: str
+    api_key: str | None
+    api_base: str | None
 
 
 class SandboxInfo(BaseModel):
@@ -13,22 +26,32 @@ class SandboxInfo(BaseModel):
     Returned by SandboxManager.provision() and other methods.
     """
 
-    id: str
-    session_id: str
+    sandbox_id: UUID
     directory_path: str
     status: SandboxStatus
-    created_at: datetime
     last_heartbeat: datetime | None
+    nextjs_port: int | None
+
+
+class SnapshotResult(BaseModel):
+    """Result of creating a snapshot (without DB record).
+
+    Returned by SandboxManager.create_snapshot().
+    The caller is responsible for creating the DB record.
+    """
+
+    storage_path: str
+    size_bytes: int
 
 
 class SnapshotInfo(BaseModel):
-    """Information about a sandbox snapshot.
+    """Full information about a sandbox snapshot (including DB info).
 
-    Returned by SandboxManager.create_snapshot().
+    Used when returning snapshot information to API callers.
     """
 
     id: str
-    session_id: str
+    sandbox_id: str
     storage_path: str
     created_at: datetime
     size_bytes: int

@@ -7,18 +7,19 @@ focusing on the setup_opencode_config method with different provider configurati
 import json
 import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from onyx.server.features.build.sandbox.internal.directory_manager import (
+from onyx.server.features.build.sandbox.local.internal.directory_manager import (
     DirectoryManager,
 )
 
 
 @pytest.fixture
-def temp_base_path() -> Path:
+def temp_base_path() -> Generator[Path, None, None]:
     """Create a temporary base path for testing."""
     temp_dir = Path(tempfile.mkdtemp(prefix="test_dir_manager_"))
     yield temp_dir
