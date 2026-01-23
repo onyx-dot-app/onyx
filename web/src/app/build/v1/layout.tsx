@@ -2,6 +2,7 @@
 
 import { BuildProvider } from "@/app/build/contexts/BuildContext";
 import { UploadFilesProvider } from "@/app/build/contexts/UploadFilesContext";
+import { BuildOnboardingProvider } from "@/app/build/onboarding/BuildOnboardingProvider";
 import BuildSidebar from "@/app/build/components/SideBar";
 
 /**
@@ -16,10 +17,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <UploadFilesProvider>
       <BuildProvider>
-        <div className="flex flex-row w-full h-full">
-          <BuildSidebar />
-          {children}
-        </div>
+        <BuildOnboardingProvider>
+          <div className="flex flex-row w-full h-full">
+            <BuildSidebar />
+            {children}
+          </div>
+        </BuildOnboardingProvider>
       </BuildProvider>
     </UploadFilesProvider>
   );

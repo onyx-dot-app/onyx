@@ -51,7 +51,7 @@ export default function BuildModeIntroContent({
           </BigButton>
           <BigButton
             primary
-            className="!bg-white !text-gray-900 hover:!bg-gray-200 active:!bg-gray-300"
+            className="!bg-white !text-black hover:!bg-gray-200 active:!bg-gray-300"
             onClick={(e) => {
               e.stopPropagation();
               onTryBuildMode();
