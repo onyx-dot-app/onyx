@@ -13,12 +13,16 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/s3"
 )
+
+const seededSnapshotURL = "s3://onyx-internal-tools/seeded.dump"
 
 // DBRestoreOptions holds options for the db restore command.
 type DBRestoreOptions struct {
-	Yes   bool
-	Clean bool
+	Yes         bool
+	Clean       bool
+	FetchSeeded bool
 }
 
 // NewDBRestoreCommand creates the db restore command.
@@ -26,7 +30,7 @@ func NewDBRestoreCommand() *cobra.Command {
 	opts := &DBRestoreOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "restore <input-file>",
+		Use:   "restore [input-file]",
 		Short: "Restore a database snapshot",
 		Long: `Restore a database snapshot using pg_restore or psql.
 
@@ -37,19 +41,31 @@ The format is automatically detected based on file extension:
 If just a filename is provided (without path), the file is looked up
 in the default snapshots directory (~/.local/share/onyx-dev/snapshots/).
 
+Use --fetch-seeded to download and restore a pre-seeded database snapshot
+from S3 (requires network access or AWS credentials).
+
 Examples:
   ods db restore mybackup.dump           # Restores from snapshots dir
   ods db restore /path/to/backup.sql     # Restores from absolute path
-  ods db restore backup.dump --clean     # Drop objects before restoring`,
-		Args: cobra.ExactArgs(1),
+  ods db restore backup.dump --clean     # Drop objects before restoring
+  ods db restore --fetch-seeded          # Download and restore seeded snapshot`,
+		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			runDBRestore(args[0], opts)
+			if opts.FetchSeeded {
+				runDBRestoreSeeded(opts)
+			} else {
+				if len(args) == 0 {
+					log.Fatal("Must provide an input file or use --fetch-seeded")
+				}
+				runDBRestore(args[0], opts)
+			}
 		},
 		ValidArgsFunction: completeSnapshotFiles,
 	}
 
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&opts.Clean, "clean", false, "Drop database objects before restoring")
+	cmd.Flags().BoolVar(&opts.FetchSeeded, "fetch-seeded", false, "Download and restore the seeded database snapshot from S3")
 
 	return cmd
 }
@@ -82,6 +98,30 @@ func completeSnapshotFiles(cmd *cobra.Command, args []string, toComplete string)
 
 	// Also allow file path completion
 	return completions, cobra.ShellCompDirectiveDefault
+}
+
+func runDBRestoreSeeded(opts *DBRestoreOptions) {
+	// Download seeded snapshot to snapshots directory
+	destPath := filepath.Join(paths.SnapshotsDir(), "seeded.dump")
+
+	log.Infof("Downloading seeded snapshot from %s...", seededSnapshotURL)
+	if err := s3.FetchToFile(seededSnapshotURL, destPath); err != nil {
+		log.Fatalf("Failed to download seeded snapshot: %v", err)
+	}
+
+	// Verify download is non-empty
+	info, err := os.Stat(destPath)
+	if err != nil {
+		log.Fatalf("Failed to stat downloaded snapshot: %v", err)
+	}
+	if info.Size() == 0 {
+		log.Fatalf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
+	}
+
+	log.Infof("Downloaded seeded snapshot to: %s (%d bytes)", destPath, info.Size())
+
+	// Restore the downloaded snapshot
+	runDBRestore(destPath, opts)
 }
 
 func runDBRestore(input string, opts *DBRestoreOptions) {

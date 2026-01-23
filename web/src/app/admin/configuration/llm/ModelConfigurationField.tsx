@@ -140,7 +140,7 @@ export function ModelConfigurationField({
             {finalError && (
               <ManualErrorMessage>{finalError}</ManualErrorMessage>
             )}
-            <div>
+            <div className="mt-3">
               <CreateButton
                 onClick={() => {
                   arrayHelpers.push({
@@ -150,8 +150,6 @@ export function ModelConfigurationField({
                     max_input_tokens: null,
                   });
                 }}
-                className="mt-3"
-                type="button"
               >
                 Add New
               </CreateButton>

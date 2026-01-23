@@ -139,6 +139,20 @@ def update_user_theme_preference(
     db_session.commit()
 
 
+def update_user_chat_background(
+    user_id: UUID,
+    chat_background: str | None,
+    db_session: Session,
+) -> None:
+    """Update user's chat background setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # type: ignore
+        .values(chat_background=chat_background)
+    )
+    db_session.commit()
+
+
 def update_user_personalization(
     user_id: UUID,
     *,

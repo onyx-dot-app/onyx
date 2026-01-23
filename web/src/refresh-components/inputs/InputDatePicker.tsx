@@ -56,7 +56,7 @@ export default function InputDatePicker({
               <InputSelect.Content>
                 {years.map((year) => (
                   <InputSelect.Item key={year} value={`${year}`}>
-                    {year}
+                    {`${year}`}
                   </InputSelect.Item>
                 ))}
               </InputSelect.Content>

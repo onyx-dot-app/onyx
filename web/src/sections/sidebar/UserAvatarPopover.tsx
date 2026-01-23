@@ -14,10 +14,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import UserSettings from "@/sections/sidebar/Settings/UserSettings";
-import NotificationsPopover from "@/sections/sidebar/Settings/NotificationsPopover";
-
+import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
   SvgExternalLink,
@@ -25,6 +22,9 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import useAppFocus from "@/hooks/useAppFocus";
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -41,14 +41,12 @@ function getDisplayName(email?: string, personalName?: string): string {
 }
 
 interface SettingsPopoverProps {
-  onClose: () => void;
-  onOpenUserSettings: () => void;
+  onUserSettingsClick: () => void;
   onOpenNotifications: () => void;
 }
 
 function SettingsPopover({
-  onClose,
-  onOpenUserSettings,
+  onUserSettingsClick,
   onOpenNotifications,
 }: SettingsPopoverProps) {
   const { user } = useUser();
@@ -60,6 +58,7 @@ function SettingsPopover({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { popup, setPopup } = usePopup();
 
   const undismissedCount =
     notifications?.filter((n) => !n.dismissed).length ?? 0;
@@ -67,36 +66,37 @@ function SettingsPopover({
     user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
 
   const handleLogout = () => {
-    logout().then((response) => {
-      if (!response?.ok) {
-        alert("Failed to logout");
-        return;
-      }
+    logout()
+      .then((response) => {
+        if (!response?.ok) {
+          alert("Failed to logout");
+          return;
+        }
 
-      const currentUrl = `${pathname}${
-        searchParams?.toString() ? `?${searchParams.toString()}` : ""
-      }`;
+        const currentUrl = `${pathname}${
+          searchParams?.toString() ? `?${searchParams.toString()}` : ""
+        }`;
 
-      const encodedRedirect = encodeURIComponent(currentUrl);
+        const encodedRedirect = encodeURIComponent(currentUrl);
 
-      router.push(
-        `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
-      );
-    });
+        router.push(
+          `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
+        );
+      })
+
+      .catch(() => {
+        setPopup({ message: "Failed to logout", type: "error" });
+      });
   };
 
   return (
     <>
+      {popup}
+
       <PopoverMenu>
         {[
           <div key="user-settings" data-testid="Settings/user-settings">
-            <LineItem
-              icon={SvgUser}
-              onClick={() => {
-                onClose();
-                onOpenUserSettings();
-              }}
-            >
+            <LineItem icon={SvgUser} onClick={onUserSettingsClick}>
               User Settings
             </LineItem>
           </div>,
@@ -143,12 +143,13 @@ export interface SettingsProps {
   folded?: boolean;
 }
 
-export default function Settings({ folded }: SettingsProps) {
+export default function UserAvatarPopover({ folded }: SettingsProps) {
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user } = useUser();
-  const userSettingsModal = useCreateModal();
+  const router = useRouter();
+  const appFocus = useAppFocus();
 
   // Fetch notifications for display
   // The GET endpoint also triggers a refresh if release notes are stale
@@ -176,63 +177,59 @@ export default function Settings({ folded }: SettingsProps) {
   };
 
   return (
-    <>
-      <userSettingsModal.Provider>
-        <UserSettings />
-      </userSettingsModal.Provider>
+    <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
+      <Popover.Trigger asChild>
+        <div id="onyx-user-dropdown">
+          <SidebarTab
+            leftIcon={({ className }) => (
+              <InputAvatar
+                className={cn(
+                  "flex items-center justify-center bg-background-neutral-inverted-00",
+                  className,
+                  "w-5 h-5"
+                )}
+              >
+                <Text as="p" inverted secondaryBody>
+                  {displayName[0]?.toUpperCase()}
+                </Text>
+              </InputAvatar>
+            )}
+            rightChildren={
+              hasNotifications ? (
+                <Section padding={0.5}>
+                  <SvgNotificationBubble size={6} />
+                </Section>
+              ) : undefined
+            }
+            transient={!!popupState || appFocus.isUserSettings()}
+            folded={folded}
+          >
+            {displayName}
+          </SidebarTab>
+        </div>
+      </Popover.Trigger>
 
-      <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
-        <Popover.Trigger asChild>
-          <div id="onyx-user-dropdown">
-            <SidebarTab
-              leftIcon={({ className }) => (
-                <InputAvatar
-                  className={cn(
-                    "flex items-center justify-center bg-background-neutral-inverted-00",
-                    className,
-                    "w-5 h-5"
-                  )}
-                >
-                  <Text as="p" inverted secondaryBody>
-                    {displayName[0]?.toUpperCase()}
-                  </Text>
-                </InputAvatar>
-              )}
-              rightChildren={
-                hasNotifications && (
-                  <div className="w-6 h-6 flex items-center justify-center">
-                    <SvgNotificationBubble size={6} />
-                  </div>
-                )
-              }
-              transient={!!popupState}
-              folded={folded}
-            >
-              {displayName}
-            </SidebarTab>
-          </div>
-        </Popover.Trigger>
-
-        <Popover.Content
-          align="end"
-          side="right"
-          width={popupState === "Notifications" ? "xl" : "md"}
-        >
-          {popupState === "Settings" && (
-            <SettingsPopover
-              onClose={() => setPopupState(undefined)}
-              onOpenUserSettings={() => userSettingsModal.toggle(true)}
-              onOpenNotifications={() => setPopupState("Notifications")}
-            />
-          )}
-          {popupState === "Notifications" && (
-            <NotificationsPopover
-              onClose={() => setPopupState("Settings")}
-              onNavigate={() => setPopupState(undefined)}
-            />
-          )}
-        </Popover.Content>
-      </Popover>
-    </>
+      <Popover.Content
+        align="end"
+        side="right"
+        width={popupState === "Notifications" ? "xl" : "md"}
+      >
+        {popupState === "Settings" && (
+          <SettingsPopover
+            onUserSettingsClick={() => {
+              setPopupState(undefined);
+              router.push("/chat/settings");
+            }}
+            onOpenNotifications={() => setPopupState("Notifications")}
+          />
+        )}
+        {popupState === "Notifications" && (
+          <NotificationsPopover
+            onClose={() => setPopupState("Settings")}
+            onNavigate={() => setPopupState(undefined)}
+          />
+        )}
+      </Popover.Content>
+    </Popover>
   );
 }

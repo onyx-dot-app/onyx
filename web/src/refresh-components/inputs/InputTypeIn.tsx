@@ -5,6 +5,7 @@ import { cn, noProp } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import {
   innerClasses,
+  MIN_WIDTH_CLASS,
   textClasses,
   Variants,
   wrapperClasses,
@@ -128,6 +129,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
       <div
         className={cn(
           "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 relative",
+          MIN_WIDTH_CLASS,
           wrapperClasses[variant],
           className
         )}
@@ -164,13 +166,14 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
           {...props}
         />
 
-        {showClearButton && value && !disabled && !isReadOnly && (
+        {showClearButton && !disabled && !isReadOnly && (
           <IconButton
             icon={SvgX}
             disabled={disabled}
             onClick={noProp(handleClear)}
             type="button"
             internal
+            className={value ? "" : "invisible"}
           />
         )}
 

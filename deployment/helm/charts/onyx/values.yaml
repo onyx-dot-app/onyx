@@ -58,6 +58,52 @@ vespa:
       cpu: 8000m
       memory: 32000Mi
 
+opensearch:
+  enabled: false
+  # These values are passed to the opensearch subchart.
+  # See https://github.com/opensearch-project/helm-charts/blob/main/charts/opensearch/values.yaml
+
+  singleNode: true  # Forces replicas=1, sets discovery.type=single-node
+
+  # Determines service DNS: onyx-opensearch-master.<namespace>.svc.cluster.local
+  clusterName: "onyx-opensearch"
+  nodeGroup: "master"
+  masterService: "onyx-opensearch-master"
+
+  replicas: 1
+
+  image:
+    repository: "opensearchproject/opensearch"
+    tag: ""  # Empty uses chart's appVersion (3.4.0).
+
+  # The security plugin requires OPENSEARCH_INITIAL_ADMIN_PASSWORD for
+  # OpenSearch 2.12+.
+  # See https://docs.opensearch.org/latest/install-and-configure/install-opensearch/helm/#prerequisites
+  extraEnvs:
+    - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: onyx-opensearch  # Must match auth.opensearch.secretName.
+          key: opensearch_admin_password  # Must match auth.opensearch.secretKeys value.
+
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+
+  persistence:
+    enabled: true
+    size: 30Gi
+    storageClass: ""
+
+  # Java heap should be ~50% of memory limit.
+  # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
+  # Xms is the starting size, Xmx is the maximum size. These should be the same.
+  opensearchJavaOpts: "-Xmx4g -Xms4g"
+
 persistent:
   storageClassName: ""
 
@@ -1028,6 +1074,29 @@ auth:
     values:
       db_readonly_user: ""
       db_readonly_password: ""
+  opensearch:
+    # Enable or disable this secret entirely. Will remove from env var
+    # configurations and remove any created secrets.
+    # Set to true when opensearch.enabled is true.
+    enabled: false
+    # Overwrite the default secret name, ignored if existingSecret is defined.
+    secretName: 'onyx-opensearch'
+    # Use a secret specified elsewhere.
+    existingSecret: ""
+    # This defines the env var to secret map, key is always upper-cased as an
+    # env var.
+    secretKeys:
+      OPENSEARCH_ADMIN_USERNAME: opensearch_admin_username
+      OPENSEARCH_ADMIN_PASSWORD: opensearch_admin_password
+    # Secrets values IF existingSecret is empty. Key here must match the value
+    # in secretKeys to be used. Values will be base64 encoded in the k8s
+    # cluster.
+    # Password must meet OpenSearch complexity requirements:
+    # min 8 chars, uppercase, lowercase, digit, and special character.
+    # CHANGE THIS FOR PRODUCTION.
+    values:
+      opensearch_admin_username: "admin"
+      opensearch_admin_password: "OnyxDev1!"
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN

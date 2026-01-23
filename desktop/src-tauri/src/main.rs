@@ -21,9 +21,9 @@ use tauri::{
     webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use url::Url;
 #[cfg(target_os = "macos")]
 use tokio::time::sleep;
-use url::Url;
 #[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
@@ -76,39 +76,25 @@ fn get_config_path() -> Option<PathBuf> {
 }
 
 /// Load config from file, or create default if it doesn't exist
-fn load_config() -> AppConfig {
+fn load_config() -> (AppConfig, bool) {
     let config_path = match get_config_path() {
         Some(path) => path,
         None => {
-            eprintln!("Could not determine config directory, using defaults");
-            return AppConfig::default();
+            return (AppConfig::default(), false);
         }
     };
 
-    if config_path.exists() {
-        match fs::read_to_string(&config_path) {
-            Ok(contents) => match serde_json::from_str(&contents) {
-                Ok(config) => {
-                    return config;
-                }
-                Err(e) => {
-                    eprintln!("Failed to parse config: {}, using defaults", e);
-                }
-            },
-            Err(e) => {
-                eprintln!("Failed to read config: {}, using defaults", e);
-            }
-        }
-    } else {
-        // Create default config file
-        if let Err(e) = save_config(&AppConfig::default()) {
-            eprintln!("Failed to create default config: {}", e);
-        } else {
-            println!("Created default config at {:?}", config_path);
-        }
+    if !config_path.exists() {
+        return (AppConfig::default(), false);
     }
 
-    AppConfig::default()
+    match fs::read_to_string(&config_path) {
+        Ok(contents) => match serde_json::from_str(&contents) {
+            Ok(config) => (config, true),
+            Err(_) => (AppConfig::default(), false),
+        },
+        Err(_) => (AppConfig::default(), false),
+    }
 }
 
 /// Save config to file
@@ -128,7 +114,11 @@ fn save_config(config: &AppConfig) -> Result<(), String> {
 }
 
 // Global config state
-struct ConfigState(RwLock<AppConfig>);
+struct ConfigState {
+    config: RwLock<AppConfig>,
+    config_initialized: RwLock<bool>,
+    app_base_url: RwLock<Option<Url>>,
+}
 
 fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -142,7 +132,7 @@ fn focus_main_window(app: &AppHandle) {
 
 fn trigger_new_chat(app: &AppHandle) {
     let state = app.state::<ConfigState>();
-    let server_url = state.0.read().unwrap().server_url.clone();
+    let server_url = state.config.read().unwrap().server_url.clone();
 
     if let Some(window) = app.get_webview_window("main") {
         let url = format!("{}/chat", server_url);
@@ -152,7 +142,7 @@ fn trigger_new_chat(app: &AppHandle) {
 
 fn trigger_new_window(app: &AppHandle) {
     let state = app.state::<ConfigState>();
-    let server_url = state.0.read().unwrap().server_url.clone();
+    let server_url = state.config.read().unwrap().server_url.clone();
     let handle = app.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -206,6 +196,30 @@ fn open_docs() {
     }
 }
 
+fn open_settings(app: &AppHandle) {
+    // Navigate main window to the settings page (index.html) with settings flag
+    let state = app.state::<ConfigState>();
+    let settings_url = state
+        .app_base_url
+        .read()
+        .unwrap()
+        .as_ref()
+        .cloned()
+        .and_then(|mut url| {
+            url.set_query(None);
+            url.set_fragment(Some("settings"));
+            url.set_path("/");
+            Some(url)
+        })
+        .or_else(|| Url::parse("tauri://localhost/#settings").ok());
+
+    if let Some(window) = app.get_webview_window("main") {
+        if let Some(url) = settings_url {
+            let _ = window.navigate(url);
+        }
+    }
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
@@ -213,7 +227,27 @@ fn open_docs() {
 /// Get the current server URL
 #[tauri::command]
 fn get_server_url(state: tauri::State<ConfigState>) -> String {
-    state.0.read().unwrap().server_url.clone()
+    state.config.read().unwrap().server_url.clone()
+}
+
+#[derive(Serialize)]
+struct BootstrapState {
+    server_url: String,
+    config_exists: bool,
+}
+
+/// Get the server URL plus whether a config file exists
+#[tauri::command]
+fn get_bootstrap_state(state: tauri::State<ConfigState>) -> BootstrapState {
+    let server_url = state.config.read().unwrap().server_url.clone();
+    let config_initialized = *state.config_initialized.read().unwrap();
+    let config_exists = config_initialized
+        && get_config_path().map(|path| path.exists()).unwrap_or(false);
+
+    BootstrapState {
+        server_url,
+        config_exists,
+    }
 }
 
 /// Set a new server URL and save to config
@@ -224,9 +258,10 @@ fn set_server_url(state: tauri::State<ConfigState>, url: String) -> Result<Strin
         return Err("URL must start with http:// or https://".to_string());
     }
 
-    let mut config = state.0.write().unwrap();
+    let mut config = state.config.write().unwrap();
     config.server_url = url.trim_end_matches('/').to_string();
     save_config(&config)?;
+    *state.config_initialized.write().unwrap() = true;
 
     Ok(config.server_url.clone())
 }
@@ -315,7 +350,7 @@ fn open_config_directory() -> Result<(), String> {
 /// Navigate to a specific path on the configured server
 #[tauri::command]
 fn navigate_to(window: tauri::WebviewWindow, state: tauri::State<ConfigState>, path: &str) {
-    let base_url = state.0.read().unwrap().server_url.clone();
+    let base_url = state.config.read().unwrap().server_url.clone();
     let url = format!("{}{}", base_url, path);
     let _ = window.eval(&format!("window.location.href = '{}'", url));
 }
@@ -341,7 +376,7 @@ fn go_forward(window: tauri::WebviewWindow) {
 /// Open a new window
 #[tauri::command]
 async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Result<(), String> {
-    let server_url = state.0.read().unwrap().server_url.clone();
+    let server_url = state.config.read().unwrap().server_url.clone();
     let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
 
     let builder = WebviewWindowBuilder::new(
@@ -385,9 +420,10 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
 /// Reset config to defaults
 #[tauri::command]
 fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
-    let mut config = state.0.write().unwrap();
+    let mut config = state.config.write().unwrap();
     *config = AppConfig::default();
     save_config(&config)?;
+    *state.config_initialized.write().unwrap() = true;
     Ok(())
 }
 
@@ -423,7 +459,7 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let forward = Shortcut::new(Some(Modifiers::SUPER), Code::BracketRight);
     let new_window_shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyN);
     let show_app = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
-    let open_settings = Shortcut::new(Some(Modifiers::SUPER), Code::Comma);
+    let open_settings_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::Comma);
 
     let app_handle = app.clone();
 
@@ -435,7 +471,7 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         forward,
         new_window_shortcut,
         show_app,
-        open_settings,
+        open_settings_shortcut,
     ];
 
     #[cfg(not(target_os = "macos"))]
@@ -446,7 +482,7 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         forward,
         new_window_shortcut,
         show_app,
-        open_settings,
+        open_settings_shortcut,
     ];
 
     app.global_shortcut().on_shortcuts(
@@ -463,9 +499,8 @@ fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     let _ = window.eval("window.history.back()");
                 } else if shortcut == &forward {
                     let _ = window.eval("window.history.forward()");
-                } else if shortcut == &open_settings {
-                    // Open config file for editing
-                    let _ = open_config_file();
+                } else if shortcut == &open_settings_shortcut {
+                    open_settings(&app_handle);
                 }
             }
 
@@ -495,6 +530,7 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
         true,
         Some("CmdOrCtrl+Shift+N"),
     )?;
+    let settings_item = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("CmdOrCtrl+Comma"))?;
     let docs_item = MenuItem::with_id(app, "open_docs", "Onyx Documentation", true, None::<&str>)?;
 
     if let Some(file_menu) = menu
@@ -503,12 +539,13 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
         .filter_map(|item| item.as_submenu().cloned())
         .find(|submenu| submenu.text().ok().as_deref() == Some("File"))
     {
-        file_menu.insert_items(&[&new_chat_item, &new_window_item], 0)?;
+        file_menu.insert_items(&[&new_chat_item, &new_window_item, &settings_item], 0)?;
     } else {
         let file_menu = SubmenuBuilder::new(app, "File")
             .items(&[
                 &new_chat_item,
                 &new_window_item,
+                &settings_item,
                 &PredefinedMenuItem::close_window(app, None)?,
             ])
             .build()?;
@@ -625,22 +662,20 @@ fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
 
 fn main() {
     // Load config at startup
-    let config = load_config();
-    let server_url = config.server_url.clone();
-
-    println!("Starting Onyx Desktop");
-    println!("Server URL: {}", server_url);
-    if let Some(path) = get_config_path() {
-        println!("Config file: {:?}", path);
-    }
+    let (config, config_initialized) = load_config();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .manage(ConfigState(RwLock::new(config)))
+        .manage(ConfigState {
+            config: RwLock::new(config),
+            config_initialized: RwLock::new(config_initialized),
+            app_base_url: RwLock::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             get_server_url,
+            get_bootstrap_state,
             set_server_url,
             get_config_path_cmd,
             open_config_file,
@@ -657,6 +692,7 @@ fn main() {
             "open_docs" => open_docs(),
             "new_chat" => trigger_new_chat(app),
             "new_window" => trigger_new_window(app),
+            "open_settings" => open_settings(app),
             _ => {}
         })
         .setup(move |app| {
@@ -675,7 +711,7 @@ fn main() {
                 eprintln!("Failed to setup tray icon: {}", e);
             }
 
-            // Update main window URL to configured server and inject title bar
+            // Setup main window with vibrancy effect
             if let Some(window) = app.get_webview_window("main") {
                 // Apply vibrancy effect for translucent glass look
                 #[cfg(target_os = "macos")]
@@ -683,14 +719,12 @@ fn main() {
                     let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
                 }
 
-                if let Ok(target) = Url::parse(&server_url) {
-                    if let Ok(current) = window.url() {
-                        if current != target {
-                            let _ = window.navigate(target);
-                        }
-                    } else {
-                        let _ = window.navigate(target);
-                    }
+                if let Ok(url) = window.url() {
+                    let mut base_url = url;
+                    base_url.set_query(None);
+                    base_url.set_fragment(None);
+                    base_url.set_path("/");
+                    *app.state::<ConfigState>().app_base_url.write().unwrap() = Some(base_url);
                 }
 
                 #[cfg(target_os = "macos")]

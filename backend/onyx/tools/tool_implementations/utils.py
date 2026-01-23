@@ -73,7 +73,7 @@ def convert_inference_sections_to_llm_string(
                 link = next(iter(chunk.source_links.values()), None)
             if link:
                 result["url"] = link
-        if include_document_id and "url" not in result:
+        if include_document_id:
             result["document_identifier"] = chunk.document_id
         if chunk.metadata:
             result["metadata"] = json.dumps(chunk.metadata)

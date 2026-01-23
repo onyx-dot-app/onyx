@@ -42,7 +42,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
@@ -744,27 +743,16 @@ def llm_loop_completion_handle(
         else:
             final_answer = "The generation was stopped by the user."
 
-    # Build citation_docs_info from accumulated citations in state container
-    citation_docs_info: list[CitationDocInfo] = []
-    seen_citation_nums: set[int] = set()
-    for citation_num, search_doc in state_container.citation_to_doc.items():
-        if citation_num not in seen_citation_nums:
-            seen_citation_nums.add(citation_num)
-            citation_docs_info.append(
-                CitationDocInfo(
-                    search_doc=search_doc,
-                    citation_number=citation_num,
-                )
-            )
-
     save_chat_turn(
         message_text=final_answer,
         reasoning_tokens=state_container.reasoning_tokens,
-        citation_docs_info=citation_docs_info,
+        citation_to_doc=state_container.citation_to_doc,
         tool_calls=state_container.tool_calls,
+        all_search_docs=state_container.get_all_search_docs(),
         db_session=db_session,
         assistant_message=assistant_message,
         is_clarification=state_container.is_clarification,
+        emitted_citations=state_container.get_emitted_citations(),
     )
 
 

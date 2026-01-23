@@ -7,6 +7,7 @@ from typing import Any
 
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.emitter import Emitter
+from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -14,6 +15,11 @@ from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import wait_on_background
+
+# Type alias for search doc deduplication key
+# Simple key: just document_id (str)
+# Full key: (document_id, chunk_ind, match_highlights)
+SearchDocKey = str | tuple[str, int, tuple[str, ...]]
 
 
 class ChatStateContainer:
@@ -40,6 +46,10 @@ class ChatStateContainer:
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
         # Note: LLM cost tracking is now handled in multi_llm.py
+        # Search doc collection - maps dedup key to SearchDoc for all docs from tool calls
+        self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
+        # Track which citation numbers were actually emitted during streaming
+        self._emitted_citations: set[int] = set()
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -90,6 +100,54 @@ class ChatStateContainer:
         """Thread-safe getter for is_clarification."""
         with self._lock:
             return self.is_clarification
+
+    @staticmethod
+    def create_search_doc_key(
+        search_doc: SearchDoc, use_simple_key: bool = True
+    ) -> SearchDocKey:
+        """Create a unique key for a SearchDoc for deduplication.
+
+        Args:
+            search_doc: The SearchDoc to create a key for
+            use_simple_key: If True (default), use only document_id for deduplication.
+                If False, include chunk_ind and match_highlights so that the same
+                document/chunk with different highlights are stored separately.
+        """
+        if use_simple_key:
+            return search_doc.document_id
+        match_highlights_tuple = tuple(sorted(search_doc.match_highlights or []))
+        return (search_doc.document_id, search_doc.chunk_ind, match_highlights_tuple)
+
+    def add_search_docs(
+        self, search_docs: list[SearchDoc], use_simple_key: bool = True
+    ) -> None:
+        """Add search docs to the accumulated collection with deduplication.
+
+        Args:
+            search_docs: List of SearchDoc objects to add
+            use_simple_key: If True (default), deduplicate by document_id only.
+                If False, deduplicate by document_id + chunk_ind + match_highlights.
+        """
+        with self._lock:
+            for doc in search_docs:
+                key = self.create_search_doc_key(doc, use_simple_key)
+                if key not in self._all_search_docs:
+                    self._all_search_docs[key] = doc
+
+    def get_all_search_docs(self) -> dict[SearchDocKey, SearchDoc]:
+        """Thread-safe getter for all accumulated search docs (returns a copy)."""
+        with self._lock:
+            return self._all_search_docs.copy()
+
+    def add_emitted_citation(self, citation_num: int) -> None:
+        """Add a citation number that was actually emitted during streaming."""
+        with self._lock:
+            self._emitted_citations.add(citation_num)
+
+    def get_emitted_citations(self) -> set[int]:
+        """Thread-safe getter for emitted citations (returns a copy)."""
+        with self._lock:
+            return self._emitted_citations.copy()
 
 
 def run_chat_loop_with_state_containers(
