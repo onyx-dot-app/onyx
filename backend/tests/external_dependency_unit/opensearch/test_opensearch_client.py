@@ -623,7 +623,7 @@ class TestOpenSearchClient:
         for doc in docs.values():
             test_client.index_document(document=doc)
 
-        # Refresh index to make documents searchable
+        # Refresh index to make documents searchable.
         test_client.refresh_index()
 
         # Search query.
