@@ -82,6 +82,11 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
+      # API Server connection for Discord bot message processing
+      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+      - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
     env_file:
       - path: .env
         required: false
