@@ -299,6 +299,39 @@ export async function fetchDirectoryListing(
   return res.json();
 }
 
+export interface FileContentResponse {
+  content: string;
+  mimeType: string;
+}
+
+/**
+ * Fetch file content from the sandbox for preview.
+ * Reuses the artifacts download endpoint but reads content as text.
+ */
+export async function fetchFileContent(
+  sessionId: string,
+  path: string
+): Promise<FileContentResponse> {
+  // Encode each path segment individually (spaces, special chars) but preserve slashes
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  const res = await fetch(
+    `${API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch file content: ${res.status}`);
+  }
+
+  const mimeType = res.headers.get("Content-Type") || "text/plain";
+  const content = await res.text();
+
+  return { content, mimeType };
+}
+
 // =============================================================================
 // Usage Limits API
 // =============================================================================

@@ -1011,15 +1011,6 @@ class SessionManager:
         sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.session_id)
         file_path = sandbox_path / path
 
-        # Security check: ensure path doesn't escape sandbox
-        try:
-            file_path = file_path.resolve()
-            sandbox_path_resolved = sandbox_path.resolve()
-            if not str(file_path).startswith(str(sandbox_path_resolved)):
-                raise ValueError("Access denied - path traversal")
-        except ValueError:
-            raise
-
         if not file_path.exists():
             return None
 

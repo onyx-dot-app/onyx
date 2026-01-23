@@ -1,7 +1,6 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { cn } from "@/lib/utils";
 import { useBuildSessionController } from "@/app/build/hooks/useBuildSessionController";
 import {
   useOutputPanelOpen,
@@ -28,18 +27,11 @@ export default function BuildV1Page() {
   useBuildSessionController({ existingSessionId: sessionId });
 
   return (
-    <div className="flex flex-row flex-1 h-full overflow-hidden">
-      {/* Center panel - Chat */}
-      <div
-        className={cn(
-          "h-full transition-all duration-300 ease-in-out",
-          outputPanelOpen ? "w-1/2" : "w-full"
-        )}
-      >
-        <BuildChatPanel existingSessionId={sessionId} />
-      </div>
+    <div className="relative flex-1 h-full overflow-hidden">
+      {/* Chat panel - always full width for background */}
+      <BuildChatPanel existingSessionId={sessionId} />
 
-      {/* Right panel - Output (Preview, Files, Artifacts) */}
+      {/* Output panel - floats over as a card */}
       <BuildOutputPanel onClose={toggleOutputPanel} isOpen={outputPanelOpen} />
     </div>
   );

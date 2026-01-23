@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   useSession,
@@ -20,14 +20,12 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import InputBar from "@/app/build/components/InputBar";
 import BuildWelcome from "@/app/build/components/BuildWelcome";
 import BuildMessageList from "@/app/build/components/BuildMessageList";
-import OutputPanelTab from "@/app/build/components/OutputPanelTab";
 import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar } from "@opal/icons";
 import { useBuildContext } from "@/app/build/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
-import VideoBackground from "@/app/build/v1/components/VideoBackground";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -49,13 +47,29 @@ export default function BuildChatPanel({
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const outputPanelOpen = useOutputPanelOpen();
-  const toggleOutputPanel = useToggleOutputPanel();
   const session = useSession();
   const sessionId = useSessionId();
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
   const { isMobile } = useScreenSize();
+  const toggleOutputPanel = useToggleOutputPanel();
+
+  // Track when output panel is fully closed (after animation completes)
+  // This prevents the "open panel" button from appearing during the close animation
+  const [isOutputPanelFullyClosed, setIsOutputPanelFullyClosed] =
+    useState(!outputPanelOpen);
+
+  useEffect(() => {
+    if (outputPanelOpen) {
+      // Panel opening - immediately mark as not fully closed
+      setIsOutputPanelFullyClosed(false);
+    } else {
+      // Panel closing - wait for 300ms animation to complete
+      const timer = setTimeout(() => setIsOutputPanelFullyClosed(true), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [outputPanelOpen]);
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -180,12 +194,17 @@ export default function BuildChatPanel({
   );
 
   return (
-    <div className="flex flex-col h-full w-full relative">
-      <VideoBackground />
-      <div className="relative z-10 flex flex-col h-full w-full">
-        {popup}
+    <div className="h-full w-full">
+      {popup}
+      {/* Content wrapper - shrinks when output panel opens */}
+      <div
+        className={cn(
+          "flex flex-col h-full transition-all duration-300 ease-in-out",
+          outputPanelOpen ? "w-1/2" : "w-full"
+        )}
+      >
         {/* Chat header */}
-        <div className="flex flex-row items-center justify-between pl-4 py-3">
+        <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3">
           <div className="flex flex-row items-center gap-2">
             {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
             {isMobile && leftSidebarFolded && (
@@ -197,23 +216,27 @@ export default function BuildChatPanel({
             )}
             <SandboxStatusIndicator />
           </div>
-          {/* Output panel tab in header */}
-          <OutputPanelTab
-            isOpen={outputPanelOpen}
-            onClick={toggleOutputPanel}
-          />
+          {/* Output panel toggle - only show when panel is fully closed (after animation) */}
+          {isOutputPanelFullyClosed && (
+            <IconButton
+              icon={SvgSidebar}
+              onClick={toggleOutputPanel}
+              tooltip="Open output panel"
+              tertiary
+              className="!bg-background-tint-00 border rounded-full"
+              iconClassName="!stroke-text-04"
+            />
+          )}
         </div>
 
         {/* Main content area */}
         <div className="flex-1 overflow-auto">
           {!hasSession && !existingSessionId ? (
-            <div className="h-full">
-              <BuildWelcome
-                onSubmit={handleSubmit}
-                isRunning={isRunning}
-                sandboxInitializing={isPreProvisioning}
-              />
-            </div>
+            <BuildWelcome
+              onSubmit={handleSubmit}
+              isRunning={isRunning}
+              sandboxInitializing={isPreProvisioning}
+            />
           ) : (
             <BuildMessageList
               messages={session?.messages ?? []}

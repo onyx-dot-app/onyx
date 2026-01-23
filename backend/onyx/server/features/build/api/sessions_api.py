@@ -269,11 +269,24 @@ def download_artifact(
 
     content, mime_type, filename = result
 
+    # Handle Unicode filenames in Content-Disposition header
+    # HTTP headers require Latin-1 encoding, so we use RFC 5987 for Unicode
+    try:
+        # Try Latin-1 encoding first (ASCII-compatible filenames)
+        filename.encode("latin-1")
+        content_disposition = f'attachment; filename="{filename}"'
+    except UnicodeEncodeError:
+        # Use RFC 5987 encoding for Unicode filenames
+        from urllib.parse import quote
+
+        encoded_filename = quote(filename, safe="")
+        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
+
     return Response(
         content=content,
         media_type=mime_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": content_disposition,
         },
     )
 
