@@ -37,6 +37,16 @@ import {
 } from "@/app/build/utils/streamItemHelpers";
 
 /**
+ * Extract file path from a tool call packet.
+ */
+function getFilePath(packet: Record<string, unknown>): string | null {
+  const rawInput = packet.raw_input as Record<string, unknown> | null;
+  return (rawInput?.file_path ?? rawInput?.filePath ?? rawInput?.path) as
+    | string
+    | null;
+}
+
+/**
  * Hook for handling message streaming in build sessions.
  *
  * Uses a simple FIFO approach:
@@ -79,6 +89,9 @@ export function useBuildStreaming() {
   );
   const clearStreamItems = useBuildSessionStore(
     (state) => state.clearStreamItems
+  );
+  const triggerWebappRefresh = useBuildSessionStore(
+    (state) => state.triggerWebappRefresh
   );
 
   /**
@@ -313,6 +326,17 @@ export function useBuildStreaming() {
 
               updateToolCallStreamItem(sessionId, toolCallId, updates);
 
+              // Check if this is a completed file operation in web/ directory
+              const filePath = getFilePath(packetData);
+              const isWebFileChange =
+                (kind === "edit" || kind === "write") &&
+                filePath?.includes("/web/") &&
+                status === "completed";
+
+              if (isWebFileChange) {
+                triggerWebappRefresh(sessionId);
+              }
+
               // If task tool completed, extract output and create text StreamItem
               if (isTaskTool(packetData) && status === "completed") {
                 const taskOutput = getTaskOutput(packetData);
@@ -413,6 +437,7 @@ export function useBuildStreaming() {
       clearStreamItems,
       addArtifactToSession,
       appendMessageToSession,
+      triggerWebappRefresh,
     ]
   );
 

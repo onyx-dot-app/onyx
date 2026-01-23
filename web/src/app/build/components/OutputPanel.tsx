@@ -1,12 +1,24 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import useSWR from "swr";
-import { useSession, Artifact } from "@/app/build/hooks/useBuildSessionStore";
+import {
+  useSession,
+  useWebappNeedsRefresh,
+  useBuildSessionStore,
+  useFilePreviewTabs,
+  useActiveOutputTab,
+  useActiveFilePreviewPath,
+  useFilesTabState,
+  useTabHistory,
+  Artifact,
+  OutputTabType,
+} from "@/app/build/hooks/useBuildSessionStore";
 import {
   fetchWebappInfo,
   fetchDirectoryListing,
   fetchArtifacts,
+  fetchFileContent,
 } from "@/app/build/services/apiServices";
 import { FileSystemEntry } from "@/app/build/services/buildStreamingModels";
 import { cn } from "@/lib/utils";
@@ -16,16 +28,20 @@ import {
   SvgGlobe,
   SvgHardDrive,
   SvgFiles,
-  SvgExternalLink,
   SvgFolder,
+  SvgFolderOpen,
   SvgFileText,
-  SvgChevronLeft,
+  SvgChevronRight,
   SvgDownloadCloud,
+  SvgX,
+  SvgArrowLeft,
+  SvgArrowRight,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
+import CraftingLoader from "@/app/build/components/CraftingLoader";
 
-type TabValue = "preview" | "files" | "artifacts";
+type TabValue = OutputTabType;
 
 const tabs: { value: TabValue; label: string; icon: React.FC<IconProps> }[] = [
   { value: "preview", label: "Preview", icon: SvgGlobe },
@@ -47,152 +63,503 @@ interface BuildOutputPanelProps {
  * - File browser for exploring sandbox filesystem
  * - Artifact list with download/view options
  */
-const BuildOutputPanel = memo(
-  ({ onClose: _onClose, isOpen }: BuildOutputPanelProps) => {
-    const session = useSession();
-    const [activeTab, setActiveTab] = useState<TabValue>("preview");
+const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
+  const session = useSession();
 
-    // Fetch webapp info from dedicated endpoint
-    // Only fetch for real sessions (not temp-* IDs) that are loaded
-    const shouldFetchWebapp =
-      session?.id &&
-      !session.id.startsWith("temp-") &&
-      session.status !== "creating";
+  // Get active tab state from store
+  const activeOutputTab = useActiveOutputTab();
+  const activeFilePreviewPath = useActiveFilePreviewPath();
+  const filePreviewTabs = useFilePreviewTabs();
 
-    const { data: webappInfo } = useSWR(
-      shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp` : null,
-      () => (session?.id ? fetchWebappInfo(session.id) : null),
-      {
-        refreshInterval: 5000, // Refresh every 5 seconds to catch when webapp starts
-        revalidateOnFocus: true,
-      }
-    );
+  // Store actions
+  const setActiveOutputTab = useBuildSessionStore(
+    (state) => state.setActiveOutputTab
+  );
+  const openFilePreview = useBuildSessionStore(
+    (state) => state.openFilePreview
+  );
+  const closeFilePreview = useBuildSessionStore(
+    (state) => state.closeFilePreview
+  );
+  const setActiveFilePreviewPath = useBuildSessionStore(
+    (state) => state.setActiveFilePreviewPath
+  );
 
-    const hasWebapp = webappInfo?.has_webapp ?? false;
-    const webappUrl = webappInfo?.webapp_url ?? null;
+  // Determine which tab is visually active
+  const isFilePreviewActive = activeFilePreviewPath !== null;
+  const activeTab = isFilePreviewActive ? null : activeOutputTab;
 
-    // Fetch artifacts - poll every 5 seconds when on artifacts tab
-    const shouldFetchArtifacts =
-      session?.id &&
-      !session.id.startsWith("temp-") &&
-      session.status !== "creating" &&
-      activeTab === "artifacts";
+  const handlePinnedTabClick = (tab: TabValue) => {
+    if (session?.id) {
+      setActiveOutputTab(session.id, tab);
+    }
+  };
 
-    const { data: polledArtifacts } = useSWR(
-      shouldFetchArtifacts
-        ? `/api/build/sessions/${session.id}/artifacts`
-        : null,
-      () => (session?.id ? fetchArtifacts(session.id) : null),
-      {
-        refreshInterval: 5000, // Refresh every 5 seconds to catch new artifacts
-        revalidateOnFocus: true,
-      }
-    );
+  const handlePreviewTabClick = (path: string) => {
+    if (session?.id) {
+      setActiveFilePreviewPath(session.id, path);
+    }
+  };
 
-    // Use polled artifacts if available, otherwise fall back to session store
-    const artifacts = polledArtifacts ?? session?.artifacts ?? [];
+  const handlePreviewTabClose = (e: React.MouseEvent, path: string) => {
+    e.stopPropagation(); // Don't trigger tab click
+    if (session?.id) {
+      closeFilePreview(session.id, path);
+    }
+  };
 
-    return (
-      <div
-        className={cn(
-          "h-full flex flex-col border py-4 rounded-12 border-border-01 bg-background-neutral-00 transition-all duration-300 ease-in-out overflow-hidden",
-          isOpen ? "w-1/2 opacity-100 px-4" : "w-0 opacity-0"
-        )}
-      >
-        {/* Tab List */}
-        <div className="flex w-full rounded-t-08 bg-background-tint-03">
+  const handleFileClick = (path: string, fileName: string) => {
+    if (session?.id) {
+      openFilePreview(session.id, path, fileName);
+    }
+  };
+
+  // Track when panel animation completes (defer fetch until fully open)
+  const [isFullyOpen, setIsFullyOpen] = useState(false);
+  // Track when content should unmount (delayed on close for animation)
+  const [shouldRenderContent, setShouldRenderContent] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Render content immediately on open
+      setShouldRenderContent(true);
+      // Wait for 300ms CSS transition to complete before fetching
+      const timer = setTimeout(() => setIsFullyOpen(true), 300);
+      return () => clearTimeout(timer);
+    } else {
+      // Stop fetching immediately
+      setIsFullyOpen(false);
+      // Delay unmount until close animation completes
+      const timer = setTimeout(() => setShouldRenderContent(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  // Session-scoped URL caching
+  const [cachedWebappUrl, setCachedWebappUrl] = useState<string | null>(null);
+  const [cachedForSessionId, setCachedForSessionId] = useState<string | null>(
+    null
+  );
+
+  // Clear cache when session changes
+  useEffect(() => {
+    if (session?.id !== cachedForSessionId) {
+      setCachedWebappUrl(null);
+      setCachedForSessionId(session?.id ?? null);
+    }
+  }, [session?.id, cachedForSessionId]);
+
+  // Webapp refresh trigger from streaming
+  const webappNeedsRefresh = useWebappNeedsRefresh();
+  const resetWebappRefresh = useBuildSessionStore(
+    (state) => state.resetWebappRefresh
+  );
+
+  // Fetch webapp info from dedicated endpoint
+  // Only fetch for real sessions when panel is fully open
+  const shouldFetchWebapp =
+    isFullyOpen &&
+    session?.id &&
+    !session.id.startsWith("temp-") &&
+    session.status !== "creating";
+
+  const { data: webappInfo, mutate } = useSWR(
+    shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp` : null,
+    () => (session?.id ? fetchWebappInfo(session.id) : null),
+    {
+      refreshInterval: 0, // Disable polling, use event-based refresh
+      revalidateOnFocus: true,
+      keepPreviousData: true, // Stale-while-revalidate
+    }
+  );
+
+  // Update cache when SWR returns data for current session
+  useEffect(() => {
+    if (webappInfo?.webapp_url && session?.id === cachedForSessionId) {
+      setCachedWebappUrl(webappInfo.webapp_url);
+    }
+  }, [webappInfo?.webapp_url, session?.id, cachedForSessionId]);
+
+  // Refresh when web/ file changes
+  useEffect(() => {
+    if (webappNeedsRefresh && isFullyOpen && session?.id) {
+      mutate();
+      resetWebappRefresh(session.id);
+    }
+  }, [
+    webappNeedsRefresh,
+    isFullyOpen,
+    mutate,
+    session?.id,
+    resetWebappRefresh,
+  ]);
+
+  const webappUrl = webappInfo?.webapp_url ?? null;
+
+  // Use cache only if it belongs to current session
+  const validCachedUrl =
+    cachedForSessionId === session?.id ? cachedWebappUrl : null;
+  const displayUrl = webappUrl ?? validCachedUrl;
+
+  // Tab navigation history
+  const tabHistory = useTabHistory();
+  const navigateTabBack = useBuildSessionStore(
+    (state) => state.navigateTabBack
+  );
+  const navigateTabForward = useBuildSessionStore(
+    (state) => state.navigateTabForward
+  );
+
+  const canGoBack = tabHistory.currentIndex > 0;
+  const canGoForward = tabHistory.currentIndex < tabHistory.entries.length - 1;
+
+  const handleBack = useCallback(() => {
+    if (session?.id) {
+      navigateTabBack(session.id);
+    }
+  }, [session?.id, navigateTabBack]);
+
+  const handleForward = useCallback(() => {
+    if (session?.id) {
+      navigateTabForward(session.id);
+    }
+  }, [session?.id, navigateTabForward]);
+
+  // Fetch artifacts - poll every 5 seconds when on artifacts tab
+  const shouldFetchArtifacts =
+    session?.id &&
+    !session.id.startsWith("temp-") &&
+    session.status !== "creating" &&
+    activeTab === "artifacts";
+
+  const { data: polledArtifacts } = useSWR(
+    shouldFetchArtifacts ? `/api/build/sessions/${session.id}/artifacts` : null,
+    () => (session?.id ? fetchArtifacts(session.id) : null),
+    {
+      refreshInterval: 5000, // Refresh every 5 seconds to catch new artifacts
+      revalidateOnFocus: true,
+    }
+  );
+
+  // Use polled artifacts if available, otherwise fall back to session store
+  const artifacts = polledArtifacts ?? session?.artifacts ?? [];
+
+  return (
+    <div
+      className={cn(
+        "absolute top-4 right-4 bottom-4 w-[calc(50%-2rem)] flex flex-col border rounded-12 border-border-01 bg-background-neutral-00 overflow-hidden transition-all duration-300 ease-in-out",
+        isOpen
+          ? "opacity-100 translate-x-0"
+          : "opacity-0 translate-x-full pointer-events-none"
+      )}
+      style={{
+        boxShadow: "0 8px 60px 30px rgba(0, 0, 0, 0.07)",
+      }}
+    >
+      {/* Tab List - Chrome-style tabs */}
+      <div className="flex flex-col w-full">
+        {/* Tabs row */}
+        <div className="flex items-end gap-1.5 w-full pt-1.5 px-2 bg-background-tint-03">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="w-2.5 h-2.5 rounded-full bg-red-500 hover:bg-red-400 ml-2 mr-3 mb-3.5 flex-shrink-0 transition-colors"
+            aria-label="Close panel"
+          />
+          {/* Pinned tabs */}
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.value;
             return (
               <button
                 key={tab.value}
-                onClick={() => setActiveTab(tab.value)}
+                onClick={() => handlePinnedTabClick(tab.value)}
                 className={cn(
-                  "flex-1 inline-flex items-center justify-center gap-2 rounded-t-08 p-2",
+                  "relative inline-flex items-center justify-center gap-2 px-5",
+                  "max-w-[15%] min-w-fit",
                   isActive
-                    ? "bg-background-neutral-00 text-text-04 shadow-01 border"
-                    : "text-text-03 bg-transparent border border-transparent"
+                    ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
+                    : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
                 )}
               >
-                <Icon size={16} className="stroke-text-03" />
-                <Text>{tab.label}</Text>
+                {/* Left curved joint */}
+                {isActive && (
+                  <div
+                    className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                    style={{
+                      maskImage:
+                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                      WebkitMaskImage:
+                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                    }}
+                  />
+                )}
+                <Icon
+                  size={16}
+                  className={cn(
+                    "stroke-current flex-shrink-0",
+                    isActive ? "stroke-text-04" : "stroke-text-03"
+                  )}
+                />
+                <Text className="truncate">{tab.label}</Text>
+                {/* Right curved joint */}
+                {isActive && (
+                  <div
+                    className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                    style={{
+                      maskImage:
+                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                      WebkitMaskImage:
+                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
+
+          {/* Separator between pinned and preview tabs */}
+          {filePreviewTabs.length > 0 && (
+            <div className="w-px h-5 bg-border-02 mx-2 mb-1 self-center" />
+          )}
+
+          {/* Preview tabs */}
+          {filePreviewTabs.map((previewTab) => {
+            const isActive = activeFilePreviewPath === previewTab.path;
+            return (
+              <button
+                key={previewTab.path}
+                onClick={() => handlePreviewTabClick(previewTab.path)}
+                className={cn(
+                  "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2",
+                  "max-w-[150px] min-w-fit",
+                  isActive
+                    ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
+                    : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
+                )}
+              >
+                {/* Left curved joint */}
+                {isActive && (
+                  <div
+                    className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                    style={{
+                      maskImage:
+                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                      WebkitMaskImage:
+                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                    }}
+                  />
+                )}
+                <SvgFileText
+                  size={14}
+                  className={cn(
+                    "stroke-current flex-shrink-0",
+                    isActive ? "stroke-text-04" : "stroke-text-03"
+                  )}
+                />
+                <Text className="truncate text-sm">{previewTab.fileName}</Text>
+                {/* Close button */}
+                <button
+                  onClick={(e) => handlePreviewTabClose(e, previewTab.path)}
+                  className={cn(
+                    "flex-shrink-0 p-0.5 rounded hover:bg-background-tint-03 transition-colors",
+                    isActive
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100"
+                  )}
+                  aria-label={`Close ${previewTab.fileName}`}
+                >
+                  <SvgX size={12} className="stroke-text-03" />
+                </button>
+                {/* Right curved joint */}
+                {isActive && (
+                  <div
+                    className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                    style={{
+                      maskImage:
+                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                      WebkitMaskImage:
+                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                    }}
+                  />
+                )}
               </button>
             );
           })}
         </div>
+        {/* White bar connecting tabs to content */}
+        <div className="h-2 w-full bg-background-neutral-00" />
+      </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 min-h-0">
-          <div className="h-full border-x border-b border-border-01 rounded-b-08">
-            {activeTab === "preview" && (
-              <PreviewTab webappUrl={webappUrl} hasWebapp={hasWebapp} />
+      {/* URL Bar - Chrome-style */}
+      <UrlBar
+        displayUrl={
+          isFilePreviewActive && activeFilePreviewPath
+            ? `sandbox://files/${activeFilePreviewPath}`
+            : activeOutputTab === "preview"
+              ? displayUrl || "Loading..."
+              : activeOutputTab === "files"
+                ? "sandbox://"
+                : "artifacts://"
+        }
+        showNavigation={true}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        onBack={handleBack}
+        onForward={handleForward}
+      />
+
+      {/* Tab Content */}
+      <div className="flex-1 min-h-screen h-full rounded-b-08">
+        {/* File preview content - shown when a preview tab is active */}
+        {isFilePreviewActive && activeFilePreviewPath && session?.id && (
+          <FilePreviewContent
+            sessionId={session.id}
+            filePath={activeFilePreviewPath}
+          />
+        )}
+        {/* Pinned tab content - only show when no file preview is active */}
+        {!isFilePreviewActive && (
+          <>
+            {activeOutputTab === "preview" &&
+              shouldRenderContent &&
+              // Show crafting loader only when no session exists (welcome state)
+              // Otherwise, PreviewTab handles the loading/iframe display
+              (!session ? (
+                <CraftingLoader />
+              ) : (
+                <PreviewTab webappUrl={displayUrl} />
+              ))}
+            {activeOutputTab === "files" && (
+              <FilesTab
+                sessionId={session?.id ?? null}
+                onFileClick={handleFileClick}
+              />
             )}
-            {activeTab === "files" && (
-              <FilesTab sessionId={session?.id ?? null} />
-            )}
-            {activeTab === "artifacts" && (
+            {activeOutputTab === "artifacts" && (
               <ArtifactsTab
                 artifacts={artifacts}
                 sessionId={session?.id ?? null}
               />
             )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
-    );
-  }
-);
-
+    </div>
+  );
+});
 BuildOutputPanel.displayName = "BuildOutputPanel";
-
 export default BuildOutputPanel;
 
-// ============================================================================
-// Tab Content Components
-// ============================================================================
+interface UrlBarProps {
+  displayUrl: string;
+  showNavigation?: boolean;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  onBack?: () => void;
+  onForward?: () => void;
+}
+
+/**
+ * UrlBar - Chrome-style URL/status bar below tabs
+ * Shows the current URL/path based on active tab or file preview
+ * Optionally shows back/forward navigation buttons
+ */
+function UrlBar({
+  displayUrl,
+  showNavigation = false,
+  canGoBack = false,
+  canGoForward = false,
+  onBack,
+  onForward,
+}: UrlBarProps) {
+  return (
+    <div className="px-3 pb-2">
+      <div className="flex items-center gap-1">
+        {/* Navigation buttons */}
+        {showNavigation && (
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={onBack}
+              disabled={!canGoBack}
+              className={cn(
+                "p-1.5 rounded-full transition-colors",
+                canGoBack
+                  ? "hover:bg-background-tint-03 text-text-03"
+                  : "text-text-02 cursor-not-allowed"
+              )}
+              aria-label="Go back"
+            >
+              <SvgArrowLeft size={16} />
+            </button>
+            <button
+              onClick={onForward}
+              disabled={!canGoForward}
+              className={cn(
+                "p-1.5 rounded-full transition-colors",
+                canGoForward
+                  ? "hover:bg-background-tint-03 text-text-03"
+                  : "text-text-02 cursor-not-allowed"
+              )}
+              aria-label="Go forward"
+            >
+              <SvgArrowRight size={16} />
+            </button>
+          </div>
+        )}
+        {/* URL display */}
+        <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full">
+          <Text secondaryBody text03 className="truncate">
+            {displayUrl}
+          </Text>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface PreviewTabProps {
   webappUrl: string | null;
-  hasWebapp: boolean;
 }
 
-function PreviewTab({ webappUrl, hasWebapp }: PreviewTabProps) {
-  if (!hasWebapp) {
-    return (
-      <Section
-        height="full"
-        alignItems="center"
-        justifyContent="center"
-        padding={2}
-      >
-        <SvgGlobe size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
-          No preview available
-        </Text>
-        <Text secondaryBody text02>
-          Build a web app to see a live preview here
-        </Text>
-      </Section>
-    );
-  }
+/**
+ * PreviewTab - Shows the webapp iframe preview
+ *
+ * States:
+ * - No webapp URL yet: Shows blank dark background while SWR fetches
+ * - Has webapp URL: Shows iframe with crossfade from blank background
+ */
+function PreviewTab({ webappUrl }: PreviewTabProps) {
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
+  // Reset loaded state when URL changes
+  useEffect(() => {
+    setIframeLoaded(false);
+  }, [webappUrl]);
+
+  // Base background shown while loading or when no webapp exists yet
   return (
     <div className="h-full flex flex-col">
-      <div className="flex flex-row items-center justify-between p-3 border-b border-border-01">
-        {webappUrl && (
-          <a href={webappUrl} target="_blank" rel="noopener noreferrer">
-            <Button action tertiary rightIcon={SvgExternalLink}>
-              Open
-            </Button>
-          </a>
-        )}
-      </div>
-      <div className="flex-1 p-3">
+      <div className="flex-1 p-3 relative">
+        {/* Base dark background - always present, visible when no iframe or iframe loading */}
+        <div
+          className={cn(
+            "absolute inset-0 rounded-b-08 bg-neutral-950",
+            "transition-opacity duration-300",
+            iframeLoaded ? "opacity-0 pointer-events-none" : "opacity-100"
+          )}
+        />
+
+        {/* Iframe - fades in when loaded */}
         {webappUrl && (
           <iframe
             src={webappUrl}
-            className="w-full h-full rounded-08 border border-border-01 bg-white"
+            onLoad={() => setIframeLoaded(true)}
+            className={cn(
+              "absolute inset-0 w-full h-full rounded-b-08 bg-neutral-950",
+              "transition-opacity duration-300",
+              iframeLoaded ? "opacity-100" : "opacity-0"
+            )}
             sandbox="allow-scripts allow-same-origin allow-forms"
             title="Web App Preview"
           />
@@ -202,23 +569,200 @@ function PreviewTab({ webappUrl, hasWebapp }: PreviewTabProps) {
   );
 }
 
-interface FilesTabProps {
-  sessionId: string | null;
+interface FilePreviewContentProps {
+  sessionId: string;
+  filePath: string;
 }
 
-function FilesTab({ sessionId }: FilesTabProps) {
-  const [currentPath, setCurrentPath] = useState("");
+/**
+ * FilePreviewContent - Displays file content in a scrollable monospace view
+ * Fetches content via SWR and displays loading/error/content states
+ */
+function FilePreviewContent({ sessionId, filePath }: FilePreviewContentProps) {
+  const { data, error, isLoading } = useSWR(
+    `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
+    () => fetchFileContent(sessionId, filePath),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 5000,
+    }
+  );
 
-  const { data: listing, error } = useSWR(
-    sessionId
-      ? `/api/build/sessions/${sessionId}/files?path=${currentPath}`
-      : null,
-    () => (sessionId ? fetchDirectoryListing(sessionId, currentPath) : null),
+  if (isLoading) {
+    return (
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <Text secondaryBody text03>
+          Loading file...
+        </Text>
+      </Section>
+    );
+  }
+
+  if (error) {
+    return (
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <SvgFileText size={48} className="stroke-text-02" />
+        <Text headingH3 text03>
+          Error loading file
+        </Text>
+        <Text secondaryBody text02>
+          {error.message}
+        </Text>
+      </Section>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Section
+        height="full"
+        alignItems="center"
+        justifyContent="center"
+        padding={2}
+      >
+        <Text secondaryBody text03>
+          No content
+        </Text>
+      </Section>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex-1 overflow-auto p-4">
+        <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap break-words">
+          {data.content}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+interface FilesTabProps {
+  sessionId: string | null;
+  onFileClick?: (path: string, fileName: string) => void;
+}
+
+function FilesTab({ sessionId, onFileClick }: FilesTabProps) {
+  // Get persisted state from store
+  const filesTabState = useFilesTabState();
+  const updateFilesTabState = useBuildSessionStore(
+    (state) => state.updateFilesTabState
+  );
+
+  // Convert stored array to Set for efficient lookups
+  const expandedPaths = useMemo(
+    () => new Set(filesTabState.expandedPaths),
+    [filesTabState.expandedPaths]
+  );
+
+  // Convert stored directory cache to Map for efficient lookups
+  const directoryCache = useMemo(
+    () =>
+      new Map(Object.entries(filesTabState.directoryCache)) as Map<
+        string,
+        FileSystemEntry[]
+      >,
+    [filesTabState.directoryCache]
+  );
+
+  // Scroll container ref for position tracking
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch root directory
+  const { data: rootListing, error } = useSWR(
+    sessionId ? `/api/build/sessions/${sessionId}/files?path=` : null,
+    () => (sessionId ? fetchDirectoryListing(sessionId, "") : null),
     {
       revalidateOnFocus: false,
       dedupingInterval: 2000,
     }
   );
+
+  // Update cache when root listing changes
+  useEffect(() => {
+    if (rootListing && sessionId) {
+      const newCache = {
+        ...filesTabState.directoryCache,
+        "": rootListing.entries,
+      };
+      updateFilesTabState(sessionId, { directoryCache: newCache });
+    }
+  }, [rootListing, sessionId]);
+
+  const toggleFolder = useCallback(
+    async (path: string) => {
+      if (!sessionId) return;
+
+      const newExpanded = new Set(expandedPaths);
+      if (newExpanded.has(path)) {
+        // Collapse folder
+        newExpanded.delete(path);
+        updateFilesTabState(sessionId, {
+          expandedPaths: Array.from(newExpanded),
+        });
+      } else {
+        // Expand folder - fetch contents if not cached
+        newExpanded.add(path);
+        if (!directoryCache.has(path)) {
+          const listing = await fetchDirectoryListing(sessionId, path);
+          if (listing) {
+            const newCache = {
+              ...filesTabState.directoryCache,
+              [path]: listing.entries,
+            };
+            updateFilesTabState(sessionId, {
+              expandedPaths: Array.from(newExpanded),
+              directoryCache: newCache,
+            });
+            return;
+          }
+        }
+        updateFilesTabState(sessionId, {
+          expandedPaths: Array.from(newExpanded),
+        });
+      }
+    },
+    [
+      sessionId,
+      expandedPaths,
+      directoryCache,
+      filesTabState.directoryCache,
+      updateFilesTabState,
+    ]
+  );
+
+  // Restore scroll position when component mounts or tab becomes active
+  useEffect(() => {
+    if (scrollContainerRef.current && filesTabState.scrollTop > 0) {
+      scrollContainerRef.current.scrollTop = filesTabState.scrollTop;
+    }
+  }, []); // Only on mount
+
+  // Save scroll position on scroll (debounced via passive listener)
+  const handleScroll = useCallback(() => {
+    if (scrollContainerRef.current && sessionId) {
+      const scrollTop = scrollContainerRef.current.scrollTop;
+      updateFilesTabState(sessionId, { scrollTop });
+    }
+  }, [sessionId, updateFilesTabState]);
+
+  const formatFileSize = (bytes: number | null): string => {
+    if (bytes === null) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   if (!sessionId) {
     return (
@@ -239,25 +783,6 @@ function FilesTab({ sessionId }: FilesTabProps) {
     );
   }
 
-  const handleNavigate = (entry: FileSystemEntry) => {
-    if (entry.is_directory) {
-      setCurrentPath(entry.path);
-    }
-  };
-
-  const handleBack = () => {
-    const parts = currentPath.split("/").filter(Boolean);
-    parts.pop();
-    setCurrentPath(parts.join("/"));
-  };
-
-  const formatFileSize = (bytes: number | null): string => {
-    if (bytes === null) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   if (error) {
     return (
       <Section
@@ -277,7 +802,7 @@ function FilesTab({ sessionId }: FilesTabProps) {
     );
   }
 
-  if (!listing) {
+  if (!rootListing) {
     return (
       <Section
         height="full"
@@ -294,24 +819,14 @@ function FilesTab({ sessionId }: FilesTabProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Breadcrumb / Navigation */}
-      <div className="flex items-center gap-2 p-3 border-b border-border-01">
-        {currentPath && (
-          <button
-            onClick={handleBack}
-            className="p-1 hover:bg-background-tint-02 rounded"
-          >
-            <SvgChevronLeft size={16} className="stroke-text-03" />
-          </button>
-        )}
-        <Text secondaryBody text03>
-          /{currentPath || ""}
-        </Text>
-      </div>
-
-      {/* File List */}
-      <div className="flex-1 overflow-auto">
-        {listing.entries.length === 0 ? (
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-auto px-2 pb-2 relative"
+      >
+        {/* Background to prevent content showing through sticky gap */}
+        <div className="sticky top-0 left-0 right-0 h-2 bg-background-neutral-00 -mx-2 z-[101]" />
+        {rootListing.entries.length === 0 ? (
           <Section
             height="full"
             alignItems="center"
@@ -323,41 +838,202 @@ function FilesTab({ sessionId }: FilesTabProps) {
             </Text>
           </Section>
         ) : (
-          <div className="divide-y divide-border-01">
-            {listing.entries.map((entry) => (
-              <button
-                key={entry.path}
-                onClick={() => handleNavigate(entry)}
-                className={cn(
-                  "w-full flex items-center gap-3 p-3 hover:bg-background-tint-02 transition-colors",
-                  !entry.is_directory && "cursor-default"
-                )}
-              >
-                {entry.is_directory ? (
-                  <SvgFolder
-                    size={20}
-                    className="stroke-text-03 flex-shrink-0"
-                  />
-                ) : (
-                  <SvgFileText
-                    size={20}
-                    className="stroke-text-03 flex-shrink-0"
-                  />
-                )}
-                <div className="flex-1 min-w-0 text-left">
-                  <Text secondaryBody text04 className="truncate">
-                    {entry.name}
-                  </Text>
-                  {!entry.is_directory && entry.size !== null && (
-                    <Text text02>{formatFileSize(entry.size)}</Text>
-                  )}
-                </div>
-              </button>
-            ))}
+          <div className="font-mono text-sm">
+            <FileTreeNode
+              entries={rootListing.entries}
+              depth={0}
+              expandedPaths={expandedPaths}
+              directoryCache={directoryCache}
+              onToggleFolder={toggleFolder}
+              onFileClick={onFileClick}
+              formatFileSize={formatFileSize}
+            />
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+interface FileTreeNodeProps {
+  entries: FileSystemEntry[];
+  depth: number;
+  expandedPaths: Set<string>;
+  directoryCache: Map<string, FileSystemEntry[]>;
+  onToggleFolder: (path: string) => void;
+  onFileClick?: (path: string, fileName: string) => void;
+  formatFileSize: (bytes: number | null) => string;
+  parentIsLast?: boolean[];
+}
+
+function FileTreeNode({
+  entries,
+  depth,
+  expandedPaths,
+  directoryCache,
+  onToggleFolder,
+  onFileClick,
+  formatFileSize,
+  parentIsLast = [],
+}: FileTreeNodeProps) {
+  // Sort entries: directories first, then alphabetically
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (a.is_directory && !b.is_directory) return -1;
+    if (!a.is_directory && b.is_directory) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return (
+    <>
+      {sortedEntries.map((entry, index) => {
+        const isExpanded = expandedPaths.has(entry.path);
+        const isLast = index === sortedEntries.length - 1;
+        const childEntries = directoryCache.get(entry.path) || [];
+
+        // Row height for sticky offset calculation
+        const rowHeight = 28;
+        // Account for the 8px (h-2) spacer at top of scroll container
+        const stickyTopOffset = 8;
+
+        return (
+          <div key={entry.path} className="relative">
+            {/* Tree item row */}
+            <button
+              onClick={() => {
+                if (entry.is_directory) {
+                  onToggleFolder(entry.path);
+                } else if (onFileClick) {
+                  onFileClick(entry.path, entry.name);
+                }
+              }}
+              className={cn(
+                "w-full flex items-center py-1.5 hover:bg-background-tint-02 rounded transition-colors relative",
+                !entry.is_directory && onFileClick && "cursor-pointer",
+                !entry.is_directory && !onFileClick && "cursor-default",
+                // Make expanded folders sticky
+                entry.is_directory &&
+                  isExpanded &&
+                  "sticky bg-background-neutral-00"
+              )}
+              style={
+                entry.is_directory && isExpanded
+                  ? {
+                      top: stickyTopOffset + depth * rowHeight,
+                      zIndex: 100 - depth, // Higher z-index for parent folders
+                    }
+                  : undefined
+              }
+            >
+              {/* Tree lines for depth */}
+              {parentIsLast.map((isParentLast, i) => (
+                <span
+                  key={i}
+                  className="inline-flex w-5 justify-center flex-shrink-0 self-stretch relative"
+                >
+                  {!isParentLast && (
+                    <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 -bottom-1.5 w-px bg-border-02" />
+                  )}
+                </span>
+              ))}
+
+              {/* Branch connector */}
+              {depth > 0 && (
+                <span className="inline-flex w-5 flex-shrink-0 self-stretch relative">
+                  {/* Vertical line */}
+                  <span
+                    className={cn(
+                      "absolute left-1/2 -translate-x-1/2 w-px bg-border-02",
+                      isLast ? "-top-1.5 bottom-1/2" : "-top-1.5 -bottom-1.5"
+                    )}
+                  />
+                  {/* Horizontal line */}
+                  <span className="absolute top-1/2 left-1/2 w-2 h-px bg-border-02" />
+                </span>
+              )}
+
+              {/* Expand/collapse chevron for directories */}
+              {entry.is_directory ? (
+                <span className="inline-flex w-4 h-4 items-center justify-center flex-shrink-0">
+                  <SvgChevronRight
+                    size={12}
+                    className={cn(
+                      "stroke-text-03 transition-transform duration-150",
+                      isExpanded && "rotate-90"
+                    )}
+                  />
+                </span>
+              ) : (
+                <span className="w-4 flex-shrink-0" />
+              )}
+
+              {/* Icon */}
+              {entry.is_directory ? (
+                isExpanded ? (
+                  <SvgFolderOpen
+                    size={16}
+                    className="stroke-text-03 flex-shrink-0 mx-1"
+                  />
+                ) : (
+                  <SvgFolder
+                    size={16}
+                    className="stroke-text-03 flex-shrink-0 mx-1"
+                  />
+                )
+              ) : (
+                <SvgFileText
+                  size={16}
+                  className="stroke-text-03 flex-shrink-0 mx-1"
+                />
+              )}
+
+              {/* Name */}
+              <Text
+                secondaryBody
+                text04
+                className="truncate flex-1 text-left ml-1"
+              >
+                {entry.name}
+              </Text>
+
+              {/* File size */}
+              {!entry.is_directory && entry.size !== null && (
+                <Text text02 className="ml-2 mr-2 flex-shrink-0">
+                  {formatFileSize(entry.size)}
+                </Text>
+              )}
+            </button>
+
+            {/* Render children if expanded */}
+            {entry.is_directory && isExpanded && childEntries.length > 0 && (
+              <FileTreeNode
+                entries={childEntries}
+                depth={depth + 1}
+                expandedPaths={expandedPaths}
+                directoryCache={directoryCache}
+                onToggleFolder={onToggleFolder}
+                onFileClick={onFileClick}
+                formatFileSize={formatFileSize}
+                parentIsLast={[...parentIsLast, isLast]}
+              />
+            )}
+
+            {/* Loading indicator for expanded but not-yet-loaded directories */}
+            {entry.is_directory &&
+              isExpanded &&
+              !directoryCache.has(entry.path) && (
+                <div
+                  className="flex items-center py-1"
+                  style={{ paddingLeft: `${(depth + 1) * 20 + 24}px` }}
+                >
+                  <Text secondaryBody text02>
+                    Loading...
+                  </Text>
+                </div>
+              )}
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -406,16 +1082,8 @@ function ArtifactsTab({ artifacts, sessionId }: ArtifactsTabProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-3 border-b border-border-01">
-        <Text secondaryBody text03>
-          {webappArtifacts.length} web app
-          {webappArtifacts.length !== 1 ? "s" : ""}
-        </Text>
-      </div>
-
       {/* Webapp Artifact List */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto overlay-scrollbar">
         <div className="divide-y divide-border-01">
           {webappArtifacts.map((artifact) => {
             return (
