@@ -70,13 +70,17 @@ from shared_configs.model_server_models import Embedding
 logger = setup_logger(__name__)
 
 
-def _generate_filtered_access_control_list(access: DocumentAccess) -> list[str]:
-    """Filters the access control list to remove PUBLIC_DOC_PAT.
+def generate_opensearch_filtered_access_control_list(
+    access: DocumentAccess,
+) -> list[str]:
+    """Generates an access control list with PUBLIC_DOC_PAT removed.
 
     In the OpenSearch schema this is represented by PUBLIC_FIELD_NAME.
     """
-    filtered_access_control_list = list(access.to_acl())
-    filtered_access_control_list.remove(PUBLIC_DOC_PAT)
+    access_control_list = list(access.to_acl())
+    filtered_access_control_list = [
+        acl for acl in access_control_list if acl != PUBLIC_DOC_PAT
+    ]
     return filtered_access_control_list
 
 
@@ -164,7 +168,9 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata_suffix=chunk.metadata_suffix_keyword,
         last_updated=chunk.source_document.doc_updated_at,
         public=chunk.access.is_public,
-        access_control_list=_generate_filtered_access_control_list(chunk.access),
+        access_control_list=generate_opensearch_filtered_access_control_list(
+            chunk.access
+        ),
         global_boost=chunk.boost,
         semantic_identifier=chunk.source_document.semantic_identifier,
         image_file_id=chunk.image_file_id,
@@ -588,7 +594,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # appropriate types into this dict.
             if update_request.access is not None:
                 properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = (
-                    _generate_filtered_access_control_list(update_request.access)
+                    generate_opensearch_filtered_access_control_list(
+                        update_request.access
+                    )
                 )
             if update_request.document_sets is not None:
                 properties_to_update[DOCUMENT_SETS_FIELD_NAME] = list(

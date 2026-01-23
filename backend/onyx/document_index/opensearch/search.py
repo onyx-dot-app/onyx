@@ -244,7 +244,9 @@ class DocumentQuery:
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
-        This query can be directly supplied to the OpenSearch client.
+        NOTE: This query can be directly supplied to the OpenSearch client, but
+        it MUST be supplied in addition to a search pipeline. The results from
+        hybrid search are not meaningful without that step.
 
         Args:
             query_text: The text to query for.
