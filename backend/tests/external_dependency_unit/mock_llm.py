@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any
 from typing import cast
+from typing import Literal
 from unittest.mock import patch
 
 from pydantic import BaseModel
@@ -19,7 +20,9 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.model_response import ChatCompletionDeltaToolCall
 from onyx.llm.model_response import Delta
+from onyx.llm.model_response import FunctionCall
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import StreamingChoice
@@ -32,7 +35,7 @@ class LLMResponseType(str, Enum):
 
 
 class LLMResponse(abc.ABC, BaseModel):
-    type: LLMResponseType = ""
+    type: str = ""
 
     @abc.abstractmethod
     def num_tokens(self) -> int:
@@ -40,7 +43,7 @@ class LLMResponse(abc.ABC, BaseModel):
 
 
 class LLMReasoningResponse(LLMResponse):
-    type: LLMResponseType = LLMResponseType.REASONING
+    type: Literal["resasoning"] = LLMResponseType.REASONING.value
     reasoning_tokens: list[str]
 
     def num_tokens(self) -> int:
@@ -48,7 +51,7 @@ class LLMReasoningResponse(LLMResponse):
 
 
 class LLMAnswerResponse(LLMResponse):
-    type: LLMResponseType = LLMResponseType.ANSWER
+    type: Literal["answer"] = LLMResponseType.ANSWER.value
     answer_tokens: list[str]
 
     def num_tokens(self) -> int:
@@ -56,7 +59,7 @@ class LLMAnswerResponse(LLMResponse):
 
 
 class LLMToolCallResponse(LLMResponse):
-    type: LLMResponseType = LLMResponseType.TOOL_CALL
+    type: Literal["tool_call"] = LLMResponseType.TOOL_CALL.value
     tool_name: str
     tool_call_id: str
     tool_call_argument_tokens: list[str]
@@ -75,7 +78,7 @@ class StreamItem(BaseModel):
 
 
 def _response_to_stream_items(response: LLMResponse) -> list[StreamItem]:
-    match response.type:
+    match LLMResponseType(response.type):
         case LLMResponseType.REASONING:
             response = cast(LLMReasoningResponse, response)
             return [
@@ -135,22 +138,25 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
             for tc_data in data:
                 if tc_data["tool_call_id"] is not None:
                     tool_calls.append(
-                        {
-                            "index": tc_data["index"],
-                            "id": tc_data["tool_call_id"],
-                            "function": {
-                                "name": tc_data["tool_name"],
-                                "arguments": "",
-                            },
-                        }
+                        ChatCompletionDeltaToolCall(
+                            id=tc_data["tool_call_id"],
+                            index=tc_data["index"],
+                            function=FunctionCall(
+                                arguments="",
+                                name=tc_data["tool_name"],
+                            ),
+                        )
                     )
                 else:
                     tool_calls.append(
-                        {
-                            "index": tc_data["index"],
-                            "id": None,
-                            "function": {"arguments": tc_data["arguments"]},
-                        }
+                        ChatCompletionDeltaToolCall(
+                            index=tc_data["index"],
+                            id=None,
+                            function=FunctionCall(
+                                arguments=tc_data["arguments"],
+                                name=None,
+                            ),
+                        )
                     )
             return Delta(tool_calls=tool_calls)
         else:
@@ -159,16 +165,25 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
             if data["tool_call_id"] is not None:
                 return Delta(
                     tool_calls=[
-                        {
-                            "id": data["tool_call_id"],
-                            "function": {"name": data["tool_name"], "arguments": ""},
-                        }
+                        ChatCompletionDeltaToolCall(
+                            id=data["tool_call_id"],
+                            function=FunctionCall(
+                                name=data["tool_name"],
+                                arguments="",
+                            ),
+                        )
                     ]
                 )
             else:
                 return Delta(
                     tool_calls=[
-                        {"id": None, "function": {"arguments": data["arguments"]}}
+                        ChatCompletionDeltaToolCall(
+                            id=None,
+                            function=FunctionCall(
+                                name=None,
+                                arguments=data["arguments"],
+                            ),
+                        )
                     ]
                 )
     else:
@@ -195,7 +210,7 @@ class MockLLMController(abc.ABC):
 
 
 class MockLLM(LLM, MockLLMController):
-    def __init__(self):
+    def __init__(self) -> None:
         self.stream_controller = SyncStreamController()
 
     def add_response(self, response: LLMResponse) -> None:

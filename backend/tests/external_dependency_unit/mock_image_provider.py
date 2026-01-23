@@ -29,7 +29,7 @@ class ImageGenerationProviderController(abc.ABC):
 class MockImageGenerationProvider(
     ImageGenerationProvider, ImageGenerationProviderController
 ):
-    def __init__(self):
+    def __init__(self) -> None:
         self._images: list[str] = []
         self._delays: list[float] = []
 

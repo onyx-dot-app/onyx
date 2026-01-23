@@ -1,4 +1,5 @@
 import abc
+from collections.abc import Generator
 from collections.abc import Sequence
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -31,7 +32,7 @@ class ContentProviderController(abc.ABC):
 
 
 class MockContentProvider(WebContentProvider, ContentProviderController):
-    def __init__(self):
+    def __init__(self) -> None:
         self._contents: list[MockWebContent] = []
 
     def add_content(self, web_content: MockWebContent) -> None:
@@ -48,7 +49,7 @@ class MockContentProvider(WebContentProvider, ContentProviderController):
 
 
 @contextmanager
-def use_mock_content_provider() -> ContentProviderController:
+def use_mock_content_provider() -> Generator[ContentProviderController, None, None]:
     content_provider = MockContentProvider()
 
     with patch(

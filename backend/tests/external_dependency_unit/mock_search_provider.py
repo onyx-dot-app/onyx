@@ -1,5 +1,6 @@
 import abc
 from collections import defaultdict
+from collections.abc import Generator
 from collections.abc import Sequence
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -36,7 +37,7 @@ class WebProviderController(abc.ABC):
 
 
 class MockWebProvider(WebSearchProvider, WebProviderController):
-    def __init__(self):
+    def __init__(self) -> None:
         self._results: dict[str, list[MockWebSearchResult]] = defaultdict(list)
 
     def add_results(self, query: str, results: list[MockWebSearchResult]) -> None:
@@ -46,6 +47,9 @@ class MockWebProvider(WebSearchProvider, WebProviderController):
         return list(
             map(lambda result: result.to_web_search_result(), self._results[query])
         )
+
+    def test_connection(self) -> dict[str, str]:
+        return {}
 
 
 def add_web_provider_to_db(db_session: Session) -> None:
@@ -77,7 +81,7 @@ def delete_web_provider_from_db(db_session: Session) -> None:
 @contextmanager
 def use_mock_web_provider(
     db_session: Session,
-) -> WebProviderController:
+) -> Generator[WebProviderController, None, None]:
     web_provider = MockWebProvider()
 
     # Write the tool to the database
