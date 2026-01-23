@@ -15,6 +15,7 @@ import {
 import CardSection from "@/components/admin/CardSection";
 import { RenderField } from "@/app/admin/connectors/[connector]/pages/FieldRendering";
 import { createBuildConnector } from "@/app/build/v1/configure/utils/createBuildConnector";
+import { useUser } from "@/components/user/UserProvider";
 
 interface ConnectorConfigStepProps {
   connectorType: ValidSources;
@@ -33,6 +34,7 @@ function ConnectorConfigForm({
 }: ConnectorConfigStepProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { values } = useFormikContext<Record<string, any>>();
+  const { user } = useUser();
 
   const config =
     connectorConfigs[connectorType as keyof typeof connectorConfigs];
@@ -48,6 +50,7 @@ function ConnectorConfigForm({
         credential,
         connectorSpecificConfig: connectorConfig,
         connectorName: connector_name,
+        userEmail: user?.email,
       });
 
       if (!result.success) {
@@ -111,6 +114,12 @@ function ConnectorConfigForm({
   );
 }
 
+function getUserIdentifier(email?: string): string {
+  if (!email) return "";
+  const prefix = email.split("@")[0] || email;
+  return `-${prefix.replace(/[^a-zA-Z0-9]/g, "-")}`;
+}
+
 export default function ConnectorConfigStep({
   connectorType,
   credential,
@@ -118,10 +127,12 @@ export default function ConnectorConfigStep({
   onBack,
   setPopup,
 }: ConnectorConfigStepProps) {
+  const { user } = useUser();
   const baseInitialValues = createConnectorInitialValues(connectorType as any);
+  const userIdentifier = getUserIdentifier(user?.email);
   const initialValues: Record<string, any> = {
     ...baseInitialValues,
-    connector_name: `build-mode-${connectorType}`,
+    connector_name: `build-mode-${connectorType}${userIdentifier}`,
   };
 
   return (

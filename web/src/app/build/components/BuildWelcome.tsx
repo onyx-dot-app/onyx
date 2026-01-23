@@ -1,9 +1,11 @@
 "use client";
 
+import { useRef } from "react";
 import { BuildFile } from "@/app/build/contexts/UploadFilesContext";
 import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
-import InputBar from "@/app/build/components/InputBar";
+import InputBar, { InputBarHandle } from "@/app/build/components/InputBar";
+import SuggestedPrompts from "@/app/build/components/SuggestedPrompts";
 
 interface BuildWelcomeProps {
   onSubmit: (
@@ -26,25 +28,29 @@ export default function BuildWelcome({
   isRunning,
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
+  const inputBarRef = useRef<InputBarHandle>(null);
+
+  const handlePromptClick = (promptText: string) => {
+    inputBarRef.current?.setMessage(promptText);
+  };
+
   return (
     <div className="h-full flex flex-col items-center justify-center px-4">
-      <div className="flex flex-col items-center gap-4 mb-8">
+      <div className="flex flex-col items-center gap-4 mb-6">
         <Logo folded size={48} />
         <Text headingH2 text05>
           What would you like to build?
         </Text>
-        <Text secondaryBody text03 className="text-center max-w-md">
-          Describe your task and I'll execute it in an isolated environment. You
-          can build web apps, run scripts, process data, and more.
-        </Text>
       </div>
       <div className="w-full max-w-2xl">
         <InputBar
+          ref={inputBarRef}
           onSubmit={onSubmit}
           isRunning={isRunning}
           placeholder="Create a React app that shows a dashboard..."
           sandboxInitializing={sandboxInitializing}
         />
+        <SuggestedPrompts onPromptClick={handlePromptClick} />
       </div>
     </div>
   );

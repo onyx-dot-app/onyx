@@ -9,6 +9,7 @@ export interface CreateBuildConnectorParams {
   credential: Credential<any>;
   connectorSpecificConfig?: Record<string, any>;
   connectorName?: string;
+  userEmail?: string;
 }
 
 export interface CreateBuildConnectorResult {
@@ -17,15 +18,25 @@ export interface CreateBuildConnectorResult {
   connectorId?: number;
 }
 
+function getUserIdentifier(email?: string): string {
+  if (!email) return "";
+  // Extract the part before @ and sanitize it
+  const prefix = email.split("@")[0] || email;
+  // Replace any non-alphanumeric characters with dashes
+  return `-${prefix.replace(/[^a-zA-Z0-9]/g, "-")}`;
+}
+
 export async function createBuildConnector({
   connectorType,
   credential,
   connectorSpecificConfig = {},
   connectorName,
+  userEmail,
 }: CreateBuildConnectorParams): Promise<CreateBuildConnectorResult> {
   const config =
     connectorConfigs[connectorType as keyof typeof connectorConfigs];
-  const name = connectorName || `build-mode-${connectorType}`;
+  const userIdentifier = getUserIdentifier(userEmail);
+  const name = connectorName || `build-mode-${connectorType}${userIdentifier}`;
 
   const filteredConfig: Record<string, any> = {};
   Object.entries(connectorSpecificConfig).forEach(([key, value]) => {
