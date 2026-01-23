@@ -1,0 +1,85 @@
+/* General Layout Components for Tables */
+
+/* Table Row Layout */
+.table-row-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-radius: var(--radius-08);
+  width: 100%;
+  min-width: 0;
+}
+
+.table-row-layout:hover {
+  background-color: var(--background-tint-01);
+}
+
+.table-row-layout[data-selected="true"] {
+  background-color: var(--background-tint-01);
+}
+
+/* Table Cell Layout */
+.table-cell-layout {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.table-cell-layout[data-flex="true"] {
+  flex: 1;
+}
+
+.table-cell-layout[data-fixed="true"] {
+  flex-shrink: 0;
+}
+
+/* Sidebar Layout */
+.sidebar-layout {
+  display: flex;
+  flex-direction: column;
+  width: 10rem;
+  flex-shrink: 0;
+  gap: 0.25rem;
+}
+
+/* Two Column Layout */
+.two-column-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Content Column Layout */
+.content-column-layout {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Hidden Input */
+.hidden-input {
+  display: none;
+}
+
+/* Checkbox Cell - fixed width for checkboxes */
+.checkbox-cell-layout {
+  width: 1.5rem;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* Source Icons Row */
+.source-icons-layout {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.source-icons-layout > svg {
+  width: 1rem;
+  height: 1rem;
+}
