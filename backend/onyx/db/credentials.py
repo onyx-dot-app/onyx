@@ -9,7 +9,6 @@ from sqlalchemy.sql.expression import and_
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
@@ -48,7 +47,7 @@ def _add_user_filters(
 ) -> Select:
     """Attaches filters to the statement to ensure that the user can only
     access the appropriate credentials"""
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         raise ValueError("Anonymous users are not allowed to access credentials")
 
     if user.role == UserRole.ADMIN:

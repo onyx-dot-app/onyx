@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -146,7 +145,7 @@ def validate_object_creation_for_user(
         return
 
     # Anonymous users and admins are allowed
-    if str(user.id) == ANONYMOUS_USER_UUID or user.role == UserRole.ADMIN:
+    if user.is_anonymous or user.role == UserRole.ADMIN:
         return
 
     # Allow curators and global curators to create public objects
@@ -483,11 +482,8 @@ def _validate_curator_relationship_update_requester(
     to update the curator relationship for the target user in the given user group.
     """
 
-    # Anonymous users and admins are allowed
-    if (
-        str(user_making_change.id) == ANONYMOUS_USER_UUID
-        or user_making_change.role == UserRole.ADMIN
-    ):
+    # Admins can update curator relationships for any group
+    if user_making_change.role == UserRole.ADMIN:
         return
 
     # check if the user making the change is a curator in the group they are changing the curator relationship for

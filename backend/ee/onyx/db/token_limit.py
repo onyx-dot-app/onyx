@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimit__UserGroup
@@ -23,7 +22,7 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         return stmt
 
     # If anonymous user, only show global/public token_rate_limits
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         where_clause = TokenRateLimit.scope == TokenRateLimitScope.GLOBAL
         return stmt.where(where_clause)
 

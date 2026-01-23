@@ -14,7 +14,6 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
@@ -54,7 +53,7 @@ def _add_user_filters(
         return stmt
 
     # If anonymous user, only show public cc_pairs
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
         return stmt.where(where_clause)
 

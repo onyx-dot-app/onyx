@@ -35,7 +35,6 @@ from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -510,7 +509,7 @@ def handle_new_chat_message(
 
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=tenant_id if str(user.id) == ANONYMOUS_USER_UUID else user.email,
+        distinct_id=tenant_id if user.is_anonymous else user.email,
         event=MilestoneRecordType.RAN_QUERY,
     )
 
@@ -590,7 +589,7 @@ def handle_send_chat_message(
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=tenant_id if str(user.id) == ANONYMOUS_USER_UUID else user.email,
+        distinct_id=tenant_id if user.is_anonymous else user.email,
         event=MilestoneRecordType.RAN_QUERY,
     )
 

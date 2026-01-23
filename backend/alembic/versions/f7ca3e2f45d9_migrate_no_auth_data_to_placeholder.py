@@ -29,10 +29,13 @@ depends_on = None
 NO_AUTH_PLACEHOLDER_USER_UUID = "00000000-0000-0000-0000-000000000001"
 NO_AUTH_PLACEHOLDER_USER_EMAIL = "no-auth-placeholder@onyx.app"
 
+# Trigger and function names
+TRIGGER_NAME = "trg_migrate_no_auth_data"
+FUNCTION_NAME = "migrate_no_auth_data_to_user"
 
 # Trigger function that migrates data from placeholder to first real user
-MIGRATE_NO_AUTH_TRIGGER_FUNCTION = """
-CREATE OR REPLACE FUNCTION migrate_no_auth_data_to_user()
+MIGRATE_NO_AUTH_TRIGGER_FUNCTION = f"""
+CREATE OR REPLACE FUNCTION {FUNCTION_NAME}()
 RETURNS TRIGGER AS $$
 DECLARE
     placeholder_uuid UUID := '00000000-0000-0000-0000-000000000001'::uuid;
@@ -69,8 +72,8 @@ BEGIN
     IF NOT FOUND THEN
         -- Either placeholder doesn't exist or another transaction has it locked
         -- Either way, drop the trigger and return without making admin
-        EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', schema_name);
-        EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', schema_name);
+        EXECUTE format('DROP TRIGGER IF EXISTS {TRIGGER_NAME} ON %I."user"', schema_name);
+        EXECUTE format('DROP FUNCTION IF EXISTS %I.{FUNCTION_NAME}()', schema_name);
         RETURN NULL;
     END IF;
 
@@ -106,19 +109,19 @@ BEGIN
     DELETE FROM "user" WHERE id = placeholder_uuid;
 
     -- Drop the trigger and function (self-cleanup)
-    EXECUTE format('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON %I."user"', schema_name);
-    EXECUTE format('DROP FUNCTION IF EXISTS %I.migrate_no_auth_data_to_user()', schema_name);
+    EXECUTE format('DROP TRIGGER IF EXISTS {TRIGGER_NAME} ON %I."user"', schema_name);
+    EXECUTE format('DROP FUNCTION IF EXISTS %I.{FUNCTION_NAME}()', schema_name);
 
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 """
 
-MIGRATE_NO_AUTH_TRIGGER = """
-CREATE TRIGGER trg_migrate_no_auth_data
+MIGRATE_NO_AUTH_TRIGGER = f"""
+CREATE TRIGGER {TRIGGER_NAME}
 AFTER INSERT ON "user"
 FOR EACH ROW
-EXECUTE FUNCTION migrate_no_auth_data_to_user();
+EXECUTE FUNCTION {FUNCTION_NAME}();
 """
 
 
@@ -173,33 +176,24 @@ def upgrade() -> None:
     if not has_null_records:
         return
 
-    # Check if placeholder user already exists
-    result = connection.execute(
-        sa.text('SELECT id FROM "user" WHERE id = :user_id'),
-        {"user_id": NO_AUTH_PLACEHOLDER_USER_UUID},
+    # Create the placeholder user
+    connection.execute(
+        sa.text(
+            """
+            INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
+            VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
+            """
+        ),
+        {
+            "id": NO_AUTH_PLACEHOLDER_USER_UUID,
+            "email": NO_AUTH_PLACEHOLDER_USER_EMAIL,
+            "hashed_password": "",  # Empty password - user cannot log in
+            "is_active": False,  # Inactive - user cannot log in
+            "is_superuser": False,
+            "is_verified": False,
+            "role": "BASIC",
+        },
     )
-    if result.fetchone():
-        print("Placeholder user already exists. Skipping creation.")
-    else:
-        # Create the placeholder user
-        # Using raw SQL to avoid ORM dependencies
-        connection.execute(
-            sa.text(
-                """
-                INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
-                VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
-                """
-            ),
-            {
-                "id": NO_AUTH_PLACEHOLDER_USER_UUID,
-                "email": NO_AUTH_PLACEHOLDER_USER_EMAIL,
-                "hashed_password": "",  # Empty password - user cannot log in
-                "is_active": False,  # Inactive - user cannot log in
-                "is_superuser": False,
-                "is_verified": False,
-                "role": "BASIC",
-            },
-        )
 
     # Assign NULL user_id records to the placeholder user
     for table in tables_to_check:
@@ -238,15 +232,15 @@ def downgrade() -> None:
     Drop trigger and function, set placeholder user's records back to NULL,
     and delete the placeholder user.
     """
+    # Skip in multi-tenant mode for consistency with upgrade
+    if MULTI_TENANT:
+        return
+
     connection = op.get_bind()
 
     # Drop trigger and function if they exist (they may have already self-destructed)
-    connection.execute(
-        sa.text('DROP TRIGGER IF EXISTS trg_migrate_no_auth_data ON "user"')
-    )
-    connection.execute(
-        sa.text("DROP FUNCTION IF EXISTS migrate_no_auth_data_to_user()")
-    )
+    connection.execute(sa.text(f'DROP TRIGGER IF EXISTS {TRIGGER_NAME} ON "user"'))
+    connection.execute(sa.text(f"DROP FUNCTION IF EXISTS {FUNCTION_NAME}()"))
 
     tables_to_update = [
         "chat_session",

@@ -19,7 +19,6 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
@@ -97,7 +96,7 @@ def _add_user_filters(
     """
 
     # Anonymous users only see public Personas
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         where_clause = Persona.is_public == True  # noqa: E712
         return stmt.where(where_clause)
 

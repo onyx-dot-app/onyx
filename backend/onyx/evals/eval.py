@@ -395,11 +395,11 @@ def _get_answer_with_tools(
                     ),
                 )
 
-            user = (
-                get_user_by_email(configuration.search_permissions_email, db_session)
-                if configuration.search_permissions_email
-                else None
-            )
+            user = get_user_by_email(configuration.search_permissions_email, db_session)
+            if not user:
+                raise ValueError(
+                    f"User not found for email: {configuration.search_permissions_email}"
+                )
 
             forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
             request = SendMessageRequest(
@@ -491,13 +491,13 @@ def _get_multi_turn_answer_with_tools(
         with SessionLocal() as db_session:
             full_configuration = configuration.get_configuration(db_session)
 
-            user = (
-                get_user_by_email(configuration.search_permissions_email, db_session)
-                if configuration.search_permissions_email
-                else None
-            )
+            user = get_user_by_email(configuration.search_permissions_email, db_session)
+            if not user:
+                raise ValueError(
+                    f"User not found for email: {configuration.search_permissions_email}"
+                )
             # Cache user_id to avoid SQLAlchemy expiration issues
-            user_id = user.id if user else None
+            user_id = user.id
 
             # Create a single chat session for all turns
             chat_session = create_chat_session(

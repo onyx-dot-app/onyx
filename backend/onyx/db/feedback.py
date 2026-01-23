@@ -13,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.db.chat import get_chat_message
@@ -83,7 +82,7 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     """
 
     # Anonymous users only see public documents
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         where_clause = CCPair.access_type == AccessType.PUBLIC
         return stmt.where(where_clause)
 

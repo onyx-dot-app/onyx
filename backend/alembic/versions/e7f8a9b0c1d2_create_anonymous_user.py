@@ -24,6 +24,17 @@ depends_on = None
 ANONYMOUS_USER_UUID = "00000000-0000-0000-0000-000000000002"
 ANONYMOUS_USER_EMAIL = "anonymous@onyx.app"
 
+# Tables with user_id foreign key that may need migration
+TABLES_WITH_USER_ID = [
+    "chat_session",
+    "credential",
+    "document_set",
+    "persona",
+    "tool",
+    "notification",
+    "inputprompt",
+]
+
 
 def upgrade() -> None:
     """
@@ -32,46 +43,27 @@ def upgrade() -> None:
     """
     connection = op.get_bind()
 
-    # Check if anonymous user already exists
-    result = connection.execute(
-        sa.text('SELECT id FROM "user" WHERE id = :user_id'),
-        {"user_id": ANONYMOUS_USER_UUID},
+    # Create the anonymous user
+    connection.execute(
+        sa.text(
+            """
+            INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
+            VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
+            """
+        ),
+        {
+            "id": ANONYMOUS_USER_UUID,
+            "email": ANONYMOUS_USER_EMAIL,
+            "hashed_password": "",  # Empty password - user cannot log in directly
+            "is_active": True,  # Active so it can be used for anonymous access
+            "is_superuser": False,
+            "is_verified": True,  # Verified since no email verification needed
+            "role": "BASIC",  # Anonymous users have basic role
+        },
     )
-    if result.fetchone():
-        print("Anonymous user already exists. Skipping creation.")
-    else:
-        # Create the anonymous user
-        connection.execute(
-            sa.text(
-                """
-                INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
-                VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
-                """
-            ),
-            {
-                "id": ANONYMOUS_USER_UUID,
-                "email": ANONYMOUS_USER_EMAIL,
-                "hashed_password": "",  # Empty password - user cannot log in directly
-                "is_active": True,  # Active so it can be used for anonymous access
-                "is_superuser": False,
-                "is_verified": True,  # Verified since no email verification needed
-                "role": "BASIC",  # Anonymous users have basic role
-            },
-        )
-        print(f"Created anonymous user: {ANONYMOUS_USER_EMAIL}")
 
     # Migrate any remaining user_id=NULL records to anonymous user
-    tables_to_check = [
-        "chat_session",
-        "credential",
-        "document_set",
-        "persona",
-        "tool",
-        "notification",
-        "inputprompt",
-    ]
-
-    for table in tables_to_check:
+    for table in TABLES_WITH_USER_ID:
         try:
             # Exclude public credential (id=0) which must remain user_id=NULL
             # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
@@ -109,19 +101,8 @@ def downgrade() -> None:
     """
     connection = op.get_bind()
 
-    # Note: agent__search_metrics was dropped in migration a1b2c3d4e5f7
-    tables_to_update = [
-        "chat_session",
-        "credential",
-        "document_set",
-        "persona",
-        "tool",
-        "notification",
-        "inputprompt",
-    ]
-
     # Set records back to NULL
-    for table in tables_to_update:
+    for table in TABLES_WITH_USER_ID:
         try:
             connection.execute(
                 sa.text(

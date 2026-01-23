@@ -47,6 +47,7 @@ from sqlalchemy import PrimaryKeyConstraint
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from onyx.configs.constants import (
+    ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
     FederatedConnectorSource,
     MilestoneRecordType,
@@ -279,6 +280,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         Returns True if the user has at least one OAuth (or OIDC) account.
         """
         return not bool(self.oauth_accounts)
+
+    @property
+    def is_anonymous(self) -> bool:
+        """Returns True if this is the anonymous user."""
+        return str(self.id) == ANONYMOUS_USER_UUID
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):

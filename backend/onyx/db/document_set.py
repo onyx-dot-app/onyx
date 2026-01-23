@@ -13,7 +13,6 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
@@ -64,7 +63,7 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     """
 
     # Anonymous users only see public DocumentSets
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
         return stmt.where(where_clause)
 

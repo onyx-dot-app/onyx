@@ -135,10 +135,8 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def is_user_admin(user: User | None) -> bool:
-    if user and user.role == UserRole.ADMIN:
-        return True
-    return False
+def is_user_admin(user: User) -> bool:
+    return user.role == UserRole.ADMIN
 
 
 def verify_auth_setting() -> None:

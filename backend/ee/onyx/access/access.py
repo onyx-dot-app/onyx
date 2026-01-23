@@ -12,7 +12,6 @@ from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_gro
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
@@ -125,7 +124,7 @@ def _get_acl_for_user(user: User, db_session: Session) -> set[str]:
 
     NOTE: is imported in onyx.access.access by `fetch_versioned_implementation`
     DO NOT REMOVE."""
-    is_anonymous = str(user.id) == ANONYMOUS_USER_UUID
+    is_anonymous = user.is_anonymous
     db_user_groups = (
         [] if is_anonymous else fetch_user_groups_for_user(db_session, user.id)
     )

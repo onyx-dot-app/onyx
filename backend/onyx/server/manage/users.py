@@ -37,7 +37,6 @@ from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
-from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
@@ -606,7 +605,7 @@ def get_current_auth_token_creation_redis(
     Despite the function name, it returns the token creation time, not the expiration time.
     """
     # Anonymous users don't have auth tokens
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         return None
     try:
         # Get the token from the request
@@ -641,7 +640,7 @@ def get_current_auth_token_creation_redis(
 
 def get_current_token_creation(user: User, db_session: Session) -> datetime | None:
     # Anonymous users don't have auth tokens
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         return None
 
     access_token = get_latest_access_token_for_user(user.id, db_session)
@@ -659,7 +658,7 @@ def verify_user_logged_in(
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
     # If anonymous user, return the fake UserInfo (maintains backward compatibility)
-    if str(user.id) == ANONYMOUS_USER_UUID:
+    if user.is_anonymous:
         store = get_kv_store()
         return fetch_anonymous_user_info(store, anonymous_user_enabled=True)
 
