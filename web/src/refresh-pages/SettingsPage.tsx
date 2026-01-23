@@ -1042,7 +1042,6 @@ function AccountsAccessSettings() {
   const { popup, setPopup } = usePopup();
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  // const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
   const passwordValidationSchema = Yup.object().shape({
     currentPassword: Yup.string().required("Current password is required"),
@@ -1208,16 +1207,6 @@ function AccountsAccessSettings() {
     [setPopup]
   );
 
-  if (!showPasswordSection && !showTokensSection) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-sm text-muted-foreground">
-          No account settings available.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <>
       {popup}
@@ -1371,6 +1360,7 @@ function AccountsAccessSettings() {
               title="Email"
               description="Your account email address."
               center
+              cursorPointer={false}
             >
               <Text>{user?.email ?? "anonymous"}</Text>
             </InputLayouts.Horizontal>
