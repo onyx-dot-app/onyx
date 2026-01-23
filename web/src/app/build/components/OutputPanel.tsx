@@ -270,149 +270,158 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       {/* Tab List - Chrome-style tabs */}
       <div className="flex flex-col w-full">
         {/* Tabs row */}
-        <div className="flex items-end gap-1.5 w-full pt-1.5 px-2 bg-background-tint-03 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            className="w-2.5 h-2.5 rounded-full bg-red-500 hover:bg-red-400 ml-2 mr-3 mb-3.5 flex-shrink-0 transition-colors"
-            aria-label="Close panel"
-          />
-          {/* Pinned tabs */}
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.value;
-            // Disable artifacts tab when no session
-            const isDisabled = tab.value === "artifacts" && !session;
-            return (
-              <button
-                key={tab.value}
-                onClick={() => !isDisabled && handlePinnedTabClick(tab.value)}
-                disabled={isDisabled}
-                title={
-                  isDisabled
-                    ? "Start building something to see artifacts!"
-                    : undefined
-                }
-                className={cn(
-                  "relative inline-flex items-center justify-center gap-2 px-5",
-                  "max-w-[15%] min-w-fit",
-                  isDisabled
-                    ? "text-text-02 bg-transparent cursor-not-allowed py-1 mb-1"
-                    : isActive
+        <div className="flex items-end w-full pt-1.5 bg-background-tint-03">
+          {/* Close button - sticky on left */}
+          <div className="flex items-end pl-4 pr-4 flex-shrink-0">
+            <button
+              onClick={onClose}
+              className="w-2.5 h-2.5 rounded-full bg-red-500 hover:bg-red-400 mb-3.5 transition-colors"
+              aria-label="Close panel"
+            />
+          </div>
+          {/* Scrollable tabs container */}
+          <div className="flex items-end gap-1.5 flex-1 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {/* Pinned tabs */}
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.value;
+              // Disable artifacts tab when no session
+              const isDisabled = tab.value === "artifacts" && !session;
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => !isDisabled && handlePinnedTabClick(tab.value)}
+                  disabled={isDisabled}
+                  title={
+                    isDisabled
+                      ? "Start building something to see artifacts!"
+                      : undefined
+                  }
+                  className={cn(
+                    "relative inline-flex items-center justify-center gap-2 px-5",
+                    "max-w-[15%] min-w-fit",
+                    isDisabled
+                      ? "text-text-02 bg-transparent cursor-not-allowed py-1 mb-1"
+                      : isActive
+                        ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
+                        : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
+                  )}
+                >
+                  {/* Left curved joint */}
+                  {isActive && (
+                    <div
+                      className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                      style={{
+                        maskImage:
+                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                        WebkitMaskImage:
+                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                      }}
+                    />
+                  )}
+                  <Icon
+                    size={16}
+                    className={cn(
+                      "stroke-current flex-shrink-0",
+                      isDisabled
+                        ? "stroke-text-02"
+                        : isActive
+                          ? "stroke-text-04"
+                          : "stroke-text-03"
+                    )}
+                  />
+                  <Text
+                    className={cn("truncate", isDisabled && "text-text-02")}
+                  >
+                    {tab.label}
+                  </Text>
+                  {/* Right curved joint */}
+                  {isActive && (
+                    <div
+                      className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                      style={{
+                        maskImage:
+                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                        WebkitMaskImage:
+                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                      }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Separator between pinned and preview tabs */}
+            {filePreviewTabs.length > 0 && (
+              <div className="w-px h-5 bg-border-02 mx-2 mb-1 self-center" />
+            )}
+
+            {/* Preview tabs */}
+            {filePreviewTabs.map((previewTab) => {
+              const isActive = activeFilePreviewPath === previewTab.path;
+              return (
+                <button
+                  key={previewTab.path}
+                  onClick={() => handlePreviewTabClick(previewTab.path)}
+                  className={cn(
+                    "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2",
+                    "max-w-[150px] min-w-fit",
+                    isActive
                       ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
                       : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
-                )}
-              >
-                {/* Left curved joint */}
-                {isActive && (
-                  <div
-                    className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                    style={{
-                      maskImage:
-                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                      WebkitMaskImage:
-                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                    }}
-                  />
-                )}
-                <Icon
-                  size={16}
-                  className={cn(
-                    "stroke-current flex-shrink-0",
-                    isDisabled
-                      ? "stroke-text-02"
-                      : isActive
-                        ? "stroke-text-04"
-                        : "stroke-text-03"
                   )}
-                />
-                <Text className={cn("truncate", isDisabled && "text-text-02")}>
-                  {tab.label}
-                </Text>
-                {/* Right curved joint */}
-                {isActive && (
-                  <div
-                    className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                    style={{
-                      maskImage:
-                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                      WebkitMaskImage:
-                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                    }}
-                  />
-                )}
-              </button>
-            );
-          })}
-
-          {/* Separator between pinned and preview tabs */}
-          {filePreviewTabs.length > 0 && (
-            <div className="w-px h-5 bg-border-02 mx-2 mb-1 self-center" />
-          )}
-
-          {/* Preview tabs */}
-          {filePreviewTabs.map((previewTab) => {
-            const isActive = activeFilePreviewPath === previewTab.path;
-            return (
-              <button
-                key={previewTab.path}
-                onClick={() => handlePreviewTabClick(previewTab.path)}
-                className={cn(
-                  "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2",
-                  "max-w-[150px] min-w-fit",
-                  isActive
-                    ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
-                    : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
-                )}
-              >
-                {/* Left curved joint */}
-                {isActive && (
-                  <div
-                    className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                    style={{
-                      maskImage:
-                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                      WebkitMaskImage:
-                        "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                    }}
-                  />
-                )}
-                <SvgFileText
-                  size={14}
-                  className={cn(
-                    "stroke-current flex-shrink-0",
-                    isActive ? "stroke-text-04" : "stroke-text-03"
-                  )}
-                />
-                <Text className="truncate text-sm">{previewTab.fileName}</Text>
-                {/* Close button */}
-                <button
-                  onClick={(e) => handlePreviewTabClose(e, previewTab.path)}
-                  className={cn(
-                    "flex-shrink-0 p-0.5 rounded hover:bg-background-tint-03 transition-colors",
-                    isActive
-                      ? "opacity-100"
-                      : "opacity-0 group-hover:opacity-100"
-                  )}
-                  aria-label={`Close ${previewTab.fileName}`}
                 >
-                  <SvgX size={12} className="stroke-text-03" />
-                </button>
-                {/* Right curved joint */}
-                {isActive && (
-                  <div
-                    className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                    style={{
-                      maskImage:
-                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                      WebkitMaskImage:
-                        "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                    }}
+                  {/* Left curved joint */}
+                  {isActive && (
+                    <div
+                      className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                      style={{
+                        maskImage:
+                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                        WebkitMaskImage:
+                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                      }}
+                    />
+                  )}
+                  <SvgFileText
+                    size={14}
+                    className={cn(
+                      "stroke-current flex-shrink-0",
+                      isActive ? "stroke-text-04" : "stroke-text-03"
+                    )}
                   />
-                )}
-              </button>
-            );
-          })}
+                  <Text className="truncate text-sm">
+                    {previewTab.fileName}
+                  </Text>
+                  {/* Close button */}
+                  <button
+                    onClick={(e) => handlePreviewTabClose(e, previewTab.path)}
+                    className={cn(
+                      "flex-shrink-0 p-0.5 rounded hover:bg-background-tint-03 transition-colors",
+                      isActive
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100"
+                    )}
+                    aria-label={`Close ${previewTab.fileName}`}
+                  >
+                    <SvgX size={12} className="stroke-text-03" />
+                  </button>
+                  {/* Right curved joint */}
+                  {isActive && (
+                    <div
+                      className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                      style={{
+                        maskImage:
+                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                        WebkitMaskImage:
+                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                      }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
         {/* White bar connecting tabs to content */}
         <div className="h-2 w-full bg-background-neutral-00" />
