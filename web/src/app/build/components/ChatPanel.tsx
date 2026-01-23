@@ -85,9 +85,6 @@ export default function BuildChatPanel({
   const appendMessageToSession = useBuildSessionStore(
     (state) => state.appendMessageToSession
   );
-  const refreshSessionHistory = useBuildSessionStore(
-    (state) => state.refreshSessionHistory
-  );
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
@@ -167,9 +164,10 @@ export default function BuildChatPanel({
             `/build/v1?${BUILD_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
           );
 
-          // 4. Name the session and refresh history
-          setTimeout(() => nameBuildSession(newSessionId), 200);
-          await refreshSessionHistory();
+          // 4. Schedule naming after delay (message will be saved by then)
+          // Note: Don't call refreshSessionHistory() here - it would overwrite the
+          // optimistic update from consumePreProvisionedSession() before the message is saved
+          setTimeout(() => nameBuildSession(newSessionId), 500);
 
           // 5. Stream the response (uses session ID directly, not currentSessionId)
           await streamMessage(newSessionId, message);
@@ -187,7 +185,6 @@ export default function BuildChatPanel({
       createNewSession,
       createSession,
       appendMessageToSession,
-      refreshSessionHistory,
       nameBuildSession,
       router,
     ]

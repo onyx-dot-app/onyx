@@ -32,6 +32,11 @@ from onyx.db.llm import fetch_default_provider
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import User
+from onyx.llm.factory import get_default_llm
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import SystemMessage
+from onyx.llm.models import UserMessage
+from onyx.llm.utils import llm_response_to_string
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import FileSystemEntry
 from onyx.server.features.build.api.packet_logger import get_packet_logger
@@ -510,7 +515,7 @@ class SessionManager:
 
     def _generate_session_name(self, session_id: UUID) -> str:
         """
-        Generate a session name based on the first user message.
+        Generate a session name using LLM based on the first user message.
 
         Args:
             session_id: The session UUID
@@ -540,9 +545,33 @@ class SessionManager:
         if not user_message:
             return f"Build Session {str(session_id)[:8]}"
 
-        # For now, just use first 40 chars of user message
-        # TODO: Implement LLM-based name generation
-        return user_message[:40].strip() + ("..." if len(user_message) > 40 else "")
+        # Use LLM to generate a concise session name
+        try:
+            llm = get_default_llm()
+            prompt_messages = [
+                SystemMessage(content=BUILD_NAMING_SYSTEM_PROMPT),
+                UserMessage(
+                    content=BUILD_NAMING_USER_PROMPT.format(
+                        user_message=user_message[:500]  # Limit input size
+                    )
+                ),
+            ]
+            response = llm.invoke(prompt_messages, reasoning_effort=ReasoningEffort.OFF)
+            generated_name = llm_response_to_string(response).strip().strip('"')
+
+            # Ensure the name isn't too long (max 50 chars)
+            if len(generated_name) > 50:
+                generated_name = generated_name[:47] + "..."
+
+            return (
+                generated_name
+                if generated_name
+                else f"Build Session {str(session_id)[:8]}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to generate session name with LLM: {e}")
+            # Fallback to simple truncation
+            return user_message[:40].strip() + ("..." if len(user_message) > 40 else "")
 
     def delete_session(
         self,

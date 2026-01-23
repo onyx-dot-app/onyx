@@ -1174,11 +1174,21 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     try {
       // Generate name using LLM based on first user message
       const generatedName = await generateSessionName(sessionId);
-      // Update session with the generated name
+
+      // Optimistically update the session title in sessionHistory immediately
+      // This triggers the typewriter animation in the sidebar
+      set((state) => ({
+        sessionHistory: state.sessionHistory.map((item) =>
+          item.id === sessionId ? { ...item, title: generatedName } : item
+        ),
+      }));
+
+      // Persist the name to backend (fire and forget - error handling below)
       await updateSessionName(sessionId, generatedName);
-      await get().refreshSessionHistory();
     } catch (err) {
       console.error("Failed to auto-name session:", err);
+      // On error, refresh to get the actual state from backend
+      await get().refreshSessionHistory();
     }
   },
 
@@ -1330,7 +1340,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       if (!alreadyInHistory) {
         set({
           sessionHistory: [
-            { id: sessionId, title: "New Build", createdAt: new Date() },
+            {
+              id: sessionId,
+              title: "New Build Session",
+              createdAt: new Date(),
+            },
             ...sessionHistory,
           ],
         });
