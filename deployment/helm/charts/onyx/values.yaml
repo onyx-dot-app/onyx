@@ -702,7 +702,6 @@ celery_worker_user_file_processing:
   affinity: {}
 
 # Discord bot for Onyx
-# IMPORTANT: Discord bots cannot be horizontally scaled - only one WebSocket connection per token is allowed.
 # The bot offloads message processing to scalable API pods via HTTP requests.
 discordbot:
   enabled: false  # Disabled by default - requires bot token configuration
@@ -1198,8 +1197,6 @@ configMap:
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   ONYX_BOT_RESPOND_EVERY_CHANNEL: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
-  # Discord Bot Configs (runs via supervisord, requires DISCORD_BOT_TOKEN to be set)
-  # IMPORTANT: Only one Discord bot instance can run per token
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
