@@ -1,7 +1,7 @@
 """create_build_session_table
 
 Revision ID: 96086064c5db
-Revises: 8b5ce697290e
+Revises: 41fa44bef321
 Create Date: 2026-01-19 14:47:38.156803
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "96086064c5db"
-down_revision = "8b5ce697290e"
+down_revision = "41fa44bef321"
 branch_labels = None
 depends_on = None
 
