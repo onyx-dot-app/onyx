@@ -30,7 +30,7 @@ from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.document_index.vespa.shared_utils.utils import (
+from onyx.document_index.opensearch.client import (
     wait_for_opensearch_with_timeout,
 )
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout

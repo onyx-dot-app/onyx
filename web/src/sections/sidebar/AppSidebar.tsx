@@ -29,7 +29,6 @@ import {
   restrictToFirstScrollableAncestor,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
-import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
@@ -58,7 +57,6 @@ import { useUser } from "@/components/user/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
 import {
   SvgDevKit,
   SvgEditBig,
@@ -73,6 +71,7 @@ import BuildModeIntroContent from "@/app/build/components/IntroContent";
 import { motion, AnimatePresence } from "motion/react";
 import { Notification } from "@/app/admin/settings/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -491,7 +490,7 @@ const MemoizedAppSidebarInner = memo(
               {isAdmin ? "Admin Panel" : "Curator Panel"}
             </SidebarTab>
           )}
-          <Settings folded={folded} />
+          <UserAvatarPopover folded={folded} />
         </div>
       ),
       [folded, isAdmin, isCurator]

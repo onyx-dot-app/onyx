@@ -53,6 +53,50 @@ def update_citation_processor_from_tool_response(
             citation_processor.update_citation_mapping(citation_to_doc)
 
 
+def extract_citation_order_from_text(text: str) -> list[int]:
+    """Extract citation numbers from text in order of first appearance.
+
+    Parses citation patterns like [1], [1, 2], [[1]], 【1】 etc. and returns
+    the citation numbers in the order they first appear in the text.
+
+    Args:
+        text: The text containing citations
+
+    Returns:
+        List of citation numbers in order of first appearance (no duplicates)
+    """
+    # Same pattern used in collapse_citations and DynamicCitationProcessor
+    # Group 2 captures the number in double bracket format: [[1]], 【【1】】
+    # Group 4 captures the numbers in single bracket format: [1], [1, 2]
+    citation_pattern = re.compile(
+        r"([\[【［]{2}(\d+)[\]】］]{2})|([\[【［]([\d]+(?: *, *\d+)*)[\]】］])"
+    )
+    seen: set[int] = set()
+    order: list[int] = []
+
+    for match in citation_pattern.finditer(text):
+        # Group 2 is for double bracket single number, group 4 is for single bracket
+        if match.group(2):
+            nums_str = match.group(2)
+        elif match.group(4):
+            nums_str = match.group(4)
+        else:
+            continue
+
+        for num_str in nums_str.split(","):
+            num_str = num_str.strip()
+            if num_str:
+                try:
+                    num = int(num_str)
+                    if num not in seen:
+                        seen.add(num)
+                        order.append(num)
+                except ValueError:
+                    continue
+
+    return order
+
+
 def collapse_citations(
     answer_text: str,
     existing_citation_mapping: CitationMapping,

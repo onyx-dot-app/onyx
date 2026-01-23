@@ -11,6 +11,7 @@ from typing import Any
 from typing import cast
 from typing import Dict
 from typing import List
+from typing import Literal
 from typing import Optional
 from typing import Protocol
 from typing import Tuple
@@ -1456,6 +1457,9 @@ def get_default_admin_user_emails_() -> list[str]:
 
 
 STATE_TOKEN_AUDIENCE = "fastapi-users:oauth-state"
+STATE_TOKEN_LIFETIME_SECONDS = 3600
+CSRF_TOKEN_KEY = "csrftoken"
+CSRF_TOKEN_COOKIE_NAME = "fastapiusersoauthcsrf"
 
 
 class OAuth2AuthorizeResponse(BaseModel):
@@ -1463,11 +1467,17 @@ class OAuth2AuthorizeResponse(BaseModel):
 
 
 def generate_state_token(
-    data: Dict[str, str], secret: SecretType, lifetime_seconds: int = 3600
+    data: Dict[str, str],
+    secret: SecretType,
+    lifetime_seconds: int = STATE_TOKEN_LIFETIME_SECONDS,
 ) -> str:
     data["aud"] = STATE_TOKEN_AUDIENCE
 
     return generate_jwt(data, secret, lifetime_seconds)
+
+
+def generate_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 # refer to https://github.com/fastapi-users/fastapi-users/blob/42ddc241b965475390e2bce887b084152ae1a2cd/fastapi_users/fastapi_users.py#L91
@@ -1498,6 +1508,13 @@ def get_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    *,
+    csrf_token_cookie_name: str = CSRF_TOKEN_COOKIE_NAME,
+    csrf_token_cookie_path: str = "/",
+    csrf_token_cookie_domain: Optional[str] = None,
+    csrf_token_cookie_secure: Optional[bool] = None,
+    csrf_token_cookie_httponly: bool = True,
+    csrf_token_cookie_samesite: Optional[Literal["lax", "strict", "none"]] = "lax",
 ) -> APIRouter:
     """Generate a router with the OAuth routes."""
     router = APIRouter()
@@ -1514,6 +1531,9 @@ def get_oauth_router(
             route_name=callback_route_name,
         )
 
+    if csrf_token_cookie_secure is None:
+        csrf_token_cookie_secure = WEB_DOMAIN.startswith("https")
+
     @router.get(
         "/authorize",
         name=f"oauth:{oauth_client.name}.{backend.name}.authorize",
@@ -1521,8 +1541,10 @@ def get_oauth_router(
     )
     async def authorize(
         request: Request,
+        response: Response,
+        redirect: bool = Query(False),
         scopes: List[str] = Query(None),
-    ) -> OAuth2AuthorizeResponse:
+    ) -> Response | OAuth2AuthorizeResponse:
         referral_source = request.cookies.get("referral_source", None)
 
         if redirect_url is not None:
@@ -1532,9 +1554,11 @@ def get_oauth_router(
 
         next_url = request.query_params.get("next", "/")
 
+        csrf_token = generate_csrf_token()
         state_data: Dict[str, str] = {
             "next_url": next_url,
             "referral_source": referral_source or "default_referral",
+            CSRF_TOKEN_KEY: csrf_token,
         }
         state = generate_state_token(state_data, state_secret)
 
@@ -1550,6 +1574,31 @@ def get_oauth_router(
             authorization_url = add_url_params(
                 authorization_url, {"access_type": "offline", "prompt": "consent"}
             )
+
+        if redirect:
+            redirect_response = RedirectResponse(authorization_url, status_code=302)
+            redirect_response.set_cookie(
+                key=csrf_token_cookie_name,
+                value=csrf_token,
+                max_age=STATE_TOKEN_LIFETIME_SECONDS,
+                path=csrf_token_cookie_path,
+                domain=csrf_token_cookie_domain,
+                secure=csrf_token_cookie_secure,
+                httponly=csrf_token_cookie_httponly,
+                samesite=csrf_token_cookie_samesite,
+            )
+            return redirect_response
+
+        response.set_cookie(
+            key=csrf_token_cookie_name,
+            value=csrf_token,
+            max_age=STATE_TOKEN_LIFETIME_SECONDS,
+            path=csrf_token_cookie_path,
+            domain=csrf_token_cookie_domain,
+            secure=csrf_token_cookie_secure,
+            httponly=csrf_token_cookie_httponly,
+            samesite=csrf_token_cookie_samesite,
+        )
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
@@ -1600,7 +1649,33 @@ def get_oauth_router(
         try:
             state_data = decode_jwt(state, state_secret, [STATE_TOKEN_AUDIENCE])
         except jwt.DecodeError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=getattr(
+                    ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
+                ),
+            )
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=getattr(
+                    ErrorCode,
+                    "ACCESS_TOKEN_ALREADY_EXPIRED",
+                    "ACCESS_TOKEN_ALREADY_EXPIRED",
+                ),
+            )
+
+        cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
+        state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
+        if (
+            not cookie_csrf_token
+            or not state_csrf_token
+            or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
+            )
 
         next_url = state_data.get("next_url", "/")
         referral_source = state_data.get("referral_source", None)

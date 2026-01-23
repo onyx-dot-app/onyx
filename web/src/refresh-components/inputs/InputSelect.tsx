@@ -8,6 +8,7 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import {
   iconClasses,
+  MIN_WIDTH_CLASS,
   textClasses,
   Variants,
   wrapperClasses,
@@ -160,7 +161,7 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     );
 
     return (
-      <div className="w-full relative">
+      <div className={cn("w-full relative", MIN_WIDTH_CLASS)}>
         <InputSelectContext.Provider value={contextValue}>
           <SelectPrimitive.Root
             {...(isControlled ? { value: currentValue } : { defaultValue })}

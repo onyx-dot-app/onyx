@@ -12,6 +12,12 @@ data:
   {{- if .Values.vespa.enabled }}
   VESPA_HOST: {{ .Values.vespa.name }}.{{ .Values.vespa.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
   {{- end }}
+  {{- if .Values.opensearch.enabled }}
+  OPENSEARCH_HOST: {{ .Values.opensearch.clusterName }}-{{ .Values.opensearch.nodeGroup }}.{{ .Release.Namespace }}.svc.cluster.local
+  OPENSEARCH_REST_API_PORT: "9200"
+  ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: "true"
+  ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX: "false"
+  {{- end }}
   {{- if .Values.redis.enabled }}
   REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}-master
   {{- end }}

@@ -60,6 +60,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.tools.utils import generate_tools_description
@@ -431,6 +432,14 @@ def run_research_agent_call(
                         max_concurrent_tools=1,
                         # May be better to not do this step, hard to say, needs to be tested
                         skip_search_query_expansion=False,
+                        url_snippet_map=extract_url_snippet_map(
+                            [
+                                search_doc
+                                for tool_call in state_container.get_tool_calls()
+                                if tool_call.search_docs
+                                for search_doc in tool_call.search_docs
+                            ]
+                        ),
                     )
                     tool_responses = parallel_tool_call_results.tool_responses
                     citation_mapping = (
@@ -465,8 +474,14 @@ def run_research_agent_call(
                             )
 
                         search_docs = None
+                        displayed_docs = None
                         if isinstance(tool_response.rich_response, SearchDocsResponse):
                             search_docs = tool_response.rich_response.search_docs
+                            displayed_docs = tool_response.rich_response.displayed_docs
+
+                            # Add ALL search docs to state container for DB persistence
+                            if search_docs:
+                                state_container.add_search_docs(search_docs)
 
                             # This is used for the Open URL reminder in the next cycle
                             # only do this if the web search tool yielded results
@@ -499,7 +514,7 @@ def run_research_agent_call(
                             or most_recent_reasoning,
                             tool_call_arguments=tool_call.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
-                            search_docs=search_docs,
+                            search_docs=displayed_docs or search_docs,
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)

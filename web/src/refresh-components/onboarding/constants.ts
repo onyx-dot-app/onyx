@@ -2,7 +2,6 @@ import {
   OnboardingStep,
   FinalStepItemProps,
 } from "@/refresh-components/onboarding/types";
-import { DOCS_BASE_URL } from "@/lib/constants";
 import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
 
 type StepConfig = {
@@ -72,7 +71,7 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
     description: "Set up models to create images in your chats.",
     icon: SvgImage,
     buttonText: "Image Generation",
-    buttonHref: `${DOCS_BASE_URL}/overview/core_features/image_generation`,
+    buttonHref: "/admin/configuration/image-generation",
   },
   {
     title: "Invite your team",

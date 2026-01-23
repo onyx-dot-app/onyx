@@ -16,7 +16,7 @@ import Text from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import Settings from "@/sections/sidebar/Settings/Settings";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
@@ -271,7 +271,7 @@ const MemoizedBuildSidebarInner = memo(
       () => (
         <div className="flex flex-col gap-2">
           {backToChatButton}
-          <Settings folded={folded} />
+          <UserAvatarPopover folded={folded} />
         </div>
       ),
       [folded, backToChatButton]

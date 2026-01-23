@@ -50,21 +50,3 @@ export const useSendMessageToParent = () => {
     sendMessageToParent();
   }, []);
 };
-
-export function notifyExtensionOfThemeChange(
-  newTheme: string,
-  newBgUrl: string
-) {
-  if (typeof window !== "undefined" && window.parent) {
-    window.parent.postMessage(
-      {
-        type: CHROME_MESSAGE.PREFERENCES_UPDATED,
-        payload: {
-          theme: newTheme,
-          backgroundUrl: newBgUrl,
-        },
-      },
-      "*"
-    );
-  }
-}

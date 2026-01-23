@@ -409,6 +409,53 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         )
 
 
+def test_vertex_stream_omits_stream_options() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERTEX_AI,
+        model_name="claude-opus-4-5@20251101",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.VERTEX_AI,
+            model_name="claude-opus-4-5@20251101",
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "stream_options" not in kwargs
+
+
+def test_vertex_opus_4_5_omits_reasoning_effort() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERTEX_AI,
+        model_name="claude-opus-4-5@20251101",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.VERTEX_AI,
+            model_name="claude-opus-4-5@20251101",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+
+
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
+import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import { IconProps } from "@opal/types";
 import React from "react";
@@ -26,8 +27,8 @@ const alignClassMap: Record<AlignItems, string> = {
   stretch: "items-stretch",
 };
 const widthClassmap: Record<Length, string> = {
-  auto: "w-auto",
-  fit: "w-fit",
+  auto: "w-auto flex-shrink-0",
+  fit: "w-fit flex-shrink-0",
   full: "w-full",
 };
 const heightClassmap: Record<Length, string> = {
@@ -183,25 +184,27 @@ export interface LineItemLayoutProps {
   icon?: React.FunctionComponent<IconProps>;
   title: string;
   description?: React.ReactNode;
+  middleText?: string;
   rightChildren?: React.ReactNode;
 
   variant?: LineItemLayoutVariant;
   strikethrough?: boolean;
   loading?: boolean;
   center?: boolean;
-  rightChildrenReducedPadding?: boolean;
+  reducedPadding?: boolean;
 }
 function LineItemLayout({
   icon: Icon,
   title,
   description,
+  middleText,
   rightChildren,
 
   variant = "primary",
   strikethrough,
   loading,
   center,
-  rightChildrenReducedPadding,
+  reducedPadding,
 }: LineItemLayoutProps) {
   // Derive styling from variant
   const isCompact =
@@ -215,15 +218,15 @@ function LineItemLayout({
       flexDirection="row"
       justifyContent="between"
       alignItems={center ? "center" : "start"}
+      gap={1.5}
     >
       <div
         className="line-item-layout"
         data-variant={variant}
         data-has-icon={Icon ? "true" : undefined}
         data-loading={loading ? "true" : undefined}
-        data-right-children-reduced-padding={
-          rightChildrenReducedPadding ? "true" : undefined
-        }
+        data-strikethrough={strikethrough ? "true" : undefined}
+        data-reduced-padding={reducedPadding ? "true" : undefined}
       >
         {/* Row 1: Icon, Title */}
         {Icon && (
@@ -235,7 +238,7 @@ function LineItemLayout({
           <Text
             mainContentEmphasis={!isCompact}
             text03={isMuted}
-            className={cn(strikethrough && "line-through")}
+            className="line-item-layout-title"
           >
             {title}
           </Text>
@@ -257,6 +260,14 @@ function LineItemLayout({
         ) : undefined}
       </div>
 
+      {!loading && middleText && (
+        <div className="flex-1">
+          <Truncated text03 secondaryBody>
+            {middleText}
+          </Truncated>
+        </div>
+      )}
+
       {loading && rightChildren ? (
         <div className="line-item-layout-skeleton-right" />
       ) : rightChildren ? (
@@ -266,4 +277,53 @@ function LineItemLayout({
   );
 }
 
-export { Section, LineItemLayout };
+export interface AttachmentItemLayoutProps
+  // Omitted because this interface mandates them to be defined.
+  extends Omit<LineItemLayoutProps, "description" | "icon"> {
+  description: string;
+  icon: React.FunctionComponent<IconProps>;
+  variant?: "primary" | "secondary";
+}
+function AttachmentItemLayout({
+  title,
+  description,
+  icon: Icon,
+  middleText,
+  rightChildren,
+  variant = "primary",
+}: AttachmentItemLayoutProps) {
+  const content = (
+    <Section flexDirection="row" gap={0.25} padding={0.25}>
+      <div
+        className={cn(
+          "h-[2.25rem] aspect-square",
+          variant === "primary" && "bg-background-tint-02 rounded-08"
+        )}
+      >
+        <Section>
+          <Icon className="attachment-button__icon" />
+        </Section>
+      </div>
+      <LineItemLayout
+        title={title}
+        description={description}
+        middleText={middleText}
+        rightChildren={
+          rightChildren ? (
+            <div className="px-1">{rightChildren}</div>
+          ) : undefined
+        }
+        center
+        variant="secondary"
+      />
+    </Section>
+  );
+
+  if (variant === "primary") return content;
+
+  return (
+    <div className="w-full bg-background-tint-01 rounded-12">{content}</div>
+  );
+}
+
+export { Section, LineItemLayout, AttachmentItemLayout };

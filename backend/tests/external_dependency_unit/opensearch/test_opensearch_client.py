@@ -14,6 +14,7 @@ import pytest
 
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
@@ -103,12 +104,8 @@ def _generate_test_vector(base_value: float = 0.1, dimension: int = 128) -> list
 @pytest.fixture(scope="module")
 def opensearch_available() -> None:
     """Verifies OpenSearch is running, skips all tests if not."""
-    client = OpenSearchClient(index_name="test_ping")
-    try:
-        if not client.ping():
-            pytest.skip("OpenSearch is not available")
-    finally:
-        client.close()
+    if not wait_for_opensearch_with_timeout():
+        pytest.skip("OpenSearch is not available.")
 
 
 @pytest.fixture(scope="function")
