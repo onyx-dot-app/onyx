@@ -14,16 +14,48 @@ import sys
 from pathlib import Path
 
 # Connector descriptions for known connector types
+# Keep in sync with agent_instructions.py CONNECTOR_DESCRIPTIONS
 CONNECTOR_DESCRIPTIONS = {
-    "google_drive": "**Google Drive**: Files stored as `FILE_NAME.json`.",
-    "gmail": "**Gmail**: Emails organized by thread.",
-    "linear": "**Linear**: Projects as folders, tickets as `[TICKET_ID]_NAME.json`.",
-    "slack": "**Slack**: Channels as folders, threads as JSON files.",
-    "github": "**Github**: Orgs > repos > pull_requests/issues folders.",
-    "fireflies": "**Fireflies**: Calls as `CALL_TITLE.json`.",
-    "hubspot": "**HubSpot**: Tickets, Companies, Deals, Contacts folders.",
-    "notion": "**Notion**: Pages as `PAGE_TITLE.json`.",
-    "org_info": "**Org Info**: Organizational data and identity info.",
+    "google_drive": (
+        "**Google Drive**: Copied over directly as is. "
+        "End files are stored as `FILE_NAME.json`."
+    ),
+    "gmail": (
+        "**Gmail**: Copied over directly as is. "
+        "End files are stored as `FILE_NAME.json`."
+    ),
+    "linear": (
+        "**Linear**: Each project is a folder, and within each project, "
+        "individual tickets are stored as `[TICKET_ID]_TICKET_NAME.json`."
+    ),
+    "slack": (
+        "**Slack**: Each channel is a folder titled `[CHANNEL_NAME]`. "
+        "Within each channel, each thread is a single file called "
+        "`[INITIAL_AUTHOR]_in_[CHANNEL]__[FIRST_MESSAGE].json`."
+    ),
+    "github": (
+        "**Github**: Each organization is a folder titled `[ORG_NAME]`. "
+        "Within each organization, there is a folder for each repository "
+        "titled `[REPO_NAME]`. Within each repository there are up to two "
+        "folders: `pull_requests` and `issues`. Pull requests are structured "
+        "as `[PR_ID]__[PR_NAME].json` and issues as `[ISSUE_ID]__[ISSUE_NAME].json`."
+    ),
+    "fireflies": (
+        "**Fireflies**: All calls are in the root, each as a single file "
+        "titled `CALL_TITLE.json`."
+    ),
+    "hubspot": (
+        "**HubSpot**: Four folders in the root: `Tickets`, `Companies`, "
+        "`Deals`, and `Contacts`. Each object is stored as a file named "
+        "after its title/name (e.g., `[TICKET_SUBJECT].json`, `[COMPANY_NAME].json`)."
+    ),
+    "notion": (
+        "**Notion**: Pages and databases are organized hierarchically. "
+        "Each page is stored as `PAGE_TITLE.json`."
+    ),
+    "org_info": (
+        "**Org Info**: Contains organizational data and identity information."
+    ),
 }
 
 
