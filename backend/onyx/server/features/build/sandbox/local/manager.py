@@ -116,7 +116,7 @@ class LocalSandboxManager(SandboxManager):
             error_msg = (
                 "Sandbox templates are missing. "
                 "Please build templates using:\n"
-                "  python -m onyx.server.features.build.sandbox.build_templates\n"
+                "  python -m onyx.server.features.build.sandbox.util.build_venv_template\n"
                 "Or use Docker image built with Dockerfile.sandbox-templates.\n\n"
                 "Missing templates:\n"
             )
