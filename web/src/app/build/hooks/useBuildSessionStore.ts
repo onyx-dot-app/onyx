@@ -212,6 +212,34 @@ export type PreProvisioningState =
   | { status: "ready"; sessionId: string; demoDataEnabled: boolean }
   | { status: "failed"; error: string };
 
+/** File preview tab data */
+export interface FilePreviewTab {
+  path: string;
+  fileName: string;
+}
+
+/** Files tab state - persisted across tab switches */
+export interface FilesTabState {
+  expandedPaths: string[];
+  scrollTop: number;
+  /** Cached directory listings by path - avoids refetch on tab switch */
+  directoryCache: Record<string, unknown[]>;
+}
+
+/** Tab history entry - can be a pinned tab or a file preview */
+export type TabHistoryEntry =
+  | { type: "pinned"; tab: OutputTabType }
+  | { type: "file"; path: string };
+
+/** Browser-style tab navigation history */
+export interface TabNavigationHistory {
+  entries: TabHistoryEntry[];
+  currentIndex: number;
+}
+
+/** Output panel tab types */
+export type OutputTabType = "preview" | "files" | "artifacts";
+
 export interface BuildSessionData {
   id: string;
   status: SessionStatus;
@@ -233,6 +261,18 @@ export interface BuildSessionData {
   lastAccessed: Date;
   isLoaded: boolean;
   outputPanelOpen: boolean;
+  /** Flag to trigger webapp refresh when web/ files change */
+  webappNeedsRefresh: boolean;
+  /** File preview tabs open in this session */
+  filePreviewTabs: FilePreviewTab[];
+  /** Active pinned tab in output panel */
+  activeOutputTab: OutputTabType;
+  /** Active file preview path (when set, this is the active tab instead of pinned tab) */
+  activeFilePreviewPath: string | null;
+  /** Files tab state - expanded folders and scroll position */
+  filesTabState: FilesTabState;
+  /** Browser-style tab navigation history for back/forward */
+  tabHistory: TabNavigationHistory;
 }
 
 interface BuildSessionStore {
@@ -246,6 +286,12 @@ interface BuildSessionStore {
 
   // Demo data toggle (controls whether demo files are mounted in sandbox)
   demoDataEnabled: boolean;
+
+  // Temporary output panel state when no session exists (resets when session is created/cleared)
+  noSessionOutputPanelOpen: boolean;
+
+  // Temporary active tab when no session exists (resets when session is created/cleared)
+  noSessionActiveOutputTab: OutputTabType;
 
   // Actions - Session Management
   setCurrentSession: (sessionId: string | null) => void;
@@ -336,6 +382,28 @@ interface BuildSessionStore {
 
   // Demo Data Actions
   setDemoDataEnabled: (enabled: boolean) => void;
+
+  // Webapp Refresh Actions
+  triggerWebappRefresh: (sessionId: string) => void;
+  resetWebappRefresh: (sessionId: string) => void;
+
+  // File Preview Actions
+  openFilePreview: (sessionId: string, path: string, fileName: string) => void;
+  closeFilePreview: (sessionId: string, path: string) => void;
+  setActiveOutputTab: (sessionId: string, tab: OutputTabType) => void;
+  setActiveFilePreviewPath: (sessionId: string, path: string | null) => void;
+  /** Set active tab when no session exists (for pre-provisioned sandbox viewing) */
+  setNoSessionActiveOutputTab: (tab: OutputTabType) => void;
+
+  // Files Tab State Actions
+  updateFilesTabState: (
+    sessionId: string,
+    updates: Partial<FilesTabState>
+  ) => void;
+
+  // Tab Navigation History Actions
+  navigateTabBack: (sessionId: string) => void;
+  navigateTabForward: (sessionId: string) => void;
 }
 
 // =============================================================================
@@ -359,6 +427,15 @@ const createInitialSessionData = (
   lastAccessed: new Date(),
   isLoaded: false,
   outputPanelOpen: false,
+  webappNeedsRefresh: false,
+  filePreviewTabs: [],
+  activeOutputTab: "preview",
+  activeFilePreviewPath: null,
+  filesTabState: { expandedPaths: [], scrollTop: 0, directoryCache: {} },
+  tabHistory: {
+    entries: [{ type: "pinned", tab: "preview" }],
+    currentIndex: 0,
+  },
   ...initialData,
 });
 
@@ -377,29 +454,38 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Demo data toggle (defaults to true)
   demoDataEnabled: true,
 
+  // Temporary output panel state when no session exists (resets when session is created/cleared)
+  noSessionOutputPanelOpen: false,
+
+  // Temporary active tab when no session exists
+  noSessionActiveOutputTab: "preview" as OutputTabType,
+
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
   // ===========================================================================
 
   setCurrentSession: (sessionId: string | null) => {
     set((state) => {
-      // If setting to null, just clear current session
+      // If setting to null, clear current session and reset no-session panel state
       if (sessionId === null) {
-        return { currentSessionId: null };
+        return { currentSessionId: null, noSessionOutputPanelOpen: false };
       }
 
-      // If session doesn't exist, create it
+      // If session doesn't exist, create it and inherit output panel state
       if (!state.sessions.has(sessionId)) {
-        const newSession = createInitialSessionData(sessionId);
+        const newSession = createInitialSessionData(sessionId, {
+          outputPanelOpen: state.noSessionOutputPanelOpen,
+        });
         const newSessions = new Map(state.sessions);
         newSessions.set(sessionId, newSession);
         return {
           currentSessionId: sessionId,
           sessions: newSessions,
+          noSessionOutputPanelOpen: false,
         };
       }
 
-      // Update last accessed for existing session
+      // Update last accessed for existing session and reset no-session panel state
       const session = state.sessions.get(sessionId)!;
       const updatedSession = { ...session, lastAccessed: new Date() };
       const newSessions = new Map(state.sessions);
@@ -408,6 +494,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return {
         currentSessionId: sessionId,
         sessions: newSessions,
+        noSessionOutputPanelOpen: false,
       };
     });
   },
@@ -418,7 +505,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     initialData?: Partial<BuildSessionData>
   ) => {
     set((state) => {
-      const newSession = createInitialSessionData(sessionId, initialData);
+      // Inherit output panel state from no-session state if not explicitly set
+      const outputPanelOpen =
+        initialData?.outputPanelOpen ?? state.noSessionOutputPanelOpen;
+      const newSession = createInitialSessionData(sessionId, {
+        ...initialData,
+        outputPanelOpen,
+      });
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, newSession);
       return { sessions: newSessions };
@@ -526,11 +619,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const { currentSessionId, updateSessionData } = get();
     if (currentSessionId) {
       updateSessionData(currentSessionId, { outputPanelOpen: open });
+    } else {
+      // No session - update temporary state
+      set({ noSessionOutputPanelOpen: open });
     }
   },
 
   toggleCurrentOutputPanel: () => {
-    const { currentSessionId, sessions, updateSessionData } = get();
+    const {
+      currentSessionId,
+      sessions,
+      updateSessionData,
+      noSessionOutputPanelOpen,
+    } = get();
     if (currentSessionId) {
       const session = sessions.get(currentSessionId);
       if (session) {
@@ -538,6 +639,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           outputPanelOpen: !session.outputPanelOpen,
         });
       }
+    } else {
+      // No session - toggle temporary state
+      set({ noSessionOutputPanelOpen: !noSessionOutputPanelOpen });
     }
   },
 
@@ -965,6 +1069,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
               },
             ],
             isLoaded: true,
+            // Inherit output panel state from no-session state
+            outputPanelOpen: state.noSessionOutputPanelOpen,
           })
         );
         return {
@@ -1068,11 +1174,21 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     try {
       // Generate name using LLM based on first user message
       const generatedName = await generateSessionName(sessionId);
-      // Update session with the generated name
+
+      // Optimistically update the session title in sessionHistory immediately
+      // This triggers the typewriter animation in the sidebar
+      set((state) => ({
+        sessionHistory: state.sessionHistory.map((item) =>
+          item.id === sessionId ? { ...item, title: generatedName } : item
+        ),
+      }));
+
+      // Persist the name to backend (fire and forget - error handling below)
       await updateSessionName(sessionId, generatedName);
-      await get().refreshSessionHistory();
     } catch (err) {
       console.error("Failed to auto-name session:", err);
+      // On error, refresh to get the actual state from backend
+      await get().refreshSessionHistory();
     }
   },
 
@@ -1224,7 +1340,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       if (!alreadyInHistory) {
         set({
           sessionHistory: [
-            { id: sessionId, title: "New Build", createdAt: new Date() },
+            {
+              id: sessionId,
+              title: "New Build Session",
+              createdAt: new Date(),
+            },
             ...sessionHistory,
           ],
         });
@@ -1303,11 +1423,291 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
     }
   },
+
+  // ===========================================================================
+  // Webapp Refresh Actions
+  // ===========================================================================
+
+  triggerWebappRefresh: (sessionId: string) => {
+    get().updateSessionData(sessionId, { webappNeedsRefresh: true });
+  },
+
+  resetWebappRefresh: (sessionId: string) => {
+    get().updateSessionData(sessionId, { webappNeedsRefresh: false });
+  },
+
+  // ===========================================================================
+  // File Preview Actions
+  // ===========================================================================
+
+  openFilePreview: (sessionId: string, path: string, fileName: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      // Check if tab already exists
+      const existingTab = session.filePreviewTabs.find(
+        (tab) => tab.path === path
+      );
+
+      let filePreviewTabs = session.filePreviewTabs;
+      if (!existingTab) {
+        // Add new tab
+        filePreviewTabs = [...session.filePreviewTabs, { path, fileName }];
+      }
+
+      // Push to history (truncate forward history if navigating from middle)
+      const { tabHistory } = session;
+      const newEntry: TabHistoryEntry = { type: "file", path };
+      const newEntries = [
+        ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
+        newEntry,
+      ];
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filePreviewTabs,
+        activeFilePreviewPath: path, // Always switch to this tab
+        tabHistory: {
+          entries: newEntries,
+          currentIndex: newEntries.length - 1,
+        },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  closeFilePreview: (sessionId: string, path: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      // Remove the tab
+      const filePreviewTabs = session.filePreviewTabs.filter(
+        (tab) => tab.path !== path
+      );
+
+      // If closing the active preview tab, switch to Files tab
+      const activeFilePreviewPath =
+        session.activeFilePreviewPath === path
+          ? null
+          : session.activeFilePreviewPath;
+
+      // If we closed the active tab, set activeOutputTab to "files"
+      const activeOutputTab =
+        session.activeFilePreviewPath === path
+          ? "files"
+          : session.activeOutputTab;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filePreviewTabs,
+        activeFilePreviewPath,
+        activeOutputTab,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  setActiveOutputTab: (sessionId: string, tab: OutputTabType) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      // Push to history (truncate forward history if navigating from middle)
+      const { tabHistory } = session;
+      const newEntry: TabHistoryEntry = { type: "pinned", tab };
+      const newEntries = [
+        ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
+        newEntry,
+      ];
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        activeOutputTab: tab,
+        activeFilePreviewPath: null, // Clear file preview when selecting pinned tab
+        tabHistory: {
+          entries: newEntries,
+          currentIndex: newEntries.length - 1,
+        },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  setActiveFilePreviewPath: (sessionId: string, path: string | null) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      // Push to history if switching to a file (truncate forward history)
+      const { tabHistory } = session;
+      let newTabHistory = tabHistory;
+      if (path !== null) {
+        const newEntry: TabHistoryEntry = { type: "file", path };
+        const newEntries = [
+          ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
+          newEntry,
+        ];
+        newTabHistory = {
+          entries: newEntries,
+          currentIndex: newEntries.length - 1,
+        };
+      }
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        activeFilePreviewPath: path,
+        tabHistory: newTabHistory,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  setNoSessionActiveOutputTab: (tab: OutputTabType) => {
+    set({ noSessionActiveOutputTab: tab });
+  },
+
+  // ===========================================================================
+  // Files Tab State Actions
+  // ===========================================================================
+
+  updateFilesTabState: (sessionId: string, updates: Partial<FilesTabState>) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filesTabState: { ...session.filesTabState, ...updates },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  // ===========================================================================
+  // Tab Navigation History Actions
+  // ===========================================================================
+
+  navigateTabBack: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const { tabHistory } = session;
+      if (tabHistory.currentIndex <= 0) return state;
+
+      const newIndex = tabHistory.currentIndex - 1;
+      const entry = tabHistory.entries[newIndex];
+      if (!entry) return state;
+
+      // Re-open file tab if it was closed
+      let filePreviewTabs = session.filePreviewTabs;
+      if (entry.type === "file") {
+        const tabExists = filePreviewTabs.some(
+          (tab) => tab.path === entry.path
+        );
+        if (!tabExists) {
+          // Extract filename from path
+          const fileName = entry.path.split("/").pop() || entry.path;
+          filePreviewTabs = [
+            ...filePreviewTabs,
+            { path: entry.path, fileName },
+          ];
+        }
+      }
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        tabHistory: { ...tabHistory, currentIndex: newIndex },
+        activeOutputTab:
+          entry.type === "pinned" ? entry.tab : session.activeOutputTab,
+        activeFilePreviewPath: entry.type === "file" ? entry.path : null,
+        filePreviewTabs,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  navigateTabForward: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const { tabHistory } = session;
+      if (tabHistory.currentIndex >= tabHistory.entries.length - 1)
+        return state;
+
+      const newIndex = tabHistory.currentIndex + 1;
+      const entry = tabHistory.entries[newIndex];
+      if (!entry) return state;
+
+      // Re-open file tab if it was closed
+      let filePreviewTabs = session.filePreviewTabs;
+      if (entry.type === "file") {
+        const tabExists = filePreviewTabs.some(
+          (tab) => tab.path === entry.path
+        );
+        if (!tabExists) {
+          // Extract filename from path
+          const fileName = entry.path.split("/").pop() || entry.path;
+          filePreviewTabs = [
+            ...filePreviewTabs,
+            { path: entry.path, fileName },
+          ];
+        }
+      }
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        tabHistory: { ...tabHistory, currentIndex: newIndex },
+        activeOutputTab:
+          entry.type === "pinned" ? entry.tab : session.activeOutputTab,
+        activeFilePreviewPath: entry.type === "file" ? entry.path : null,
+        filePreviewTabs,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
 }));
 
 // =============================================================================
 // Selector Hooks (mirrors chat's pattern)
 // =============================================================================
+
+// Stable empty references for SSR hydration (prevents infinite loop)
+const EMPTY_ARRAY: never[] = [];
+const EMPTY_FILE_PREVIEW_TABS: FilePreviewTab[] = [];
+const EMPTY_FILES_TAB_STATE: FilesTabState = {
+  expandedPaths: [],
+  scrollTop: 0,
+  directoryCache: {},
+};
+const EMPTY_TAB_HISTORY: TabNavigationHistory = {
+  entries: [],
+  currentIndex: 0,
+};
 
 export const useCurrentSession = () =>
   useBuildSessionStore((state) => {
@@ -1343,22 +1743,22 @@ export const useIsRunning = () =>
 export const useMessages = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.messages ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.messages ?? EMPTY_ARRAY;
   });
 
 export const useArtifacts = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.artifacts ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.artifacts ?? EMPTY_ARRAY;
   });
 
 export const useToolCalls = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.toolCalls ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.toolCalls ?? EMPTY_ARRAY;
   });
 
 export const useSessionHistory = () =>
@@ -1366,12 +1766,13 @@ export const useSessionHistory = () =>
 
 /**
  * Returns the output panel open state for the current session.
- * Returns false when no session exists (welcome page).
+ * Falls back to temporary state when no session exists (welcome page).
+ * This temporary state resets to false when a session is created or cleared.
  */
 export const useOutputPanelOpen = () =>
   useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return false;
+    const { currentSessionId, sessions, noSessionOutputPanelOpen } = state;
+    if (!currentSessionId) return noSessionOutputPanelOpen;
     return sessions.get(currentSessionId)?.outputPanelOpen ?? false;
   });
 
@@ -1390,6 +1791,13 @@ export const useIsPreProvisioningReady = () =>
 export const useIsPreProvisioningFailed = () =>
   useBuildSessionStore((state) => state.preProvisioning.status === "failed");
 
+export const usePreProvisionedSessionId = () =>
+  useBuildSessionStore((state) =>
+    state.preProvisioning.status === "ready"
+      ? state.preProvisioning.sessionId
+      : null
+  );
+
 // Demo data selectors
 export const useDemoDataEnabled = () =>
   useBuildSessionStore((state) => state.demoDataEnabled);
@@ -1401,6 +1809,54 @@ export const useSetDemoDataEnabled = () =>
 export const useStreamItems = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return [];
-    return sessions.get(currentSessionId)?.streamItems ?? [];
+    if (!currentSessionId) return EMPTY_ARRAY;
+    return sessions.get(currentSessionId)?.streamItems ?? EMPTY_ARRAY;
+  });
+
+// Webapp refresh selector
+export const useWebappNeedsRefresh = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return false;
+    return sessions.get(currentSessionId)?.webappNeedsRefresh ?? false;
+  });
+
+// File preview selectors
+export const useFilePreviewTabs = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return EMPTY_FILE_PREVIEW_TABS;
+    return (
+      sessions.get(currentSessionId)?.filePreviewTabs ?? EMPTY_FILE_PREVIEW_TABS
+    );
+  });
+
+export const useActiveOutputTab = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions, noSessionActiveOutputTab } = state;
+    if (!currentSessionId) return noSessionActiveOutputTab;
+    return sessions.get(currentSessionId)?.activeOutputTab ?? "preview";
+  });
+
+export const useActiveFilePreviewPath = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return null;
+    return sessions.get(currentSessionId)?.activeFilePreviewPath ?? null;
+  });
+
+export const useFilesTabState = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return EMPTY_FILES_TAB_STATE;
+    return (
+      sessions.get(currentSessionId)?.filesTabState ?? EMPTY_FILES_TAB_STATE
+    );
+  });
+
+export const useTabHistory = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return EMPTY_TAB_HISTORY;
+    return sessions.get(currentSessionId)?.tabHistory ?? EMPTY_TAB_HISTORY;
   });

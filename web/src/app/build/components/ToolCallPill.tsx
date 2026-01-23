@@ -136,7 +136,8 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
-          "w-full border rounded-lg overflow-hidden",
+          "w-full border rounded-lg overflow-hidden transition-colors",
+          "hover:bg-background-tint-02",
           statusDisplay.bgClass
         )}
       >
@@ -144,7 +145,7 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
           <button
             className={cn(
               "w-full flex flex-col gap-1 px-3 py-2",
-              "hover:bg-background-tint-02 transition-colors text-left"
+              "transition-colors text-left"
             )}
           >
             {/* Top row: status icon + title + description + expand arrow */}

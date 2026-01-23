@@ -37,6 +37,20 @@ import {
 } from "@/app/build/utils/streamItemHelpers";
 
 /**
+ * Extract file path from a tool call packet.
+ */
+function getFilePath(packet: Record<string, unknown>): string | null {
+  // Handle both snake_case (raw_input) and camelCase (rawInput) variants
+  const rawInput = (packet.raw_input ?? packet.rawInput) as Record<
+    string,
+    unknown
+  > | null;
+  return (rawInput?.file_path ?? rawInput?.filePath ?? rawInput?.path) as
+    | string
+    | null;
+}
+
+/**
  * Hook for handling message streaming in build sessions.
  *
  * Uses a simple FIFO approach:
@@ -79,6 +93,9 @@ export function useBuildStreaming() {
   );
   const clearStreamItems = useBuildSessionStore(
     (state) => state.clearStreamItems
+  );
+  const triggerWebappRefresh = useBuildSessionStore(
+    (state) => state.triggerWebappRefresh
   );
 
   /**
@@ -196,12 +213,6 @@ export function useBuildStreaming() {
               accumulatedText = "";
               accumulatedThinking = "";
 
-              // DEBUG: Log full packet
-              console.log(
-                "[tool_call_start] Full packet:",
-                JSON.stringify(packetData, null, 2)
-              );
-
               const toolCallId = (packetData.tool_call_id ||
                 packetData.toolCallId ||
                 genId("tc")) as string;
@@ -210,12 +221,6 @@ export function useBuildStreaming() {
               const toolName = (packetData.tool_name ||
                 packetData.toolName ||
                 packetData.title) as string | null;
-
-              console.log("[tool_call_start] Extracted:", {
-                toolCallId,
-                kind,
-                toolName,
-              });
 
               // Check if this is a TodoWrite call
               // Skip tool_call_start for TodoWrite - it has no todos yet
@@ -247,8 +252,6 @@ export function useBuildStreaming() {
                 newContent: diffData.newText,
               };
 
-              console.log("[tool_call_start] Created toolCall:", toolCall);
-
               const item: StreamItem = {
                 type: "tool_call",
                 id: toolCallId,
@@ -261,12 +264,6 @@ export function useBuildStreaming() {
 
             // Tool call progress - update existing tool_call item or todo_list item
             case "tool_call_progress": {
-              // DEBUG: Log full packet
-              console.log(
-                "[tool_call_progress] Full packet:",
-                JSON.stringify(packetData, null, 2)
-              );
-
               const toolCallId = (packetData.tool_call_id ||
                 packetData.toolCallId) as string;
               if (!toolCallId) break;
@@ -309,9 +306,21 @@ export function useBuildStreaming() {
                 }),
               };
 
-              console.log("[tool_call_progress] Updates:", updates);
-
               updateToolCallStreamItem(sessionId, toolCallId, updates);
+
+              // Check if this is a file operation in web/ directory
+              // Match both absolute paths (/outputs/web/...) and relative paths (web/...)
+              const filePath = getFilePath(packetData);
+              const isWebFile =
+                (kind === "edit" || kind === "write") &&
+                filePath &&
+                (filePath.includes("/web/") || filePath.startsWith("web/"));
+
+              // Trigger refresh when we see a web file being edited
+              // The output panel will open when streaming ends
+              if (isWebFile) {
+                triggerWebappRefresh(sessionId);
+              }
 
               // If task tool completed, extract output and create text StreamItem
               if (isTaskTool(packetData) && status === "completed") {
@@ -371,10 +380,19 @@ export function useBuildStreaming() {
             }
 
             // Agent finished
-            case "prompt_response":
+            case "prompt_response": {
               finalizeStreaming();
-              updateSessionData(sessionId, { status: "completed" });
+              // Check if we had a web/ file change - if so, open output panel
+              const session = useBuildSessionStore
+                .getState()
+                .sessions.get(sessionId);
+              const shouldOpenPanel = session?.webappNeedsRefresh === true;
+              updateSessionData(sessionId, {
+                status: "completed",
+                ...(shouldOpenPanel && { outputPanelOpen: true }),
+              });
               break;
+            }
 
             // Error
             case "error": {
@@ -413,6 +431,7 @@ export function useBuildStreaming() {
       clearStreamItems,
       addArtifactToSession,
       appendMessageToSession,
+      triggerWebappRefresh,
     ]
   );
 

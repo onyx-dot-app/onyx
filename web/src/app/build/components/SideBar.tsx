@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useCallback, useState, useEffect } from "react";
+import { memo, useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildContext } from "@/app/build/contexts/BuildContext";
 import {
@@ -16,6 +16,7 @@ import Text from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
+import Settings from "@/sections/sidebar/Settings/Settings";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
@@ -32,6 +33,7 @@ import {
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
+import TypewriterText from "@/app/build/components/TypewriterText";
 
 // ============================================================================
 // Build Session Button
@@ -55,6 +57,26 @@ function BuildSessionButton({
   const [renaming, setRenaming] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  // Track title changes for typewriter animation (only for auto-naming, not manual rename)
+  const prevTitleRef = useRef(historyItem.title);
+  const [shouldAnimate, setShouldAnimate] = useState(false);
+
+  // Detect when title changes from "New Build Session" to a real name (auto-naming)
+  useEffect(() => {
+    const prevTitle = prevTitleRef.current;
+    const newTitle = historyItem.title;
+
+    // Animate only when transitioning from default name to LLM-generated name
+    if (
+      prevTitle !== newTitle &&
+      prevTitle === "New Build Session" &&
+      !renaming
+    ) {
+      setShouldAnimate(true);
+    }
+
+    prevTitleRef.current = newTitle;
+  }, [historyItem.title, renaming]);
 
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -125,6 +147,12 @@ function BuildSessionButton({
                 initialName={historyItem.title}
                 onRename={onRename}
                 onClose={() => setRenaming(false)}
+              />
+            ) : shouldAnimate ? (
+              <TypewriterText
+                text={historyItem.title}
+                charSpeed={25}
+                onAnimationComplete={() => setShouldAnimate(false)}
               />
             ) : (
               historyItem.title
@@ -239,11 +267,21 @@ const MemoizedBuildSidebarInner = memo(
       [folded]
     );
 
+    const footer = useMemo(
+      () => (
+        <div className="flex flex-col gap-2">
+          {backToChatButton}
+          <Settings folded={folded} />
+        </div>
+      ),
+      [folded, backToChatButton]
+    );
+
     return (
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody
           actionButtons={[newBuildButton, buildConfigurePanel]}
-          footer={backToChatButton}
+          footer={footer}
           scrollKey="build-sidebar"
         >
           {!folded && (
