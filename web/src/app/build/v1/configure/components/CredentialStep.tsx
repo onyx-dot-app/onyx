@@ -31,6 +31,7 @@ import { BUILD_MODE_OAUTH_COOKIE_NAME } from "@/app/build/v1/constants";
 import Cookies from "js-cookie";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { createBuildConnector } from "@/app/build/v1/configure/utils/createBuildConnector";
+import { useUser } from "@/components/user/UserProvider";
 
 interface CredentialStepProps {
   connectorType: ValidSources;
@@ -65,6 +66,7 @@ export default function CredentialStep({
     useState(false);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const { user } = useUser();
 
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
     useOAuthDetails(connectorType);
@@ -97,6 +99,7 @@ export default function CredentialStep({
       const result = await createBuildConnector({
         connectorType,
         credential: selectedCredential,
+        userEmail: user?.email,
       });
 
       if (!result.success) {

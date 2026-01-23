@@ -1,6 +1,8 @@
 "use client";
 
 import { create } from "zustand";
+import Cookies from "js-cookie";
+import { BUILD_DEMO_DATA_COOKIE_NAME } from "@/app/build/v1/constants";
 
 import {
   ApiSandboxResponse,
@@ -407,6 +409,21 @@ interface BuildSessionStore {
 }
 
 // =============================================================================
+// Cookie Helpers
+// =============================================================================
+
+/**
+ * Read initial demoDataEnabled value from cookie.
+ * Defaults to true if cookie doesn't exist or is invalid.
+ */
+function getInitialDemoDataEnabled(): boolean {
+  if (typeof window === "undefined") return true; // SSR fallback
+  const cookieValue = Cookies.get(BUILD_DEMO_DATA_COOKIE_NAME);
+  if (cookieValue === "false") return false;
+  return true; // Default to true
+}
+
+// =============================================================================
 // Initial State Factory
 // =============================================================================
 
@@ -451,8 +468,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Pre-provisioning state
   preProvisioning: { status: "idle" },
 
-  // Demo data toggle (defaults to true)
-  demoDataEnabled: true,
+  // Demo data toggle (persisted to cookie, defaults to true)
+  demoDataEnabled: getInitialDemoDataEnabled(),
 
   // Temporary output panel state when no session exists (resets when session is created/cleared)
   noSessionOutputPanelOpen: false,
@@ -1375,8 +1392,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return;
     }
 
-    // Update the state value
+    // Update the state value and persist to cookie
     set({ demoDataEnabled: enabled });
+    Cookies.set(BUILD_DEMO_DATA_COOKIE_NAME, String(enabled), {
+      path: "/",
+      expires: 365, // 1 year
+    });
 
     // Check if we need to invalidate a pre-provisioned session
     if (preProvisioning.status === "ready") {

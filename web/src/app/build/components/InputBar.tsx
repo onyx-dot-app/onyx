@@ -27,6 +27,7 @@ const MAX_INPUT_HEIGHT = 200;
 export interface InputBarHandle {
   reset: () => void;
   focus: () => void;
+  setMessage: (message: string) => void;
 }
 
 export interface InputBarProps {
@@ -111,7 +112,7 @@ const InputBar = React.memo(
         hasUploadingFiles,
       } = useUploadFilesContext();
 
-      // Expose reset and focus methods to parent via ref
+      // Expose reset, focus, and setMessage methods to parent via ref
       React.useImperativeHandle(ref, () => ({
         reset: () => {
           setMessage("");
@@ -119,6 +120,17 @@ const InputBar = React.memo(
         },
         focus: () => {
           textAreaRef.current?.focus();
+        },
+        setMessage: (msg: string) => {
+          setMessage(msg);
+          // Move cursor to end after setting message
+          setTimeout(() => {
+            const textarea = textAreaRef.current;
+            if (textarea) {
+              textarea.focus();
+              textarea.setSelectionRange(msg.length, msg.length);
+            }
+          }, 0);
         },
       }));
 
@@ -298,25 +310,27 @@ const InputBar = React.memo(
                 disabled={disabled}
                 onClick={() => fileInputRef.current?.click()}
               />
-              {/* Demo Data indicator pill */}
-              <SimpleTooltip
-                tooltip="Switch to your data in the Configure panel!"
-                side="top"
-              >
-                <span>
-                  <SelectButton
-                    leftIcon={SvgOrganization}
-                    engaged={demoDataEnabled}
-                    action
-                    folded
-                    disabled={disabled}
-                    onClick={() => router.push("/build/v1/configure")}
-                    className="bg-action-link-01"
-                  >
-                    Demo Data
-                  </SelectButton>
-                </span>
-              </SimpleTooltip>
+              {/* Demo Data indicator pill - only show when demo data is enabled */}
+              {demoDataEnabled && (
+                <SimpleTooltip
+                  tooltip="Switch to your data in the Configure panel!"
+                  side="top"
+                >
+                  <span>
+                    <SelectButton
+                      leftIcon={SvgOrganization}
+                      engaged={demoDataEnabled}
+                      action
+                      folded
+                      disabled={disabled}
+                      onClick={() => router.push("/build/v1/configure")}
+                      className="bg-action-link-01"
+                    >
+                      Demo Data
+                    </SelectButton>
+                  </span>
+                </SimpleTooltip>
+              )}
             </div>
 
             {/* Bottom right controls */}
