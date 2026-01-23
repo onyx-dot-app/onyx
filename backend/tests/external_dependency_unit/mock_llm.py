@@ -128,20 +128,49 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
     elif response_type == LLMResponseType.ANSWER:
         return Delta(content=data)
     elif response_type == LLMResponseType.TOOL_CALL:
-        # First tick has tool_call_id and tool_name, subsequent ticks have arguments
-        if data["tool_call_id"] is not None:
-            return Delta(
-                tool_calls=[
-                    {
-                        "id": data["tool_call_id"],
-                        "function": {"name": data["tool_name"], "arguments": ""},
-                    }
-                ]
-            )
+        # Handle grouped tool calls (list) vs single tool call (dict)
+        if isinstance(data, list):
+            # Multiple tool calls emitted together in the same tick
+            tool_calls = []
+            for tc_data in data:
+                if tc_data["tool_call_id"] is not None:
+                    tool_calls.append(
+                        {
+                            "index": tc_data["index"],
+                            "id": tc_data["tool_call_id"],
+                            "function": {
+                                "name": tc_data["tool_name"],
+                                "arguments": "",
+                            },
+                        }
+                    )
+                else:
+                    tool_calls.append(
+                        {
+                            "index": tc_data["index"],
+                            "id": None,
+                            "function": {"arguments": tc_data["arguments"]},
+                        }
+                    )
+            return Delta(tool_calls=tool_calls)
         else:
-            return Delta(
-                tool_calls=[{"id": None, "function": {"arguments": data["arguments"]}}]
-            )
+            # Single tool call (original behavior)
+            # First tick has tool_call_id and tool_name, subsequent ticks have arguments
+            if data["tool_call_id"] is not None:
+                return Delta(
+                    tool_calls=[
+                        {
+                            "id": data["tool_call_id"],
+                            "function": {"name": data["tool_name"], "arguments": ""},
+                        }
+                    ]
+                )
+            else:
+                return Delta(
+                    tool_calls=[
+                        {"id": None, "function": {"arguments": data["arguments"]}}
+                    ]
+                )
     else:
         raise ValueError(f"Unknown response type: {response_type}")
 
@@ -150,6 +179,11 @@ class MockLLMController(abc.ABC):
     @abc.abstractmethod
     def add_response(self, response: LLMResponse) -> None:
         """Add a response to the current stream."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def add_responses_together(self, *responses: LLMResponse) -> None:
+        """Add multiple responses that should be emitted together in the same tick."""
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -172,6 +206,54 @@ class MockLLM(LLM, MockLLMController):
     def add_response(self, response: LLMResponse) -> None:
         items = _response_to_stream_items(response)
         self.stream_controller.queue_items(items)
+
+    def add_responses_together(self, *responses: LLMResponse) -> None:
+        """Add multiple responses that should be emitted together in the same tick.
+
+        Currently only supports multiple tool call responses being grouped together.
+        The initial tool call info (id, name) for all tool calls will be emitted
+        in a single delta, followed by argument tokens for each tool call.
+        """
+        tool_calls = [r for r in responses if r.type == LLMResponseType.TOOL_CALL]
+
+        if len(tool_calls) != len(responses):
+            raise ValueError(
+                "add_responses_together currently only supports "
+                "multiple tool call responses"
+            )
+
+        # Create combined first item with all tool call initial info
+        combined_data = [
+            {
+                "index": idx,
+                "tool_call_id": cast(LLMToolCallResponse, tc).tool_call_id,
+                "tool_name": cast(LLMToolCallResponse, tc).tool_name,
+                "arguments": None,
+            }
+            for idx, tc in enumerate(tool_calls)
+        ]
+        combined_item = StreamItem(
+            response_type=LLMResponseType.TOOL_CALL,
+            data=combined_data,
+        )
+        self.stream_controller.queue_items([combined_item])
+
+        # Add argument tokens for each tool call with their index
+        for idx, tc in enumerate(tool_calls):
+            tc = cast(LLMToolCallResponse, tc)
+            for token in tc.tool_call_argument_tokens:
+                item = StreamItem(
+                    response_type=LLMResponseType.TOOL_CALL,
+                    data=[
+                        {
+                            "index": idx,
+                            "tool_call_id": None,
+                            "tool_name": None,
+                            "arguments": token,
+                        }
+                    ],
+                )
+                self.stream_controller.queue_items([item])
 
     def forward(self, n: int) -> None:
         if self.stream_controller:
