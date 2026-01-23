@@ -111,6 +111,13 @@ export default function BuildConfigPage() {
     ({ config }) => config?.status === "connected"
   );
 
+  // Auto-enable demo data when all connectors are disconnected
+  useEffect(() => {
+    if (!hasActiveConnector && !demoDataEnabled) {
+      setDemoDataEnabled(true);
+    }
+  }, [hasActiveConnector, demoDataEnabled, setDemoDataEnabled]);
+
   const handleDeleteConfirm = async () => {
     if (!connectorToDelete) return;
 
