@@ -205,38 +205,36 @@ def save_chat_turn(
     # Use (document_id, chunk_ind, match_highlights) as key to avoid duplicates
     # while ensuring different versions with different highlights are stored separately
     search_doc_key_to_id: dict[tuple[str, int, tuple[str, ...]], int] = {}
-    tool_call_to_search_doc_ids: dict[str, list[int]] = {}
+    tool_call_to_displayed_doc_ids: dict[str, list[int]] = {}
 
-    # Process tool calls and their search docs
+    # Process tool calls: create DB entries for all search_docs (full set),
+    # but only link displayed_docs to each tool call
     for tool_call_info in tool_calls:
+        # Process search_docs (full set) to create DB entries
         if tool_call_info.search_docs:
-            search_doc_ids_for_tool: list[int] = []
             for search_doc_py in tool_call_info.search_docs:
-                # Create a unique key for this SearchDoc version
                 search_doc_key = _create_search_doc_key(search_doc_py)
-
-                # Check if we've already created this exact SearchDoc version
-                if search_doc_key in search_doc_key_to_id:
-                    search_doc_ids_for_tool.append(search_doc_key_to_id[search_doc_key])
-                else:
-                    # Create new DB SearchDoc entry
+                if search_doc_key not in search_doc_key_to_id:
                     db_search_doc = create_db_search_doc(
                         server_search_doc=search_doc_py,
                         db_session=db_session,
                         commit=False,
                     )
                     search_doc_key_to_id[search_doc_key] = db_search_doc.id
-                    search_doc_ids_for_tool.append(db_search_doc.id)
 
-            tool_call_to_search_doc_ids[tool_call_info.tool_call_id] = list(
-                set(search_doc_ids_for_tool)
+        # Collect displayed_docs IDs for tool call linking (deduplicated)
+        if tool_call_info.displayed_docs:
+            displayed_ids: set[int] = set()
+            for search_doc_py in tool_call_info.displayed_docs:
+                search_doc_key = _create_search_doc_key(search_doc_py)
+                if search_doc_key in search_doc_key_to_id:
+                    displayed_ids.add(search_doc_key_to_id[search_doc_key])
+            tool_call_to_displayed_doc_ids[tool_call_info.tool_call_id] = list(
+                displayed_ids
             )
 
-    # 3. Collect all unique SearchDoc IDs from all tool calls to link to ChatMessage
-    # Use a set to deduplicate by ID (since we've already deduplicated by key above)
-    all_search_doc_ids_set: set[int] = set()
-    for search_doc_ids in tool_call_to_search_doc_ids.values():
-        all_search_doc_ids_set.update(search_doc_ids)
+    # 3. Collect all unique SearchDoc IDs for ChatMessage (full set from all tool calls)
+    all_search_doc_ids_set: set[int] = set(search_doc_key_to_id.values())
 
     # 4. Build citation mapping from citation_docs_info
     citation_number_to_search_doc_id: dict[int, int] = {}
@@ -303,7 +301,7 @@ def save_chat_turn(
         assistant_message=assistant_message,
         db_session=db_session,
         default_tokenizer=default_tokenizer,
-        tool_call_to_search_doc_ids=tool_call_to_search_doc_ids,
+        tool_call_to_search_doc_ids=tool_call_to_displayed_doc_ids,
     )
 
     # 7. Build citations mapping from citation_docs_info

@@ -10,6 +10,8 @@ from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
 from onyx.db.models import ChatMessage
+from onyx.db.models import SearchDoc as SearchDocDB
+from onyx.db.models import ToolCall__SearchDoc
 from onyx.db.tools import get_tool_by_id
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_IN_CODE_ID
 from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
@@ -412,9 +414,21 @@ def translate_assistant_message_to_packets(
                         queries = cast(
                             list[str], tool_call.tool_call_arguments.get("queries", [])
                         )
+                        # Query docs from junction table
+                        tool_call_docs = (
+                            db_session.query(SearchDocDB)
+                            .join(
+                                ToolCall__SearchDoc,
+                                SearchDocDB.id == ToolCall__SearchDoc.search_doc_id,
+                            )
+                            .filter(
+                                ToolCall__SearchDoc.tool_call_id == tool_call.id,
+                            )
+                            .all()
+                        )
                         search_docs: list[SavedSearchDoc] = [
                             translate_db_search_doc_to_saved_search_doc(doc)
-                            for doc in tool_call.search_docs
+                            for doc in tool_call_docs
                         ]
                         turn_tool_packets.extend(
                             create_search_packets(

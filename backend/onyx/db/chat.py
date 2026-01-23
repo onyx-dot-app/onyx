@@ -476,7 +476,9 @@ def add_search_docs_to_chat_message(
 
 
 def add_search_docs_to_tool_call(
-    tool_call_id: int, search_doc_ids: list[int], db_session: Session
+    tool_call_id: int,
+    search_doc_ids: list[int],
+    db_session: Session,
 ) -> None:
     """
     Link SearchDocs to a ToolCall by creating entries in the tool_call__search_doc junction table.
@@ -490,7 +492,8 @@ def add_search_docs_to_tool_call(
 
     for search_doc_id in search_doc_ids:
         tool_call_search_doc = ToolCall__SearchDoc(
-            tool_call_id=tool_call_id, search_doc_id=search_doc_id
+            tool_call_id=tool_call_id,
+            search_doc_id=search_doc_id,
         )
         db_session.add(tool_call_search_doc)
 

@@ -364,7 +364,10 @@ class SearchDoc(BaseModel):
 
 
 class SearchDocsResponse(BaseModel):
+    # Full retrieval set - used for assistant message sources at end of conversation
     search_docs: list[SearchDoc]
+    # LLM-selected subset - used for tool call UI and saved to tool call in DB
+    displayed_docs: list[SearchDoc]
     # Maps the citation number to the document id
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the
     # document id is  the most staightforward way.
