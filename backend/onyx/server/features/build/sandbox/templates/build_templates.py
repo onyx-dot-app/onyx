@@ -258,7 +258,7 @@ def main() -> None:
     else:
         # Try to find requirements file relative to script location
         script_dir = Path(__file__).parent
-        requirements_file = script_dir.parent / "initial-requirements.txt"
+        requirements_file = script_dir.parent.parent / "initial-requirements.txt"
         if not requirements_file.exists():
             raise FileNotFoundError(
                 "Could not find requirements file. "

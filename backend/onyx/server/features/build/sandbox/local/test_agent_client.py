@@ -27,11 +27,9 @@ from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 
 try:
-    from onyx.server.features.build.sandbox.local.internal.agent_client import (
-        ACPAgentClient,
-    )
+    from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
 except ImportError:
-    from internal.agent_client import ACPAgentClient  # type: ignore
+    from agent_client import ACPAgentClient  # type: ignore
 
 
 def test_with_opencode_acp(message: str, working_dir: str | None = None) -> None:

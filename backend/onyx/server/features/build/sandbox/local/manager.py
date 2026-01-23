@@ -22,17 +22,13 @@ from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.internal.snapshot_manager import SnapshotManager
-from onyx.server.features.build.sandbox.local.internal.agent_client import (
-    ACPAgentClient,
-)
-from onyx.server.features.build.sandbox.local.internal.agent_client import ACPEvent
-from onyx.server.features.build.sandbox.local.internal.directory_manager import (
+from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
+from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
+from onyx.server.features.build.sandbox.local.process_manager import ProcessManager
+from onyx.server.features.build.sandbox.manager.directory_manager import (
     DirectoryManager,
 )
-from onyx.server.features.build.sandbox.local.internal.process_manager import (
-    ProcessManager,
-)
+from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
@@ -150,6 +146,8 @@ class LocalSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None = None,
         snapshot_path: str | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a session.
 
@@ -167,6 +165,8 @@ class LocalSandboxManager(SandboxManager):
             llm_config: LLM provider configuration
             nextjs_port: Pre-allocated port for Next.js server
             snapshot_path: Optional storage path to restore from
+            user_name: User's name for personalization in AGENTS.md
+            user_role: User's role/title for personalization in AGENTS.md
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -219,7 +219,15 @@ class LocalSandboxManager(SandboxManager):
             logger.debug("Virtual environment ready")
 
             logger.debug("Setting up agent instructions (AGENTS.md)")
-            self._directory_manager.setup_agent_instructions(sandbox_path)
+            self._directory_manager.setup_agent_instructions(
+                sandbox_path=sandbox_path,
+                provider=llm_config.provider,
+                model_name=llm_config.model_name,
+                nextjs_port=nextjs_port,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                user_name=user_name,
+                user_role=user_role,
+            )
             logger.debug("Agent instructions ready")
 
             logger.debug("Setting up skills")

@@ -48,6 +48,12 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.templates.agent_instructions import (
+    generate_agent_instructions,
+)
+from onyx.server.features.build.sandbox.templates.opencode_config import (
+    build_opencode_config,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -158,6 +164,7 @@ class KubernetesSandboxManager(SandboxManager):
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
+        self._skills_path = build_dir / "skills"
 
         logger.info(
             f"KubernetesSandboxManager initialized: "
@@ -179,11 +186,44 @@ class KubernetesSandboxManager(SandboxManager):
             f"http://{service_name}.{self._namespace}.svc.cluster.local:{NEXTJS_PORT}"
         )
 
-    def _load_agent_instructions(self) -> str:
-        """Load agent instructions from template file."""
-        if self._agent_instructions_template_path.exists():
-            return self._agent_instructions_template_path.read_text()
-        return "# Agent Instructions\n\nNo custom instructions provided."
+    def _load_agent_instructions(
+        self,
+        provider: str | None = None,
+        model_name: str | None = None,
+        nextjs_port: int | None = None,
+        disabled_tools: list[str] | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
+    ) -> str:
+        """Load and populate agent instructions from template file.
+
+        Args:
+            provider: LLM provider type
+            model_name: Model name
+            nextjs_port: Next.js port
+            disabled_tools: List of disabled tools
+            user_name: User's name for personalization
+            user_role: User's role/title for personalization
+
+        Returns:
+            Populated agent instructions content
+
+        Note:
+            files_path is not passed here because in Kubernetes, the files are
+            synced via an init container after pod creation. The agent will
+            discover the file structure at runtime by exploring the files/ directory.
+        """
+        return generate_agent_instructions(
+            template_path=self._agent_instructions_template_path,
+            skills_path=self._skills_path,
+            files_path=None,  # Files are synced after pod creation
+            provider=provider,
+            model_name=model_name,
+            nextjs_port=nextjs_port if nextjs_port else NEXTJS_PORT,
+            disabled_tools=disabled_tools,
+            user_name=user_name,
+            user_role=user_role,
+        )
 
     def _create_sandbox_pod(
         self,
@@ -195,12 +235,21 @@ class KubernetesSandboxManager(SandboxManager):
         llm_api_key: str,
         llm_api_base: str | None,
         snapshot_id: str | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
     ) -> client.V1Pod:
         """Create Pod specification for sandbox."""
         pod_name = self._get_pod_name(sandbox_id)
 
-        # Load agent instructions
-        agent_instructions = self._load_agent_instructions()
+        # Load agent instructions with dynamic content
+        agent_instructions = self._load_agent_instructions(
+            provider=llm_provider,
+            model_name=llm_model,
+            nextjs_port=NEXTJS_PORT,
+            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            user_name=user_name,
+            user_role=user_role,
+        )
 
         # Environment variables for init container
         init_env = [
@@ -262,16 +311,14 @@ echo "File sync complete"
             ),
         )
 
-        # Build opencode config JSON
-        opencode_config: dict[str, str | list[str]] = {
-            "provider": llm_provider,
-            "model": llm_model,
-            "apiKey": llm_api_key,
-        }
-        if llm_api_base:
-            opencode_config["apiBase"] = llm_api_base
-        if OPENCODE_DISABLED_TOOLS:
-            opencode_config["disabledTools"] = OPENCODE_DISABLED_TOOLS
+        # Build opencode config JSON using shared config builder
+        opencode_config = build_opencode_config(
+            provider=llm_provider,
+            model_name=llm_model,
+            api_key=llm_api_key if llm_api_key else None,
+            api_base=llm_api_base,
+            disabled_tools=OPENCODE_DISABLED_TOOLS,
+        )
 
         # Main sandbox container
         sandbox_env = [
@@ -576,6 +623,8 @@ echo "File sync complete"
         llm_config: LLMProviderConfig,
         nextjs_port: int | None = None,
         snapshot_path: str | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod.
 
@@ -592,6 +641,8 @@ echo "File sync complete"
             llm_config: LLM provider configuration
             nextjs_port: Not used in kubernetes (always 3000 within cluster)
             snapshot_path: Optional snapshot ID to restore from
+            user_name: User's name for personalization in AGENTS.md
+            user_role: User's role/title for personalization in AGENTS.md
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -618,6 +669,8 @@ echo "File sync complete"
                 llm_api_key=llm_config.api_key or "",
                 llm_api_base=llm_config.api_base,
                 snapshot_id=snapshot_path,  # snapshot_path is used as snapshot_id
+                user_name=user_name,
+                user_role=user_role,
             )
             self._core_api.create_namespaced_pod(
                 namespace=self._namespace,

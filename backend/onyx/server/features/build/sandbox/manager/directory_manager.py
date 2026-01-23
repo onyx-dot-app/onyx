@@ -3,8 +3,13 @@
 import json
 import shutil
 from pathlib import Path
-from typing import Any
 
+from onyx.server.features.build.sandbox.templates.agent_instructions import (
+    generate_agent_instructions,
+)
+from onyx.server.features.build.sandbox.templates.opencode_config import (
+    build_opencode_config,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -57,7 +62,7 @@ class DirectoryManager:
         │   └── graphs/
         ├── .venv/                      # Python virtual environment
         ├── AGENTS.md                   # Agent instructions
-        └── .agent/
+        └── .opencode/
             └── skills/                 # Agent skills
 
         Args:
@@ -120,31 +125,67 @@ class DirectoryManager:
             shutil.copytree(self._venv_template_path, venv_path, symlinks=True)
         return venv_path
 
-    def setup_agent_instructions(self, sandbox_path: Path) -> None:
-        """Copy AGENTS.md instructions template.
+    def setup_agent_instructions(
+        self,
+        sandbox_path: Path,
+        provider: str | None = None,
+        model_name: str | None = None,
+        nextjs_port: int | None = None,
+        disabled_tools: list[str] | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
+    ) -> None:
+        """Generate AGENTS.md with dynamic configuration.
+
+        Reads the template file and replaces placeholders with actual values
+        including user personalization, LLM configuration, runtime settings,
+        and dynamically discovered knowledge sources.
 
         Args:
             sandbox_path: Path to the sandbox directory
+            provider: LLM provider type (e.g., "openai", "anthropic")
+            model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
+            nextjs_port: Port for Next.js development server
+            disabled_tools: List of disabled tools
+            user_name: User's name for personalization
+            user_role: User's role/title for personalization
         """
         agent_md_path = sandbox_path / "AGENTS.md"
-        if (
-            not agent_md_path.exists()
-            and self._agent_instructions_template_path.exists()
-        ):
-            shutil.copy(self._agent_instructions_template_path, agent_md_path)
+        if agent_md_path.exists():
+            return
+
+        # Get the files path (symlink to knowledge sources)
+        files_path = sandbox_path / "files"
+
+        # Use shared utility to generate content
+        content = generate_agent_instructions(
+            template_path=self._agent_instructions_template_path,
+            skills_path=self._skills_path,
+            files_path=files_path if files_path.exists() else None,
+            provider=provider,
+            model_name=model_name,
+            nextjs_port=nextjs_port,
+            disabled_tools=disabled_tools,
+            user_name=user_name,
+            user_role=user_role,
+        )
+
+        # Write the generated content
+        agent_md_path.write_text(content)
+        logger.debug(f"Generated AGENTS.md at {agent_md_path}")
 
     def setup_skills(self, sandbox_path: Path, overwrite: bool = True) -> None:
-        """Copy skills directory to .agent/skills.
+        """Copy skills directory to .opencode/skills.
 
         Copies all skills from the source skills directory to the sandbox's
-        .agent/skills directory. If the destination already exists, it will
+        .opencode/skills directory. If the destination already exists, it will
         be removed and recreated to ensure skills are up-to-date.
 
         Args:
             sandbox_path: Path to the sandbox directory
             overwrite: If True, overwrite existing skills. If False, preserve existing skills.
         """
-        skills_dest = sandbox_path / ".agent" / "skills"
+        skills_dest = sandbox_path / ".opencode" / "skills"
 
         if not self._skills_path.exists():
             logger.warning(
@@ -209,90 +250,15 @@ class DirectoryManager:
                 f"opencode.json already exists at {config_path}, skipping config setup"
             )
             return
-        # Build opencode model string: provider/model-name
-        opencode_model = f"{provider}/{model_name}"
 
-        # Build configuration with schema
-        config: dict[str, Any] = {
-            "$schema": "https://opencode.ai/config.json",
-            "model": opencode_model,
-            "provider": {},
-        }
-
-        # Build provider configuration
-        provider_config: dict[str, Any] = {}
-
-        # Add API key if provided
-        if api_key:
-            provider_config["options"] = {"apiKey": api_key}
-
-        # Add API base if provided
-        if api_base:
-            provider_config["api"] = api_base
-
-        # Build model configuration with thinking/reasoning options
-        options: dict[str, Any] = {}
-
-        if provider == "openai":
-            options["reasoningEffort"] = "high"
-        elif provider == "anthropic":
-            options["thinking"] = {
-                "type": "enabled",
-                "budgetTokens": 16000,
-            }
-        elif provider == "google":
-            options["thinking_budget"] = 16000
-            options["thinking_level"] = "high"
-        elif provider == "bedrock":
-            options["thinking"] = {
-                "type": "enabled",
-                "budgetTokens": 16000,
-            }
-        elif provider == "azure":
-            options["reasoningEffort"] = "high"
-
-        # Add model configuration to provider
-        if options:
-            provider_config["models"] = {
-                model_name: {
-                    "options": options,
-                }
-            }
-
-        # Add provider to config
-        config["provider"][provider] = provider_config
-
-        # Set default tool permission
-        config["permission"] = {
-            "bash": {
-                "rm": "deny",
-                "ssh": "deny",
-                "scp": "deny",
-                "sftp": "deny",
-                "ftp": "deny",
-                "telnet": "deny",
-                "nc": "deny",
-                "netcat": "deny",
-                "*": "allow",  # Allow other bash commands
-            },
-            "edit": "allow",
-            "write": "allow",
-            "read": "allow",
-            "grep": "allow",
-            "glob": "allow",
-            "list": "allow",
-            "lsp": "allow",
-            "patch": "allow",
-            "skill": "allow",
-            "question": "allow",
-            "webfetch": "allow",
-            "external_directory": "allow",  # Allow access to symlinked files directory
-        }
-
-        # Disable specified tools via permissions
-        if disabled_tools:
-            for tool in disabled_tools:
-                config["permission"][tool] = "deny"
+        # Use shared config builder
+        config = build_opencode_config(
+            provider=provider,
+            model_name=model_name,
+            api_key=api_key,
+            api_base=api_base,
+            disabled_tools=disabled_tools,
+        )
 
         config_json = json.dumps(config, indent=2)
         config_path.write_text(config_json)
