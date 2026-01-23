@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
+import Cookies from "js-cookie";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -10,7 +11,7 @@ import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
-import { SvgPlug } from "@opal/icons";
+import { SvgPlug, SvgSettings } from "@opal/icons";
 import { ValidSources } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import ConnectorCard, {
@@ -26,6 +27,17 @@ import { OAUTH_STATE_KEY } from "@/app/build/v1/constants";
 import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import BuildOnboardingModal from "@/app/build/onboarding/components/BuildOnboardingModal";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useUser } from "@/components/user/UserProvider";
+import { updateUserPersonalization } from "@/lib/userSettings";
+import {
+  WORK_AREA_OPTIONS,
+  LEVEL_OPTIONS,
+  BUILD_USER_WORK_AREA_COOKIE_NAME,
+  BUILD_USER_LEVEL_COOKIE_NAME,
+} from "@/app/build/onboarding/constants";
+import { BuildUserInfo } from "@/app/build/onboarding/types";
 
 // Build mode connectors
 const BUILD_CONNECTORS: ValidSources[] = [
@@ -57,10 +69,13 @@ interface SelectedConnectorState {
 export default function BuildConfigPage() {
   const router = useRouter();
   const llmManager = useLlmManager();
+  const { refreshUser, user } = useUser();
+  const { llmProviders, refetch: refetchLlmProviders } = useLLMProviders();
   const [selectedConnector, setSelectedConnector] =
     useState<SelectedConnectorState | null>(null);
   const [connectorToDelete, setConnectorToDelete] =
     useState<BuildConnectorConfig | null>(null);
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
 
   // Get store values - update store directly on switch change
   const demoDataEnabled = useBuildSessionStore(
@@ -68,6 +83,51 @@ export default function BuildConfigPage() {
   );
   const setDemoDataEnabled = useBuildSessionStore(
     (state) => state.setDemoDataEnabled
+  );
+
+  // Read persona from cookies
+  const workAreaValue = Cookies.get(BUILD_USER_WORK_AREA_COOKIE_NAME) || "";
+  const levelValue = Cookies.get(BUILD_USER_LEVEL_COOKIE_NAME) || "";
+
+  // Get display labels
+  const workAreaLabel =
+    WORK_AREA_OPTIONS.find((o) => o.value === workAreaValue)?.label ||
+    workAreaValue;
+  const levelLabel =
+    LEVEL_OPTIONS.find((o) => o.value === levelValue)?.label || levelValue;
+
+  // Get initial values for the modal
+  const existingName = user?.personalization?.name || "";
+  const spaceIndex = existingName.indexOf(" ");
+  const initialFirstName =
+    spaceIndex > 0 ? existingName.slice(0, spaceIndex) : existingName;
+  const initialLastName =
+    spaceIndex > 0 ? existingName.slice(spaceIndex + 1) : "";
+
+  const hasLlmProvider = (llmProviders?.length ?? 0) > 0;
+
+  // Handle persona update
+  const handlePersonaComplete = useCallback(
+    async (info: BuildUserInfo) => {
+      const fullName = `${info.firstName} ${info.lastName}`.trim();
+      await updateUserPersonalization({ name: fullName });
+
+      Cookies.set(BUILD_USER_WORK_AREA_COOKIE_NAME, info.workArea, {
+        path: "/",
+        expires: 365,
+      });
+
+      if (info.level) {
+        Cookies.set(BUILD_USER_LEVEL_COOKIE_NAME, info.level, {
+          path: "/",
+          expires: 365,
+        });
+      }
+
+      await refreshUser();
+      setShowPersonaModal(false);
+    },
+    [refreshUser]
   );
 
   const handleNavigateBack = () => {
@@ -179,6 +239,35 @@ export default function BuildConfigPage() {
                   </SimpleTooltip>
                 </InputLayouts.Horizontal>
               </Card>
+              <Card>
+                <InputLayouts.Horizontal
+                  title="Your Demo Persona"
+                  description={
+                    workAreaLabel && levelLabel
+                      ? `${workAreaLabel} ${levelLabel}`
+                      : workAreaLabel || "Not set"
+                  }
+                  center
+                >
+                  <SimpleTooltip
+                    tooltip={
+                      !hasLlmProvider
+                        ? "Configure an LLM provider first"
+                        : undefined
+                    }
+                    disabled={hasLlmProvider}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setShowPersonaModal(true)}
+                      disabled={!hasLlmProvider}
+                      className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <SvgSettings className="w-5 h-5" />
+                    </button>
+                  </SimpleTooltip>
+                </InputLayouts.Horizontal>
+              </Card>
               <Separator />
               <InputLayouts.Label
                 title="Connectors"
@@ -249,6 +338,22 @@ export default function BuildConfigPage() {
           onSubmit={handleDeleteConfirm}
         />
       )}
+
+      <BuildOnboardingModal
+        open={showPersonaModal}
+        showLlmSetup={false}
+        llmProviders={llmProviders}
+        onComplete={handlePersonaComplete}
+        onLlmComplete={async () => {
+          await refetchLlmProviders();
+        }}
+        initialValues={{
+          firstName: initialFirstName,
+          lastName: initialLastName,
+          workArea: workAreaValue,
+          level: levelValue,
+        }}
+      />
     </SettingsLayouts.Root>
   );
 }
