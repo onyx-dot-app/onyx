@@ -473,9 +473,3 @@ class LocalSandboxManager(SandboxManager):
             raise ValueError(f"Not a file: {path}")
 
         return target_path.read_bytes()
-
-    def cancel_agent(self, sandbox_id: UUID) -> None:
-        """Cancel the current agent operation."""
-        client = self._acp_clients.get(sandbox_id)
-        if client:
-            client.cancel()

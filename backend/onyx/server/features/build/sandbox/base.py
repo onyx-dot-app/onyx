@@ -169,15 +169,6 @@ class SandboxManager(ABC):
         """
         ...
 
-    @abstractmethod
-    def cancel_agent(self, sandbox_id: UUID) -> None:
-        """Cancel the current agent operation.
-
-        Args:
-            sandbox_id: The sandbox ID
-        """
-        ...
-
 
 # Singleton instance cache for the factory
 _sandbox_manager_instance: SandboxManager | None = None

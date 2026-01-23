@@ -155,9 +155,6 @@ class KubernetesSandboxManager(SandboxManager):
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 
-        # Track ACP HTTP clients in memory
-        self._acp_clients: dict[UUID, ACPHttpClient] = {}
-
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
@@ -316,7 +313,7 @@ echo "File sync complete"
             #     failure_threshold=6,
             # ),
             # liveness_probe=client.V1Probe(
-            #     http_get=client.V1HTTPGetAction(path="/health", port=AGENT_PORT),
+            #     http_get=client.V1HTTPGetAction(path="/global/health", port=AGENT_PORT),
             #     initial_delay_seconds=30,
             #     period_seconds=30,
             #     timeout_seconds=5,
@@ -698,22 +695,11 @@ echo "File sync complete"
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
 
-        1. Close ACP HTTP client
-        2. Delete Service, Pod
+        Deletes the Service and Pod for the sandbox.
 
         Args:
             sandbox_id: The sandbox ID to terminate
         """
-        # Close ACP HTTP client
-        acp_client = self._acp_clients.pop(sandbox_id, None)
-        if acp_client:
-            try:
-                acp_client.close()
-            except Exception as e:
-                logger.warning(
-                    f"Error closing ACP client for sandbox {sandbox_id}: {e}"
-                )
-
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
 
@@ -796,14 +782,10 @@ echo "File sync complete"
         Returns:
             True if sandbox is healthy, False otherwise
         """
-        # Get or create ACP HTTP client
-        acp_client = self._acp_clients.get(sandbox_id)
-        if acp_client is None:
-            agent_url = self._get_agent_url(str(sandbox_id))
-            acp_client = ACPHttpClient(agent_url)
-            self._acp_clients[sandbox_id] = acp_client
-
-        # Check agent health
+        # Create a fresh client for each request - we can't assume requests
+        # always hit the same API server pod, so we don't cache clients
+        agent_url = self._get_agent_url(str(sandbox_id))
+        acp_client = ACPHttpClient(agent_url)
         return acp_client.health_check(timeout=5.0)
 
     def send_message(
@@ -820,14 +802,13 @@ echo "File sync complete"
         Yields:
             Typed ACP schema event objects
         """
-        # Get or create ACP HTTP client
-        acp_client = self._acp_clients.get(sandbox_id)
-        if acp_client is None or not acp_client.is_initialized:
-            # _get_agent_url needs string for service name
-            agent_url = self._get_agent_url(str(sandbox_id))
-            acp_client = ACPHttpClient(agent_url)
-            acp_client.initialize(cwd="/workspace")
-            self._acp_clients[sandbox_id] = acp_client
+        # Create a fresh client for each request - we can't assume requests
+        # always hit the same API server pod, so we don't cache clients.
+        # The agent in the sandbox pod is the source of truth for its own state.
+        # initialize() must be idempotent on the agent side.
+        agent_url = self._get_agent_url(str(sandbox_id))
+        acp_client = ACPHttpClient(agent_url)
+        acp_client.initialize(cwd="/workspace")
 
         for event in acp_client.send_message(message):
             yield event
@@ -987,12 +968,6 @@ echo "File sync complete"
 
         except ApiException as e:
             raise RuntimeError(f"Failed to read file: {e}") from e
-
-    def cancel_agent(self, sandbox_id: UUID) -> None:
-        """Cancel the current agent operation."""
-        acp_client = self._acp_clients.get(sandbox_id)
-        if acp_client:
-            acp_client.cancel()
 
     def get_nextjs_url(self, sandbox_id: UUID) -> str:
         """Get the Next.js URL for the sandbox.

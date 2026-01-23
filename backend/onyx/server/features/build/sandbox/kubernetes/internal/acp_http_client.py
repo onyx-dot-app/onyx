@@ -342,7 +342,7 @@ class ACPHttpClient:
         """
         try:
             response = self._http_client.get(
-                f"{self._base_url}/health",
+                f"{self._base_url}/global/health",
                 timeout=timeout,
             )
             return response.status_code == 200

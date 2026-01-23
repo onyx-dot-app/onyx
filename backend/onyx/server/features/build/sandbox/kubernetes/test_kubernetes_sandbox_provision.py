@@ -318,6 +318,7 @@ def test_kubernetes_sandbox_send_message() -> None:
 
         # Verify health check passes before sending message
         is_healthy = manager.health_check(sandbox_id)
+        time.sleep(1000)
         assert is_healthy, "Sandbox agent should be healthy before sending messages"
 
         # Send a simple message

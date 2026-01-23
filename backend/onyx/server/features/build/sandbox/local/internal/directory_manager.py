@@ -264,18 +264,6 @@ class DirectoryManager:
 
         # Set default tool permission
         config["permission"] = {
-            "bash": {
-                "rm": "deny",
-                "ssh": "deny",
-                "scp": "deny",
-                "sftp": "deny",
-                "ftp": "deny",
-                "telnet": "deny",
-                "nc": "deny",
-                "netcat": "deny",
-                # Allow read access to common file operations
-                "allowReadAccess": True,
-            },
             "edit": "allow",
             "write": "allow",
             "read": "allow",
