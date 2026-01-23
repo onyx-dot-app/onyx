@@ -654,8 +654,15 @@ def run_llm_loop(
 
                 # Extract search_docs if this is a search tool response
                 search_docs = None
+                displayed_docs = None
                 if isinstance(tool_response.rich_response, SearchDocsResponse):
                     search_docs = tool_response.rich_response.search_docs
+                    displayed_docs = tool_response.rich_response.displayed_docs
+
+                    # Add ALL search docs to state container for DB persistence
+                    if search_docs:
+                        state_container.add_search_docs(search_docs)
+
                     if gathered_documents:
                         gathered_documents.extend(search_docs)
                     else:
@@ -689,7 +696,7 @@ def run_llm_loop(
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
                     tool_call_arguments=tool_call.tool_args,
                     tool_call_response=saved_response,
-                    search_docs=search_docs,
+                    search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,
                 )
                 # Add to state container for partial save support
