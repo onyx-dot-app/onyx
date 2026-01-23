@@ -13,6 +13,7 @@ from onyx.llm.well_known_providers.auto_update_service import (
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import GOOGLE_AI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
@@ -35,6 +36,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
         BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
+        GOOGLE_AI_PROVIDER_NAME: get_google_ai_model_names(),
         VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
@@ -210,6 +212,47 @@ def get_vertexai_model_names() -> list[str]:
     )
 
 
+def get_google_ai_model_names() -> list[str]:
+    """Get Google AI Studio model names from litellm model_cost.
+
+    Uses the 'gemini/' prefix which corresponds to Google AI Studio API.
+    Filters out non-chat models (embedding, image generation, etc.).
+    """
+    import litellm
+
+    model_names = []
+
+    # Filter patterns to exclude non-chat models
+    exclude_patterns = [
+        "embedding",
+        "text-embedding",
+        "imagen",
+        "veo",
+        "learnlm",
+        "-exp",
+        "chirp",
+        "code-gecko",
+        "text-bison",  # Legacy PaLM models
+        "chat-bison",  # Legacy PaLM models
+    ]
+
+    for model_name in litellm.model_cost.keys():
+        if not model_name.startswith("gemini/"):
+            continue
+
+        # Extract the base model name without prefix
+        base_name = model_name.replace("gemini/", "")
+
+        # Skip non-chat models
+        if any(pattern in base_name.lower() for pattern in exclude_patterns):
+            continue
+
+        # Add the base model name (without prefix - will be added at runtime)
+        model_names.append(base_name)
+
+    return sorted(list(set(model_names)), reverse=True)
+
+
 def model_configurations_for_provider(
     provider_name: str, llm_recommendations: LLMRecommendations
 ) -> list[ModelConfigurationView]:
@@ -282,6 +325,7 @@ def get_provider_display_name(provider_name: str) -> str:
         ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
         AZURE_PROVIDER_NAME: "Azure OpenAI",
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
+        GOOGLE_AI_PROVIDER_NAME: "Google AI Studio",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
     }

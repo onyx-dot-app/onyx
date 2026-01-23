@@ -60,3 +60,13 @@ VERTEXAI_VISIBLE_MODEL_NAMES = {
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
 }
+
+# Google AI Studio (uses gemini/ prefix in litellm, requires only API key)
+GOOGLE_AI_PROVIDER_NAME = "google_ai"
+GOOGLE_AI_DEFAULT_MODEL = "gemini-3-pro-preview"
+# Curated list of Google AI Studio models to show by default in the UI
+GOOGLE_AI_VISIBLE_MODEL_NAMES = {
+    "gemini-3-pro-preview",
+    "gemini-3-pro-image-preview",
+    "gemini-3-flash-preview",
+}

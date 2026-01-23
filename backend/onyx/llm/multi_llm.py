@@ -154,6 +154,10 @@ class LitellmLLM(LLM):
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
             os.environ["OLLAMA_API_BASE"] = api_base
+
+        # Set GEMINI_API_KEY for Google AI Studio (uses gemini/ prefix in litellm)
+        if model_provider == LlmProviderNames.GOOGLE_AI and api_key:
+            os.environ["GEMINI_API_KEY"] = api_key
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:
@@ -302,6 +306,7 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
+        is_google_ai = self._model_provider == LlmProviderNames.GOOGLE_AI
         # Vertex Anthropic Opus 4.5 rejects output_config (LiteLLM maps reasoning_effort).
         # Keep this guard until LiteLLM/Vertex accept the field for this model.
         is_vertex_opus_4_5 = (
@@ -315,11 +320,15 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        model_provider = (
-            f"{self.config.model_provider}/responses"
-            if is_openai_model  # Uses litellm's completions -> responses bridge
-            else self.config.model_provider
-        )
+        # Map internal provider names to litellm-compatible prefixes
+        if is_openai_model:
+            # Uses litellm's completions -> responses bridge
+            model_provider = f"{self.config.model_provider}/responses"
+        elif is_google_ai:
+            # Google AI Studio uses gemini/ prefix in litellm
+            model_provider = "gemini"
+        else:
+            model_provider = self.config.model_provider
         model = (
             f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
         )

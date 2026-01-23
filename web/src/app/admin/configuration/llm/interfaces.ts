@@ -1,6 +1,7 @@
 export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
+  GOOGLE_AI = "google_ai",
   OLLAMA_CHAT = "ollama_chat",
   AZURE = "azure",
   OPENROUTER = "openrouter",
