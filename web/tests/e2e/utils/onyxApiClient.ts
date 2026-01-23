@@ -389,6 +389,43 @@ export class OnyxApiClient {
     return responseData.id;
   }
 
+  async listLlmProviders(): Promise<
+    Array<{
+      id: number;
+      is_public?: boolean;
+    }>
+  > {
+    const response = await this.get("/llm/provider");
+    return await this.handleResponse(response, "Failed to list LLM providers");
+  }
+
+  async createPublicProvider(providerName: string): Promise<number> {
+    const response = await this.page.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: "test-key",
+          default_model_name: "gpt-4o",
+          is_public: true,
+          groups: [],
+          personas: [],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create public provider"
+    );
+
+    this.log(
+      `Created public LLM provider: ${providerName} (ID: ${responseData.id})`
+    );
+    return responseData.id;
+  }
+
   /**
    * Deletes an LLM provider.
    *
@@ -492,6 +529,17 @@ export class OnyxApiClient {
       this.log(`Deleted assistant ${assistantId}`);
     }
     return success;
+  }
+
+  async getAssistant(assistantId: number): Promise<{
+    id: number;
+    tools: Array<{ id: number; mcp_server_id?: number | null }>;
+  }> {
+    const response = await this.get(`/persona/${assistantId}`);
+    return await this.handleResponse(
+      response,
+      `Failed to fetch assistant ${assistantId}`
+    );
   }
 
   async listMcpServers(): Promise<any[]> {
