@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Permissions-Policy" content="clipboard-write=(self)" />
+    <title>Onyx</title>
+    <link rel="stylesheet" href="../styles/shared.css" />
+    <style>
+      :root {
+        --background-900: #0a0a0a;
+        --background-800: #1a1a1a;
+        --text-light-05: rgba(255, 255, 255, 0.95);
+        --text-light-03: rgba(255, 255, 255, 0.6);
+        --white-10: rgba(255, 255, 255, 0.1);
+        --white-15: rgba(255, 255, 255, 0.15);
+        --white-20: rgba(255, 255, 255, 0.2);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 300px;
+        margin: 0;
+        padding: 0;
+        font-family: var(--font-hanken-grotesk);
+        background: linear-gradient(
+          135deg,
+          var(--background-900) 0%,
+          var(--background-800) 100%
+        );
+        color: var(--text-light-05);
+      }
+
+      .popup-container {
+        padding: 16px;
+      }
+
+      .popup-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--white-10);
+        margin-bottom: 16px;
+      }
+
+      .popup-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .popup-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        padding: 4px;
+      }
+
+      .popup-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-light-05);
+      }
+
+      .menu-button-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .menu-button-text {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .menu-button-shortcut {
+        font-size: 11px;
+        color: var(--text-light-03);
+        font-weight: 400;
+        margin-left: auto;
+      }
+
+      .settings-group {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 12px;
+      }
+
+      .setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+      }
+
+      .setting-label {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--text-light-05);
+      }
+
+      .setting-divider {
+        height: 1px;
+        background: var(--white-10);
+        margin: 0 4px;
+      }
+
+      .menu-button {
+        background: rgba(255, 255, 255, 0.05);
+        border: none;
+        padding: 12px;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        font-size: 14px;
+        color: var(--text-light-05);
+        font-weight: 400;
+        transition: background 0.2s;
+        border-radius: 12px;
+        font-family: var(--font-hanken-grotesk);
+      }
+
+      .menu-button:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .menu-button svg {
+        width: 18px;
+        height: 18px;
+        stroke: var(--text-light-05);
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .button-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+      }
+
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(255, 255, 255, 0.2);
+        transition: 0.3s;
+        border-radius: 24px;
+      }
+
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.3s;
+        border-radius: 50%;
+      }
+
+      input:checked + .toggle-slider {
+        background-color: rgba(255, 255, 255, 0.4);
+      }
+
+      input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="popup-container">
+      <div class="popup-header">
+        <div class="popup-icon">
+          <img src="../../public/icon48.png" alt="Onyx" />
+        </div>
+        <h2 class="popup-title">Onyx</h2>
+      </div>
+
+      <div class="settings-group">
+        <div class="setting-row">
+          <label class="setting-label" for="defaultNewTabToggle">
+            Use Onyx as new tab page
+          </label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="defaultNewTabToggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="button-group">
+        <button class="menu-button" id="openSidePanel">
+          <div class="menu-button-content">
+            <div class="menu-button-text">
+              <svg viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="15" y1="3" x2="15" y2="21"></line>
+              </svg>
+              Open Onyx Panel
+            </div>
+            <span class="menu-button-shortcut">Ctrl+O</span>
+          </div>
+        </button>
+
+        <button class="menu-button" id="openOptions">
+          <div class="menu-button-text">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+              ></path>
+            </svg>
+            Extension Settings
+          </div>
+        </button>
+      </div>
+    </div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
