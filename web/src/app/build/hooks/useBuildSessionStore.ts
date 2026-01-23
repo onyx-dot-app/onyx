@@ -14,7 +14,7 @@ import {
   SessionStatus,
   ToolCall,
   ToolCallStatus,
-} from "@/app/build/services/buildStreamingModels";
+} from "@/app/build/types/streamingTypes";
 
 import {
   StreamItem,

@@ -75,7 +75,7 @@ export default function BuildConfigPage() {
   };
 
   const { data, mutate, isLoading } = useSWR<BuildConnectorListResponse>(
-    "/api/build/v1/connectors",
+    "/api/build/connectors",
     errorHandlingFetcher,
     { refreshInterval: 5000 }
   );

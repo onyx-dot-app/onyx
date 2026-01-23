@@ -11,9 +11,20 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.configs.constants import DocumentSource
+from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexingStatus
+from onyx.db.enums import ProcessingMode
+from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import User
 from onyx.server.features.build.api.messages_api import router as messages_router
+from onyx.server.features.build.api.models import BuildConnectorInfo
+from onyx.server.features.build.api.models import BuildConnectorListResponse
+from onyx.server.features.build.api.models import BuildConnectorStatus
+from onyx.server.features.build.api.models import RateLimitResponse
+from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.utils.logger import setup_logger
@@ -25,6 +36,133 @@ router = APIRouter(prefix="/build")
 # Include sub-routers for sessions and messages
 router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
+
+
+# -----------------------------------------------------------------------------
+# Rate Limiting
+# -----------------------------------------------------------------------------
+
+
+@router.get("/limit", response_model=RateLimitResponse)
+def get_rate_limit(
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> RateLimitResponse:
+    """Get rate limit information for the current user."""
+    return get_user_rate_limit_status(user, db_session)
+
+
+# -----------------------------------------------------------------------------
+# Build Connectors
+# -----------------------------------------------------------------------------
+
+
+@router.get("/connectors", response_model=BuildConnectorListResponse)
+def get_build_connectors(
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> BuildConnectorListResponse:
+    """Get all connectors for the build admin panel.
+
+    Returns all connector-credential pairs with simplified status information.
+    """
+    cc_pairs = get_connector_credential_pairs_for_user(
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+        eager_load_connector=True,
+        eager_load_credential=True,
+        processing_mode=ProcessingMode.FILE_SYSTEM,  # Only show FILE_SYSTEM connectors
+    )
+
+    connectors: list[BuildConnectorInfo] = []
+    for cc_pair in cc_pairs:
+        # Skip ingestion API connectors and default pairs
+        if cc_pair.connector.source == DocumentSource.INGESTION_API:
+            continue
+        if cc_pair.name == "DefaultCCPair":
+            continue
+
+        # Determine status
+        error_message: str | None = None
+
+        if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+            status = BuildConnectorStatus.DELETING
+        elif cc_pair.status == ConnectorCredentialPairStatus.INVALID:
+            status = BuildConnectorStatus.ERROR
+            error_message = "Connector credentials are invalid"
+        else:
+            # Check latest index attempt for errors
+            latest_attempt = get_latest_index_attempt_for_cc_pair_id(
+                db_session=db_session,
+                connector_credential_pair_id=cc_pair.id,
+                secondary_index=False,
+                only_finished=True,
+            )
+
+            if latest_attempt and latest_attempt.status == IndexingStatus.FAILED:
+                status = BuildConnectorStatus.ERROR
+                error_message = latest_attempt.error_msg
+            elif (
+                latest_attempt
+                and latest_attempt.status == IndexingStatus.COMPLETED_WITH_ERRORS
+            ):
+                status = BuildConnectorStatus.ERROR
+                error_message = "Indexing completed with errors"
+            elif cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+                status = BuildConnectorStatus.CONNECTED
+            elif cc_pair.last_successful_index_time is None:
+                # Never successfully indexed - check if currently indexing
+                # First check cc_pair status for scheduled/initial indexing
+                if cc_pair.status in (
+                    ConnectorCredentialPairStatus.SCHEDULED,
+                    ConnectorCredentialPairStatus.INITIAL_INDEXING,
+                ):
+                    status = BuildConnectorStatus.INDEXING
+                else:
+                    in_progress_attempt = get_latest_index_attempt_for_cc_pair_id(
+                        db_session=db_session,
+                        connector_credential_pair_id=cc_pair.id,
+                        secondary_index=False,
+                        only_finished=False,
+                    )
+                    if (
+                        in_progress_attempt
+                        and in_progress_attempt.status == IndexingStatus.IN_PROGRESS
+                    ):
+                        status = BuildConnectorStatus.INDEXING
+                    elif (
+                        in_progress_attempt
+                        and in_progress_attempt.status == IndexingStatus.NOT_STARTED
+                    ):
+                        status = BuildConnectorStatus.INDEXING
+                    else:
+                        # Has a finished attempt but never succeeded - likely error
+                        status = BuildConnectorStatus.ERROR
+                        error_message = (
+                            latest_attempt.error_msg
+                            if latest_attempt
+                            else "Initial indexing failed"
+                        )
+            else:
+                status = BuildConnectorStatus.CONNECTED
+
+        connectors.append(
+            BuildConnectorInfo(
+                cc_pair_id=cc_pair.id,
+                connector_id=cc_pair.connector.id,
+                credential_id=cc_pair.credential.id,
+                source=cc_pair.connector.source.value,
+                name=cc_pair.name or cc_pair.connector.name or "Unnamed",
+                status=status,
+                docs_indexed=0,  # Would need to query for this
+                last_indexed=cc_pair.last_successful_index_time,
+                error_message=error_message,
+            )
+        )
+
+    return BuildConnectorListResponse(connectors=connectors)
+
 
 # Headers to skip when proxying (hop-by-hop headers)
 EXCLUDED_HEADERS = {

@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -220,3 +221,45 @@ class UploadResponse(BaseModel):
     filename: str  # Sanitized filename
     path: str  # Relative path in sandbox (e.g., "user_uploaded_files/doc.pdf")
     size_bytes: int  # File size in bytes
+
+
+# ===== Rate Limit Models =====
+class RateLimitResponse(BaseModel):
+    """Rate limit information."""
+
+    is_limited: bool
+    limit_type: str  # "weekly" or "total"
+    messages_used: int
+    limit: int
+    reset_timestamp: str | None = None
+
+
+# ===== Build Connector Models =====
+class BuildConnectorStatus(str, Enum):
+    """Status of a build connector."""
+
+    NOT_CONNECTED = "not_connected"
+    CONNECTED = "connected"
+    INDEXING = "indexing"
+    ERROR = "error"
+    DELETING = "deleting"
+
+
+class BuildConnectorInfo(BaseModel):
+    """Simplified connector info for build admin panel."""
+
+    cc_pair_id: int
+    connector_id: int
+    credential_id: int
+    source: str
+    name: str
+    status: BuildConnectorStatus
+    docs_indexed: int
+    last_indexed: datetime | None
+    error_message: str | None = None
+
+
+class BuildConnectorListResponse(BaseModel):
+    """List of build connectors."""
+
+    connectors: list[BuildConnectorInfo]

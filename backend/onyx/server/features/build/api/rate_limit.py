@@ -8,11 +8,11 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
+from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.subscription_check import is_user_subscribed
 from onyx.server.features.build.db.rate_limit import count_user_messages_in_window
 from onyx.server.features.build.db.rate_limit import count_user_messages_total
 from onyx.server.features.build.db.rate_limit import get_oldest_message_timestamp
-from onyx.server.features.build.v1_api import RateLimitResponse
 from shared_configs.configs import MULTI_TENANT
 
 

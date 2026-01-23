@@ -22,7 +22,7 @@ import {
   fetchArtifacts,
   fetchFileContent,
 } from "@/app/build/services/apiServices";
-import { FileSystemEntry } from "@/app/build/services/buildStreamingModels";
+import { FileSystemEntry } from "@/app/build/types/streamingTypes";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
@@ -421,7 +421,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       <UrlBar
         displayUrl={
           isFilePreviewActive && activeFilePreviewPath
-            ? `sandbox://files/${activeFilePreviewPath}`
+            ? `sandbox://${activeFilePreviewPath}`
             : activeOutputTab === "preview"
               ? session
                 ? displayUrl || "Loading..."

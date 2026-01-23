@@ -7,7 +7,7 @@ import ThinkingCard from "@/app/build/components/ThinkingCard";
 import ToolCallPill from "@/app/build/components/ToolCallPill";
 import TodoListCard from "@/app/build/components/TodoListCard";
 import UserMessage from "@/app/build/components/UserMessage";
-import { BuildMessage } from "@/app/build/services/buildStreamingModels";
+import { BuildMessage } from "@/app/build/types/streamingTypes";
 import { StreamItem } from "@/app/build/types/displayTypes";
 
 /**
