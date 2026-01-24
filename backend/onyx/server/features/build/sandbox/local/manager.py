@@ -194,6 +194,13 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Sandbox directory created at {sandbox_path}")
 
         try:
+            # Setup files symlink (shared across all sessions)
+            logger.debug(f"Setting up files symlink to {file_system_path}")
+            self._directory_manager.setup_files_symlink(
+                sandbox_path, Path(file_system_path)
+            )
+            logger.debug("Files symlink created")
+
             logger.info(
                 f"Provisioned sandbox {sandbox_id} at {sandbox_path} "
                 f"(no sessions yet, Next.js port reserved: {nextjs_port})"
@@ -345,7 +352,9 @@ class LocalSandboxManager(SandboxManager):
             logger.debug("Opencode config ready")
 
             # Start Next.js server on pre-allocated port
-            web_dir = self._directory_manager.get_web_path(sandbox_path)
+            web_dir = self._directory_manager.get_web_path(
+                sandbox_path, str(session_id)
+            )
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
             self._process_manager.start_nextjs_server(web_dir, nextjs_port)

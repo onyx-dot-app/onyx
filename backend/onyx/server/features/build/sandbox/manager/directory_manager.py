@@ -400,7 +400,7 @@ class DirectoryManager:
             return sandbox_path / "sessions" / session_id / "outputs"
         return sandbox_path / "outputs"
 
-    def get_web_path(self, sandbox_path: Path, session_id: str | None = None) -> Path:
+    def get_web_path(self, sandbox_path: Path, session_id: str) -> Path:
         """Return path to Next.js web directory.
 
         Args:
