@@ -580,7 +580,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
             open
             onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
           >
-            <Modal.Content medium>
+            <Modal.Content>
               <Modal.Header
                 icon={SvgFileText}
                 title="Sources"

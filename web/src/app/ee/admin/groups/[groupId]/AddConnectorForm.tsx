@@ -33,7 +33,7 @@ export default function AddConnectorForm({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgPlus}
           title="Add New Connector"

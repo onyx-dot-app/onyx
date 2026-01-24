@@ -128,7 +128,7 @@ function ShareAgentFormContent({
   }
 
   return (
-    <Modal.Content tall>
+    <Modal.Content width="sm" height="lg">
       <Modal.Header icon={SvgShare} title="Share Agent" onClose={onClose} />
 
       <Modal.Body padding={0.5}>

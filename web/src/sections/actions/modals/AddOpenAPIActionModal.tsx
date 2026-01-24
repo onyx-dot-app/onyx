@@ -526,7 +526,7 @@ export default function AddOpenAPIActionModal({
 
   return (
     <Modal open={isOpen} onOpenChange={handleModalClose}>
-      <Modal.Content tall skipOverlay={skipOverlay}>
+      <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Formik
           initialValues={initialValues}
           validationSchema={validationSchema}

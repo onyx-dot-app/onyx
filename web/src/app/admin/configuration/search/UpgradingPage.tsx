@@ -130,7 +130,7 @@ export default function UpgradingPage({
       {popup}
       {isCancelling && (
         <Modal open onOpenChange={() => setIsCancelling(false)}>
-          <Modal.Content small>
+          <Modal.Content width="sm" height="sm">
             <Modal.Header
               icon={SvgX}
               title="Cancel Embedding Model Switch"

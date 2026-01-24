@@ -360,7 +360,7 @@ export default function UserSettings() {
       {popup}
 
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-        <Modal.Content tall>
+        <Modal.Content width="sm" height="lg">
           <Modal.Header
             icon={SvgSettings}
             title="Settings"

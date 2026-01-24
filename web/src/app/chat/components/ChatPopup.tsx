@@ -73,7 +73,7 @@ export function ChatPopup() {
 
   return (
     <Modal open onOpenChange={() => {}}>
-      <Modal.Content tall>
+      <Modal.Content width="sm" height="lg">
         <Modal.Header
           titleClassName="text-text-04"
           icon={headerIcon}

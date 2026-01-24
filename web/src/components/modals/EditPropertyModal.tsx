@@ -24,7 +24,7 @@ export default function EditPropertyModal({
 }: EditPropertyModalProps) {
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content medium>
+      <Modal.Content>
         <Modal.Header
           icon={SvgEdit}
           title={`Edit ${propertyTitle}`}

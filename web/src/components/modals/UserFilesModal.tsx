@@ -169,7 +169,8 @@ export default function UserFilesModal({
 
       <Modal open={isOpen} onOpenChange={toggle}>
         <Modal.Content
-          tall
+          width="sm"
+          height="lg"
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             searchInputRef.current?.focus();

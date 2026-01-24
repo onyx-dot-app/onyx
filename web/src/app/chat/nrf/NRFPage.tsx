@@ -461,7 +461,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           />
 
           <Modal open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
-            <Modal.Content mini>
+            <Modal.Content width="sm">
               <Modal.Header
                 icon={SvgAlertTriangle}
                 title="Turn off Onyx new tab page?"
@@ -483,7 +483,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {!user && authTypeMetadata.authType !== AuthType.DISABLED && (
         <Modal open onOpenChange={() => {}}>
-          <Modal.Content small>
+          <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
               {authTypeMetadata.authType === AuthType.BASIC ? (
