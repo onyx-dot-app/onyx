@@ -12,6 +12,7 @@ export enum RenderType {
   HIGHLIGHT = "highlight",
   FULL = "full",
   COMPACT = "compact",
+  INLINE = "inline",
 }
 
 export interface FullChatState {

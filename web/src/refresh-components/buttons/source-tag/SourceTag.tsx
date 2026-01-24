@@ -124,7 +124,7 @@ const SourceTagInner = ({
         <div className="flex items-center -space-x-1.5">
           {uniqueSources.slice(0, 3).map((source, index) => (
             <div
-              key={source.id}
+              key={source.id ?? `source-${index}`}
               className={cn(
                 "relative flex items-center justify-center p-0.5 rounded-04",
                 "bg-background-tint-00 border transition-colors duration-150",
@@ -141,14 +141,7 @@ const SourceTagInner = ({
               ) : source.sourceType === ValidSources.Web && source.sourceUrl ? (
                 <WebResultIcon url={source.sourceUrl} size={12} />
               ) : (
-                <SourceIcon
-                  sourceType={
-                    source.sourceType === ValidSources.Web
-                      ? ValidSources.Web
-                      : source.sourceType
-                  }
-                  iconSize={12}
-                />
+                <SourceIcon sourceType={source.sourceType} iconSize={12} />
               )}
             </div>
           ))}

@@ -254,6 +254,12 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepSupportsCompact,
   } = useTimelineMetrics(turnGroups, userStopped);
 
+  // Check if last step is a search tool for INLINE render type
+  const lastStepIsSearchTool = useMemo(
+    () => lastStep && isSearchToolPackets(lastStep.packets),
+    [lastStep]
+  );
+
   // Expansion state management
   const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
     useTimelineExpansion(stopPacketSeen, lastTurnGroup, hasDisplayContent);
@@ -432,7 +438,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             stopReason={stopReason}
             defaultExpanded={false}
             renderTypeOverride={
-              lastStepIsResearchAgent ? RenderType.HIGHLIGHT : undefined
+              lastStepIsResearchAgent
+                ? RenderType.HIGHLIGHT
+                : lastStepIsSearchTool
+                  ? RenderType.INLINE
+                  : undefined
             }
             isLastStep={true}
           >

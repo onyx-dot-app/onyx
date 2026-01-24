@@ -63,6 +63,9 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
 
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
+  const isInline = renderType === RenderType.INLINE;
+
+  const hasResults = results.length > 0;
 
   const icon = isInternetSearch ? SvgGlobe : SvgSearchMenu;
   const queriesHeader = isInternetSearch
@@ -93,7 +96,9 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             items={results}
             initialCount={INITIAL_RESULTS_TO_SHOW}
             expansionCount={RESULTS_PER_EXPANSION}
-            getKey={(doc: OnyxDocument) => doc.document_id}
+            getKey={(doc: OnyxDocument, index: number) =>
+              doc.document_id ?? `result-${index}`
+            }
             toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
             onClick={(doc: OnyxDocument) => {
               if (doc.link) {
@@ -103,6 +108,53 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
           />
         </div>
+      ),
+    });
+  }
+
+  // INLINE mode: dynamic phase-based content for collapsed streaming view
+  if (isInline) {
+    // Querying phase: show queries
+    if (!hasResults) {
+      return children({
+        icon: null,
+        status: queriesHeader,
+        supportsCompact: true,
+        content: (
+          <SearchChipList
+            items={queries}
+            initialCount={INITIAL_QUERIES_TO_SHOW}
+            expansionCount={QUERIES_PER_EXPANSION}
+            getKey={(_, index) => index}
+            toSourceInfo={queryToSourceInfo}
+            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+            showDetailsCard={false}
+          />
+        ),
+      });
+    }
+
+    // Reading results phase: show results
+    return children({
+      icon: null,
+      status: "Reading results",
+      supportsCompact: true,
+      content: (
+        <SearchChipList
+          items={results}
+          initialCount={INITIAL_RESULTS_TO_SHOW}
+          expansionCount={RESULTS_PER_EXPANSION}
+          getKey={(doc: OnyxDocument, index: number) =>
+            doc.document_id ?? `result-${index}`
+          }
+          toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
+          onClick={(doc: OnyxDocument) => {
+            if (doc.link) {
+              window.open(doc.link, "_blank");
+            }
+          }}
+          emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+        />
       ),
     });
   }
@@ -136,7 +188,9 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               items={results}
               initialCount={INITIAL_RESULTS_TO_SHOW}
               expansionCount={RESULTS_PER_EXPANSION}
-              getKey={(doc: OnyxDocument) => doc.document_id}
+              getKey={(doc: OnyxDocument, index: number) =>
+                doc.document_id ?? `result-${index}`
+              }
               toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
               onClick={(doc: OnyxDocument) => {
                 if (doc.link) {
