@@ -39,10 +39,12 @@ import {
   SvgArrowLeft,
   SvgArrowRight,
   SvgImage,
+  SvgExternalLink,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/build/components/CraftingLoader";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 type TabValue = OutputTabType;
 
@@ -451,6 +453,13 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
         canGoForward={canGoForward}
         onBack={handleBack}
         onForward={handleForward}
+        previewUrl={
+          activeOutputTab === "preview" &&
+          displayUrl &&
+          displayUrl.startsWith("http")
+            ? displayUrl
+            : null
+        }
       />
 
       {/* Tab Content */}
@@ -504,12 +513,14 @@ interface UrlBarProps {
   canGoForward?: boolean;
   onBack?: () => void;
   onForward?: () => void;
+  previewUrl?: string | null;
 }
 
 /**
  * UrlBar - Chrome-style URL/status bar below tabs
  * Shows the current URL/path based on active tab or file preview
  * Optionally shows back/forward navigation buttons
+ * For Preview tab, shows a button to open the URL in a new browser tab
  */
 function UrlBar({
   displayUrl,
@@ -518,7 +529,14 @@ function UrlBar({
   canGoForward = false,
   onBack,
   onForward,
+  previewUrl,
 }: UrlBarProps) {
+  const handleOpenInNewTab = () => {
+    if (previewUrl) {
+      window.open(previewUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
   return (
     <div className="px-3 pb-2">
       <div className="flex items-center gap-1">
@@ -554,7 +572,19 @@ function UrlBar({
           </div>
         )}
         {/* URL display */}
-        <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full">
+        <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2">
+          {/* Open in new tab button - only shown for Preview tab with valid URL */}
+          {previewUrl && (
+            <SimpleTooltip tooltip="open in a new tab" delayDuration={200}>
+              <button
+                onClick={handleOpenInNewTab}
+                className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-background-tint-03 text-text-03"
+                aria-label="open in a new tab"
+              >
+                <SvgExternalLink size={14} />
+              </button>
+            </SimpleTooltip>
+          )}
           <Text secondaryBody text03 className="truncate">
             {displayUrl}
           </Text>
@@ -606,7 +636,7 @@ function PreviewTab({ webappUrl }: PreviewTabProps) {
               "transition-opacity duration-300",
               iframeLoaded ? "opacity-100" : "opacity-0"
             )}
-            sandbox="allow-scripts allow-same-origin allow-forms"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             title="Web App Preview"
           />
         )}
