@@ -797,6 +797,18 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
 
+# Start Next.js dev server in background
+echo "Starting Next.js dev server on port {NEXTJS_PORT}..."
+cd {session_path}/outputs/web
+
+# Start npm run dev in background with output to log file
+nohup npm run dev -- -p {NEXTJS_PORT} > {session_path}/nextjs.log 2>&1 &
+NEXTJS_PID=$!
+echo "Next.js server started with PID $NEXTJS_PID"
+
+# Store PID for potential cleanup
+echo $NEXTJS_PID > {session_path}/nextjs.pid
+
 echo "Session workspace setup complete"
 """
 
@@ -850,6 +862,14 @@ echo "Session workspace setup complete"
 
         cleanup_script = f"""
 set -e
+
+# Kill Next.js server if running
+if [ -f {session_path}/nextjs.pid ]; then
+    NEXTJS_PID=$(cat {session_path}/nextjs.pid)
+    echo "Stopping Next.js server (PID: $NEXTJS_PID)"
+    kill $NEXTJS_PID 2>/dev/null || true
+fi
+
 echo "Removing session directory: {session_path}"
 rm -rf {session_path}
 echo "Session cleanup complete"

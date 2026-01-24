@@ -419,3 +419,200 @@ def test_kubernetes_sandbox_send_message() -> None:
             except ApiException as e:
                 # 404 means pod was successfully deleted
                 assert e.status == 404
+
+
+@pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
+)
+def test_kubernetes_sandbox_webapp_passthrough() -> None:
+    """Test that the webapp passthrough (Next.js server) is accessible in the sandbox.
+
+    This test:
+    1. Creates a sandbox pod
+    2. Sets up a session workspace
+    3. Verifies the Next.js server is running and accessible within the pod
+    4. Verifies get_nextjs_url returns the correct cluster URL format
+    5. Cleans up by terminating the sandbox
+    """
+    _is_kubernetes_available()
+
+    # Initialize the database engine
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+
+    # Set up tenant context (required for multi-tenant operations)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+
+    # Get the manager instance
+    manager = KubernetesSandboxManager()
+
+    sandbox_id = uuid4()
+    session_id = uuid4()
+
+    # Create a test LLM config
+    llm_config = LLMProviderConfig(
+        provider="openai",
+        model_name="gpt-4",
+        api_key="test-key",
+        api_base=None,
+    )
+
+    try:
+        # Provision the sandbox
+        sandbox_info = manager.provision(
+            sandbox_id=sandbox_id,
+            user_id=TEST_USER_ID,
+            tenant_id=TEST_TENANT_ID,
+            llm_config=llm_config,
+        )
+
+        assert sandbox_info.status == SandboxStatus.RUNNING
+
+        # Verify health check passes before testing webapp
+        is_healthy = False
+        for _ in range(10):
+            is_healthy = manager.health_check(
+                sandbox_id, nextjs_port=KUBERNETES_NEXTJS_PORT
+            )
+            if is_healthy:
+                break
+            time.sleep(10)
+
+        assert is_healthy, "Sandbox should be healthy before testing webapp passthrough"
+        print("DEBUG: Sandbox is healthy")
+
+        # Set up session workspace
+        manager.setup_session_workspace(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            llm_config=llm_config,
+            nextjs_port=KUBERNETES_NEXTJS_PORT,
+            file_system_path=None,
+            snapshot_path=None,
+            user_name="Test User",
+            user_role="Test Role",
+        )
+
+        # Get Kubernetes client for exec operations
+        k8s_client = _get_kubernetes_client()
+        pod_name = f"sandbox-{str(sandbox_id)[:8]}"
+
+        # Wait for Next.js server to be ready (it may take a few seconds to start)
+        nextjs_ready = False
+        for attempt in range(30):
+            exec_command = [
+                "/bin/sh",
+                "-c",
+                (
+                    f"curl -s -o /dev/null -w '%{{http_code}}' "
+                    f"http://localhost:{KUBERNETES_NEXTJS_PORT}/ 2>/dev/null || echo 'failed'"
+                ),
+            ]
+            resp = k8s_stream(
+                k8s_client.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=SANDBOX_NAMESPACE,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+            print(f"DEBUG: Next.js health check attempt {attempt + 1}: {resp}")
+            if resp and resp.strip() in ("200", "304"):
+                nextjs_ready = True
+                break
+            time.sleep(2)
+
+        assert (
+            nextjs_ready
+        ), f"Next.js server should be accessible at localhost:{KUBERNETES_NEXTJS_PORT}"
+        print("DEBUG: Next.js server is ready")
+
+        # Verify we can fetch actual content from the Next.js server
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f"curl -s http://localhost:{KUBERNETES_NEXTJS_PORT}/ | head -c 500",
+        ]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None, "Should receive content from Next.js server"
+        assert len(resp) > 0, "Next.js server response should not be empty"
+        # Basic check that it looks like HTML
+        assert (
+            "<" in resp or "html" in resp.lower() or "<!doctype" in resp.lower()
+        ), f"Response should be HTML content. Got: {resp[:200]}"
+        print(f"DEBUG: Next.js server returned content (first 200 chars): {resp[:200]}")
+
+        # Verify get_nextjs_url returns correctly formatted cluster URL
+        nextjs_url = manager.get_nextjs_url(sandbox_id)
+        expected_service_name = f"sandbox-{str(sandbox_id)[:8]}"
+        expected_url_pattern = (
+            f"http://{expected_service_name}.{SANDBOX_NAMESPACE}.svc.cluster.local:"
+        )
+        assert nextjs_url.startswith(expected_url_pattern), (
+            f"Next.js URL should follow cluster service format. "
+            f"Expected to start with: {expected_url_pattern}, Got: {nextjs_url}"
+        )
+        assert (
+            str(KUBERNETES_NEXTJS_PORT) in nextjs_url
+        ), f"Next.js URL should contain port {KUBERNETES_NEXTJS_PORT}. Got: {nextjs_url}"
+        print(f"DEBUG: get_nextjs_url returned: {nextjs_url}")
+
+        # Verify the service is accessible via the cluster URL from within the pod
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f"curl -s -o /dev/null -w '%{{http_code}}' {nextjs_url}/ 2>/dev/null || echo 'failed'",
+        ]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        print(f"DEBUG: Cluster URL health check response: {resp}")
+        assert resp and resp.strip() in ("200", "304"), (
+            f"Next.js server should be accessible via cluster URL {nextjs_url}. "
+            f"Got response: {resp}"
+        )
+
+    finally:
+        # Clean up: terminate the sandbox
+        if sandbox_id:
+            manager.terminate(sandbox_id)
+
+            # Verify Kubernetes resources are cleaned up
+            k8s_client = _get_kubernetes_client()
+            pod_name = f"sandbox-{str(sandbox_id)[:8]}"
+
+            # Give K8s a moment to delete resources
+            time.sleep(2)
+
+            # Verify pod is deleted (or being deleted)
+            try:
+                pod = k8s_client.read_namespaced_pod(
+                    name=pod_name,
+                    namespace=SANDBOX_NAMESPACE,
+                )
+                # Pod might still exist but be terminating
+                assert pod.metadata.deletion_timestamp is not None
+            except ApiException as e:
+                # 404 means pod was successfully deleted
+                assert e.status == 404
