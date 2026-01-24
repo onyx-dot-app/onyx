@@ -61,6 +61,7 @@ import {
   SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
+  SvgLogOut,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
   SvgPlayCircle,
@@ -72,6 +73,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Notification } from "@/app/admin/settings/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import { logout } from "@/lib/user";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -438,12 +440,52 @@ const MemoizedAppSidebarInner = memo(
             folded={folded}
             onClick={() => setShowIntroAnimation(true)}
           >
-            Play intro animation
+            [DEV] Play intro animation
           </SidebarTab>
         </div>
       ),
       [folded]
     );
+
+    const clearNotificationsAndLogoutButton = useMemo(
+      () => (
+        <div data-testid="AppSidebar/clear-notifications-and-logout">
+          <SidebarTab
+            leftIcon={SvgLogOut}
+            folded={folded}
+            onClick={async () => {
+              try {
+                // Fire both requests simultaneously - don't wait for clear to finish
+                const clearPromise = fetch(
+                  "/api/build/dev/clear-feature-announcements-and-logout",
+                  {
+                    method: "POST",
+                    credentials: "include",
+                  }
+                ).catch((error) => {
+                  console.error("Error clearing notifications:", error);
+                });
+
+                // Logout immediately without waiting for clear to finish
+                await logout();
+                // Redirect to login page
+                router.push("/auth/login");
+              } catch (error) {
+                console.error("Error logging out:", error);
+                setPopup({
+                  message: "Failed to logout",
+                  type: "error",
+                });
+              }
+            }}
+          >
+            [DEV] Clear user's notifications and logout
+          </SidebarTab>
+        </div>
+      ),
+      [folded, router, setPopup]
+    );
+
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -570,6 +612,7 @@ const MemoizedAppSidebarInner = memo(
                 {newSessionButton}
                 {buildButton}
                 {playIntroButton}
+                {clearNotificationsAndLogoutButton}
               </>
             }
           >
