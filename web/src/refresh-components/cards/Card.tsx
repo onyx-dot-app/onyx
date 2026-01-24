@@ -48,21 +48,19 @@ const classNames = {
 } as const;
 
 export interface CardProps extends GeneralLayouts.SectionProps {
-  ref?: React.Ref<HTMLDivElement>;
   // card variants
   translucent?: boolean;
   borderless?: boolean;
   disabled?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Card({
-  ref,
   translucent,
   borderless,
   disabled,
-
   padding = 1,
-
+  ref,
   ...props
 }: CardProps) {
   const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
