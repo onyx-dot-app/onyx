@@ -6,7 +6,6 @@ import Modal from "@/refresh-components/Modal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
 import { cn } from "@/lib/utils";
 
@@ -151,14 +150,7 @@ export default function ExpandableTextDisplay({
               </div>
             );
 
-          // Wrap with fading edge when truncated (but not when streaming)
-          return isTruncated && !isStreaming ? (
-            <FadingEdgeContainer direction="bottom">
-              {contentElement}
-            </FadingEdgeContainer>
-          ) : (
-            contentElement
-          );
+          return contentElement;
         })()}
 
         {/* Expand button - only show when content is truncated */}
