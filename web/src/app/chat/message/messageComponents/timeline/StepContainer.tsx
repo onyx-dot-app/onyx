@@ -94,13 +94,11 @@ export function StepContainer({
           isHover && "bg-background-tint-02"
         )}
       >
-        {!hideHeader && (
+        {!hideHeader && header && (
           <div className="flex items-center justify-between pl-2 pr-1 h-8">
-            {header && (
-              <Text as="p" mainUiMuted text03>
-                {header}
-              </Text>
-            )}
+            <Text as="p" mainUiMuted text03>
+              {header}
+            </Text>
 
             {showCollapseControls &&
               (buttonTitle ? (
