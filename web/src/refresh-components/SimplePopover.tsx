@@ -26,7 +26,7 @@ export default function SimplePopover({
       <Popover.Trigger asChild>
         <div>{typeof trigger === "function" ? trigger(open) : trigger}</div>
       </Popover.Trigger>
-      <Popover.Content align="start" side="top" {...rest} />
+      <Popover.Content align="start" side="top" md {...rest} />
     </Popover>
   );
 }

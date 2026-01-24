@@ -573,7 +573,7 @@ export default function ActionsPopover({
   );
 
   const primaryView = (
-    <PopoverMenu medium>
+    <PopoverMenu md>
       {[
         <InputTypeIn
           key="search"
