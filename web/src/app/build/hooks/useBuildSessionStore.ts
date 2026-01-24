@@ -188,6 +188,102 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
   return streamItems;
 }
 
+/**
+ * Consolidate raw backend messages into proper conversation turns.
+ *
+ * The backend stores each streaming packet as a separate message. This function:
+ * 1. Groups consecutive assistant messages (between user messages) into turns
+ * 2. Converts each group's packets to streamItems
+ * 3. Creates consolidated messages with streamItems in message_metadata
+ *
+ * Returns: Array of consolidated messages (user messages + one assistant message per turn)
+ */
+function consolidateMessagesIntoTurns(
+  rawMessages: BuildMessage[]
+): BuildMessage[] {
+  const consolidated: BuildMessage[] = [];
+  let currentAssistantPackets: BuildMessage[] = [];
+
+  for (const message of rawMessages) {
+    if (message.type === "user") {
+      // If we have accumulated assistant packets, consolidate them into one message
+      if (currentAssistantPackets.length > 0) {
+        const streamItems = convertMessagesToStreamItems(
+          currentAssistantPackets
+        );
+        const textContent = streamItems
+          .filter((item) => item.type === "text")
+          .map((item) => item.content)
+          .join("");
+
+        consolidated.push({
+          id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+          type: "assistant",
+          content: textContent,
+          timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+          message_metadata: {
+            streamItems,
+          },
+        });
+        currentAssistantPackets = [];
+      }
+      // Add the user message as-is
+      consolidated.push(message);
+    } else if (message.type === "assistant") {
+      // Check if this message already has consolidated streamItems (from new format)
+      if (message.message_metadata?.streamItems) {
+        // Already consolidated, add as-is
+        if (currentAssistantPackets.length > 0) {
+          // Flush any pending packets first
+          const streamItems = convertMessagesToStreamItems(
+            currentAssistantPackets
+          );
+          const textContent = streamItems
+            .filter((item) => item.type === "text")
+            .map((item) => item.content)
+            .join("");
+
+          consolidated.push({
+            id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+            type: "assistant",
+            content: textContent,
+            timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+            message_metadata: {
+              streamItems,
+            },
+          });
+          currentAssistantPackets = [];
+        }
+        consolidated.push(message);
+      } else {
+        // Old format - accumulate for consolidation
+        currentAssistantPackets.push(message);
+      }
+    }
+  }
+
+  // Don't forget any trailing assistant packets
+  if (currentAssistantPackets.length > 0) {
+    const streamItems = convertMessagesToStreamItems(currentAssistantPackets);
+    const textContent = streamItems
+      .filter((item) => item.type === "text")
+      .map((item) => item.content)
+      .join("");
+
+    consolidated.push({
+      id: currentAssistantPackets[0]?.id || genId("assistant-msg"),
+      type: "assistant",
+      content: textContent,
+      timestamp: currentAssistantPackets[0]?.timestamp || new Date(),
+      message_metadata: {
+        streamItems,
+      },
+    });
+  }
+
+  return consolidated;
+}
+
 // Re-export types for consumers
 export type {
   Artifact,
@@ -1147,14 +1243,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const currentSession = get().sessions.get(sessionId);
       const hasOptimisticMessages = (currentSession?.messages.length ?? 0) > 0;
 
-      // Convert loaded messages to stream items for rendering
-      // If there are optimistic messages (active streaming), preserve current streamItems
+      // Consolidate messages into proper conversation turns
+      // Each assistant turn becomes a single message with streamItems in metadata
+      // If there are optimistic messages (active streaming), preserve current state
       const messagesToUse = hasOptimisticMessages
         ? currentSession!.messages
-        : messages;
+        : consolidateMessagesIntoTurns(messages);
+      // Session-level streamItems are only for current streaming response
+      // When loading from history, they should be empty (each message has its own streamItems)
       const streamItemsToUse = hasOptimisticMessages
         ? currentSession!.streamItems
-        : convertMessagesToStreamItems(messages);
+        : [];
 
       updateSessionData(sessionId, {
         status: sessionData.status === "active" ? "completed" : "idle",

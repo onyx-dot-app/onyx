@@ -356,7 +356,10 @@ export default function BuildConfigPage() {
         }}
       />
 
-      <NotAllowedModal open={showNotAllowedModal} />
+      <NotAllowedModal
+        open={showNotAllowedModal}
+        onClose={() => setShowNotAllowedModal(false)}
+      />
     </SettingsLayouts.Root>
   );
 }

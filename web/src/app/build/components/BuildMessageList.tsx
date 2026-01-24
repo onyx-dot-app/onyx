@@ -45,16 +45,13 @@ export default function BuildMessageList({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, streamItems.length]);
 
-  // Get user messages only (we'll handle assistant content via streamItems)
-  const userMessages = messages.filter((msg) => msg.type === "user");
-
-  // Determine if we should show assistant response area
+  // Determine if we should show streaming response area (for current in-progress response)
   const hasStreamItems = streamItems.length > 0;
-  const hasUserMessages = userMessages.length > 0;
-  // Show loading if user sent a message but no response yet (survives navigation)
-  const isWaitingForResponse = hasUserMessages && !hasStreamItems;
-  const showAssistantArea =
-    hasStreamItems || isStreaming || isWaitingForResponse;
+  const lastMessage = messages[messages.length - 1];
+  const lastMessageIsUser = lastMessage?.type === "user";
+  // Show streaming area if we have stream items OR if we're waiting for a response to the latest user message
+  const showStreamingArea =
+    hasStreamItems || (isStreaming && lastMessageIsUser);
 
   // Check for active tools (for "Working..." state)
   const hasActiveTools = streamItems.some(
@@ -64,16 +61,74 @@ export default function BuildMessageList({
         item.toolCall.status === "pending")
   );
 
+  // Helper to render stream items (used for both saved messages and current streaming)
+  const renderStreamItems = (items: StreamItem[]) =>
+    items.map((item) => {
+      switch (item.type) {
+        case "text":
+          return <TextChunk key={item.id} content={item.content} />;
+        case "thinking":
+          return (
+            <ThinkingCard
+              key={item.id}
+              content={item.content}
+              isStreaming={item.isStreaming}
+            />
+          );
+        case "tool_call":
+          return <ToolCallPill key={item.id} toolCall={item.toolCall} />;
+        case "todo_list":
+          return (
+            <TodoListCard
+              key={item.id}
+              todoList={item.todoList}
+              defaultOpen={item.todoList.isOpen}
+            />
+          );
+        default:
+          return null;
+      }
+    });
+
+  // Helper to render an assistant message
+  const renderAssistantMessage = (message: BuildMessage) => {
+    // Check if we have saved stream items in message_metadata
+    const savedStreamItems = message.message_metadata?.streamItems as
+      | StreamItem[]
+      | undefined;
+
+    return (
+      <div key={message.id} className="flex items-start gap-3 py-4">
+        <div className="shrink-0 mt-0.5">
+          <Logo folded size={24} />
+        </div>
+        <div className="flex-1 flex flex-col gap-3 min-w-0">
+          {savedStreamItems && savedStreamItems.length > 0 ? (
+            // Render full stream items (includes tool calls, thinking, etc.)
+            renderStreamItems(savedStreamItems)
+          ) : (
+            // Fallback to text content only
+            <TextChunk content={message.content} />
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col items-center px-4 pb-4">
       <div className="w-full max-w-2xl backdrop-blur-md rounded-16 p-4">
-        {/* Render user messages */}
-        {userMessages.map((message) => (
-          <UserMessage key={message.id} content={message.content} />
-        ))}
+        {/* Render messages in order (user and assistant interleaved) */}
+        {messages.map((message) =>
+          message.type === "user" ? (
+            <UserMessage key={message.id} content={message.content} />
+          ) : message.type === "assistant" ? (
+            renderAssistantMessage(message)
+          ) : null
+        )}
 
-        {/* Render assistant response with FIFO stream items */}
-        {showAssistantArea && (
+        {/* Render current streaming response (for in-progress response) */}
+        {showStreamingArea && (
           <div className="flex items-start gap-3 py-4">
             <div className="shrink-0 mt-0.5">
               <Logo folded size={24} />
@@ -85,39 +140,7 @@ export default function BuildMessageList({
               ) : (
                 <>
                   {/* Render stream items in FIFO order */}
-                  {streamItems.map((item) => {
-                    switch (item.type) {
-                      case "text":
-                        return (
-                          <TextChunk key={item.id} content={item.content} />
-                        );
-                      case "thinking":
-                        return (
-                          <ThinkingCard
-                            key={item.id}
-                            content={item.content}
-                            isStreaming={item.isStreaming}
-                          />
-                        );
-                      case "tool_call":
-                        return (
-                          <ToolCallPill
-                            key={item.id}
-                            toolCall={item.toolCall}
-                          />
-                        );
-                      case "todo_list":
-                        return (
-                          <TodoListCard
-                            key={item.id}
-                            todoList={item.todoList}
-                            defaultOpen={item.todoList.isOpen}
-                          />
-                        );
-                      default:
-                        return null;
-                    }
-                  })}
+                  {renderStreamItems(streamItems)}
 
                   {/* Streaming indicator when actively streaming text */}
                   {isStreaming && hasStreamItems && !hasActiveTools && (

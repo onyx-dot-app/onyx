@@ -382,10 +382,38 @@ export function useBuildStreaming() {
             // Agent finished
             case "prompt_response": {
               finalizeStreaming();
-              // Check if we had a web/ file change - if so, open output panel
+
+              // Save the assistant response as a message before clearing stream items
               const session = useBuildSessionStore
                 .getState()
                 .sessions.get(sessionId);
+
+              if (session && session.streamItems.length > 0) {
+                // Collect text content for the message content field
+                const textContent = session.streamItems
+                  .filter((item) => item.type === "text")
+                  .map((item) => item.content)
+                  .join("");
+
+                // Save the complete stream items in message_metadata for full rendering
+                appendMessageToSession(sessionId, {
+                  id: genId("assistant-msg"),
+                  type: "assistant",
+                  content: textContent,
+                  timestamp: new Date(),
+                  message_metadata: {
+                    streamItems: session.streamItems.map((item) => ({
+                      ...item,
+                      // Mark all items as no longer streaming
+                      ...(item.type === "text" || item.type === "thinking"
+                        ? { isStreaming: false }
+                        : {}),
+                    })),
+                  },
+                });
+              }
+
+              // Check if we had a web/ file change - if so, open output panel
               const shouldOpenPanel = session?.webappNeedsRefresh === true;
               updateSessionData(sessionId, {
                 status: "completed",

@@ -27,6 +27,8 @@ export function useBuildOnboarding() {
   const { user, isAdmin, isCurator, refreshUser } = useUser();
   const { llmProviders, isLoading: isLoadingLlm, refetch } = useLLMProviders();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [notAllowedModalDismissed, setNotAllowedModalDismissed] =
+    useState(false);
 
   const existingPersona = getBuildUserPersona();
   const hasUserInfo = !!(
@@ -35,7 +37,7 @@ export function useBuildOnboarding() {
   const hasRecommendedLlms = checkHasRecommendedLlms(llmProviders);
 
   const flow: BuildOnboardingFlow = {
-    showNotAllowedModal: false,
+    showNotAllowedModal: false && !notAllowedModalDismissed,
     showUserInfoModal: !hasUserInfo,
     showLlmModal: isAdmin && !hasRecommendedLlms,
   };
@@ -70,6 +72,10 @@ export function useBuildOnboarding() {
     await refetch();
   }, [refetch]);
 
+  const closeNotAllowedModal = useCallback(() => {
+    setNotAllowedModalDismissed(true);
+  }, []);
+
   const isLoading = isLoadingLlm || !user;
 
   // Get existing personalization data for pre-filling the form
@@ -87,6 +93,7 @@ export function useBuildOnboarding() {
     actions: {
       completeUserInfo,
       completeLlmSetup,
+      closeNotAllowedModal,
     },
     isLoading,
     isSubmitting,
