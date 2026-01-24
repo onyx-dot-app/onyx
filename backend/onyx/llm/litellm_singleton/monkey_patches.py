@@ -493,6 +493,12 @@ def _patch_openai_responses_chunk_parser() -> None:
             # Final event signaling all output items (including parallel tool calls) are done
             # Azure's Responses API returns all tool calls in response.completed,
             # not in incremental events. We need to extract them here.
+            from litellm.types.utils import (
+                Delta,
+                ModelResponseStream,
+                StreamingChoices,
+            )
+
             response_data = parsed_chunk.get("response", {})
             output_items = response_data.get("output", [])
 
@@ -513,13 +519,15 @@ def _patch_openai_responses_chunk_parser() -> None:
                     )
 
             if tool_calls:
-                # Return first tool call - the streaming handler will merge them
-                return GenericStreamingChunk(
-                    text="",
-                    tool_use=tool_calls[0],
-                    is_finished=True,
-                    finish_reason="tool_calls",
-                    usage=None,
+                # Return ModelResponseStream with all tool calls in delta.tool_calls
+                return ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(tool_calls=tool_calls),
+                            finish_reason="tool_calls",
+                        )
+                    ]
                 )
             else:
                 return GenericStreamingChunk(
