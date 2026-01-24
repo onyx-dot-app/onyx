@@ -337,15 +337,19 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   );
   const messageHistory = useCurrentMessageHistory();
 
-  // Determine anchor: second-to-last message (last user message before current response)
-  const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
+  // Only anchor during active generation - not when loading old conversations
+  const lastMessage = messageHistory[messageHistory.length - 1];
+  const isActiveGeneration =
+    lastMessage?.type === "user" || // User just sent message, waiting for response
+    lastMessage?.is_generating; // Assistant is currently generating
+  const anchorMessage = isActiveGeneration
+    ? messageHistory.at(-2) ?? messageHistory[0]
+    : undefined;
   const anchorNodeId = anchorMessage?.nodeId;
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
   // Auto-scroll preference from user settings
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
-  const isStreaming = currentChatState === "streaming";
-
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
       filterManager,
@@ -675,6 +679,11 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                 />
               )}
 
+              {/* Loading placeholder - takes space while chat loads */}
+              {!!currentChatSessionId && !liveAssistant && (
+                <div className="flex-1" />
+              )}
+
               {/* ChatUI */}
               {!!currentChatSessionId && liveAssistant && (
                 <ChatScrollContainer
@@ -682,7 +691,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                   sessionId={currentChatSessionId}
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
-                  isStreaming={isStreaming}
+                  isStreaming={currentChatState === "streaming"}
                   onScrollButtonVisibilityChange={setShowScrollButton}
                   disableFadeOverlay={hasBackground}
                 >
@@ -715,32 +724,20 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                 </div>
               )}
 
-              {/* ChatInputBar container - absolutely positioned when in chat, centered when no session */}
-              <div
-                className={cn(
-                  "flex justify-center",
-                  currentChatSessionId
-                    ? "absolute bottom-6 left-0 right-0 pointer-events-none"
-                    : "w-full"
+              {/* ChatInputBar container */}
+              <div className="flex justify-center w-full pt-1 relative">
+                {/* Scroll to bottom button - absolutely positioned above input */}
+                {showScrollButton && (
+                  <div className="absolute -top-10 left-1/2 -translate-x-1/2">
+                    <IconButton
+                      icon={SvgChevronDown}
+                      onClick={handleScrollToBottom}
+                      aria-label="Scroll to bottom"
+                      secondary
+                    />
+                  </div>
                 )}
-              >
-                <div
-                  className={cn(
-                    "w-[min(50rem,100%)] z-sticky flex flex-col px-4",
-                    currentChatSessionId && "pointer-events-auto"
-                  )}
-                >
-                  {/* Scroll to bottom button - positioned above ChatInputBar */}
-                  {showScrollButton && (
-                    <div className="mb-2 self-center">
-                      <IconButton
-                        icon={SvgChevronDown}
-                        onClick={handleScrollToBottom}
-                        aria-label="Scroll to bottom"
-                      />
-                    </div>
-                  )}
-
+                <div className="w-[min(50rem,100%)] z-sticky flex flex-col px-4">
                   {(showOnboarding ||
                     (user?.role !== UserRole.ADMIN &&
                       !user?.personalization?.name)) &&

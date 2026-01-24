@@ -29,8 +29,8 @@ export interface ChatScrollContainerProps {
   children: React.ReactNode;
 
   /**
-   * CSS selector for the anchor element (e.g., "#message-123")
-   * Used to scroll to a specific message position
+   * CSS selector for the element to anchor at top (e.g., "#message-123")
+   * When set, positions this element at top with spacer below content
    */
   anchorSelector?: string;
 
@@ -46,7 +46,7 @@ export interface ChatScrollContainerProps {
   /** Session ID - resets scroll state when changed */
   sessionId?: string;
 
-  /** Disable fade overlays (e.g., when a background image is set) */
+  /** Disable fade overlays (e.g., when background image is set) */
   disableFadeOverlay?: boolean;
 }
 
@@ -92,7 +92,10 @@ const ChatScrollContainer = React.memo(
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
+      const pendingAnchorRef = useRef<string | null>(null); // Track anchor we need to scroll to
+      const hasPositionedAnchorRef = useRef(false); // Prevent re-positioning once done
 
+      const [spacerHeight, setSpacerHeight] = useState(0);
       const [hasContentAbove, setHasContentAbove] = useState(false);
       const [hasContentBelow, setHasContentBelow] = useState(false);
       const [isAtBottom, setIsAtBottom] = useState(true);
@@ -112,10 +115,26 @@ const ChatScrollContainer = React.memo(
       const isStreamingRef = useRef(isStreaming);
       isStreamingRef.current = isStreaming;
 
+      // Calculate spacer height to position anchor at top
+      const calcSpacerHeight = useCallback(
+        (anchorElement: HTMLElement): number => {
+          if (!endDivRef.current || !scrollContainerRef.current) return 0;
+          const contentEnd = endDivRef.current.offsetTop;
+          const contentFromAnchor = contentEnd - anchorElement.offsetTop;
+          return Math.max(
+            0,
+            scrollContainerRef.current.clientHeight -
+              contentFromAnchor -
+              anchorOffsetPx
+          );
+        },
+        [anchorOffsetPx]
+      );
+
       // Get current scroll state
       const getScrollState = useCallback((): ScrollState => {
         const container = scrollContainerRef.current;
-        if (!container || !endDivRef.current) {
+        if (!container) {
           return {
             isAtBottom: true,
             hasContentAbove: false,
@@ -123,27 +142,50 @@ const ChatScrollContainer = React.memo(
           };
         }
 
-        const contentEnd = endDivRef.current.offsetTop;
+        // Use distance from bottom of scroll area (accounts for spacer)
+        const maxScrollTop = container.scrollHeight - container.clientHeight;
+        const distanceFromBottom = maxScrollTop - container.scrollTop;
+
+        // For fade overlays, use content end (before spacer)
+        const contentEnd =
+          endDivRef.current?.offsetTop ?? container.scrollHeight;
         const viewportBottom = container.scrollTop + container.clientHeight;
         const contentBelowViewport = contentEnd - viewportBottom;
 
         return {
-          isAtBottom: contentBelowViewport <= buttonThresholdPx,
+          isAtBottom: distanceFromBottom <= buttonThresholdPx,
           hasContentAbove: container.scrollTop > fadeThresholdPx,
           hasContentBelow: contentBelowViewport > fadeThresholdPx,
         };
       }, [buttonThresholdPx, fadeThresholdPx]);
 
+      // Track previous state to avoid unnecessary re-renders
+      const prevScrollStateRef = useRef<ScrollState>({
+        isAtBottom: true,
+        hasContentAbove: false,
+        hasContentBelow: false,
+      });
+
       // Update scroll state and notify parent about button visibility
+      // Only updates state if values actually changed to prevent flickering
       const updateScrollState = useCallback(() => {
         const state = getScrollState();
-        setIsAtBottom(state.isAtBottom);
-        isAtBottomRef.current = state.isAtBottom; // Keep ref in sync
-        setHasContentAbove(state.hasContentAbove);
-        setHasContentBelow(state.hasContentBelow);
+        const prev = prevScrollStateRef.current;
 
-        // Show button when user is not at bottom (e.g., scrolled up)
-        onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
+        // Only update if values changed
+        if (state.isAtBottom !== prev.isAtBottom) {
+          setIsAtBottom(state.isAtBottom);
+          isAtBottomRef.current = state.isAtBottom;
+          onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
+        }
+        if (state.hasContentAbove !== prev.hasContentAbove) {
+          setHasContentAbove(state.hasContentAbove);
+        }
+        if (state.hasContentBelow !== prev.hasContentBelow) {
+          setHasContentBelow(state.hasContentBelow);
+        }
+
+        prevScrollStateRef.current = state;
       }, [getScrollState]);
 
       // Scroll to bottom of content
@@ -207,12 +249,38 @@ const ChatScrollContainer = React.memo(
         } else {
           // Still update fade overlays, but preserve isAtBottomRef
           const state = getScrollState();
-          setHasContentAbove(state.hasContentAbove);
-          setHasContentBelow(state.hasContentBelow);
+          const prev = prevScrollStateRef.current;
+          // Only update if values changed
+          if (state.hasContentAbove !== prev.hasContentAbove) {
+            setHasContentAbove(state.hasContentAbove);
+          }
+          if (state.hasContentBelow !== prev.hasContentBelow) {
+            setHasContentBelow(state.hasContentBelow);
+          }
           // Update button visibility based on actual position
-          onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
+          if (state.isAtBottom !== prev.isAtBottom) {
+            onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
+          }
+          prevScrollStateRef.current = state;
         }
-      }, [updateScrollState, getScrollState]);
+
+        // Recalculate spacer during user scroll (only after initial positioning)
+        if (
+          anchorSelector &&
+          endDivRef.current &&
+          hasPositionedAnchorRef.current
+        ) {
+          const anchorElement = container.querySelector(
+            anchorSelector
+          ) as HTMLElement;
+          if (anchorElement) {
+            const newSpacerHeight = calcSpacerHeight(anchorElement);
+            setSpacerHeight((prev) =>
+              prev !== newSpacerHeight ? newSpacerHeight : prev
+            );
+          }
+        }
+      }, [anchorSelector, calcSpacerHeight, updateScrollState, getScrollState]);
 
       // Watch for content changes (MutationObserver + ResizeObserver)
       useEffect(() => {
@@ -228,6 +296,57 @@ const ChatScrollContainer = React.memo(
 
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
+
+            // Check for pending anchor that wasn't found initially
+            if (pendingAnchorRef.current) {
+              const pendingAnchorElement = container.querySelector(
+                pendingAnchorRef.current
+              ) as HTMLElement;
+              if (pendingAnchorElement && endDivRef.current) {
+                // Found it! Calculate spacer and scroll to anchor position
+                setSpacerHeight(calcSpacerHeight(pendingAnchorElement));
+
+                // Defer scroll to next tick so spacer takes effect
+                setTimeout(() => {
+                  const targetScrollTop = Math.max(
+                    0,
+                    pendingAnchorElement.offsetTop - anchorOffsetPx
+                  );
+                  container.scrollTo({
+                    top: targetScrollTop,
+                    behavior: "smooth",
+                  });
+                  prevScrollTopRef.current = targetScrollTop;
+
+                  if (autoScrollRef.current) {
+                    isAtBottomRef.current = true;
+                  }
+
+                  // Mark as positioned to prevent further repositioning
+                  hasPositionedAnchorRef.current = true;
+
+                  updateScrollState();
+                }, 0);
+
+                pendingAnchorRef.current = null;
+                return;
+              }
+            }
+
+            // Update spacer - applies to both autoScroll ON and OFF
+            // As content grows, spacer shrinks to maintain anchor position
+            if (anchorSelector && hasPositionedAnchorRef.current) {
+              const anchorElement = container.querySelector(
+                anchorSelector
+              ) as HTMLElement;
+              if (anchorElement) {
+                const newSpacerHeight = calcSpacerHeight(anchorElement);
+                // Only update if actually changed to prevent unnecessary re-renders
+                setSpacerHeight((prev) =>
+                  prev !== newSpacerHeight ? newSpacerHeight : prev
+                );
+              }
+            }
 
             // Auto-scroll: follow content if we were at bottom
             if (autoScrollRef.current && wasAtBottom) {
@@ -256,7 +375,7 @@ const ChatScrollContainer = React.memo(
           resizeObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
-      }, [updateScrollState, scrollToBottom]);
+      }, [anchorSelector, calcSpacerHeight, updateScrollState, scrollToBottom]);
 
       // Handle session changes and anchor changes
       useEffect(() => {
@@ -274,26 +393,53 @@ const ChatScrollContainer = React.memo(
           setIsScrollReady(false);
           prevScrollTopRef.current = 0;
           isAtBottomRef.current = true;
+          hasPositionedAnchorRef.current = false;
+          prevScrollStateRef.current = {
+            isAtBottom: true,
+            hasContentAbove: false,
+            hasContentBelow: false,
+          };
+          setSpacerHeight(0);
         }
 
-        const shouldScroll =
-          (scrolledForSessionRef.current !== sessionId || isNewAnchor) &&
-          anchorSelector;
+        const needsInitialScroll = scrolledForSessionRef.current !== sessionId;
+        const needsAnchorScroll = isNewAnchor && anchorSelector;
 
-        if (!shouldScroll) {
+        if (!needsInitialScroll && !needsAnchorScroll) {
           prevAnchorSelectorRef.current = anchorSelector ?? null;
           return;
+        }
+
+        // No anchor = scroll to bottom (loading old conversation)
+        if (!anchorSelector) {
+          const timeoutId = setTimeout(() => {
+            scrollToBottom("instant");
+            hasPositionedAnchorRef.current = true; // Mark as positioned
+            setIsScrollReady(true);
+            scrolledForSessionRef.current = sessionId ?? null;
+            prevAnchorSelectorRef.current = null;
+            updateScrollState();
+          }, 0);
+          return () => clearTimeout(timeoutId);
         }
 
         const anchorElement = container.querySelector(
           anchorSelector!
         ) as HTMLElement;
         if (!anchorElement || !endDivRef.current) {
+          // Element not in DOM yet - mark as pending for MutationObserver to handle
+          pendingAnchorRef.current = anchorSelector!;
           setIsScrollReady(true);
           scrolledForSessionRef.current = sessionId ?? null;
           prevAnchorSelectorRef.current = anchorSelector ?? null;
           return;
         }
+
+        // Clear pending since we found it
+        pendingAnchorRef.current = null;
+
+        // Calculate spacer - applies to both autoScroll ON and OFF
+        setSpacerHeight(calcSpacerHeight(anchorElement));
 
         // Determine scroll behavior
         // New session with existing content = instant, new anchor = smooth
@@ -303,21 +449,12 @@ const ChatScrollContainer = React.memo(
           ? "instant"
           : "smooth";
 
-        // Defer scroll to next tick for layout to settle
+        // Defer scroll to next tick so spacer height takes effect
         const timeoutId = setTimeout(() => {
-          let targetScrollTop: number;
-
-          // When loading an existing conversation, scroll to bottom
-          // Otherwise (e.g., anchor change during conversation), scroll to anchor
-          if (isLoadingExistingContent) {
-            targetScrollTop = container.scrollHeight - container.clientHeight;
-          } else {
-            targetScrollTop = Math.max(
-              0,
-              anchorElement.offsetTop - anchorOffsetPx
-            );
-          }
-
+          const targetScrollTop = Math.max(
+            0,
+            anchorElement.offsetTop - anchorOffsetPx
+          );
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Update prevScrollTopRef so scroll direction is measured from new position
@@ -325,10 +462,14 @@ const ChatScrollContainer = React.memo(
 
           updateScrollState();
 
-          // Mark as "at bottom" after scrolling to bottom so auto-scroll continues
-          if (isLoadingExistingContent || autoScrollRef.current) {
+          // When autoScroll is on, assume we're "at bottom" after positioning
+          // so that MutationObserver will continue auto-scrolling
+          if (autoScrollRef.current) {
             isAtBottomRef.current = true;
           }
+
+          // Mark as positioned to prevent MutationObserver from repositioning
+          hasPositionedAnchorRef.current = true;
 
           setIsScrollReady(true);
           scrolledForSessionRef.current = sessionId ?? null;
@@ -336,10 +477,16 @@ const ChatScrollContainer = React.memo(
         }, 0);
 
         return () => clearTimeout(timeoutId);
-      }, [sessionId, anchorSelector, anchorOffsetPx, updateScrollState]);
+      }, [
+        sessionId,
+        anchorSelector,
+        anchorOffsetPx,
+        calcSpacerHeight,
+        updateScrollState,
+      ]);
 
       return (
-        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-[7.5rem]">
+        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden">
           <FadeOverlay
             show={!disableFadeOverlay && hasContentAbove}
             position="top"
@@ -367,8 +514,13 @@ const ChatScrollContainer = React.memo(
             >
               {children}
 
-              {/* End marker to measure content end */}
+              {/* End marker - before spacer so we can measure content end */}
               <div ref={endDivRef} />
+
+              {/* Spacer to allow scrolling anchor to top */}
+              {spacerHeight > 0 && (
+                <div style={{ height: spacerHeight }} aria-hidden="true" />
+              )}
             </div>
           </div>
         </div>
