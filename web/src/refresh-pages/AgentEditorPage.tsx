@@ -1048,14 +1048,17 @@ export default function AgentEditorPage({
                 <shareAgentModal.Provider>
                   <ShareAgentModal
                     agent={existingAgent}
+                    userIds={values.shared_user_ids}
+                    groupIds={values.shared_group_ids}
+                    isPublic={values.is_public}
                     onShare={(userIds, groupIds, isPublic) => {
                       setFieldValue("shared_user_ids", userIds);
                       setFieldValue("shared_group_ids", groupIds);
                       setFieldValue("is_public", isPublic);
+                      shareAgentModal.toggle(false);
                     }}
                   />
                 </shareAgentModal.Provider>
-
                 <deleteAgentModal.Provider>
                   {deleteAgentModal.isOpen && (
                     <ConfirmationModalLayout
@@ -1479,7 +1482,7 @@ export default function AgentEditorPage({
                           <Card>
                             <InputLayouts.Horizontal
                               title="Share This Agent"
-                              description="Share this agent with other users, groups, or everyone in your organization. "
+                              description="Share this agent with other users, groups, or everyone in your organization."
                               center
                             >
                               <Button
