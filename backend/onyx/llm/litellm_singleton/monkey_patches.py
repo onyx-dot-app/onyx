@@ -369,6 +369,8 @@ def _patch_openai_responses_chunk_parser() -> None:
             # New output item added
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
+                # Track that we've received tool calls via streaming
+                self._has_streamed_tool_calls = True
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
@@ -394,6 +396,8 @@ def _patch_openai_responses_chunk_parser() -> None:
         elif event_type == "response.function_call_arguments.delta":
             content_part: Optional[str] = parsed_chunk.get("delta", None)
             if content_part:
+                # Track that we've received tool calls via streaming
+                self._has_streamed_tool_calls = True
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
@@ -491,35 +495,42 @@ def _patch_openai_responses_chunk_parser() -> None:
 
         elif event_type == "response.completed":
             # Final event signaling all output items (including parallel tool calls) are done
-            # Azure's Responses API returns all tool calls in response.completed,
-            # not in incremental events. We need to extract them here.
-            from litellm.types.utils import (
-                Delta,
-                ModelResponseStream,
-                StreamingChoices,
-            )
+            # Check if we already received tool calls via streaming events
+            has_streamed_tool_calls = getattr(self, "_has_streamed_tool_calls", False)
 
             response_data = parsed_chunk.get("response", {})
             output_items = response_data.get("output", [])
 
-            # Extract tool calls from output
-            tool_calls = []
-            for idx, item in enumerate(output_items):
-                if isinstance(item, dict) and item.get("type") == "function_call":
-                    tool_calls.append(
-                        ChatCompletionToolCallChunk(
-                            id=item.get("call_id"),
-                            index=idx,
-                            type="function",
-                            function=ChatCompletionToolCallFunctionChunk(
-                                name=item.get("name"),
-                                arguments=item.get("arguments", ""),
-                            ),
-                        )
-                    )
+            # Check if there are function_call items in the output
+            has_function_calls = any(
+                isinstance(item, dict) and item.get("type") == "function_call"
+                for item in output_items
+            )
 
-            if tool_calls:
-                # Return ModelResponseStream with all tool calls in delta.tool_calls
+            if has_function_calls and not has_streamed_tool_calls:
+                # Azure's Responses API returns all tool calls in response.completed
+                # without streaming them incrementally. Extract them here.
+                from litellm.types.utils import (
+                    Delta,
+                    ModelResponseStream,
+                    StreamingChoices,
+                )
+
+                tool_calls = []
+                for idx, item in enumerate(output_items):
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        tool_calls.append(
+                            ChatCompletionToolCallChunk(
+                                id=item.get("call_id"),
+                                index=idx,
+                                type="function",
+                                function=ChatCompletionToolCallFunctionChunk(
+                                    name=item.get("name"),
+                                    arguments=item.get("arguments", ""),
+                                ),
+                            )
+                        )
+
                 return ModelResponseStream(
                     choices=[
                         StreamingChoices(
@@ -528,6 +539,15 @@ def _patch_openai_responses_chunk_parser() -> None:
                             finish_reason="tool_calls",
                         )
                     ]
+                )
+            elif has_function_calls:
+                # Tool calls were already streamed, just signal completion
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=None,
+                    is_finished=True,
+                    finish_reason="tool_calls",
+                    usage=None,
                 )
             else:
                 return GenericStreamingChunk(
