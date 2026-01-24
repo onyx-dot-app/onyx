@@ -500,28 +500,33 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           )}
 
           {/* Done indicator */}
-          {stopPacketSeen && isExpanded && !userStopped && (
-            <StepContainer
-              stepIcon={SvgCheckCircle}
-              header="Generate Answer"
-              isLastStep={true}
-              isFirstStep={false}
-            >
-              {null}
-            </StepContainer>
-          )}
+          {stopPacketSeen &&
+            isExpanded &&
+            (!userStopped || hasDisplayContent) && (
+              <StepContainer
+                stepIcon={SvgCheckCircle}
+                header="Done"
+                isLastStep={true}
+                isFirstStep={false}
+              >
+                {null}
+              </StepContainer>
+            )}
 
           {/* Stopped indicator */}
-          {stopPacketSeen && isExpanded && userStopped && (
-            <StepContainer
-              stepIcon={SvgStopCircle}
-              header="Stopped"
-              isLastStep={true}
-              isFirstStep={false}
-            >
-              {null}
-            </StepContainer>
-          )}
+          {stopPacketSeen &&
+            isExpanded &&
+            userStopped &&
+            !hasDisplayContent && (
+              <StepContainer
+                stepIcon={SvgStopCircle}
+                header="Stopped"
+                isLastStep={true}
+                isFirstStep={false}
+              >
+                {null}
+              </StepContainer>
+            )}
         </div>
       )}
     </TimelineContainer>
