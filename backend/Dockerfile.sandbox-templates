@@ -2,10 +2,10 @@ FROM python:3.11.7-slim-bookworm
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+    contains code for both the Community and Enterprise editions of Onyx. If you do not \
+    have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
+    Edition features outside of personal development or testing purposes. Please reach out to \
+    founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV DANSWER_RUNNING_IN_DOCKER="true" \
@@ -30,22 +30,22 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 # nodejs and npm needed for building Next.js template
 RUN apt-get update && \
     apt-get install -y \
-        cmake \
-        curl \
-        zip \
-        ca-certificates \
-        libgnutls30 \
-        libblkid1 \
-        libmount1 \
-        libsmartcols1 \
-        libuuid1 \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc \
-        nano \
-        vim \
-        nodejs \
-        npm && \
+    cmake \
+    curl \
+    zip \
+    ca-certificates \
+    libgnutls30 \
+    libblkid1 \
+    libmount1 \
+    libsmartcols1 \
+    libuuid1 \
+    libxmlsec1-dev \
+    pkg-config \
+    gcc \
+    nano \
+    vim \
+    nodejs \
+    npm && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -56,8 +56,8 @@ RUN apt-get update && \
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 RUN uv pip install --system --no-cache-dir --upgrade \
-        -r /tmp/requirements.txt \
-        -r /tmp/ee-requirements.txt && \
+    -r /tmp/requirements.txt \
+    -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
     playwright install chromium && \
     playwright install-deps chromium && \
@@ -70,19 +70,19 @@ RUN uv pip install --system --no-cache-dir --upgrade \
     # perl-base could only be removed with --allow-remove-essential
     apt-get update && \
     apt-get remove -y --allow-remove-essential \
-        perl-base \
-        xserver-common \
-        xvfb \
-        cmake \
-        libldap-2.5-0 \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc && \
+    perl-base \
+    xserver-common \
+    xvfb \
+    cmake \
+    libldap-2.5-0 \
+    libxmlsec1-dev \
+    pkg-config \
+    gcc && \
     # Install here to avoid some packages being cleaned up above
     apt-get install -y \
-        libxmlsec1-openssl \
-        # Install postgresql-client for easy manual tests
-        postgresql-client && \
+    libxmlsec1-openssl \
+    # Install postgresql-client for easy manual tests
+    postgresql-client && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* && \
     rm -rf ~/.cache/uv /tmp/*.txt && \
@@ -93,7 +93,7 @@ RUN uv pip install --system --no-cache-dir --upgrade \
 COPY --chown=onyx:onyx ./onyx/server/features/build/templates/outputs/web /templates/outputs/web
 
 # Build Python venv template
-COPY --chown=onyx:onyx ./onyx/server/features/build/initial-requirements.txt /tmp/sandbox-requirements.txt
+COPY --chown=onyx:onyx ./onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt /tmp/sandbox-requirements.txt
 COPY --chown=onyx:onyx ./onyx/server/features/build/sandbox/util/build_venv_template.py /tmp/build_venv_template.py
 RUN mkdir -p /templates && \
     python /tmp/build_venv_template.py --requirements /tmp/sandbox-requirements.txt && \
@@ -102,17 +102,17 @@ RUN mkdir -p /templates && \
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
-Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
+    Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
 
 # Pre-downloading NLTK for setups with limited egress
 RUN python -c "import nltk; \
-nltk.download('stopwords', quiet=True); \
-nltk.download('punkt_tab', quiet=True);"
+    nltk.download('stopwords', quiet=True); \
+    nltk.download('punkt_tab', quiet=True);"
 # nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
 
 # Pre-downloading tiktoken for setups with limited egress
 RUN python -c "import tiktoken; \
-tiktoken.get_encoding('cl100k_base')"
+    tiktoken.get_encoding('cl100k_base')"
 
 # Set up application files
 WORKDIR /app

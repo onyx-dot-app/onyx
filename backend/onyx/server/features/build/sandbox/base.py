@@ -290,13 +290,13 @@ def get_sandbox_manager() -> SandboxManager:
         with _sandbox_manager_lock:
             if _sandbox_manager_instance is None:
                 if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-                    from onyx.server.features.build.sandbox.local.manager import (
+                    from onyx.server.features.build.sandbox.local.local_sandbox_manager import (
                         LocalSandboxManager,
                     )
 
                     _sandbox_manager_instance = LocalSandboxManager()
                 elif SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                    from onyx.server.features.build.sandbox.kubernetes.manager import (
+                    from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
                         KubernetesSandboxManager,
                     )
 
