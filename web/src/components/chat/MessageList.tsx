@@ -183,6 +183,7 @@ const MessageList = React.memo(
               >
                 <AIMessage
                   rawPackets={message.packets}
+                  packetsVersion={message.packetsVersion}
                   chatState={chatStateData}
                   nodeId={message.nodeId}
                   messageId={message.messageId}
