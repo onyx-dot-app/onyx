@@ -8,12 +8,8 @@ import {
   LLMProviderName,
 } from "@/app/admin/configuration/llm/interfaces";
 import { BuildOnboardingFlow, BuildUserInfo } from "../types";
-import {
-  BUILD_USER_LEVEL_COOKIE_NAME,
-  BUILD_USER_WORK_AREA_COOKIE_NAME,
-} from "../constants";
+import { getBuildUserPersona, setBuildUserPersona } from "../constants";
 import { updateUserPersonalization } from "@/lib/userSettings";
-import Cookies from "js-cookie";
 
 function checkHasRecommendedLlms(
   llmProviders: LLMProviderDescriptor[] | undefined
@@ -32,8 +28,10 @@ export function useBuildOnboarding() {
   const { llmProviders, isLoading: isLoadingLlm, refetch } = useLLMProviders();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const existingWorkArea = Cookies.get(BUILD_USER_WORK_AREA_COOKIE_NAME) || "";
-  const hasUserInfo = !!(user?.personalization?.name && existingWorkArea);
+  const existingPersona = getBuildUserPersona();
+  const hasUserInfo = !!(
+    user?.personalization?.name && existingPersona?.workArea
+  );
   const hasRecommendedLlms = checkHasRecommendedLlms(llmProviders);
   const isBasicUser = !isAdmin && !isCurator;
 
@@ -56,19 +54,11 @@ export function useBuildOnboarding() {
           name: fullName,
         });
 
-        // Save work area to cookie
-        Cookies.set(BUILD_USER_WORK_AREA_COOKIE_NAME, info.workArea, {
-          path: "/",
-          expires: 365,
+        // Save persona to single consolidated cookie
+        setBuildUserPersona({
+          workArea: info.workArea,
+          level: info.level,
         });
-
-        // Save level to cookie if provided
-        if (info.level) {
-          Cookies.set(BUILD_USER_LEVEL_COOKIE_NAME, info.level, {
-            path: "/",
-            expires: 365,
-          });
-        }
 
         // Refresh user to update the flow
         await refreshUser();
@@ -88,7 +78,6 @@ export function useBuildOnboarding() {
 
   // Get existing personalization data for pre-filling the form
   const existingName = user?.personalization?.name || "";
-  const existingLevel = Cookies.get(BUILD_USER_LEVEL_COOKIE_NAME) || "";
 
   // Split name on first space
   const spaceIndex = existingName.indexOf(" ");
@@ -109,8 +98,8 @@ export function useBuildOnboarding() {
     initialValues: {
       firstName: initialFirstName,
       lastName: initialLastName,
-      workArea: existingWorkArea,
-      level: existingLevel,
+      workArea: existingPersona?.workArea || "",
+      level: existingPersona?.level || "",
     },
   };
 }

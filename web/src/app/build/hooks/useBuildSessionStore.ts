@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import Cookies from "js-cookie";
 import { BUILD_DEMO_DATA_COOKIE_NAME } from "@/app/build/v1/constants";
+import { getBuildUserPersona } from "@/app/build/onboarding/constants";
 
 import {
   ApiSandboxResponse,
@@ -1306,7 +1307,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     // Start new provisioning with current demoDataEnabled value
     const promise = (async (): Promise<string | null> => {
       try {
-        const sessionData = await apiCreateSession({ demoDataEnabled });
+        // Parse user persona from cookie
+        const persona = getBuildUserPersona();
+
+        const sessionData = await apiCreateSession({
+          demoDataEnabled,
+          userWorkArea: persona?.workArea || null,
+          userLevel: persona?.level || null,
+        });
         set({
           preProvisioning: {
             status: "ready",
