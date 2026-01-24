@@ -28,11 +28,14 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.base import ACPEvent
-from onyx.server.features.build.sandbox.kubernetes.manager import (
+from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+logger = setup_logger()
 
 # Test constants
 TEST_TENANT_ID = "test-tenant"
