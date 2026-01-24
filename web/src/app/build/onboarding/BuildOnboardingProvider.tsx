@@ -28,7 +28,10 @@ export function BuildOnboardingProvider({
   return (
     <>
       {/* Blocking modal - takes precedence */}
-      <NotAllowedModal open={flow.showNotAllowedModal} />
+      <NotAllowedModal
+        open={flow.showNotAllowedModal}
+        onClose={actions.closeNotAllowedModal}
+      />
 
       {/* Combined onboarding modal */}
       <BuildOnboardingModal

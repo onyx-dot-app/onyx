@@ -3,21 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { SvgLock, SvgArrowRight, SvgBubbleText } from "@opal/icons";
+import { SvgLock, SvgArrowRight } from "@opal/icons";
 import { logout } from "@/lib/user";
 import { cn } from "@/lib/utils";
 
 interface NotAllowedModalProps {
   open: boolean;
+  onClose: () => void;
 }
 
-export default function NotAllowedModal({ open }: NotAllowedModalProps) {
+export default function NotAllowedModal({
+  open,
+  onClose,
+}: NotAllowedModalProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-
-  const handleReturnToChat = () => {
-    router.push("/chat");
-  };
 
   const handleCreateNewAccount = async () => {
     setIsLoading(true);
@@ -52,9 +52,9 @@ export default function NotAllowedModal({ open }: NotAllowedModalProps) {
                 Build Mode Access Restricted
               </Text>
               <Text mainUiBody text03 className="max-w-sm">
-                Unfortunately, Build Mode is only available to admins and
-                curators. You can create a new Onyx account and try Build Mode
-                with our demo data!
+                Unfortunately, connecting your own data to Build Mode requires
+                admin permissions. You can create a new Onyx account and try
+                Build Mode with your own data!
               </Text>
             </div>
           </div>
@@ -63,11 +63,10 @@ export default function NotAllowedModal({ open }: NotAllowedModalProps) {
           <div className="flex justify-center gap-3 pt-2">
             <button
               type="button"
-              onClick={handleReturnToChat}
+              onClick={onClose}
               className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
             >
-              <SvgBubbleText className="w-4 h-4" />
-              <Text mainUiAction>Return to Chat</Text>
+              <Text mainUiAction>Go Back</Text>
             </button>
             <button
               type="button"

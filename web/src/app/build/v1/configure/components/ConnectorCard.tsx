@@ -128,19 +128,17 @@ export default function ConnectorCard({
       </Popover.Trigger>
       <Popover.Content side="right" align="start" sideOffset={4}>
         <Popover.Menu>
-          {status === "error" && (
-            <LineItem
-              key="manage"
-              icon={SvgSettings}
-              onClick={(e) => {
-                e.stopPropagation();
-                setPopoverOpen(false);
-                router.push(`/admin/connector/${config?.cc_pair_id}`);
-              }}
-            >
-              Manage connector
-            </LineItem>
-          )}
+          <LineItem
+            key="manage"
+            icon={SvgSettings}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPopoverOpen(false);
+              router.push(`/admin/connector/${config?.cc_pair_id}`);
+            }}
+          >
+            Manage connector
+          </LineItem>
           <LineItem
             key="delete"
             danger
