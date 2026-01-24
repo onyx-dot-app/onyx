@@ -62,8 +62,9 @@ CONNECTOR_DESCRIPTIONS = {
     ),
     "org_info": (
         "**Org Info**: This directory contains various pieces of information about our organization. Contains: "
-        "`organizational_data_acme.json`: a json with our groups, managers, and their reports. "
-        "`my_identity_profile.txt`: Your identity and profile information."
+        "`AGENTS.md: Instructions for the agent to use the organization information."
+        "`organization_structure.json`: a json with our groups, managers, and their reports. "
+        "`user_identity_profile.txt`: Your identity and profile information."
     ),
 }
 
