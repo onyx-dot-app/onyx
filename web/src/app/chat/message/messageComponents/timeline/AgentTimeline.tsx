@@ -46,6 +46,7 @@ interface TimelineStepProps {
   isLastStep: boolean;
   isFirstStep: boolean;
   isSingleStep: boolean;
+  isStreaming?: boolean;
 }
 
 //will be removed on cleanup
@@ -59,6 +60,7 @@ const TimelineStep = React.memo(function TimelineStep({
   isLastStep,
   isFirstStep,
   isSingleStep,
+  isStreaming = false,
 }: TimelineStepProps) {
   // Memoize packet type checks to avoid recomputing on every render
   const isResearchAgent = useMemo(
@@ -112,7 +114,7 @@ const TimelineStep = React.memo(function TimelineStep({
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
-      defaultExpanded={true}
+      defaultExpanded={isStreaming}
       isLastStep={isLastStep}
     >
       {renderStep}
@@ -503,6 +505,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
                     isLastStep={stepIsLast}
                     isFirstStep={stepIsFirst}
                     isSingleStep={isSingleStep}
+                    isStreaming={!stopPacketSeen && !userStopped}
                   />
                 );
               })
