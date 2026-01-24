@@ -417,6 +417,7 @@ export function useBuildStreaming() {
               const shouldOpenPanel = session?.webappNeedsRefresh === true;
               updateSessionData(sessionId, {
                 status: "completed",
+                streamItems: [], // Clear stream items since they're now saved in the message
                 ...(shouldOpenPanel && { outputPanelOpen: true }),
               });
               break;

@@ -1242,6 +1242,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       // Re-fetch existing session to check for optimistic messages
       const currentSession = get().sessions.get(sessionId);
       const hasOptimisticMessages = (currentSession?.messages.length ?? 0) > 0;
+      const isCurrentlyStreaming =
+        currentSession?.status === "running" ||
+        currentSession?.status === "creating";
 
       // Consolidate messages into proper conversation turns
       // Each assistant turn becomes a single message with streamItems in metadata
@@ -1254,9 +1257,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const streamItemsToUse = hasOptimisticMessages
         ? currentSession!.streamItems
         : [];
+      // Preserve streaming status if currently streaming, otherwise use backend status
+      const statusToUse = isCurrentlyStreaming
+        ? currentSession!.status
+        : sessionData.status === "active"
+          ? "completed"
+          : "idle";
 
       updateSessionData(sessionId, {
-        status: sessionData.status === "active" ? "completed" : "idle",
+        status: statusToUse,
         // Preserve optimistic messages if they exist (e.g., from pre-provisioned flow)
         messages: messagesToUse,
         streamItems: streamItemsToUse,

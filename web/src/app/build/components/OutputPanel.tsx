@@ -280,7 +280,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             />
           </div>
           {/* Scrollable tabs container */}
-          <div className="flex items-end gap-1.5 flex-1 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex items-end gap-1.5 flex-1 pl-3 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {/* Pinned tabs */}
             {tabs.map((tab) => {
               const Icon = tab.icon;
