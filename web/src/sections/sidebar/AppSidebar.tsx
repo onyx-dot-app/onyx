@@ -61,9 +61,11 @@ import {
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
+  SvgSearch,
   SvgSettings,
 } from "@opal/icons";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -373,6 +375,18 @@ const MemoizedAppSidebarInner = memo(
         </div>
       );
     }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+    const searchChatsButton = useMemo(
+      () => (
+        <ChatSearchCommandMenu
+          trigger={
+            <SidebarTab leftIcon={SvgSearch} folded={folded}>
+              Search chats
+            </SidebarTab>
+          }
+        />
+      ),
+      [folded]
+    );
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -471,6 +485,9 @@ const MemoizedAppSidebarInner = memo(
             footer={settingsButton}
             actionButton={newSessionButton}
           >
+            {/* Search chats button */}
+            {searchChatsButton}
+
             {/* When folded, show icons immediately without waiting for data */}
             {folded ? (
               <>

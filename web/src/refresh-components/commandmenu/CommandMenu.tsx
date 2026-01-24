@@ -5,10 +5,10 @@ import React, {
   useContext,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
-import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -18,7 +18,6 @@ import ShadowDiv from "@/refresh-components/ShadowDiv";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
 import { SvgChevronRight, SvgSearch, SvgX } from "@opal/icons";
-import { useItemRegistry, useCommandMenuKeyboard } from "./hooks";
 import type {
   CommandMenuProps,
   CommandMenuContentProps,
@@ -53,9 +52,23 @@ function useCommandMenuContext() {
 // =============================================================================
 
 /**
+ * Gets ordered items by querying DOM for data-command-item elements.
+ * Safe to call in event handlers (after DOM is committed).
+ */
+function getOrderedItems(): string[] {
+  const container = document.querySelector("[data-command-menu-list]");
+  if (!container) return [];
+  const elements = container.querySelectorAll("[data-command-item]");
+  return Array.from(elements)
+    .map((el) => el.getAttribute("data-command-item"))
+    .filter((v): v is string => v !== null);
+}
+
+/**
  * CommandMenu Root Component
  *
  * Wrapper around Radix Dialog.Root for managing command menu state.
+ * Centralizes all keyboard/selection logic - items only render and report mouse events.
  *
  * @example
  * ```tsx
@@ -71,43 +84,137 @@ function useCommandMenuContext() {
  * ```
  */
 function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
-  const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
+  const [highlightedValue, setHighlightedValue] = React.useState<string | null>(
+    null
+  );
   const [isKeyboardNav, setIsKeyboardNav] = React.useState(false);
-  const {
-    registerItem,
-    unregisterItem,
-    getItemIndex,
-    getItemByIndex,
-    itemCount,
-    resetItems,
-  } = useItemRegistry();
+
+  // Centralized callback registry - items register their onSelect callback
+  const itemCallbacks = useRef<Map<string, () => void>>(new Map());
 
   // Reset state when menu closes
   useEffect(() => {
     if (!open) {
-      setHighlightedIndex(-1);
+      setHighlightedValue(null);
       setIsKeyboardNav(false);
-      resetItems();
+      itemCallbacks.current.clear();
     }
-  }, [open, resetItems]);
+  }, [open]);
 
-  const onItemSelect = useCallback(
+  // Registration functions (items call on mount)
+  const registerItem = useCallback((value: string, onSelect: () => void) => {
+    itemCallbacks.current.set(value, onSelect);
+  }, []);
+
+  const unregisterItem = useCallback((value: string) => {
+    itemCallbacks.current.delete(value);
+  }, []);
+
+  // Shared mouse handlers (items call on events)
+  const onItemMouseEnter = useCallback(
     (value: string) => {
+      if (!isKeyboardNav) {
+        setHighlightedValue(value);
+      }
+    },
+    [isKeyboardNav]
+  );
+
+  const onItemMouseMove = useCallback(
+    (value: string) => {
+      if (isKeyboardNav) {
+        setIsKeyboardNav(false);
+      }
+      if (highlightedValue !== value) {
+        setHighlightedValue(value);
+      }
+    },
+    [isKeyboardNav, highlightedValue]
+  );
+
+  const onItemClick = useCallback(
+    (value: string) => {
+      const callback = itemCallbacks.current.get(value);
+      callback?.();
       onOpenChange(false);
     },
     [onOpenChange]
   );
 
+  // Keyboard handler - centralized for all keys including Enter
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      switch (e.key) {
+        case "ArrowDown": {
+          e.preventDefault();
+          setIsKeyboardNav(true);
+          const items = getOrderedItems();
+          if (items.length === 0) return;
+          const currentIndex = highlightedValue
+            ? items.indexOf(highlightedValue)
+            : -1;
+          const nextIndex =
+            currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+          const nextItem = items[nextIndex];
+          if (nextItem !== undefined) {
+            setHighlightedValue(nextItem);
+          }
+          break;
+        }
+        case "ArrowUp": {
+          e.preventDefault();
+          setIsKeyboardNav(true);
+          const items = getOrderedItems();
+          if (items.length === 0) return;
+          const currentIndex = highlightedValue
+            ? items.indexOf(highlightedValue)
+            : 0;
+          const prevIndex =
+            currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+          const prevItem = items[prevIndex];
+          if (prevItem !== undefined) {
+            setHighlightedValue(prevItem);
+          }
+          break;
+        }
+        case "Enter": {
+          e.preventDefault();
+          if (highlightedValue) {
+            const callback = itemCallbacks.current.get(highlightedValue);
+            callback?.();
+            onOpenChange(false);
+          }
+          break;
+        }
+        case "Escape": {
+          e.preventDefault();
+          onOpenChange(false);
+          break;
+        }
+      }
+    },
+    [highlightedValue, onOpenChange]
+  );
+
+  // Scroll highlighted item into view on keyboard nav
+  useEffect(() => {
+    if (isKeyboardNav && highlightedValue) {
+      const el = document.querySelector(
+        `[data-command-item="${highlightedValue}"]`
+      );
+      el?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlightedValue, isKeyboardNav]);
+
   const contextValue: CommandMenuContextValue = {
-    highlightedIndex,
-    setHighlightedIndex,
+    highlightedValue,
     isKeyboardNav,
-    setIsKeyboardNav,
     registerItem,
     unregisterItem,
-    getItemIndex,
-    itemCount,
-    onItemSelect,
+    onItemMouseEnter,
+    onItemMouseMove,
+    onItemClick,
+    handleKeyDown,
   };
 
   return (
@@ -127,24 +234,13 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
  * CommandMenu Content Component
  *
  * Modal container with overlay, sizing, and animations.
+ * Keyboard handling is centralized in Root and accessed via context.
  */
 const CommandMenuContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   CommandMenuContentProps
 >(({ children }, ref) => {
-  const { itemCount, highlightedIndex, setHighlightedIndex, setIsKeyboardNav } =
-    useCommandMenuContext();
-
-  // Use the hook instead of inline implementation
-  const { handleKeyDown } = useCommandMenuKeyboard({
-    isOpen: true, // Always true when Content is rendered
-    setIsOpen: () => {}, // No-op since Radix Dialog handles closing
-    highlightedIndex,
-    setHighlightedIndex,
-    setIsKeyboardNav,
-    itemCount,
-    onSelect: () => {}, // No-op since Enter is handled by individual items
-  });
+  const { handleKeyDown } = useCommandMenuContext();
 
   return (
     <DialogPrimitive.Portal>
@@ -189,6 +285,7 @@ CommandMenuContent.displayName = "CommandMenuContent";
  * CommandMenu Header Component
  *
  * Contains filter tags and search input.
+ * Arrow keys preventDefault at input level (to stop cursor movement) then bubble to Content.
  */
 function CommandMenuHeader({
   placeholder = "Search...",
@@ -198,14 +295,16 @@ function CommandMenuHeader({
   onFilterRemove,
   onClose,
 }: CommandMenuHeaderProps) {
-  const { setHighlightedIndex, setIsKeyboardNav } = useCommandMenuContext();
-
-  const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onValueChange?.(e.target.value);
-    // Reset highlight when search changes
-    setHighlightedIndex(-1);
-    setIsKeyboardNav(false);
-  };
+  // Prevent default for arrow/enter keys so they don't move cursor or submit forms
+  // The actual handling happens in Root's centralized handler via event bubbling
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
+        e.preventDefault();
+      }
+    },
+    []
+  );
 
   return (
     <Section padding={1} gap={0.5} alignItems="start">
@@ -236,11 +335,12 @@ function CommandMenuHeader({
           </DialogPrimitive.Close>
         )}
       </Section>
-      {/* Search input */}
+      {/* Search input - arrow/enter keys bubble up to Content for centralized handling */}
       <InputTypeIn
         placeholder={placeholder}
         value={value}
-        onChange={handleValueChange}
+        onChange={(e) => onValueChange?.(e.target.value)}
+        onKeyDown={handleInputKeyDown}
         autoFocus
       />
     </Section>
@@ -277,6 +377,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
       <ShadowDiv
         className="flex-1 min-h-0 bg-background-tint-01"
         backgroundColor="var(--background-tint-01)"
+        data-command-menu-list
       >
         <Section padding={0.5} gap={0} alignItems="stretch">
           {children}
@@ -295,7 +396,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
  *
  * When `isApplied` is true, renders as a non-interactive group label.
  * Otherwise, renders as a selectable filter with a chevron indicator.
- * Uses LineItem for consistent styling and keyboard navigation support.
+ * Dumb component - registers callback on mount, renders based on context state.
  */
 function CommandMenuFilter({
   value,
@@ -305,20 +406,18 @@ function CommandMenuFilter({
   onSelect,
 }: CommandMenuFilterProps) {
   const {
-    highlightedIndex,
-    setHighlightedIndex,
-    isKeyboardNav,
-    setIsKeyboardNav,
+    highlightedValue,
     registerItem,
     unregisterItem,
-    getItemIndex,
-    onItemSelect,
+    onItemMouseEnter,
+    onItemMouseMove,
+    onItemClick,
   } = useCommandMenuContext();
 
-  // Only register for keyboard nav when selectable (not applied)
+  // Register callback on mount - NO keyboard listener needed
   useEffect(() => {
     if (!isApplied && onSelect) {
-      registerItem(value);
+      registerItem(value, () => onSelect());
       return () => unregisterItem(value);
     }
   }, [value, isApplied, onSelect, registerItem, unregisterItem]);
@@ -334,57 +433,23 @@ function CommandMenuFilter({
     );
   }
 
-  const itemIndex = getItemIndex(value);
-  const isHighlighted = itemIndex === highlightedIndex && itemIndex !== -1;
+  const isHighlighted = value === highlightedValue;
 
-  const handleClick = () => {
-    onSelect?.();
-  };
-
-  const handleMouseEnter = () => {
-    if (!isKeyboardNav && onSelect) {
-      setHighlightedIndex(itemIndex);
-    }
-  };
-
-  const handleMouseMove = () => {
-    if (onSelect) {
-      if (isKeyboardNav) {
-        setIsKeyboardNav(false);
-      }
-      if (highlightedIndex !== itemIndex) {
-        setHighlightedIndex(itemIndex);
-      }
-    }
-  };
-
-  // Handle Enter key on highlighted filter
-  useEffect(() => {
-    if (isHighlighted && isKeyboardNav && onSelect) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          handleClick();
-        }
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isHighlighted, isKeyboardNav, onSelect]);
-
-  // Selectable filter - uses LineItem for consistent styling and keyboard nav
+  // Selectable filter - uses LineItem, delegates all events to context
   return (
-    <LineItem
-      icon={icon}
-      rightChildren={<SvgChevronRight className="w-4 h-4 stroke-text-02" />}
-      emphasized={isHighlighted}
-      selected={isHighlighted}
-      onClick={handleClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseMove={handleMouseMove}
-    >
-      {children}
-    </LineItem>
+    <div data-command-item={value}>
+      <LineItem
+        icon={icon}
+        rightChildren={<SvgChevronRight className="w-4 h-4 stroke-text-02" />}
+        emphasized={isHighlighted}
+        selected={isHighlighted}
+        onClick={() => onItemClick(value)}
+        onMouseEnter={() => onItemMouseEnter(value)}
+        onMouseMove={() => onItemMouseMove(value)}
+      >
+        {children}
+      </LineItem>
+    </div>
   );
 }
 
@@ -395,7 +460,7 @@ function CommandMenuFilter({
 /**
  * CommandMenu Item Component
  *
- * Wraps LineItem with keyboard navigation support.
+ * Dumb component - registers callback on mount, renders based on context state.
  * Use rightContent for timestamps, badges, etc.
  */
 function CommandMenuItem({
@@ -406,72 +471,36 @@ function CommandMenuItem({
   children,
 }: CommandMenuItemProps) {
   const {
-    highlightedIndex,
-    setHighlightedIndex,
-    isKeyboardNav,
-    setIsKeyboardNav,
+    highlightedValue,
     registerItem,
     unregisterItem,
-    getItemIndex,
-    onItemSelect,
+    onItemMouseEnter,
+    onItemMouseMove,
+    onItemClick,
   } = useCommandMenuContext();
 
-  // Register item on mount
+  // Register callback on mount - NO keyboard listener needed
   useEffect(() => {
-    registerItem(value);
+    registerItem(value, () => onSelect?.(value));
     return () => unregisterItem(value);
-  }, [value, registerItem, unregisterItem]);
+  }, [value, onSelect, registerItem, unregisterItem]);
 
-  const itemIndex = getItemIndex(value);
-  const isHighlighted = itemIndex === highlightedIndex && itemIndex !== -1;
-
-  const handleClick = () => {
-    onSelect?.(value);
-    onItemSelect(value);
-  };
-
-  const handleMouseEnter = () => {
-    if (!isKeyboardNav) {
-      setHighlightedIndex(itemIndex);
-    }
-  };
-
-  const handleMouseMove = () => {
-    // Switch back to mouse mode and update highlight
-    if (isKeyboardNav) {
-      setIsKeyboardNav(false);
-    }
-    if (highlightedIndex !== itemIndex) {
-      setHighlightedIndex(itemIndex);
-    }
-  };
-
-  // Handle Enter key on highlighted item
-  useEffect(() => {
-    if (isHighlighted && isKeyboardNav) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          handleClick();
-        }
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isHighlighted, isKeyboardNav]);
+  const isHighlighted = value === highlightedValue;
 
   return (
-    <LineItem
-      icon={icon}
-      rightChildren={rightContent}
-      emphasized={isHighlighted}
-      selected={isHighlighted}
-      onClick={handleClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseMove={handleMouseMove}
-    >
-      {children}
-    </LineItem>
+    <div data-command-item={value}>
+      <LineItem
+        icon={icon}
+        rightChildren={rightContent}
+        emphasized={isHighlighted}
+        selected={isHighlighted}
+        onClick={() => onItemClick(value)}
+        onMouseEnter={() => onItemMouseEnter(value)}
+        onMouseMove={() => onItemMouseMove(value)}
+      >
+        {children}
+      </LineItem>
+    </div>
   );
 }
 
@@ -482,7 +511,7 @@ function CommandMenuItem({
 /**
  * CommandMenu Action Component
  *
- * Quick action with optional keyboard shortcut.
+ * Dumb component - registers callback on mount, renders based on context state.
  * Uses LineItem with action variant for visual distinction.
  */
 function CommandMenuAction({
@@ -493,79 +522,43 @@ function CommandMenuAction({
   children,
 }: CommandMenuActionProps) {
   const {
-    highlightedIndex,
-    setHighlightedIndex,
-    isKeyboardNav,
-    setIsKeyboardNav,
+    highlightedValue,
     registerItem,
     unregisterItem,
-    getItemIndex,
-    onItemSelect,
+    onItemMouseEnter,
+    onItemMouseMove,
+    onItemClick,
   } = useCommandMenuContext();
 
-  // Register item on mount
+  // Register callback on mount - NO keyboard listener needed
   useEffect(() => {
-    registerItem(value);
+    registerItem(value, () => onSelect?.(value));
     return () => unregisterItem(value);
-  }, [value, registerItem, unregisterItem]);
+  }, [value, onSelect, registerItem, unregisterItem]);
 
-  const itemIndex = getItemIndex(value);
-  const isHighlighted = itemIndex === highlightedIndex && itemIndex !== -1;
-
-  const handleClick = () => {
-    onSelect?.(value);
-    onItemSelect(value);
-  };
-
-  const handleMouseEnter = () => {
-    if (!isKeyboardNav) {
-      setHighlightedIndex(itemIndex);
-    }
-  };
-
-  const handleMouseMove = () => {
-    // Switch back to mouse mode and update highlight
-    if (isKeyboardNav) {
-      setIsKeyboardNav(false);
-    }
-    if (highlightedIndex !== itemIndex) {
-      setHighlightedIndex(itemIndex);
-    }
-  };
-
-  // Handle Enter key on highlighted action
-  useEffect(() => {
-    if (isHighlighted && isKeyboardNav) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          handleClick();
-        }
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isHighlighted, isKeyboardNav]);
+  const isHighlighted = value === highlightedValue;
 
   return (
-    <LineItem
-      action
-      icon={icon}
-      rightChildren={
-        shortcut ? (
-          <Text figureKeystroke text02>
-            {shortcut}
-          </Text>
-        ) : undefined
-      }
-      emphasized={isHighlighted}
-      selected={isHighlighted}
-      onClick={handleClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseMove={handleMouseMove}
-    >
-      {children}
-    </LineItem>
+    <div data-command-item={value}>
+      <LineItem
+        action
+        icon={icon}
+        rightChildren={
+          shortcut ? (
+            <Text figureKeystroke text02>
+              {shortcut}
+            </Text>
+          ) : undefined
+        }
+        emphasized={isHighlighted}
+        selected={isHighlighted}
+        onClick={() => onItemClick(value)}
+        onMouseEnter={() => onItemMouseEnter(value)}
+        onMouseMove={() => onItemMouseMove(value)}
+      >
+        {children}
+      </LineItem>
+    </div>
   );
 }
 

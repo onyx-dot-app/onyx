@@ -163,15 +163,22 @@ export interface CommandMenuFooterActionProps {
 
 /**
  * Context value for CommandMenu keyboard navigation
+ * Uses centralized control with callback registry - items are "dumb" renderers
  */
 export interface CommandMenuContextValue {
-  highlightedIndex: number;
-  setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
+  // State
+  highlightedValue: string | null;
   isKeyboardNav: boolean;
-  setIsKeyboardNav: (value: boolean) => void;
-  registerItem: (value: string) => number;
+
+  // Registration (items call on mount with their callback)
+  registerItem: (value: string, onSelect: () => void) => void;
   unregisterItem: (value: string) => void;
-  getItemIndex: (value: string) => number;
-  itemCount: number;
-  onItemSelect: (value: string) => void;
+
+  // Mouse interaction (items call on events - centralized in root)
+  onItemMouseEnter: (value: string) => void;
+  onItemMouseMove: (value: string) => void;
+  onItemClick: (value: string) => void;
+
+  // Keyboard handler (Content attaches this to DialogPrimitive.Content)
+  handleKeyDown: (e: React.KeyboardEvent) => void;
 }

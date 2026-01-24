@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { CommandMenuEntry, CommandMenuGroup } from "./types";
 
 // =============================================================================
@@ -12,14 +12,10 @@ import type { CommandMenuEntry, CommandMenuGroup } from "./types";
 export function useCommandMenuState() {
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [isKeyboardNav, setIsKeyboardNav] = useState(false);
 
-  // Reset state when closing
+  // Reset search when closing
   useEffect(() => {
     if (!isOpen) {
-      setHighlightedIndex(-1);
-      setIsKeyboardNav(false);
       setSearchValue("");
     }
   }, [isOpen]);
@@ -29,93 +25,7 @@ export function useCommandMenuState() {
     setIsOpen,
     searchValue,
     setSearchValue,
-    highlightedIndex,
-    setHighlightedIndex,
-    isKeyboardNav,
-    setIsKeyboardNav,
   };
-}
-
-// =============================================================================
-// HOOK: useCommandMenuKeyboard
-// =============================================================================
-
-interface UseCommandMenuKeyboardProps {
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
-  highlightedIndex: number;
-  setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
-  setIsKeyboardNav: (isKeyboard: boolean) => void;
-  itemCount: number;
-  onSelect: (index: number) => void;
-}
-
-/**
- * Manages keyboard navigation for the CommandMenu
- * Adapted from useComboBoxKeyboard - handles arrow keys, Enter, Escape
- */
-export function useCommandMenuKeyboard({
-  isOpen,
-  setIsOpen,
-  highlightedIndex,
-  setHighlightedIndex,
-  setIsKeyboardNav,
-  itemCount,
-  onSelect,
-}: UseCommandMenuKeyboardProps) {
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!itemCount) return;
-
-      switch (e.key) {
-        case "ArrowDown":
-          e.preventDefault();
-          setIsKeyboardNav(true);
-          if (!isOpen) {
-            setIsOpen(true);
-            setHighlightedIndex(0);
-          } else {
-            setHighlightedIndex((prev) => {
-              if (prev === -1) return 0;
-              return prev < itemCount - 1 ? prev + 1 : prev;
-            });
-          }
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          setIsKeyboardNav(true);
-          if (isOpen) {
-            setHighlightedIndex((prev) =>
-              prev <= 0 ? itemCount - 1 : prev - 1
-            );
-          }
-          break;
-        case "Enter":
-          if (isOpen && highlightedIndex >= 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            onSelect(highlightedIndex);
-            setIsOpen(false);
-          }
-          break;
-        case "Escape":
-          e.preventDefault();
-          setIsOpen(false);
-          break;
-      }
-    },
-    [
-      isOpen,
-      itemCount,
-      highlightedIndex,
-      onSelect,
-      setIsOpen,
-      setHighlightedIndex,
-      setIsKeyboardNav,
-    ]
-  );
-
-  return { handleKeyDown };
 }
 
 // =============================================================================
@@ -212,55 +122,4 @@ export function useCommandMenuEntryFilter<T extends CommandMenuEntry>({
         item.description?.toLowerCase().includes(term)
     );
   }, [items, searchValue]);
-}
-
-// =============================================================================
-// HOOK: useItemRegistry
-// =============================================================================
-
-/**
- * Manages item registration for keyboard navigation
- * Items register themselves when mounting and unregister when unmounting
- */
-export function useItemRegistry() {
-  const itemsRef = useRef<string[]>([]);
-  const [itemCount, setItemCount] = useState(0);
-
-  const registerItem = useCallback((value: string) => {
-    if (!itemsRef.current.includes(value)) {
-      itemsRef.current.push(value);
-      setItemCount(itemsRef.current.length);
-    }
-    return itemsRef.current.indexOf(value);
-  }, []);
-
-  const unregisterItem = useCallback((value: string) => {
-    const index = itemsRef.current.indexOf(value);
-    if (index !== -1) {
-      itemsRef.current.splice(index, 1);
-      setItemCount(itemsRef.current.length);
-    }
-  }, []);
-
-  const getItemIndex = useCallback((value: string) => {
-    return itemsRef.current.indexOf(value);
-  }, []);
-
-  const getItemByIndex = useCallback((index: number) => {
-    return itemsRef.current[index];
-  }, []);
-
-  const resetItems = useCallback(() => {
-    itemsRef.current = [];
-    setItemCount(0);
-  }, []);
-
-  return {
-    registerItem,
-    unregisterItem,
-    getItemIndex,
-    getItemByIndex,
-    itemCount,
-    resetItems,
-  };
 }
