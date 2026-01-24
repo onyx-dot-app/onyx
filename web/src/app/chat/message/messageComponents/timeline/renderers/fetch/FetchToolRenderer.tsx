@@ -119,52 +119,32 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     supportsCompact: false,
     content: (
       <div className="flex flex-col">
-        {!isCompact &&
-          (displayDocuments ? (
-            <SearchChipList
-              items={documents}
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(doc: OnyxDocument) => doc.document_id}
-              toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
-              onClick={(doc: OnyxDocument) => {
-                if (doc.link) window.open(doc.link, "_blank");
-              }}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-            />
-          ) : displayUrls ? (
-            <SearchChipList
-              items={urls}
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(url: string) => url}
-              toSourceInfo={urlToSourceInfo}
-              onClick={(url: string) => window.open(url, "_blank")}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-            />
-          ) : (
-            <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
-              {!stopPacketSeen && <BlinkingDot />}
-            </div>
-          ))}
-
-        {displayUrls && (
-          <>
-            {!isCompact && (
-              <Text as="p" mainUiMuted text03>
-                Reading results:
-              </Text>
-            )}
-            <SearchChipList
-              items={urls}
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(url: string, index: number) => `reading-${url}-${index}`}
-              toSourceInfo={urlToSourceInfo}
-              onClick={(url: string) => window.open(url, "_blank")}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-            />
-          </>
+        {displayDocuments ? (
+          <SearchChipList
+            items={documents}
+            initialCount={INITIAL_URLS_TO_SHOW}
+            expansionCount={URLS_PER_EXPANSION}
+            getKey={(doc: OnyxDocument) => doc.document_id}
+            toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
+            onClick={(doc: OnyxDocument) => {
+              if (doc.link) window.open(doc.link, "_blank");
+            }}
+            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+          />
+        ) : displayUrls ? (
+          <SearchChipList
+            items={urls}
+            initialCount={INITIAL_URLS_TO_SHOW}
+            expansionCount={URLS_PER_EXPANSION}
+            getKey={(url: string) => url}
+            toSourceInfo={urlToSourceInfo}
+            onClick={(url: string) => window.open(url, "_blank")}
+            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+          />
+        ) : (
+          <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
+            {!stopPacketSeen && <BlinkingDot />}
+          </div>
         )}
       </div>
     ),

@@ -129,6 +129,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             toSourceInfo={queryToSourceInfo}
             emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
             showDetailsCard={false}
+            isQuery={true}
           />
         ),
       });
