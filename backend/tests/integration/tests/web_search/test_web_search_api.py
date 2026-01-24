@@ -270,7 +270,7 @@ def test_web_search_endpoints_with_exa(
     provider_id = _activate_exa_provider(admin_user)
     assert isinstance(provider_id, int)
 
-    search_request = {"queries": ["latest ai research news"], "max_results": 3}
+    search_request = {"queries": ["wikipedia python programming"], "max_results": 3}
 
     lite_response = requests.post(
         f"{API_SERVER_URL}/web-search/search-lite",
