@@ -152,6 +152,7 @@ const ChatInputBar = React.memo(
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
+    const trimmedMessage = message.trim();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -484,8 +485,8 @@ const ChatInputBar = React.memo(
                   !(event.nativeEvent as any).isComposing
                 ) {
                   event.preventDefault();
-                  if (message) {
-                    onSubmit(message);
+                  if (trimmedMessage) {
+                    onSubmit(trimmedMessage);
                   }
                 }
               }}
@@ -692,13 +693,13 @@ const ChatInputBar = React.memo(
               id="onyx-chat-input-send-button"
               icon={chatState === "input" ? SvgArrowUp : SvgStop}
               disabled={
-                (chatState === "input" && !message) || hasUploadingFiles
+                (chatState === "input" && !trimmedMessage) || hasUploadingFiles
               }
               onClick={() => {
                 if (chatState == "streaming") {
                   stopGenerating();
-                } else if (message) {
-                  onSubmit(message);
+                } else if (trimmedMessage) {
+                  onSubmit(trimmedMessage);
                 }
               }}
             />
