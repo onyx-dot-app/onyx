@@ -263,11 +263,17 @@ function ShareAgentFormContent({
 
 export interface ShareAgentModalProps {
   agent?: MinimalPersonaSnapshot;
+  userIds: string[];
+  groupIds: number[];
+  isPublic: boolean;
   onShare?: (userIds: string[], groupIds: number[], isPublic: boolean) => void;
 }
 
 export default function ShareAgentModal({
   agent,
+  userIds,
+  groupIds,
+  isPublic,
   onShare,
 }: ShareAgentModalProps) {
   const { data: usersData } = useUsers({ includeApiKeys: false });
@@ -292,9 +298,9 @@ export default function ShareAgentModal({
   }, [usersData?.accepted, groupsData]);
 
   const initialValues: ShareAgentFormValues = {
-    selectedUserIds: fullAgent?.users?.map((u) => u.id) ?? [],
-    selectedGroupIds: fullAgent?.groups ?? [],
-    isPublic: fullAgent?.is_public ?? true,
+    selectedUserIds: userIds,
+    selectedGroupIds: groupIds,
+    isPublic: isPublic,
   };
 
   function handleSubmit(values: ShareAgentFormValues) {

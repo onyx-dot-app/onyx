@@ -63,7 +63,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
-  const { refresh: refreshAgent } = useAgent(agent.id);
+  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   const { popup, setPopup } = usePopup();
 
   // Start chat and auto-pin unpinned agents to the sidebar
@@ -103,7 +103,13 @@ export default function AgentCard({ agent }: AgentCardProps) {
       {popup}
 
       <shareAgentModal.Provider>
-        <ShareAgentModal agent={agent} onShare={handleShare} />
+        <ShareAgentModal
+          agent={agent}
+          userIds={fullAgent?.users?.map((u) => u.id) ?? []}
+          groupIds={fullAgent?.groups ?? []}
+          isPublic={fullAgent?.is_public ?? false}
+          onShare={handleShare}
+        />
       </shareAgentModal.Provider>
 
       <Card

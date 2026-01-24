@@ -1043,6 +1043,9 @@ export default function AgentEditorPage({
                 <shareAgentModal.Provider>
                   <ShareAgentModal
                     agent={existingAgent}
+                    userIds={values.shared_user_ids}
+                    groupIds={values.shared_group_ids}
+                    isPublic={values.is_public}
                     onShare={(userIds, groupIds, isPublic) => {
                       setFieldValue("shared_user_ids", userIds);
                       setFieldValue("shared_group_ids", groupIds);
