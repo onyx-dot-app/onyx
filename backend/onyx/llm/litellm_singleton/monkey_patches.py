@@ -369,6 +369,8 @@ def _patch_openai_responses_chunk_parser() -> None:
             # New output item added
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
+                # Track that we've received tool calls via streaming
+                self._has_streamed_tool_calls = True
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
@@ -394,6 +396,8 @@ def _patch_openai_responses_chunk_parser() -> None:
         elif event_type == "response.function_call_arguments.delta":
             content_part: Optional[str] = parsed_chunk.get("delta", None)
             if content_part:
+                # Track that we've received tool calls via streaming
+                self._has_streamed_tool_calls = True
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
@@ -491,21 +495,71 @@ def _patch_openai_responses_chunk_parser() -> None:
 
         elif event_type == "response.completed":
             # Final event signaling all output items (including parallel tool calls) are done
+            # Check if we already received tool calls via streaming events
+            # There is an issue where OpenAI (not via Azure) will give back the tool calls streamed out as tokens
+            # But on Azure, it's only given out all at once. OpenAI also happens to give back the tool calls in the
+            # response.completed event so we need to throw it out here or there are duplicate tool calls.
+            has_streamed_tool_calls = getattr(self, "_has_streamed_tool_calls", False)
+
             response_data = parsed_chunk.get("response", {})
-            # Determine finish reason based on response content
-            finish_reason = "stop"
-            if response_data.get("output"):
-                for item in response_data["output"]:
-                    if isinstance(item, dict) and item.get("type") == "function_call":
-                        finish_reason = "tool_calls"
-                        break
-            return GenericStreamingChunk(
-                text="",
-                tool_use=None,
-                is_finished=True,
-                finish_reason=finish_reason,
-                usage=None,
+            output_items = response_data.get("output", [])
+
+            # Check if there are function_call items in the output
+            has_function_calls = any(
+                isinstance(item, dict) and item.get("type") == "function_call"
+                for item in output_items
             )
+
+            if has_function_calls and not has_streamed_tool_calls:
+                # Azure's Responses API returns all tool calls in response.completed
+                # without streaming them incrementally. Extract them here.
+                from litellm.types.utils import (
+                    Delta,
+                    ModelResponseStream,
+                    StreamingChoices,
+                )
+
+                tool_calls = []
+                for idx, item in enumerate(output_items):
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        tool_calls.append(
+                            ChatCompletionToolCallChunk(
+                                id=item.get("call_id"),
+                                index=idx,
+                                type="function",
+                                function=ChatCompletionToolCallFunctionChunk(
+                                    name=item.get("name"),
+                                    arguments=item.get("arguments", ""),
+                                ),
+                            )
+                        )
+
+                return ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(tool_calls=tool_calls),
+                            finish_reason="tool_calls",
+                        )
+                    ]
+                )
+            elif has_function_calls:
+                # Tool calls were already streamed, just signal completion
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=None,
+                    is_finished=True,
+                    finish_reason="tool_calls",
+                    usage=None,
+                )
+            else:
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=None,
+                    is_finished=True,
+                    finish_reason="stop",
+                    usage=None,
+                )
 
         else:
             pass
