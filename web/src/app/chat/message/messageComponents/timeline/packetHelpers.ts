@@ -7,6 +7,7 @@ export const COMPACT_SUPPORTED_PACKET_TYPES = new Set<PacketType>([
   PacketType.PYTHON_TOOL_START,
   PacketType.CUSTOM_TOOL_START,
   PacketType.RESEARCH_AGENT_START,
+  PacketType.REASONING_START,
 ]);
 
 // Check if packets belong to a research agent (handles its own Done indicator)
