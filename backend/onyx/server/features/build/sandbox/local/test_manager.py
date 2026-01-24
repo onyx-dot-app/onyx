@@ -203,7 +203,6 @@ def session_workspace(
         sandbox_id=sandbox_record.id,
         user_id=sandbox_record.user_id,
         tenant_id=TEST_TENANT_ID,
-        file_system_path=SANDBOX_BASE_PATH,
         llm_config=llm_config,
         nextjs_port=sandbox_record.nextjs_port,
     )
@@ -212,6 +211,7 @@ def session_workspace(
         session_id=session_id,
         llm_config=llm_config,
         nextjs_port=sandbox_record.nextjs_port,
+        file_system_path=SANDBOX_BASE_PATH,
     )
 
     yield sandbox_record, session_id

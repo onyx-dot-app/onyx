@@ -100,7 +100,6 @@ def test_kubernetes_sandbox_provision() -> None:
             sandbox_id=sandbox_id,
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
-            file_system_path="/tmp/test-files",  # Not used by K8s manager
             llm_config=llm_config,
         )
 
@@ -298,7 +297,6 @@ def test_kubernetes_sandbox_send_message() -> None:
             sandbox_id=sandbox_id,
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
-            file_system_path="/tmp/test-files",
             llm_config=llm_config,
         )
 

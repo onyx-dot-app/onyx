@@ -310,12 +310,12 @@ class LocalSandboxManager(SandboxManager):
             logger.debug("Outputs directory ready")
 
             logger.debug("Setting up skills")
-            self._directory_manager.setup_skills(sandbox_path)
+            self._directory_manager.setup_skills(session_path)
             logger.debug("Skills ready")
 
             # Setup user uploads directory
             logger.debug("Setting up user uploads directory")
-            self._directory_manager.setup_user_uploads_directory(sandbox_path)
+            self._directory_manager.setup_user_uploads_directory(session_path)
             logger.debug("User uploads directory ready")
 
             # Setup opencode.json with LLM provider configuration
@@ -324,7 +324,7 @@ class LocalSandboxManager(SandboxManager):
                 f"model: {llm_config.model_name}"
             )
             self._directory_manager.setup_opencode_config(
-                sandbox_path=sandbox_path,
+                sandbox_path=session_path,
                 provider=llm_config.provider,
                 model_name=llm_config.model_name,
                 api_key=llm_config.api_key,
@@ -342,14 +342,14 @@ class LocalSandboxManager(SandboxManager):
             self._process_manager.start_nextjs_server(web_dir, nextjs_port)
             logger.info("Next.js server started successfully")
 
-            # Setup venv, AGENTS.md, and skills
+            # Setup venv and AGENTS.md
             logger.debug("Setting up virtual environment")
             self._directory_manager.setup_venv(session_path)
             logger.debug("Virtual environment ready")
 
             logger.debug("Setting up agent instructions (AGENTS.md)")
             self._directory_manager.setup_agent_instructions(
-                sandbox_path=sandbox_path,
+                sandbox_path=session_path,
                 provider=llm_config.provider,
                 model_name=llm_config.model_name,
                 nextjs_port=nextjs_port,
