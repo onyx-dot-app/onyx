@@ -149,13 +149,11 @@ export function ParallelTimelineTabs({
                 "transition-colors duration-200"
               )}
               rightContent={
-                hasResearchAgent ? (
-                  <IconButton
-                    tertiary
-                    onClick={handleToggle}
-                    icon={isExpanded ? SvgFold : SvgExpand}
-                  />
-                ) : undefined
+                <IconButton
+                  tertiary
+                  onClick={handleToggle}
+                  icon={isExpanded ? SvgFold : SvgExpand}
+                />
               }
             >
               {turnGroup.steps.map((step) => (
