@@ -132,7 +132,7 @@ def test_kubernetes_sandbox_provision() -> None:
         assert service is not None
         assert service.spec.type == "ClusterIP"
 
-        # Verify /workspace/outputs directory exists and contains expected files
+        # Verify /workspace/templates/outputs directory exists and contains expected files
         exec_command = ["/bin/sh", "-c", "ls -la /workspace/templates/outputs"]
         resp = k8s_stream(
             k8s_client.connect_get_namespaced_pod_exec,
@@ -146,13 +146,17 @@ def test_kubernetes_sandbox_provision() -> None:
             tty=False,
         )
         assert resp is not None
-        print(f"DEBUG: Contents of /workspace/outputs:\n{resp}")
+        print(f"DEBUG: Contents of /workspace/templates/outputs:\n{resp}")
         assert (
             "web" in resp
-        ), f"/workspace/outputs should contain web directory. Actual contents:\n{resp}"
+        ), f"/workspace/templates/outputs should contain web directory. Actual contents:\n{resp}"
 
-        # Verify /workspace/outputs/web/AGENTS.md file exists
-        exec_command = ["/bin/sh", "-c", "cat /workspace/outputs/web/AGENTS.md"]
+        # Verify /workspace/templates/outputs/web/AGENTS.md file exists
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            "cat /workspace/templates/outputs/web/AGENTS.md",
+        ]
         resp = k8s_stream(
             k8s_client.connect_get_namespaced_pod_exec,
             name=pod_name,
@@ -167,11 +171,11 @@ def test_kubernetes_sandbox_provision() -> None:
         assert resp is not None
         assert (
             len(resp) > 0
-        ), "/workspace/outputs/web/AGENTS.md file should not be empty"
+        ), "/workspace/templates/outputs/web/AGENTS.md file should not be empty"
         # Verify it contains expected content
         assert (
             "Agent" in resp or "Instructions" in resp or "#" in resp
-        ), "/workspace/outputs/web/AGENTS.md should contain agent instructions"
+        ), "/workspace/templates/outputs/web/AGENTS.md should contain agent instructions"
 
         # Verify /workspace/files directory exists and contains expected files
         exec_command = ["/bin/sh", "-c", "find /workspace/files -type f | wc -l"]

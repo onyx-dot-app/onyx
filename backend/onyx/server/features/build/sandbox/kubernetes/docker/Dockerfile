@@ -45,7 +45,7 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     fi
 
 # Create workspace directories
-RUN mkdir -p /workspace/files /workspace/templates && \
+RUN mkdir -p workspace/sessions /workspace/files /workspace/templates && \
     chown -R sandbox:sandbox /workspace
 
 # Copy outputs template (web app scaffold, without node_modules)
