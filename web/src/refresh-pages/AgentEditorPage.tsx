@@ -883,11 +883,10 @@ export default function AgentEditorPage({
         message: "Agent deleted successfully",
       });
 
+      deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/chat/agents");
     }
-
-    deleteAgentModal.toggle(false);
   }
 
   // FilePickerPopover callbacks - defined outside render to avoid inline functions
