@@ -287,6 +287,7 @@ def run_deep_research_llm_loop(
                 token_count=100,
                 message_type=MessageType.USER,
             )
+
             truncated_message_history = construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=None,
