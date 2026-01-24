@@ -31,6 +31,19 @@
   }
 }
 
+/* Action Variant - same background behavior as main */
+.line-item-button-action {
+  @apply bg-transparent hover:bg-background-tint-02;
+}
+
+.line-item-button-action-emphasized {
+  @apply bg-transparent hover:bg-background-tint-02;
+
+  &[data-selected="true"] {
+    @apply bg-background-tint-02;
+  }
+}
+
 /* LineItem Text Variants */
 .line-item-text-main {
   color: var(--text-04) !important;
@@ -49,6 +62,10 @@
   color: var(--status-error-05) !important;
 }
 
+.line-item-text-action {
+  color: var(--text-04) !important;
+}
+
 /* LineItem Icon Variants */
 .line-item-icon-main {
   @apply stroke-text-03;
@@ -64,4 +81,8 @@
 
 .line-item-icon-danger {
   @apply stroke-status-error-05;
+}
+
+.line-item-icon-action {
+  @apply stroke-text-03;
 }

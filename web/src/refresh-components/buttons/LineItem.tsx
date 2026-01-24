@@ -20,18 +20,24 @@ const buttonClassNames = {
     normal: "line-item-button-danger",
     emphasized: "line-item-button-danger-emphasized",
   },
+  action: {
+    normal: "line-item-button-action",
+    emphasized: "line-item-button-action-emphasized",
+  },
 } as const;
 
 const textClassNames = {
   main: "line-item-text-main",
   strikethrough: "line-item-text-strikethrough",
   danger: "line-item-text-danger",
+  action: "line-item-text-action",
 } as const;
 
 const iconClassNames = {
   main: "line-item-icon-main",
   strikethrough: "line-item-icon-strikethrough",
   danger: "line-item-icon-danger",
+  action: "line-item-icon-action",
 } as const;
 
 export interface LineItemProps
@@ -42,6 +48,7 @@ export interface LineItemProps
   // line-item variants
   strikethrough?: boolean;
   danger?: boolean;
+  action?: boolean;
 
   // modifier (makes the background more pronounced when selected).
   emphasized?: boolean;
@@ -106,6 +113,7 @@ export default function LineItem({
   selected,
   strikethrough,
   danger,
+  action,
   emphasized,
   icon: Icon,
   description,
@@ -115,8 +123,14 @@ export default function LineItem({
   ref,
   ...props
 }: LineItemProps) {
-  // Determine variant (mutually exclusive, with priority order)
-  const variant = strikethrough ? "strikethrough" : danger ? "danger" : "main";
+  // Determine variant (mutually exclusive, with priority order: strikethrough > danger > action > main)
+  const variant = strikethrough
+    ? "strikethrough"
+    : danger
+      ? "danger"
+      : action
+        ? "action"
+        : "main";
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 

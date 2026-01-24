@@ -1,0 +1,177 @@
+import type { IconProps } from "@opal/types";
+
+// =============================================================================
+// CommandMenu Entry Types (Discriminated Union)
+// =============================================================================
+
+/**
+ * Base interface for all CommandMenu items
+ * Contains common properties used for filtering and display
+ */
+interface CommandMenuEntryBase {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: React.FunctionComponent<IconProps>;
+}
+
+/**
+ * Filter entry - clicking adds a filter to narrow results
+ * Used for section titles that can filter the list
+ */
+export interface CommandMenuFilterEntry extends CommandMenuEntryBase {
+  type: "filter";
+}
+
+/**
+ * Clickable item entry - navigates or performs an action
+ * Used for sessions, projects, documents with timestamps
+ */
+export interface CommandMenuClickableEntry extends CommandMenuEntryBase {
+  type: "item";
+  rightContent?: React.ReactNode; // For timestamps, badges, etc.
+}
+
+/**
+ * Action entry - performs a quick action with optional keyboard shortcut
+ * Used for "New Session", "New Project", etc.
+ */
+export interface CommandMenuActionEntry extends CommandMenuEntryBase {
+  type: "action";
+  shortcut?: string; // e.g., "⌘N", "⌘P"
+}
+
+/**
+ * Discriminated union of all entry types
+ * Use `entry.type` to discriminate between types
+ */
+export type CommandMenuEntry =
+  | CommandMenuFilterEntry
+  | CommandMenuClickableEntry
+  | CommandMenuActionEntry;
+
+// =============================================================================
+// CommandMenu Group Types
+// =============================================================================
+
+/**
+ * Group structure for organizing menu entries
+ */
+export interface CommandMenuGroup {
+  id: string;
+  title: string;
+  titleSelectable?: boolean; // When true, clicking title adds a filter
+  items: CommandMenuEntry[];
+}
+
+// =============================================================================
+// Filter Object (for header display)
+// =============================================================================
+
+/**
+ * Filter object for CommandMenu header
+ */
+export interface CommandMenuFilter {
+  id: string;
+  label: string;
+  icon?: React.FunctionComponent<IconProps>;
+}
+
+/**
+ * Props for CommandMenu root component
+ */
+export interface CommandMenuProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode;
+}
+
+/**
+ * Props for CommandMenu content (modal container)
+ */
+export interface CommandMenuContentProps {
+  children: React.ReactNode;
+}
+
+/**
+ * Props for CommandMenu header with search and filters
+ */
+export interface CommandMenuHeaderProps {
+  placeholder?: string;
+  filters?: CommandMenuFilter[];
+  value?: string;
+  onValueChange?: (value: string) => void;
+  onFilterRemove?: (filterId: string) => void;
+  onClose?: () => void;
+}
+
+/**
+ * Props for CommandMenu list container
+ */
+export interface CommandMenuListProps {
+  children: React.ReactNode;
+  emptyMessage?: string;
+}
+
+/**
+ * Props for CommandMenu filter (selectable or as applied group label)
+ */
+export interface CommandMenuFilterProps {
+  value: string;
+  children: string;
+  icon?: React.FunctionComponent<IconProps>;
+  isApplied?: boolean; // When true, renders as non-interactive group label
+  onSelect?: () => void;
+}
+
+/**
+ * Props for CommandMenu item
+ */
+export interface CommandMenuItemProps {
+  value: string;
+  icon?: React.FunctionComponent<IconProps>;
+  rightContent?: React.ReactNode; // For timestamps, badges, etc.
+  onSelect?: (value: string) => void;
+  children: string;
+}
+
+/**
+ * Props for CommandMenu action (quick actions with keyboard shortcuts)
+ */
+export interface CommandMenuActionProps {
+  value: string;
+  icon?: React.FunctionComponent<IconProps>;
+  shortcut?: string; // Keyboard shortcut like "⌘N", "⌘P"
+  onSelect?: (value: string) => void;
+  children: string;
+}
+
+/**
+ * Props for CommandMenu footer
+ */
+export interface CommandMenuFooterProps {
+  leftActions?: React.ReactNode;
+}
+
+/**
+ * Props for CommandMenu footer action hint
+ */
+export interface CommandMenuFooterActionProps {
+  icon: React.FunctionComponent<IconProps>;
+  label: string;
+}
+
+/**
+ * Context value for CommandMenu keyboard navigation
+ */
+export interface CommandMenuContextValue {
+  highlightedIndex: number;
+  setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
+  isKeyboardNav: boolean;
+  setIsKeyboardNav: (value: boolean) => void;
+  registerItem: (value: string) => number;
+  unregisterItem: (value: string) => void;
+  getItemIndex: (value: string) => number;
+  itemCount: number;
+  onItemSelect: (value: string) => void;
+}
