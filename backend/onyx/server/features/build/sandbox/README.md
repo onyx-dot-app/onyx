@@ -97,7 +97,7 @@ python -m onyx.server.features.build.sandbox.util.build_venv_template
 
 # Or manually
 python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/initial-requirements.txt
+/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
 ```
 
 **That's it!** When sandboxes are created:
@@ -262,7 +262,7 @@ sudo ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web /temp
 
 # Create Python venv
 python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/initial-requirements.txt
+/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
 ```
 
 ### Permission Denied

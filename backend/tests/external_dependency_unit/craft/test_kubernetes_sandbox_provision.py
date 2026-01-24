@@ -132,26 +132,8 @@ def test_kubernetes_sandbox_provision() -> None:
         assert service is not None
         assert service.spec.type == "ClusterIP"
 
-        # Verify AGENTS.md file exists in the pod (written by init container)
-        exec_command = ["/bin/sh", "-c", "cat /workspace/AGENTS.md"]
-        resp = k8s_stream(
-            k8s_client.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=SANDBOX_NAMESPACE,
-            container="sandbox",
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        assert resp is not None
-        assert len(resp) > 0, "AGENTS.md file should not be empty"
-        # Verify it contains expected content (from template or default)
-        assert "Agent" in resp or "Instructions" in resp or "#" in resp
-
         # Verify /workspace/outputs directory exists and contains expected files
-        exec_command = ["/bin/sh", "-c", "ls -la /workspace/outputs"]
+        exec_command = ["/bin/sh", "-c", "ls -la /workspace/templates/outputs"]
         resp = k8s_stream(
             k8s_client.connect_get_namespaced_pod_exec,
             name=pod_name,
@@ -168,26 +150,6 @@ def test_kubernetes_sandbox_provision() -> None:
         assert (
             "web" in resp
         ), f"/workspace/outputs should contain web directory. Actual contents:\n{resp}"
-
-        # Verify /workspace/outputs/web directory exists
-        exec_command = [
-            "/bin/sh",
-            "-c",
-            "test -d /workspace/outputs/web && echo 'exists'",
-        ]
-        resp = k8s_stream(
-            k8s_client.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=SANDBOX_NAMESPACE,
-            container="sandbox",
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        assert resp is not None
-        assert "exists" in resp, "/workspace/outputs/web directory should exist"
 
         # Verify /workspace/outputs/web/AGENTS.md file exists
         exec_command = ["/bin/sh", "-c", "cat /workspace/outputs/web/AGENTS.md"]
@@ -229,6 +191,24 @@ def test_kubernetes_sandbox_provision() -> None:
         assert (
             file_count == 1099
         ), f"/workspace/files should contain 1099 files, but found {file_count}"
+
+        # Verify AGENTS.md file exists in the pod (written by init container)
+        exec_command = ["/bin/sh", "-c", "cat /workspace/AGENTS.md"]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        assert len(resp) > 0, "AGENTS.md file should not be empty"
+        # Verify it contains expected content (from template or default)
+        assert "Agent" in resp or "Instructions" in resp or "#" in resp
 
     finally:
         # Clean up: terminate the sandbox (no longer needs db_session)
