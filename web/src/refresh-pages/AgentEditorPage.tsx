@@ -1233,6 +1233,7 @@ export default function AgentEditorPage({
                                       wrap
                                       gap={0.5}
                                       justifyContent="start"
+                                      alignItems="start"
                                     >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
