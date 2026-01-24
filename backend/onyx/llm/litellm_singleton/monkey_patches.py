@@ -491,21 +491,44 @@ def _patch_openai_responses_chunk_parser() -> None:
 
         elif event_type == "response.completed":
             # Final event signaling all output items (including parallel tool calls) are done
+            # Azure's Responses API returns all tool calls in response.completed,
+            # not in incremental events. We need to extract them here.
             response_data = parsed_chunk.get("response", {})
-            # Determine finish reason based on response content
-            finish_reason = "stop"
-            if response_data.get("output"):
-                for item in response_data["output"]:
-                    if isinstance(item, dict) and item.get("type") == "function_call":
-                        finish_reason = "tool_calls"
-                        break
-            return GenericStreamingChunk(
-                text="",
-                tool_use=None,
-                is_finished=True,
-                finish_reason=finish_reason,
-                usage=None,
-            )
+            output_items = response_data.get("output", [])
+
+            # Extract tool calls from output
+            tool_calls = []
+            for idx, item in enumerate(output_items):
+                if isinstance(item, dict) and item.get("type") == "function_call":
+                    tool_calls.append(
+                        ChatCompletionToolCallChunk(
+                            id=item.get("call_id"),
+                            index=idx,
+                            type="function",
+                            function=ChatCompletionToolCallFunctionChunk(
+                                name=item.get("name"),
+                                arguments=item.get("arguments", ""),
+                            ),
+                        )
+                    )
+
+            if tool_calls:
+                # Return first tool call - the streaming handler will merge them
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=tool_calls[0],
+                    is_finished=True,
+                    finish_reason="tool_calls",
+                    usage=None,
+                )
+            else:
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=None,
+                    is_finished=True,
+                    finish_reason="stop",
+                    usage=None,
+                )
 
         else:
             pass
