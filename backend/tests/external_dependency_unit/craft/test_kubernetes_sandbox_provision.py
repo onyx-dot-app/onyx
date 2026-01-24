@@ -196,6 +196,8 @@ def test_kubernetes_sandbox_provision() -> None:
             file_count == 1099
         ), f"/workspace/files should contain 1099 files, but found {file_count}"
 
+        # start session
+
         # Verify AGENTS.md file exists in the pod (written by init container)
         exec_command = ["/bin/sh", "-c", "cat /workspace/AGENTS.md"]
         resp = k8s_stream(

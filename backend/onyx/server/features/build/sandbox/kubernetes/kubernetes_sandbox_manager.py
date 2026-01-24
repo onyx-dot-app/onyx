@@ -282,7 +282,7 @@ set -e
 
 # Sync knowledge files for this user/tenant (shared across sessions)
 echo "Syncing knowledge files for tenant: $TENANT_ID / user: $USER_ID"
-aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/ || true
+aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/
 
 echo "Sandbox init complete (user-level only, no sessions yet)"
 """
