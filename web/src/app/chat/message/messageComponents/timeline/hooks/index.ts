@@ -11,3 +11,9 @@ export { useTimelineHeader } from "./useTimelineHeader";
 export type { TimelineHeaderResult } from "./useTimelineHeader";
 
 export { useStreamingDuration } from "./useStreamingDuration";
+
+export { useTimelineUIState, TimelineUIState } from "./useTimelineUIState";
+export type {
+  TimelineUIStateInput,
+  TimelineUIStateResult,
+} from "./useTimelineUIState";
