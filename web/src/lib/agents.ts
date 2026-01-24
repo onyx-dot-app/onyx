@@ -6,7 +6,13 @@ import { User } from "./types";
 import { checkUserIsNoAuthUser } from "./user";
 import { personaComparator } from "@/app/admin/assistants/lib";
 
-// Check ownership
+/**
+ * Checks if the given user owns the specified assistant.
+ *
+ * @param user - The user to check ownership for, or null if no user is logged in
+ * @param assistant - The assistant to check ownership of
+ * @returns true if the user owns the assistant (or no auth is required), false otherwise
+ */
 export function checkUserOwnsAssistant(
   user: User | null,
   assistant: MinimalPersonaSnapshot | Persona
@@ -14,6 +20,18 @@ export function checkUserOwnsAssistant(
   return checkUserIdOwnsAssistant(user?.id, assistant);
 }
 
+/**
+ * Checks if the given user ID owns the specified assistant.
+ *
+ * Returns true if any of the following conditions are met (and the assistant is not built-in):
+ * - No user ID is provided
+ * - The user is a no-auth user
+ * - The user ID matches the assistant owner's ID
+ *
+ * @param userId - The user ID to check ownership for
+ * @param assistant - The assistant to check ownership of
+ * @returns true if the user owns the assistant, false otherwise
+ */
 export function checkUserIdOwnsAssistant(
   userId: string | undefined,
   assistant: MinimalPersonaSnapshot | Persona
@@ -26,7 +44,12 @@ export function checkUserIdOwnsAssistant(
   );
 }
 
-// Pin agents
+/**
+ * Updates the user's pinned assistants with the given ordered list of agent IDs.
+ *
+ * @param pinnedAgentIds - Array of agent IDs in the desired pinned order
+ * @throws Error if the API request fails
+ */
 export async function pinAgents(pinnedAgentIds: number[]) {
   const response = await fetch(`/api/user/pinned-assistants`, {
     method: "PATCH",
@@ -42,7 +65,14 @@ export async function pinAgents(pinnedAgentIds: number[]) {
   }
 }
 
-// Filter assistants based on connector status, image compatibility and visibility
+/**
+ * Filters and sorts assistants based on visibility.
+ *
+ * Only returns assistants that are marked as visible, sorted using the persona comparator.
+ *
+ * @param assistants - Array of assistants to filter
+ * @returns Filtered and sorted array of visible assistants
+ */
 export function filterAssistants(
   assistants: MinimalPersonaSnapshot[]
 ): MinimalPersonaSnapshot[] {
@@ -50,6 +80,30 @@ export function filterAssistants(
     (assistant) => assistant.is_visible
   );
   return filteredAssistants.sort(personaComparator);
+}
+
+/**
+ * Deletes an agent by its ID.
+ *
+ * @param agentId - The ID of the agent to delete
+ * @returns null on success, or an error message string on failure
+ */
+export async function deleteAgent(agentId: number): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/persona/${agentId}`, {
+      method: "DELETE",
+    });
+
+    if (response.ok) {
+      return null;
+    }
+
+    const errorMessage = (await response.json()).detail || "Unknown error";
+    return errorMessage;
+  } catch (error) {
+    console.error("deleteAgent: Network error", error);
+    return "Network error. Please check your connection and try again.";
+  }
 }
 
 /**
