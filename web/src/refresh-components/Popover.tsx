@@ -95,20 +95,23 @@ const PopoverClose = PopoverPrimitive.Close;
  * ```
  */
 const widthClasses = {
-  main: "w-fit",
-  wide: "w-[280px]",
+  fit: "w-fit",
+  md: "w-[12rem]",
+  lg: "w-[18rem]",
 };
 interface PopoverContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
   > {
-  wide?: boolean;
+  fit?: boolean;
+  md?: boolean;
+  lg?: boolean;
 }
 const PopoverContent = React.forwardRef<
   React.ComponentRef<typeof PopoverPrimitive.Content>,
   PopoverContentProps
->(({ wide, align = "center", sideOffset = 4, ...props }, ref) => {
-  const width = wide ? "wide" : "main";
+>(({ fit, md, lg, align = "center", sideOffset = 4, ...props }, ref) => {
+  const width = fit ? "fit" : md ? "md" : lg ? "lg" : "fit";
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -132,11 +135,6 @@ PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 function SeparatorHelper() {
   return <Separator className="py-0 px-2" />;
 }
-
-const sizeClasses = {
-  small: "w-[10rem]",
-  medium: "w-[15.5rem]",
-};
 
 export default Object.assign(PopoverRoot, {
   Trigger: PopoverTrigger,
@@ -186,10 +184,16 @@ export default Object.assign(PopoverRoot, {
  * </Popover.Menu>
  * ```
  */
+const sizeClasses = {
+  sm: "w-[10rem]",
+  md: "w-[16rem]",
+  full: "!w-full",
+};
 export interface PopoverMenuProps {
   // size variants
-  small?: boolean;
-  medium?: boolean;
+  sm?: boolean;
+  md?: boolean;
+  full?: boolean;
 
   children?: React.ReactNode[];
   footer?: React.ReactNode;
@@ -198,8 +202,9 @@ export interface PopoverMenuProps {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 export function PopoverMenu({
-  small,
-  medium,
+  sm,
+  md,
+  full,
 
   children,
   footer,
@@ -214,7 +219,7 @@ export function PopoverMenu({
     if (child !== null) return true;
     return index !== 0 && index !== definedChildren.length - 1;
   });
-  const size = small ? "small" : medium ? "medium" : "small";
+  const size = full ? "full" : sm ? "sm" : md ? "md" : "full";
 
   return (
     <Section alignItems="stretch">

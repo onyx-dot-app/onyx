@@ -59,8 +59,10 @@ import {
   SvgExpand,
   SvgFold,
   SvgImage,
+  SvgLock,
   SvgOnyxOctagon,
   SvgSliders,
+  SvgTrash,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
@@ -85,6 +87,9 @@ import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
+import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import { deleteAgent } from "@/lib/agents";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -217,7 +222,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
           </InputAvatar>
         </Popover.Trigger>
         <Popover.Content>
-          <PopoverMenu medium>
+          <PopoverMenu md>
             {[
               <LineItem
                 key="upload-image"
@@ -443,6 +448,8 @@ export default function AgentEditorPage({
   const appRouter = useAppRouter();
   const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
+  const shareAgentModal = useCreateModal();
+  const deleteAgentModal = useCreateModal();
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -634,6 +641,11 @@ export default function AgentEditorPage({
         existingAgent?.tools?.some((t) => t.id === openApiTool.id) ?? false,
       ])
     ),
+
+    // Sharing
+    shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
+    shared_group_ids: existingAgent?.groups ?? [],
+    is_public: existingAgent?.is_public ?? true,
   };
 
   const validationSchema = Yup.object().shape({
@@ -778,15 +790,15 @@ export default function AgentEditorPage({
             ? values.document_set_ids
             : [],
         num_chunks: numChunks,
-        is_public: existingAgent?.is_public ?? true,
+        is_public: values.is_public,
         // recency_bias: ...,
         // llm_filter_extraction: ...,
         llm_relevance_filter: false,
         llm_model_provider_override: values.llm_model_provider_override || null,
         llm_model_version_override: values.llm_model_version_override || null,
         starter_messages: finalStarterMessages,
-        users: undefined, // TODO: Handle restricted access users
-        groups: [], // TODO: Handle groups
+        users: values.shared_user_ids,
+        groups: values.shared_group_ids,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
@@ -851,6 +863,29 @@ export default function AgentEditorPage({
         type: "error",
         message: `An error occurred: ${error}`,
       });
+    }
+  }
+
+  // Delete agent handler
+  async function handleDeleteAgent() {
+    if (!existingAgent) return;
+
+    const error = await deleteAgent(existingAgent.id);
+
+    if (error) {
+      setPopup({
+        type: "error",
+        message: `Failed to delete agent: ${error}`,
+      });
+    } else {
+      setPopup({
+        type: "success",
+        message: "Agent deleted successfully",
+      });
+
+      deleteAgentModal.toggle(false);
+      await refreshAgents();
+      router.push("/chat/agents");
     }
   }
 
@@ -961,6 +996,7 @@ export default function AgentEditorPage({
             return (
               <>
                 <FormWarningsEffect />
+
                 <userFilesModal.Provider>
                   <UserFilesModal
                     title="User Files"
@@ -1008,6 +1044,43 @@ export default function AgentEditorPage({
                     }}
                   />
                 </userFilesModal.Provider>
+
+                <shareAgentModal.Provider>
+                  <ShareAgentModal
+                    agent={existingAgent}
+                    userIds={values.shared_user_ids}
+                    groupIds={values.shared_group_ids}
+                    isPublic={values.is_public}
+                    onShare={(userIds, groupIds, isPublic) => {
+                      setFieldValue("shared_user_ids", userIds);
+                      setFieldValue("shared_group_ids", groupIds);
+                      setFieldValue("is_public", isPublic);
+                      shareAgentModal.toggle(false);
+                    }}
+                  />
+                </shareAgentModal.Provider>
+                <deleteAgentModal.Provider>
+                  {deleteAgentModal.isOpen && (
+                    <ConfirmationModalLayout
+                      icon={SvgTrash}
+                      title="Delete Agent"
+                      submit={
+                        <Button danger onClick={handleDeleteAgent}>
+                          Delete Agent
+                        </Button>
+                      }
+                      onClose={() => deleteAgentModal.toggle(false)}
+                    >
+                      <GeneralLayouts.Section alignItems="start" gap={0.5}>
+                        <Text>
+                          Anyone using this agent will no longer be able to
+                          access it. Deletion cannot be undone.
+                        </Text>
+                        <Text>Are you sure you want to delete this agent?</Text>
+                      </GeneralLayouts.Section>
+                    </ConfirmationModalLayout>
+                  )}
+                </deleteAgentModal.Provider>
 
                 <Form className="h-full w-full">
                   <SettingsLayouts.Root>
@@ -1395,6 +1468,22 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section>
                           <Card>
                             <InputLayouts.Horizontal
+                              label="Share This Agent"
+                              description="Share this agent with other users, groups, or everyone in your organization. "
+                              center
+                            >
+                              <Button
+                                secondary
+                                leftIcon={SvgLock}
+                                onClick={() => shareAgentModal.toggle(true)}
+                              >
+                                Share
+                              </Button>
+                            </InputLayouts.Horizontal>
+                          </Card>
+
+                          <Card>
+                            <InputLayouts.Horizontal
                               name="llm_model"
                               label="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
@@ -1445,6 +1534,28 @@ export default function AgentEditorPage({
                           </GeneralLayouts.Section>
                         </GeneralLayouts.Section>
                       </SimpleCollapsible>
+
+                      {existingAgent && (
+                        <>
+                          <Separator noPadding />
+
+                          <Card>
+                            <InputLayouts.Horizontal
+                              label="Delete This Agent"
+                              description="Anyone using this agent will no longer be able to access it."
+                              center
+                            >
+                              <Button
+                                secondary
+                                danger
+                                onClick={() => deleteAgentModal.toggle(true)}
+                              >
+                                Delete Agent
+                              </Button>
+                            </InputLayouts.Horizontal>
+                          </Card>
+                        </>
+                      )}
                     </SettingsLayouts.Body>
                   </SettingsLayouts.Root>
                 </Form>
