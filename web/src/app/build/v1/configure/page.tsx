@@ -27,6 +27,7 @@ import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import BuildOnboardingModal from "@/app/build/onboarding/components/BuildOnboardingModal";
+import NotAllowedModal from "@/app/build/onboarding/components/NotAllowedModal";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUser } from "@/components/user/UserProvider";
 import { updateUserPersonalization } from "@/lib/userSettings";
@@ -68,13 +69,16 @@ interface SelectedConnectorState {
 export default function BuildConfigPage() {
   const router = useRouter();
   const llmManager = useLlmManager();
-  const { refreshUser, user } = useUser();
+  const { refreshUser, user, isAdmin, isCurator } = useUser();
   const { llmProviders, refetch: refetchLlmProviders } = useLLMProviders();
   const [selectedConnector, setSelectedConnector] =
     useState<SelectedConnectorState | null>(null);
   const [connectorToDelete, setConnectorToDelete] =
     useState<BuildConnectorConfig | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [showNotAllowedModal, setShowNotAllowedModal] = useState(false);
+
+  const isBasicUser = !isAdmin && !isCurator;
 
   // Get store values - update store directly on switch change
   const demoDataEnabled = useBuildSessionStore(
@@ -275,7 +279,11 @@ export default function BuildConfigPage() {
                     onConfigure={() => {
                       // Only open modal for unconfigured connectors
                       if (!config) {
-                        setSelectedConnector({ type, config });
+                        if (isBasicUser) {
+                          setShowNotAllowedModal(true);
+                        } else {
+                          setSelectedConnector({ type, config });
+                        }
                       }
                     }}
                     onDelete={() => config && setConnectorToDelete(config)}
@@ -347,6 +355,8 @@ export default function BuildConfigPage() {
           level: levelValue,
         }}
       />
+
+      <NotAllowedModal open={showNotAllowedModal} />
     </SettingsLayouts.Root>
   );
 }

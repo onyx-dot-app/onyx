@@ -33,15 +33,11 @@ export function useBuildOnboarding() {
     user?.personalization?.name && existingPersona?.workArea
   );
   const hasRecommendedLlms = checkHasRecommendedLlms(llmProviders);
-  const isBasicUser = !isAdmin && !isCurator;
-
-  const showNotAllowedModal = isBasicUser;
 
   const flow: BuildOnboardingFlow = {
-    showNotAllowedModal,
-    showUserInfoModal:
-      !showNotAllowedModal && !hasUserInfo && (isAdmin || isCurator),
-    showLlmModal: !showNotAllowedModal && isAdmin && !hasRecommendedLlms,
+    showNotAllowedModal: false,
+    showUserInfoModal: !hasUserInfo,
+    showLlmModal: isAdmin && !hasRecommendedLlms,
   };
 
   const completeUserInfo = useCallback(
