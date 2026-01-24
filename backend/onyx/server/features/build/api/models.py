@@ -18,6 +18,8 @@ class SessionCreateRequest(BaseModel):
     demo_data_enabled: bool = (
         True  # Whether to mount demo data files in sandbox (not yet implemented)
     )
+    user_work_area: str | None = None  # User's work area (e.g., "engineering")
+    user_level: str | None = None  # User's level (e.g., "ic", "manager")
 
 
 class SessionUpdateRequest(BaseModel):

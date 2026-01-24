@@ -81,6 +81,8 @@ export async function processSSEStream(
 export interface CreateSessionOptions {
   name?: string | null;
   demoDataEnabled?: boolean;
+  userWorkArea?: string | null;
+  userLevel?: string | null;
 }
 
 export async function createSession(
@@ -92,6 +94,8 @@ export async function createSession(
     body: JSON.stringify({
       name: options?.name || null,
       demo_data_enabled: options?.demoDataEnabled ?? true,
+      user_work_area: options?.userWorkArea || null,
+      user_level: options?.userLevel || null,
     }),
   });
 
