@@ -612,7 +612,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,
-        nextjs_port: int | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -629,7 +628,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration
-            nextjs_port: Not used in kubernetes (always 3000 within cluster)
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -686,7 +684,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
                 directory_path=f"k8s://{self._namespace}/{pod_name}",
                 status=SandboxStatus.RUNNING,
                 last_heartbeat=None,
-                nextjs_port=NEXTJS_PORT,  # Always 3000 within cluster
             )
 
         except Exception as e:

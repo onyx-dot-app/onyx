@@ -76,7 +76,6 @@ class SandboxManager(ABC):
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,
-        nextjs_port: int | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -91,7 +90,6 @@ class SandboxManager(ABC):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration (for default config)
-            nextjs_port: Pre-allocated port for Next.js server (local backend only)
 
         Returns:
             SandboxInfo with the provisioned sandbox details

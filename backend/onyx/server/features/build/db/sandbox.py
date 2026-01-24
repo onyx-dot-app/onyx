@@ -10,8 +10,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -20,7 +18,6 @@ logger = setup_logger()
 def create_sandbox__no_commit(
     db_session: Session,
     user_id: UUID,
-    nextjs_port: int | None = None,
 ) -> Sandbox:
     """Create a new sandbox record for a user.
 
@@ -30,7 +27,6 @@ def create_sandbox__no_commit(
     sandbox = Sandbox(
         user_id=user_id,
         status=SandboxStatus.PROVISIONING,
-        nextjs_port=nextjs_port,
     )
     db_session.add(sandbox)
     db_session.flush()
@@ -208,72 +204,3 @@ def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     db_session.delete(snapshot)
     db_session.commit()
     return True
-
-
-def _is_port_available(port: int) -> bool:
-    """Check if a port is available by attempting to bind to it.
-
-    Checks both IPv4 and IPv6 wildcard addresses to properly detect
-    if anything is listening on the port, regardless of address family.
-    """
-    import socket
-
-    logger.debug(f"Checking if port {port} is available")
-
-    # Check IPv4 wildcard (0.0.0.0) - this will detect any IPv4 listener
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("0.0.0.0", port))
-            logger.debug(f"Port {port} IPv4 wildcard bind successful")
-    except OSError as e:
-        logger.debug(f"Port {port} IPv4 wildcard not available: {e}")
-        return False
-
-    # Check IPv6 wildcard (::) - this will detect any IPv6 listener
-    try:
-        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # IPV6_V6ONLY must be False to allow dual-stack behavior
-            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-            sock.bind(("::", port))
-            logger.debug(f"Port {port} IPv6 wildcard bind successful")
-    except OSError as e:
-        logger.debug(f"Port {port} IPv6 wildcard not available: {e}")
-        return False
-
-    logger.debug(f"Port {port} is available")
-    return True
-
-
-def allocate_nextjs_port(db_session: Session) -> int:
-    """Allocate an available port for a new sandbox.
-
-    Finds the first available port in the configured range by checking
-    both database allocations and system-level port availability.
-
-    Args:
-        db_session: Database session for querying allocated ports
-
-    Returns:
-        An available port number
-
-    Raises:
-        RuntimeError: If no ports are available in the configured range
-    """
-    # Get all currently allocated ports from the database
-    allocated_ports = set(
-        db_session.query(Sandbox.nextjs_port)
-        .filter(Sandbox.nextjs_port.isnot(None))
-        .all()
-    )
-    allocated_ports = {port[0] for port in allocated_ports if port[0] is not None}
-
-    # Find first port that's not in DB and not currently bound
-    for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-        if port not in allocated_ports and _is_port_available(port):
-            return port
-
-    raise RuntimeError(
-        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
-    )

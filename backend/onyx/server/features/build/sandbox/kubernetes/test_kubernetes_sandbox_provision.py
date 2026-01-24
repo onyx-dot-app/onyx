@@ -95,7 +95,7 @@ def test_kubernetes_sandbox_provision() -> None:
     )
 
     try:
-        # Call provision (no longer needs db_session)
+        # Call provision
         sandbox_info = manager.provision(
             sandbox_id=sandbox_id,
             user_id=TEST_USER_ID,

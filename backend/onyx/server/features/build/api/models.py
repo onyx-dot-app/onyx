@@ -43,7 +43,6 @@ class SandboxResponse(BaseModel):
     container_id: str | None
     created_at: datetime
     last_heartbeat: datetime | None
-    nextjs_port: int | None
 
     @classmethod
     def from_model(cls, sandbox: Any) -> "SandboxResponse":
@@ -54,7 +53,6 @@ class SandboxResponse(BaseModel):
             container_id=sandbox.container_id,
             created_at=sandbox.created_at,
             last_heartbeat=sandbox.last_heartbeat,
-            nextjs_port=sandbox.nextjs_port,
         )
 
 
@@ -94,6 +92,7 @@ class SessionResponse(BaseModel):
     status: BuildSessionStatus
     created_at: datetime
     last_activity_at: datetime
+    nextjs_port: int | None
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
 
@@ -113,6 +112,7 @@ class SessionResponse(BaseModel):
             status=session.status,
             created_at=session.created_at,
             last_activity_at=session.last_activity_at,
+            nextjs_port=session.nextjs_port,
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
         )

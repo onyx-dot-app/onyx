@@ -30,7 +30,6 @@ class SandboxInfo(BaseModel):
     directory_path: str
     status: SandboxStatus
     last_heartbeat: datetime | None
-    nextjs_port: int | None
 
 
 class SnapshotResult(BaseModel):

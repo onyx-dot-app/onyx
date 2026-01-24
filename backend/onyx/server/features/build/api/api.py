@@ -26,7 +26,6 @@ from onyx.server.features.build.api.models import BuildConnectorStatus
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
-from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
 
@@ -210,7 +209,7 @@ REWRITABLE_CONTENT_TYPES = {
 
 
 def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
-    """Get the localhost URL for a sandbox's Next.js server.
+    """Get the localhost URL for a session's Next.js server.
 
     Args:
         session_id: The build session ID
@@ -220,14 +219,16 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
         The localhost URL (e.g., "http://localhost:3010")
 
     Raises:
-        HTTPException: If sandbox not found or port not allocated
+        HTTPException: If session not found or port not allocated
     """
-    sandbox = get_sandbox_by_session_id(db_session, session_id)
-    if not sandbox:
-        raise HTTPException(status_code=404, detail="Sandbox not found")
-    if sandbox.nextjs_port is None:
-        raise HTTPException(status_code=503, detail="Sandbox port not allocated")
-    return f"http://localhost:{sandbox.nextjs_port}"
+    from onyx.db.models import BuildSession
+
+    session = db_session.get(BuildSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.nextjs_port is None:
+        raise HTTPException(status_code=503, detail="Session port not allocated")
+    return f"http://localhost:{session.nextjs_port}"
 
 
 def _proxy_request(

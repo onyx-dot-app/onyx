@@ -51,6 +51,7 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import USER_UPLOADS_DIRECTORY
+from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
@@ -60,7 +61,6 @@ from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
-from onyx.server.features.build.db.sandbox import allocate_nextjs_port
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
@@ -360,13 +360,6 @@ class SessionManager:
             api_base=llm_provider.api_base,
         )
 
-        # Allocate port for local backend
-        nextjs_port: int | None = None
-        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-            nextjs_port = allocate_nextjs_port(self._db_session)
-        else:
-            nextjs_port = KUBERNETES_NEXTJS_PORT
-
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
         if PERSISTENT_DOCUMENT_STORAGE_PATH:
@@ -378,12 +371,24 @@ class SessionManager:
         else:
             user_file_system_path = "/tmp/onyx-files"
 
-        # Create BuildSession record (uses flush, caller commits)
+        # Allocate port for this session (per-session port allocation)
+        nextjs_port: int | None = None
+        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+            nextjs_port = allocate_nextjs_port(self._db_session)
+        else:
+            nextjs_port = KUBERNETES_NEXTJS_PORT
+
+        # Create BuildSession record with allocated port (uses flush, caller commits)
         build_session = create_build_session__no_commit(
             user_id, self._db_session, name=name
         )
+        build_session.nextjs_port = nextjs_port
+        self._db_session.flush()
         session_id = str(build_session.id)
-        logger.info(f"Created build session {session_id} for user {user_id}")
+        logger.info(
+            f"Created build session {session_id} for user {user_id} "
+            f"(port: {nextjs_port})"
+        )
 
         # Check if user already has a sandbox (one sandbox per user model)
         existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
@@ -403,10 +408,8 @@ class SessionManager:
                     user_id=user_id,
                     tenant_id=tenant_id,
                     llm_config=llm_config,
-                    nextjs_port=sandbox.nextjs_port or nextjs_port,
                 )
                 sandbox.status = sandbox_info.status
-                sandbox.nextjs_port = sandbox_info.nextjs_port
                 self._db_session.flush()
             else:
                 logger.info(
@@ -418,7 +421,6 @@ class SessionManager:
             sandbox = create_sandbox__no_commit(
                 db_session=self._db_session,
                 user_id=user_id,
-                nextjs_port=nextjs_port,
             )
             sandbox_id = sandbox.id
             logger.info(f"Created sandbox record {sandbox_id} for session {session_id}")
@@ -429,11 +431,9 @@ class SessionManager:
                 user_id=user_id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
-                nextjs_port=nextjs_port,
             )
 
             # Update sandbox record with status from provisioning
-            sandbox.nextjs_port = sandbox_info.nextjs_port
             sandbox.status = sandbox_info.status
             self._db_session.flush()
 
@@ -1214,8 +1214,8 @@ class SessionManager:
 
         # Build webapp URL if we have a port and webapp exists
         webapp_url = None
-        if has_webapp and sandbox.nextjs_port:
-            webapp_url = f"http://localhost:{sandbox.nextjs_port}"
+        if has_webapp and session.nextjs_port:
+            webapp_url = f"http://localhost:{session.nextjs_port}"
 
         return {
             "has_webapp": has_webapp,

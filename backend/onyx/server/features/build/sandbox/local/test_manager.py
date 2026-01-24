@@ -29,7 +29,7 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
-from onyx.server.features.build.db.sandbox import allocate_nextjs_port
+from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.local import LocalSandboxManager
 from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
@@ -145,7 +145,6 @@ def sandbox_record(
         id=uuid4(),
         user_id=test_user.id,
         status=SandboxStatus.RUNNING,
-        nextjs_port=allocate_nextjs_port(db_session),
     )
     db_session.add(sandbox)
     db_session.commit()
@@ -188,6 +187,7 @@ def session_workspace(
     sandbox_manager: LocalSandboxManager,
     sandbox_record: Sandbox,
     build_session_record: BuildSession,
+    db_session: Session,
 ) -> Generator[tuple[Sandbox, UUID], None, None]:
     """Set up a session workspace within the sandbox and return (sandbox, session_id)."""
     session_id = build_session_record.id
@@ -199,18 +199,20 @@ def session_workspace(
         api_key="test-api-key",
         api_base=None,
     )
+    # Allocate port for this test session
+    nextjs_port = allocate_nextjs_port(db_session)
+
     sandbox_manager.provision(
         sandbox_id=sandbox_record.id,
         user_id=sandbox_record.user_id,
         tenant_id=TEST_TENANT_ID,
         llm_config=llm_config,
-        nextjs_port=sandbox_record.nextjs_port,
     )
     sandbox_manager.setup_session_workspace(
         sandbox_id=sandbox_record.id,
         session_id=session_id,
         llm_config=llm_config,
-        nextjs_port=sandbox_record.nextjs_port,
+        nextjs_port=nextjs_port,
         file_system_path=SANDBOX_BASE_PATH,
     )
 

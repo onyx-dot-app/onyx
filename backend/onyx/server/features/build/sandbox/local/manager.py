@@ -151,7 +151,6 @@ class LocalSandboxManager(SandboxManager):
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,
-        nextjs_port: int | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -167,7 +166,6 @@ class LocalSandboxManager(SandboxManager):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration (stored for default config)
-            nextjs_port: Pre-allocated port for Next.js server (stored for later use)
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -180,19 +178,13 @@ class LocalSandboxManager(SandboxManager):
             f"user {user_id}, tenant {tenant_id}"
         )
 
-        if nextjs_port is None:
-            raise RuntimeError(
-                "nextjs_port must be provided for local sandbox provisioning"
-            )
-
         # Create sandbox directory structure (user-level only)
         logger.info(f"Creating sandbox directory structure for sandbox {sandbox_id}")
         sandbox_path = self._directory_manager.create_sandbox_directory(str(sandbox_id))
         logger.debug(f"Sandbox directory created at {sandbox_path}")
 
         logger.info(
-            f"Provisioned sandbox {sandbox_id} at {sandbox_path} "
-            f"(no sessions yet, Next.js port reserved: {nextjs_port})"
+            f"Provisioned sandbox {sandbox_id} at {sandbox_path} (no sessions yet)"
         )
 
         return SandboxInfo(
@@ -200,7 +192,6 @@ class LocalSandboxManager(SandboxManager):
             directory_path=str(self._get_sandbox_path(sandbox_id)),
             status=SandboxStatus.RUNNING,
             last_heartbeat=None,
-            nextjs_port=nextjs_port,
         )
 
     def terminate(self, sandbox_id: UUID) -> None:
