@@ -34,7 +34,7 @@ from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
-from onyx.db.persona import update_persona_shared_users
+from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
 from onyx.file_store.file_store import get_default_file_store
@@ -366,7 +366,9 @@ def delete_label(
 
 
 class PersonaShareRequest(BaseModel):
-    user_ids: list[UUID]
+    user_ids: list[UUID] | None = None
+    group_ids: list[int] | None = None
+    is_public: bool | None = None
 
 
 # We notify each user when a user is shared with them
@@ -377,11 +379,13 @@ def share_persona(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_persona_shared_users(
+    update_persona_shared(
         persona_id=persona_id,
-        user_ids=persona_share_request.user_ids,
         user=user,
         db_session=db_session,
+        user_ids=persona_share_request.user_ids,
+        group_ids=persona_share_request.group_ids,
+        is_public=persona_share_request.is_public,
     )
 
 
