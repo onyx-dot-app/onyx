@@ -305,7 +305,6 @@ export default function ShareAgentModal({
 
   function handleSubmit(values: ShareAgentFormValues) {
     onShare?.(values.selectedUserIds, values.selectedGroupIds, values.isPublic);
-    shareAgentModal.toggle(false);
   }
 
   function handleClose() {

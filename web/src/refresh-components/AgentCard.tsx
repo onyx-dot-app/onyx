@@ -93,6 +93,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
       } else {
         // Revalidate the agent data to reflect the changes
         refreshAgent();
+        shareAgentModal.toggle(false);
       }
     },
     [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent, setPopup]
