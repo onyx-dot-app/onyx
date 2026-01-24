@@ -3,6 +3,7 @@
 import { memo, useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
+import Truncated from "@/refresh-components/texts/Truncated";
 import {
   Tooltip,
   TooltipContent,
@@ -61,6 +62,12 @@ export interface SourceTagProps {
 
   /** Additional CSS classes */
   className?: string;
+
+  /** When true, removes icon background and wraps displayName with Truncated */
+  isQuery?: boolean;
+
+  /** When true, hides icon, removes background, shows bg-background-tint-02 on hover */
+  isMore?: boolean;
 }
 
 const SourceTagInner = ({
@@ -71,6 +78,8 @@ const SourceTagInner = ({
   onSourceClick,
   showDetailsCard = true,
   className,
+  isQuery,
+  isMore,
 }: SourceTagProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -111,27 +120,32 @@ const SourceTagInner = ({
       type="button"
       className={cn(
         "group inline-flex items-center cursor-pointer transition-all duration-150",
-        "appearance-none border-none bg-background-tint-02",
+        "appearance-none border-none",
+        !isMore && "bg-background-tint-02",
+        isMore && "hover:bg-background-tint-02",
         isOpen && "bg-background-tint-inverted-03",
-        !showDetailsCard && "hover:bg-background-tint-inverted-03",
+        !showDetailsCard && !isQuery && "hover:bg-background-tint-inverted-03",
         styles.container,
+        isQuery && "gap-0",
         className
       )}
       onClick={() => onSourceClick?.()}
     >
       {/* Stacked icons container - only for tag variant */}
-      {!inlineCitation && (
+      {!inlineCitation && !isMore && (
         <div className="flex items-center -space-x-1.5">
           {uniqueSources.slice(0, 3).map((source, index) => (
             <div
               key={source.id ?? `source-${index}`}
               className={cn(
                 "relative flex items-center justify-center p-0.5 rounded-04",
-                "bg-background-tint-00 border transition-colors duration-150",
+                !isQuery && "bg-background-tint-00",
+                "border transition-colors duration-150",
                 isOpen
                   ? "border-background-tint-inverted-03"
                   : "border-background-tint-02",
                 !showDetailsCard &&
+                  !isQuery &&
                   "group-hover:border-background-tint-inverted-03"
               )}
               style={{ zIndex: uniqueSources.slice(0, 3).length - index }}
@@ -149,20 +163,41 @@ const SourceTagInner = ({
       )}
 
       <div className={cn("flex items-baseline", !inlineCitation && "pr-0.5")}>
-        <Text
-          figureSmallValue={inlineCitation}
-          secondaryBody={!inlineCitation}
-          text05={isOpen}
-          text03={!isOpen && inlineCitation}
-          text04={!isOpen && !inlineCitation}
-          inverted={isOpen}
-          className={cn(
-            "max-w-[10rem] truncate transition-colors duration-150",
-            !showDetailsCard && "group-hover:text-text-inverted-05"
-          )}
-        >
-          {displayName}
-        </Text>
+        {isQuery ? (
+          <Truncated
+            figureSmallValue={inlineCitation}
+            secondaryBody={!inlineCitation}
+            text05={isOpen}
+            text03={!isOpen && inlineCitation}
+            text04={!isOpen && !inlineCitation}
+            inverted={isOpen}
+            className={cn(
+              "max-w-[10rem] transition-colors duration-150",
+              !showDetailsCard &&
+                !isQuery &&
+                "group-hover:text-text-inverted-05"
+            )}
+          >
+            {displayName}
+          </Truncated>
+        ) : (
+          <Text
+            figureSmallValue={inlineCitation}
+            secondaryBody={!inlineCitation}
+            text05={isOpen}
+            text03={!isOpen && inlineCitation}
+            text04={!isOpen && !inlineCitation}
+            inverted={isOpen}
+            className={cn(
+              "max-w-[10rem] truncate transition-colors duration-150",
+              !showDetailsCard &&
+                !isQuery &&
+                "group-hover:text-text-inverted-05"
+            )}
+          >
+            {displayName}
+          </Text>
+        )}
 
         {/* Count - for inline citation */}
         {inlineCitation && showCount && (
@@ -173,7 +208,9 @@ const SourceTagInner = ({
             inverted={isOpen}
             className={cn(
               "transition-colors duration-150",
-              !showDetailsCard && "group-hover:text-text-inverted-05"
+              !showDetailsCard &&
+                !isQuery &&
+                "group-hover:text-text-inverted-05"
             )}
           >
             +{extraCount}
@@ -189,7 +226,9 @@ const SourceTagInner = ({
             inverted={isOpen}
             className={cn(
               "max-w-[10rem] truncate transition-colors duration-150",
-              !showDetailsCard && "group-hover:text-text-inverted-05"
+              !showDetailsCard &&
+                !isQuery &&
+                "group-hover:text-text-inverted-05"
             )}
           >
             {displayUrl}

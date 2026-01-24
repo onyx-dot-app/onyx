@@ -114,7 +114,7 @@ const TimelineStep = React.memo(function TimelineStep({
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
-      defaultExpanded={isStreaming}
+      defaultExpanded={isStreaming || isSingleStep}
       isLastStep={isLastStep}
     >
       {renderStep}
