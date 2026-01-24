@@ -23,7 +23,9 @@ Module structure:
 
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.local.manager import LocalSandboxManager
+from onyx.server.features.build.sandbox.local.local_sandbox_manager import (
+    LocalSandboxManager,
+)
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotInfo
