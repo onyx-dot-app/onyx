@@ -23,6 +23,7 @@ from kubernetes.stream import stream as k8s_stream  # type: ignore[import-untype
 
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import SandboxStatus
+from onyx.server.features.build.configs import KUBERNETES_NEXTJS_PORT
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
@@ -94,12 +95,11 @@ def test_kubernetes_sandbox_provision() -> None:
     )
 
     try:
-        # Call provision (no longer needs db_session)
+        # Call provision
         sandbox_info = manager.provision(
             sandbox_id=sandbox_id,
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
-            file_system_path="/tmp/test-files",  # Not used by K8s manager
             llm_config=llm_config,
         )
 
@@ -281,6 +281,7 @@ def test_kubernetes_sandbox_send_message() -> None:
     manager = KubernetesSandboxManager()
 
     sandbox_id = uuid4()
+    session_id = uuid4()
 
     # Create a test LLM config (values don't matter for this test)
     llm_config = LLMProviderConfig(
@@ -296,7 +297,6 @@ def test_kubernetes_sandbox_send_message() -> None:
             sandbox_id=sandbox_id,
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
-            file_system_path="/tmp/test-files",
             llm_config=llm_config,
         )
 
@@ -305,7 +305,9 @@ def test_kubernetes_sandbox_send_message() -> None:
         # Verify health check passes before sending message
         is_healthy = False
         for _ in range(10):
-            is_healthy = manager.health_check(sandbox_id, nextjs_port=None)
+            is_healthy = manager.health_check(
+                sandbox_id, nextjs_port=KUBERNETES_NEXTJS_PORT
+            )
             if is_healthy:
                 break
             time.sleep(10)
@@ -313,9 +315,13 @@ def test_kubernetes_sandbox_send_message() -> None:
         assert is_healthy, "Sandbox agent should be healthy before sending messages"
         print("DEBUG: Sandbox agent is healthy")
 
+        manager.setup_session_workspace(
+            sandbox_id, session_id, llm_config, nextjs_port=KUBERNETES_NEXTJS_PORT
+        )
+
         # Send a simple message
         events: list[ACPEvent] = []
-        for event in manager.send_message(sandbox_id, "What is 2 + 2?"):
+        for event in manager.send_message(sandbox_id, session_id, "What is 2 + 2?"):
             events.append(event)
 
         # Verify we received events

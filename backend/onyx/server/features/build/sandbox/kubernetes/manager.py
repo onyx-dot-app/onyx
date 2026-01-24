@@ -8,6 +8,25 @@ Key features:
 - S3-based snapshots via init containers
 - Cluster-native service discovery
 - RBAC-controlled resource management
+- User-shared sandbox model with per-session workspaces
+
+Architecture Note (User-Shared Sandbox Model):
+- One pod per user (shared across all user's sessions)
+- provision() creates the pod with shared files/ directory
+- setup_session_workspace() creates per-session workspace via kubectl exec
+- cleanup_session_workspace() removes session workspace via kubectl exec
+- terminate() destroys the entire pod (all sessions)
+
+Directory Structure (inside pod):
+    /workspace/
+    ├── files/                     # SHARED - synced from S3
+    └── sessions/
+        ├── $session_id_1/         # Per-session workspace
+        │   ├── outputs/
+        │   ├── AGENTS.md
+        │   └── ...
+        └── $session_id_2/
+            └── ...
 
 IMPORTANT: This manager does NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
@@ -234,22 +253,16 @@ class KubernetesSandboxManager(SandboxManager):
         llm_model: str,
         llm_api_key: str,
         llm_api_base: str | None,
-        snapshot_id: str | None = None,
-        user_name: str | None = None,
-        user_role: str | None = None,
     ) -> client.V1Pod:
-        """Create Pod specification for sandbox."""
-        pod_name = self._get_pod_name(sandbox_id)
+        """Create Pod specification for sandbox (user-level).
 
-        # Load agent instructions with dynamic content
-        agent_instructions = self._load_agent_instructions(
-            provider=llm_provider,
-            model_name=llm_model,
-            nextjs_port=NEXTJS_PORT,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-            user_name=user_name,
-            user_role=user_role,
-        )
+        Creates pod with:
+        - files/ directory synced from S3 (shared across sessions)
+        - sessions/ directory for per-session workspaces
+
+        NOTE: Session-specific setup is done via setup_session_workspace().
+        """
+        pod_name = self._get_pod_name(sandbox_id)
 
         # Environment variables for init container
         init_env = [
@@ -258,8 +271,6 @@ class KubernetesSandboxManager(SandboxManager):
             client.V1EnvVar(name="USER_ID", value=user_id),
             client.V1EnvVar(name="S3_BUCKET", value=self._s3_bucket),
         ]
-        if snapshot_id:
-            init_env.append(client.V1EnvVar(name="SNAPSHOT_ID", value=snapshot_id))
 
         # Add local AWS credentials if available (for dev/testing, IRSA handles prod)
         init_env.extend(_get_local_aws_credential_env_vars())
@@ -275,30 +286,25 @@ class KubernetesSandboxManager(SandboxManager):
                 """
 set -e
 
-# Restore from snapshot if provided
-if [ -n "$SNAPSHOT_ID" ]; then
-    echo "Restoring from snapshot: $SNAPSHOT_ID"
-    aws s3 cp "s3://$S3_BUCKET/$TENANT_ID/snapshots/$SANDBOX_ID/$SNAPSHOT_ID.tar.gz" /tmp/snapshot.tar.gz
-    tar -xzf /tmp/snapshot.tar.gz -C /workspace/outputs
-    rm /tmp/snapshot.tar.gz
-fi
+# Create directory structure
+echo "Creating workspace directories"
+mkdir -p /workspace/sessions
+mkdir -p /workspace/templates
 
-# Sync knowledge files for this user/tenant
+# Sync knowledge files for this user/tenant (shared across sessions)
 echo "Syncing knowledge files for tenant: $TENANT_ID / user: $USER_ID"
-aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/
+aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/ || true
 
-# Copy and unzip output templates for this user/tenant
-echo "Copying output template zip for tenant: $TENANT_ID / user: $USER_ID"
-aws s3 cp "s3://$S3_BUCKET/craft-output-template/outputs.zip" /tmp/outputs.zip
-python3 -c "import zipfile; zipfile.ZipFile('/tmp/outputs.zip').extractall('/workspace/')"
-rm /tmp/outputs.zip
+# Download outputs template for session setup (copied locally since main container has no S3 access)
+echo "Downloading outputs template"
+aws s3 cp "s3://$S3_BUCKET/craft-output-template/outputs.zip" \
+    /workspace/templates/outputs.zip || echo "Warning: outputs template not found"
 
-echo "File sync complete"
+echo "Sandbox init complete (user-level only, no sessions yet)"
 """
             ],
             volume_mounts=[
                 client.V1VolumeMount(name="workspace", mount_path="/workspace"),
-                client.V1VolumeMount(name="outputs", mount_path="/workspace/outputs"),
                 client.V1VolumeMount(name="files", mount_path="/workspace/files"),
             ],
             resources=client.V1ResourceRequirements(
@@ -307,22 +313,14 @@ echo "File sync complete"
             ),
         )
 
-        # Build opencode config JSON using shared config builder
-        opencode_config = build_opencode_config(
-            provider=llm_provider,
-            model_name=llm_model,
-            api_key=llm_api_key if llm_api_key else None,
-            api_base=llm_api_base,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-        )
-
         # Main sandbox container
         sandbox_env = [
             client.V1EnvVar(name="SANDBOX_ID", value=sandbox_id),
-            client.V1EnvVar(name="OPENCODE_CONFIG", value=json.dumps(opencode_config)),
-            # Template for AGENTS.md generation (populated by entrypoint script)
-            client.V1EnvVar(name="AGENT_INSTRUCTIONS", value=agent_instructions),
+            client.V1EnvVar(name="S3_BUCKET", value=self._s3_bucket),
+            client.V1EnvVar(name="TENANT_ID", value=tenant_id),
         ]
+        # Add AWS credentials for session setup operations
+        sandbox_env.extend(_get_local_aws_credential_env_vars())
 
         sandbox_container = client.V1Container(
             name="sandbox",
@@ -335,7 +333,6 @@ echo "File sync complete"
             env=sandbox_env,
             volume_mounts=[
                 client.V1VolumeMount(name="workspace", mount_path="/workspace"),
-                client.V1VolumeMount(name="outputs", mount_path="/workspace/outputs"),
                 client.V1VolumeMount(
                     name="files", mount_path="/workspace/files", read_only=True
                 ),
@@ -367,15 +364,12 @@ echo "File sync complete"
             ),
         )
 
-        # Volumes
+        # Volumes - workspace holds sessions/, files is shared read-only
         volumes = [
             client.V1Volume(
                 name="workspace",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="10Mi"),
-            ),
-            client.V1Volume(
-                name="outputs",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
+                # Increased size: holds sessions/ directory with per-session outputs
+                empty_dir=client.V1EmptyDirVolumeSource(size_limit="10Gi"),
             ),
             client.V1Volume(
                 name="files",
@@ -617,30 +611,23 @@ echo "File sync complete"
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        file_system_path: str,
         llm_config: LLMProviderConfig,
-        nextjs_port: int | None = None,
-        snapshot_path: str | None = None,
-        user_name: str | None = None,
-        user_role: str | None = None,
     ) -> SandboxInfo:
-        """Provision a new sandbox as a Kubernetes pod.
+        """Provision a new sandbox as a Kubernetes pod (user-level).
 
-        1. Create Pod (init container handles S3 file sync)
-        2. Create Service for pod
-        3. Wait for pod to be ready
-        4. Return sandbox info
+        Creates pod with:
+        1. Init container syncs files/ from S3
+        2. Creates sessions/ directory for per-session workspaces
+        3. Main container runs the sandbox environment
+
+        NOTE: This does NOT set up session-specific workspaces.
+        Call setup_session_workspace() to create session workspaces.
 
         Args:
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            file_system_path: Path to the knowledge/source files (not used in k8s)
             llm_config: LLM provider configuration
-            nextjs_port: Not used in kubernetes (always 3000 within cluster)
-            snapshot_path: Optional snapshot ID to restore from
-            user_name: User's name for personalization in AGENTS.md
-            user_role: User's role/title for personalization in AGENTS.md
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -656,7 +643,7 @@ echo "File sync complete"
         pod_name = self._get_pod_name(str(sandbox_id))
 
         try:
-            # 1. Create Pod
+            # 1. Create Pod (user-level only, no session setup)
             logger.debug(f"Creating Pod {pod_name}")
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
@@ -666,9 +653,6 @@ echo "File sync complete"
                 llm_model=llm_config.model_name,
                 llm_api_key=llm_config.api_key or "",
                 llm_api_base=llm_config.api_base,
-                snapshot_id=snapshot_path,  # snapshot_path is used as snapshot_id
-                user_name=user_name,
-                user_role=user_role,
             )
             self._core_api.create_namespaced_pod(
                 namespace=self._namespace,
@@ -690,14 +674,16 @@ echo "File sync complete"
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
-            logger.info(f"Provisioned Kubernetes sandbox {sandbox_id}, pod: {pod_name}")
+            logger.info(
+                f"Provisioned Kubernetes sandbox {sandbox_id}, pod: {pod_name} "
+                "(no sessions yet)"
+            )
 
             return SandboxInfo(
                 sandbox_id=sandbox_id,
                 directory_path=f"k8s://{self._namespace}/{pod_name}",
                 status=SandboxStatus.RUNNING,
                 last_heartbeat=None,
-                nextjs_port=NEXTJS_PORT,  # Always 3000 within cluster
             )
 
         except Exception as e:
@@ -751,15 +737,207 @@ echo "File sync complete"
 
         logger.info(f"Terminated Kubernetes sandbox {sandbox_id}")
 
-    def create_snapshot(
-        self, sandbox_id: UUID, tenant_id: str
-    ) -> SnapshotResult | None:
-        """Create a snapshot by running a Job that tars outputs and streams to S3.
+    def setup_session_workspace(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        llm_config: LLMProviderConfig,
+        nextjs_port: int,
+        file_system_path: str | None = None,
+        snapshot_path: str | None = None,
+        user_name: str | None = None,
+        user_role: str | None = None,
+    ) -> None:
+        """Set up a session workspace within an existing sandbox pod.
 
-        For Kubernetes backend, we exec into the pod to create the snapshot.
+        Executes kubectl exec to:
+        1. Create sessions/$session_id/ directory
+        2. Copy outputs template from local templates (downloaded during init)
+        3. Write AGENTS.md
+        4. Write opencode.json with LLM config
+
+        Note: Snapshot restoration is not supported in Kubernetes mode since the
+        main container doesn't have S3 access. Snapshots would need to be
+        pre-downloaded during pod provisioning if needed.
 
         Args:
-            sandbox_id: The sandbox ID to snapshot
+            sandbox_id: The sandbox ID (must be provisioned)
+            session_id: The session ID for this workspace
+            llm_config: LLM provider configuration for opencode.json
+            file_system_path: Not used in k8s (files synced from S3 during init)
+            snapshot_path: Optional S3 path - logged but ignored (no S3 access)
+
+        Raises:
+            RuntimeError: If workspace setup fails
+        """
+        if snapshot_path:
+            logger.warning(
+                f"Snapshot restoration requested but not supported in Kubernetes mode. "
+                f"Snapshot path {snapshot_path} will be ignored. "
+                f"Session {session_id} will start with fresh outputs template."
+            )
+
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = f"/workspace/sessions/{session_id}"
+
+        agent_instructions = self._load_agent_instructions(
+            provider=llm_config.provider,
+            model_name=llm_config.model_name,
+            nextjs_port=NEXTJS_PORT,
+            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            user_name=user_name,
+            user_role=user_role,
+        )
+
+        # Build opencode config JSON using shared config builder
+        opencode_config = build_opencode_config(
+            provider=llm_config.provider,
+            model_name=llm_config.model_name,
+            api_key=llm_config.api_key if llm_config.api_key else None,
+            api_base=llm_config.api_base,
+            disabled_tools=OPENCODE_DISABLED_TOOLS,
+        )
+
+        opencode_json = json.dumps(opencode_config)
+        # Escape for shell
+        opencode_json_escaped = opencode_json.replace("'", "'\\''")
+        agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
+
+        # Copy outputs template from local templates directory (downloaded during init)
+        # This avoids S3 access at runtime since main container doesn't have S3 credentials
+        outputs_setup = f"""
+# Copy outputs template from local templates (downloaded during pod init)
+echo "Copying outputs template from local templates"
+if [ -f /workspace/templates/outputs.zip ]; then
+    python3 -c "import zipfile; zipfile.ZipFile('/workspace/templates/outputs.zip').extractall('{session_path}/')"
+else
+    echo "Warning: outputs template not found at /workspace/templates/outputs.zip"
+    mkdir -p {session_path}/outputs/web
+fi
+"""
+
+        setup_script = f"""
+set -e
+
+# Create session directory structure
+echo "Creating session directory: {session_path}"
+mkdir -p {session_path}/outputs
+mkdir -p {session_path}/user_uploaded_files
+
+# Setup outputs
+{outputs_setup}
+
+# Write agent instructions
+echo "Writing AGENTS.md"
+printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+
+# Write opencode config
+echo "Writing opencode.json"
+printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
+
+echo "Session workspace setup complete"
+"""
+
+        logger.info(
+            f"Setting up session workspace {session_id} in sandbox {sandbox_id}"
+        )
+
+        try:
+            # Execute setup script in the pod
+            exec_response = k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                command=["/bin/sh", "-c", setup_script],
+                container="sandbox",
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            logger.debug(f"Session setup output: {exec_response}")
+            logger.info(
+                f"Set up session workspace {session_id} in sandbox {sandbox_id}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to setup session workspace {session_id} in sandbox {sandbox_id}: {e}",
+                exc_info=True,
+            )
+            raise RuntimeError(
+                f"Failed to setup session workspace {session_id}: {e}"
+            ) from e
+
+    def cleanup_session_workspace(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        """Clean up a session workspace (on session delete).
+
+        Executes kubectl exec to remove the session directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to clean up
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = f"/workspace/sessions/{session_id}"
+
+        cleanup_script = f"""
+set -e
+echo "Removing session directory: {session_path}"
+rm -rf {session_path}
+echo "Session cleanup complete"
+"""
+
+        logger.info(
+            f"Cleaning up session workspace {session_id} in sandbox {sandbox_id}"
+        )
+
+        try:
+            exec_response = k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                command=["/bin/sh", "-c", cleanup_script],
+                container="sandbox",
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            logger.debug(f"Session cleanup output: {exec_response}")
+            logger.info(
+                f"Cleaned up session workspace {session_id} in sandbox {sandbox_id}"
+            )
+
+        except ApiException as e:
+            if e.status == 404:
+                # Pod not found, nothing to clean up
+                logger.debug(f"Pod {pod_name} not found, skipping cleanup")
+            else:
+                logger.warning(f"Error cleaning up session workspace {session_id}: {e}")
+        except Exception as e:
+            logger.warning(f"Error cleaning up session workspace {session_id}: {e}")
+
+    def create_snapshot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        tenant_id: str,
+    ) -> SnapshotResult | None:
+        """Create a snapshot of a session's outputs directory.
+
+        For Kubernetes backend, we exec into the pod to create the snapshot.
+        Only captures sessions/$session_id/outputs/
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to snapshot
             tenant_id: Tenant identifier for storage path
 
         Returns:
@@ -768,20 +946,22 @@ echo "File sync complete"
         Raises:
             RuntimeError: If snapshot creation fails
         """
-        sandbox_id_str = str(sandbox_id)  # Needed for pod names and S3 paths
+        sandbox_id_str = str(sandbox_id)
+        session_id_str = str(session_id)
         pod_name = self._get_pod_name(sandbox_id_str)
         snapshot_id = str(uuid4())
 
+        session_path = f"/workspace/sessions/{session_id_str}"
         s3_path = (
             f"s3://{self._s3_bucket}/{tenant_id}/snapshots/"
-            f"{sandbox_id_str}/{snapshot_id}.tar.gz"
+            f"{session_id_str}/{snapshot_id}.tar.gz"
         )
 
-        # Exec into pod to create and upload snapshot
+        # Exec into pod to create and upload snapshot (session outputs only)
         exec_command = [
             "/bin/sh",
             "-c",
-            f'tar -czf - -C /workspace outputs | aws s3 cp - {s3_path} --tagging "Type=snapshot"',
+            f'tar -czf - -C {session_path} outputs | aws s3 cp - {s3_path} --tagging "Type=snapshot"',
         ]
 
         try:
@@ -808,10 +988,10 @@ echo "File sync complete"
         size_bytes = 0
 
         storage_path = (
-            f"sandbox-snapshots/{tenant_id}/{sandbox_id_str}/{snapshot_id}.tar.gz"
+            f"sandbox-snapshots/{tenant_id}/{session_id_str}/{snapshot_id}.tar.gz"
         )
 
-        logger.info(f"Created snapshot for sandbox {sandbox_id}")
+        logger.info(f"Created snapshot for session {session_id}")
 
         return SnapshotResult(
             storage_path=storage_path,
@@ -842,40 +1022,47 @@ echo "File sync complete"
     def send_message(
         self,
         sandbox_id: UUID,
+        session_id: UUID,
         message: str,
     ) -> Generator[ACPEvent, None, None]:
         """Send a message to the CLI agent and stream ACP events.
 
         Runs `opencode acp` via kubectl exec in the sandbox pod.
+        The agent runs in the session-specific workspace.
 
         Args:
-            sandbox_id: The sandbox ID to send message to
+            sandbox_id: The sandbox ID
+            session_id: The session ID (determines workspace directory)
             message: The message content to send
 
         Yields:
             Typed ACP schema event objects
         """
         pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = f"/workspace/sessions/{session_id}"
         exec_client = ACPExecClient(
             pod_name=pod_name,
             namespace=self._namespace,
             container="sandbox",
         )
         try:
-            exec_client.start(cwd="/workspace")
+            exec_client.start(cwd=session_path)
             for event in exec_client.send_message(message):
                 yield event
         finally:
             exec_client.stop()
 
-    def list_directory(self, sandbox_id: UUID, path: str) -> list[FilesystemEntry]:
-        """List contents of a directory in the sandbox's outputs directory.
+    def list_directory(
+        self, sandbox_id: UUID, session_id: UUID, path: str
+    ) -> list[FilesystemEntry]:
+        """List contents of a directory in the session's outputs directory.
 
         For Kubernetes backend, we exec into the pod to list files.
 
         Args:
             sandbox_id: The sandbox ID
-            path: Relative path within the outputs directory
+            session_id: The session ID
+            path: Relative path within sessions/$session_id/outputs/
 
         Returns:
             List of FilesystemEntry objects sorted by directory first, then name
@@ -888,7 +1075,7 @@ echo "File sync complete"
 
         # Security: sanitize path
         clean_path = path.lstrip("/").replace("..", "")
-        target_path = f"/workspace/outputs/{clean_path}"
+        target_path = f"/workspace/sessions/{session_id}/{clean_path}"
 
         # Use exec to list directory
         exec_command = [
@@ -968,14 +1155,15 @@ echo "File sync complete"
 
         return entries
 
-    def read_file(self, sandbox_id: UUID, path: str) -> bytes:
-        """Read a file from the sandbox's outputs directory.
+    def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
+        """Read a file from the session's outputs directory.
 
         For Kubernetes backend, we exec into the pod to read the file.
 
         Args:
             sandbox_id: The sandbox ID
-            path: Relative path within the outputs directory
+            session_id: The session ID
+            path: Relative path within sessions/$session_id/outputs/
 
         Returns:
             File contents as bytes
@@ -988,7 +1176,7 @@ echo "File sync complete"
 
         # Security: sanitize path
         clean_path = path.lstrip("/").replace("..", "")
-        target_path = f"/workspace/outputs/{clean_path}"
+        target_path = f"/workspace/sessions/{session_id}/outputs/{clean_path}"
 
         # Use exec to read file (base64 encode to handle binary)
         exec_command = [

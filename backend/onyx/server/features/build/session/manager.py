@@ -45,11 +45,13 @@ from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
+from onyx.server.features.build.configs import KUBERNETES_NEXTJS_PORT
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.configs import USER_UPLOADS_DIRECTORY
+from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
@@ -59,12 +61,11 @@ from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
-from onyx.server.features.build.db.sandbox import allocate_nextjs_port
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
@@ -359,11 +360,6 @@ class SessionManager:
             api_base=llm_provider.api_base,
         )
 
-        # Allocate port for local backend
-        nextjs_port: int | None = None
-        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-            nextjs_port = allocate_nextjs_port(self._db_session)
-
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
         if PERSISTENT_DOCUMENT_STORAGE_PATH:
@@ -375,46 +371,93 @@ class SessionManager:
         else:
             user_file_system_path = "/tmp/onyx-files"
 
-        # Create BuildSession record (uses flush, caller commits)
+        # Allocate port for this session (per-session port allocation)
+        nextjs_port: int | None = None
+        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+            nextjs_port = allocate_nextjs_port(self._db_session)
+        else:
+            nextjs_port = KUBERNETES_NEXTJS_PORT
+
+        # Create BuildSession record with allocated port (uses flush, caller commits)
         build_session = create_build_session__no_commit(
             user_id, self._db_session, name=name
         )
+        build_session.nextjs_port = nextjs_port
+        self._db_session.flush()
         session_id = str(build_session.id)
-        logger.info(f"Created build session {session_id} for user {user_id}")
-
-        # Create Sandbox record (uses flush, caller commits)
-        sandbox = create_sandbox__no_commit(
-            db_session=self._db_session,
-            session_id=build_session.id,
-            nextjs_port=nextjs_port,
+        logger.info(
+            f"Created build session {session_id} for user {user_id} "
+            f"(port: {nextjs_port})"
         )
-        sandbox_id = sandbox.id
-        logger.info(f"Created sandbox record {sandbox_id} for session {session_id}")
 
+        # Check if user already has a sandbox (one sandbox per user model)
+        existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+
+        if existing_sandbox:
+            # User already has a sandbox - check if it needs re-provisioning
+            sandbox = existing_sandbox
+            sandbox_id = sandbox.id
+
+            if sandbox.status == SandboxStatus.TERMINATED:
+                # Re-provision terminated sandbox
+                logger.info(
+                    f"Re-provisioning terminated sandbox {sandbox_id} for user {user_id}"
+                )
+                sandbox_info = self._sandbox_manager.provision(
+                    sandbox_id=sandbox_id,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    llm_config=llm_config,
+                )
+                sandbox.status = sandbox_info.status
+                self._db_session.flush()
+            else:
+                logger.info(
+                    f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
+                    f"for new session {session_id}"
+                )
+        else:
+            # Create new Sandbox record for the user (uses flush, caller commits)
+            sandbox = create_sandbox__no_commit(
+                db_session=self._db_session,
+                user_id=user_id,
+            )
+            sandbox_id = sandbox.id
+            logger.info(f"Created sandbox record {sandbox_id} for session {session_id}")
+
+            # Provision sandbox (no DB operations inside)
+            sandbox_info = self._sandbox_manager.provision(
+                sandbox_id=sandbox_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                llm_config=llm_config,
+            )
+
+            # Update sandbox record with status from provisioning
+            sandbox.status = sandbox_info.status
+            self._db_session.flush()
+
+        # Set up session workspace within the sandbox
+        logger.info(
+            f"Setting up session workspace {session_id} in sandbox {sandbox.id}"
+        )
         # Fetch user data for personalization in AGENTS.md
         user = fetch_user_by_id(self._db_session, user_id)
         user_name = user.personal_name if user else None
         user_role = user.personal_role if user else None
-
-        # Provision sandbox (no DB operations inside)
-        sandbox_info = self._sandbox_manager.provision(
-            sandbox_id=sandbox_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            file_system_path=user_file_system_path,
+        self._sandbox_manager.setup_session_workspace(
+            sandbox_id=sandbox.id,
+            session_id=build_session.id,
             llm_config=llm_config,
             nextjs_port=nextjs_port,
+            file_system_path=user_file_system_path,
+            snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
             user_role=user_role,
         )
-
-        # Update sandbox record with status from provisioning
-        sandbox.nextjs_port = sandbox_info.nextjs_port
-        sandbox.status = sandbox_info.status
-        self._db_session.flush()
-
+        sandbox_id = sandbox.id
         logger.info(
-            f"Successfully created session {session_id} with sandbox for user {user_id}"
+            f"Successfully created session {session_id} with workspace in sandbox {sandbox.id}"
         )
 
         return build_session
@@ -591,8 +634,8 @@ class SessionManager:
         """
         Delete a build session and all associated data.
 
-        Terminates any running sandbox before deletion. This operation is atomic -
-        if sandbox termination fails, the session is NOT deleted.
+        Cleans up session workspace but does NOT terminate the sandbox
+        (sandbox is user-owned and shared across sessions).
 
         NOTE: This method does NOT commit the transaction. The caller is
         responsible for committing after this method returns successfully.
@@ -603,26 +646,27 @@ class SessionManager:
 
         Returns:
             True if deleted, False if not found
-
-        Raises:
-            RuntimeError: If sandbox termination fails
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
             return False
 
-        # Terminate sandbox if running - raises on failure
-        if session.sandbox and session.sandbox.status in [
-            SandboxStatus.RUNNING,
-            SandboxStatus.PROVISIONING,
-        ]:
-            logger.info(f"Terminating sandbox before deleting session {session_id}")
-            sandbox_id = session.sandbox.id
-            self._sandbox_manager.terminate(sandbox_id)
-            # Update status after termination (sandbox manager no longer does this)
-            update_sandbox_status__no_commit(
-                self._db_session, sandbox_id, SandboxStatus.TERMINATED
-            )
+        # Get user's sandbox to clean up session workspace
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox and sandbox.status.is_active():
+            # Clean up session workspace (but don't terminate sandbox)
+            try:
+                self._sandbox_manager.cleanup_session_workspace(
+                    sandbox_id=sandbox.id,
+                    session_id=session_id,
+                )
+                logger.info(
+                    f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
+                )
+            except Exception as e:
+                # Log but don't fail - session can still be deleted even if
+                # workspace cleanup fails (e.g., if pod is already terminated)
+                logger.warning(f"Failed to cleanup session workspace {session_id}: {e}")
 
         # Delete session (uses flush, caller commits)
         return delete_build_session__no_commit(session_id, user_id, self._db_session)
@@ -771,8 +815,11 @@ class SessionManager:
                 yield _format_packet_event(error_packet)
                 return
 
+            # Get the user's sandbox (now user-owned, not session-owned)
+            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+
             # Check if sandbox is running
-            if not session.sandbox or session.sandbox.status != SandboxStatus.RUNNING:
+            if not sandbox or sandbox.status != SandboxStatus.RUNNING:
                 error_packet = ErrorPacket(
                     message="Sandbox is not running. Please wait for it to start."
                 )
@@ -825,7 +872,7 @@ class SessionManager:
 
             # Stream ACP events directly to frontend
             for acp_event in self._sandbox_manager.send_message(
-                sandbox_id, user_message_content
+                sandbox_id, session_id, user_message_content
             ):
                 # Check if we need to finalize pending chunks before processing
                 event_type = self._get_event_type(acp_event)
@@ -1050,13 +1097,16 @@ class SessionManager:
         if session is None:
             return None
 
-        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return None
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        # Use session-specific path
+        session_path = (
+            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        )
         artifacts: list[dict[str, Any]] = []
-        output_dir = sandbox_path / "outputs"
+        output_dir = session_path / "outputs"
 
         if not output_dir.exists():
             return artifacts
@@ -1093,7 +1143,7 @@ class SessionManager:
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            path: Relative path to the artifact
+            path: Relative path to the artifact (within session workspace)
 
         Returns:
             Tuple of (content, mime_type, filename) or None if not found
@@ -1106,12 +1156,15 @@ class SessionManager:
         if session is None:
             return None
 
-        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return None
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-        file_path = sandbox_path / path
+        # Use session-specific path
+        session_path = (
+            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        )
+        file_path = session_path / path
 
         if not file_path.exists():
             return None
@@ -1148,19 +1201,21 @@ class SessionManager:
         if session is None:
             return None
 
-        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
 
-        # Check if web directory exists
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-        web_dir = sandbox_path / "outputs" / "web"
+        # Check if web directory exists (in session workspace)
+        session_path = (
+            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        )
+        web_dir = session_path / "outputs" / "web"
         has_webapp = web_dir.exists()
 
         # Build webapp URL if we have a port and webapp exists
         webapp_url = None
-        if has_webapp and sandbox.nextjs_port:
-            webapp_url = f"http://localhost:{sandbox.nextjs_port}"
+        if has_webapp and session.nextjs_port:
+            webapp_url = f"http://localhost:{session.nextjs_port}"
 
         return {
             "has_webapp": has_webapp,
@@ -1188,13 +1243,15 @@ class SessionManager:
         if session is None:
             return None
 
-        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return None
 
-        # Check if web directory exists
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-        web_dir = sandbox_path / "outputs" / "web"
+        # Check if web directory exists (in session workspace)
+        session_path = (
+            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        )
+        web_dir = session_path / "outputs" / "web"
 
         if not web_dir.exists():
             return None
@@ -1233,12 +1290,12 @@ class SessionManager:
         path: str,
     ) -> DirectoryListing | None:
         """
-        List files and directories in the sandbox.
+        List files and directories in the session workspace.
 
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            path: Relative path from sandbox root (empty string for root)
+            path: Relative path from session workspace root (empty string for root)
 
         Returns:
             DirectoryListing with sorted entries (directories first) or None if not found
@@ -1251,18 +1308,21 @@ class SessionManager:
         if session is None:
             return None
 
-        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return None
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-        target_dir = sandbox_path / path if path else sandbox_path
+        # Use session-specific path
+        session_path = (
+            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        )
+        target_dir = session_path / path if path else session_path
 
-        # Security check: ensure path doesn't escape sandbox via .. traversal
+        # Security check: ensure path doesn't escape session workspace via .. traversal
         try:
             normalized = os.path.normpath(str(target_dir))
-            sandbox_normalized = os.path.normpath(str(sandbox_path))
-            if not normalized.startswith(sandbox_normalized):
+            session_normalized = os.path.normpath(str(session_path))
+            if not normalized.startswith(session_normalized):
                 raise ValueError("Access denied - path traversal")
         except ValueError:
             raise
@@ -1304,7 +1364,7 @@ class SessionManager:
         filename: str,
         content: bytes,
     ) -> tuple[str, int]:
-        """Upload a file to the session's sandbox.
+        """Upload a file to the session's workspace.
 
         Args:
             session_id: The session UUID
@@ -1323,16 +1383,18 @@ class SessionManager:
         if session is None:
             raise ValueError("Session not found")
 
-        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             raise ValueError("Sandbox not found")
 
         # Filename is already sanitized by API layer
         safe_filename = filename
 
-        # Get upload directory path
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-        uploads_path = sandbox_path / USER_UPLOADS_DIRECTORY
+        # Get upload directory path (in session workspace)
+        session_path = (
+            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        )
+        uploads_path = session_path / USER_UPLOADS_DIRECTORY
 
         # Ensure uploads directory exists
         uploads_path.mkdir(parents=True, exist_ok=True)
@@ -1353,7 +1415,7 @@ class SessionManager:
         # Explicitly remove execute permissions: rw-r--r-- (644)
         target_path.chmod(0o644)
 
-        # Return relative path from sandbox root
+        # Return relative path from session root
         relative_path = f"{USER_UPLOADS_DIRECTORY}/{safe_filename}"
 
         # Update heartbeat - file upload is user activity that keeps sandbox alive
@@ -1372,7 +1434,7 @@ class SessionManager:
         user_id: UUID,
         path: str,
     ) -> bool:
-        """Delete a file from the session's sandbox.
+        """Delete a file from the session's workspace.
 
         Args:
             session_id: The session UUID
@@ -1390,18 +1452,21 @@ class SessionManager:
         if session is None:
             raise ValueError("Session not found")
 
-        sandbox = get_sandbox_by_session_id(self._db_session, session_id)
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             raise ValueError("Sandbox not found")
 
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-        file_path = sandbox_path / path
+        # Use session-specific path
+        session_path = (
+            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        )
+        file_path = session_path / path
 
-        # Security check: ensure path doesn't escape sandbox
+        # Security check: ensure path doesn't escape session workspace
         try:
             file_path = file_path.resolve()
-            sandbox_path_resolved = sandbox_path.resolve()
-            if not str(file_path).startswith(str(sandbox_path_resolved)):
+            session_path_resolved = session_path.resolve()
+            if not str(file_path).startswith(str(session_path_resolved)):
                 raise ValueError("Access denied - path traversal")
         except ValueError:
             raise
@@ -1417,3 +1482,47 @@ class SessionManager:
         logger.info(f"Deleted file from session {session_id}: {path}")
 
         return True
+
+    # =========================================================================
+    # Sandbox Management Operations
+    # =========================================================================
+
+    def terminate_user_sandbox(self, user_id: UUID) -> bool:
+        """Terminate the user's sandbox and clean up all session workspaces.
+
+        Used for explicit "start fresh" functionality.
+
+        Args:
+            user_id: The user ID
+
+        Returns:
+            True if sandbox was terminated, False if user had no sandbox
+        """
+        from onyx.server.features.build.db.sandbox import (
+            update_sandbox_status__no_commit,
+        )
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            return False
+
+        if sandbox.status == SandboxStatus.TERMINATED:
+            logger.info(f"Sandbox {sandbox.id} already terminated")
+            return True
+
+        try:
+            # Terminate the sandbox (this cleans up all resources)
+            self._sandbox_manager.terminate(sandbox.id)
+            logger.info(f"Terminated sandbox {sandbox.id} for user {user_id}")
+
+            # Update status in database
+            update_sandbox_status__no_commit(
+                self._db_session, sandbox.id, SandboxStatus.TERMINATED
+            )
+            self._db_session.flush()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to terminate sandbox {sandbox.id}: {e}")
+            raise RuntimeError(f"Failed to terminate sandbox: {e}") from e

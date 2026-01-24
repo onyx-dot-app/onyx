@@ -45,7 +45,6 @@ class SandboxResponse(BaseModel):
     container_id: str | None
     created_at: datetime
     last_heartbeat: datetime | None
-    nextjs_port: int | None
 
     @classmethod
     def from_model(cls, sandbox: Any) -> "SandboxResponse":
@@ -56,7 +55,6 @@ class SandboxResponse(BaseModel):
             container_id=sandbox.container_id,
             created_at=sandbox.created_at,
             last_heartbeat=sandbox.last_heartbeat,
-            nextjs_port=sandbox.nextjs_port,
         )
 
 
@@ -96,12 +94,19 @@ class SessionResponse(BaseModel):
     status: BuildSessionStatus
     created_at: datetime
     last_activity_at: datetime
+    nextjs_port: int | None
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
 
     @classmethod
-    def from_model(cls, session: Any) -> "SessionResponse":
-        """Convert BuildSession ORM model to response."""
+    def from_model(cls, session: Any, sandbox: Any | None = None) -> "SessionResponse":
+        """Convert BuildSession ORM model to response.
+
+        Args:
+            session: BuildSession ORM model
+            sandbox: Optional Sandbox ORM model. Since sandboxes are now user-owned
+                     (not session-owned), the sandbox must be passed separately.
+        """
         return cls(
             id=str(session.id),
             user_id=str(session.user_id) if session.user_id else None,
@@ -109,9 +114,8 @@ class SessionResponse(BaseModel):
             status=session.status,
             created_at=session.created_at,
             last_activity_at=session.last_activity_at,
-            sandbox=(
-                SandboxResponse.from_model(session.sandbox) if session.sandbox else None
-            ),
+            nextjs_port=session.nextjs_port,
+            sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
         )
 
