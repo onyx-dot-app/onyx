@@ -23,13 +23,36 @@ NAMESPACE="onyx-sandboxes"
 POD_NAME="sandbox-test"
 IMAGE_NAME="onyxdotapp/onyx-backend:latest"
 TEST_FILE="onyx/server/features/build/sandbox/kubernetes/test_kubernetes_sandbox_provision.py"
+ENV_FILE="$PROJECT_ROOT/.vscode/.env"
+
+ORIGINAL_TEST_FILE="$PROJECT_ROOT/backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_provision.py"
+cp "$ORIGINAL_TEST_FILE" "$PROJECT_ROOT/backend/$TEST_FILE"
 
 # Optional: specific test to run
 TEST_NAME="${1:-}"
 
+# Build env var arguments from .vscode/.env file for passing to the container
+ENV_VARS=()
+if [ -f "$ENV_FILE" ]; then
+    echo "=== Loading environment variables from .vscode/.env ==="
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        # Skip lines without =
+        [[ "$line" != *"="* ]] && continue
+        # Add to env vars array
+        ENV_VARS+=("$line")
+    done < "$ENV_FILE"
+    echo "Loaded ${#ENV_VARS[@]} environment variables"
+else
+    echo "Warning: .vscode/.env not found, running without additional env vars"
+fi
+
 echo "=== Building onyx-backend Docker image ==="
 cd "$PROJECT_ROOT/backend"
 docker build -t "$IMAGE_NAME" -f Dockerfile .
+
+rm "$PROJECT_ROOT/backend/$TEST_FILE"
 
 echo "=== Loading image into kind cluster ==="
 kind load docker-image "$IMAGE_NAME" --name onyx 2>/dev/null || \
@@ -48,10 +71,10 @@ kubectl wait --for=condition=Ready pod/"$POD_NAME" -n "$NAMESPACE" --timeout=120
 echo "=== Running tests ==="
 if [ -n "$TEST_NAME" ]; then
     kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- \
-        pytest "$TEST_FILE::$TEST_NAME" -v -s
+        env "${ENV_VARS[@]}" pytest "$TEST_FILE::$TEST_NAME" -v -s
 else
     kubectl exec -it "$POD_NAME" -n "$NAMESPACE" -- \
-        pytest "$TEST_FILE" -v -s
+        env "${ENV_VARS[@]}" pytest "$TEST_FILE" -v -s
 fi
 
 echo "=== Tests complete ==="

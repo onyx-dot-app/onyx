@@ -197,9 +197,24 @@ def test_kubernetes_sandbox_provision() -> None:
         ), f"/workspace/files should contain 1099 files, but found {file_count}"
 
         # start session
+        session_id = uuid4()
+        manager.setup_session_workspace(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            llm_config=llm_config,
+            nextjs_port=KUBERNETES_NEXTJS_PORT,
+            file_system_path=None,
+            snapshot_path=None,
+            user_name="Test User",
+            user_role="Test Role",
+        )
 
-        # Verify AGENTS.md file exists in the pod (written by init container)
-        exec_command = ["/bin/sh", "-c", "cat /workspace/AGENTS.md"]
+        # Verify AGENTS.md file exists for the session
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f"cat /workspace/sessions/{session_id}/AGENTS.md",
+        ]
         resp = k8s_stream(
             k8s_client.connect_get_namespaced_pod_exec,
             name=pod_name,
@@ -215,6 +230,49 @@ def test_kubernetes_sandbox_provision() -> None:
         assert len(resp) > 0, "AGENTS.md file should not be empty"
         # Verify it contains expected content (from template or default)
         assert "Agent" in resp or "Instructions" in resp or "#" in resp
+        assert "Test User" in resp
+        assert "Test Role" in resp
+
+        # Verify opencode.json file exists for the session
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f"cat /workspace/sessions/{session_id}/opencode.json",
+        ]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        assert len(resp) > 0, "opencode.json file should not be empty"
+
+        # verify that the outputs directory is copied over
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f"ls -la /workspace/sessions/{session_id}/outputs",
+        ]
+        resp = k8s_stream(
+            k8s_client.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        assert resp is not None
+        assert len(resp) > 0, "outputs directory should not be empty"
+        assert "web" in resp, "outputs directory should contain web directory"
 
     finally:
         # Clean up: terminate the sandbox (no longer needs db_session)

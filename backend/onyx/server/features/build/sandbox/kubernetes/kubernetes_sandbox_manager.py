@@ -247,6 +247,7 @@ class KubernetesSandboxManager(SandboxManager):
     def _create_sandbox_pod(
         self,
         sandbox_id: str,
+        user_id: str,
         tenant_id: str,
     ) -> client.V1Pod:
         """Create Pod specification for sandbox (user-level).
@@ -259,30 +260,20 @@ class KubernetesSandboxManager(SandboxManager):
         """
         pod_name = self._get_pod_name(sandbox_id)
 
-        # Environment variables for init container
-        init_env = [
-            client.V1EnvVar(name="SANDBOX_ID", value=sandbox_id),
-            client.V1EnvVar(name="TENANT_ID", value=tenant_id),
-            client.V1EnvVar(name="S3_BUCKET", value=self._s3_bucket),
-        ]
-
-        # Add local AWS credentials if available (for dev/testing, IRSA handles prod)
-        init_env.extend(_get_local_aws_credential_env_vars())
-
         # Init container for S3 file sync (knowledge files only)
         # Outputs template is baked into the main container image at /workspace/templates/outputs/
         init_container = client.V1Container(
             name="file-sync",
             image="amazon/aws-cli:latest",
-            env=init_env,
+            env=_get_local_aws_credential_env_vars(),
             command=["/bin/sh", "-c"],
             args=[
-                """
+                f"""
 set -e
 
 # Sync knowledge files for this user/tenant (shared across sessions)
-echo "Syncing knowledge files for tenant: $TENANT_ID / user: $USER_ID"
-aws s3 sync "s3://$S3_BUCKET/$TENANT_ID/knowledge/$USER_ID/" /workspace/files/
+echo "Syncing knowledge files for tenant: {tenant_id} / user: {user_id}"
+aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
 
 echo "Sandbox init complete (user-level only, no sessions yet)"
 """
@@ -297,14 +288,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         )
 
         # Main sandbox container
-        sandbox_env = [
-            client.V1EnvVar(name="SANDBOX_ID", value=sandbox_id),
-            client.V1EnvVar(name="S3_BUCKET", value=self._s3_bucket),
-            client.V1EnvVar(name="TENANT_ID", value=tenant_id),
-        ]
-        # Add AWS credentials for session setup operations
-        sandbox_env.extend(_get_local_aws_credential_env_vars())
-
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
@@ -313,7 +296,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
                 client.V1ContainerPort(name="nextjs", container_port=NEXTJS_PORT),
                 client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
             ],
-            env=sandbox_env,
             volume_mounts=[
                 client.V1VolumeMount(
                     name="files", mount_path="/workspace/files", read_only=True
@@ -629,6 +611,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             logger.debug(f"Creating Pod {pod_name}")
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
+                user_id=str(user_id),
                 tenant_id=tenant_id,
             )
             self._core_api.create_namespaced_pod(
