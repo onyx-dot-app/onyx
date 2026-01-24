@@ -402,7 +402,6 @@ class SessionManager:
                     sandbox_id=sandbox_id,
                     user_id=user_id,
                     tenant_id=tenant_id,
-                    file_system_path=user_file_system_path,
                     llm_config=llm_config,
                     nextjs_port=sandbox.nextjs_port or nextjs_port,
                 )
@@ -429,7 +428,6 @@ class SessionManager:
                 sandbox_id=sandbox_id,
                 user_id=user_id,
                 tenant_id=tenant_id,
-                file_system_path=user_file_system_path,
                 llm_config=llm_config,
                 nextjs_port=nextjs_port,
             )
@@ -451,8 +449,9 @@ class SessionManager:
             sandbox_id=sandbox.id,
             session_id=build_session.id,
             llm_config=llm_config,
-            snapshot_path=None,  # TODO: Support restoring from snapshot
             nextjs_port=nextjs_port,
+            file_system_path=user_file_system_path,
+            snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
             user_role=user_role,
         )

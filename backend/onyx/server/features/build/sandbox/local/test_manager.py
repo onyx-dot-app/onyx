@@ -222,6 +222,8 @@ def session_workspace(
         session_id=session_id,
     )
 
+    sandbox_manager.terminate(sandbox_record.id)
+
 
 @pytest.fixture
 def file_store_initialized() -> Generator[None, None, None]:

@@ -150,7 +150,6 @@ class LocalSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        file_system_path: str,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None = None,
     ) -> SandboxInfo:
@@ -158,7 +157,6 @@ class LocalSandboxManager(SandboxManager):
 
         Creates user-level sandbox structure:
         1. Create sandbox directory with sessions/ subdirectory
-        2. Setup files symlink to knowledge/source files
 
         NOTE: This does NOT set up session-specific workspaces or start Next.js.
         Call setup_session_workspace() to create session workspaces.
@@ -168,7 +166,6 @@ class LocalSandboxManager(SandboxManager):
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            file_system_path: Path to the knowledge/source files to link
             llm_config: LLM provider configuration (stored for default config)
             nextjs_port: Pre-allocated port for Next.js server (stored for later use)
 
@@ -193,36 +190,18 @@ class LocalSandboxManager(SandboxManager):
         sandbox_path = self._directory_manager.create_sandbox_directory(str(sandbox_id))
         logger.debug(f"Sandbox directory created at {sandbox_path}")
 
-        try:
-            # Setup files symlink (shared across all sessions)
-            logger.debug(f"Setting up files symlink to {file_system_path}")
-            self._directory_manager.setup_files_symlink(
-                sandbox_path, Path(file_system_path)
-            )
-            logger.debug("Files symlink created")
+        logger.info(
+            f"Provisioned sandbox {sandbox_id} at {sandbox_path} "
+            f"(no sessions yet, Next.js port reserved: {nextjs_port})"
+        )
 
-            logger.info(
-                f"Provisioned sandbox {sandbox_id} at {sandbox_path} "
-                f"(no sessions yet, Next.js port reserved: {nextjs_port})"
-            )
-
-            return SandboxInfo(
-                sandbox_id=sandbox_id,
-                directory_path=str(self._get_sandbox_path(sandbox_id)),
-                status=SandboxStatus.RUNNING,
-                last_heartbeat=None,
-                nextjs_port=nextjs_port,
-            )
-
-        except Exception as e:
-            # Cleanup on failure
-            logger.error(
-                f"Sandbox provisioning failed for sandbox {sandbox_id}: {e}",
-                exc_info=True,
-            )
-            logger.info(f"Cleaning up sandbox directory at {sandbox_path}")
-            self._directory_manager.cleanup_sandbox_directory(sandbox_path)
-            raise
+        return SandboxInfo(
+            sandbox_id=sandbox_id,
+            directory_path=str(self._get_sandbox_path(sandbox_id)),
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=None,
+            nextjs_port=nextjs_port,
+        )
 
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up all resources.
@@ -269,6 +248,7 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
+        file_system_path: str | None = None,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -281,7 +261,7 @@ class LocalSandboxManager(SandboxManager):
         3. .venv/ (from template)
         4. AGENTS.md
         5. .agent/skills/
-        6. files/ (symlink to sandbox-level files/)
+        6. files/ (symlink to file_system_path)
         7. opencode.json
         8. user_uploaded_files/
         9. Start Next.js dev server for this session
@@ -290,6 +270,7 @@ class LocalSandboxManager(SandboxManager):
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
+            file_system_path: Path to knowledge/source files (for files/ symlink)
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
@@ -316,12 +297,13 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Session directory created at {session_path}")
 
         try:
-            # Setup files symlink within session workspace
-            logger.debug("Setting up files symlink in session workspace")
-            self._directory_manager.setup_session_files_symlink(
-                sandbox_path, session_path
-            )
-            logger.debug("Files symlink ready")
+            # Setup files symlink directly to file_system_path
+            if file_system_path:
+                logger.debug(f"Setting up files symlink to {file_system_path}")
+                self._directory_manager.setup_files_symlink(
+                    session_path, Path(file_system_path)
+                )
+                logger.debug("Files symlink ready")
 
             logger.debug("Setting up outputs directory from template")
             self._directory_manager.setup_outputs_directory(session_path)

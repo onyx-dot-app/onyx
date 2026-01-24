@@ -611,7 +611,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        file_system_path: str,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None = None,
     ) -> SandboxInfo:
@@ -629,7 +628,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            file_system_path: Path to the knowledge/source files (not used in k8s)
             llm_config: LLM provider configuration
             nextjs_port: Not used in kubernetes (always 3000 within cluster)
 
@@ -748,6 +746,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
+        file_system_path: str | None = None,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -768,6 +767,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
+            file_system_path: Not used in k8s (files synced from S3 during init)
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
 
         Raises:

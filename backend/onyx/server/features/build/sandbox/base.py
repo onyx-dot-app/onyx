@@ -75,14 +75,12 @@ class SandboxManager(ABC):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        file_system_path: str,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
-        Creates the sandbox container/directory with shared resources:
-        - files/ symlink to user's persistent documents
+        Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
 
         NOTE: This does NOT set up session-specific workspaces.
@@ -92,7 +90,6 @@ class SandboxManager(ABC):
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            file_system_path: Path to the knowledge/source files to link
             llm_config: LLM provider configuration (for default config)
             nextjs_port: Pre-allocated port for Next.js server (local backend only)
 
@@ -123,6 +120,7 @@ class SandboxManager(ABC):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
+        file_system_path: str | None = None,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -133,6 +131,7 @@ class SandboxManager(ABC):
         - sessions/$session_id/outputs/ (from snapshot or template)
         - sessions/$session_id/venv/
         - sessions/$session_id/skills/
+        - sessions/$session_id/files/ (symlink to file_system_path)
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/opencode.json
         - sessions/$session_id/user_uploaded_files/
@@ -141,6 +140,7 @@ class SandboxManager(ABC):
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
+            file_system_path: Path to knowledge/source files (for files/ symlink)
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md

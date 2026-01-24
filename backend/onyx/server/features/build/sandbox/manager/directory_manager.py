@@ -6,7 +6,6 @@ Supports user-shared sandbox model where:
 """
 
 import json
-import os
 import shutil
 from pathlib import Path
 
@@ -163,43 +162,6 @@ class DirectoryManager:
         files_link = sandbox_path / "files"
         if not files_link.exists():
             files_link.symlink_to(file_system_path, target_is_directory=True)
-
-    def setup_session_files_symlink(
-        self,
-        sandbox_path: Path,
-        session_path: Path,
-    ) -> None:
-        """Create symlink to sandbox-level files directory within session workspace.
-
-        Creates a symlink at session_path/files/ that points to the sandbox-level
-        files/ directory. This allows the agent to access shared files from within
-        the session workspace.
-
-        Args:
-            sandbox_path: Path to the sandbox directory (contains files/ symlink)
-            session_path: Path to the session workspace directory
-        """
-        session_files_link = session_path / "files"
-        sandbox_files_path = sandbox_path / "files"
-
-        if not sandbox_files_path.exists():
-            raise ValueError(f"Sandbox files path {sandbox_files_path} does not exist")
-
-        # Create relative symlink for portability
-        # Calculate relative path from session_path to sandbox_files_path
-        try:
-            relative_target = os.path.relpath(
-                str(sandbox_files_path.resolve()), str(session_path.resolve())
-            )
-            session_files_link.symlink_to(relative_target, target_is_directory=True)
-        except (OSError, ValueError) as e:
-            logger.warning(
-                f"Failed to create relative symlink, using absolute path: {e}"
-            )
-            # Fallback to absolute symlink if relative path calculation fails
-            session_files_link.symlink_to(
-                sandbox_files_path.resolve(), target_is_directory=True
-            )
 
     def setup_outputs_directory(self, sandbox_path: Path) -> None:
         """Copy outputs template and create additional directories.
