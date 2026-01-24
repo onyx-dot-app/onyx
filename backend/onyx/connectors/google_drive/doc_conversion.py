@@ -100,12 +100,32 @@ def build_folder_path(
     file: GoogleDriveFileType,
     service: GoogleDriveService,
     drive_id: str | None = None,
+    user_email: str | None = None,
 ) -> list[str]:
     """
     Build the full folder path for a file by walking up the parent chain.
     Returns a list of folder names from root to immediate parent.
+
+    Args:
+        file: The Google Drive file object
+        service: Google Drive service instance
+        drive_id: Optional drive ID (will be extracted from file if not provided)
+        user_email: Optional user email to check ownership for "My Drive" vs "Shared with me"
     """
     path_parts: list[str] = []
+
+    # Get drive_id from file if not provided
+    if drive_id is None:
+        drive_id = file.get("driveId")
+
+    # Check if file is owned by the user (for distinguishing "My Drive" vs "Shared with me")
+    is_owned_by_user = False
+    if user_email:
+        owners = file.get("owners", [])
+        is_owned_by_user = any(
+            owner.get("emailAddress", "").lower() == user_email.lower()
+            for owner in owners
+        )
 
     # Get the file's parent folder ID
     parents = file.get("parents", [])
@@ -113,7 +133,11 @@ def build_folder_path(
         # File is at root level
         if drive_id:
             return [_get_drive_name(service, drive_id)]
-        return ["My Drive"]
+        # If not in a shared drive, check if it's owned by the user
+        if is_owned_by_user:
+            return ["My Drive"]
+        else:
+            return ["Shared with me"]
 
     parent_id: str | None = parents[0]
 
@@ -128,19 +152,30 @@ def build_folder_path(
 
         # Check if we've reached the root (parent is the drive itself or no parent)
         if next_parent is None:
-            # This folder's name is either the drive root or My Drive
+            # This folder's name is either the drive root, My Drive, or Shared with me
             if drive_id:
                 path_parts.insert(0, _get_drive_name(service, drive_id))
             else:
-                # For My Drive, the root folder name is usually the user's name
-                # We'll use "My Drive" as a consistent label
-                path_parts.insert(0, "My Drive")
+                # Not in a shared drive - determine if it's "My Drive" or "Shared with me"
+                if is_owned_by_user:
+                    path_parts.insert(0, "My Drive")
+                else:
+                    path_parts.insert(0, "Shared with me")
             break
         else:
             path_parts.insert(0, folder_name)
             parent_id = next_parent
 
-    return path_parts if path_parts else ["My Drive"]
+    # If we didn't find a root, determine the root based on ownership and drive
+    if not path_parts:
+        if drive_id:
+            return [_get_drive_name(service, drive_id)]
+        elif is_owned_by_user:
+            return ["My Drive"]
+        else:
+            return ["Shared with me"]
+
+    return path_parts
 
 
 # This is not a standard valid unicode char, it is used by the docs advanced API to
@@ -629,7 +664,10 @@ def _convert_drive_item_to_document(
         drive_id = file.get("driveId")
 
         # Build full folder path by walking up the parent chain
-        source_path = build_folder_path(file, _get_drive_service(), drive_id)
+        # Pass retriever_email to determine if file is in "My Drive" vs "Shared with me"
+        source_path = build_folder_path(
+            file, _get_drive_service(), drive_id, retriever_email
+        )
 
         doc_metadata = {
             "hierarchy": {
