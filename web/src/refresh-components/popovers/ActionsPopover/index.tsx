@@ -588,13 +588,8 @@ export default function ActionsPopover({
       // No sources enabled but search tool is enabled - disable it
       toggleToolForCurrentAssistant(searchToolId);
     }
-  }, [
-    searchToolId,
-    numSourcesEnabled,
-    searchToolDisabled,
-    sourcesInitialized,
-    toggleToolForCurrentAssistant,
-  ]);
+    console.log("HELLO");
+  }, [searchToolId, numSourcesEnabled, searchToolDisabled, sourcesInitialized]);
 
   // Set search tool to a specific enabled/disabled state (only toggles if needed)
   const setSearchToolEnabled = (enabled: boolean) => {
