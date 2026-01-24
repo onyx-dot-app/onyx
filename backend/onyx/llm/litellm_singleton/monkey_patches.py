@@ -496,6 +496,9 @@ def _patch_openai_responses_chunk_parser() -> None:
         elif event_type == "response.completed":
             # Final event signaling all output items (including parallel tool calls) are done
             # Check if we already received tool calls via streaming events
+            # There is an issue where OpenAI (not via Azure) will give back the tool calls streamed out as tokens
+            # But on Azure, it's only given out all at once. OpenAI also happens to give back the tool calls in the
+            # response.completed event so we need to throw it out here or there are duplicate tool calls.
             has_streamed_tool_calls = getattr(self, "_has_streamed_tool_calls", False)
 
             response_data = parsed_chunk.get("response", {})
