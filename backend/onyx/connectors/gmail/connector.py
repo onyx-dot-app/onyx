@@ -390,7 +390,9 @@ class GmailConnector(
         """
         List all user emails if we are on a Google Workspace domain.
         If the domain is gmail.com, or if we attempt to call the Admin SDK and
-        get a 404, fall back to using the single user.
+        get a 404 or 403, fall back to using the single user.
+        A 404 indicates a personal Gmail account with no Workspace domain.
+        A 403 indicates insufficient permissions (e.g., OAuth user without admin privileges).
         """
 
         try:
@@ -411,6 +413,13 @@ class GmailConnector(
                 logger.warning(
                     "Received 404 from Admin SDK; this may indicate a personal Gmail account "
                     "with no Workspace domain. Falling back to single user."
+                )
+                return [self.primary_admin_email]
+            elif e.resp.status == 403:
+                logger.warning(
+                    "Received 403 from Admin SDK; this may indicate insufficient permissions "
+                    "(e.g., OAuth user without admin privileges or service account without "
+                    "domain-wide delegation). Falling back to single user."
                 )
                 return [self.primary_admin_email]
             raise
