@@ -144,9 +144,39 @@ export default function CredentialStep({
           <GmailMain
             buildMode
             onOAuthRedirect={onOAuthRedirect}
-            onCredentialCreated={(credential) => {
+            onCredentialCreated={async (credential) => {
               onSelectCredential(credential);
-              onContinue();
+              // For single-step connectors (like Gmail), create connector immediately
+              // For multi-step connectors, continue to config step
+              if (isSingleStep && onConnectorSuccess) {
+                // Create connector immediately for single-step flow
+                setIsConnecting(true);
+                try {
+                  const result = await createBuildConnector({
+                    connectorType,
+                    credential: credential,
+                    userEmail: user?.email,
+                  });
+
+                  if (!result.success) {
+                    throw new Error(result.error);
+                  }
+
+                  onConnectorSuccess();
+                } catch (err) {
+                  setPopup?.({
+                    message:
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to create connector",
+                    type: "error",
+                  });
+                } finally {
+                  setIsConnecting(false);
+                }
+              } else {
+                onContinue();
+              }
             }}
           />
         ) : (

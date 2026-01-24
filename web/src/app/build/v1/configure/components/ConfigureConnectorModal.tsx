@@ -25,14 +25,13 @@ function connectorNeedsConfigStep(connectorType: ValidSources): boolean {
   const config = connectorConfigs[connectorType as ConfigurableSources];
   if (!config) return false;
 
+  // Only check main values, not advanced_values
+  // Advanced values are optional configuration and shouldn't force a 2-step flow
   const hasVisibleValues = config.values.some(
     (field) => !("hidden" in field && field.hidden)
   );
-  const hasVisibleAdvancedValues = config.advanced_values.some(
-    (field) => !("hidden" in field && field.hidden)
-  );
 
-  return hasVisibleValues || hasVisibleAdvancedValues;
+  return hasVisibleValues;
 }
 
 interface ConfigureConnectorModalProps {

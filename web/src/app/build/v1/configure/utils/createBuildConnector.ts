@@ -58,6 +58,7 @@ export async function createBuildConnector({
       prune_freq: 2592000,
       indexing_start: null,
       access_type: "private",
+      groups: [],
     });
 
     if (connectorError || !connector) {

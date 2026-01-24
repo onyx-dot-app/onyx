@@ -43,7 +43,9 @@ function ConnectorConfigForm({
     setIsSubmitting(true);
 
     try {
-      const { connector_name, ...connectorConfig } = values;
+      // Extract connector_name and exclude access_type/groups (these are top-level fields)
+      const { connector_name, access_type, groups, ...connectorConfig } =
+        values;
 
       const result = await createBuildConnector({
         connectorType,
