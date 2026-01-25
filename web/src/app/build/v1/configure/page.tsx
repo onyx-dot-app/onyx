@@ -216,20 +216,20 @@ export default function BuildConfigPage() {
             >
               <Card>
                 <InputLayouts.Horizontal
-                  title="Use Demo Data"
+                  title="Disable Demo Data"
                   description="Demo data set contains 3000 files across all available connectors"
                   center
                 >
                   <SimpleTooltip
                     tooltip={
                       !hasActiveConnector
-                        ? "Connect and sync a data source to enable demo data"
+                        ? "Connect and sync a data source to disable demo data"
                         : undefined
                     }
                     disabled={hasActiveConnector}
                   >
                     <Switch
-                      checked={demoDataEnabled}
+                      checked={!demoDataEnabled}
                       onCheckedChange={setDemoDataEnabled}
                       disabled={!hasActiveConnector}
                     />
