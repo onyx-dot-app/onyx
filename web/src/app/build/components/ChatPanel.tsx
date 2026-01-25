@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   useSession,
@@ -22,10 +22,11 @@ import BuildWelcome from "@/app/build/components/BuildWelcome";
 import BuildMessageList from "@/app/build/components/BuildMessageList";
 import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicator";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgSidebar } from "@opal/icons";
+import { SvgSidebar, SvgChevronDown } from "@opal/icons";
 import { useBuildContext } from "@/app/build/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -90,6 +91,88 @@ export default function BuildChatPanel({
   );
   const { streamMessage } = useBuildStreaming();
   const isPreProvisioning = useIsPreProvisioning();
+
+  // Scroll detection for auto-scroll "magnet"
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const prevScrollTopRef = useRef(0);
+
+  // Check if user is at bottom of scroll container
+  const checkIfAtBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return true;
+
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const threshold = 32; // 2rem threshold
+
+    return distanceFromBottom <= threshold;
+  }, []);
+
+  // Handle scroll events - only update state on user-initiated scrolling
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const currentScrollTop = container.scrollTop;
+    const prevScrollTop = prevScrollTopRef.current;
+    const wasAtBottom = checkIfAtBottom();
+
+    // Detect if user scrolled up (scrollTop decreased)
+    // This distinguishes user scrolling from content growth
+    const scrolledUp = currentScrollTop < prevScrollTop - 5; // 5px threshold
+
+    // Only update state if user scrolled up (definitely user action)
+    // If content grows and we're still at bottom, don't change state
+    if (scrolledUp) {
+      // User scrolled up - release auto-scroll magnet
+      setIsAtBottom(wasAtBottom);
+      setShowScrollButton(!wasAtBottom);
+    } else if (wasAtBottom) {
+      // We're at bottom - ensure button stays hidden (handles content growth)
+      setIsAtBottom(true);
+      setShowScrollButton(false);
+    }
+    // If scrollTop increased but we're still at bottom, it's content growth - do nothing
+
+    prevScrollTopRef.current = currentScrollTop;
+  }, [checkIfAtBottom]);
+
+  // Scroll to bottom and resume auto-scroll
+  const scrollToBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    // Use requestAnimationFrame to ensure we scroll after any layout changes
+    requestAnimationFrame(() => {
+      if (!container) return;
+
+      // Scroll to a value larger than scrollHeight - browsers will clamp to max
+      // This ensures we always reach the absolute bottom
+      const targetScroll = container.scrollHeight + 1000; // Add buffer to ensure we go all the way
+      container.scrollTo({ top: targetScroll, behavior: "smooth" });
+
+      // Update state immediately
+      setIsAtBottom(true);
+      setShowScrollButton(false);
+
+      // Update prevScrollTopRef after scroll completes
+      setTimeout(() => {
+        if (container) {
+          prevScrollTopRef.current = container.scrollTop;
+        }
+      }, 600); // Smooth scroll animation duration
+    });
+  }, []);
+
+  // Reset scroll state when session changes
+  useEffect(() => {
+    setIsAtBottom(true);
+    setShowScrollButton(false);
+  }, [sessionId]);
 
   const handleSubmit = useCallback(
     async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
@@ -227,7 +310,11 @@ export default function BuildChatPanel({
         </div>
 
         {/* Main content area */}
-        <div className="flex-1 overflow-auto">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-auto"
+        >
           {!hasSession && !existingSessionId ? (
             <BuildWelcome
               onSubmit={handleSubmit}
@@ -239,14 +326,36 @@ export default function BuildChatPanel({
               messages={session?.messages ?? []}
               streamItems={session?.streamItems ?? []}
               isStreaming={isRunning}
+              autoScrollEnabled={isAtBottom}
             />
           )}
         </div>
 
         {/* Input bar at bottom when session exists */}
         {(hasSession || existingSessionId) && (
-          <div className="px-4 pb-8 pt-4">
+          <div className="px-4 pb-8 pt-4 relative">
             <div className="max-w-2xl mx-auto">
+              {/* Scroll to bottom button - shown when user has scrolled away */}
+              {showScrollButton && (
+                <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
+                  <SimpleTooltip tooltip="Scroll to bottom" delayDuration={200}>
+                    <button
+                      onClick={scrollToBottom}
+                      className={cn(
+                        "flex items-center justify-center",
+                        "w-8 h-8 rounded-full",
+                        "bg-background-neutral-00 border border-border-01",
+                        "shadow-01 hover:shadow-02",
+                        "transition-all duration-200",
+                        "hover:bg-background-tint-01"
+                      )}
+                      aria-label="Scroll to bottom"
+                    >
+                      <SvgChevronDown size={16} className="stroke-text-04" />
+                    </button>
+                  </SimpleTooltip>
+                </div>
+              )}
               <InputBar
                 onSubmit={handleSubmit}
                 isRunning={isRunning}
