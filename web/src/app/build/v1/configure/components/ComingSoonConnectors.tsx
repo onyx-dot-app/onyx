@@ -33,14 +33,11 @@ const COMING_SOON_CONNECTORS: ValidSources[] = [
   // Salesforce
   ValidSources.Salesforce,
   ValidSources.Gong,
-  // Google
-  ValidSources.GoogleCloudStorage,
-  ValidSources.GoogleSites,
   // Knowledge Base/Wiki
   ValidSources.Bookstack,
-  ValidSources.S3,
-  ValidSources.R2,
-  ValidSources.OciStorage,
+  ValidSources.Discord,
+  ValidSources.Zendesk,
+  ValidSources.Freshdesk,
   ValidSources.Egnyte,
   // Project Management
   ValidSources.Asana,
@@ -56,14 +53,10 @@ const COMING_SOON_CONNECTORS: ValidSources[] = [
   ValidSources.Gitbook,
   ValidSources.Highspot,
   ValidSources.DrupalWiki,
-  ValidSources.Mediawiki,
   ValidSources.Discourse,
   ValidSources.Axero,
   // Messaging/Collaboration
-  ValidSources.Discord,
   ValidSources.Zulip,
-  ValidSources.Zendesk,
-  ValidSources.Freshdesk,
   // Other
   ValidSources.Loopio,
   ValidSources.Xenforo,
@@ -132,14 +125,20 @@ export default function ComingSoonConnectors() {
             ];
           }
 
+          // Insert Box right after Discord
+          if (type === ValidSources.Discord) {
+            return [
+              card,
+              <div key="box" className="opacity-60">
+                <Card variant="secondary">
+                  <LineItemLayout icon={BoxIcon} title="Box" center />
+                </Card>
+              </div>,
+            ];
+          }
+
           return [card];
         })}
-        {/* Cloud Storage - Box */}
-        <div className="opacity-60">
-          <Card variant="secondary">
-            <LineItemLayout icon={BoxIcon} title="Box" center />
-          </Card>
-        </div>
         {/* Enterprise/ERP */}
         <div className="opacity-60">
           <Card variant="secondary">
