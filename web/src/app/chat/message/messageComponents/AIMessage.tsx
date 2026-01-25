@@ -227,6 +227,14 @@ const AIMessage = React.memo(function AIMessage({
   );
   const stopReasonRef = useRef<StopReason | undefined>(undefined);
 
+  // Track specifically when MESSAGE_START arrives (for collapsing the tools header).
+  // This is separate from finalAnswerComing which can be set by onAllToolsDisplayed
+  // or by PYTHON/IMAGE tool packets.
+  const [hasTextMessageStarted, setHasTextMessageStarted] = useState(
+    rawPackets.some((p) => p.obj.type === PacketType.MESSAGE_START)
+  );
+  const hasTextMessageStartedRef = useRef(hasTextMessageStarted);
+
   // Incremental packet processing state
   const lastProcessedIndexRef = useRef<number>(0);
   const citationsRef = useRef<StreamingCitation[]>([]);
@@ -265,6 +273,10 @@ const AIMessage = React.memo(function AIMessage({
     seenGroupKeysRef.current = new Set();
     groupKeysWithSectionEndRef.current = new Set();
     expectedBranchesRef.current = new Map();
+    hasTextMessageStartedRef.current = rawPackets.some(
+      (p) => p.obj.type === PacketType.MESSAGE_START
+    );
+    setHasTextMessageStarted(hasTextMessageStartedRef.current);
   };
   useEffect(() => {
     resetState();
@@ -421,6 +433,15 @@ const AIMessage = React.memo(function AIMessage({
           setFinalAnswerComing(true);
         }
         finalAnswerComingRef.current = true;
+      }
+
+      // Track specifically when MESSAGE_START arrives (for collapsing tools header)
+      if (
+        packet.obj.type === PacketType.MESSAGE_START &&
+        !hasTextMessageStartedRef.current
+      ) {
+        setHasTextMessageStarted(true);
+        hasTextMessageStartedRef.current = true;
       }
 
       if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
@@ -583,6 +604,7 @@ const AIMessage = React.memo(function AIMessage({
                         isStreaming={globalChatState === "streaming"}
                         onAllToolsDisplayed={() => setFinalAnswerComing(true)}
                         expectedBranchesPerTurn={expectedBranchesRef.current}
+                        hasTextMessageStarted={hasTextMessageStarted}
                       />
                     )}
 
