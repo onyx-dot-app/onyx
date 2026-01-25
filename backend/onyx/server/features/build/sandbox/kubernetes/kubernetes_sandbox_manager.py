@@ -356,7 +356,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             containers=[sandbox_container],
             volumes=volumes,
             restart_policy="Never",
-            termination_grace_period_seconds=30,
+            termination_grace_period_seconds=300,
             # Node selection for sandbox nodes
             node_selector={"onyx.app/workload": "sandbox"},
             tolerations=[
@@ -375,9 +375,9 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
                 seccomp_profile=client.V1SeccompProfile(type="RuntimeDefault"),
             ),
             # Disable host access
-            host_network=False,
-            host_pid=False,
-            host_ipc=False,
+            # host_network=False,
+            # host_pid=False,
+            # host_ipc=False,
         )
 
         return client.V1Pod(
