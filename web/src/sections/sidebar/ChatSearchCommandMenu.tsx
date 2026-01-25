@@ -13,7 +13,13 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
-import { SvgEditBig, SvgFolder, SvgFolderPlus, SvgFileText } from "@opal/icons";
+import {
+  SvgEditBig,
+  SvgFolder,
+  SvgFolderPlus,
+  SvgFileText,
+  SvgBubbleText,
+} from "@opal/icons";
 
 interface ChatSearchCommandMenuProps {
   trigger: React.ReactNode;
@@ -184,7 +190,7 @@ export default function ChatSearchCommandMenu({
                     <CommandMenu.Item
                       key={chat.id}
                       value={`chat-${chat.id}`}
-                      icon={SvgFileText}
+                      icon={SvgBubbleText}
                       rightContent={
                         <Text secondaryBody text03>
                           {formatDisplayTime(chat.time)}

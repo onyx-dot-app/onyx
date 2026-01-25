@@ -15,7 +15,7 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import EditableTag from "@/refresh-components/buttons/EditableTag";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import ShadowDiv from "@/refresh-components/ShadowDiv";
+import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Separator from "@/refresh-components/Separator";
 import { Section } from "@/layouts/general-layouts";
 import { SvgChevronRight, SvgSearch, SvgX } from "@opal/icons";
@@ -198,12 +198,25 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
   );
 
   // Scroll highlighted item into view on keyboard nav
+  // Uses manual scroll calculation instead of scrollIntoView to only scroll
+  // the list container, not the modal or other ancestors
   useEffect(() => {
     if (isKeyboardNav && highlightedValue) {
+      const container = document.querySelector("[data-command-menu-list]");
       const el = document.querySelector(
         `[data-command-item="${highlightedValue}"]`
       );
-      el?.scrollIntoView({ block: "nearest" });
+
+      if (container && el instanceof HTMLElement) {
+        const containerRect = container.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+
+        if (elRect.top < containerRect.top) {
+          container.scrollTop -= containerRect.top - elRect.top;
+        } else if (elRect.bottom > containerRect.bottom) {
+          container.scrollTop += elRect.bottom - containerRect.bottom;
+        }
+      }
     }
   }, [highlightedValue, isKeyboardNav]);
 
@@ -268,7 +281,7 @@ const CommandMenuContent = React.forwardRef<
           "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
           "duration-200",
           "w-[32rem]",
-          "max-h-[30rem]"
+          "min-h-[15rem] max-h-[40rem]"
         )}
       >
         <VisuallyHidden.Root asChild>
@@ -311,7 +324,7 @@ function CommandMenuHeader({
   );
 
   return (
-    <div>
+    <div className="flex-shrink-0">
       {/* Top row: Search icon, filters, close button */}
       <div className="px-3 pt-3 flex flex-row justify-between items-center">
         <Section
@@ -361,36 +374,31 @@ function CommandMenuHeader({
 /**
  * CommandMenu List Component
  *
- * Scrollable container for menu items with scroll shadows.
+ * Scrollable container for menu items with scroll shadow indicators.
+ * Uses ScrollIndicatorDiv for automatic scroll shadows.
  */
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
   const childCount = React.Children.count(children);
 
   if (childCount === 0 && emptyMessage) {
     return (
-      <div className="bg-background-tint-01 flex-1 min-h-0">
-        <Section padding={1}>
-          <Text secondaryBody text03>
-            {emptyMessage}
-          </Text>
-        </Section>
+      <div className="bg-background-tint-01 p-4">
+        <Text secondaryBody text03>
+          {emptyMessage}
+        </Text>
       </div>
     );
   }
 
   return (
-    <>
-      <Separator noPadding />
-      <ShadowDiv
-        className="flex-1 min-h-0 bg-background-tint-01"
-        backgroundColor="var(--background-tint-01)"
-        data-command-menu-list
-      >
-        <Section padding={0.5} gap={0} alignItems="stretch">
-          {children}
-        </Section>
-      </ShadowDiv>
-    </>
+    <ScrollIndicatorDiv
+      className="p-1 gap-0 max-h-[60vh] bg-background-tint-01"
+      backgroundColor="var(--background-tint-01)"
+      data-command-menu-list
+      variant="shadow"
+    >
+      {children}
+    </ScrollIndicatorDiv>
   );
 }
 
@@ -497,6 +505,7 @@ function CommandMenuItem({
   return (
     <div data-command-item={value}>
       <LineItem
+        muted
         icon={icon}
         rightChildren={rightContent}
         emphasized={isHighlighted}
@@ -580,7 +589,7 @@ function CommandMenuAction({
  */
 function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
   return (
-    <>
+    <div className="flex-shrink-0">
       <Separator noPadding />
       <Section
         flexDirection="row"
@@ -590,7 +599,7 @@ function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
       >
         {leftActions}
       </Section>
-    </>
+    </div>
   );
 }
 

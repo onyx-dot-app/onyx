@@ -44,6 +44,19 @@
   }
 }
 
+/* Muted Variant - subdued styling for less prominent items */
+.line-item-button-muted {
+  @apply bg-transparent hover:bg-background-tint-02;
+}
+
+.line-item-button-muted-emphasized {
+  @apply bg-transparent hover:bg-background-tint-02;
+
+  &[data-selected="true"] {
+    @apply bg-background-tint-02;
+  }
+}
+
 /* LineItem Text Variants */
 .line-item-text-main {
   color: var(--text-04) !important;
@@ -66,6 +79,14 @@
   color: var(--text-04) !important;
 }
 
+.line-item-text-muted {
+  color: var(--text-03) !important;
+
+  .group\/LineItem[data-selected="true"] & {
+    color: var(--text-03) !important;
+  }
+}
+
 /* LineItem Icon Variants */
 .line-item-icon-main {
   @apply stroke-text-03;
@@ -85,4 +106,12 @@
 
 .line-item-icon-action {
   @apply stroke-text-03;
+}
+
+.line-item-icon-muted {
+  @apply stroke-text-02;
+
+  .group\/LineItem[data-selected="true"] & {
+    @apply stroke-text-02;
+  }
 }
