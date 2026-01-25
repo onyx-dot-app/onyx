@@ -461,92 +461,6 @@ function ParallelToolTabs({
   );
 }
 
-// Shared component for expanded tool rendering
-function ExpandedToolItem({
-  icon,
-  content,
-  status,
-  isLastItem,
-  showClickableToggle = false,
-  onToggleClick,
-  defaultIconColor = "text-text-300",
-  expandedText,
-}: {
-  icon: ((props: { size: number }) => JSX.Element) | null;
-  content: JSX.Element | string;
-  status: string | JSX.Element | null;
-  isLastItem: boolean;
-  showClickableToggle?: boolean;
-  onToggleClick?: () => void;
-  defaultIconColor?: string;
-  expandedText?: JSX.Element | string;
-}) {
-  const finalIcon = icon ? (
-    icon({ size: 14 })
-  ) : (
-    <FiCircle className={cn("w-2 h-2 fill-current", defaultIconColor)} />
-  );
-
-  return (
-    <div className="relative">
-      {/* Connector line */}
-      {!isLastItem && (
-        <div
-          className="absolute w-px bg-background-tint-04 z-0"
-          style={{
-            left: "10px",
-            top: "20px",
-            bottom: "0",
-          }}
-        />
-      )}
-
-      {/* Main row with icon and content */}
-      <div
-        className={cn(
-          "flex items-start gap-2",
-          STANDARD_TEXT_COLOR,
-          "relative z-10"
-        )}
-      >
-        {/* Icon column */}
-        <div className="flex flex-col items-center w-5">
-          <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
-            {finalIcon}
-          </div>
-        </div>
-
-        {/* Content with padding */}
-        <div className={cn("flex-1", !isLastItem && "pb-4")}>
-          <div className="flex mb-1">
-            <Text
-              as="p"
-              text02
-              className={cn(
-                "text-sm flex items-center gap-1",
-                showClickableToggle &&
-                  "cursor-pointer hover:text-text-900 transition-colors"
-              )}
-              onClick={showClickableToggle ? onToggleClick : undefined}
-            >
-              {status}
-            </Text>
-          </div>
-
-          <div
-            className={cn(
-              expandedText ? "text-sm" : "text-xs text-text-600",
-              expandedText && STANDARD_TEXT_COLOR
-            )}
-          >
-            {expandedText || content}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Multi-tool renderer component for grouped tools
 export default function MultiToolRenderer({
   packetGroups,
@@ -570,7 +484,7 @@ export default function MultiToolRenderer({
   // Map of turn_index -> expected number of parallel branches (from TopLevelBranching packet)
   expectedBranchesPerTurn?: Map<number, number>;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [isStreamingExpanded, setIsStreamingExpanded] = useState(false);
 
   const toolGroups = useMemo(() => {
@@ -725,152 +639,50 @@ export default function MultiToolRenderer({
     }
   };
 
-  // Group items by turn_index and sort by turn_index
-  const turnGroups = useMemo(() => {
-    const grouped = new Map<number, DisplayItem[]>();
-    displayItems.forEach((item) => {
-      const existing = grouped.get(item.turn_index) || [];
-      existing.push(item);
-      grouped.set(item.turn_index, existing);
-    });
-    // Convert to sorted array of [turnIndex, items] pairs
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([turnIndex, items]) => ({
-        turnIndex,
-        items,
-        hasParallelTools: new Set(items.map((item) => item.tab_index)).size > 1,
-      }));
-  }, [displayItems]);
-
   // Helper to check if a turn has parallel tools
   const turnHasParallelTools = (turnItems: DisplayItem[]): boolean => {
     const uniqueTabIndices = new Set(turnItems.map((item) => item.tab_index));
     return uniqueTabIndices.size > 1;
   };
 
-  // If still processing, show tools progressively with timing
-  if (!isComplete) {
-    // Filter display items to only show those whose (turn_index, tab_index) is visible
-    const itemsToDisplay = displayItems.filter((item) =>
-      visibleTools.has(`${item.turn_index}-${item.tab_index}`)
-    );
+  // Filter display items to only show those whose (turn_index, tab_index) is visible
+  const itemsToDisplay = isComplete
+    ? displayItems
+    : displayItems.filter((item) =>
+        visibleTools.has(`${item.turn_index}-${item.tab_index}`)
+      );
 
-    if (itemsToDisplay.length === 0) {
-      return null;
-    }
-
-    // Group visible items by turn_index
-    const visibleTurnGroups: {
-      turnIndex: number;
-      items: DisplayItem[];
-      hasParallelTools: boolean;
-    }[] = [];
-    const visibleItemsByTurn = new Map<number, DisplayItem[]>();
-    itemsToDisplay.forEach((item) => {
-      const existing = visibleItemsByTurn.get(item.turn_index) || [];
-      existing.push(item);
-      visibleItemsByTurn.set(item.turn_index, existing);
-    });
-    Array.from(visibleItemsByTurn.entries())
-      .sort(([a], [b]) => a - b)
-      .forEach(([turnIndex, items]) => {
-        visibleTurnGroups.push({
-          turnIndex,
-          items,
-          hasParallelTools: turnHasParallelTools(items),
-        });
-      });
-
-    return (
-      <div className="mb-4 w-full relative pt-4">
-        {/* Timeline content */}
-        <div className="relative border border-border-medium rounded-lg p-4 shadow">
-          <div className="flex flex-col">
-            {visibleTurnGroups.map((turnGroup, turnGroupIndex) => {
-              const isLastTurnGroup =
-                turnGroupIndex === visibleTurnGroups.length - 1;
-
-              // If this turn has parallel tools, render as tabs
-              if (turnGroup.hasParallelTools) {
-                return (
-                  <div key={`turn-${turnGroup.turnIndex}`}>
-                    <ParallelToolTabs
-                      items={turnGroup.items}
-                      chatState={chatState}
-                      stopPacketSeen={stopPacketSeen}
-                      stopReason={stopReason}
-                      shouldStopShimmering={shouldStopShimmering}
-                      handleToolComplete={handleToolComplete}
-                    />
-                  </div>
-                );
-              }
-
-              // Single tool in this turn - render as timeline item
-              const turnItems = turnGroup.items;
-              return (
-                <div key={`turn-${turnGroup.turnIndex}`}>
-                  {turnItems.map((item, index) => {
-                    const isLastItem =
-                      isLastTurnGroup && index === turnItems.length - 1;
-
-                    // Calculate loading state for this item
-                    let isItemComplete = false;
-                    if (
-                      item.type === DisplayType.SEARCH_STEP_1 ||
-                      item.type === DisplayType.SEARCH_STEP_2
-                    ) {
-                      const searchState = constructCurrentSearchState(
-                        item.packets as SearchToolPacket[]
-                      );
-                      isItemComplete = searchState.isComplete;
-                    } else {
-                      // Use isToolComplete helper which handles research agents correctly
-                      // (only looks at parent-level SECTION_END for research agents)
-                      isItemComplete = isToolComplete(item.packets);
-                    }
-                    const isLoading = !isItemComplete && !shouldStopShimmering;
-
-                    return (
-                      <div key={item.key}>
-                        {renderDisplayItem(
-                          item,
-                          index,
-                          turnItems.length,
-                          true,
-                          true,
-                          ({ icon, content, status }) => (
-                            <ToolItemRow
-                              icon={icon}
-                              content={content}
-                              status={status}
-                              isLastItem={isLastItem}
-                              isLoading={isLoading}
-                              isCancelled={
-                                stopReason === StopReason.USER_CANCELLED
-                              }
-                            />
-                          )
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
+  if (itemsToDisplay.length === 0) {
+    return null;
   }
 
-  // If complete, show summary with toggle and render each turn group independently
+  // Group visible items by turn_index
+  const visibleTurnGroups: {
+    turnIndex: number;
+    items: DisplayItem[];
+    hasParallelTools: boolean;
+  }[] = [];
+  const visibleItemsByTurn = new Map<number, DisplayItem[]>();
+  itemsToDisplay.forEach((item) => {
+    const existing = visibleItemsByTurn.get(item.turn_index) || [];
+    existing.push(item);
+    visibleItemsByTurn.set(item.turn_index, existing);
+  });
+  Array.from(visibleItemsByTurn.entries())
+    .sort(([a], [b]) => a - b)
+    .forEach(([turnIndex, items]) => {
+      visibleTurnGroups.push({
+        turnIndex,
+        items,
+        hasParallelTools: turnHasParallelTools(items),
+      });
+    });
+
   return (
     <>
-      {/* Summary header - clickable */}
+      {/* Summary header - clickable, outside the box */}
       <div
-        className="flex flex-row flex-1 items-center pl-4 group/StepsButton select-none"
+        className="flex flex-row flex-1 items-center pl-4 group/StepsButton select-none cursor-pointer"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <Text text03 className="group-hover/StepsButton:text-text-04">
@@ -884,109 +696,120 @@ export default function MultiToolRenderer({
         />
       </div>
 
-      {/* Expanded content */}
-      <div
-        className={cn(
-          "w-full transition-all duration-300 ease-in-out overflow-hidden",
-          isExpanded
-            ? "max-h-[1000px] overflow-y-auto opacity-100"
-            : "max-h-0 opacity-0"
-        )}
-      >
-        <div
-          className={cn(
-            "py-4 px-0.5 transition-transform duration-300 ease-in-out",
-            isExpanded ? "transform translate-y-0" : "transform"
-          )}
-        >
-          <div className="flex flex-col">
-            {turnGroups.map((turnGroup, turnGroupIndex) => {
-              const isLastTurnGroup = turnGroupIndex === turnGroups.length - 1;
+      {/* Boxed timeline content */}
+      {isExpanded && (
+        <div className="mb-4 w-full relative pt-4">
+          <div className="relative border border-border-medium rounded-lg p-4 shadow">
+            <div className="flex flex-col">
+              {visibleTurnGroups.map((turnGroup, turnGroupIndex) => {
+                const isLastTurnGroup =
+                  turnGroupIndex === visibleTurnGroups.length - 1;
 
-              // If this turn has parallel tools, render as tabs
-              if (turnGroup.hasParallelTools) {
+                // If this turn has parallel tools, render as tabs
+                if (turnGroup.hasParallelTools) {
+                  return (
+                    <div key={`turn-${turnGroup.turnIndex}`}>
+                      <ParallelToolTabs
+                        items={turnGroup.items}
+                        chatState={chatState}
+                        stopPacketSeen={stopPacketSeen}
+                        stopReason={stopReason}
+                        shouldStopShimmering={shouldStopShimmering}
+                        handleToolComplete={handleToolComplete}
+                      />
+                      {/* Connector line to next turn group or Done node */}
+                      {!isLastTurnGroup && (
+                        <div
+                          className="w-px bg-background-tint-04 ml-[10px] h-4"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                  );
+                }
+
+                // Single tool in this turn - render as timeline item
+                const turnItems = turnGroup.items;
                 return (
                   <div key={`turn-${turnGroup.turnIndex}`}>
-                    <ParallelToolTabs
-                      items={turnGroup.items}
-                      chatState={chatState}
-                      stopPacketSeen={stopPacketSeen}
-                      stopReason={stopReason}
-                      shouldStopShimmering={true}
-                      handleToolComplete={handleToolComplete}
-                    />
-                    {/* Connector line to next turn group or Done node */}
-                    {!isLastTurnGroup && (
-                      <div
-                        className="w-px bg-background-tint-04 ml-[10px] h-4"
-                        aria-hidden="true"
-                      />
-                    )}
+                    {turnItems.map((item, index) => {
+                      const isLastItem =
+                        isLastTurnGroup &&
+                        index === turnItems.length - 1 &&
+                        !isComplete;
+
+                      // Calculate loading state for this item
+                      let isItemComplete = false;
+                      if (
+                        item.type === DisplayType.SEARCH_STEP_1 ||
+                        item.type === DisplayType.SEARCH_STEP_2
+                      ) {
+                        const searchState = constructCurrentSearchState(
+                          item.packets as SearchToolPacket[]
+                        );
+                        isItemComplete = searchState.isComplete;
+                      } else {
+                        // Use isToolComplete helper which handles research agents correctly
+                        // (only looks at parent-level SECTION_END for research agents)
+                        isItemComplete = isToolComplete(item.packets);
+                      }
+                      const isLoading =
+                        !isItemComplete && !shouldStopShimmering;
+
+                      return (
+                        <div key={item.key}>
+                          {renderDisplayItem(
+                            item,
+                            index,
+                            turnItems.length,
+                            !isComplete,
+                            true,
+                            ({ icon, content, status }) => (
+                              <ToolItemRow
+                                icon={icon}
+                                content={content}
+                                status={status}
+                                isLastItem={isComplete ? false : isLastItem}
+                                isLoading={isLoading}
+                                isCancelled={
+                                  stopReason === StopReason.USER_CANCELLED
+                                }
+                              />
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
-              }
+              })}
 
-              // Single tool in this turn - render sequentially
-              const turnItems = turnGroup.items;
-              return (
-                <div key={`turn-${turnGroup.turnIndex}`}>
-                  {turnItems.map((item, index) => {
-                    // Don't mark as last item if there are more turns or Done node follows
-                    const isLastItemInTurn = index === turnItems.length - 1;
-                    const isLastItem = isLastTurnGroup && isLastItemInTurn;
+              {/* Done node at the bottom - only show when streaming is complete */}
+              {isComplete && (
+                <div className="relative">
+                  {/* Connector line from previous tool */}
+                  <div
+                    className="absolute w-px bg-background-300 z-0"
+                    style={{
+                      left: "10px",
+                      top: "-12px",
+                      height: "32px",
+                    }}
+                  />
 
-                    return (
-                      <div key={item.key}>
-                        {renderDisplayItem(
-                          item,
-                          index,
-                          turnItems.length,
-                          false,
-                          true,
-                          ({ icon, content, status, expandedText }) => (
-                            <ExpandedToolItem
-                              icon={icon}
-                              content={content}
-                              status={status}
-                              isLastItem={false} // Always draw connector line since Done node follows
-                              defaultIconColor="text-text-03"
-                              expandedText={expandedText}
-                            />
-                          )
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-
-            {/* Done node at the bottom - only show after all tools are displayed */}
-            {allToolsDisplayed && (
-              <div className="relative">
-                {/* Connector line from previous tool */}
-                <div
-                  className="absolute w-px bg-background-300 z-0"
-                  style={{
-                    left: "10px",
-                    top: "-12px",
-                    height: "32px",
-                  }}
-                />
-
-                {/* Main row with icon and content */}
-                <div
-                  className={cn(
-                    "flex items-start gap-2",
-                    STANDARD_TEXT_COLOR,
-                    "relative z-10 pb-3"
-                  )}
-                >
-                  {/* Icon column */}
-                  <div className="flex flex-col items-center w-5">
-                    {/* Dot with background to cover the line */}
-                    <div
-                      className="
+                  {/* Main row with icon and content */}
+                  <div
+                    className={cn(
+                      "flex items-start gap-2",
+                      STANDARD_TEXT_COLOR,
+                      "relative z-10 pb-3"
+                    )}
+                  >
+                    {/* Icon column */}
+                    <div className="flex flex-col items-center w-5">
+                      {/* Dot with background to cover the line */}
+                      <div
+                        className="
                         flex-shrink-0
                         flex
                         items-center
@@ -996,39 +819,40 @@ export default function MultiToolRenderer({
                         bg-background
                         rounded-full
                       "
-                    >
-                      {toolGroups.some((group) =>
-                        group.packets.some(
-                          (p) => p.obj.type === PacketType.ERROR
-                        )
-                      ) ? (
-                        <FiXCircle className="w-3 h-3 rounded-full text-red-500" />
-                      ) : (
-                        <FiCheckCircle className="w-3 h-3 rounded-full" />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Content with padding */}
-                  <div className="flex-1">
-                    <div className="flex mb-1">
-                      <div className="text-sm">
+                      >
                         {toolGroups.some((group) =>
                           group.packets.some(
                             (p) => p.obj.type === PacketType.ERROR
                           )
-                        )
-                          ? "Completed with errors"
-                          : "Done"}
+                        ) ? (
+                          <FiXCircle className="w-3 h-3 rounded-full text-red-500" />
+                        ) : (
+                          <FiCheckCircle className="w-3 h-3 rounded-full" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Content with padding */}
+                    <div className="flex-1">
+                      <div className="flex mb-1">
+                        <div className="text-sm">
+                          {toolGroups.some((group) =>
+                            group.packets.some(
+                              (p) => p.obj.type === PacketType.ERROR
+                            )
+                          )
+                            ? "Completed with errors"
+                            : "Done"}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
