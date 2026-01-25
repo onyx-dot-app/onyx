@@ -263,9 +263,11 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
   useEffect(() => {
     if (isKeyboardNav && highlightedValue) {
       const container = document.querySelector("[data-command-menu-list]");
-      const el = document.querySelector(
-        `[data-command-item="${highlightedValue}"]`
-      );
+      // Use safe attribute matching instead of direct selector interpolation
+      // to prevent CSS selector injection
+      const el = Array.from(
+        container?.querySelectorAll("[data-command-item]") ?? []
+      ).find((e) => e.getAttribute("data-command-item") === highlightedValue);
 
       if (container && el instanceof HTMLElement) {
         const containerRect = container.getBoundingClientRect();
@@ -282,18 +284,32 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     }
   }, [highlightedValue, isKeyboardNav]);
 
-  const contextValue: CommandMenuContextValue = {
-    highlightedValue,
-    highlightedItemType,
-    isKeyboardNav,
-    registerItem,
-    unregisterItem,
-    onItemMouseEnter,
-    onItemMouseMove,
-    onItemClick,
-    onListMouseLeave,
-    handleKeyDown,
-  };
+  const contextValue = useMemo<CommandMenuContextValue>(
+    () => ({
+      highlightedValue,
+      highlightedItemType,
+      isKeyboardNav,
+      registerItem,
+      unregisterItem,
+      onItemMouseEnter,
+      onItemMouseMove,
+      onItemClick,
+      onListMouseLeave,
+      handleKeyDown,
+    }),
+    [
+      highlightedValue,
+      highlightedItemType,
+      isKeyboardNav,
+      registerItem,
+      unregisterItem,
+      onItemMouseEnter,
+      onItemMouseMove,
+      onItemClick,
+      onListMouseLeave,
+      handleKeyDown,
+    ]
+  );
 
   return (
     <CommandMenuContext.Provider value={contextValue}>
@@ -322,8 +338,9 @@ const CommandMenuContent = React.forwardRef<
 
   return (
     <DialogPrimitive.Portal>
-      {/* Overlay */}
+      {/* Overlay - hidden from assistive technology */}
       <DialogPrimitive.Overlay
+        aria-hidden="true"
         className={cn(
           "fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
@@ -412,7 +429,12 @@ function CommandMenuHeader({
         </Section>
         {onClose && (
           <DialogPrimitive.Close asChild>
-            <IconButton icon={SvgX} internal onClick={onClose} />
+            <IconButton
+              icon={SvgX}
+              internal
+              onClick={onClose}
+              aria-label="Close menu"
+            />
           </DialogPrimitive.Close>
         )}
       </div>
@@ -447,7 +469,11 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
 
   if (childCount === 0 && emptyMessage) {
     return (
-      <div className="bg-background-tint-01 p-4">
+      <div
+        className="bg-background-tint-01 p-4"
+        role="status"
+        aria-live="polite"
+      >
         <Text secondaryBody text03>
           {emptyMessage}
         </Text>
@@ -457,6 +483,8 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
 
   return (
     <ScrollIndicatorDiv
+      role="listbox"
+      aria-label="Command menu options"
       className="p-1 gap-0 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
       data-command-menu-list
@@ -520,7 +548,7 @@ function CommandMenuFilter({
 
   // Selectable filter - uses LineItem, delegates all events to context
   return (
-    <div data-command-item={value}>
+    <div data-command-item={value} role="option" aria-selected={isHighlighted}>
       <Divider
         showTitle
         text={children as string}
@@ -577,7 +605,7 @@ function CommandMenuItem({
       : rightContent;
 
   return (
-    <div data-command-item={value}>
+    <div data-command-item={value} role="option" aria-selected={isHighlighted}>
       <LineItem
         muted
         icon={icon}
@@ -629,7 +657,7 @@ function CommandMenuAction({
   const isHighlighted = value === highlightedValue;
 
   return (
-    <div data-command-item={value}>
+    <div data-command-item={value} role="option" aria-selected={isHighlighted}>
       <LineItem
         action
         icon={icon}
@@ -690,8 +718,11 @@ function CommandMenuFooterAction({
   label,
 }: CommandMenuFooterActionProps) {
   return (
-    <div className="flex items-center gap-1">
-      <Icon className="w-[0.875rem] h-[0.875rem] stroke-text-02" />
+    <div className="flex items-center gap-1" aria-label={label}>
+      <Icon
+        className="w-[0.875rem] h-[0.875rem] stroke-text-02"
+        aria-hidden="true"
+      />
       <Text mainUiBody text03>
         {label}
       </Text>

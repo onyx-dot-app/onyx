@@ -2,6 +2,24 @@ import { useState, useEffect, useMemo } from "react";
 import type { CommandMenuEntry, CommandMenuGroup } from "./types";
 
 // =============================================================================
+// Shared Helper
+// =============================================================================
+
+/**
+ * Checks if an item matches the search term by label or description.
+ * Used by all filter hooks to avoid duplication.
+ */
+function matchesSearchTerm(
+  item: { label: string; description?: string | null },
+  term: string
+): boolean {
+  return (
+    item.label.toLowerCase().includes(term) ||
+    (item.description?.toLowerCase().includes(term) ?? false)
+  );
+}
+
+// =============================================================================
 // HOOK: useCommandMenuState
 // =============================================================================
 
@@ -54,11 +72,7 @@ export function useCommandMenuFilter<T extends CommandMenuFilterItem>({
   return useMemo(() => {
     if (!searchValue.trim()) return items;
     const term = searchValue.toLowerCase();
-    return items.filter(
-      (item) =>
-        item.label.toLowerCase().includes(term) ||
-        item.description?.toLowerCase().includes(term)
-    );
+    return items.filter((item) => matchesSearchTerm(item, term));
   }, [items, searchValue]);
 }
 
@@ -86,11 +100,7 @@ export function useCommandMenuGroupFilter({
     return groups
       .map((group) => ({
         ...group,
-        items: group.items.filter(
-          (item) =>
-            item.label.toLowerCase().includes(term) ||
-            item.description?.toLowerCase().includes(term)
-        ),
+        items: group.items.filter((item) => matchesSearchTerm(item, term)),
       }))
       .filter((group) => group.items.length > 0);
   }, [groups, searchValue]);
@@ -116,10 +126,6 @@ export function useCommandMenuEntryFilter<T extends CommandMenuEntry>({
   return useMemo(() => {
     if (!searchValue.trim()) return items;
     const term = searchValue.toLowerCase();
-    return items.filter(
-      (item) =>
-        item.label.toLowerCase().includes(term) ||
-        item.description?.toLowerCase().includes(term)
-    );
+    return items.filter((item) => matchesSearchTerm(item, term));
   }, [items, searchValue]);
 }
