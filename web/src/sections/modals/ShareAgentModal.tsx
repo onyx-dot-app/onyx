@@ -27,9 +27,6 @@ import { useUser } from "@/components/user/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { User } from "@/lib/types";
-import { UserGroup } from "@/lib/types";
-import { FullPersona } from "@/app/admin/assistants/interfaces";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -44,58 +41,70 @@ interface ShareAgentFormValues {
   isPublic: boolean;
 }
 
-interface ComboBoxOption {
-  value: string;
-  label: string;
-}
-
 // ============================================================================
 // ShareAgentFormContent
 // ============================================================================
 
 interface ShareAgentFormContentProps {
   agent?: MinimalPersonaSnapshot;
-  fullAgent: FullPersona | null;
-  usersData: User[];
-  groupsData: UserGroup[];
-  currentUserId: string | undefined;
-  comboBoxOptions: ComboBoxOption[];
-  onClose: () => void;
-  onCopyLink: () => void;
 }
 
-function ShareAgentFormContent({
-  agent,
-  fullAgent,
-  usersData,
-  groupsData,
-  currentUserId,
-  comboBoxOptions,
-  onClose,
-  onCopyLink,
-}: ShareAgentFormContentProps) {
+function ShareAgentFormContent({ agent }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty } =
     useFormikContext<ShareAgentFormValues>();
+  const { data: usersData } = useUsers({ includeApiKeys: false });
+  const { data: groupsData } = useGroups();
+  const { user: currentUser } = useUser();
+  const { agent: fullAgent } = useAgent(agent?.id ?? null);
+  const shareAgentModal = useModal();
+
+  const acceptedUsers = usersData?.accepted ?? [];
+  const groups = groupsData ?? [];
+
+  // Create options for InputComboBox from all accepted users and groups
+  const comboBoxOptions = useMemo(() => {
+    const userOptions = acceptedUsers.map((user) => ({
+      value: `user-${user.id}`,
+      label: user.email,
+    }));
+
+    const groupOptions = groups.map((group) => ({
+      value: `group-${group.id}`,
+      label: group.name,
+    }));
+
+    return [...userOptions, ...groupOptions];
+  }, [acceptedUsers, groups]);
 
   // Compute owner and displayed users
   const ownerId = fullAgent?.owner?.id;
   const owner = ownerId
-    ? usersData.find((user) => user.id === ownerId)
-    : usersData.find((user) => user.id === currentUserId);
+    ? acceptedUsers.find((user) => user.id === ownerId)
+    : acceptedUsers.find((user) => user.id === currentUser?.id);
   const otherUsers = owner
-    ? usersData.filter(
+    ? acceptedUsers.filter(
         (user) =>
           user.id !== owner.id && values.selectedUserIds.includes(user.id)
       )
-    : usersData;
+    : acceptedUsers;
   const displayedUsers = [...(owner ? [owner] : []), ...otherUsers];
 
   // Compute displayed groups based on current form values
-  const displayedGroups = groupsData.filter((group) =>
+  const displayedGroups = groups.filter((group) =>
     values.selectedGroupIds.includes(group.id)
   );
 
   // Handlers
+  function handleClose() {
+    shareAgentModal.toggle(false);
+  }
+
+  function handleCopyLink() {
+    if (!agent?.id) return;
+    const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
+    navigator.clipboard.writeText(url);
+  }
+
   function handleComboBoxSelect(selectedValue: string) {
     if (selectedValue.startsWith("user-")) {
       const userId = selectedValue.replace("user-", "");
@@ -129,7 +138,7 @@ function ShareAgentFormContent({
 
   return (
     <Modal.Content width="sm" height="lg">
-      <Modal.Header icon={SvgShare} title="Share Agent" onClose={onClose} />
+      <Modal.Header icon={SvgShare} title="Share Agent" onClose={handleClose} />
 
       <Modal.Body padding={0.5}>
         <Card variant="borderless" padding={0.5}>
@@ -165,7 +174,7 @@ function ShareAgentFormContent({
                     {/* Shared Users */}
                     {displayedUsers.map((user) => {
                       const isOwner = fullAgent?.owner?.id === user.id;
-                      const isCurrentUser = currentUserId === user.id;
+                      const isCurrentUser = currentUser?.id === user.id;
 
                       return (
                         <LineItem
@@ -236,13 +245,13 @@ function ShareAgentFormContent({
         <BasicModalFooter
           left={
             agent ? (
-              <Button secondary leftIcon={SvgLink} onClick={onCopyLink}>
+              <Button secondary leftIcon={SvgLink} onClick={handleCopyLink}>
                 Copy Link
               </Button>
             ) : undefined
           }
           cancel={
-            <Button secondary onClick={onClose}>
+            <Button secondary onClick={handleClose}>
               Done
             </Button>
           }
@@ -276,26 +285,7 @@ export default function ShareAgentModal({
   isPublic,
   onShare,
 }: ShareAgentModalProps) {
-  const { data: usersData } = useUsers({ includeApiKeys: false });
-  const { data: groupsData } = useGroups();
-  const { user: currentUser } = useUser();
   const shareAgentModal = useModal();
-  const { agent: fullAgent } = useAgent(agent?.id ?? null);
-
-  // Create options for InputComboBox from all accepted users and groups
-  const comboBoxOptions = useMemo(() => {
-    const userOptions = (usersData?.accepted ?? []).map((user) => ({
-      value: `user-${user.id}`,
-      label: user.email,
-    }));
-
-    const groupOptions = (groupsData ?? []).map((group) => ({
-      value: `group-${group.id}`,
-      label: group.name,
-    }));
-
-    return [...userOptions, ...groupOptions];
-  }, [usersData?.accepted, groupsData]);
 
   const initialValues: ShareAgentFormValues = {
     selectedUserIds: userIds,
@@ -307,16 +297,6 @@ export default function ShareAgentModal({
     onShare?.(values.selectedUserIds, values.selectedGroupIds, values.isPublic);
   }
 
-  function handleClose() {
-    shareAgentModal.toggle(false);
-  }
-
-  function handleCopyLink() {
-    if (!agent?.id) return;
-    const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
-    navigator.clipboard.writeText(url);
-  }
-
   return (
     <Modal open={shareAgentModal.isOpen} onOpenChange={shareAgentModal.toggle}>
       <Formik
@@ -324,16 +304,7 @@ export default function ShareAgentModal({
         onSubmit={handleSubmit}
         enableReinitialize
       >
-        <ShareAgentFormContent
-          agent={agent}
-          fullAgent={fullAgent}
-          usersData={usersData?.accepted ?? []}
-          groupsData={groupsData ?? []}
-          currentUserId={currentUser?.id}
-          comboBoxOptions={comboBoxOptions}
-          onClose={handleClose}
-          onCopyLink={handleCopyLink}
-        />
+        <ShareAgentFormContent agent={agent} />
       </Formik>
     </Modal>
   );
