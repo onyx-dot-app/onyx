@@ -17,6 +17,7 @@ import EditableTag from "@/refresh-components/buttons/EditableTag";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Separator from "@/refresh-components/Separator";
+import Divider from "@/refresh-components/Divider";
 import { Section } from "@/layouts/general-layouts";
 import { SvgChevronRight, SvgSearch, SvgX } from "@opal/icons";
 import type {
@@ -104,6 +105,15 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
 
   // Registration functions (items call on mount)
   const registerItem = useCallback((value: string, onSelect: () => void) => {
+    if (
+      process.env.NODE_ENV === "development" &&
+      itemCallbacks.current.has(value)
+    ) {
+      console.warn(
+        `[CommandMenu] Duplicate value "${value}" registered. ` +
+          `Values must be unique across all Filter, Item, and Action components.`
+      );
+    }
     itemCallbacks.current.set(value, onSelect);
   }, []);
 
@@ -439,13 +449,7 @@ function CommandMenuFilter({
 
   // When filter is applied, show as group label (non-interactive)
   if (isApplied) {
-    return (
-      <div className="px-2 py-1.5">
-        <Text secondaryBody text03>
-          {children}
-        </Text>
-      </div>
-    );
+    return <Divider showTitle text={children as string} icon={icon} />;
   }
 
   const isHighlighted = value === highlightedValue;
@@ -453,17 +457,17 @@ function CommandMenuFilter({
   // Selectable filter - uses LineItem, delegates all events to context
   return (
     <div data-command-item={value}>
-      <LineItem
+      <Divider
+        showTitle
+        text={children as string}
         icon={icon}
-        rightChildren={<SvgChevronRight className="w-4 h-4 stroke-text-02" />}
-        emphasized={isHighlighted}
-        selected={isHighlighted}
+        foldable
+        isHighlighted={isHighlighted}
         onClick={() => onItemClick(value)}
         onMouseEnter={() => onItemMouseEnter(value)}
         onMouseMove={() => onItemMouseMove(value)}
-      >
-        {children}
-      </LineItem>
+        dividerLine={false}
+      />
     </div>
   );
 }

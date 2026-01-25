@@ -55,13 +55,19 @@ export default function ChatSearchCommandMenu({
   const currentAgent = useCurrentAgent();
   const createProjectModal = useCreateModal();
 
-  // Transform and filter chat sessions
+  // Constants for preview limits
+  const PREVIEW_CHATS_LIMIT = 4;
+  const PREVIEW_PROJECTS_LIMIT = 2;
+
+  // Transform and filter chat sessions (sorted by latest first)
   const filteredChats = useMemo<FilterableChat[]>(() => {
-    const chats = chatSessions.map((session) => ({
-      id: session.id,
-      label: session.name || UNNAMED_CHAT,
-      time: session.time_updated || session.time_created,
-    }));
+    const chats = chatSessions
+      .map((session) => ({
+        id: session.id,
+        label: session.name || UNNAMED_CHAT,
+        time: session.time_updated || session.time_created,
+      }))
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
     if (!searchValue.trim()) return chats;
 
@@ -69,14 +75,16 @@ export default function ChatSearchCommandMenu({
     return chats.filter((chat) => chat.label.toLowerCase().includes(term));
   }, [chatSessions, searchValue]);
 
-  // Transform and filter projects
+  // Transform and filter projects (sorted by latest first)
   const filteredProjects = useMemo<FilterableProject[]>(() => {
-    const projectList = projects.map((project) => ({
-      id: project.id,
-      label: project.name,
-      description: project.description,
-      time: project.created_at,
-    }));
+    const projectList = projects
+      .map((project) => ({
+        id: project.id,
+        label: project.name,
+        description: project.description,
+        time: project.created_at,
+      }))
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
     if (!searchValue.trim()) return projectList;
 
@@ -87,6 +95,21 @@ export default function ChatSearchCommandMenu({
         project.description?.toLowerCase().includes(term)
     );
   }, [projects, searchValue]);
+
+  // Compute displayed items based on filter state
+  const displayedChats = useMemo(() => {
+    if (activeFilter === "all" && !searchValue.trim()) {
+      return filteredChats.slice(0, PREVIEW_CHATS_LIMIT);
+    }
+    return filteredChats;
+  }, [filteredChats, activeFilter, searchValue]);
+
+  const displayedProjects = useMemo(() => {
+    if (activeFilter === "all" && !searchValue.trim()) {
+      return filteredProjects.slice(0, PREVIEW_PROJECTS_LIMIT);
+    }
+    return filteredProjects;
+  }, [filteredProjects, activeFilter, searchValue]);
 
   // Header filters for showing active filter as a chip
   const headerFilters = useMemo(() => {
@@ -142,7 +165,7 @@ export default function ChatSearchCommandMenu({
     }
   }, []);
 
-  const hasResults = filteredChats.length > 0 || filteredProjects.length > 0;
+  const hasResults = displayedChats.length > 0 || displayedProjects.length > 0;
   const hasSearchValue = searchValue.trim().length > 0;
 
   return (
@@ -178,15 +201,17 @@ export default function ChatSearchCommandMenu({
 
             {/* Recent Sessions section - show if filter is 'all' or 'chats' */}
             {(activeFilter === "all" || activeFilter === "chats") &&
-              filteredChats.length > 0 && (
+              displayedChats.length > 0 && (
                 <>
-                  <CommandMenu.Filter
-                    value="recent-sessions"
-                    onSelect={() => setActiveFilter("chats")}
-                  >
-                    Recent Sessions
-                  </CommandMenu.Filter>
-                  {filteredChats.map((chat) => (
+                  {activeFilter === "all" && (
+                    <CommandMenu.Filter
+                      value="recent-sessions"
+                      onSelect={() => setActiveFilter("chats")}
+                    >
+                      Recent Sessions
+                    </CommandMenu.Filter>
+                  )}
+                  {displayedChats.map((chat) => (
                     <CommandMenu.Item
                       key={chat.id}
                       value={`chat-${chat.id}`}
@@ -206,15 +231,17 @@ export default function ChatSearchCommandMenu({
 
             {/* Projects section - show if filter is 'all' or 'projects' */}
             {(activeFilter === "all" || activeFilter === "projects") &&
-              filteredProjects.length > 0 && (
+              displayedProjects.length > 0 && (
                 <>
-                  <CommandMenu.Filter
-                    value="projects"
-                    onSelect={() => setActiveFilter("projects")}
-                  >
-                    Projects
-                  </CommandMenu.Filter>
-                  {filteredProjects.map((project) => (
+                  {activeFilter === "all" && (
+                    <CommandMenu.Filter
+                      value="projects"
+                      onSelect={() => setActiveFilter("projects")}
+                    >
+                      Projects
+                    </CommandMenu.Filter>
+                  )}
+                  {displayedProjects.map((project) => (
                     <CommandMenu.Item
                       key={project.id}
                       value={`project-${project.id}`}

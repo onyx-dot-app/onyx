@@ -117,6 +117,11 @@ export interface CommandMenuListProps {
  * Props for CommandMenu filter (selectable or as applied group label)
  */
 export interface CommandMenuFilterProps {
+  /**
+   * Unique identifier for this item within the CommandMenu.
+   * Must be unique across all Filter, Item, and Action components.
+   * Used for keyboard navigation, selection callbacks, and highlight state.
+   */
   value: string;
   children: string;
   icon?: React.FunctionComponent<IconProps>;
@@ -128,6 +133,11 @@ export interface CommandMenuFilterProps {
  * Props for CommandMenu item
  */
 export interface CommandMenuItemProps {
+  /**
+   * Unique identifier for this item within the CommandMenu.
+   * Must be unique across all Filter, Item, and Action components.
+   * Used for keyboard navigation, selection callbacks, and highlight state.
+   */
   value: string;
   icon?: React.FunctionComponent<IconProps>;
   rightContent?: React.ReactNode; // For timestamps, badges, etc.
@@ -139,6 +149,11 @@ export interface CommandMenuItemProps {
  * Props for CommandMenu action (quick actions with keyboard shortcuts)
  */
 export interface CommandMenuActionProps {
+  /**
+   * Unique identifier for this item within the CommandMenu.
+   * Must be unique across all Filter, Item, and Action components.
+   * Used for keyboard navigation, selection callbacks, and highlight state.
+   */
   value: string;
   icon?: React.FunctionComponent<IconProps>;
   shortcut?: string; // Keyboard shortcut like "⌘N", "⌘P"
