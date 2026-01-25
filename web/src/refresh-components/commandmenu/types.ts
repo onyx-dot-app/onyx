@@ -140,7 +140,9 @@ export interface CommandMenuItemProps {
    */
   value: string;
   icon?: React.FunctionComponent<IconProps>;
-  rightContent?: React.ReactNode; // For timestamps, badges, etc.
+  rightContent?:
+    | React.ReactNode
+    | ((params: { isHighlighted: boolean }) => React.ReactNode); // For timestamps, badges, etc.
   onSelect?: (value: string) => void;
   children: string;
 }

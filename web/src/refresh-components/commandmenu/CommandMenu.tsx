@@ -554,12 +554,18 @@ function CommandMenuItem({
 
   const isHighlighted = value === highlightedValue;
 
+  // Resolve rightContent - supports both static ReactNode and render function
+  const resolvedRightContent =
+    typeof rightContent === "function"
+      ? rightContent({ isHighlighted })
+      : rightContent;
+
   return (
     <div data-command-item={value}>
       <LineItem
         muted
         icon={icon}
-        rightChildren={rightContent}
+        rightChildren={resolvedRightContent}
         emphasized={isHighlighted}
         selected={isHighlighted}
         onClick={() => onItemClick(value)}

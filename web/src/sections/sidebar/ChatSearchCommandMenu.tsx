@@ -19,7 +19,6 @@ import {
   SvgEditBig,
   SvgFolder,
   SvgFolderPlus,
-  SvgFileText,
   SvgBubbleText,
 } from "@opal/icons";
 
@@ -211,10 +210,16 @@ export default function ChatSearchCommandMenu({
                       key={chat.id}
                       value={`chat-${chat.id}`}
                       icon={SvgBubbleText}
-                      rightContent={
-                        <Text secondaryBody text03>
-                          {formatDisplayTime(chat.time)}
-                        </Text>
+                      rightContent={({ isHighlighted }) =>
+                        isHighlighted ? (
+                          <Text figureKeystroke text02>
+                            ↵
+                          </Text>
+                        ) : (
+                          <Text secondaryBody text03>
+                            {formatDisplayTime(chat.time)}
+                          </Text>
+                        )
                       }
                       onSelect={() => handleChatSelect(chat.id)}
                     >
@@ -252,10 +257,16 @@ export default function ChatSearchCommandMenu({
                       key={project.id}
                       value={`project-${project.id}`}
                       icon={SvgFolder}
-                      rightContent={
-                        <Text secondaryBody text03>
-                          {formatDisplayTime(project.time)}
-                        </Text>
+                      rightContent={({ isHighlighted }) =>
+                        isHighlighted ? (
+                          <Text figureKeystroke text02>
+                            ↵
+                          </Text>
+                        ) : (
+                          <Text secondaryBody text03>
+                            {formatDisplayTime(project.time)}
+                          </Text>
+                        )
                       }
                       onSelect={() => handleProjectSelect(project.id)}
                     >
