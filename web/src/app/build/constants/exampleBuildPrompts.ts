@@ -9,6 +9,8 @@ export interface BuildPrompt {
   summary: string;
   /** Full prompt text inserted into the input bar */
   fullText: string;
+  /** Optional image URL/path for visual display */
+  image?: string;
 }
 
 export type UserPersona = "default" | "engineering" | "sales" | "product";
@@ -24,18 +26,21 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
       summary: "Analyze team productivity by month across my company",
       fullText:
         "Create a dashboard with the number of closed tickets per month. Split by priority and compare teams.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "default-2",
       summary: "Visualize my team's work with interactive drill-downs",
       fullText:
         "What did my team work on this month? Create a dashboard that 1) shows the number of actions per activity, 2) shows the individual work items when I select something in the dashboard.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "default-3",
       summary: "Connect my backlog to recent customer conversations",
       fullText:
         "For each of my open Linear tickets, find at least 2 customers that have discussed related issues. Present the results in a dashboard table.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "default-4",
@@ -43,6 +48,7 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
         "Surface the top pain points from this week's customer success calls",
       fullText:
         "Based on the customer calls this week, what are the 5 most important challenges? Create a table in a dashboard that shows the challenge and the customers that complained about it.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "default-5",

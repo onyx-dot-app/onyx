@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useCallback, useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/build/contexts/BuildContext";
 import {
   useSession,
@@ -191,6 +191,7 @@ interface BuildSidebarInnerProps {
 const MemoizedBuildSidebarInner = memo(
   ({ folded, onFoldClick }: BuildSidebarInnerProps) => {
     const router = useRouter();
+    const pathname = usePathname();
     const session = useSession();
     const sessionHistory = useSessionHistory();
     // Access actions directly like chat does - these don't cause re-renders
@@ -251,11 +252,12 @@ const MemoizedBuildSidebarInner = memo(
           leftIcon={SvgSettings}
           folded={folded}
           href="/build/v1/configure"
+          transient={pathname.startsWith("/build/v1/configure")}
         >
           Configure
         </SidebarTab>
       ),
-      [folded]
+      [folded, pathname]
     );
 
     const backToChatButton = useMemo(
@@ -297,7 +299,10 @@ const MemoizedBuildSidebarInner = memo(
                   <BuildSessionButton
                     key={historyItem.id}
                     historyItem={historyItem}
-                    isActive={session?.id === historyItem.id}
+                    isActive={
+                      !pathname.startsWith("/build/v1/configure") &&
+                      session?.id === historyItem.id
+                    }
                     onLoad={() => handleLoadSession(historyItem.id)}
                     onRename={(newName) =>
                       renameBuildSession(historyItem.id, newName)
