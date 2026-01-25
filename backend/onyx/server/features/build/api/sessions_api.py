@@ -74,7 +74,11 @@ def create_session(
     session_manager = SessionManager(db_session)
 
     try:
-        build_session = session_manager.get_or_create_empty_session(user.id)
+        build_session = session_manager.get_or_create_empty_session(
+            user.id,
+            user_work_area=request.user_work_area,
+            user_level=request.user_level,
+        )
         db_session.commit()
     except ValueError as e:
         # Max concurrent sandboxes reached or other validation error

@@ -313,6 +313,8 @@ class SessionManager:
         self,
         user_id: UUID,
         name: str | None = None,
+        user_work_area: str | None = None,
+        user_level: str | None = None,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
@@ -324,6 +326,8 @@ class SessionManager:
         Args:
             user_id: The user ID
             name: Optional session name
+            user_work_area: User's work area for demo persona (e.g., "engineering")
+            user_level: User's level for demo persona (e.g., "ic", "manager")
 
         Returns:
             The created BuildSession model
@@ -454,6 +458,8 @@ class SessionManager:
             snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
             user_role=user_role,
+            user_work_area=user_work_area,
+            user_level=user_level,
         )
         sandbox_id = sandbox.id
         logger.info(
@@ -462,7 +468,12 @@ class SessionManager:
 
         return build_session
 
-    def get_or_create_empty_session(self, user_id: UUID) -> BuildSession:
+    def get_or_create_empty_session(
+        self,
+        user_id: UUID,
+        user_work_area: str | None = None,
+        user_level: str | None = None,
+    ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
         Used for pre-provisioning sandboxes when user lands on /build/v1.
@@ -470,6 +481,8 @@ class SessionManager:
 
         Args:
             user_id: The user ID
+            user_work_area: User's work area for demo persona (e.g., "engineering")
+            user_level: User's level for demo persona (e.g., "ic", "manager")
 
         Returns:
             BuildSession (existing empty or newly created)
@@ -484,7 +497,11 @@ class SessionManager:
                 f"Returning existing empty session {existing.id} for user {user_id}"
             )
             return existing
-        return self.create_session__no_commit(user_id=user_id)
+        return self.create_session__no_commit(
+            user_id=user_id,
+            user_work_area=user_work_area,
+            user_level=user_level,
+        )
 
     def get_session(
         self,
