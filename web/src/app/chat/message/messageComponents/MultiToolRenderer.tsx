@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, JSX } from "react";
+import { useState, useMemo, useEffect, useRef, JSX } from "react";
 import {
   FiCheckCircle,
   FiChevronRight,
@@ -558,6 +558,7 @@ export default function MultiToolRenderer({
   onAllToolsDisplayed,
   isStreaming,
   expectedBranchesPerTurn,
+  hasTextMessageStarted,
 }: {
   packetGroups: { turn_index: number; tab_index: number; packets: Packet[] }[];
   chatState: FullChatState;
@@ -569,9 +570,23 @@ export default function MultiToolRenderer({
   isStreaming?: boolean;
   // Map of turn_index -> expected number of parallel branches (from TopLevelBranching packet)
   expectedBranchesPerTurn?: Map<number, number>;
+  // True when MESSAGE_START packet has arrived (specifically for text messages,
+  // not PYTHON/IMAGE tools). Used to determine when to collapse the tools header.
+  hasTextMessageStarted?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isStreamingExpanded, setIsStreamingExpanded] = useState(false);
+
+  // Track if hasTextMessageStarted has ever been true.
+  // Once true, we always show the collapsed view and never revert to streaming view.
+  // This is latched because we want the user to control expansion after the initial collapse.
+  const hasEverSeenTextMessageRef = useRef(hasTextMessageStarted ?? false);
+
+  useEffect(() => {
+    if (hasTextMessageStarted) {
+      hasEverSeenTextMessageRef.current = true;
+    }
+  }, [hasTextMessageStarted]);
 
   const toolGroups = useMemo(() => {
     return packetGroups.filter(
@@ -749,12 +764,13 @@ export default function MultiToolRenderer({
     return uniqueTabIndices.size > 1;
   };
 
-  // If still processing, show tools progressively with timing
-  // Use stopPacketSeen instead of isComplete to prevent flickering.
-  // isComplete (finalAnswerComing) toggles back and forth when message and tool
-  // packets interleave, causing the UI to flip between streaming and complete views.
-  // stopPacketSeen only transitions from false to true, providing a stable condition.
-  if (!stopPacketSeen) {
+  // If the text message hasn't started yet, show tools progressively with timing.
+  // We use hasEverSeenTextMessageRef (latched) instead of isComplete directly to prevent
+  // flickering. isComplete (finalAnswerComing) can be set by onAllToolsDisplayed or by
+  // PYTHON/IMAGE tools before the actual text message starts. hasTextMessageStarted is
+  // only set when MESSAGE_START arrives. Once true, we switch to the collapsed view
+  // permanently and let the user control expansion.
+  if (!hasEverSeenTextMessageRef.current) {
     // Filter display items to only show those whose (turn_index, tab_index) is visible
     const itemsToDisplay = displayItems.filter((item) =>
       visibleTools.has(`${item.turn_index}-${item.tab_index}`)
