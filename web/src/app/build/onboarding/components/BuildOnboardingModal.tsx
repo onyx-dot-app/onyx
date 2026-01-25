@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SvgInfoSmall, SvgArrowRight, SvgArrowLeft } from "@opal/icons";
+import {
+  SvgInfoSmall,
+  SvgArrowRight,
+  SvgArrowLeft,
+  SvgCheckCircle,
+} from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -75,7 +80,6 @@ const PROVIDERS: ProviderConfig[] = [
       {
         name: "moonshotai/kimi-k2-thinking",
         label: "Kimi K2 Thinking",
-        recommended: true,
       },
       { name: "google/gemini-3-pro-preview", label: "Gemini 3 Pro" },
       { name: "qwen/qwen3-235b-a22b-thinking-2507", label: "Qwen3 235B" },
@@ -110,7 +114,7 @@ function SelectableButton({
         onClick={onClick}
         disabled={disabled}
         className={cn(
-          "px-6 py-3 rounded-12 border transition-colors",
+          "w-full px-6 py-3 rounded-12 border transition-colors",
           disabled && "opacity-50 cursor-not-allowed",
           selected
             ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
@@ -432,30 +436,32 @@ export default function BuildOnboardingModal({
               </div>
 
               {/* Name inputs */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Text secondaryBody text03>
-                    First name
-                  </Text>
-                  <input
-                    type="text"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Steven"
-                    className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Text secondaryBody text03>
-                    Last name
-                  </Text>
-                  <input
-                    type="text"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Alexson"
-                    className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
-                  />
+              <div className="flex justify-center">
+                <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+                  <div className="flex flex-col gap-1.5">
+                    <Text secondaryBody text03>
+                      First name
+                    </Text>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="Steven"
+                      className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Text secondaryBody text03>
+                      Last name
+                    </Text>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Alexson"
+                      className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -464,7 +470,7 @@ export default function BuildOnboardingModal({
                 <Text mainUiBody text04>
                   What do you do?
                 </Text>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-3 w-full">
                   {WORK_AREA_OPTIONS.map((option) => (
                     <SelectableButton
                       key={option.value}
@@ -486,18 +492,20 @@ export default function BuildOnboardingModal({
                 <Text mainUiBody text04>
                   Level
                 </Text>
-                <div className="flex justify-center gap-3">
-                  {LEVEL_OPTIONS.map((option) => (
-                    <SelectableButton
-                      key={option.value}
-                      selected={level === option.value}
-                      onClick={() =>
-                        setLevel(level === option.value ? "" : option.value)
-                      }
-                    >
-                      {option.label}
-                    </SelectableButton>
-                  ))}
+                <div className="flex justify-center gap-3 w-full">
+                  <div className="grid grid-cols-2 gap-3 w-2/3">
+                    {LEVEL_OPTIONS.map((option) => (
+                      <SelectableButton
+                        key={option.value}
+                        selected={level === option.value}
+                        onClick={() =>
+                          setLevel(level === option.value ? "" : option.value)
+                        }
+                      >
+                        {option.label}
+                      </SelectableButton>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -577,11 +585,22 @@ export default function BuildOnboardingModal({
                       "opacity-50 cursor-not-allowed"
                   )}
                 />
-                {connectionStatus === "error" && (
-                  <Text secondaryBody className="text-red-500">
-                    {errorMessage}
-                  </Text>
-                )}
+                {/* Message area - reserved space to prevent layout shift */}
+                <div className="min-h-[1.5rem] flex justify-center">
+                  {connectionStatus === "error" && (
+                    <Text secondaryBody className="text-red-500">
+                      {errorMessage}
+                    </Text>
+                  )}
+                  {connectionStatus === "success" && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-08 bg-status-success-00 border border-status-success-02 w-fit">
+                      <SvgCheckCircle className="w-4 h-4 stroke-status-success-05 shrink-0" />
+                      <Text secondaryBody className="text-status-success-05">
+                        Success!
+                      </Text>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

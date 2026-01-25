@@ -5,7 +5,9 @@ import useSWR from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { useLlmManager } from "@/lib/hooks";
 import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
+import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { SvgPlug, SvgSettings } from "@opal/icons";
@@ -66,6 +68,7 @@ interface SelectedConnectorState {
  */
 export default function BuildConfigPage() {
   const router = useRouter();
+  const llmManager = useLlmManager();
   const { refreshUser, user, isAdmin, isCurator } = useUser();
   const { llmProviders, refetch: refetchLlmProviders } = useLLMProviders();
   const [selectedConnector, setSelectedConnector] =
@@ -287,6 +290,24 @@ export default function BuildConfigPage() {
                   />
                 ))}
               </div>
+            </Section>
+
+            <Separator />
+
+            <Section alignItems="start" gap={0.5} height="fit">
+              <InputLayouts.Label
+                title="Advanced Options"
+                description="Configure advanced options for your build mode"
+              />
+              <Card>
+                <InputLayouts.Horizontal
+                  title="Default LLM"
+                  description="Select the language model for your build sessions"
+                  center
+                >
+                  <LLMPopover llmManager={llmManager} />
+                </InputLayouts.Horizontal>
+              </Card>
             </Section>
           </Section>
         )}
