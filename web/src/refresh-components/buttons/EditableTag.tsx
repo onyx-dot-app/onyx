@@ -51,7 +51,7 @@ export default function EditableTag({
     <div
       className={cn(
         "flex items-center gap-1 px-2 py-1 rounded-08",
-        "bg-background-tint-01 hover:bg-background-tint-02",
+        "bg-background-tint-02 hover:bg-background-tint-03",
         "transition-colors",
         onClick && "cursor-pointer"
       )}
@@ -69,8 +69,8 @@ export default function EditableTag({
           : undefined
       }
     >
-      {Icon && <Icon className="w-[0.875rem] h-[0.875rem] stroke-text-03" />}
-      <Text secondaryBody text03>
+      {Icon && <Icon className="size-3 stroke-text-03" />}
+      <Text mainUiBody text04>
         {label}
       </Text>
       {onRemove && (
@@ -80,10 +80,10 @@ export default function EditableTag({
             e.stopPropagation();
             onRemove();
           }}
-          className="ml-0.5 hover:bg-background-tint-03 rounded-04 p-0.5 transition-colors"
+          className="p-0.5 stroke-text-02 hover:stroke-text-03"
           aria-label={`Remove ${label} filter`}
         >
-          <SvgX className="w-[0.75rem] h-[0.75rem] stroke-text-02" />
+          <SvgX className="size-3 " />
         </button>
       )}
     </div>

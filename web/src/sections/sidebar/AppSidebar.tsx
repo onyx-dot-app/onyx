@@ -61,7 +61,7 @@ import {
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
-  SvgSearch,
+  SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
@@ -379,7 +379,7 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <ChatSearchCommandMenu
           trigger={
-            <SidebarTab leftIcon={SvgSearch} folded={folded}>
+            <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
               Search chats
             </SidebarTab>
           }

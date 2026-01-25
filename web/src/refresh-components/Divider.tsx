@@ -111,6 +111,7 @@ export default function Divider({
       ref={ref}
       role={foldable ? "button" : "separator"}
       tabIndex={foldable ? 0 : undefined}
+      data-selected={isHighlighted ? "true" : undefined}
       onClick={foldable ? handleClick : undefined}
       onKeyDown={
         foldable

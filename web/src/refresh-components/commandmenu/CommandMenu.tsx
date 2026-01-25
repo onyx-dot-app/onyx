@@ -169,9 +169,21 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
       switch (e.key) {
         case "ArrowDown": {
           e.preventDefault();
+          const wasKeyboardNav = isKeyboardNav;
           setIsKeyboardNav(true);
           const items = getOrderedItems();
           if (items.length === 0) return;
+
+          // If transitioning from mouse to keyboard mode, start from first item
+          if (!wasKeyboardNav) {
+            const firstItem = items[0];
+            if (firstItem !== undefined) {
+              setHighlightedValue(firstItem);
+            }
+            break;
+          }
+
+          // Continue normal keyboard navigation
           const currentIndex = highlightedValue
             ? items.indexOf(highlightedValue)
             : -1;
@@ -185,9 +197,21 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
         case "ArrowUp": {
           e.preventDefault();
+          const wasKeyboardNav = isKeyboardNav;
           setIsKeyboardNav(true);
           const items = getOrderedItems();
           if (items.length === 0) return;
+
+          // If transitioning from mouse to keyboard mode, start from first item
+          if (!wasKeyboardNav) {
+            const firstItem = items[0];
+            if (firstItem !== undefined) {
+              setHighlightedValue(firstItem);
+            }
+            break;
+          }
+
+          // Continue normal keyboard navigation
           const currentIndex = highlightedValue
             ? items.indexOf(highlightedValue)
             : 0;
@@ -217,7 +241,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
       }
     },
-    [highlightedValue, onOpenChange]
+    [highlightedValue, isKeyboardNav, onOpenChange]
   );
 
   // Scroll highlighted item into view on keyboard nav
@@ -234,10 +258,12 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         const containerRect = container.getBoundingClientRect();
         const elRect = el.getBoundingClientRect();
 
-        if (elRect.top < containerRect.top) {
-          container.scrollTop -= containerRect.top - elRect.top;
-        } else if (elRect.bottom > containerRect.bottom) {
-          container.scrollTop += elRect.bottom - containerRect.bottom;
+        const scrollMargin = 60; // Padding from container edges when scrolling
+        if (elRect.top < containerRect.top + scrollMargin) {
+          container.scrollTop -= containerRect.top + scrollMargin - elRect.top;
+        } else if (elRect.bottom > containerRect.bottom - scrollMargin) {
+          container.scrollTop +=
+            elRect.bottom - (containerRect.bottom - scrollMargin);
         }
       }
     }
@@ -296,7 +322,7 @@ const CommandMenuContent = React.forwardRef<
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
           "z-modal",
-          "bg-background-tint-00 border rounded-16 shadow-2xl",
+          "bg-background-tint-00 border rounded-16 shadow-2xl outline-none",
           "flex flex-col overflow-hidden",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
@@ -401,6 +427,7 @@ function CommandMenuHeader({
  * Uses ScrollIndicatorDiv for automatic scroll shadows.
  */
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
+  const { isKeyboardNav } = useCommandMenuContext();
   const childCount = React.Children.count(children);
 
   if (childCount === 0 && emptyMessage) {
@@ -418,6 +445,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
       className="p-1 gap-0 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
       data-command-menu-list
+      data-keyboard-nav={isKeyboardNav ? "true" : undefined}
       variant="shadow"
     >
       {children}
