@@ -40,6 +40,8 @@ import {
   SvgArrowRight,
   SvgImage,
   SvgExternalLink,
+  SvgMinus,
+  SvgMaximize2,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
@@ -127,10 +129,16 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   };
 
+  const handleMaximize = () => {
+    setIsMaximized((prev) => !prev);
+  };
+
   // Track when panel animation completes (defer fetch until fully open)
   const [isFullyOpen, setIsFullyOpen] = useState(false);
   // Track when content should unmount (delayed on close for animation)
   const [shouldRenderContent, setShouldRenderContent] = useState(false);
+  // Track if panel is maximized
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -260,7 +268,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute top-4 right-4 bottom-4 w-[calc(50%-2rem)] flex flex-col border rounded-12 border-border-01 bg-background-neutral-00 overflow-hidden transition-all duration-300 ease-in-out",
+        "absolute flex flex-col border rounded-12 border-border-01 bg-background-neutral-00 overflow-hidden transition-all duration-300 ease-in-out",
+        isMaximized
+          ? "top-4 right-16 bottom-4 w-[calc(100%-8rem)]"
+          : "top-4 right-4 bottom-4 w-[calc(50%-2rem)]",
         isOpen
           ? "opacity-100 translate-x-0"
           : "opacity-0 translate-x-full pointer-events-none"
@@ -273,13 +284,44 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       <div className="flex flex-col w-full">
         {/* Tabs row */}
         <div className="flex items-end w-full pt-1.5 bg-background-tint-03">
-          {/* Close button - sticky on left */}
-          <div className="flex items-end pl-4 pr-4 flex-shrink-0">
+          {/* macOS-style window controls - sticky on left */}
+          <div className="group flex items-center gap-2.5 pl-4 pr-2 py-3 flex-shrink-0">
             <button
               onClick={onClose}
-              className="w-2.5 h-2.5 rounded-full bg-red-500 hover:bg-red-400 mb-3.5 transition-colors"
+              className="relative w-3.5 h-3.5 rounded-full bg-[#ff5f57] hover:bg-[#ff3b30] transition-colors flex-shrink-0 flex items-center justify-center"
+              aria-label="No action"
+            >
+              <SvgX
+                size={12}
+                strokeWidth={4}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ stroke: "#8a2e2a" }}
+              />
+            </button>
+            <button
+              onClick={onClose}
+              className="relative w-3.5 h-3.5 rounded-full bg-[#ffbd2e] hover:bg-[#ffa000] transition-colors flex-shrink-0 flex items-center justify-center"
               aria-label="Close panel"
-            />
+            >
+              <SvgMinus
+                size={12}
+                strokeWidth={3}
+                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ stroke: "#8a6618" }}
+              />
+            </button>
+            <button
+              onClick={handleMaximize}
+              className="relative w-3.5 h-3.5 rounded-full bg-[#28ca42] hover:bg-[#1fb832] transition-colors flex-shrink-0 flex items-center justify-center"
+              aria-label="Maximize panel"
+            >
+              <SvgMaximize2
+                size={8}
+                strokeWidth={2.5}
+                className="opacity-0 group-hover:opacity-90 rotate-90 transition-opacity"
+                style={{ stroke: "#155c24" }}
+              />
+            </button>
           </div>
           {/* Scrollable tabs container */}
           <div className="flex items-end gap-1.5 flex-1 pl-3 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
