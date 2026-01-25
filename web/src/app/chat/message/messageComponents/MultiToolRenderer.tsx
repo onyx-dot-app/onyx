@@ -750,7 +750,11 @@ export default function MultiToolRenderer({
   };
 
   // If still processing, show tools progressively with timing
-  if (!isComplete) {
+  // Use stopPacketSeen instead of isComplete to prevent flickering.
+  // isComplete (finalAnswerComing) toggles back and forth when message and tool
+  // packets interleave, causing the UI to flip between streaming and complete views.
+  // stopPacketSeen only transitions from false to true, providing a stable condition.
+  if (!stopPacketSeen) {
     // Filter display items to only show those whose (turn_index, tab_index) is visible
     const itemsToDisplay = displayItems.filter((item) =>
       visibleTools.has(`${item.turn_index}-${item.tab_index}`)
