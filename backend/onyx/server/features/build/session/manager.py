@@ -46,11 +46,12 @@ from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import KUBERNETES_NEXTJS_PORT
+from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
+from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.configs import USER_UPLOADS_DIRECTORY
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -73,6 +74,10 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class UploadLimitExceededError(ValueError):
+    """Raised when file upload limits are exceeded."""
 
 
 class BuildStreamingState:
@@ -1374,23 +1379,22 @@ class SessionManager:
 
         return DirectoryListing(path=path, entries=entries)
 
-    def upload_file(
+    def get_upload_stats(
         self,
         session_id: UUID,
         user_id: UUID,
-        filename: str,
-        content: bytes,
-    ) -> tuple[str, int]:
-        """Upload a file to the session's workspace.
+    ) -> tuple[int, int]:
+        """Get current file count and total size for a session's uploads.
+
+        Delegates to SandboxManager for the actual filesystem query (supports both
+        local filesystem and Kubernetes pods).
 
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            filename: Sanitized filename (validation done at API layer)
-            content: File content as bytes
 
         Returns:
-            Tuple of (relative_path, size_bytes) where the file was saved
+            Tuple of (file_count, total_size_bytes)
 
         Raises:
             ValueError: If session not found
@@ -1404,44 +1408,69 @@ class SessionManager:
         if sandbox is None:
             raise ValueError("Sandbox not found")
 
-        # Filename is already sanitized by API layer
-        safe_filename = filename
-
-        # Get upload directory path (in session workspace)
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        # Delegate to sandbox manager (handles both local and K8s)
+        return self._sandbox_manager.get_upload_stats(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
         )
-        uploads_path = session_path / USER_UPLOADS_DIRECTORY
 
-        # Ensure uploads directory exists
-        uploads_path.mkdir(parents=True, exist_ok=True)
+    def upload_file(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        filename: str,
+        content: bytes,
+    ) -> tuple[str, int]:
+        """Upload a file to the session's workspace.
 
-        # Handle filename collisions by appending a number
-        target_path = uploads_path / safe_filename
-        if target_path.exists():
-            stem = target_path.stem
-            suffix = target_path.suffix
-            counter = 1
-            while target_path.exists():
-                target_path = uploads_path / f"{stem}_{counter}{suffix}"
-                counter += 1
-            safe_filename = target_path.name
+        Delegates to SandboxManager for the actual file write (supports both
+        local filesystem and Kubernetes pods).
 
-        # Write file with read-only permissions (no execute)
-        target_path.write_bytes(content)
-        # Explicitly remove execute permissions: rw-r--r-- (644)
-        target_path.chmod(0o644)
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            filename: Sanitized filename (validation done at API layer)
+            content: File content as bytes
 
-        # Return relative path from session root
-        relative_path = f"{USER_UPLOADS_DIRECTORY}/{safe_filename}"
+        Returns:
+            Tuple of (relative_path, size_bytes) where the file was saved
+
+        Raises:
+            ValueError: If session not found or upload limits exceeded
+        """
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            raise ValueError("Session not found")
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            raise ValueError("Sandbox not found")
+
+        # Check upload limits
+        file_count, total_size = self.get_upload_stats(session_id, user_id)
+
+        if file_count >= MAX_UPLOAD_FILES_PER_SESSION:
+            raise UploadLimitExceededError(
+                f"Maximum number of files ({MAX_UPLOAD_FILES_PER_SESSION}) reached"
+            )
+
+        if total_size + len(content) > MAX_TOTAL_UPLOAD_SIZE_BYTES:
+            max_mb = MAX_TOTAL_UPLOAD_SIZE_BYTES // (1024 * 1024)
+            raise UploadLimitExceededError(
+                f"Total upload size limit ({max_mb}MB) exceeded"
+            )
+
+        # Delegate to sandbox manager (handles both local and K8s)
+        relative_path = self._sandbox_manager.upload_file(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            filename=filename,
+            content=content,
+        )
 
         # Update heartbeat - file upload is user activity that keeps sandbox alive
         update_sandbox_heartbeat(self._db_session, sandbox.id)
-
-        logger.info(
-            f"Uploaded file to session {session_id}: {relative_path} "
-            f"({len(content)} bytes)"
-        )
 
         return relative_path, len(content)
 
@@ -1453,10 +1482,13 @@ class SessionManager:
     ) -> bool:
         """Delete a file from the session's workspace.
 
+        Delegates to SandboxManager for the actual file delete (supports both
+        local filesystem and Kubernetes pods).
+
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            path: Relative path to the file (e.g., "user_uploaded_files/doc.pdf")
+            path: Relative path to the file (e.g., "attachments/doc.pdf")
 
         Returns:
             True if file was deleted, False if not found
@@ -1473,32 +1505,19 @@ class SessionManager:
         if sandbox is None:
             raise ValueError("Sandbox not found")
 
-        # Use session-specific path
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        # Delegate to sandbox manager (handles both local and K8s)
+        deleted = self._sandbox_manager.delete_file(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            path=path,
         )
-        file_path = session_path / path
 
-        # Security check: ensure path doesn't escape session workspace
-        try:
-            file_path = file_path.resolve()
-            session_path_resolved = session_path.resolve()
-            if not str(file_path).startswith(str(session_path_resolved)):
-                raise ValueError("Access denied - path traversal")
-        except ValueError:
-            raise
+        if deleted:
+            # SandboxManager already logs the deletion details
+            # Update heartbeat - file deletion is user activity that keeps sandbox alive
+            update_sandbox_heartbeat(self._db_session, sandbox.id)
 
-        if not file_path.exists():
-            return False
-
-        if file_path.is_dir():
-            raise ValueError("Cannot delete directory")
-
-        file_path.unlink()
-
-        logger.info(f"Deleted file from session {session_id}: {path}")
-
-        return True
+        return deleted
 
     # =========================================================================
     # Sandbox Management Operations

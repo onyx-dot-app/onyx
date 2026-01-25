@@ -20,6 +20,7 @@ import {
   SvgX,
   SvgPaperclip,
   SvgOrganization,
+  SvgAlertCircle,
 } from "@opal/icons";
 
 const MAX_INPUT_HEIGHT = 200;
@@ -41,6 +42,8 @@ export interface InputBarProps {
   placeholder?: string;
   /** Session ID for immediate file uploads. If provided, files upload immediately when attached. */
   sessionId?: string;
+  /** Pre-provisioned session ID for file uploads before a session is active. */
+  preProvisionedSessionId?: string | null;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
 }
@@ -57,23 +60,34 @@ function BuildFileCard({
 }) {
   const isImage = isImageFile(file.name);
   const isUploading = file.status === UploadFileStatus.UPLOADING;
+  const isFailed = file.status === UploadFileStatus.FAILED;
 
-  return (
+  const cardContent = (
     <div
       className={cn(
         "flex items-center gap-1.5 px-2 py-1 rounded-08",
-        "bg-background-neutral-01 border border-border-01",
-        "text-sm text-text-04"
+        "bg-background-neutral-01 border",
+        "text-sm text-text-04",
+        isFailed ? "border-status-error-02" : "border-border-01"
       )}
     >
       {isUploading ? (
         <SvgLoader className="h-4 w-4 animate-spin text-text-03" />
+      ) : isFailed ? (
+        <SvgAlertCircle className="h-4 w-4 text-status-error-02" />
       ) : isImage ? (
         <SvgImage className="h-4 w-4 text-text-03" />
       ) : (
         <SvgFileText className="h-4 w-4 text-text-03" />
       )}
-      <span className="max-w-[120px] truncate">{file.name}</span>
+      <span
+        className={cn(
+          "max-w-[120px] truncate",
+          isFailed && "text-status-error-02"
+        )}
+      >
+        {file.name}
+      </span>
       <button
         onClick={() => onRemove(file.id)}
         className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded"
@@ -82,6 +96,17 @@ function BuildFileCard({
       </button>
     </div>
   );
+
+  // Wrap in tooltip if there's an error
+  if (isFailed && file.error) {
+    return (
+      <SimpleTooltip tooltip={file.error} side="top">
+        {cardContent}
+      </SimpleTooltip>
+    );
+  }
+
+  return cardContent;
 }
 
 const InputBar = React.memo(
@@ -93,6 +118,7 @@ const InputBar = React.memo(
         disabled = false,
         placeholder = "Describe your task...",
         sessionId,
+        preProvisionedSessionId,
         sandboxInitializing = false,
       },
       ref
@@ -100,6 +126,10 @@ const InputBar = React.memo(
       const router = useRouter();
       const demoDataEnabled = useDemoDataEnabled();
       const [message, setMessage] = useState("");
+
+      // Use active session ID, falling back to pre-provisioned session ID
+      const effectiveSessionId =
+        sessionId ?? preProvisionedSessionId ?? undefined;
       const textAreaRef = useRef<HTMLTextAreaElement>(null);
       const containerRef = useRef<HTMLDivElement>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,11 +185,11 @@ const InputBar = React.memo(
         async (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
-          // Pass sessionId so files upload immediately if session exists
-          uploadFiles(Array.from(files), sessionId);
+          // Pass effectiveSessionId so files upload immediately if session exists
+          uploadFiles(Array.from(files), effectiveSessionId);
           e.target.value = "";
         },
-        [uploadFiles, sessionId]
+        [uploadFiles, effectiveSessionId]
       );
 
       const handlePaste = useCallback(
@@ -176,12 +206,12 @@ const InputBar = React.memo(
             }
             if (pastedFiles.length > 0) {
               event.preventDefault();
-              // Pass sessionId so files upload immediately if session exists
-              uploadFiles(pastedFiles, sessionId);
+              // Pass effectiveSessionId so files upload immediately if session exists
+              uploadFiles(pastedFiles, effectiveSessionId);
             }
           }
         },
-        [uploadFiles, sessionId]
+        [uploadFiles, effectiveSessionId]
       );
 
       const handleInputChange = useCallback(
@@ -262,7 +292,7 @@ const InputBar = React.memo(
                 <BuildFileCard
                   key={file.id}
                   file={file}
-                  onRemove={(id) => removeFile(id, sessionId)}
+                  onRemove={(id) => removeFile(id, effectiveSessionId)}
                 />
               ))}
             </div>

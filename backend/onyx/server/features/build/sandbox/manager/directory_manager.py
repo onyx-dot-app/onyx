@@ -50,7 +50,7 @@ class DirectoryManager:
             │   ├── files/             # Symlink to sandbox-level files/ (SHARED)
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
-            │   └── user_uploaded_files/
+            │   └── attachments/
             └── $session_id_2/
                 └── ...
     """
@@ -114,7 +114,7 @@ class DirectoryManager:
         ├── .venv/                      # Python virtual environment
         ├── AGENTS.md                   # Agent instructions
         ├── opencode.json               # LLM config (set up separately)
-        ├── user_uploaded_files/        # User-uploaded files`
+        ├── attachments/                # User-uploaded files
         └── .opencode/
             └── skills/                 # Agent skills
 
@@ -476,10 +476,10 @@ class DirectoryManager:
         session_path = sandbox_path / "sessions" / session_id
         return session_path.exists() and session_path.is_dir()
 
-    def setup_user_uploads_directory(
+    def setup_attachments_directory(
         self, sandbox_path: Path, session_id: str | None = None
     ) -> Path:
-        """Create user uploads directory at user_uploaded_files.
+        """Create attachments directory for user-uploaded files.
 
         This directory is used to store files uploaded by the user
         through the chat interface.
@@ -489,29 +489,27 @@ class DirectoryManager:
             session_id: Optional session ID for session-specific uploads
 
         Returns:
-            Path to the user uploads directory
+            Path to the attachments directory
         """
         if session_id:
-            uploads_path = (
-                sandbox_path / "sessions" / session_id / "user_uploaded_files"
-            )
+            attachments_path = sandbox_path / "sessions" / session_id / "attachments"
         else:
-            uploads_path = sandbox_path / "user_uploaded_files"
-        uploads_path.mkdir(parents=True, exist_ok=True)
-        return uploads_path
+            attachments_path = sandbox_path / "attachments"
+        attachments_path.mkdir(parents=True, exist_ok=True)
+        return attachments_path
 
-    def get_user_uploads_path(
+    def get_attachments_path(
         self, sandbox_path: Path, session_id: str | None = None
     ) -> Path:
-        """Return path to user uploads directory.
+        """Return path to attachments directory.
 
         Args:
             sandbox_path: Path to the sandbox directory
             session_id: Optional session ID for session-specific uploads
 
         Returns:
-            Path to the user_uploaded_files directory
+            Path to the attachments directory
         """
         if session_id:
-            return sandbox_path / "sessions" / session_id / "user_uploaded_files"
-        return sandbox_path / "user_uploaded_files"
+            return sandbox_path / "sessions" / session_id / "attachments"
+        return sandbox_path / "attachments"

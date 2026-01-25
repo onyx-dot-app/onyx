@@ -320,7 +320,7 @@ class TestListDirectory:
         result = sandbox_manager.list_directory(sandbox.id, session_id, "/")
         print(result)
 
-        # .agent, .venv, AGENTS.md, opencode.json, files, outputs, user_uploaded_files + 2 created files
+        # .agent, .venv, AGENTS.md, opencode.json, files, outputs, attachments + 2 created files
         assert len(result) == 9
         assert all(isinstance(e, FilesystemEntry) for e in result)
 
@@ -448,3 +448,158 @@ class TestSendMessage:
         # Last event should be PromptResponse
         last_event = events[-1]
         assert isinstance(last_event, PromptResponse)
+
+
+class TestUploadFile:
+    """Tests for SandboxManager.upload_file()."""
+
+    def test_upload_file_creates_file(
+        self,
+        sandbox_manager: LocalSandboxManager,
+        db_session: Session,
+        session_workspace: tuple[Sandbox, UUID],
+        tenant_context: None,
+    ) -> None:
+        """Test that upload_file creates a file in the attachments directory."""
+        sandbox, session_id = session_workspace
+        content = b"Hello, World!"
+
+        result = sandbox_manager.upload_file(
+            sandbox.id, session_id, "test.txt", content
+        )
+
+        assert result == "attachments/test.txt"
+
+        # Verify file exists
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        file_path = (
+            sandbox_path / "sessions" / str(session_id) / "attachments" / "test.txt"
+        )
+        assert file_path.exists()
+        assert file_path.read_bytes() == content
+
+    def test_upload_file_handles_collision(
+        self,
+        sandbox_manager: LocalSandboxManager,
+        db_session: Session,
+        session_workspace: tuple[Sandbox, UUID],
+        tenant_context: None,
+    ) -> None:
+        """Test that upload_file renames files on collision."""
+        sandbox, session_id = session_workspace
+
+        # Upload first file
+        sandbox_manager.upload_file(sandbox.id, session_id, "test.txt", b"first")
+
+        # Upload second file with same name
+        result = sandbox_manager.upload_file(
+            sandbox.id, session_id, "test.txt", b"second"
+        )
+
+        assert result == "attachments/test_1.txt"
+
+
+class TestDeleteFile:
+    """Tests for SandboxManager.delete_file()."""
+
+    def test_delete_file_removes_file(
+        self,
+        sandbox_manager: LocalSandboxManager,
+        db_session: Session,
+        session_workspace: tuple[Sandbox, UUID],
+        tenant_context: None,
+    ) -> None:
+        """Test that delete_file removes a file."""
+        sandbox, session_id = session_workspace
+
+        # Upload a file first
+        sandbox_manager.upload_file(sandbox.id, session_id, "test.txt", b"content")
+
+        # Delete it
+        result = sandbox_manager.delete_file(
+            sandbox.id, session_id, "attachments/test.txt"
+        )
+
+        assert result is True
+
+        # Verify file is gone
+        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
+        file_path = (
+            sandbox_path / "sessions" / str(session_id) / "attachments" / "test.txt"
+        )
+        assert not file_path.exists()
+
+    def test_delete_file_returns_false_for_missing(
+        self,
+        sandbox_manager: LocalSandboxManager,
+        db_session: Session,
+        session_workspace: tuple[Sandbox, UUID],
+        tenant_context: None,
+    ) -> None:
+        """Test that delete_file returns False for non-existent file."""
+        sandbox, session_id = session_workspace
+
+        result = sandbox_manager.delete_file(
+            sandbox.id, session_id, "attachments/nonexistent.txt"
+        )
+
+        assert result is False
+
+    def test_delete_file_rejects_path_traversal(
+        self,
+        sandbox_manager: LocalSandboxManager,
+        db_session: Session,
+        session_workspace: tuple[Sandbox, UUID],
+        tenant_context: None,
+    ) -> None:
+        """Test that delete_file rejects path traversal attempts."""
+        sandbox, session_id = session_workspace
+
+        with pytest.raises(ValueError, match="path traversal"):
+            sandbox_manager.delete_file(sandbox.id, session_id, "../../../etc/passwd")
+
+
+class TestGetUploadStats:
+    """Tests for SandboxManager.get_upload_stats()."""
+
+    def test_get_upload_stats_empty(
+        self,
+        sandbox_manager: LocalSandboxManager,
+        db_session: Session,
+        session_workspace: tuple[Sandbox, UUID],
+        tenant_context: None,
+    ) -> None:
+        """Test get_upload_stats returns zeros for empty directory."""
+        sandbox, session_id = session_workspace
+
+        file_count, total_size = sandbox_manager.get_upload_stats(
+            sandbox.id, session_id
+        )
+
+        assert file_count == 0
+        assert total_size == 0
+
+    def test_get_upload_stats_with_files(
+        self,
+        sandbox_manager: LocalSandboxManager,
+        db_session: Session,
+        session_workspace: tuple[Sandbox, UUID],
+        tenant_context: None,
+    ) -> None:
+        """Test get_upload_stats returns correct count and size."""
+        sandbox, session_id = session_workspace
+
+        # Upload some files
+        sandbox_manager.upload_file(
+            sandbox.id, session_id, "file1.txt", b"hello"
+        )  # 5 bytes
+        sandbox_manager.upload_file(
+            sandbox.id, session_id, "file2.txt", b"world!"
+        )  # 6 bytes
+
+        file_count, total_size = sandbox_manager.get_upload_stats(
+            sandbox.id, session_id
+        )
+
+        assert file_count == 2
+        assert total_size == 11  # 5 + 6

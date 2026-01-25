@@ -16,6 +16,8 @@ interface BuildWelcomeProps {
   isRunning: boolean;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
+  /** Pre-provisioned session ID for file uploads before a session is active. */
+  preProvisionedSessionId?: string | null;
 }
 
 /**
@@ -27,6 +29,7 @@ export default function BuildWelcome({
   onSubmit,
   isRunning,
   sandboxInitializing = false,
+  preProvisionedSessionId,
 }: BuildWelcomeProps) {
   const inputBarRef = useRef<InputBarHandle>(null);
 
@@ -49,6 +52,7 @@ export default function BuildWelcome({
           isRunning={isRunning}
           placeholder="Create a React app that shows a dashboard..."
           sandboxInitializing={sandboxInitializing}
+          preProvisionedSessionId={preProvisionedSessionId}
         />
         <SuggestedPrompts onPromptClick={handlePromptClick} />
       </div>

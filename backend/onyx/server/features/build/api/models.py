@@ -225,7 +225,7 @@ class UploadResponse(BaseModel):
     """Response after successful file upload."""
 
     filename: str  # Sanitized filename
-    path: str  # Relative path in sandbox (e.g., "user_uploaded_files/doc.pdf")
+    path: str  # Relative path in sandbox (e.g., "attachments/doc.pdf")
     size_bytes: int  # File size in bytes
 
 

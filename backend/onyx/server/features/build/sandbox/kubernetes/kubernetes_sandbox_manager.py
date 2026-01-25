@@ -34,8 +34,11 @@ All database operations should be handled by the caller (SessionManager, Celery 
 Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
+import io
 import json
 import os
+import re
+import tarfile
 import threading
 import time
 from collections.abc import Generator
@@ -820,7 +823,7 @@ set -e
 # Create session directory structure
 echo "Creating session directory: {session_path}"
 mkdir -p {session_path}/outputs
-mkdir -p {session_path}/user_uploaded_files
+mkdir -p {session_path}/attachments
 
 # Setup outputs
 {outputs_setup}
@@ -1242,3 +1245,265 @@ echo "Session cleanup complete"
             Internal cluster URL for the Next.js server
         """
         return self._get_nextjs_url(str(sandbox_id))
+
+    def upload_file(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        filename: str,
+        content: bytes,
+    ) -> str:
+        """Upload a file to the session's attachments directory.
+
+        Uses tar streaming via stdin for efficient binary transfer.
+        Handles filename collisions atomically within the shell script.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            filename: Sanitized filename
+            content: File content as bytes
+
+        Returns:
+            Relative path where file was saved (e.g., "attachments/doc.pdf")
+
+        Raises:
+            RuntimeError: If upload fails
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        target_dir = f"/workspace/sessions/{session_id}/attachments"
+
+        # Create tar archive in memory
+        tar_buffer = io.BytesIO()
+        with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+            tarinfo = tarfile.TarInfo(name=filename)
+            tarinfo.size = len(content)
+            tar.addfile(tarinfo, io.BytesIO(content))
+        tar_data = tar_buffer.getvalue()
+
+        # Shell script that:
+        # 1. Creates target directory and temp extraction directory
+        # 2. Extracts tar to temp directory
+        # 3. Moves file to target with collision handling
+        # 4. Cleans up temp directory
+        # 5. Outputs final filename
+        script = f"""
+set -e
+target_dir="{target_dir}"
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+mkdir -p "$target_dir"
+tar xf - -C "$tmpdir"
+
+# Find the extracted file (first file in tmpdir)
+original=$(ls -1 "$tmpdir" | head -1)
+base="$original"
+
+cd "$target_dir"
+if [ -f "$base" ]; then
+    stem="${{base%.*}}"
+    ext="${{base##*.}}"
+    [ "$stem" = "$base" ] && ext="" || ext=".$ext"
+    i=1
+    while [ -f "${{stem}}_${{i}}${{ext}}" ]; do i=$((i+1)); done
+    base="${{stem}}_${{i}}${{ext}}"
+fi
+
+mv "$tmpdir/$original" "$target_dir/$base"
+chmod 644 "$target_dir/$base"
+echo "$base"
+"""
+
+        try:
+            # Open WebSocket connection with stdin enabled
+            ws_client = k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", script],
+                stdin=True,
+                stdout=True,
+                stderr=True,
+                tty=False,
+                _preload_content=False,  # Return WSClient instead of string
+            )
+
+            # Write tar data to stdin
+            ws_client.write_stdin(tar_data)
+            ws_client.close()
+
+            # Read response
+            stdout_data = ""
+            stderr_data = ""
+            while ws_client.is_open():
+                ws_client.update(timeout=30)
+                if ws_client.peek_stdout():
+                    stdout_data += ws_client.read_stdout()
+                if ws_client.peek_stderr():
+                    stderr_data += ws_client.read_stderr()
+
+            # Get any remaining data
+            stdout_data += ws_client.read_stdout() or ""
+            stderr_data += ws_client.read_stderr() or ""
+
+            if stderr_data.strip():
+                logger.warning(f"Upload stderr: {stderr_data.strip()}")
+
+            # Last line of output is the final filename
+            final_filename = stdout_data.strip().split("\n")[-1]
+
+            if not final_filename:
+                raise RuntimeError(
+                    f"Upload failed - no filename returned. stderr: {stderr_data}"
+                )
+
+            logger.info(
+                f"Uploaded file to session {session_id}: attachments/{final_filename} "
+                f"({len(content)} bytes via tar)"
+            )
+
+            return f"attachments/{final_filename}"
+
+        except ApiException as e:
+            raise RuntimeError(f"Failed to upload file: {e}") from e
+
+    def delete_file(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        path: str,
+    ) -> bool:
+        """Delete a file from the session's workspace.
+
+        Uses kubectl exec to delete the file from the pod.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            path: Relative path to the file (e.g., "attachments/doc.pdf")
+
+        Returns:
+            True if file was deleted, False if not found
+
+        Raises:
+            ValueError: If path traversal attempted or invalid characters
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        # Security: robust path sanitization
+        # Reject paths with traversal patterns, URL-encoded characters, or null bytes
+        if re.search(r"\.\.", path) or "%" in path or "\x00" in path:
+            raise ValueError("Invalid path: potential path traversal detected")
+
+        # Reject paths with shell metacharacters that could be exploited
+        if re.search(r'[;&|`$(){}[\]<>\'"\n\r\\]', path):
+            raise ValueError("Invalid path: contains disallowed characters")
+
+        clean_path = path.lstrip("/")
+
+        # Verify path only contains safe characters (alphanumeric, dash, underscore, dot, forward slash)
+        if not re.match(r"^[a-zA-Z0-9_\-./]+$", clean_path):
+            raise ValueError("Invalid path: contains disallowed characters")
+
+        target_path = f"/workspace/sessions/{session_id}/{clean_path}"
+
+        # Use exec to delete file
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f'[ -f "{target_path}" ] && rm "{target_path}" && echo "DELETED" || echo "NOT_FOUND"',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stdin=False,
+                stdout=True,
+                stderr=True,
+                tty=False,
+            )
+
+            deleted = "DELETED" in resp
+            if deleted:
+                logger.info(f"Deleted file from session {session_id}: {path}")
+            else:
+                logger.debug(
+                    f"File not found for deletion in session {session_id}: {path}"
+                )
+
+            return deleted
+
+        except ApiException as e:
+            raise RuntimeError(f"Failed to delete file: {e}") from e
+
+    def get_upload_stats(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> tuple[int, int]:
+        """Get current file count and total size for a session's attachments.
+
+        Uses kubectl exec to query the pod's attachments directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+
+        Returns:
+            Tuple of (file_count, total_size_bytes)
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        target_dir = f"/workspace/sessions/{session_id}/attachments"
+
+        # Get file count and total size in one command
+        # Uses find to list files, wc -l for count, and du for size
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f"""
+if [ -d "{target_dir}" ]; then
+    count=$(find "{target_dir}" -maxdepth 1 -type f 2>/dev/null | wc -l)
+    size=$(du -sb "{target_dir}" 2>/dev/null | cut -f1)
+    echo "$count $size"
+else
+    echo "0 0"
+fi
+""",
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stdin=False,
+                stdout=True,
+                stderr=True,
+                tty=False,
+            )
+
+            # Parse response: "count size"
+            parts = resp.strip().split()
+            if len(parts) >= 2:
+                try:
+                    file_count = int(parts[0])
+                    # du includes directory overhead, but for limits this is fine
+                    total_size = int(parts[1])
+                    return file_count, total_size
+                except ValueError:
+                    logger.warning(f"Failed to parse upload stats: {resp}")
+                    return 0, 0
+
+            return 0, 0
+
+        except ApiException as e:
+            logger.warning(f"Failed to get upload stats: {e}")
+            return 0, 0

@@ -24,6 +24,7 @@ from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
 from onyx.utils.logger import setup_logger
@@ -367,7 +368,7 @@ async def upload_file_endpoint(
 ) -> UploadResponse:
     """Upload a file to the session's sandbox.
 
-    The file will be placed in the sandbox's user_uploaded_files directory.
+    The file will be placed in the sandbox's attachments directory.
     """
     user_id: UUID = user.id
     session_manager = SessionManager(db_session)
@@ -393,6 +394,9 @@ async def upload_file_endpoint(
             filename=safe_filename,
             content=content,
         )
+    except UploadLimitExceededError as e:
+        # Return 429 for limit exceeded errors
+        raise HTTPException(status_code=429, detail=str(e))
     except ValueError as e:
         error_message = str(e)
         if "not found" in error_message.lower():
@@ -417,7 +421,7 @@ def delete_file_endpoint(
 
     Args:
         session_id: The session ID
-        path: Relative path to the file (e.g., "user_uploaded_files/doc.pdf")
+        path: Relative path to the file (e.g., "attachments/doc.pdf")
     """
     user_id: UUID = user.id
     session_manager = SessionManager(db_session)

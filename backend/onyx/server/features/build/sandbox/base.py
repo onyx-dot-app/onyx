@@ -59,7 +59,7 @@ class SandboxManager(ABC):
             │   ├── skills/            # Opencode skills
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
-            │   └── user_uploaded_files/
+            │   └── attachments/
             └── $session_id_2/
                 └── ...
 
@@ -134,7 +134,7 @@ class SandboxManager(ABC):
         - sessions/$session_id/files/ (symlink to file_system_path)
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/opencode.json
-        - sessions/$session_id/user_uploaded_files/
+        - sessions/$session_id/attachments/
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -181,7 +181,7 @@ class SandboxManager(ABC):
         Captures only the session-specific outputs:
         sessions/$session_id/outputs/
 
-        Does NOT include: venv, skills, AGENTS.md, opencode.json, user_uploaded_files
+        Does NOT include: venv, skills, AGENTS.md, opencode.json, attachments
         Does NOT include: shared files/ directory
 
         Args:
@@ -271,6 +271,69 @@ class SandboxManager(ABC):
 
         Raises:
             ValueError: If path traversal attempted or path is not a file
+        """
+        ...
+
+    @abstractmethod
+    def upload_file(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        filename: str,
+        content: bytes,
+    ) -> str:
+        """Upload a file to the session's attachments directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            filename: Sanitized filename
+            content: File content as bytes
+
+        Returns:
+            Relative path where file was saved (e.g., "attachments/doc.pdf")
+
+        Raises:
+            RuntimeError: If upload fails
+        """
+        ...
+
+    @abstractmethod
+    def delete_file(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        path: str,
+    ) -> bool:
+        """Delete a file from the session's workspace.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            path: Relative path to the file (e.g., "attachments/doc.pdf")
+
+        Returns:
+            True if file was deleted, False if not found
+
+        Raises:
+            ValueError: If path traversal attempted
+        """
+        ...
+
+    @abstractmethod
+    def get_upload_stats(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> tuple[int, int]:
+        """Get current file count and total size for a session's attachments.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+
+        Returns:
+            Tuple of (file_count, total_size_bytes)
         """
         ...
 

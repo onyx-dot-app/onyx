@@ -37,7 +37,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
 │   └── graphs/                     # Generated visualizations
 ├── .venv/                          # Python virtual environment
 ├── files/                          # Symlink to knowledge files
-├── user_uploaded_files/            # User uploads
+├── attachments/                    # User uploads
 ├── AGENTS.md                       # Agent instructions
 └── .opencode/
     └── skills/                     # Agent skills

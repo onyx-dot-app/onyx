@@ -68,7 +68,12 @@ SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
 # File upload configuration
 MAX_UPLOAD_FILE_SIZE_MB = int(os.environ.get("BUILD_MAX_UPLOAD_FILE_SIZE_MB", "50"))
 MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
-USER_UPLOADS_DIRECTORY = "user_uploaded_files"
+MAX_UPLOAD_FILES_PER_SESSION = int(
+    os.environ.get("BUILD_MAX_UPLOAD_FILES_PER_SESSION", "20")
+)
+MAX_TOTAL_UPLOAD_SIZE_MB = int(os.environ.get("BUILD_MAX_TOTAL_UPLOAD_SIZE_MB", "200"))
+MAX_TOTAL_UPLOAD_SIZE_BYTES = MAX_TOTAL_UPLOAD_SIZE_MB * 1024 * 1024
+ATTACHMENTS_DIRECTORY = "attachments"
 
 # ============================================================================
 # Kubernetes Sandbox Configuration

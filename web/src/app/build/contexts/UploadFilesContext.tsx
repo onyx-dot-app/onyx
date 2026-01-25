@@ -19,10 +19,16 @@ import {
  * Upload File Status - tracks the state of files being uploaded
  */
 export enum UploadFileStatus {
+  /** File is currently being uploaded to the sandbox */
   UPLOADING = "UPLOADING",
+  /** File is being processed after upload */
   PROCESSING = "PROCESSING",
+  /** File has been successfully uploaded and has a path */
   COMPLETED = "COMPLETED",
+  /** File upload failed */
   FAILED = "FAILED",
+  /** File is waiting for a session to be created before uploading */
+  PENDING = "PENDING",
 }
 
 /**
@@ -37,8 +43,10 @@ export interface BuildFile {
   created_at: string;
   // Original File object for upload
   file?: File;
-  // Path in sandbox after upload (e.g., "user_uploaded_files/doc.pdf")
+  // Path in sandbox after upload (e.g., "attachments/doc.pdf")
   path?: string;
+  // Error message if upload failed
+  error?: string;
 }
 
 // Helper to generate unique temp IDs
@@ -108,47 +116,63 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       setCurrentMessageFiles((prev) => [...prev, ...optimisticFiles]);
 
       if (sessionId) {
-        // Upload each file to the session's sandbox
-        for (const optimisticFile of optimisticFiles) {
+        // Upload all files in parallel for better performance
+        const uploadPromises = optimisticFiles.map(async (optimisticFile) => {
           try {
             const result = await uploadFileApi(sessionId, optimisticFile.file!);
-            // Update status to completed with path
-            setCurrentMessageFiles((prev) =>
-              prev.map((f) =>
-                f.id === optimisticFile.id
-                  ? {
-                      ...f,
-                      status: UploadFileStatus.COMPLETED,
-                      path: result.path,
-                      name: result.filename,
-                    }
-                  : f
-              )
-            );
+            return {
+              id: optimisticFile.id,
+              success: true as const,
+              result,
+            };
           } catch (error) {
             console.error("File upload failed:", error);
-            // Mark as failed
-            setCurrentMessageFiles((prev) =>
-              prev.map((f) =>
-                f.id === optimisticFile.id
-                  ? { ...f, status: UploadFileStatus.FAILED }
-                  : f
-              )
-            );
+            let errorMessage = "Upload failed";
+            if (error instanceof Error) {
+              errorMessage = error.message;
+            }
+            return {
+              id: optimisticFile.id,
+              success: false as const,
+              errorMessage,
+            };
           }
-        }
+        });
+
+        const results = await Promise.all(uploadPromises);
+
+        // Batch update all file statuses at once
+        setCurrentMessageFiles((prev) =>
+          prev.map((f) => {
+            const uploadResult = results.find((r) => r.id === f.id);
+            if (!uploadResult) return f;
+
+            if (uploadResult.success) {
+              return {
+                ...f,
+                status: UploadFileStatus.COMPLETED,
+                path: uploadResult.result.path,
+                name: uploadResult.result.filename,
+              };
+            } else {
+              return {
+                ...f,
+                status: UploadFileStatus.FAILED,
+                error: uploadResult.errorMessage,
+              };
+            }
+          })
+        );
       } else {
-        // No session yet - mark as pending (will upload when session is created)
-        // Keep status as UPLOADING until we have a session to upload to
-        setTimeout(() => {
-          setCurrentMessageFiles((prev) =>
-            prev.map((f) =>
-              optimisticFiles.some((of) => of.id === f.id)
-                ? { ...f, status: UploadFileStatus.COMPLETED }
-                : f
-            )
-          );
-        }, 100);
+        // No session yet - mark as PENDING (will upload when session is created)
+        // The ChatPanel fallback will handle uploading these when the session is ready
+        setCurrentMessageFiles((prev) =>
+          prev.map((f) =>
+            optimisticFiles.some((of) => of.id === f.id)
+              ? { ...f, status: UploadFileStatus.PENDING }
+              : f
+          )
+        );
       }
 
       return optimisticFiles;

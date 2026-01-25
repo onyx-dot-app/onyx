@@ -11,9 +11,14 @@ import {
   useToggleOutputPanel,
   useBuildSessionStore,
   useIsPreProvisioning,
+  usePreProvisionedSessionId,
 } from "@/app/build/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/build/hooks/useBuildStreaming";
-import { BuildFile } from "@/app/build/contexts/UploadFilesContext";
+import {
+  BuildFile,
+  UploadFileStatus,
+  useUploadFilesContext,
+} from "@/app/build/contexts/UploadFilesContext";
 import { uploadFile } from "@/app/build/services/apiServices";
 import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -91,6 +96,14 @@ export default function BuildChatPanel({
   );
   const { streamMessage } = useBuildStreaming();
   const isPreProvisioning = useIsPreProvisioning();
+  const preProvisionedSessionId = usePreProvisionedSessionId();
+  const { currentMessageFiles, hasUploadingFiles } = useUploadFilesContext();
+
+  // Ref to access current file state in async callbacks
+  const currentFilesRef = useRef(currentMessageFiles);
+  useEffect(() => {
+    currentFilesRef.current = currentMessageFiles;
+  }, [currentMessageFiles]);
 
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -206,11 +219,11 @@ export default function BuildChatPanel({
           // Fallback: createNewSession handles everything including navigation
           const fallbackSessionId = await createNewSession(message);
           if (fallbackSessionId) {
-            if (files.length > 0) {
+            // Upload files that weren't already uploaded (no path means not yet uploaded)
+            const filesToUpload = files.filter((f) => f.file && !f.path);
+            if (filesToUpload.length > 0) {
               await Promise.all(
-                files
-                  .filter((f) => f.file)
-                  .map((f) => uploadFile(fallbackSessionId, f.file!))
+                filesToUpload.map((f) => uploadFile(fallbackSessionId, f.file!))
               );
             }
             await streamMessage(fallbackSessionId, message);
@@ -218,6 +231,7 @@ export default function BuildChatPanel({
         } else {
           // Pre-provisioned session flow:
           // The backend session already exists (created during pre-provisioning).
+          // Files were already uploaded immediately when attached to the pre-provisioned session.
           // Here we initialize the LOCAL Zustand store entry with the right state.
           const userMessage = {
             id: `msg-${Date.now()}`,
@@ -233,26 +247,65 @@ export default function BuildChatPanel({
             status: "running",
           });
 
-          // 2. Upload files before navigation
-          if (files.length > 0) {
+          // Fallback: Handle files that weren't successfully uploaded yet
+          // This handles edge cases where:
+          // 1. File is still uploading when user sends message - wait for it
+          // 2. File upload failed and needs retry
+          // 3. File was attached but upload hasn't started yet
+
+          // Wait for any in-flight uploads to complete (max 5 seconds)
+          // Use ref to check current state during polling
+          if (hasUploadingFiles) {
+            const maxWaitMs = 5000;
+            const checkIntervalMs = 100;
+            let waited = 0;
+
+            await new Promise<void>((resolve) => {
+              const checkUploads = () => {
+                // Check current state via ref (updates with each render)
+                const stillUploading = currentFilesRef.current.some(
+                  (f) => f.status === UploadFileStatus.UPLOADING
+                );
+                if (!stillUploading || waited >= maxWaitMs) {
+                  resolve();
+                } else {
+                  waited += checkIntervalMs;
+                  setTimeout(checkUploads, checkIntervalMs);
+                }
+              };
+              checkUploads();
+            });
+          }
+
+          // Upload any files that need to be uploaded:
+          // - PENDING: Was attached before session existed, needs upload now
+          // - FAILED: Previous upload failed, retry
+          // - No path + not currently uploading: Edge case fallback
+          const currentFiles = currentFilesRef.current;
+          const filesToUpload = currentFiles.filter(
+            (f) =>
+              f.file &&
+              (f.status === UploadFileStatus.PENDING ||
+                f.status === UploadFileStatus.FAILED ||
+                (!f.path && f.status !== UploadFileStatus.UPLOADING))
+          );
+          if (filesToUpload.length > 0) {
             await Promise.all(
-              files
-                .filter((f) => f.file)
-                .map((f) => uploadFile(newSessionId, f.file!))
+              filesToUpload.map((f) => uploadFile(newSessionId, f.file!))
             );
           }
 
-          // 3. Navigate to URL - session controller will set currentSessionId
+          // Navigate to URL - session controller will set currentSessionId
           router.push(
             `/build/v1?${BUILD_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
           );
 
-          // 4. Schedule naming after delay (message will be saved by then)
+          // Schedule naming after delay (message will be saved by then)
           // Note: Don't call refreshSessionHistory() here - it would overwrite the
           // optimistic update from consumePreProvisionedSession() before the message is saved
           setTimeout(() => nameBuildSession(newSessionId), 500);
 
-          // 5. Stream the response (uses session ID directly, not currentSessionId)
+          // Stream the response (uses session ID directly, not currentSessionId)
           await streamMessage(newSessionId, message);
         }
       }
@@ -320,6 +373,7 @@ export default function BuildChatPanel({
               onSubmit={handleSubmit}
               isRunning={isRunning}
               sandboxInitializing={isPreProvisioning}
+              preProvisionedSessionId={preProvisionedSessionId}
             />
           ) : (
             <BuildMessageList
@@ -361,6 +415,7 @@ export default function BuildChatPanel({
                 isRunning={isRunning}
                 placeholder="Continue the conversation..."
                 sessionId={sessionId ?? undefined}
+                preProvisionedSessionId={preProvisionedSessionId}
               />
             </div>
           </div>
