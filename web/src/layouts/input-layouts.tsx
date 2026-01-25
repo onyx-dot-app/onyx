@@ -169,14 +169,14 @@ function LabelLayout({
       <Section
         flexDirection="row"
         justifyContent={center ? "center" : "start"}
-        gap={0}
+        gap={0.25}
       >
         <Text mainContentEmphasis text04>
           {title}
         </Text>
         {optional && (
           <Text text03 mainContentMuted>
-            {" (Optional)"}
+            (Optional)
           </Text>
         )}
       </Section>
