@@ -685,6 +685,40 @@ def _patch_openai_responses_transform_response() -> None:
     LiteLLMResponsesTransformationHandler.transform_response = _patched_transform_response  # type: ignore[method-assign]
 
 
+def _patch_azure_responses_should_fake_stream() -> None:
+    """
+    Patches AzureOpenAIResponsesAPIConfig.should_fake_stream to always return False.
+
+    By default, LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
+    not in its database. This causes Azure custom model deployments to buffer the entire
+    response before yielding, resulting in poor time-to-first-token.
+
+    Azure's Responses API supports native streaming, so we override this to always use
+    real streaming (SyncResponsesAPIStreamingIterator).
+    """
+    from litellm.llms.azure.responses.transformation import (
+        AzureOpenAIResponsesAPIConfig,
+    )
+
+    if (
+        getattr(AzureOpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
+        == "_patched_should_fake_stream"
+    ):
+        return
+
+    def _patched_should_fake_stream(
+        self: Any,
+        model: Optional[str],
+        stream: Optional[bool],
+        custom_llm_provider: Optional[str] = None,
+    ) -> bool:
+        # Azure Responses API supports native streaming - never fake it
+        return False
+
+    _patched_should_fake_stream.__name__ = "_patched_should_fake_stream"
+    AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream  # type: ignore[method-assign]
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -694,12 +728,13 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
-    - Patching LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text for tool content types
+    - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
     """
     _patch_ollama_transform_request()
     _patch_ollama_chunk_parser()
     _patch_openai_responses_chunk_parser()
     _patch_openai_responses_transform_response()
+    _patch_azure_responses_should_fake_stream()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:
