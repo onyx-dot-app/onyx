@@ -15,49 +15,64 @@ export default function BuildModeIntroContent({
   onTryBuildMode,
 }: BuildModeIntroContentProps) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-6">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, delay: 0.5 }}
-      >
-        <OnyxLogoTypeIcon size={200} className="text-white" />
-      </motion.div>
-      <div className="flex flex-col items-center gap-3">
+    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+      <div className="flex flex-col items-center gap-7 w-full">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.8 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="w-full relative"
         >
-          <Text headingH1 className="!text-8xl !text-white">
-            Build Mode
-          </Text>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end">
+            <div className="flex justify-end">
+              <OnyxLogoTypeIcon size={385} className="text-white" />
+            </div>
+            <div className="w-8"></div>
+            <div className="flex justify-start">
+              <div
+                className="relative inline-flex overflow-visible"
+                style={{ transform: "translateX(-0.6em)" }}
+              >
+                <span className="relative inline-block leading-[3.5]">
+                  <Text
+                    headingH1
+                    className="!text-9xl !text-white relative inline-block"
+                  >
+                    Craft
+                  </Text>
+                </span>
+                <span className="pointer-events-none absolute top-3 -right-14 text-[1em] font-black uppercase tracking-[0.2em]">
+                  BETA
+                </span>
+              </div>
+            </div>
+          </div>
         </motion.div>
         <motion.div
-          className="flex gap-4 pointer-events-auto"
+          className="flex gap-5 pointer-events-auto justify-center"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 1.1 }}
+          transition={{ duration: 0.8, delay: 1.3 }}
         >
           <BigButton
             secondary
-            className="!border-white !text-white hover:!bg-white/10 active:!bg-white/20"
+            className="!border-white !text-white hover:!bg-white/10 active:!bg-white/20 !w-[160px]"
             onClick={(e) => {
               e.stopPropagation();
               onClose();
             }}
           >
-            Return to Chat
+            Return Home
           </BigButton>
           <BigButton
             primary
-            className="!bg-white !text-black hover:!bg-gray-200 active:!bg-gray-300"
+            className="!bg-white !text-black hover:!bg-gray-200 active:!bg-gray-300 !w-[160px]"
             onClick={(e) => {
               e.stopPropagation();
               onTryBuildMode();
             }}
           >
-            Try Build Mode
+            Start Crafting
           </BigButton>
         </motion.div>
       </div>
