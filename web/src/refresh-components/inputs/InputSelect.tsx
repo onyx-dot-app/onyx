@@ -382,7 +382,6 @@ const InputSelectItem = React.forwardRef<
         emphasized
         description={description}
         onClick={noProp((event) => event.preventDefault())}
-        className={cn("w-full", props.className)}
       >
         {children}
       </LineItem>
