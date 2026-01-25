@@ -279,7 +279,10 @@ export default function BuildConfigPage() {
                     }
                     disabled={hasActiveConnector}
                   >
-                    <Card className={!hasActiveConnector ? "opacity-50" : ""}>
+                    <Card
+                      padding={0.75}
+                      className={!hasActiveConnector ? "opacity-50" : ""}
+                    >
                       <div
                         className={`flex items-center gap-3 ${
                           !hasActiveConnector ? "pointer-events-none" : ""

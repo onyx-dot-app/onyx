@@ -87,11 +87,11 @@ export default function ComingSoonConnectors() {
         <button
           type="button"
           onClick={() => setShowRequestModal(true)}
-          className="px-4 py-2 rounded-12 bg-black dark:bg-white hover:opacity-90 transition-colors whitespace-nowrap"
+          className="px-4 py-2 rounded-12 bg-white dark:bg-black hover:opacity-90 transition-colors whitespace-nowrap"
         >
           <Text
             mainUiAction
-            className="text-text-light-05 dark:text-text-dark-05"
+            className="text-text-dark-05 dark:text-text-light-05"
           >
             Submit a request
           </Text>
