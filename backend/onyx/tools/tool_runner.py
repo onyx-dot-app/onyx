@@ -229,6 +229,8 @@ def run_tool_calls(
     max_concurrent_tools: int | None = None,
     # Skip query expansion for repeat search tool calls
     skip_search_query_expansion: bool = False,
+    # A map of url -> summary for passing web results to open url tool
+    url_snippet_map: dict[str, str] = {},
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -359,6 +361,7 @@ def run_tool_calls(
             override_kwargs = OpenURLToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
                 citation_mapping=url_to_citation,
+                url_snippet_map=url_snippet_map,
             )
             starting_citation_num += 100
 

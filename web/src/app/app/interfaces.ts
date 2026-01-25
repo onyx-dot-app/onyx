@@ -139,6 +139,8 @@ export interface Message {
 
   // new gen
   packets: Packet[];
+  // Version counter for efficient memo comparison (increments with each packet)
+  packetsVersion?: number;
 
   // cached values for easy access
   documents?: OnyxDocument[] | null;

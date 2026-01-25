@@ -9,6 +9,36 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Mapping of curly/smart quotes to straight quotes
+CURLY_TO_STRAIGHT_QUOTES: dict[str, str] = {
+    "\u2019": "'",  # Right single quotation mark
+    "\u2018": "'",  # Left single quotation mark
+    "\u201c": '"',  # Left double quotation mark
+    "\u201d": '"',  # Right double quotation mark
+}
+
+# Zero-width characters that should typically be removed during text normalization
+ZERO_WIDTH_CHARS: set[str] = {
+    "\u200b",  # Zero-width space
+    "\u200c",  # Zero-width non-joiner
+    "\u200d",  # Zero-width joiner
+    "\ufeff",  # Byte order mark / zero-width no-break space
+    "\u2060",  # Word joiner
+}
+
+
+def normalize_curly_quotes(text: str) -> str:
+    """Convert curly/smart quotes to straight quotes."""
+    for curly, straight in CURLY_TO_STRAIGHT_QUOTES.items():
+        text = text.replace(curly, straight)
+    return text
+
+
+def is_zero_width_char(c: str) -> bool:
+    """Check if a character is a zero-width character."""
+    return c in ZERO_WIDTH_CHARS
+
+
 ESCAPE_SEQUENCE_RE = re.compile(
     r"""
     ( \\U........      # 8-digit hex escapes
@@ -257,3 +287,15 @@ def remove_invalid_unicode_chars(text: str) -> str:
     - Unicode non-characters
     """
     return _INVALID_UNICODE_CHARS_RE.sub("", text)
+
+
+def normalize_char(c: str) -> str:
+    """Normalize a single character (curly quotes, whitespace, punctuation)."""
+    if c in CURLY_TO_STRAIGHT_QUOTES:
+        c = CURLY_TO_STRAIGHT_QUOTES[c]
+    if c.isspace():
+        return " "
+    elif re.match(r"[^\w\s\']", c):
+        return " "
+    else:
+        return c.lower()

@@ -116,6 +116,8 @@ class UserFileFilters(BaseModel):
 
 
 class IndexFilters(BaseFilters, UserFileFilters):
+    # NOTE: These strings must be formatted in the same way as the output of
+    # DocumentAccess::to_acl.
     access_control_list: list[str] | None
     tenant_id: str | None = None
 

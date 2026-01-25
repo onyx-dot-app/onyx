@@ -60,6 +60,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.tools.utils import generate_tools_description
@@ -431,6 +432,14 @@ def run_research_agent_call(
                         max_concurrent_tools=1,
                         # May be better to not do this step, hard to say, needs to be tested
                         skip_search_query_expansion=False,
+                        url_snippet_map=extract_url_snippet_map(
+                            [
+                                search_doc
+                                for tool_call in state_container.get_tool_calls()
+                                if tool_call.search_docs
+                                for search_doc in tool_call.search_docs
+                            ]
+                        ),
                     )
                     tool_responses = parallel_tool_call_results.tool_responses
                     citation_mapping = (

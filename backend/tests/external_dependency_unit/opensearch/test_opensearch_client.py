@@ -8,14 +8,22 @@ import re
 import uuid
 from collections.abc import Generator
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 
 import pytest
 
+from onyx.access.models import DocumentAccess
+from onyx.access.utils import prefix_user_email
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
+from onyx.document_index.opensearch.opensearch_document_index import (
+    generate_opensearch_filtered_access_control_list,
+)
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
@@ -42,14 +50,22 @@ def _patch_global_tenant_state(monkeypatch: pytest.MonkeyPatch, state: bool) -> 
 
 def _create_test_document_chunk(
     document_id: str,
-    chunk_index: int,
     content: str,
     tenant_state: TenantState,
+    chunk_index: int = 0,
     content_vector: list[float] | None = None,
     title: str | None = None,
     title_vector: list[float] | None = None,
-    public: bool = True,
     hidden: bool = False,
+    document_access: DocumentAccess = DocumentAccess.build(
+        user_emails=[],
+        user_groups=[],
+        external_user_emails=[],
+        external_user_group_ids=[],
+        is_public=True,
+    ),
+    source_type: DocumentSource = DocumentSource.FILE,
+    last_updated: datetime | None = None,
 ) -> DocumentChunk:
     if content_vector is None:
         # Generate dummy vector - 128 dimensions for fast testing.
@@ -59,11 +75,6 @@ def _create_test_document_chunk(
     if title is not None and title_vector is None:
         title_vector = [0.2] * 128
 
-    now = datetime.now(timezone.utc)
-    # We only store millisecond precision, so to make sure asserts work in this
-    # test file manually lose some precision from datetime.now().
-    now = now.replace(microsecond=(now.microsecond // 1000) * 1000)
-
     return DocumentChunk(
         document_id=document_id,
         chunk_index=chunk_index,
@@ -71,11 +82,13 @@ def _create_test_document_chunk(
         title_vector=title_vector,
         content=content,
         content_vector=content_vector,
-        source_type="test_source",
+        source_type=source_type.value,
         metadata_list=None,
-        last_updated=now,
-        public=public,
-        access_control_list=[],
+        last_updated=last_updated,
+        public=document_access.is_public,
+        access_control_list=generate_opensearch_filtered_access_control_list(
+            document_access
+        ),
         hidden=hidden,
         global_boost=0,
         semantic_identifier="Test semantic identifier",
@@ -331,6 +344,9 @@ class TestOpenSearchClient:
             chunk_index=0,
             content="Content to retrieve",
             tenant_state=tenant_state,
+            # We only store second precision, so to make sure asserts work in
+            # this test we'll deliberately lose some precision.
+            last_updated=datetime.now(timezone.utc).replace(microsecond=0),
         )
         test_client.index_document(document=original_doc)
 
@@ -471,6 +487,8 @@ class TestOpenSearchClient:
         search_query = DocumentQuery.get_from_document_id_query(
             document_id="delete-me",
             tenant_state=tenant_state,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -483,6 +501,8 @@ class TestOpenSearchClient:
         keep_query = DocumentQuery.get_from_document_id_query(
             document_id="keep-me",
             tenant_state=tenant_state,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -510,7 +530,6 @@ class TestOpenSearchClient:
             chunk_index=0,
             content="Original content",
             tenant_state=tenant_state,
-            public=True,
             hidden=False,
         )
         test_client.index_document(document=doc)
@@ -561,10 +580,13 @@ class TestOpenSearchClient:
                 properties_to_update={"hidden": True},
             )
 
-    def test_search_basic(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    def test_hybrid_search_with_pipeline(
+        self,
+        test_client: OpenSearchClient,
+        search_pipeline: None,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Tests basic search functionality."""
+        """Tests hybrid search with a normalization pipeline."""
         # Precondition.
         _patch_global_tenant_state(monkeypatch, False)
         tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
@@ -574,24 +596,24 @@ class TestOpenSearchClient:
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
 
-        # Index multiple documents with different content and vectors.
+        # Index documents.
         docs = {
-            "search-doc-1": _create_test_document_chunk(
-                document_id="search-doc-1",
+            "doc-1": _create_test_document_chunk(
+                document_id="doc-1",
                 chunk_index=0,
                 content="Python programming language tutorial",
                 content_vector=_generate_test_vector(0.1),
                 tenant_state=tenant_state,
             ),
-            "search-doc-2": _create_test_document_chunk(
-                document_id="search-doc-2",
+            "doc-2": _create_test_document_chunk(
+                document_id="doc-2",
                 chunk_index=0,
                 content="How to make cheese",
                 content_vector=_generate_test_vector(0.2),
                 tenant_state=tenant_state,
             ),
-            "search-doc-3": _create_test_document_chunk(
-                document_id="search-doc-3",
+            "doc-3": _create_test_document_chunk(
+                document_id="doc-3",
                 chunk_index=0,
                 content="C++ for newborns",
                 content_vector=_generate_test_vector(0.15),
@@ -613,78 +635,10 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
-        )
-
-        # Under test.
-        results = test_client.search(body=search_body, search_pipeline_id=None)
-
-        # Postcondition.
-        assert len(results) == 3
-        # Assert that all the chunks above are present.
-        assert all(
-            chunk.document_chunk.document_id
-            in ["search-doc-1", "search-doc-2", "search-doc-3"]
-            for chunk in results
-        )
-        # Make sure the chunk contents are preserved.
-        for chunk in results:
-            assert chunk.document_chunk == docs[chunk.document_chunk.document_id]
-            # Make sure score reporting seems reasonable (it should not be None
-            # or 0).
-            assert chunk.score
-
-        # Make sure there is some kind of match highlight for the first hit. We
-        # don't expect highlights for any other hit.
-        assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
-
-    def test_search_with_pipeline(
-        self,
-        test_client: OpenSearchClient,
-        search_pipeline: None,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Tests search with a normalization pipeline."""
-        # Precondition.
-        _patch_global_tenant_state(monkeypatch, False)
-        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
-        mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=tenant_state.multitenant
-        )
-        settings = DocumentSchema.get_index_settings()
-        test_client.create_index(mappings=mappings, settings=settings)
-
-        # Index documents.
-        docs = {
-            "pipeline-doc-1": _create_test_document_chunk(
-                document_id="pipeline-doc-1",
-                chunk_index=0,
-                content="Machine learning algorithms for single-celled organisms",
-                content_vector=_generate_test_vector(0.3),
-                tenant_state=tenant_state,
-            ),
-            "pipeline-doc-2": _create_test_document_chunk(
-                document_id="pipeline-doc-2",
-                chunk_index=0,
-                content="Deep learning shallow neural networks",
-                content_vector=_generate_test_vector(0.35),
-                tenant_state=tenant_state,
-            ),
-        }
-        for doc in docs.values():
-            test_client.index_document(document=doc)
-
-        # Refresh index to make documents searchable
-        test_client.refresh_index()
-
-        # Search query.
-        query_text = "machine learning"
-        query_vector = _generate_test_vector(0.32)
-        search_body = DocumentQuery.get_hybrid_search_query(
-            query_text=query_text,
-            query_vector=query_vector,
-            num_candidates=10,
-            num_hits=5,
-            tenant_state=tenant_state,
+            # We're not worried about filtering here. tenant_id in this object
+            # is not relevant.
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
@@ -693,23 +647,26 @@ class TestOpenSearchClient:
         )
 
         # Postcondition.
-        assert len(results) == 2
+        assert len(results) == len(docs)
         # Assert that all the chunks above are present.
-        assert all(
-            chunk.document_chunk.document_id in ["pipeline-doc-1", "pipeline-doc-2"]
-            for chunk in results
-        )
+        assert all(chunk.document_chunk.document_id in docs.keys() for chunk in results)
         # Make sure the chunk contents are preserved.
-        for chunk in results:
+        for i, chunk in enumerate(results):
             assert chunk.document_chunk == docs[chunk.document_chunk.document_id]
             # Make sure score reporting seems reasonable (it should not be None
             # or 0).
             assert chunk.score
-            # Make sure there is some kind of match highlight.
-            assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
+            # Make sure there is some kind of match highlight only for the first
+            # result. The other results are so bad they're not expected to have
+            # match highlights.
+            if i == 0:
+                assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_empty_index(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+        self,
+        test_client: OpenSearchClient,
+        search_pipeline: None,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Tests search on an empty index returns an empty list."""
         # Precondition.
@@ -731,19 +688,28 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
+            # We're not worried about filtering here. tenant_id in this object
+            # is not relevant.
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
-        results = test_client.search(body=search_body, search_pipeline_id=None)
+        results = test_client.search(
+            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
+        )
 
         # Postcondition.
         assert len(results) == 0
 
-    def test_search_filters(
-        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    def test_hybrid_search_with_pipeline_and_filters(
+        self,
+        test_client: OpenSearchClient,
+        search_pipeline: None,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """
-        Tests search filters for public/hidden documents and tenant isolation.
+        Tests search filters for ACL, hidden documents, and tenant isolation.
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
@@ -757,29 +723,47 @@ class TestOpenSearchClient:
 
         # Index documents with different public/hidden and tenant states.
         docs = {
-            "public-doc-1": _create_test_document_chunk(
-                document_id="public-doc-1",
+            "public-doc": _create_test_document_chunk(
+                document_id="public-doc",
                 chunk_index=0,
                 content="Public document content",
-                public=True,
                 hidden=False,
                 tenant_state=tenant_x,
             ),
-            "hidden-doc-1": _create_test_document_chunk(
-                document_id="hidden-doc-1",
+            "hidden-doc": _create_test_document_chunk(
+                document_id="hidden-doc",
                 chunk_index=0,
                 content="Hidden document content, spooky",
-                public=True,
                 hidden=True,
                 tenant_state=tenant_x,
             ),
-            "private-doc-1": _create_test_document_chunk(
-                document_id="private-doc-1",
+            "private-doc-user-a": _create_test_document_chunk(
+                document_id="private-doc-user-a",
                 chunk_index=0,
                 content="Private document content, btw my SSN is 123-45-6789",
-                public=False,
                 hidden=False,
                 tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-a@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+            ),
+            "private-doc-user-b": _create_test_document_chunk(
+                document_id="private-doc-user-b",
+                chunk_index=0,
+                content="Private document content, btw my SSN is 987-65-4321",
+                hidden=False,
+                tenant_state=tenant_x,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-b@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
             ),
             "should-not-exist-from-tenant-x-pov": _create_test_document_chunk(
                 document_id="should-not-exist-from-tenant-x-pov",
@@ -787,7 +771,6 @@ class TestOpenSearchClient:
                 content="This is an entirely different tenant, x should never see this",
                 # Make this as permissive as possible to exercise tenant
                 # isolation.
-                public=True,
                 hidden=False,
                 tenant_state=tenant_y,
             ),
@@ -798,9 +781,6 @@ class TestOpenSearchClient:
         # Refresh index to make documents searchable.
         test_client.refresh_index()
 
-        # Search with default filters (public=True, hidden=False).
-        # The DocumentQuery.get_hybrid_search_query uses filters that should
-        # only return public, non-hidden documents.
         query_text = "document content"
         query_vector = _generate_test_vector(0.6)
         search_body = DocumentQuery.get_hybrid_search_query(
@@ -809,24 +789,41 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_x,
+            # The user should only be able to see their private docs. tenant_id
+            # in this object is not relevant.
+            index_filters=IndexFilters(
+                access_control_list=[prefix_user_email("user-a@example.com")],
+                tenant_id=None,
+            ),
+            include_hidden=False,
         )
 
         # Under test.
-        results = test_client.search(body=search_body, search_pipeline_id=None)
+        results = test_client.search(
+            body=search_body, search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME
+        )
 
         # Postcondition.
-        # Should only get the public, non-hidden document.
-        assert len(results) == 1
-        assert results[0].document_chunk.document_id == "public-doc-1"
+        # Should only get the public, non-hidden document, and the private
+        # document for which the user has access.
+        assert len(results) == 2
+        # NOTE: This test is not explicitly testing for how well results are
+        # ordered; we're just assuming which doc will be the first result here.
+        assert results[0].document_chunk.document_id == "public-doc"
         # Make sure the chunk contents are preserved.
-        assert results[0].document_chunk == docs["public-doc-1"]
+        assert results[0].document_chunk == docs["public-doc"]
         # Make sure score reporting seems reasonable (it should not be None
         # or 0).
         assert results[0].score
         # Make sure there is some kind of match highlight.
         assert results[0].match_highlights.get(CONTENT_FIELD_NAME, [])
+        # Same for the second result.
+        assert results[1].document_chunk.document_id == "private-doc-user-a"
+        assert results[1].document_chunk == docs["private-doc-user-a"]
+        assert results[1].score
+        assert results[1].match_highlights.get(CONTENT_FIELD_NAME, [])
 
-    def test_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
+    def test_hybrid_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,
         test_client: OpenSearchClient,
         search_pipeline: None,
@@ -849,52 +846,54 @@ class TestOpenSearchClient:
         # Vectors closer to query_vector (0.1) should rank higher.
         docs = [
             _create_test_document_chunk(
-                document_id="highly-relevant-1",
+                document_id="highly-relevant",
                 chunk_index=0,
                 content="Artificial intelligence and machine learning transform technology",
                 content_vector=_generate_test_vector(
                     0.1
                 ),  # Very close to query vector.
-                public=True,
                 hidden=False,
                 tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
-                document_id="somewhat-relevant-1",
+                document_id="somewhat-relevant",
                 chunk_index=0,
                 content="Computer programming with various languages",
                 content_vector=_generate_test_vector(0.5),  # Far from query vector.
-                public=True,
                 hidden=False,
                 tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
-                document_id="not-very-relevant-1",
+                document_id="not-very-relevant",
                 chunk_index=0,
                 content="Cooking recipes for delicious meals",
                 content_vector=_generate_test_vector(
                     0.9
                 ),  # Very far from query vector.
-                public=True,
                 hidden=False,
                 tenant_state=tenant_x,
             ),
             # These should be filtered out by public/hidden filters.
             _create_test_document_chunk(
-                document_id="hidden-but-relevant-1",
+                document_id="hidden-but-relevant",
                 chunk_index=0,
                 content="Artificial intelligence research papers",
                 content_vector=_generate_test_vector(0.05),  # Very close but hidden.
-                public=True,
                 hidden=True,
                 tenant_state=tenant_x,
             ),
             _create_test_document_chunk(
-                document_id="private-but-relevant-1",
+                document_id="private-but-relevant",
                 chunk_index=0,
                 content="Artificial intelligence industry analysis",
                 content_vector=_generate_test_vector(0.08),  # Very close but private.
-                public=False,
+                document_access=DocumentAccess.build(
+                    user_emails=[],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
                 hidden=False,
                 tenant_state=tenant_x,
             ),
@@ -905,7 +904,7 @@ class TestOpenSearchClient:
         # Refresh index to make documents searchable.
         test_client.refresh_index()
 
-        # Search query matching "highly-relevant-1" most closely.
+        # Search query matching "highly-relevant" most closely.
         query_text = "artificial intelligence"
         query_vector = _generate_test_vector(0.1)
         search_body = DocumentQuery.get_hybrid_search_query(
@@ -914,6 +913,9 @@ class TestOpenSearchClient:
             num_candidates=10,
             num_hits=5,
             tenant_state=tenant_x,
+            # Explicitly pass in an empty list to enforce private doc filtering.
+            index_filters=IndexFilters(access_control_list=[], tenant_id=None),
+            include_hidden=False,
         )
 
         # Under test.
@@ -925,15 +927,15 @@ class TestOpenSearchClient:
         # Should only get public, non-hidden documents (3 out of 5).
         assert len(results) == 3
         result_ids = [chunk.document_chunk.document_id for chunk in results]
-        assert "highly-relevant-1" in result_ids
-        assert "somewhat-relevant-1" in result_ids
-        assert "not-very-relevant-1" in result_ids
+        assert "highly-relevant" in result_ids
+        assert "somewhat-relevant" in result_ids
+        assert "not-very-relevant" in result_ids
         # Filtered out by public/hidden constraints.
-        assert "hidden-but-relevant-1" not in result_ids
-        assert "private-but-relevant-1" not in result_ids
+        assert "hidden-but-relevant" not in result_ids
+        assert "private-but-relevant" not in result_ids
 
-        # Most relevant document should be first due to normalization pipeline.
-        assert results[0].document_chunk.document_id == "highly-relevant-1"
+        # Most relevant document should be first.
+        assert results[0].document_chunk.document_id == "highly-relevant"
 
         # Make sure there is some kind of match highlight for the most relevant
         # result.
@@ -1014,6 +1016,8 @@ class TestOpenSearchClient:
         verify_query_x = DocumentQuery.get_from_document_id_query(
             document_id="doc-tenant-x",
             tenant_state=tenant_x,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -1026,6 +1030,8 @@ class TestOpenSearchClient:
         verify_query_y = DocumentQuery.get_from_document_id_query(
             document_id="doc-tenant-y",
             tenant_state=tenant_y,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -1113,6 +1119,8 @@ class TestOpenSearchClient:
         query_body = DocumentQuery.get_from_document_id_query(
             document_id="doc-1",
             tenant_state=tenant_state,
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
             max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
             min_chunk_index=None,
             max_chunk_index=None,
@@ -1133,3 +1141,176 @@ class TestOpenSearchClient:
             for chunk in doc1_chunks
         }
         assert set(chunk_ids) == expected_ids
+
+    def test_search_with_no_document_access_can_retrieve_all_documents(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests search with no document access can retrieve all documents, even
+        private ones.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Index documents with different public/hidden and tenant states.
+        docs = {
+            "public-doc": _create_test_document_chunk(
+                document_id="public-doc",
+                chunk_index=0,
+                content="Public document content",
+                hidden=False,
+                tenant_state=tenant_state,
+            ),
+            "hidden-doc": _create_test_document_chunk(
+                document_id="hidden-doc",
+                chunk_index=0,
+                content="Hidden document content, spooky",
+                hidden=True,
+                tenant_state=tenant_state,
+            ),
+            "private-doc-user-a": _create_test_document_chunk(
+                document_id="private-doc-user-a",
+                chunk_index=0,
+                content="Private document content, btw my SSN is 123-45-6789",
+                hidden=False,
+                tenant_state=tenant_state,
+                document_access=DocumentAccess.build(
+                    user_emails=["user-a@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+            ),
+        }
+        for doc in docs.values():
+            test_client.index_document(document=doc)
+
+        # Refresh index to make documents searchable.
+        test_client.refresh_index()
+
+        # Build query for all documents.
+        query_body = DocumentQuery.get_from_document_id_query(
+            document_id="private-doc-user-a",
+            tenant_state=tenant_state,
+            # This is the input under test, notice None for acl.
+            index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+            include_hidden=False,
+            max_chunk_size=DEFAULT_MAX_CHUNK_SIZE,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            get_full_document=False,
+        )
+
+        # Under test.
+        chunk_ids = test_client.search_for_document_ids(body=query_body)
+
+        # Postcondition.
+        # Even though this doc is private, because we supplied None for acl we
+        # were able to retrieve it.
+        assert len(chunk_ids) == 1
+        # Since this is a chunk ID, it will have the doc ID in it plus other
+        # stuff we don't care about in this test.
+        assert chunk_ids[0].startswith("private-doc-user-a")
+
+    def test_time_cutoff_filter(
+        self,
+        test_client: OpenSearchClient,
+        search_pipeline: None,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Tests the time cutoff filter works."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Index docs with various ages.
+        one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+        one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
+        one_year_ago = datetime.now(timezone.utc) - timedelta(days=365)
+        docs = [
+            _create_test_document_chunk(
+                document_id="one-day-ago",
+                content="Good match",
+                last_updated=one_day_ago,
+                tenant_state=tenant_state,
+            ),
+            _create_test_document_chunk(
+                document_id="one-year-ago",
+                content="Good match",
+                last_updated=one_year_ago,
+                tenant_state=tenant_state,
+            ),
+            _create_test_document_chunk(
+                document_id="no-last-updated",
+                # Since we test for result ordering in the postconditions, let's
+                # just make this content slightly less of a match with the query
+                # so this test is not flaky from the ordering of the results.
+                content="Still an ok match",
+                last_updated=None,
+                tenant_state=tenant_state,
+            ),
+        ]
+        for doc in docs:
+            test_client.index_document(document=doc)
+
+        # Refresh index to make documents searchable.
+        test_client.refresh_index()
+
+        # Build query for documents updated in the last week.
+        last_week_search_body = DocumentQuery.get_hybrid_search_query(
+            query_text="Good match",
+            query_vector=_generate_test_vector(0.1),
+            num_candidates=10,
+            num_hits=5,
+            tenant_state=tenant_state,
+            index_filters=IndexFilters(
+                access_control_list=None, tenant_id=None, time_cutoff=one_week_ago
+            ),
+            include_hidden=False,
+        )
+        last_six_months_search_body = DocumentQuery.get_hybrid_search_query(
+            query_text="Good match",
+            query_vector=_generate_test_vector(0.1),
+            num_candidates=10,
+            num_hits=5,
+            tenant_state=tenant_state,
+            index_filters=IndexFilters(
+                access_control_list=None, tenant_id=None, time_cutoff=six_months_ago
+            ),
+            include_hidden=False,
+        )
+
+        # Under test.
+        last_week_results = test_client.search(
+            body=last_week_search_body,
+            search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+        )
+        last_six_months_results = test_client.search(
+            body=last_six_months_search_body,
+            search_pipeline_id=MIN_MAX_NORMALIZATION_PIPELINE_NAME,
+        )
+
+        # Postcondition.
+        # We expect to only get one-day-ago.
+        assert len(last_week_results) == 1
+        assert last_week_results[0].document_chunk.document_id == "one-day-ago"
+        # We expect to get one-day-ago and no-last-updated since six months >
+        # ASSUMED_DOCUMENT_AGE_DAYS.
+        assert len(last_six_months_results) == 2
+        assert last_six_months_results[0].document_chunk.document_id == "one-day-ago"
+        assert (
+            last_six_months_results[1].document_chunk.document_id == "no-last-updated"
+        )

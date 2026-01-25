@@ -74,6 +74,8 @@ export type RegenerationFactory = (regenerationRequest: {
 
 export interface AIMessageProps {
   rawPackets: Packet[];
+  // Version counter for efficient memo comparison (avoids array copying)
+  packetsVersion?: number;
   chatState: FullChatState;
   nodeId: number;
   messageId?: number;
@@ -88,8 +90,6 @@ export interface AIMessageProps {
 }
 
 // TODO: Consider more robust comparisons:
-// - `rawPackets.length` assumes packets are append-only. Could compare the last
-//   packet or use a shallow comparison if packets can be modified in place.
 // - `chatState.docs`, `chatState.citations`, and `otherMessagesCanSwitchTo` use
 //   reference equality. Shallow array/object comparison would be more robust if
 //   these are recreated with the same values.
@@ -98,7 +98,7 @@ function arePropsEqual(prev: AIMessageProps, next: AIMessageProps): boolean {
     prev.nodeId === next.nodeId &&
     prev.messageId === next.messageId &&
     prev.currentFeedback === next.currentFeedback &&
-    prev.rawPackets.length === next.rawPackets.length &&
+    prev.packetsVersion === next.packetsVersion &&
     prev.chatState.assistant?.id === next.chatState.assistant?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&

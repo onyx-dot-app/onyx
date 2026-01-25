@@ -45,6 +45,7 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.tracing.framework.create import trace
@@ -616,6 +617,7 @@ def run_llm_loop(
                 next_citation_num=citation_processor.get_next_citation_number(),
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
+                url_snippet_map=extract_url_snippet_map(gathered_documents or []),
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
