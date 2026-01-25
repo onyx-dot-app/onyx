@@ -41,6 +41,10 @@ import { useAssistantController } from "@/app/app/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
+import { useQueryClassification } from "@/app/app/hooks/useQueryClassification";
+import { useDocumentSearch } from "@/app/app/hooks/useDocumentSearch";
+import { SearchResultsPanel } from "@/app/app/components/search/SearchResultsPanel";
+import { AppMode, CompactModeToggle } from "@/app/app/components/ModeToggle";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
@@ -190,6 +194,32 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     chatSessionId: currentChatSessionId,
     assistantId: selectedAssistant?.id,
   });
+
+  // Unified Search and Chat: Mode and search state
+  const [appMode, setAppMode] = useState<AppMode>("auto");
+  const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(
+    null
+  );
+  const {
+    isSearchFlow,
+    isClassifying,
+    classify: classifyQuery,
+    reset: resetClassification,
+  } = useQueryClassification();
+  const {
+    results: searchResults,
+    executedQueries,
+    llmSelectedDocIds,
+    isLoading: isSearchLoading,
+    error: searchError,
+    search: performSearch,
+    reset: resetSearch,
+  } = useDocumentSearch();
+
+  // Determine if we're showing search results
+  const showSearchResults =
+    (appMode === "search" || isSearchFlow === true) &&
+    (searchResults.length > 0 || isSearchLoading || pendingSearchQuery);
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
@@ -446,23 +476,115 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const handleChatInputSubmit = useCallback(
-    (message: string) => {
-      onSubmit({
-        message,
-        currentMessageFiles: currentMessageFiles,
-        deepResearch: deepResearchEnabled,
-      });
-      if (showOnboarding) {
-        finishOnboarding();
+    async (message: string) => {
+      // If mode is explicitly set to chat, skip classification
+      if (appMode === "chat") {
+        resetSearch();
+        resetClassification();
+        onSubmit({
+          message,
+          currentMessageFiles: currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+        });
+        if (showOnboarding) {
+          finishOnboarding();
+        }
+        return;
+      }
+
+      // If mode is explicitly set to search, skip classification and go directly to search
+      if (appMode === "search") {
+        setPendingSearchQuery(message);
+        await performSearch(message);
+        return;
+      }
+
+      // Auto mode: classify the query first
+      setPendingSearchQuery(message);
+      const isSearch = await classifyQuery(message);
+
+      if (isSearch) {
+        // Query classified as search - perform document search
+        await performSearch(message);
+      } else {
+        // Query classified as chat - submit to chat
+        resetSearch();
+        onSubmit({
+          message,
+          currentMessageFiles: currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+        });
+        if (showOnboarding) {
+          finishOnboarding();
+        }
       }
     },
     [
+      appMode,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
       showOnboarding,
       finishOnboarding,
+      classifyQuery,
+      performSearch,
+      resetSearch,
+      resetClassification,
     ]
+  );
+
+  // Handle "Ask about these results" action from search panel
+  const handleAskAboutSearchResults = useCallback(() => {
+    if (!pendingSearchQuery) return;
+
+    // Switch to chat mode with the original query
+    setAppMode("chat");
+
+    // Submit the query to chat, optionally with top search results as context
+    const topDocs = searchResults.slice(0, 5);
+    setSelectedDocuments(
+      topDocs.map((doc) => ({
+        document_id: doc.document_id,
+        semantic_identifier: doc.semantic_identifier,
+        link: doc.link ?? "",
+        source_type: doc.source_type,
+        blurb: doc.blurb,
+        boost: doc.boost,
+        hidden: doc.hidden,
+        score: doc.score ?? 0,
+        chunk_ind: doc.chunk_ind,
+        match_highlights: doc.match_highlights,
+        metadata: doc.metadata as Record<string, string>,
+        updated_at: doc.updated_at,
+        is_internet: doc.is_internet,
+      }))
+    );
+
+    resetSearch();
+    resetClassification();
+
+    onSubmit({
+      message: pendingSearchQuery,
+      currentMessageFiles: currentMessageFiles,
+      deepResearch: deepResearchEnabled,
+    });
+  }, [
+    pendingSearchQuery,
+    searchResults,
+    setSelectedDocuments,
+    resetSearch,
+    resetClassification,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+  ]);
+
+  // Handle document click from search results
+  const handleSearchDocumentClick = useCallback(
+    (doc: MinimalOnyxDocument) => {
+      setPresentingDocument(doc);
+    },
+    [setPresentingDocument]
   );
 
   // Memoized callbacks for DocumentsSidebar
@@ -705,13 +827,32 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </ChatScrollContainer>
               )}
 
-              {!currentChatSessionId && !currentProjectId && (
-                <div className="w-full flex-1 flex flex-col items-center justify-end">
-                  <WelcomeMessage
-                    agent={liveAssistant}
-                    isDefaultAgent={isDefaultAgent}
+              {/* Welcome message when no session and not showing search results */}
+              {!currentChatSessionId &&
+                !currentProjectId &&
+                !showSearchResults && (
+                  <div className="w-full flex-1 flex flex-col items-center justify-end">
+                    <WelcomeMessage
+                      agent={liveAssistant}
+                      isDefaultAgent={isDefaultAgent}
+                    />
+                    <Spacer rem={1.5} />
+                  </div>
+                )}
+
+              {/* Search Results Panel */}
+              {!currentChatSessionId && showSearchResults && (
+                <div className="w-full flex-1 overflow-auto">
+                  <SearchResultsPanel
+                    query={pendingSearchQuery || ""}
+                    executedQueries={executedQueries}
+                    results={searchResults}
+                    llmSelectedDocIds={llmSelectedDocIds}
+                    isLoading={isSearchLoading || isClassifying}
+                    error={searchError}
+                    onDocumentClick={handleSearchDocumentClick}
+                    onAskAboutResults={handleAskAboutSearchResults}
                   />
-                  <Spacer rem={1.5} />
                 </div>
               )}
 
@@ -754,6 +895,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       />
                     )}
 
+                  {/* Mode Toggle - only show when no active chat session */}
+                  {!currentChatSessionId && (
+                    <div className="flex justify-center mb-2">
+                      <CompactModeToggle
+                        mode={appMode}
+                        onModeChange={setAppMode}
+                        disabled={isClassifying || isSearchLoading}
+                      />
+                    </div>
+                  )}
+
                   <ChatInputBar
                     ref={chatInputBarRef}
                     deepResearchEnabled={deepResearchEnabled}
@@ -793,20 +945,22 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
               </div>
 
-              {/* SearchUI */}
-              {!currentChatSessionId && !currentProjectId && (
-                <div className="flex flex-1 flex-col items-center w-full">
-                  {liveAssistant?.starter_messages &&
-                    liveAssistant.starter_messages.length > 0 &&
-                    messageHistory.length === 0 &&
-                    !currentProjectId &&
-                    !currentChatSessionId && (
-                      <div className="max-w-[50rem] w-full">
-                        <Suggestions onSubmit={onSubmit} />
-                      </div>
-                    )}
-                </div>
-              )}
+              {/* Suggestions - only show when not in search mode with results */}
+              {!currentChatSessionId &&
+                !currentProjectId &&
+                !showSearchResults && (
+                  <div className="flex flex-1 flex-col items-center w-full">
+                    {liveAssistant?.starter_messages &&
+                      liveAssistant.starter_messages.length > 0 &&
+                      messageHistory.length === 0 &&
+                      !currentProjectId &&
+                      !currentChatSessionId && (
+                        <div className="max-w-[50rem] w-full">
+                          <Suggestions onSubmit={onSubmit} />
+                        </div>
+                      )}
+                  </div>
+                )}
               <AppLayouts.Footer />
             </div>
           )}
