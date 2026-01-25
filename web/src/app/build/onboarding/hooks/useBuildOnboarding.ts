@@ -7,8 +7,14 @@ import {
   LLMProviderDescriptor,
   LLMProviderName,
 } from "@/app/admin/configuration/llm/interfaces";
-import { BuildOnboardingFlow, BuildUserInfo } from "../types";
-import { getBuildUserPersona, setBuildUserPersona } from "../constants";
+import {
+  BuildOnboardingFlow,
+  BuildUserInfo,
+} from "@/app/build/onboarding/types";
+import {
+  getBuildUserPersona,
+  setBuildUserPersona,
+} from "@/app/build/onboarding/constants";
 import { updateUserPersonalization } from "@/lib/userSettings";
 
 function checkHasRecommendedLlms(
