@@ -527,11 +527,11 @@ The `ChartConfig` object defines colors and labels for your data series. This en
 const chartConfig = {
   revenue: {
     label: "Revenue",
-    color: "hsl(var(--chart-1))",
+    color: "var(--chart-1)",
   },
   expenses: {
     label: "Expenses", 
-    color: "hsl(var(--chart-2))",
+    color: "var(--chart-2)",
   },
 } satisfies ChartConfig;
 ```
@@ -550,7 +550,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 const chartConfig = {
   value: {
     label: "Value",
-    color: "hsl(var(--chart-1))",
+    color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
@@ -582,11 +582,11 @@ const chartConfig = {
 const chartConfig = {
   revenue: {
     label: "Revenue",
-    color: "hsl(var(--chart-1))",
+    color: "var(--chart-1)",
   },
   expenses: {
     label: "Expenses",
-    color: "hsl(var(--chart-2))",
+    color: "var(--chart-2)",
   },
 } satisfies ChartConfig;
 
@@ -607,9 +607,9 @@ const chartConfig = {
 
 ```typescript
 const chartConfig = {
-  desktop: { label: "Desktop", color: "hsl(var(--chart-1))" },
-  mobile: { label: "Mobile", color: "hsl(var(--chart-2))" },
-  tablet: { label: "Tablet", color: "hsl(var(--chart-3))" },
+  desktop: { label: "Desktop", color: "var(--chart-1)" },
+  mobile: { label: "Mobile", color: "var(--chart-2)" },
+  tablet: { label: "Tablet", color: "var(--chart-3)" },
 } satisfies ChartConfig;
 
 <ChartContainer config={chartConfig} className="h-[300px] w-full">
@@ -630,12 +630,12 @@ const chartConfig = {
 #### Chart Styling Rules
 
 **Colors (use CSS variables from globals.css):**
-- `hsl(var(--chart-1))` through `hsl(var(--chart-5))` - Primary chart colors
-- `hsl(var(--primary))` - For single-series emphasis
-- `hsl(var(--muted))` - For de-emphasized data
+- `var(--chart-1)` through `var(--chart-5)` - Primary chart colors
+- `var(--primary)` - For single-series emphasis
+- `var(--muted)` - For de-emphasized data
 
 **Color References in Charts:**
-- In `ChartConfig`: Use `color: "hsl(var(--chart-1))"`
+- In `ChartConfig`: Use `color: "var(--chart-1)"`
 - In chart elements: Use `fill="var(--color-keyname)"` or `stroke="var(--color-keyname)"`
 - The `keyname` matches the key in your `ChartConfig`
 
@@ -663,23 +663,23 @@ import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Responsive
 
 <ResponsiveContainer width="100%" height={300}>
   <ScatterChart>
-    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-    <XAxis dataKey="x" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-    <YAxis dataKey="y" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+    <XAxis dataKey="x" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
+    <YAxis dataKey="y" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
     <Tooltip 
       contentStyle={{ 
-        backgroundColor: "hsl(var(--card))", 
-        border: "1px solid hsl(var(--border))", 
+        backgroundColor: "var(--card)", 
+        border: "1px solid var(--border)", 
         borderRadius: "6px" 
       }} 
     />
-    <Scatter data={data} fill="hsl(var(--chart-1))" />
+    <Scatter data={data} fill="var(--chart-1)" />
   </ScatterChart>
 </ResponsiveContainer>
 ```
 
 **When using raw recharts:**
-- Still use CSS variables for colors (`hsl(var(--chart-1))`, etc.)
+- Still use CSS variables for colors (`var(--chart-1)`, etc.)
 - Match styling to shadcn conventions (tickLine={false}, axisLine={false})
 - Style tooltips to match the design system
 
