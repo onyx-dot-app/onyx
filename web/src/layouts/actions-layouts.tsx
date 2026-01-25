@@ -427,10 +427,7 @@ function ActionsTool({
  */
 function ActionsToolSkeleton() {
   return Array.from({ length: 3 }).map((_, index) => (
-    <div
-      key={index}
-      className="w-full p-3 rounded-12 border bg-background-tint-00"
-    >
+    <Card key={index} padding={1.5}>
       <LineItemLayout
         // We provide dummy values here.
         // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
@@ -439,7 +436,7 @@ function ActionsToolSkeleton() {
         rightChildren={<></>}
         loading
       />
-    </div>
+    </Card>
   ));
 }
 
