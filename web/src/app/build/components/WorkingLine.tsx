@@ -127,65 +127,69 @@ export default function WorkingLine({ toolCall }: WorkingLineProps) {
         <CollapsibleTrigger asChild>
           <button
             className={cn(
-              "w-full flex gap-2 py-1.5 px-2 rounded-md",
+              "w-full flex gap-2 py-1.5 pl-2 pr-4 rounded-md",
               "hover:bg-background-tint-02 transition-colors text-left",
-              isOpen ? "items-start" : "items-center"
+              "items-start"
             )}
           >
             {/* Status indicator */}
             {StatusIcon ? (
               <StatusIcon
                 className={cn(
-                  "size-3.5 shrink-0",
-                  statusDisplay.iconClass,
-                  isOpen && "mt-0.5"
+                  "size-3.5 shrink-0 mt-0.5",
+                  statusDisplay.iconClass
                 )}
               />
             ) : (
               <ToolIcon
-                className={cn(
-                  "size-3.5 stroke-text-03 shrink-0",
-                  isOpen && "mt-0.5"
-                )}
+                className={cn("size-3.5 stroke-text-03 shrink-0 mt-0.5")}
               />
             )}
 
             {/* Action text */}
-            <span
-              className={cn(
-                "text-sm flex-1",
-                isOpen ? "break-all whitespace-pre-wrap" : "truncate"
-              )}
-            >
-              {toolCall.kind === "execute" && toolCall.description ? (
-                <>
-                  {/* For execute: show description as primary, command as secondary */}
-                  <span className="text-text-04">
-                    {toolCall.description.charAt(0).toUpperCase() +
-                      toolCall.description.slice(1)}
-                  </span>
-                  {toolCall.command && (
-                    <span className="text-text-02"> {toolCall.command}</span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="text-text-04">{toolCall.title}</span>
-                  {toolCall.description &&
-                    toolCall.description !== toolCall.title && (
-                      <span className="text-text-02">
-                        {" "}
-                        {toolCall.description}
-                      </span>
+            <span className="text-sm flex-1 min-w-0 text-left">
+              <span
+                className={cn(
+                  "block",
+                  isOpen
+                    ? toolCall.kind === "execute"
+                      ? "break-words whitespace-pre-wrap"
+                      : "break-words whitespace-normal"
+                    : "truncate"
+                )}
+              >
+                {toolCall.kind === "execute" && toolCall.description ? (
+                  <>
+                    {/* For execute: show description as primary, command as secondary */}
+                    <span className="text-text-04">
+                      {toolCall.description.charAt(0).toUpperCase() +
+                        toolCall.description.slice(1)}
+                    </span>
+                    {toolCall.command && (
+                      <span className="text-text-02"> {toolCall.command}</span>
                     )}
-                </>
-              )}
+                  </>
+                ) : (
+                  <span className="text-text-04">
+                    {toolCall.title}
+                    {toolCall.description &&
+                      toolCall.description !== toolCall.title && (
+                        <>
+                          {" "}
+                          <span className="text-text-02">
+                            {toolCall.description}
+                          </span>
+                        </>
+                      )}
+                  </span>
+                )}
+              </span>
             </span>
 
             {/* Expand arrow */}
             <SvgChevronDown
               className={cn(
-                "size-3.5 stroke-text-03 transition-transform duration-150 shrink-0",
+                "size-3.5 stroke-text-03 transition-transform duration-150 shrink-0 mt-0.5",
                 !isOpen && "rotate-[-90deg]"
               )}
             />
