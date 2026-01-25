@@ -718,7 +718,7 @@ export default function ActionsPopover({
             />
           </div>
         </Popover.Trigger>
-        <Popover.Content side="bottom" align="start">
+        <Popover.Content side="bottom" align="start" lg>
           <div data-testid="tool-options">
             {secondaryView
               ? secondaryView.type === "mcp"

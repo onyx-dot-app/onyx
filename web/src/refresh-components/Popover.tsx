@@ -97,7 +97,8 @@ const PopoverClose = PopoverPrimitive.Close;
 const widthClasses = {
   fit: "w-fit",
   md: "w-[12rem]",
-  lg: "w-[18rem]",
+  lg: "w-[15rem]",
+  xl: "w-[18rem]",
 };
 interface PopoverContentProps
   extends WithoutStyles<
@@ -106,12 +107,13 @@ interface PopoverContentProps
   fit?: boolean;
   md?: boolean;
   lg?: boolean;
+  xl?: boolean;
 }
 const PopoverContent = React.forwardRef<
   React.ComponentRef<typeof PopoverPrimitive.Content>,
   PopoverContentProps
->(({ fit, md, lg, align = "center", sideOffset = 4, ...props }, ref) => {
-  const width = fit ? "fit" : md ? "md" : lg ? "lg" : "fit";
+>(({ fit, md, lg, xl, align = "center", sideOffset = 4, ...props }, ref) => {
+  const width = fit ? "fit" : md ? "md" : lg ? "lg" : xl ? "xl" : "fit";
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
