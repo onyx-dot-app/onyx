@@ -34,10 +34,11 @@ All database operations should be handled by the caller (SessionManager, Celery 
 Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
-import base64
+import io
 import json
 import os
 import re
+import tarfile
 import threading
 import time
 from collections.abc import Generator
@@ -1254,7 +1255,7 @@ echo "Session cleanup complete"
     ) -> str:
         """Upload a file to the session's attachments directory.
 
-        Uses a single kubectl exec with base64 encoding to write the file.
+        Uses tar streaming via stdin for efficient binary transfer.
         Handles filename collisions atomically within the shell script.
 
         Args:
@@ -1271,19 +1272,35 @@ echo "Session cleanup complete"
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         target_dir = f"/workspace/sessions/{session_id}/attachments"
-        encoded = base64.b64encode(content).decode("ascii")
+
+        # Create tar archive in memory
+        tar_buffer = io.BytesIO()
+        with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+            tarinfo = tarfile.TarInfo(name=filename)
+            tarinfo.size = len(content)
+            tar.addfile(tarinfo, io.BytesIO(content))
+        tar_data = tar_buffer.getvalue()
 
         # Shell script that:
-        # 1. Creates directory
-        # 2. Handles collisions atomically
-        # 3. Decodes and writes file atomically (temp file + mv)
-        # 4. Outputs final filename
+        # 1. Creates target directory and temp extraction directory
+        # 2. Extracts tar to temp directory
+        # 3. Moves file to target with collision handling
+        # 4. Cleans up temp directory
+        # 5. Outputs final filename
         script = f"""
 set -e
-mkdir -p "{target_dir}"
-cd "{target_dir}"
+target_dir="{target_dir}"
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
 
-base="{filename}"
+mkdir -p "$target_dir"
+tar xf - -C "$tmpdir"
+
+# Find the extracted file (first file in tmpdir)
+original=$(ls -1 "$tmpdir" | head -1)
+base="$original"
+
+cd "$target_dir"
 if [ -f "$base" ]; then
     stem="${{base%.*}}"
     ext="${{base##*.}}"
@@ -1293,31 +1310,58 @@ if [ -f "$base" ]; then
     base="${{stem}}_${{i}}${{ext}}"
 fi
 
-echo "{encoded}" | base64 -d > "$base.tmp"
-mv "$base.tmp" "$base"
-chmod 644 "$base"
+mv "$tmpdir/$original" "$target_dir/$base"
+chmod 644 "$target_dir/$base"
 echo "$base"
 """
 
         try:
-            resp = k8s_stream(
+            # Open WebSocket connection with stdin enabled
+            ws_client = k8s_stream(
                 self._core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
                 command=["/bin/sh", "-c", script],
-                stdin=False,
+                stdin=True,
                 stdout=True,
                 stderr=True,
                 tty=False,
+                _preload_content=False,  # Return WSClient instead of string
             )
 
+            # Write tar data to stdin
+            ws_client.write_stdin(tar_data)
+            ws_client.close()
+
+            # Read response
+            stdout_data = ""
+            stderr_data = ""
+            while ws_client.is_open():
+                ws_client.update(timeout=30)
+                if ws_client.peek_stdout():
+                    stdout_data += ws_client.read_stdout()
+                if ws_client.peek_stderr():
+                    stderr_data += ws_client.read_stderr()
+
+            # Get any remaining data
+            stdout_data += ws_client.read_stdout() or ""
+            stderr_data += ws_client.read_stderr() or ""
+
+            if stderr_data.strip():
+                logger.warning(f"Upload stderr: {stderr_data.strip()}")
+
             # Last line of output is the final filename
-            final_filename = resp.strip().split("\n")[-1]
+            final_filename = stdout_data.strip().split("\n")[-1]
+
+            if not final_filename:
+                raise RuntimeError(
+                    f"Upload failed - no filename returned. stderr: {stderr_data}"
+                )
 
             logger.info(
                 f"Uploaded file to session {session_id}: attachments/{final_filename} "
-                f"({len(content)} bytes)"
+                f"({len(content)} bytes via tar)"
             )
 
             return f"attachments/{final_filename}"
