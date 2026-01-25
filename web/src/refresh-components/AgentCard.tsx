@@ -105,7 +105,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
 
       <shareAgentModal.Provider>
         <ShareAgentModal
-          agent={agent}
+          agentId={agent.id}
           userIds={fullAgent?.users?.map((u) => u.id) ?? []}
           groupIds={fullAgent?.groups ?? []}
           isPublic={fullAgent?.is_public ?? false}

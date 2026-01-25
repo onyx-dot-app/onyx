@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import {
@@ -46,16 +45,16 @@ interface ShareAgentFormValues {
 // ============================================================================
 
 interface ShareAgentFormContentProps {
-  agent?: MinimalPersonaSnapshot;
+  agentId?: number;
 }
 
-function ShareAgentFormContent({ agent }: ShareAgentFormContentProps) {
+function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty } =
     useFormikContext<ShareAgentFormValues>();
   const { data: usersData } = useUsers({ includeApiKeys: false });
   const { data: groupsData } = useGroups();
   const { user: currentUser } = useUser();
-  const { agent: fullAgent } = useAgent(agent?.id ?? null);
+  const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
 
   const acceptedUsers = usersData?.accepted ?? [];
@@ -100,8 +99,8 @@ function ShareAgentFormContent({ agent }: ShareAgentFormContentProps) {
   }
 
   function handleCopyLink() {
-    if (!agent?.id) return;
-    const url = `${window.location.origin}/chat?assistantId=${agent.id}`;
+    if (!agentId) return;
+    const url = `${window.location.origin}/chat?assistantId=${agentId}`;
     navigator.clipboard.writeText(url);
   }
 
@@ -182,7 +181,7 @@ function ShareAgentFormContent({ agent }: ShareAgentFormContentProps) {
                           icon={SvgUser}
                           description={isCurrentUser ? "You" : undefined}
                           rightChildren={
-                            isOwner || (isCurrentUser && !agent) ? (
+                            isOwner || (isCurrentUser && !agentId) ? (
                               // Owner will always have the agent "shared" with it.
                               // Therefore, we never render any `IconButton SvgX` to remove it.
                               //
@@ -244,7 +243,7 @@ function ShareAgentFormContent({ agent }: ShareAgentFormContentProps) {
       <Modal.Footer>
         <BasicModalFooter
           left={
-            agent ? (
+            agentId ? (
               <Button secondary leftIcon={SvgLink} onClick={handleCopyLink}>
                 Copy Link
               </Button>
@@ -271,7 +270,7 @@ function ShareAgentFormContent({ agent }: ShareAgentFormContentProps) {
 // ============================================================================
 
 export interface ShareAgentModalProps {
-  agent?: MinimalPersonaSnapshot;
+  agentId?: number;
   userIds: string[];
   groupIds: number[];
   isPublic: boolean;
@@ -279,7 +278,7 @@ export interface ShareAgentModalProps {
 }
 
 export default function ShareAgentModal({
-  agent,
+  agentId,
   userIds,
   groupIds,
   isPublic,
@@ -304,7 +303,7 @@ export default function ShareAgentModal({
         onSubmit={handleSubmit}
         enableReinitialize
       >
-        <ShareAgentFormContent agent={agent} />
+        <ShareAgentFormContent agentId={agentId} />
       </Formik>
     </Modal>
   );

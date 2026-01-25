@@ -1047,7 +1047,7 @@ export default function AgentEditorPage({
 
                 <shareAgentModal.Provider>
                   <ShareAgentModal
-                    agent={existingAgent}
+                    agentId={existingAgent?.id}
                     userIds={values.shared_user_ids}
                     groupIds={values.shared_group_ids}
                     isPublic={values.is_public}
