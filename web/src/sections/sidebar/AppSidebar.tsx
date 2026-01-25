@@ -483,11 +483,13 @@ const MemoizedAppSidebarInner = memo(
           <SidebarBody
             scrollKey="app-sidebar"
             footer={settingsButton}
-            actionButton={newSessionButton}
+            actionButton={
+              <div className="flex flex-col gap-0.5">
+                {newSessionButton}
+                {searchChatsButton}
+              </div>
+            }
           >
-            {/* Search chats button */}
-            {searchChatsButton}
-
             {/* When folded, show icons immediately without waiting for data */}
             {folded ? (
               <>
