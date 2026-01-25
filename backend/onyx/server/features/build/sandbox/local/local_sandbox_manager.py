@@ -300,14 +300,12 @@ class LocalSandboxManager(SandboxManager):
                 )
                 logger.debug("Files symlink ready")
 
-                # Setup user identity file with persona info (after files symlink)
-                if user_work_area:
-                    logger.debug(
-                        f"Setting up user identity for {user_work_area}/{user_level}"
-                    )
-                    self._directory_manager.setup_user_identity_file(
-                        session_path, user_work_area, user_level
-                    )
+            # Setup org_info directory with user identity (at session root)
+            if user_work_area:
+                logger.debug(f"Setting up org_info for {user_work_area}/{user_level}")
+                self._directory_manager.setup_org_info(
+                    session_path, user_work_area, user_level
+                )
 
             logger.debug("Setting up outputs directory from template")
             self._directory_manager.setup_outputs_directory(session_path)
