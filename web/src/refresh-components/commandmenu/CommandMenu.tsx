@@ -163,6 +163,12 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     [onOpenChange]
   );
 
+  const onListMouseLeave = useCallback(() => {
+    if (!isKeyboardNav) {
+      setHighlightedValue(null);
+    }
+  }, [isKeyboardNav]);
+
   // Keyboard handler - centralized for all keys including Enter
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -277,6 +283,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     onItemMouseEnter,
     onItemMouseMove,
     onItemClick,
+    onListMouseLeave,
     handleKeyDown,
   };
 
@@ -427,7 +434,7 @@ function CommandMenuHeader({
  * Uses ScrollIndicatorDiv for automatic scroll shadows.
  */
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
-  const { isKeyboardNav } = useCommandMenuContext();
+  const { isKeyboardNav, onListMouseLeave } = useCommandMenuContext();
   const childCount = React.Children.count(children);
 
   if (childCount === 0 && emptyMessage) {
@@ -447,6 +454,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
       data-command-menu-list
       data-keyboard-nav={isKeyboardNav ? "true" : undefined}
       variant="shadow"
+      onMouseLeave={onListMouseLeave}
     >
       {children}
     </ScrollIndicatorDiv>

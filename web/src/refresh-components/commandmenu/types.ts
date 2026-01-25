@@ -199,6 +199,7 @@ export interface CommandMenuContextValue {
   onItemMouseEnter: (value: string) => void;
   onItemMouseMove: (value: string) => void;
   onItemClick: (value: string) => void;
+  onListMouseLeave: () => void;
 
   // Keyboard handler (Content attaches this to DialogPrimitive.Content)
   handleKeyDown: (e: React.KeyboardEvent) => void;
