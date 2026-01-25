@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
@@ -169,6 +170,12 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     }
   }, [isKeyboardNav]);
 
+  // Compute the type of the currently highlighted item
+  const highlightedItemType = useMemo(() => {
+    if (!highlightedValue) return null;
+    return itemCallbacks.current.get(highlightedValue)?.type ?? null;
+  }, [highlightedValue]);
+
   // Keyboard handler - centralized for all keys including Enter
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -277,6 +284,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
 
   const contextValue: CommandMenuContextValue = {
     highlightedValue,
+    highlightedItemType,
     isKeyboardNav,
     registerItem,
     unregisterItem,
@@ -656,7 +664,6 @@ function CommandMenuAction({
 function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
   return (
     <div className="flex-shrink-0">
-      <Separator noPadding />
       <Section
         flexDirection="row"
         justifyContent="start"
@@ -685,7 +692,7 @@ function CommandMenuFooterAction({
   return (
     <div className="flex items-center gap-1">
       <Icon className="w-[0.875rem] h-[0.875rem] stroke-text-02" />
-      <Text figureKeystroke text02>
+      <Text mainUiBody text03>
         {label}
       </Text>
     </div>
@@ -695,6 +702,8 @@ function CommandMenuFooterAction({
 // =============================================================================
 // Export Compound Component
 // =============================================================================
+
+export { useCommandMenuContext };
 
 export default Object.assign(CommandMenuRoot, {
   Content: CommandMenuContent,

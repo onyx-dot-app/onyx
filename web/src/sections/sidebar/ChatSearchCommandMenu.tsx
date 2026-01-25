@@ -3,7 +3,9 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import CommandMenu from "@/refresh-components/commandmenu/CommandMenu";
+import CommandMenu, {
+  useCommandMenuContext,
+} from "@/refresh-components/commandmenu/CommandMenu";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
@@ -20,7 +22,32 @@ import {
   SvgFolder,
   SvgFolderPlus,
   SvgBubbleText,
+  SvgChevronDown,
+  SvgCornerRightUpDot,
+  SvgArrowUpDown,
+  SvgKeystroke,
 } from "@opal/icons";
+
+/**
+ * Dynamic footer that shows contextual action labels based on highlighted item type
+ */
+function DynamicFooter() {
+  const { highlightedItemType } = useCommandMenuContext();
+
+  // "Show all" for filters, "Open" for everything else (items, actions, or no highlight)
+  const actionLabel = highlightedItemType === "filter" ? "Show all" : "Open";
+
+  return (
+    <CommandMenu.Footer
+      leftActions={
+        <>
+          <CommandMenu.FooterAction icon={SvgArrowUpDown} label="Select" />
+          <CommandMenu.FooterAction icon={SvgKeystroke} label={actionLabel} />
+        </>
+      }
+    />
+  );
+}
 
 interface ChatSearchCommandMenuProps {
   trigger: React.ReactNode;
@@ -196,15 +223,18 @@ export default function ChatSearchCommandMenu({
             {(activeFilter === "all" || activeFilter === "chats") &&
               displayedChats.length > 0 && (
                 <>
-                  {(activeFilter === "all" || activeFilter === "chats") && (
-                    <CommandMenu.Filter
-                      value="recent-sessions"
-                      onSelect={() => setActiveFilter("chats")}
-                      isApplied={activeFilter === "chats"}
-                    >
-                      {activeFilter === "chats" ? "Recent" : "Recent Sessions"}
-                    </CommandMenu.Filter>
-                  )}
+                  {(activeFilter === "all" || activeFilter === "chats") &&
+                    searchValue.trim().length === 0 && (
+                      <CommandMenu.Filter
+                        value="recent-sessions"
+                        onSelect={() => setActiveFilter("chats")}
+                        isApplied={activeFilter === "chats"}
+                      >
+                        {activeFilter === "chats"
+                          ? "Recent"
+                          : "Recent Sessions"}
+                      </CommandMenu.Filter>
+                    )}
                   {displayedChats.map((chat) => (
                     <CommandMenu.Item
                       key={chat.id}
@@ -288,6 +318,8 @@ export default function ChatSearchCommandMenu({
                 </CommandMenu.Action>
               )}
           </CommandMenu.List>
+
+          <DynamicFooter />
         </CommandMenu.Content>
       </CommandMenu>
 

@@ -185,6 +185,7 @@ export interface CommandMenuFooterActionProps {
 export interface CommandMenuContextValue {
   // State
   highlightedValue: string | null;
+  highlightedItemType: "filter" | "item" | "action" | null;
   isKeyboardNav: boolean;
 
   // Registration (items call on mount with their callback)
