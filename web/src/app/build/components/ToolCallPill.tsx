@@ -13,7 +13,7 @@ import {
   SvgFileText,
   SvgEdit,
   SvgLoader,
-  SvgCheckCircle,
+  SvgCheckSquare,
   SvgAlertCircle,
   SvgBubbleText,
 } from "@opal/icons";
@@ -52,35 +52,35 @@ function getStatusDisplay(status: string) {
       return {
         icon: null,
         iconClass: "stroke-status-info-05",
-        bgClass: "bg-status-info-01 border-status-info-02",
+        bgClass: "bg-status-info-01 border-status-info-01",
         showSpinner: true,
       };
     case "in_progress":
       return {
         icon: null,
         iconClass: "stroke-status-info-05",
-        bgClass: "bg-status-info-01 border-status-info-02",
+        bgClass: "bg-status-info-01 border-status-info-01",
         showSpinner: true,
       };
     case "completed":
       return {
-        icon: SvgCheckCircle,
+        icon: SvgCheckSquare,
         iconClass: "stroke-status-success-05",
-        bgClass: "bg-background-neutral-01 border-border-02",
+        bgClass: "bg-background-neutral-01 border-border-01",
         showSpinner: false,
       };
     case "failed":
       return {
         icon: SvgAlertCircle,
         iconClass: "stroke-status-error-05",
-        bgClass: "bg-status-error-01 border-status-error-02",
+        bgClass: "bg-status-error-01 border-status-error-01",
         showSpinner: false,
       };
     default:
       return {
         icon: null,
         iconClass: "stroke-text-03",
-        bgClass: "bg-background-neutral-01 border-border-02",
+        bgClass: "bg-background-neutral-01 border-border-01",
         showSpinner: false,
       };
   }
@@ -136,7 +136,7 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
-          "w-full border rounded-lg overflow-hidden transition-colors",
+          "w-full border-[0.5px] rounded-lg overflow-hidden transition-colors",
           "hover:bg-background-tint-02",
           statusDisplay.bgClass
         )}

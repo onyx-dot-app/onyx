@@ -114,6 +114,21 @@ export function isTaskTool(
 }
 
 /**
+ * Check if a tool call should be included in a "Working" pill.
+ * Returns true for all tool calls except task/subagent tools.
+ * Working tools: glob, grep, read, edit, write, bash, webfetch, websearch, etc.
+ */
+export function isWorkingToolCall(toolCall: {
+  kind: string;
+  subagentType?: string;
+}): boolean {
+  // Task tools (subagents) are kept as separate pills
+  if (toolCall.kind === "task") return false;
+  if (toolCall.subagentType) return false;
+  return true;
+}
+
+/**
  * Check if a tool is a TodoWrite tool.
  * Detects by tool name ("todowrite", "todo_write") OR by presence of todos array in rawInput.
  * The second check is needed because the backend may change the title on completion
@@ -159,51 +174,49 @@ export function getToolTitle(
   toolName: string | null | undefined,
   isNewFile?: boolean
 ): string {
-  // Handle "edit" kind explicitly - it's a write/edit operation
+  // Special case: "edit" kind uses isNewFile to determine title
   // The title field often contains the file path (not "edit"), so we can't rely on toolName
   if (kind === "edit") {
-    // isNewFile: true = "Writing file", false = "Editing file", undefined = default to "Writing file"
-    return isNewFile === false ? "Editing file" : "Writing file";
+    return isNewFile === false ? "Editing " : "Writing ";
   }
 
-  const normalizedKind = kind === "edit" ? "other" : kind;
   const normalizedToolName = toolName?.toLowerCase();
 
-  // First check tool name for specific mappings
-  switch (normalizedToolName) {
-    case "task":
-      return "Running task";
-    case "glob":
-      return "Searching files";
-    case "grep":
-      return "Searching content";
-    case "webfetch":
-      return "Fetching web content";
-    case "websearch":
-      return "Searching web";
-    case "bash":
-      return "Running command";
-    case "read":
-      return "Reading file";
-    case "write":
-    case "edit":
-      return "Writing file";
+  // Priority 1: Check tool name for specific mappings (most specific)
+  if (normalizedToolName) {
+    switch (normalizedToolName) {
+      case "task":
+        return "Running task";
+      case "glob":
+        return "Searching files";
+      case "grep":
+        return "Searching content";
+      case "webfetch":
+        return "Fetching web content";
+      case "websearch":
+        return "Searching web";
+      case "bash":
+        return "Running command";
+      case "read":
+        return "Read ";
+      case "write":
+      case "edit":
+        return "Writing ";
+    }
   }
 
-  // Fall back to kind-based titles
-  switch (normalizedKind) {
+  // Priority 2: Fall back to kind-based titles
+  switch (kind) {
     case "execute":
       return "Running command";
     case "read":
-      return "Reading file";
+      return "Read ";
     case "task":
       return "Running task";
     case "search":
       return "Searching";
     case "other":
     default:
-      // "other" is a fallback for unrecognized kinds
-      // Actual write/edit tools are caught by toolName check above
       return "Running tool";
   }
 }

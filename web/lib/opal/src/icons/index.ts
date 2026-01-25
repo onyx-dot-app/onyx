@@ -103,6 +103,7 @@ export { default as SvgPaintBrush } from "@opal/icons/paint-brush";
 export { default as SvgPaperclip } from "@opal/icons/paperclip";
 export { default as SvgPauseCircle } from "@opal/icons/pause-circle";
 export { default as SvgPenSmall } from "@opal/icons/pen-small";
+export { default as SvgPencilRuler } from "@opal/icons/PencilRuler";
 export { default as SvgPieChart } from "@opal/icons/pie-chart";
 export { default as SvgPin } from "@opal/icons/pin";
 export { default as SvgPinned } from "@opal/icons/pinned";

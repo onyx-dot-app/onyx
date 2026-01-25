@@ -64,3 +64,15 @@ export type StreamItem =
   | { type: "thinking"; id: string; content: string; isStreaming: boolean }
   | { type: "tool_call"; id: string; toolCall: ToolCallState }
   | { type: "todo_list"; id: string; todoList: TodoListState };
+
+/**
+ * GroupedStreamItem - StreamItem after grouping transformation for rendering.
+ * Consecutive working tool calls are grouped into a single "working_group" item.
+ * Used by BuildMessageList to render consolidated Working pills.
+ */
+export type GroupedStreamItem =
+  | { type: "text"; id: string; content: string; isStreaming: boolean }
+  | { type: "thinking"; id: string; content: string; isStreaming: boolean }
+  | { type: "tool_call"; id: string; toolCall: ToolCallState }
+  | { type: "todo_list"; id: string; todoList: TodoListState }
+  | { type: "working_group"; id: string; toolCalls: ToolCallState[] };

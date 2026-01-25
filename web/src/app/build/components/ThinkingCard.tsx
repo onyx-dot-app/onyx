@@ -31,11 +31,11 @@ export default function ThinkingCard({
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
-          "w-full border rounded-lg overflow-hidden transition-colors",
+          "w-full border-[0.5px] rounded-lg overflow-hidden transition-colors",
           "hover:bg-background-tint-02",
           isStreaming
-            ? "border-theme-blue-03 bg-theme-blue-01"
-            : "border-border-02 bg-background-neutral-01"
+            ? "border-theme-blue-02 bg-theme-blue-01"
+            : "border-border-01 bg-background-neutral-01"
         )}
       >
         <CollapsibleTrigger asChild>
