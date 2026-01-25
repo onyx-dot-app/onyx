@@ -643,6 +643,7 @@ export function useChatController({
       let toolCall: ToolCallMetadata | null = null;
       let files = projectFilesToFileDescriptors(currentMessageFiles);
       let packets: Packet[] = [];
+      let packetsVersion = 0;
 
       let newUserMessageId: number | null = null;
       let newAssistantMessageId: number | null = null;
@@ -729,7 +730,6 @@ export function useChatController({
             if (!packet) {
               continue;
             }
-            console.debug("Packet:", JSON.stringify(packet));
 
             // We've processed initial packets and are starting to stream content.
             // Transition from 'loading' to 'streaming'.
@@ -800,8 +800,8 @@ export function useChatController({
                 updateCanContinue(true, frozenSessionId);
               }
             } else if (Object.hasOwn(packet, "obj")) {
-              console.debug("Object packet:", JSON.stringify(packet));
               packets.push(packet as Packet);
+              packetsVersion++;
 
               // Check if the packet contains document information
               const packetObj = (packet as Packet).obj;
@@ -859,6 +859,7 @@ export function useChatController({
                   overridden_model: finalMessage?.overridden_model,
                   stopReason: stopReason,
                   packets: packets,
+                  packetsVersion: packetsVersion,
                 },
               ],
               // Pass the latest map state
