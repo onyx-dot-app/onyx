@@ -793,7 +793,6 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
 
                 org_info_setup = f"""
 # Create org_info directory with all files
-echo "Setting up org_info for {user_work_area}/{user_level}"
 mkdir -p {session_path}/org_info
 printf '%s' '{agents_md_escaped}' > {session_path}/org_info/AGENTS.md
 printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile.txt
