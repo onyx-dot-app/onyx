@@ -311,9 +311,9 @@ function CommandMenuHeader({
   );
 
   return (
-    <Section padding={1} gap={0.5} alignItems="start">
+    <div>
       {/* Top row: Search icon, filters, close button */}
-      <Section flexDirection="row" justifyContent="between" gap={0.5}>
+      <div className="px-3 pt-3 flex flex-row justify-between items-center">
         <Section
           flexDirection="row"
           justifyContent="start"
@@ -321,7 +321,7 @@ function CommandMenuHeader({
           width="fit"
         >
           {/* Standalone search icon */}
-          <SvgSearch className="w-6 h-6 stroke-text-01" />
+          <SvgSearch className="w-6 h-6 stroke-text-04" />
           {filters.map((filter) => (
             <EditableTag
               key={filter.id}
@@ -338,16 +338,19 @@ function CommandMenuHeader({
             <IconButton icon={SvgX} internal onClick={onClose} />
           </DialogPrimitive.Close>
         )}
-      </Section>
+      </div>
       {/* Search input - arrow/enter keys bubble up to Content for centralized handling */}
-      <InputTypeIn
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onValueChange?.(e.target.value)}
-        onKeyDown={handleInputKeyDown}
-        autoFocus
-      />
-    </Section>
+      <div className="px-2 pb-2 pt-0.5">
+        <InputTypeIn
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onValueChange?.(e.target.value)}
+          onKeyDown={handleInputKeyDown}
+          autoFocus
+          className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover,:active,:focus,:focus-within)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
+        />
+      </div>
+    </div>
   );
 }
 
