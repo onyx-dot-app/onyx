@@ -15,6 +15,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
+from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -162,6 +163,56 @@ class DirectoryManager:
         files_link = sandbox_path / "files"
         if not files_link.exists():
             files_link.symlink_to(file_system_path, target_is_directory=True)
+
+    def setup_user_identity_file(
+        self,
+        sandbox_path: Path,
+        user_work_area: str | None,
+        user_level: str | None,
+    ) -> None:
+        """Replace placeholders in user identity file with persona info.
+
+        Reads the identity file template and replaces {{USER_FULL_NAME}} and
+        {{USER_EMAIL}} placeholders with the appropriate persona information
+        based on the user's work area and level.
+
+        Args:
+            sandbox_path: Path to the sandbox/session directory
+            user_work_area: User's work area (e.g., "engineering", "product")
+            user_level: User's level (e.g., "ic", "manager")
+        """
+        # Get persona info from mapping
+        persona = get_persona_info(user_work_area, user_level)
+        if not persona:
+            logger.debug(
+                f"No persona found for work_area={user_work_area}, "
+                f"level={user_level}, skipping identity file setup"
+            )
+            return
+
+        # Path to identity file
+        identity_file = (
+            sandbox_path / "files" / "org_info" / "user_identity_profile.txt"
+        )
+
+        if not identity_file.exists():
+            logger.debug(f"Identity file not found at {identity_file}, skipping setup")
+            return
+
+        try:
+            # Read current content
+            content = identity_file.read_text()
+
+            # Replace placeholders
+            content = content.replace("{{USER_FULL_NAME}}", persona["name"])
+            content = content.replace("{{USER_EMAIL}}", persona["email"])
+
+            # Write back
+            identity_file.write_text(content)
+            logger.info(f"Set user identity: {persona['name']} <{persona['email']}>")
+        except Exception as e:
+            # Don't fail provisioning if identity file setup fails
+            logger.warning(f"Failed to set user identity file: {e}")
 
     def setup_outputs_directory(self, sandbox_path: Path) -> None:
         """Copy outputs template and create additional directories.

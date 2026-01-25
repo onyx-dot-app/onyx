@@ -122,6 +122,8 @@ class SandboxManager(ABC):
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
+        user_work_area: str | None = None,
+        user_level: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -142,6 +144,8 @@ class SandboxManager(ABC):
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
+            user_work_area: User's work area for demo persona (e.g., "engineering")
+            user_level: User's level for demo persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails

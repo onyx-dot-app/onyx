@@ -707,6 +707,8 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
+        user_work_area: str | None = None,
+        user_level: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -726,6 +728,8 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             llm_config: LLM provider configuration for opencode.json
             file_system_path: Not used in k8s (files synced from S3 during init)
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
+            user_work_area: User's work area for demo persona (PR2 - not yet used)
+            user_level: User's level for demo persona (PR2 - not yet used)
 
         Raises:
             RuntimeError: If workspace setup fails
