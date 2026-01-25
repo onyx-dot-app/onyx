@@ -326,7 +326,7 @@ const InputBar = React.memo(
                       onClick={() => router.push("/build/v1/configure")}
                       className="bg-action-link-01"
                     >
-                      Demo Data
+                      Demo Data Active
                     </SelectButton>
                   </span>
                 </SimpleTooltip>
