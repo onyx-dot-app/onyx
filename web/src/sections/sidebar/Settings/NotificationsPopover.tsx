@@ -122,8 +122,7 @@ export default function NotificationsPopover({
                 >
                   <LineItem
                     icon={getNotificationIcon(notification.notif_type)}
-                    // description={notification.description ?? undefined}
-                    description="aasdfasdfasdfasdfasasdfasdfasdfasdfasasdfasdfasdfasdfasdddsdfasdfasdfasdfasd"
+                    description={notification.description ?? undefined}
                     onClick={() => handleNotificationClick(notification)}
                     rightChildren={
                       !notification.dismissed ? (
