@@ -356,7 +356,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             containers=[sandbox_container],
             volumes=volumes,
             restart_policy="Never",
-            termination_grace_period_seconds=120,
+            termination_grace_period_seconds=300,
             # Node selection for sandbox nodes
             node_selector={"onyx.app/workload": "sandbox"},
             tolerations=[
