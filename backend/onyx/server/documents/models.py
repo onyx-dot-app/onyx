@@ -525,6 +525,10 @@ class RunConnectorRequest(BaseModel):
     from_beginning: bool = False
 
 
+class ConnectorRequestSubmission(BaseModel):
+    connector_name: str
+
+
 class CCPropertyUpdateRequest(BaseModel):
     name: str
     value: str

@@ -1,8 +1,8 @@
 "use client";
 
-import { useBuildOnboarding } from "./hooks/useBuildOnboarding";
-import NotAllowedModal from "./components/NotAllowedModal";
-import BuildOnboardingModal from "./components/BuildOnboardingModal";
+import { useBuildOnboarding } from "@/app/build/onboarding/hooks/useBuildOnboarding";
+import NotAllowedModal from "@/app/build/onboarding/components/NotAllowedModal";
+import BuildOnboardingModal from "@/app/build/onboarding/components/BuildOnboardingModal";
 
 interface BuildOnboardingProviderProps {
   children: React.ReactNode;

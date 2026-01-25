@@ -11,12 +11,15 @@ import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { SvgPlug, SvgSettings } from "@opal/icons";
+import { FiInfo } from "react-icons/fi";
 import { ValidSources } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import ConnectorCard, {
   BuildConnectorConfig,
 } from "@/app/build/v1/configure/components/ConnectorCard";
 import ConfigureConnectorModal from "@/app/build/v1/configure/components/ConfigureConnectorModal";
+import ComingSoonConnectors from "@/app/build/v1/configure/components/ComingSoonConnectors";
+import DemoDataConfirmModal from "@/app/build/v1/configure/components/DemoDataConfirmModal";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { deleteConnector } from "@/app/build/services/apiServices";
@@ -77,6 +80,11 @@ export default function BuildConfigPage() {
     useState<BuildConnectorConfig | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showNotAllowedModal, setShowNotAllowedModal] = useState(false);
+  const [showDemoDataConfirmModal, setShowDemoDataConfirmModal] =
+    useState(false);
+  const [pendingDemoDataEnabled, setPendingDemoDataEnabled] = useState<
+    boolean | null
+  >(null);
 
   const isBasicUser = !isAdmin && !isCurator;
 
@@ -216,28 +224,6 @@ export default function BuildConfigPage() {
             >
               <Card>
                 <InputLayouts.Horizontal
-                  title="Use Demo Data"
-                  description="Demo data set contains 3000 files across all available connectors"
-                  center
-                >
-                  <SimpleTooltip
-                    tooltip={
-                      !hasActiveConnector
-                        ? "Connect and sync a data source to enable demo data"
-                        : undefined
-                    }
-                    disabled={hasActiveConnector}
-                  >
-                    <Switch
-                      checked={demoDataEnabled}
-                      onCheckedChange={setDemoDataEnabled}
-                      disabled={!hasActiveConnector}
-                    />
-                  </SimpleTooltip>
-                </InputLayouts.Horizontal>
-              </Card>
-              <Card>
-                <InputLayouts.Horizontal
                   title="Your Demo Persona"
                   description={
                     workAreaLabel && levelLabel
@@ -265,12 +251,61 @@ export default function BuildConfigPage() {
                   </SimpleTooltip>
                 </InputLayouts.Horizontal>
               </Card>
+              <Card>
+                <InputLayouts.Horizontal
+                  title="Default LLM"
+                  description="Select the language model for your build sessions"
+                  center
+                >
+                  <LLMPopover llmManager={llmManager} />
+                </InputLayouts.Horizontal>
+              </Card>
               <Separator />
-              <InputLayouts.Label
-                title="Connectors"
-                description="Connect your data sources to build mode"
-              />
-              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="w-full flex items-center justify-between">
+                <div className="flex flex-col gap-0.25">
+                  <Text mainContentEmphasis text04>
+                    Connectors
+                  </Text>
+                  <Text secondaryBody text03>
+                    Connect your data sources to build mode
+                  </Text>
+                </div>
+                <div className="w-fit flex-shrink-0">
+                  <SimpleTooltip
+                    tooltip={
+                      !hasActiveConnector
+                        ? "Connect and sync a data source to disable demo data"
+                        : undefined
+                    }
+                    disabled={hasActiveConnector}
+                  >
+                    <Card className={!hasActiveConnector ? "opacity-50" : ""}>
+                      <div
+                        className={`flex items-center gap-3 ${
+                          !hasActiveConnector ? "pointer-events-none" : ""
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <SimpleTooltip tooltip="The demo dataset contains 1000 files across various connectors">
+                            <span className="inline-flex items-center cursor-help">
+                              <FiInfo size={16} className="text-text-03" />
+                            </span>
+                          </SimpleTooltip>
+                          <Text mainUiAction>Use Demo Dataset</Text>
+                        </div>
+                        <Switch
+                          checked={demoDataEnabled}
+                          onCheckedChange={(newValue) => {
+                            setPendingDemoDataEnabled(newValue);
+                            setShowDemoDataConfirmModal(true);
+                          }}
+                        />
+                      </div>
+                    </Card>
+                  </SimpleTooltip>
+                </div>
+              </div>
+              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
                 {connectorStates.map(({ type, config }) => (
                   <ConnectorCard
                     key={type}
@@ -290,24 +325,7 @@ export default function BuildConfigPage() {
                   />
                 ))}
               </div>
-            </Section>
-
-            <Separator />
-
-            <Section alignItems="start" gap={0.5} height="fit">
-              <InputLayouts.Label
-                title="Advanced Options"
-                description="Configure advanced options for your build mode"
-              />
-              <Card>
-                <InputLayouts.Horizontal
-                  title="Default LLM"
-                  description="Select the language model for your build sessions"
-                  center
-                >
-                  <LLMPopover llmManager={llmManager} />
-                </InputLayouts.Horizontal>
-              </Card>
+              <ComingSoonConnectors />
             </Section>
           </Section>
         )}
@@ -343,6 +361,7 @@ export default function BuildConfigPage() {
       <BuildOnboardingModal
         open={showPersonaModal}
         showLlmSetup={false}
+        skipInfoSlides={true}
         llmProviders={llmProviders}
         onComplete={handlePersonaComplete}
         onLlmComplete={async () => {
@@ -359,6 +378,22 @@ export default function BuildConfigPage() {
       <NotAllowedModal
         open={showNotAllowedModal}
         onClose={() => setShowNotAllowedModal(false)}
+      />
+
+      <DemoDataConfirmModal
+        open={showDemoDataConfirmModal}
+        onClose={() => {
+          setShowDemoDataConfirmModal(false);
+          setPendingDemoDataEnabled(null);
+        }}
+        pendingDemoDataEnabled={pendingDemoDataEnabled}
+        onConfirm={() => {
+          if (pendingDemoDataEnabled !== null) {
+            setDemoDataEnabled(pendingDemoDataEnabled);
+          }
+          setShowDemoDataConfirmModal(false);
+          setPendingDemoDataEnabled(null);
+        }}
       />
     </SettingsLayouts.Root>
   );

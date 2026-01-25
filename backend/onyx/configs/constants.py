@@ -346,6 +346,7 @@ class MilestoneRecordType(str, Enum):
     MULTIPLE_ASSISTANTS = "multiple_assistants"
     CREATED_ASSISTANT = "created_assistant"
     CREATED_ONYX_BOT = "created_onyx_bot"
+    REQUESTED_CONNECTOR = "requested_connector"
 
 
 class PostgresAdvisoryLocks(Enum):

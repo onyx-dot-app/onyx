@@ -186,6 +186,7 @@ interface BuildOnboardingModalProps {
   onComplete: (info: BuildUserInfo) => Promise<void>;
   onLlmComplete?: () => Promise<void>;
   initialValues?: InitialValues;
+  skipInfoSlides?: boolean;
 }
 
 export default function BuildOnboardingModal({
@@ -195,6 +196,7 @@ export default function BuildOnboardingModal({
   onComplete,
   onLlmComplete,
   initialValues,
+  skipInfoSlides = false,
 }: BuildOnboardingModalProps) {
   // Navigation
   const [currentStep, setCurrentStep] = useState<Step>("user-info");
@@ -241,7 +243,14 @@ export default function BuildOnboardingModal({
   )!;
   const isLlmValid = apiKey.trim() && selectedModel;
 
-  const totalSteps = showLlmSetup ? 4 : 3; // user-info, (optional: llm-setup), page1, page2
+  // Calculate total steps - if skipping info slides, only count user-info and optionally llm-setup
+  const totalSteps = skipInfoSlides
+    ? showLlmSetup
+      ? 2
+      : 1
+    : showLlmSetup
+      ? 4
+      : 3; // user-info, (optional: llm-setup), page1, page2
   const currentStepIndex =
     currentStep === "user-info"
       ? 0
@@ -270,8 +279,20 @@ export default function BuildOnboardingModal({
     if (currentStep === "user-info" && showLlmSetup) {
       setCurrentStep("llm-setup");
     } else if (currentStep === "user-info" && !showLlmSetup) {
+      // Skip info slides if skipInfoSlides is true
+      if (skipInfoSlides) {
+        // Directly submit instead of going to page1
+        handleSubmit();
+        return;
+      }
       setCurrentStep("page1");
     } else if (currentStep === "llm-setup") {
+      // Skip info slides if skipInfoSlides is true
+      if (skipInfoSlides) {
+        // Directly submit instead of going to page1
+        handleSubmit();
+        return;
+      }
       setCurrentStep("page1");
     } else if (currentStep === "page1") {
       setCurrentStep("page2");
@@ -683,7 +704,7 @@ export default function BuildOnboardingModal({
             {currentStep === "user-info" && (
               <button
                 type="button"
-                onClick={handleNext}
+                onClick={skipInfoSlides ? handleSubmit : handleNext}
                 disabled={!canProceedUserInfo || isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
@@ -700,16 +721,22 @@ export default function BuildOnboardingModal({
                       : "text-text-02"
                   )}
                 >
-                  Continue
+                  {skipInfoSlides
+                    ? isSubmitting
+                      ? "Saving..."
+                      : "Save"
+                    : "Continue"}
                 </Text>
-                <SvgArrowRight
-                  className={cn(
-                    "w-4 h-4",
-                    canProceedUserInfo && !isSubmitting
-                      ? "text-white dark:text-black"
-                      : "text-text-02"
-                  )}
-                />
+                {!skipInfoSlides && (
+                  <SvgArrowRight
+                    className={cn(
+                      "w-4 h-4",
+                      canProceedUserInfo && !isSubmitting
+                        ? "text-white dark:text-black"
+                        : "text-text-02"
+                    )}
+                  />
+                )}
               </button>
             )}
 
