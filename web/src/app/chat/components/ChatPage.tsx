@@ -338,12 +338,20 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
   const messageHistory = useCurrentMessageHistory();
 
   // Only anchor during active generation - not when loading old conversations
+  // The anchor should be the last USER message, which we want positioned at TOP_OFFSET
   const lastMessage = messageHistory[messageHistory.length - 1];
+
+  // Use currentChatState to detect active generation since is_generating may not be set on messages
   const isActiveGeneration =
-    lastMessage?.type === "user" || // User just sent message, waiting for response
-    lastMessage?.is_generating; // Assistant is currently generating
+    currentChatState === "streaming" ||
+    currentChatState === "loading" ||
+    lastMessage?.type === "user"; // User just sent message, waiting for response
+
+  // Find the last user message to use as anchor
   const anchorMessage = isActiveGeneration
-    ? messageHistory.at(-2) ?? messageHistory[0]
+    ? lastMessage?.type === "user"
+      ? lastMessage // User just sent message - anchor the user message
+      : messageHistory.at(-2) // AI is generating - anchor the user message before it
     : undefined;
   const anchorNodeId = anchorMessage?.nodeId;
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
@@ -710,6 +718,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     anchorNodeId={anchorNodeId}
                     disableBlur={!hasBackground}
+                    isStreaming={currentChatState === "streaming"}
                   />
                 </ChatScrollContainer>
               )}
@@ -728,7 +737,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
               <div className="flex justify-center w-full pt-1 relative">
                 {/* Scroll to bottom button - absolutely positioned above input */}
                 {showScrollButton && (
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2">
+                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-modal">
                     <IconButton
                       icon={SvgChevronDown}
                       onClick={handleScrollToBottom}

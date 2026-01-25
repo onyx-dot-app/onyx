@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Message } from "@/app/chat/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import HumanMessage from "@/app/chat/message/HumanMessage";
@@ -10,6 +16,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
 import Spacer from "@/refresh-components/Spacer";
+import { TOP_OFFSET } from "@/components/chat/ChatScrollContainer";
 import {
   useCurrentMessageHistory,
   useCurrentMessageTree,
@@ -53,6 +60,12 @@ export interface MessageListProps {
    * When true, disables the backdrop blur effect on the container.
    */
   disableBlur?: boolean;
+
+  /**
+   * Whether the assistant is currently streaming a response.
+   * Used to apply min-height to the streaming message container.
+   */
+  isStreaming?: boolean;
 }
 
 const MessageList = React.memo(
@@ -68,6 +81,7 @@ const MessageList = React.memo(
     onResubmit,
     anchorNodeId,
     disableBlur,
+    isStreaming = false,
   }: MessageListProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
@@ -85,6 +99,25 @@ const MessageList = React.memo(
     onSubmitRef.current = onSubmit;
     deepResearchEnabledRef.current = deepResearchEnabled;
     currentMessageFilesRef.current = currentMessageFiles;
+
+    // Track min-height state separately to delay removal and prevent layout shift
+    // Min-height is needed when generation is active (anchorNodeId OR isStreaming)
+    const shouldHaveMinHeight = !!(anchorNodeId || isStreaming);
+    const [minHeightActive, setMinHeightActive] = useState(shouldHaveMinHeight);
+
+    useEffect(() => {
+      if (shouldHaveMinHeight) {
+        // Immediately enable min-height when generation starts
+        setMinHeightActive(true);
+      } else if (minHeightActive) {
+        // Delay removal to prevent layout shift when generation ends
+        // The scroll container will have time to stabilize
+        const timer = setTimeout(() => {
+          setMinHeightActive(false);
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }, [shouldHaveMinHeight, minHeightActive]);
 
     const createRegenerator = useCallback(
       (regenerationRequest: {
@@ -187,11 +220,22 @@ const MessageList = React.memo(
               researchType: message.researchType,
             };
 
+            // Apply min-height to the last assistant message during active generation
+            // This creates scrollable space to position the anchor at TOP_OFFSET
+            // Use minHeightActive which has delayed removal to prevent layout shift
+            const isLastMessage = i === messages.length - 1;
+            const needsMinHeight = minHeightActive && isLastMessage;
+
             return (
               <div
                 id={`message-${message.nodeId}`}
                 key={messageReactComponentKey}
                 data-anchor={isAnchor ? "true" : undefined}
+                style={{
+                  minHeight: needsMinHeight
+                    ? `calc(100vh - ${TOP_OFFSET}px)`
+                    : undefined,
+                }}
               >
                 <AIMessage
                   rawPackets={message.packets}
@@ -208,11 +252,26 @@ const MessageList = React.memo(
                   onRegenerate={createRegenerator}
                   parentMessage={previousMessage}
                 />
+                {/* Marker for actual content end (used for auto-scroll during streaming) */}
+                {isStreaming && isLastMessage && (
+                  <div data-content-end="true" />
+                )}
               </div>
             );
           }
           return null;
         })}
+
+        {/* Spacer to create scrollable space when waiting for AI response */}
+        {/* This allows the user message to be positioned at TOP_OFFSET before AI starts streaming */}
+        {anchorNodeId &&
+          messages.length > 0 &&
+          messages[messages.length - 1]?.type === "user" && (
+            <div
+              style={{ minHeight: `calc(100vh - ${TOP_OFFSET}px)` }}
+              aria-hidden="true"
+            />
+          )}
 
         {/* Error banner when last message is user message or error type */}
         {(((error !== null || loadError !== null) &&
