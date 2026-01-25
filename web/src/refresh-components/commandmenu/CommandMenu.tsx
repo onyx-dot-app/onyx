@@ -8,6 +8,7 @@ import React, {
   useRef,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -270,6 +271,9 @@ const CommandMenuContent = React.forwardRef<
           "max-h-[30rem]"
         )}
       >
+        <VisuallyHidden.Root asChild>
+          <DialogPrimitive.Title>Command Menu</DialogPrimitive.Title>
+        </VisuallyHidden.Root>
         {children}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>

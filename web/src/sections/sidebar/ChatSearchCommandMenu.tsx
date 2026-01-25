@@ -85,10 +85,10 @@ export default function ChatSearchCommandMenu({
   // Header filters for showing active filter as a chip
   const headerFilters = useMemo(() => {
     if (activeFilter === "chats") {
-      return [{ id: "chats", label: "Recent Sessions" }];
+      return [{ id: "chats", label: "Recent Sessions", icon: SvgFileText }];
     }
     if (activeFilter === "projects") {
-      return [{ id: "projects", label: "Projects" }];
+      return [{ id: "projects", label: "Projects", icon: SvgFolder }];
     }
     return [];
   }, [activeFilter]);
