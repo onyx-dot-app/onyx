@@ -20,7 +20,7 @@ const DEFAULT_AUTH_ERROR_MSG =
 const DEFAULT_ERROR_MSG = "An error occurred while fetching the data.";
 
 export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
-  const res = await fetch(url);
+  const res = await fetch(url, { credentials: "include" });
 
   if (res.status === 403) {
     const redirect = new RedirectError(
