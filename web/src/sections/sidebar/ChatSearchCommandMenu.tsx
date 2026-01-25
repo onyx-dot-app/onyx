@@ -14,6 +14,10 @@ import { useCurrentAgent } from "@/hooks/useAgents";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import {
+  useChatSearchOptimistic,
+  FilterableChat,
+} from "./useChatSearchOptimistic";
+import {
   SvgEditBig,
   SvgFolder,
   SvgFolderPlus,
@@ -23,12 +27,6 @@ import {
 
 interface ChatSearchCommandMenuProps {
   trigger: React.ReactNode;
-}
-
-interface FilterableChat {
-  id: string;
-  label: string;
-  time: string;
 }
 
 interface FilterableProject {
@@ -59,21 +57,41 @@ export default function ChatSearchCommandMenu({
   const PREVIEW_CHATS_LIMIT = 4;
   const PREVIEW_PROJECTS_LIMIT = 2;
 
-  // Transform and filter chat sessions (sorted by latest first)
-  const filteredChats = useMemo<FilterableChat[]>(() => {
-    const chats = chatSessions
+  // Transform local chat sessions for optimistic search (sorted by latest first)
+  const localSessions = useMemo<FilterableChat[]>(() => {
+    return chatSessions
       .map((session) => ({
         id: session.id,
         label: session.name || UNNAMED_CHAT,
         time: session.time_updated || session.time_created,
       }))
       .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  }, [chatSessions]);
 
-    if (!searchValue.trim()) return chats;
+  // Determine if we should enable optimistic search (when searching or viewing chats filter)
+  const shouldUseOptimisticSearch =
+    searchValue.trim().length > 0 || activeFilter === "chats";
 
-    const term = searchValue.toLowerCase();
-    return chats.filter((chat) => chat.label.toLowerCase().includes(term));
-  }, [chatSessions, searchValue]);
+  // Use optimistic search hook for chat sessions
+  const {
+    results: optimisticResults,
+    isSearching,
+    hasMore,
+    isLoadingMore,
+    sentinelRef,
+  } = useChatSearchOptimistic({
+    localSessions,
+    searchQuery: searchValue,
+    enabled: shouldUseOptimisticSearch,
+  });
+
+  // Get filtered chats - use optimistic results when searching or viewing chats, otherwise use local
+  const filteredChats = useMemo<FilterableChat[]>(() => {
+    if (shouldUseOptimisticSearch) {
+      return optimisticResults;
+    }
+    return localSessions;
+  }, [shouldUseOptimisticSearch, optimisticResults, localSessions]);
 
   // Transform and filter projects (sorted by latest first)
   const filteredProjects = useMemo<FilterableProject[]>(() => {
@@ -226,6 +244,16 @@ export default function ChatSearchCommandMenu({
                       {chat.label}
                     </CommandMenu.Item>
                   ))}
+                  {/* Infinite scroll sentinel and loading indicator for chats */}
+                  {activeFilter === "chats" && hasMore && (
+                    <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+                  )}
+                  {activeFilter === "chats" &&
+                    (isLoadingMore || isSearching) && (
+                      <div className="flex justify-center items-center py-3">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-solid border-text-04 border-t-text-02" />
+                      </div>
+                    )}
                 </>
               )}
 

@@ -91,8 +91,10 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
   );
   const [isKeyboardNav, setIsKeyboardNav] = React.useState(false);
 
-  // Centralized callback registry - items register their onSelect callback
-  const itemCallbacks = useRef<Map<string, () => void>>(new Map());
+  // Centralized callback registry - items register their onSelect callback and type
+  const itemCallbacks = useRef<
+    Map<string, { callback: () => void; type: "filter" | "item" | "action" }>
+  >(new Map());
 
   // Reset state when menu closes
   useEffect(() => {
@@ -104,18 +106,25 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
   }, [open]);
 
   // Registration functions (items call on mount)
-  const registerItem = useCallback((value: string, onSelect: () => void) => {
-    if (
-      process.env.NODE_ENV === "development" &&
-      itemCallbacks.current.has(value)
-    ) {
-      console.warn(
-        `[CommandMenu] Duplicate value "${value}" registered. ` +
-          `Values must be unique across all Filter, Item, and Action components.`
-      );
-    }
-    itemCallbacks.current.set(value, onSelect);
-  }, []);
+  const registerItem = useCallback(
+    (
+      value: string,
+      onSelect: () => void,
+      type: "filter" | "item" | "action" = "item"
+    ) => {
+      if (
+        process.env.NODE_ENV === "development" &&
+        itemCallbacks.current.has(value)
+      ) {
+        console.warn(
+          `[CommandMenu] Duplicate value "${value}" registered. ` +
+            `Values must be unique across all Filter, Item, and Action components.`
+        );
+      }
+      itemCallbacks.current.set(value, { callback: onSelect, type });
+    },
+    []
+  );
 
   const unregisterItem = useCallback((value: string) => {
     itemCallbacks.current.delete(value);
@@ -145,9 +154,11 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
 
   const onItemClick = useCallback(
     (value: string) => {
-      const callback = itemCallbacks.current.get(value);
-      callback?.();
-      onOpenChange(false);
+      const entry = itemCallbacks.current.get(value);
+      entry?.callback();
+      if (entry?.type !== "filter") {
+        onOpenChange(false);
+      }
     },
     [onOpenChange]
   );
@@ -191,9 +202,11 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         case "Enter": {
           e.preventDefault();
           if (highlightedValue) {
-            const callback = itemCallbacks.current.get(highlightedValue);
-            callback?.();
-            onOpenChange(false);
+            const entry = itemCallbacks.current.get(highlightedValue);
+            entry?.callback();
+            if (entry?.type !== "filter") {
+              onOpenChange(false);
+            }
           }
           break;
         }
@@ -442,7 +455,7 @@ function CommandMenuFilter({
   // Register callback on mount - NO keyboard listener needed
   useEffect(() => {
     if (!isApplied && onSelect) {
-      registerItem(value, () => onSelect());
+      registerItem(value, () => onSelect(), "filter");
       return () => unregisterItem(value);
     }
   }, [value, isApplied, onSelect, registerItem, unregisterItem]);
@@ -552,7 +565,7 @@ function CommandMenuAction({
 
   // Register callback on mount - NO keyboard listener needed
   useEffect(() => {
-    registerItem(value, () => onSelect?.(value));
+    registerItem(value, () => onSelect?.(value), "action");
     return () => unregisterItem(value);
   }, [value, onSelect, registerItem, unregisterItem]);
 

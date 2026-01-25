@@ -186,7 +186,11 @@ export interface CommandMenuContextValue {
   isKeyboardNav: boolean;
 
   // Registration (items call on mount with their callback)
-  registerItem: (value: string, onSelect: () => void) => void;
+  registerItem: (
+    value: string,
+    onSelect: () => void,
+    type?: "filter" | "item" | "action"
+  ) => void;
   unregisterItem: (value: string) => void;
 
   // Mouse interaction (items call on events - centralized in root)
