@@ -4,14 +4,12 @@ import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import CommandMenu from "@/refresh-components/commandmenu/CommandMenu";
-import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import { formatDisplayTime } from "@/sections/sidebar/chatSearchUtils";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
-import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import {
   useChatSearchOptimistic,
@@ -47,7 +45,6 @@ export default function ChatSearchCommandMenu({
   const router = useRouter();
 
   // Data hooks
-  const { chatSessions } = useChatSessions();
   const { projects } = useProjects();
   const combinedSettings = useSettingsContext();
   const currentAgent = useCurrentAgent();
@@ -57,41 +54,21 @@ export default function ChatSearchCommandMenu({
   const PREVIEW_CHATS_LIMIT = 4;
   const PREVIEW_PROJECTS_LIMIT = 2;
 
-  // Transform local chat sessions for optimistic search (sorted by latest first)
-  const localSessions = useMemo<FilterableChat[]>(() => {
-    return chatSessions
-      .map((session) => ({
-        id: session.id,
-        label: session.name || UNNAMED_CHAT,
-        time: session.time_updated || session.time_created,
-      }))
-      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-  }, [chatSessions]);
-
   // Determine if we should enable optimistic search (when searching or viewing chats filter)
   const shouldUseOptimisticSearch =
     searchValue.trim().length > 0 || activeFilter === "chats";
 
-  // Use optimistic search hook for chat sessions
+  // Use optimistic search hook for chat sessions (includes fallback from useChatSessions + useProjects)
   const {
-    results: optimisticResults,
+    results: filteredChats,
     isSearching,
     hasMore,
     isLoadingMore,
     sentinelRef,
   } = useChatSearchOptimistic({
-    localSessions,
     searchQuery: searchValue,
     enabled: shouldUseOptimisticSearch,
   });
-
-  // Get filtered chats - use optimistic results when searching or viewing chats, otherwise use local
-  const filteredChats = useMemo<FilterableChat[]>(() => {
-    if (shouldUseOptimisticSearch) {
-      return optimisticResults;
-    }
-    return localSessions;
-  }, [shouldUseOptimisticSearch, optimisticResults, localSessions]);
 
   // Transform and filter projects (sorted by latest first)
   const filteredProjects = useMemo<FilterableProject[]>(() => {
@@ -132,7 +109,7 @@ export default function ChatSearchCommandMenu({
   // Header filters for showing active filter as a chip
   const headerFilters = useMemo(() => {
     if (activeFilter === "chats") {
-      return [{ id: "chats", label: "Recent Sessions", icon: SvgFileText }];
+      return [{ id: "chats", label: "Recent Sessions", icon: SvgBubbleText }];
     }
     if (activeFilter === "projects") {
       return [{ id: "projects", label: "Projects", icon: SvgFolder }];
@@ -183,7 +160,6 @@ export default function ChatSearchCommandMenu({
     }
   }, []);
 
-  const hasResults = displayedChats.length > 0 || displayedProjects.length > 0;
   const hasSearchValue = searchValue.trim().length > 0;
 
   return (
@@ -221,12 +197,13 @@ export default function ChatSearchCommandMenu({
             {(activeFilter === "all" || activeFilter === "chats") &&
               displayedChats.length > 0 && (
                 <>
-                  {activeFilter === "all" && (
+                  {(activeFilter === "all" || activeFilter === "chats") && (
                     <CommandMenu.Filter
                       value="recent-sessions"
                       onSelect={() => setActiveFilter("chats")}
+                      isApplied={activeFilter === "chats"}
                     >
-                      Recent Sessions
+                      {activeFilter === "chats" ? "Recent" : "Recent Sessions"}
                     </CommandMenu.Filter>
                   )}
                   {displayedChats.map((chat) => (
@@ -261,10 +238,11 @@ export default function ChatSearchCommandMenu({
             {(activeFilter === "all" || activeFilter === "projects") &&
               displayedProjects.length > 0 && (
                 <>
-                  {activeFilter === "all" && (
+                  {(activeFilter === "all" || activeFilter === "projects") && (
                     <CommandMenu.Filter
                       value="projects"
                       onSelect={() => setActiveFilter("projects")}
+                      isApplied={activeFilter === "projects"}
                     >
                       Projects
                     </CommandMenu.Filter>

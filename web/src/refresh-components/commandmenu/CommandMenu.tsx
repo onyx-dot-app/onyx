@@ -462,7 +462,14 @@ function CommandMenuFilter({
 
   // When filter is applied, show as group label (non-interactive)
   if (isApplied) {
-    return <Divider showTitle text={children as string} icon={icon} />;
+    return (
+      <Divider
+        showTitle
+        text={children as string}
+        icon={icon}
+        dividerLine={false}
+      />
+    );
   }
 
   const isHighlighted = value === highlightedValue;
