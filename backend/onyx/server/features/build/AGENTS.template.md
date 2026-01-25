@@ -193,11 +193,11 @@ Key fields:
 
 **Important**: Do NOT write any files to the `files/` directory. Do NOT edit any files in the `files/` directory. This is read-only knowledge data.
 
-## User Uploaded Files (PRIORITY)
+## Attachments (PRIORITY)
 
-The `user_uploaded_files/` directory contains files that the user has explicitly uploaded during this session. **These files are critically important** and should be treated as high-priority context.
+The `attachments/` directory contains files that the user has explicitly uploaded during this session. **These files are critically important** and should be treated as high-priority context.
 
-### Why User Uploaded Files Matter
+### Why Attachments Matter
 
 - The user deliberately chose to upload these files, signaling they are directly relevant to the task
 - These files often contain the specific data, requirements, or examples the user wants you to work with
@@ -207,9 +207,9 @@ The `user_uploaded_files/` directory contains files that the user has explicitly
 
 **At the start of every task, you MUST:**
 
-1. **Check for uploaded files**: List the contents of `user_uploaded_files/` to see what the user has provided
-2. **Read and analyze each file**: Thoroughly examine every uploaded file to understand its contents and relevance
-3. **Reference uploaded content**: Use the information from uploaded files to inform your responses and outputs
+1. **Check for attachments**: List the contents of `attachments/` to see what the user has provided
+2. **Read and analyze each file**: Thoroughly examine every attachment to understand its contents and relevance
+3. **Reference attachment content**: Use the information from attachments to inform your responses and outputs
 
 ### File Handling
 

@@ -7,6 +7,7 @@ IMPORTANT: This manager does NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
 """
 
+import re
 import threading
 from collections.abc import Generator
 from datetime import datetime
@@ -256,7 +257,7 @@ class LocalSandboxManager(SandboxManager):
         5. .agent/skills/
         6. files/ (symlink to file_system_path)
         7. opencode.json
-        8. user_uploaded_files/
+        8. attachments/
         9. Start Next.js dev server for this session
 
         Args:
@@ -315,10 +316,10 @@ class LocalSandboxManager(SandboxManager):
             self._directory_manager.setup_skills(session_path)
             logger.debug("Skills ready")
 
-            # Setup user uploads directory
-            logger.debug("Setting up user uploads directory")
-            self._directory_manager.setup_user_uploads_directory(session_path)
-            logger.debug("User uploads directory ready")
+            # Setup attachments directory
+            logger.debug("Setting up attachments directory")
+            self._directory_manager.setup_attachments_directory(session_path)
+            logger.debug("Attachments directory ready")
 
             # Setup opencode.json with LLM provider configuration
             logger.debug(
@@ -582,3 +583,134 @@ class LocalSandboxManager(SandboxManager):
             raise ValueError(f"Not a file: {path}")
 
         return target_path.read_bytes()
+
+    def upload_file(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        filename: str,
+        content: bytes,
+    ) -> str:
+        """Upload a file to the session's attachments directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            filename: Sanitized filename
+            content: File content as bytes
+
+        Returns:
+            Relative path where file was saved (e.g., "attachments/doc.pdf")
+
+        Raises:
+            RuntimeError: If upload fails
+        """
+        session_path = self._get_session_path(sandbox_id, session_id)
+        attachments_dir = session_path / "attachments"
+        attachments_dir.mkdir(parents=True, exist_ok=True)
+
+        # Handle filename collisions by appending a number
+        target_path = attachments_dir / filename
+        if target_path.exists():
+            stem = target_path.stem
+            suffix = target_path.suffix
+            counter = 1
+            while target_path.exists():
+                target_path = attachments_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+            filename = target_path.name
+
+        target_path.write_bytes(content)
+        target_path.chmod(0o644)
+
+        logger.info(
+            f"Uploaded file to session {session_id}: attachments/{filename} "
+            f"({len(content)} bytes)"
+        )
+
+        return f"attachments/{filename}"
+
+    def delete_file(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        path: str,
+    ) -> bool:
+        """Delete a file from the session's workspace.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            path: Relative path to the file (e.g., "attachments/doc.pdf")
+
+        Returns:
+            True if file was deleted, False if not found
+
+        Raises:
+            ValueError: If path traversal attempted or trying to delete a directory
+        """
+        session_path = self._get_session_path(sandbox_id, session_id)
+
+        # Security: robust path sanitization (consistent with K8s implementation)
+        # Reject paths with traversal patterns, URL-encoded characters, or null bytes
+        if re.search(r"\.\.", path) or "%" in path or "\x00" in path:
+            raise ValueError("Invalid path: potential path traversal detected")
+
+        # Reject paths with shell metacharacters (consistency with K8s implementation)
+        if re.search(r'[;&|`$(){}[\]<>\'"\n\r\\]', path):
+            raise ValueError("Invalid path: contains disallowed characters")
+
+        clean_path = path.lstrip("/")
+
+        # Verify path only contains safe characters
+        if not re.match(r"^[a-zA-Z0-9_\-./]+$", clean_path):
+            raise ValueError("Invalid path: contains disallowed characters")
+
+        file_path = session_path / clean_path
+
+        # Verify path stays within session (defense in depth)
+        try:
+            file_path.resolve().relative_to(session_path.resolve())
+        except ValueError:
+            raise ValueError("Path traversal not allowed")
+
+        if not file_path.exists():
+            logger.debug(f"File not found for deletion in session {session_id}: {path}")
+            return False
+
+        if file_path.is_dir():
+            raise ValueError("Cannot delete directory")
+
+        file_path.unlink()
+        logger.info(f"Deleted file from session {session_id}: {path}")
+
+        return True
+
+    def get_upload_stats(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> tuple[int, int]:
+        """Get current file count and total size for a session's attachments.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+
+        Returns:
+            Tuple of (file_count, total_size_bytes)
+        """
+        session_path = self._get_session_path(sandbox_id, session_id)
+        attachments_path = session_path / "attachments"
+
+        if not attachments_path.exists():
+            return 0, 0
+
+        file_count = 0
+        total_size = 0
+        for item in attachments_path.iterdir():
+            if item.is_file():
+                file_count += 1
+                total_size += item.stat().st_size
+
+        return file_count, total_size

@@ -620,7 +620,7 @@ class TestSandboxDirectoryStructure:
         directory_manager.setup_venv(sandbox_path)
         directory_manager.setup_agent_instructions(sandbox_path)
         directory_manager.setup_skills(sandbox_path)
-        directory_manager.setup_user_uploads_directory(sandbox_path)
+        directory_manager.setup_attachments_directory(sandbox_path)
         directory_manager.setup_opencode_config(
             sandbox_path=sandbox_path,
             provider="anthropic",
@@ -633,7 +633,7 @@ class TestSandboxDirectoryStructure:
         assert (sandbox_path / ".venv").exists()
         assert (sandbox_path / "AGENTS.md").exists()
         assert (sandbox_path / ".opencode" / "skills").exists()
-        assert (sandbox_path / "user_uploaded_files").exists()
+        assert (sandbox_path / "attachments").exists()
         assert (sandbox_path / "opencode.json").exists()
 
         # Verify opencode.json has thinking config
