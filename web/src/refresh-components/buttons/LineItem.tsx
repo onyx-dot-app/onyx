@@ -158,7 +158,9 @@ const LineItem = React.forwardRef<HTMLButtonElement, LineItemProps>(
               {children}
             </Truncated>
             {rightChildren && (
-              <Section alignItems="end">{rightChildren}</Section>
+              <Section fit alignItems="end">
+                {rightChildren}
+              </Section>
             )}
           </Section>
           {description && (
