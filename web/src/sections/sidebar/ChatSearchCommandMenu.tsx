@@ -22,8 +22,6 @@ import {
   SvgFolder,
   SvgFolderPlus,
   SvgBubbleText,
-  SvgChevronDown,
-  SvgCornerRightUpDot,
   SvgArrowUpDown,
   SvgKeystroke,
 } from "@opal/icons";

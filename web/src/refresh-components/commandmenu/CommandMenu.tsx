@@ -273,12 +273,11 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         const containerRect = container.getBoundingClientRect();
         const elRect = el.getBoundingClientRect();
 
-        const scrollMargin = 60; // Padding from container edges when scrolling
+        const scrollMargin = 60;
         if (elRect.top < containerRect.top + scrollMargin) {
           container.scrollTop -= containerRect.top + scrollMargin - elRect.top;
-        } else if (elRect.bottom > containerRect.bottom - scrollMargin) {
-          container.scrollTop +=
-            elRect.bottom - (containerRect.bottom - scrollMargin);
+        } else if (elRect.bottom > containerRect.bottom) {
+          container.scrollTop += elRect.bottom - containerRect.bottom;
         }
       }
     }
