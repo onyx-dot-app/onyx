@@ -228,11 +228,53 @@ def get_documents_by_ids(
     return list(documents)
 
 
-def _build_document_access_filter(
+def _apply_document_access_filter(
+    stmt: Select,
     user_email: str | None,
     external_group_ids: list[str],
-) -> ColumnElement[bool]:
-    access_filters: list[ColumnElement[bool]] = [DbDocument.is_public.is_(True)]
+) -> Select:
+    """
+    Apply document access filtering to a query.
+
+    This joins with DocumentByConnectorCredentialPair and ConnectorCredentialPair to:
+    1. Check if the document is from a PUBLIC connector (access_type = PUBLIC)
+    2. Check document-level permissions (is_public, external_user_emails, external_user_group_ids)
+    3. Exclude documents from cc_pairs that are being deleted
+
+    Args:
+        stmt: The SELECT statement to modify
+        user_email: The user's email for permission checking
+        external_group_ids: List of external group IDs the user belongs to
+
+    Returns:
+        Modified SELECT statement with access filtering applied
+    """
+    # Join to get cc_pair info for each document
+    stmt = stmt.join(
+        DocumentByConnectorCredentialPair,
+        DbDocument.id == DocumentByConnectorCredentialPair.id,
+    ).join(
+        ConnectorCredentialPair,
+        and_(
+            DocumentByConnectorCredentialPair.connector_id
+            == ConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id
+            == ConnectorCredentialPair.credential_id,
+        ),
+    )
+
+    # Exclude documents from cc_pairs that are being deleted
+    stmt = stmt.where(
+        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
+    )
+
+    # Build access filters
+    access_filters: list[ColumnElement[bool]] = [
+        # Document is from a PUBLIC connector
+        ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+        # Document is marked as public (e.g., "Anyone with link" in source)
+        DbDocument.is_public.is_(True),
+    ]
     if user_email:
         access_filters.append(any_(DbDocument.external_user_emails) == user_email)
     if external_group_ids:
@@ -241,7 +283,9 @@ def _build_document_access_filter(
                 postgresql.array(external_group_ids)
             )
         )
-    return or_(*access_filters)
+
+    stmt = stmt.where(or_(*access_filters))
+    return stmt
 
 
 def _apply_document_cursor_filter(
@@ -294,7 +338,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     stmt = select(DbDocument).where(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
-    stmt = stmt.where(_build_document_access_filter(user_email, external_group_ids))
+    stmt = _apply_document_access_filter(stmt, user_email, external_group_ids)
     stmt = _apply_document_cursor_filter(
         stmt,
         cursor_last_modified=cursor_last_modified,
@@ -306,6 +350,8 @@ def get_accessible_documents_for_hierarchy_node_paginated(
         DbDocument.last_synced.desc().nulls_last(),
         DbDocument.id.desc(),
     )
+    # Use distinct to avoid duplicates when a document belongs to multiple cc_pairs
+    stmt = stmt.distinct()
     stmt = stmt.limit(limit)
     return list(db_session.execute(stmt).scalars().all())
 
@@ -546,6 +592,7 @@ def upsert_documents(
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
                     kg_stage=KGStage.NOT_STARTED,
+                    parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
                     **(
                         {
                             "external_user_emails": list(
@@ -575,6 +622,7 @@ def upsert_documents(
         "primary_owners": insert_stmt.excluded.primary_owners,
         "secondary_owners": insert_stmt.excluded.secondary_owners,
         "doc_metadata": insert_stmt.excluded.doc_metadata,
+        "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
     }
     if includes_permissions:
         # Use COALESCE to preserve existing permissions when new values are NULL.

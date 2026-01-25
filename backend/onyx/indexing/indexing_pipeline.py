@@ -120,6 +120,8 @@ def _upsert_documents_in_db(
             from_ingestion_api=doc.from_ingestion_api,
             external_access=doc.external_access,
             doc_metadata=doc.doc_metadata,
+            # parent_hierarchy_node_id is resolved in docfetching using Redis cache
+            parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
         )
         document_metadata_list.append(db_doc_metadata)
 

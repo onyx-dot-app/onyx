@@ -193,6 +193,10 @@ class DocumentBase(BaseModel):
     # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
     parent_hierarchy_raw_node_id: str | None = None
 
+    # Resolved database ID of the parent hierarchy node
+    # Set during docfetching after hierarchy nodes are cached
+    parent_hierarchy_node_id: int | None = None
+
     def get_title_for_document_index(
         self,
     ) -> str | None:
