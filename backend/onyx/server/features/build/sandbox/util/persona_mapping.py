@@ -187,4 +187,4 @@ def generate_user_identity_content(persona: PersonaInfo) -> str:
     Returns:
         Content for user_identity_profile.txt
     """
-    return f"""Your name is {persona["name"]}. Your email is {persona["email"]}. You are working at Netherite Extraction Corp."""
+    return f"Your name is {persona["name"]}. Your email is {persona["email"]}. You are working at Netherite Extraction Corp.\n"
