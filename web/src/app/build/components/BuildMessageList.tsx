@@ -24,6 +24,10 @@ interface BuildMessageListProps {
   messages: BuildMessage[];
   streamItems: StreamItem[];
   isStreaming?: boolean;
+  /** Whether auto-scroll is enabled (user is at bottom) */
+  autoScrollEnabled?: boolean;
+  /** Ref to the end marker div for scroll detection */
+  messagesEndRef?: React.RefObject<HTMLDivElement>;
 }
 
 /**
@@ -37,13 +41,19 @@ export default function BuildMessageList({
   messages,
   streamItems,
   isStreaming = false,
+  autoScrollEnabled = true,
+  messagesEndRef: externalMessagesEndRef,
 }: BuildMessageListProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const internalMessagesEndRef = useRef<HTMLDivElement>(null);
+  // Use external ref if provided, otherwise use internal ref
+  const messagesEndRef = externalMessagesEndRef ?? internalMessagesEndRef;
 
-  // Auto-scroll to bottom when new content arrives
+  // Auto-scroll to bottom when new content arrives (only if auto-scroll is enabled)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, streamItems.length]);
+    if (autoScrollEnabled && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, streamItems.length, autoScrollEnabled, messagesEndRef]);
 
   // Determine if we should show streaming response area (for current in-progress response)
   const hasStreamItems = streamItems.length > 0;
