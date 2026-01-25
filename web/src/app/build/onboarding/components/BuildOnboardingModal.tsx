@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { SvgInfoSmall, SvgArrowRight, SvgArrowLeft } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -86,7 +86,7 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
-type Step = "user-info" | "llm-setup";
+type Step = "user-info" | "page1" | "page2" | "llm-setup";
 
 interface SelectableButtonProps {
   selected: boolean;
@@ -228,8 +228,6 @@ export default function BuildOnboardingModal({
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showSuccessPage, setShowSuccessPage] = useState(false);
-  const autoCloseTriggered = useRef(false);
 
   const useLevelForPrompt = WORK_AREAS_WITH_LEVEL.includes(workArea);
   const isUserInfoValid = firstName.trim() && lastName.trim() && workArea;
@@ -239,70 +237,19 @@ export default function BuildOnboardingModal({
   )!;
   const isLlmValid = apiKey.trim() && selectedModel;
 
-  const totalSteps = showLlmSetup ? 2 : 1;
-  const currentStepIndex = currentStep === "user-info" ? 0 : 1;
-
-  // Auto-close after showing success page
-  useEffect(() => {
-    if (showSuccessPage && !autoCloseTriggered.current) {
-      autoCloseTriggered.current = true;
-      const timer = setTimeout(async () => {
-        // Create the LLM provider
-        if (showLlmSetup && apiKey.trim()) {
-          const baseValues = buildInitialValues();
-          const providerName = `build-mode-${currentProviderConfig.providerName}`;
-          const payload = {
-            ...baseValues,
-            name: providerName,
-            provider: currentProviderConfig.providerName,
-            api_key: apiKey,
-            default_model_name: selectedModel,
-            model_configurations: currentProviderConfig.models.map((m) => ({
-              name: m.name,
-              is_visible: true,
-              max_input_tokens: null,
-              supports_image_input: true,
-            })),
-          };
-
-          const response = await fetch(
-            `${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            }
-          );
-
-          if (response.ok && (!llmProviders || llmProviders.length === 0)) {
-            const newProvider = await response.json();
-            if (newProvider?.id) {
-              await fetch(
-                `${LLM_PROVIDERS_ADMIN_URL}/${newProvider.id}/default`,
-                {
-                  method: "POST",
-                }
-              );
-            }
-          }
-
-          // Refresh LLM providers list
-          if (onLlmComplete) {
-            await onLlmComplete();
-          }
-        }
-
-        // Complete with user info
-        await onComplete({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          workArea,
-          level: useLevelForPrompt && level ? level : undefined,
-        });
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showSuccessPage]);
+  const totalSteps = showLlmSetup ? 4 : 3; // user-info, (optional: llm-setup), page1, page2
+  const currentStepIndex =
+    currentStep === "user-info"
+      ? 0
+      : currentStep === "llm-setup"
+        ? 1
+        : currentStep === "page1"
+          ? showLlmSetup
+            ? 2
+            : 1
+          : showLlmSetup
+            ? 3
+            : 2;
 
   const handleProviderChange = (provider: ProviderKey) => {
     setSelectedProvider(provider);
@@ -315,18 +262,32 @@ export default function BuildOnboardingModal({
   };
 
   const handleNext = () => {
+    setErrorMessage(""); // Clear any errors when navigating
     if (currentStep === "user-info" && showLlmSetup) {
       setCurrentStep("llm-setup");
+    } else if (currentStep === "user-info" && !showLlmSetup) {
+      setCurrentStep("page1");
+    } else if (currentStep === "llm-setup") {
+      setCurrentStep("page1");
+    } else if (currentStep === "page1") {
+      setCurrentStep("page2");
     }
   };
 
   const handleBack = () => {
-    if (currentStep === "llm-setup") {
+    setErrorMessage(""); // Clear any errors when navigating
+    if (currentStep === "page2") {
+      setCurrentStep("page1");
+    } else if (currentStep === "page1" && showLlmSetup) {
+      setCurrentStep("llm-setup");
+    } else if (currentStep === "page1" && !showLlmSetup) {
+      setCurrentStep("user-info");
+    } else if (currentStep === "llm-setup") {
       setCurrentStep("user-info");
     }
   };
 
-  const handleTestConnection = async () => {
+  const handleConnect = async () => {
     if (!apiKey.trim()) return;
 
     setConnectionStatus("testing");
@@ -348,6 +309,7 @@ export default function BuildOnboardingModal({
       })),
     };
 
+    // Test the connection first
     const testResult = await testApiKeyHelper(
       currentProviderConfig.providerName,
       payload
@@ -361,68 +323,61 @@ export default function BuildOnboardingModal({
       return;
     }
 
-    setConnectionStatus("success");
-    setShowSuccessPage(true);
+    // If test succeeds, create the provider
+    try {
+      const response = await fetch(
+        `${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        setErrorMessage(
+          "There was an issue creating the provider. Please try again."
+        );
+        setConnectionStatus("error");
+        return;
+      }
+
+      // Set as default provider if it's the first one
+      if (!llmProviders || llmProviders.length === 0) {
+        const newProvider = await response.json();
+        if (newProvider?.id) {
+          await fetch(`${LLM_PROVIDERS_ADMIN_URL}/${newProvider.id}/default`, {
+            method: "POST",
+          });
+        }
+      }
+
+      // Don't call onLlmComplete here - it will update the flow state and close the modal
+      // We'll call it when the user completes onboarding in handleSubmit
+      setConnectionStatus("success");
+    } catch (error) {
+      console.error("Error connecting LLM provider:", error);
+      setErrorMessage(
+        "There was an issue connecting the provider. Please try again."
+      );
+      setConnectionStatus("error");
+    }
   };
 
   const handleSubmit = async () => {
     if (!isUserInfoValid) return;
+    // If LLM setup was required, ensure it was completed
     if (showLlmSetup && connectionStatus !== "success") return;
 
     setIsSubmitting(true);
 
     try {
-      // If LLM setup is required, create the provider first
-      if (showLlmSetup && apiKey.trim()) {
-        const baseValues = buildInitialValues();
-        const providerName = `build-mode-${currentProviderConfig.providerName}`;
-        const payload = {
-          ...baseValues,
-          name: providerName,
-          provider: currentProviderConfig.providerName,
-          api_key: apiKey,
-          default_model_name: selectedModel,
-          model_configurations: currentProviderConfig.models.map((m) => ({
-            name: m.name,
-            is_visible: true,
-            max_input_tokens: null,
-            supports_image_input: true,
-          })),
-        };
-
-        const response = await fetch(
-          `${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          }
-        );
-
-        if (!response.ok) {
-          setErrorMessage(
-            "There was an issue with this provider and model, please try a different one."
-          );
-          setConnectionStatus("error");
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Set as default provider if it's the first one
-        if (!llmProviders || llmProviders.length === 0) {
-          const newProvider = await response.json();
-          if (newProvider?.id) {
-            await fetch(
-              `${LLM_PROVIDERS_ADMIN_URL}/${newProvider.id}/default`,
-              {
-                method: "POST",
-              }
-            );
-          }
-        }
+      // Refresh LLM providers list if LLM was set up (this will update flow state)
+      if (showLlmSetup && onLlmComplete) {
+        await onLlmComplete();
       }
 
-      // Complete with user info
+      // Complete with user info (LLM provider was already created in handleConnect)
       await onComplete({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -430,10 +385,10 @@ export default function BuildOnboardingModal({
         level: useLevelForPrompt && level ? level : undefined,
       });
     } catch (error) {
+      console.error("Error completing onboarding:", error);
       setErrorMessage(
-        "There was an issue with this provider and model, please try a different one."
+        "There was an issue completing onboarding. Please try again."
       );
-      setConnectionStatus("error");
     } finally {
       setIsSubmitting(false);
     }
@@ -442,9 +397,10 @@ export default function BuildOnboardingModal({
   if (!open) return null;
 
   const canProceedUserInfo = isUserInfoValid;
-  const canTestConnection = isLlmValid && connectionStatus !== "testing";
+  const isConnecting = connectionStatus === "testing";
+  const canTestConnection = isLlmValid && !isConnecting;
   const canGetStarted = connectionStatus === "success";
-  const isLastStep = !showLlmSetup || currentStep === "llm-setup";
+  const isLastStep = currentStep === "page2";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -547,8 +503,8 @@ export default function BuildOnboardingModal({
             </div>
           )}
 
-          {/* LLM Setup Step - hide when showing success */}
-          {currentStep === "llm-setup" && !showSuccessPage && (
+          {/* LLM Setup Step */}
+          {currentStep === "llm-setup" && (
             <div className="flex-1 flex flex-col gap-6">
               {/* Header */}
               <div className="flex items-center justify-center">
@@ -630,159 +586,190 @@ export default function BuildOnboardingModal({
             </div>
           )}
 
-          {/* Success Page */}
-          {showSuccessPage && (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="relative flex items-center justify-center">
-                {/* Left accent marks */}
-                <div className="absolute -left-16 flex flex-col gap-1">
-                  <div className="w-8 h-1 bg-black dark:bg-white rounded-full" />
-                  <div className="w-6 h-1 bg-black dark:bg-white rounded-full opacity-60" />
-                  <div className="w-4 h-1 bg-black dark:bg-white rounded-full opacity-30" />
-                </div>
-
-                {/* Success text */}
-                <Text headingH1 text05 className="text-4xl font-bold">
-                  Success!
-                </Text>
-
-                {/* Right accent marks */}
-                <div className="absolute -right-16 flex flex-col gap-1 items-end">
-                  <div className="w-8 h-1 bg-black dark:bg-white rounded-full" />
-                  <div className="w-6 h-1 bg-black dark:bg-white rounded-full opacity-60" />
-                  <div className="w-4 h-1 bg-black dark:bg-white rounded-full opacity-30" />
-                </div>
-              </div>
+          {/* Page 1 - What is Onyx Craft? */}
+          {currentStep === "page1" && (
+            <div className="flex-1 flex flex-col gap-6 items-center justify-center">
+              <Text headingH2 text05>
+                What is Onyx Craft?
+              </Text>
+              <img
+                src="/craft_demo_image_1.png"
+                alt="Onyx Craft"
+                className="max-w-full h-auto rounded-12"
+              />
+              <Text mainContentBody text04 className="text-center">
+                Beautiful dashboards, slides, and reports.
+                <br />
+                Built by AI agents that know your world. Privately and securely.
+              </Text>
             </div>
           )}
 
-          {/* Navigation buttons - hide on success page */}
-          {!showSuccessPage && (
-            <div className="relative flex justify-between items-center pt-2">
-              {/* Back button */}
-              <div>
-                {currentStep !== "user-info" && (
-                  <button
-                    type="button"
-                    onClick={handleBack}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
-                  >
-                    <SvgArrowLeft className="w-4 h-4" />
-                    <Text mainUiAction>Back</Text>
-                  </button>
-                )}
-              </div>
+          {/* Page 2 - Blank page with temporary text */}
+          {currentStep === "page2" && (
+            <div className="flex-1 flex flex-col gap-6 items-center justify-center">
+              <Text headingH2 text05>
+                Let's get started!
+              </Text>
+              <img
+                src="/craft_demo_image_2.png"
+                alt="Onyx Craft"
+                className="max-w-full h-auto rounded-12"
+              />
+              <Text mainContentBody text04 className="text-center">
+                Before connecting your own apps, try out our example dataset of
+                over 1,000 documents from Google Drive and Hubspot to Linear and
+                GitHub.
+                <br />
+              </Text>
+            </div>
+          )}
 
-              {/* Step indicator - absolutely centered */}
-              {totalSteps > 1 && (
-                <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
-                  {Array.from({ length: totalSteps }).map((_, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "w-2 h-2 rounded-full transition-colors",
-                        i === currentStepIndex
-                          ? "bg-text-05"
-                          : i < currentStepIndex
-                            ? "bg-text-03"
-                            : "bg-border-01"
-                      )}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Action buttons */}
-              {currentStep === "user-info" && (
+          {/* Navigation buttons */}
+          <div className="relative flex justify-between items-center pt-2">
+            {/* Back button */}
+            <div>
+              {currentStep !== "user-info" && (
                 <button
                   type="button"
-                  onClick={isLastStep ? handleSubmit : handleNext}
-                  disabled={!canProceedUserInfo || isSubmitting}
-                  className={cn(
-                    "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                    canProceedUserInfo && !isSubmitting
-                      ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
-                      : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
-                  )}
+                  onClick={handleBack}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
                 >
-                  <Text
-                    mainUiAction
-                    className={cn(
-                      canProceedUserInfo && !isSubmitting
-                        ? "text-white dark:text-black"
-                        : "text-text-02"
-                    )}
-                  >
-                    {isLastStep ? "Get Started!" : "Continue"}
-                  </Text>
-                  {!isLastStep && (
-                    <SvgArrowRight
-                      className={cn(
-                        "w-4 h-4",
-                        canProceedUserInfo && !isSubmitting
-                          ? "text-white dark:text-black"
-                          : "text-text-02"
-                      )}
-                    />
-                  )}
+                  <SvgArrowLeft className="w-4 h-4" />
+                  <Text mainUiAction>Back</Text>
                 </button>
               )}
-
-              {currentStep === "llm-setup" &&
-                connectionStatus !== "success" && (
-                  <button
-                    type="button"
-                    onClick={handleTestConnection}
-                    disabled={!canTestConnection}
-                    className={cn(
-                      "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                      canTestConnection
-                        ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
-                        : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
-                    )}
-                  >
-                    <Text
-                      mainUiAction
-                      className={cn(
-                        canTestConnection
-                          ? "text-white dark:text-black"
-                          : "text-text-02"
-                      )}
-                    >
-                      {connectionStatus === "testing"
-                        ? "Testing..."
-                        : "Test Connection"}
-                    </Text>
-                  </button>
-                )}
-
-              {currentStep === "llm-setup" &&
-                connectionStatus === "success" && (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className={cn(
-                      "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                      !isSubmitting
-                        ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
-                        : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
-                    )}
-                  >
-                    <Text
-                      mainUiAction
-                      className={cn(
-                        !isSubmitting
-                          ? "text-white dark:text-black"
-                          : "text-text-02"
-                      )}
-                    >
-                      {isSubmitting ? "Saving..." : "Get Started!"}
-                    </Text>
-                  </button>
-                )}
             </div>
-          )}
+
+            {/* Step indicator - absolutely centered */}
+            {totalSteps > 1 && (
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
+                {Array.from({ length: totalSteps }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "w-2 h-2 rounded-full transition-colors",
+                      i === currentStepIndex
+                        ? "bg-text-05"
+                        : i < currentStepIndex
+                          ? "bg-text-03"
+                          : "bg-border-01"
+                    )}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            {currentStep === "user-info" && (
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={!canProceedUserInfo || isSubmitting}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
+                  canProceedUserInfo && !isSubmitting
+                    ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
+                    : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
+                )}
+              >
+                <Text
+                  mainUiAction
+                  className={cn(
+                    canProceedUserInfo && !isSubmitting
+                      ? "text-white dark:text-black"
+                      : "text-text-02"
+                  )}
+                >
+                  Continue
+                </Text>
+                <SvgArrowRight
+                  className={cn(
+                    "w-4 h-4",
+                    canProceedUserInfo && !isSubmitting
+                      ? "text-white dark:text-black"
+                      : "text-text-02"
+                  )}
+                />
+              </button>
+            )}
+
+            {currentStep === "page1" && (
+              <button
+                type="button"
+                onClick={handleNext}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-12 bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-colors"
+              >
+                <Text mainUiAction className="text-white dark:text-black">
+                  Continue
+                </Text>
+                <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
+              </button>
+            )}
+
+            {currentStep === "page2" && (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
+                  !isSubmitting
+                    ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
+                    : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
+                )}
+              >
+                <Text
+                  mainUiAction
+                  className={cn(
+                    !isSubmitting
+                      ? "text-white dark:text-black"
+                      : "text-text-02"
+                  )}
+                >
+                  {isSubmitting ? "Saving..." : "Get Started!"}
+                </Text>
+              </button>
+            )}
+
+            {currentStep === "llm-setup" && connectionStatus !== "success" && (
+              <button
+                type="button"
+                onClick={handleConnect}
+                disabled={!canTestConnection || isConnecting}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
+                  canTestConnection && !isConnecting
+                    ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
+                    : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
+                )}
+              >
+                <Text
+                  mainUiAction
+                  className={cn(
+                    canTestConnection && !isConnecting
+                      ? "text-white dark:text-black"
+                      : "text-text-02"
+                  )}
+                >
+                  {isConnecting ? "Connecting..." : "Connect"}
+                </Text>
+              </button>
+            )}
+
+            {currentStep === "llm-setup" && connectionStatus === "success" && (
+              <button
+                type="button"
+                onClick={handleNext}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-12 bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-colors"
+              >
+                <Text mainUiAction className="text-white dark:text-black">
+                  Continue
+                </Text>
+                <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
