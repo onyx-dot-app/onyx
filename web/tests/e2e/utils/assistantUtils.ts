@@ -8,14 +8,14 @@ export type AssistantParams = {
   instructions?: string; // system_prompt
 };
 
-// Create an assistant via the UI from the chat page and wait until it is active
+// Create an assistant via the UI from the app page and wait until it is active
 export async function createAssistant(page: Page, params: AssistantParams) {
   const { name, description = "", instructions = "Test Instructions" } = params;
 
   // Navigate to creation flow
-  // We assume we're on /chat; if not, go there first
-  if (!page.url().includes("/chat")) {
-    await page.goto("/chat");
+  // We assume we're on /app; if not, go there first
+  if (!page.url().includes("/app")) {
+    await page.goto("/app");
   }
 
   // Open Assistants modal/list

@@ -365,8 +365,8 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
     // Navigate to chat (which uses default assistant for new users)
-    await page.goto("/chat");
-    await page.waitForURL("**/chat**");
+    await page.goto("/app");
+    await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
     console.log(`[test] Navigated to chat page`);
 
@@ -472,16 +472,16 @@ test.describe("Default Assistant MCP Integration", () => {
     await page.context().clearCookies();
     await loginWithCredentials(page, basicUserEmail, basicUserPassword);
 
-    await page.goto("/chat");
+    await page.goto("/app");
     await ensureOnboardingComplete(page);
     await page.getByTestId("AppSidebar/more-agents").click();
-    await page.waitForURL("**/chat/agents");
+    await page.waitForURL("**/app/agents");
 
     await page
       .getByTestId("AgentsPage/new-agent-button")
       .getByRole("link", { name: "New Agent" })
       .click();
-    await page.waitForURL("**/chat/agents/create");
+    await page.waitForURL("**/app/agents/create");
 
     const assistantName = `MCP Assistant ${Date.now()}`;
     await page.locator('input[name="name"]').fill(assistantName);
@@ -511,7 +511,7 @@ test.describe("Default Assistant MCP Integration", () => {
 
     await page.getByRole("button", { name: "Create" }).click();
 
-    await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+    await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
     const assistantIdMatch = page.url().match(/assistantId=(\d+)/);
     expect(assistantIdMatch).toBeTruthy();
     const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
@@ -669,8 +669,8 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Logged in as basic user to verify tool visibility`);
 
     // Navigate to chat
-    await page.goto("/chat");
-    await page.waitForURL("**/chat**");
+    await page.goto("/app");
+    await page.waitForURL("**/app**");
     console.log(`[test] Navigated to chat`);
 
     // Open actions popover

@@ -43,7 +43,7 @@ test.describe("LLM Ordering", () => {
     await ensureImageGenerationEnabled(page);
 
     // Navigate to the chat page
-    await page.goto("/chat");
+    await page.goto("/app");
     await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
 
     const testModelDisplayName = "GPT-4o Mini";
