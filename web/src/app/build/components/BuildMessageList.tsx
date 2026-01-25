@@ -6,9 +6,15 @@ import TextChunk from "@/app/build/components/TextChunk";
 import ThinkingCard from "@/app/build/components/ThinkingCard";
 import ToolCallPill from "@/app/build/components/ToolCallPill";
 import TodoListCard from "@/app/build/components/TodoListCard";
+import WorkingPill from "@/app/build/components/WorkingPill";
 import UserMessage from "@/app/build/components/UserMessage";
 import { BuildMessage } from "@/app/build/types/streamingTypes";
-import { StreamItem } from "@/app/build/types/displayTypes";
+import {
+  StreamItem,
+  GroupedStreamItem,
+  ToolCallState,
+} from "@/app/build/types/displayTypes";
+import { isWorkingToolCall } from "@/app/build/utils/streamItemHelpers";
 
 /**
  * BlinkingDot - Pulsing gray circle for loading state
@@ -18,6 +24,44 @@ function BlinkingDot() {
   return (
     <span className="animate-pulse flex-none bg-theme-primary-05 inline-block rounded-full h-3 w-3 ml-2 mt-2" />
   );
+}
+
+/**
+ * Group consecutive working tool calls into WorkingGroup items.
+ * Keeps text, thinking, todo_list, and task tool_calls as individual items.
+ */
+function groupStreamItems(items: StreamItem[]): GroupedStreamItem[] {
+  const grouped: GroupedStreamItem[] = [];
+  let currentWorkingGroup: ToolCallState[] = [];
+
+  const flushWorkingGroup = () => {
+    const firstToolCall = currentWorkingGroup[0];
+    if (firstToolCall) {
+      grouped.push({
+        type: "working_group",
+        id: `working-${firstToolCall.id}`,
+        toolCalls: [...currentWorkingGroup],
+      });
+      currentWorkingGroup = [];
+    }
+  };
+
+  for (const item of items) {
+    if (item.type === "tool_call" && isWorkingToolCall(item.toolCall)) {
+      // Add to current working group
+      currentWorkingGroup.push(item.toolCall);
+    } else {
+      // Flush any accumulated working group before adding non-working item
+      flushWorkingGroup();
+      // Add the item as-is (text, thinking, todo_list, or task tool_call)
+      grouped.push(item as GroupedStreamItem);
+    }
+  }
+
+  // Don't forget to flush any remaining working group
+  flushWorkingGroup();
+
+  return grouped;
 }
 
 interface BuildMessageListProps {
@@ -71,9 +115,16 @@ export default function BuildMessageList({
         item.toolCall.status === "pending")
   );
 
-  // Helper to render stream items (used for both saved messages and current streaming)
-  const renderStreamItems = (items: StreamItem[]) =>
-    items.map((item) => {
+  // Helper to render stream items with grouping (used for both saved messages and current streaming)
+  const renderStreamItems = (items: StreamItem[], isCurrentStream = false) => {
+    const grouped = groupStreamItems(items);
+
+    // Find the index of the last working_group (only relevant for current stream)
+    const lastWorkingGroupIndex = isCurrentStream
+      ? grouped.findLastIndex((item) => item.type === "working_group")
+      : -1;
+
+    return grouped.map((item, index) => {
       switch (item.type) {
         case "text":
           return <TextChunk key={item.id} content={item.content} />;
@@ -86,6 +137,7 @@ export default function BuildMessageList({
             />
           );
         case "tool_call":
+          // Only task/subagent tools reach here (non-working tools)
           return <ToolCallPill key={item.id} toolCall={item.toolCall} />;
         case "todo_list":
           return (
@@ -95,10 +147,19 @@ export default function BuildMessageList({
               defaultOpen={item.todoList.isOpen}
             />
           );
+        case "working_group":
+          return (
+            <WorkingPill
+              key={item.id}
+              toolCalls={item.toolCalls}
+              isLatest={index === lastWorkingGroupIndex}
+            />
+          );
         default:
           return null;
       }
     });
+  };
 
   // Helper to render an assistant message
   const renderAssistantMessage = (message: BuildMessage) => {
@@ -150,7 +211,7 @@ export default function BuildMessageList({
               ) : (
                 <>
                   {/* Render stream items in FIFO order */}
-                  {renderStreamItems(streamItems)}
+                  {renderStreamItems(streamItems, true)}
 
                   {/* Streaming indicator when actively streaming text */}
                   {isStreaming && hasStreamItems && !hasActiveTools && (

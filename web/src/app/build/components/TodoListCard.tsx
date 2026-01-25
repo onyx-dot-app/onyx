@@ -102,10 +102,10 @@ export default function TodoListCard({
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
-          "w-full border rounded-lg overflow-hidden",
+          "w-full border-[0.5px] rounded-lg overflow-hidden",
           allCompleted
-            ? "bg-status-success-01 border-status-success-02"
-            : "bg-background-neutral-01 border-border-02"
+            ? "bg-status-success-01 border-status-success-01"
+            : "bg-background-neutral-01 border-border-01"
         )}
       >
         <CollapsibleTrigger asChild>
