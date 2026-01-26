@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_1430155",
+  "semantic_identifier": "1430155 - Velvetcompass Travel - sales_pitch - Discussion with Oscar Montgomery",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-15 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-15 00:00:00",
+    "duration_min": "33"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "1430155 - Velvetcompass Travel - sales_pitch - Discussion with Oscar Montgomery",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Oscar\u2014James Choi here. Thanks for taking a few minutes. I\u2019ll be brief: I wanted to share how Sales_Accelerator helps revenue teams turn what they already know in CRM into a clear \u201cwhat to do next\u201d system\u2014especially for outbound prioritization and forecasting.",
+      "link": "https://www.onyx.app/1756780-1"
+    },
+    {
+      "text": "Oscar Montgomery: Hey James, sure. We\u2019ve got a few minutes. What exactly does it do beyond Salesforce dashboards and our usual reports?",
+      "link": "https://www.onyx.app/1756780-2"
+    },
+    {
+      "text": "James Choi: Totally fair question. Sales_Accelerator sits on top of Salesforce or HubSpot\u2014so it\u2019s not another CRM\u2014and it pulls in your activity signals like emails, calls, meetings, plus stage history and cycle-time benchmarks. Then it produces an explainable forecast\u2014commit, best-case, pipeline\u2014while also flagging risk on deals and recommending next actions. The key difference from static dashboards is it ties the forecast to drivers like stage age, last touch, whether a next meeting is scheduled, and even fit tier if you have that.",
+      "link": "https://www.onyx.app/1756780-3"
+    },
+    {
+      "text": "Oscar Montgomery: \u201cExplainable\u201d is interesting. Forecasting has been a pain for us\u2014especially when reps are optimistic. But we also don\u2019t want another tool everyone ignores. How does it actually get used day-to-day?",
+      "link": "https://www.onyx.app/1756780-4"
+    },
+    {
+      "text": "James Choi: That\u2019s exactly the gap we built it for\u2014day-to-day execution. Two places it shows up quickly. First is SDR outbound: if you\u2019re using Customer_Analyzer, we can consume those fit tiers and positioning blocks\u2014so your team isn\u2019t redoing ICP work. Sales_Accelerator will prioritize the next set of accounts to contact\u2014say the next 50\u2014and it recommends segment-aligned openers and proof points so reps can start conversations faster with consistent messaging.",
+      "link": "https://www.onyx.app/1756780-5"
+    },
+    {
+      "text": "Oscar Montgomery: We do have some scoring already, but reps still pick accounts based on gut feel or whatever\u2019s easiest. When you say \u201cnext 50,\u201d is that just a list, or is there more guidance?",
+      "link": "https://www.onyx.app/1756780-6"
+    },
+    {
+      "text": "James Choi: It\u2019s a prioritized list, plus the \u201cwhy.\u201d For each recommended account, it shows the drivers\u2014fit tier, recent intent/activity signals where available, and your historical conversion patterns by segment. And it suggests a next step\u2014like \u201csend opener X,\u201d \u201cfollow up with sequence Y,\u201d or \u201cbook meeting with stakeholder Z,\u201d depending on what\u2019s worked for similar accounts. The goal is to make it easy for reps to trust the order and take action without guessing.",
+      "link": "https://www.onyx.app/1756780-7"
+    },
+    {
+      "text": "Oscar Montgomery: Okay. How does that connect to forecasting though? Our leadership cares about \u201care we hitting the number,\u201d not just SDR efficiency.",
+      "link": "https://www.onyx.app/1756780-8"
+    },
+    {
+      "text": "James Choi: Right\u2014and that\u2019s the second place it becomes visible. The sales_forecast feature uses CRM stage data but corrects for reality using activity signals and cycle-time benchmarks. For example, if a deal is sitting in \u201cProposal\u201d for 45 days and your typical cycle there is 18, plus there\u2019s been no meeting booked and last touch was two weeks ago, Sales_Accelerator will downgrade risk and surface it. Conversely, if a deal is moving with consistent meetings and activity aligned to historical wins, it will support higher confidence. The output is a forecast you can defend: \u201cHere\u2019s why we\u2019re calling this commit vs best-case,\u201d rather than just rep sentiment.",
+      "link": "https://www.onyx.app/1756780-9"
+    },
+    {
+      "text": "Oscar Montgomery: That would help. Our Q-end is always chaotic. But I\u2019m curious\u2014how hard is the integration? We don\u2019t have much bandwidth for long implementations.",
+      "link": "https://www.onyx.app/1756780-10"
+    },
+    {
+      "text": "James Choi: The integration is intentionally lightweight because it sits on top of your existing CRM. We\u2019re not migrating data. Typically it\u2019s connecting Salesforce/HubSpot for stages and fields, and connecting activity sources\u2014email/call/meeting signals. If you already have Customer_Analyzer, we just ingest fit scores and positioning blocks so the outbound and prioritization layer is immediately useful. Most teams start with a pilot on one segment or one SDR pod and expand from there.",
+      "link": "https://www.onyx.app/1756780-11"
+    },
+    {
+      "text": "Oscar Montgomery: We\u2019re in travel\u2014Velvetcompass Travel\u2019s sales cycles vary a lot by segment. Some deals are quick, others take forever. Does your benchmarking handle that, or does it assume one sales cycle?",
+      "link": "https://www.onyx.app/1756780-12"
+    },
+    {
+      "text": "James Choi: Great point. The forecasting is segmented\u2014so you can break it down by segment, rep, source, or whatever dimensions matter. It\u2019ll learn different cycle-time benchmarks and conversion patterns per segment. So your enterprise travel partnerships don\u2019t get compared to your mid-market packages. That segmentation also shows up in diagnostics\u2014like \u201cwhere are we slipping by segment\u201d or \u201cwhich stages are bottlenecks.\u201d",
+      "link": "https://www.onyx.app/1756780-13"
+    },
+    {
+      "text": "Oscar Montgomery: That sounds useful. We also have the problem that reps log activity inconsistently. If the data is messy, does the forecast just fall apart?",
+      "link": "https://www.onyx.app/1756780-14"
+    },
+    {
+      "text": "James Choi: Messy data is common. We rely on what\u2019s reliable: stage movement plus activity signals that don\u2019t require perfect logging\u2014like meetings on the calendar, email/call metadata, and recency. And the model shows confidence and drivers. So if a rep isn\u2019t logging notes, you still see \u201cno next meeting scheduled\u201d and \u201clast touch\u201d signals. Over time, teams actually improve hygiene because the system makes gaps obvious and ties them to forecast risk.",
+      "link": "https://www.onyx.app/1756780-15"
+    },
+    {
+      "text": "Oscar Montgomery: Got it. You mentioned earlier it can do scenario planning\u2014what does that look like in practice?",
+      "link": "https://www.onyx.app/1756780-16"
+    },
+    {
+      "text": "James Choi: A simple example: \u201cIf we add 20 SQLs in ICP Tier 1 this month, what\u2019s the expected impact?\u201d It uses your historical conversion rates and cycle timing to show the likely downstream effect\u2014pipeline coverage, expected bookings, and timing. For leadership, that\u2019s huge because it links top-of-funnel actions to quarter outcomes, instead of guessing how much pipeline is \u201cenough.\u201d",
+      "link": "https://www.onyx.app/1756780-17"
+    },
+    {
+      "text": "Oscar Montgomery: I like the idea, but we\u2019ve been burned by tools that promise \u201cAI next best action\u201d and it\u2019s generic. How tailored are the recommendations?",
+      "link": "https://www.onyx.app/1756780-18"
+    },
+    {
+      "text": "James Choi: Totally fair skepticism. We keep it grounded in your data and your positioning. The \u201cnext best action\u201d is explainable\u2014so it\u2019s not a black box. For SDR outbound, we\u2019re not inventing messaging from scratch; we\u2019re using Customer_Analyzer positioning blocks and aligning them to the segment and fit tier. Then Sales_Accelerator recommends which accounts to hit first and which follow-up sequence tends to work for that segment. The rep sees the rationale and can tweak, but the baseline is consistent.",
+      "link": "https://www.onyx.app/1756780-19"
+    },
+    {
+      "text": "Oscar Montgomery: If we did a pilot, what would you measure to prove it\u2019s working?",
+      "link": "https://www.onyx.app/1756780-20"
+    },
+    {
+      "text": "James Choi: For Velvetcompass Travel, I\u2019d suggest two pilot KPIs: one SDR-side and one leadership-side. SDR: lift in meetings booked per rep per week in the segment you choose, plus time-to-first-touch on the top fit tiers. Leadership: forecast accuracy improvement\u2014reduced slippage and fewer end-of-quarter surprises\u2014measured by how close commit/best-case lands to actuals, and how early risk flags appear before deals slip.",
+      "link": "https://www.onyx.app/1756780-21"
+    },
+    {
+      "text": "Oscar Montgomery: That makes sense. Who typically owns this internally\u2014sales ops, rev ops, managers?",
+      "link": "https://www.onyx.app/1756780-22"
+    },
+    {
+      "text": "James Choi: Usually rev ops or sales ops runs the rollout, and frontline managers drive adoption because it becomes their operating rhythm\u2014weekly forecast and deal-risk review, plus SDR daily prioritization. Reps like it when it saves them time and removes guesswork.",
+      "link": "https://www.onyx.app/1756780-23"
+    },
+    {
+      "text": "Oscar Montgomery: Okay. I\u2019m interested, but I\u2019d need to see it in context\u2014like our segments and what \u201cexplainable drivers\u201d actually look like. What\u2019s the next step?",
+      "link": "https://www.onyx.app/1756780-24"
+    },
+    {
+      "text": "James Choi: Perfect. Next step is a 30\u201345 minute working session where we map your segments, current CRM stages, and where forecasting breaks down today. I can also show the SDR prioritization view\u2014how the \u201cnext 50 accounts\u201d list is generated using fit tiers and how messaging proof points appear per segment. If you can pull in whoever owns rev ops and maybe one SDR manager, we can make it very concrete.",
+      "link": "https://www.onyx.app/1756780-25"
+    },
+    {
+      "text": "Oscar Montgomery: Yeah, loop in our rev ops lead and our SDR manager. I can join too. Do you have times next week?",
+      "link": "https://www.onyx.app/1756780-26"
+    },
+    {
+      "text": "James Choi: I do. How does Tuesday at 11am PT or Thursday at 2pm PT look? I\u2019ll send a calendar invite with a short agenda: CRM connection overview, forecasting drivers demo, and the outbound prioritization workflow using fit tiers.",
+      "link": "https://www.onyx.app/1756780-27"
+    },
+    {
+      "text": "Oscar Montgomery: Tuesday at 11 works. Send it over and I\u2019ll add the others.",
+      "link": "https://www.onyx.app/1756780-28"
+    },
+    {
+      "text": "James Choi: Great\u2014I'll send the invite and a quick pre-read with what data we\u2019ll want to reference, nothing heavy. Thanks Oscar\u2014looking forward to showing you how this could smooth out the quarter-end scramble and give your SDRs a cleaner target list.",
+      "link": "https://www.onyx.app/1756780-29"
+    },
+    {
+      "text": "Oscar Montgomery: Sounds good, James. Talk Tuesday.",
+      "link": "https://www.onyx.app/1756780-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "oscar_montgomery@velvetcompass_travel.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "6ce28794a9d846519e02e8d4724bcc49",
+  "semantic_identifier": "Design--Persist positioning_version_id on customer-facing artifacts and outcome events.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Persist positioning_version_id on customer-facing artifacts and outcome events.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Design: Persist `positioning_version_id` on artifacts and outcome events\n\nWhen a positioning recommendation is \u201capplied\u201d to generate or update a customer-facing artifact (sales enablement export, segment brief push, email/landing-page template usage), we will persist the *currently active* `positioning_version_id` onto the resulting artifact record. This makes the artifact self-describing with respect to which positioning version (from the existing positioning change log) it reflects at the moment of creation/update, even if the positioning evolves later. The value should be captured at the same time we resolve the recommendation content, using the same source-of-truth lookup we already use to fetch \u201cactive positioning\u201d for that company/segment/context.\n\nWe will also persist the same `positioning_version_id` onto any subsequent tracked outcome events that are attributable to that artifact (conversion, win/loss, churn). The event-ingestion path will populate `positioning_version_id` by joining through the artifact reference when available (preferred), or by passing it explicitly from the caller if the event is emitted inline with an artifact action. This yields a durable join key from downstream outcomes \u2192 artifact \u2192 positioning version, enabling reliable attribution and reporting across time without relying on \u201ccurrent positioning\u201d at query-time.\n\nSchema changes are intentionally minimal: add nullable `positioning_version_id` columns (and foreign key constraints if we enforce them today) to the relevant artifact tables and to the outcome events table, plus indexes to support the common query patterns (e.g., `(positioning_version_id, created_at)` on events and potentially `(artifact_id, positioning_version_id)` if artifacts are polymorphic). We should keep the column nullable to support safe rollout and avoid forcing historical consistency. Where artifacts are stored in multiple tables, we\u2019ll add the field to each or to a shared \u201cartifact metadata\u201d table if one exists; the implementation should favor the smallest migration footprint consistent with our data model.\n\nBackfill behavior will be explicitly non-invasive: we will not attempt to infer historical `positioning_version_id` for existing artifacts/events because \u201cactive at the time\u201d may be ambiguous; instead, historical rows remain `NULL`. After deployment, all newly generated/updated artifacts will be stamped, and all new outcome events will be stamped when an artifact reference is present (otherwise left `NULL`). This preserves correctness, avoids accidental misattribution, and still enables forward-looking attribution queries immediately.",
+      "link": "https://www.onyx.app/84962"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_2413115",
+  "semantic_identifier": "2413115 - Glimmersage Health - sales_pitch - Discussion with Christopher Burke",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-17 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-17 00:00:00",
+    "duration_min": "22"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "2413115 - Glimmersage Health - sales_pitch - Discussion with Christopher Burke",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Christopher, Megan Foster here\u2014thanks for taking a few minutes. Did I catch you at an okay time?",
+      "link": "https://www.onyx.app/1992493-1"
+    },
+    {
+      "text": "Christopher Burke: Yeah, I\u2019ve got a few minutes. What\u2019s up?",
+      "link": "https://www.onyx.app/1992493-2"
+    },
+    {
+      "text": "Megan Foster: Great. I\u2019ll keep it short. I\u2019m reaching out because we\u2019ve been working with product and growth teams at healthcare orgs to get much clearer on which customer segments are truly \u201chigh-fit\u201d and what unmet needs they have\u2014so teams can make better roadmap bets and stop chasing noisy signals. The product is called Customer_Analyzer. Are you the right person for product planning decisions at Glimmersage Health, or is that someone else?",
+      "link": "https://www.onyx.app/1992493-3"
+    },
+    {
+      "text": "Christopher Burke: I\u2019m involved, but we have a product ops person and the VP Product owns most of that. What exactly does it do?",
+      "link": "https://www.onyx.app/1992493-4"
+    },
+    {
+      "text": "Megan Foster: Totally. At a high level, Customer_Analyzer ingests signals you already have\u2014CRM fields, onboarding survey responses, product usage events, support tickets, even interview notes\u2014and turns that into two things: a fit score by segment and positioning recommendations you can actually use. For today, I wanted to focus on one piece: positioning recommendations tied directly to what your best customers say and do, so your team can align faster on who to prioritize and why. Does segment prioritization or ICP alignment feel like a pain right now?",
+      "link": "https://www.onyx.app/1992493-5"
+    },
+    {
+      "text": "Christopher Burke: It\u2019s always a discussion, but we\u2019re not in a huge mess. We do quarterly planning and pull reports. We\u2019re okay.",
+      "link": "https://www.onyx.app/1992493-6"
+    },
+    {
+      "text": "Megan Foster: That makes sense. Where we usually see teams get stuck is: the \u201creports\u201d tell you what happened, but not which segments are most aligned with your current strengths or what language will resonate with them. Our positioning_recommendation feature takes the segments you care about and generates editable messaging blocks\u2014value prop, differentiators, proof points to gather, and common objections\u2014linked back to the evidence from tickets, usage, and survey language. The idea is you can go from \u201cwe think this segment is good\u201d to \u201chere\u2019s why they\u2019re high-fit and how we should message to win more deals\u201d in a week, not a quarter.",
+      "link": "https://www.onyx.app/1992493-7"
+    },
+    {
+      "text": "Christopher Burke: We already have messaging. Marketing handles that. I\u2019m not sure we need another tool for it.",
+      "link": "https://www.onyx.app/1992493-8"
+    },
+    {
+      "text": "Megan Foster: Fair. The way product teams use it isn\u2019t to replace marketing\u2014it\u2019s to connect roadmap planning to customer reality. For example: if a segment shows high retention and heavy usage of a specific workflow, and support tickets show a repeated unmet need, the tool surfaces that as a fit driver. Then the positioning recs translate it into \u201chere\u2019s the use case to lead with\u201d and \u201chere\u2019s the proof point we should collect,\u201d which can inform both roadmap bets and what sales/marketing emphasizes. Do you have a single place today where product, sales, and marketing agree on fit drivers for your best customers?",
+      "link": "https://www.onyx.app/1992493-9"
+    },
+    {
+      "text": "Christopher Burke: Not really \u201csingle place,\u201d no. But we\u2019re not trying to boil the ocean. We\u2019re resource-constrained, and I\u2019m cautious about adding more systems.",
+      "link": "https://www.onyx.app/1992493-10"
+    },
+    {
+      "text": "Megan Foster: Completely understood. If it helps, we\u2019re not asking you to re-platform anything. Most teams start by connecting just a couple sources\u2014like HubSpot/Salesforce fields plus a support system\u2014and running a first pass on 2\u20133 segments. The output is basically a working doc: segment-specific value prop, top use cases, differentiators, and objection handling, all editable. That tends to make roadmap conversations more concrete: \u201cSegment A is higher fit because of X drivers; Segment B looks tempting but churn risk shows up in Y signals.\u201d Is churn or misfit customers something you\u2019ve dealt with recently?",
+      "link": "https://www.onyx.app/1992493-11"
+    },
+    {
+      "text": "Christopher Burke: Churn is always a concern, but we\u2019re already tracking it. Again, not sure a tool is the answer.",
+      "link": "https://www.onyx.app/1992493-12"
+    },
+    {
+      "text": "Megan Foster: That\u2019s fair. Can I ask one question to see if this is even worth a deeper look? In your last planning cycle, did you have debate around which customer types to build for\u2014like clinical groups vs admin-heavy organizations\u2014or was it pretty settled?",
+      "link": "https://www.onyx.app/1992493-13"
+    },
+    {
+      "text": "Christopher Burke: There\u2019s always debate, but it\u2019s mostly opinion plus some revenue data. It\u2019s the usual.",
+      "link": "https://www.onyx.app/1992493-14"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly the \u201cusual\u201d we try to improve: blending revenue with product usage patterns and qualitative language. The fit score component helps quantify which segments match your product\u2019s current strengths\u2014so you\u2019re not betting roadmap on loud customers. Then positioning_recommendation turns that into practical messaging blocks, so when you do pick a segment, everyone can execute consistently. If you\u2019re open to it, the next step would be a 30-minute working session where we map your segments and talk through what signals you have\u2014no commitment, just see if the outputs would be useful.",
+      "link": "https://www.onyx.app/1992493-15"
+    },
+    {
+      "text": "Christopher Burke: I\u2019m probably not the right person to commit to that. And honestly, our calendar is slammed this month. We\u2019re mid-release.",
+      "link": "https://www.onyx.app/1992493-16"
+    },
+    {
+      "text": "Megan Foster: Got it. If you\u2019re not the owner, who would you suggest I speak with\u2014VP Product or Product Ops? I can also send a one-pager you can forward.",
+      "link": "https://www.onyx.app/1992493-17"
+    },
+    {
+      "text": "Christopher Burke: You can send something, but I can\u2019t promise I\u2019ll prioritize it. VP Product is tough to get time with right now.",
+      "link": "https://www.onyx.app/1992493-18"
+    },
+    {
+      "text": "Megan Foster: Understood. Before I send it, what would make it relevant enough to earn 30 minutes later\u2014roadmap prioritization, segment selection, or aligning messaging for a go-to-market push?",
+      "link": "https://www.onyx.app/1992493-19"
+    },
+    {
+      "text": "Christopher Burke: Roadmap prioritization is always relevant, but we\u2019re already using a framework. I\u2019m not looking to change process right now.",
+      "link": "https://www.onyx.app/1992493-20"
+    },
+    {
+      "text": "Megan Foster: That makes sense\u2014process change mid-release is the worst time. What we can do is position this as \u201canalysis support,\u201d not a process overhaul: connect two data sources, generate segment fit drivers, and output a short set of recommendations your team can sanity-check. If that doesn\u2019t provide new insight, you stop. Would it be reasonable to revisit after your release\u2014say in six weeks?",
+      "link": "https://www.onyx.app/1992493-21"
+    },
+    {
+      "text": "Christopher Burke: Maybe. I can\u2019t really commit. Send the info and we\u2019ll see.",
+      "link": "https://www.onyx.app/1992493-22"
+    },
+    {
+      "text": "Megan Foster: Will do. Last quick detail so I tailor it: what systems are you using for support tickets and CRM today?",
+      "link": "https://www.onyx.app/1992493-23"
+    },
+    {
+      "text": "Christopher Burke: Zendesk and Salesforce.",
+      "link": "https://www.onyx.app/1992493-24"
+    },
+    {
+      "text": "Megan Foster: Perfect\u2014those are common for us. I\u2019ll send a short overview focused on product planning: how the fit scoring highlights high-fit customers with unmet needs, and how positioning_recommendation turns that into editable messaging blocks and an objection-handling playbook tied to evidence. If you can, forward it to your Product Ops lead or VP Product. If you\u2019d rather, just reply with who owns ICP/segment decisions and I\u2019ll reach out directly.",
+      "link": "https://www.onyx.app/1992493-25"
+    },
+    {
+      "text": "Christopher Burke: Okay. Send it over. No promises on timing.",
+      "link": "https://www.onyx.app/1992493-26"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Thanks for the time, Christopher\u2014I\u2019ll keep it concise and follow up after your release window unless I hear otherwise.",
+      "link": "https://www.onyx.app/1992493-27"
+    },
+    {
+      "text": "Christopher Burke: Sounds good. Bye.",
+      "link": "https://www.onyx.app/1992493-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "christopher_burke@glimmersage_health.onyx.app"
+    }
+  ]
+}

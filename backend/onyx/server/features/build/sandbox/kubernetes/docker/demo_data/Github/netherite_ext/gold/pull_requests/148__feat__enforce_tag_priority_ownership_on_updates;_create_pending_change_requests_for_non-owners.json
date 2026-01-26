@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#148",
+  "semantic_identifier": "148: feat: Enforce tag/priority ownership on updates; create pending change requests for non-owners",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-29",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "148",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "82",
+    "labels": [],
+    "created_at": "2025-06-29",
+    "updated_at": "2025-06-29",
+    "closed_at": "2025-07-26"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nThis PR adds server-side enforcement for `tags` and `priority` updates so only the current field owner (team/user) can apply changes immediately. Any attempt by a non-owner (UI, public API, internal services, or integrations) is intercepted and converted into a pending change request rather than overwriting the existing value. The API returns a structured response indicating that approval is required.\n\n## Key behavior changes\n- **Owner updates**: If the authenticated actor matches the current owner for the field, the update is applied normally.\n- **Non-owner updates**: The update is **not applied**. Instead:\n  - A **PendingChangeRequest** record is created capturing:\n    - `field`: `tags` or `priority`\n    - `currentValue` (snapshot)\n    - `proposedValue`\n    - `requesterId` / requester type (user/service)\n    - `source` (ui/api/integration) and optional integration identifier\n    - target entity identifiers (e.g., item/task id)\n  - The endpoint responds with an `approvalRequired` payload (see \u201cAPI response\u201d below).\n\n## Implementation details (high level)\n- Added an **ownership guard** in the write path for `tags` and `priority` updates (centralized in the domain/service layer so it applies uniformly across UI/API/integrations).\n- Implemented creation of a **pending change request** as part of the same transaction that rejects the direct update to ensure consistency.\n- Added **structured response** handling to distinguish successful updates from \u201caccepted as pending approval\u201d outcomes.\n- Ensured all code paths populate **requester + source metadata** for future UI surfacing and audit history.\n\n## API response\nWhen a non-owner attempts an update, the API returns a non-destructive response indicating the request is pending, for example:\n- `applied: false`\n- `approvalRequired: true`\n- `pendingChangeRequestId: <id>`\n- `field: tags|priority`\n- `proposedValue: ...`\n\n## Notes for reviewers\n- This is a **high-priority enforcement change**: ownership checks are applied at the backend boundary and cannot be bypassed by alternative clients.\n- No UI approval flow is introduced here; this PR only records pending requests and returns a machine-readable response for follow-up work to surface/approve/deny.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#148"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

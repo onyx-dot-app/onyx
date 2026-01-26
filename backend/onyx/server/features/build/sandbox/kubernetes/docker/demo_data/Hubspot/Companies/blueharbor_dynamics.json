@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_1772235",
+  "semantic_identifier": "Blueharbor Dynamics",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-03-21 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "1772235",
+    "domain": "blueharbor_dynamics.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Blueharbor Dynamics\nDomain: blueharbor_dynamics.onyx.app",
+      "link": "https://www.onyx.app/90048"
+    },
+    {
+      "text": "Contact: Nikhil Verma\nEmail: nikhil_verma@blueharbor_dynamics.onyx.app",
+      "link": "https://www.onyx.app/59300"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

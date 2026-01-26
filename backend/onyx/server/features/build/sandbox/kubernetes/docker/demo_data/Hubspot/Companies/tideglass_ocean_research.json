@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_3440560",
+  "semantic_identifier": "Tideglass Ocean Research",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-07-05 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "3440560",
+    "domain": "tideglass_ocean_research.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Tideglass Ocean Research\nDomain: tideglass_ocean_research.onyx.app",
+      "link": "https://www.onyx.app/68120"
+    },
+    {
+      "text": "Contact: Victoria Herrera\nEmail: victoria_herrera@tideglass_ocean_research.onyx.app",
+      "link": "https://www.onyx.app/12433"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

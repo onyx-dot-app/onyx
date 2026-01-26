@@ -1,0 +1,30 @@
+{
+  "id": "ccebc107f91141008be5896af0f47107",
+  "semantic_identifier": "Impact--Wire calibration job to use user-defined outcome labels (no fallback to default).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-02",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Wire calibration job to use user-defined outcome labels (no fallback to default).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change makes the fit model calibration pipeline honor the outcome configuration exactly as defined by the user (activation/retention/expansion) when generating both training labels and label-dependent features. Today, calibration can implicitly fall back to a default outcome, which can silently produce a calibrated model optimized for the wrong target. Wiring the job to the configured outcome rules ensures the calibrated model aligns with the customer\u2019s intended business objective and improves trust in calibration results.\n\nRemoving the fallback also improves debuggability and operational correctness. If the configured outcome rules are incomplete, incompatible with the available signals, or otherwise cannot produce labels, the calibration job will fail fast with a clear, surfaced error rather than completing successfully with unintended defaults. This reduces the risk of shipping or using a model calibrated on incorrect targets and shortens time-to-diagnosis for misconfiguration.\n\nFrom a user impact perspective, customers using non-default outcomes will see calibration results that better match their configured definitions, and they\u2019ll get explicit feedback when their configuration is not viable. This may increase the number of visible failures initially for misconfigured setups, but those failures represent previously hidden correctness issues; the net effect is higher confidence and fewer \u201cmysterious\u201d model performance discrepancies.\n\nWe will add a minimal integration test that runs the same input signals through each outcome path and asserts that each produces distinct labels. This test acts as a regression guard to prevent future reintroduction of default fallbacks or accidental coupling between outcome definitions, and it ensures changes to the labeling logic continue to respect configuration across activation, retention, and expansion.",
+      "link": "https://www.onyx.app/39099"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "f1e0a63098ec4098b5fb0f86c0f85c09",
+  "semantic_identifier": "Impact--issue_clustering v2: Generate automatic split suggestions for overly broad clusters.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--issue_clustering v2: Generate automatic split suggestions for overly broad clusters.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds an \u201cissue clustering v2\u201d post-processing step that automatically identifies clusters that are likely too broad to be useful for triage. After the initial clustering run, we\u2019ll compute cohesion/dispersion signals (e.g., intra-cluster similarity, cluster size thresholds, topic entropy) to flag clusters where themes are mixed or volume is too high, which today forces manual re-reading and ad hoc splitting.\n\nFor any flagged cluster, the job will generate candidate split suggestions into proposed child clusters. Each suggestion will be accompanied by the metrics that triggered the flag and representative examples\u2014such as the top conversations/issues per proposed child cluster\u2014so a reviewer can quickly validate whether the split is sensible without re-running clustering or rebuilding context.\n\nWe\u2019ll persist these split suggestions as first-class records and expose them through an internal API so they can be displayed in the triage UI. This makes the outputs durable (auditable over time, comparable across runs) and creates a clear workflow bridge from \u201cbroad cluster detected\u201d \u2192 \u201creview suggested splits\u201d \u2192 \u201cpromote to actionable clusters\u201d \u2192 \u201clink to downstream engineering work.\u201d\n\nThe expected impact is faster, higher-quality triage with less manual cluster grooming and fewer \u201cmiscellaneous\u201d buckets that hide priority signals. It should also improve downstream execution by producing more specific, well-scoped problem areas that map cleanly to owners, initiatives, and tickets, while preserving transparency via stored metrics and examples for reviewer trust.",
+      "link": "https://www.onyx.app/38074"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

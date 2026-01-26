@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#92",
+  "semantic_identifier": "92: feat: Sales_Accelerator: Server-side immutable audit trail for AI artifact lifecycle events",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-10-25",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "92",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "85",
+    "labels": [],
+    "created_at": "2025-10-25",
+    "updated_at": "2025-10-25",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds an immutable, server-side audit logging pipeline for AI-generated artifacts in Sales_Accelerator (emails, call notes, next-best-action recommendations), covering lifecycle events: generate/create, view, edit, export, and delete.\n\nImplementation highlights:\n- New `audit_logs` persistence layer (append-only) with fields: `event_type`, `actor_id` (and auth subject), `timestamp`, `artifact_id`, `artifact_type`, `source_context` (account_id/opportunity_id), `request_id`, `channel` (UI/API), and optional `metadata`.\n- Edit events record structured before/after diffs:\n  - For text artifacts: stored as JSON patch (RFC6902-like) plus optional pre/post hashes for integrity.\n  - For structured recommendations: stored as field-level diff.\n- Server-side capture for both UI and API flows:\n  - Hooks added in artifact service layer (not UI) to ensure audit events are recorded regardless of frontend RBAC gating.\n  - Middleware attaches actor/context/request identifiers to audit writes.\n- Export auditing:\n  - Logs export attempts with destination/type (e.g., copy/download/CRM push) and artifact reference; does not store exported payload.\n- Delete auditing:\n  - On delete, artifact content is removed per existing behavior, but audit entry persists and records identifying metadata and last-known hash.\n- Queryability for compliance:\n  - Admin/Sales Ops read endpoint added to filter by time range, actor, artifact type/id, and account/opportunity context with pagination and stable ordering.\n\nNotes:\n- Audit logs are retained independently of UI RBAC and cannot be modified via public APIs.\n- Minimal schema/indexing added to support common compliance queries (by timestamp, actor, artifact_id, and context).\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#92"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

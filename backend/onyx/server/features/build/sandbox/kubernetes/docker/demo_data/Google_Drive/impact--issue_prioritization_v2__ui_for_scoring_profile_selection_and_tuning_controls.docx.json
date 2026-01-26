@@ -1,0 +1,30 @@
+{
+  "id": "34c94cf751874dd28bb881df0c57a5e3",
+  "semantic_identifier": "Impact--Issue prioritization v2: UI for scoring profile selection + tuning controls.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-05",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Issue prioritization v2: UI for scoring profile selection + tuning controls.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature introduces \u201cIssue Prioritization v2\u201d by adding a UI layer for selecting an organization or user-specific scoring profile and tuning the weights across key dimensions (Support SLA risk, Product impact, Sales deal blockers). It turns prioritization from a fixed, one-size-fits-all score into a configurable model that can reflect different team goals and operating contexts without changing underlying issue data.\n\nIn the issue list and issue detail views, users will see transparent scoring: each dimension\u2019s score alongside the resulting aggregated score, calculated using the currently active profile. This improves explainability and trust\u2014teams can quickly understand why an issue ranks highly and what factors are driving its priority.\n\nThe UI will be wired to the saved profiles APIs delivered in GOLD-166 (list/apply/update), enabling persistent profiles at the org and user level rather than ephemeral, local settings. The experience should support a sensible default path where the \u201cdefault\u201d profile produces the same single-score behavior as today when no explicit profile is selected, ensuring continuity.\n\nImpact-wise, this unlocks more consistent prioritization across teams, reduces manual triage debates, and allows leaders to tune prioritization as business conditions change (e.g., emphasizing SLA risk during incident-heavy periods or sales blockers during end-of-quarter). It also sets the foundation for future improvements like role-based defaults, team-specific profiles, and analytics on how tuning changes queue outcomes.",
+      "link": "https://www.onyx.app/99575"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "2415604",
+  "semantic_identifier": "[GOLD-42]: Create persistent alert event model + retrieval API for monitoring (fit drift/segment changes/emerging cohorts)",
+  "title": "Create persistent alert event model + retrieval API for monitoring (fit drift/segment changes/emerging cohorts)",
+  "source": "linear",
+  "doc_updated_at": "2026-01-10",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2026-01-10"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement the data model/storage for normalized alert events as defined in [GOLD-40] (type, entity references, timestamps, computed metrics, thresholds, evaluation window, and dedupe key). Add backend query APIs to list and fetch alert events with filtering (by alert type, segment/customer, time range) and pagination for downstream UI/notification delivery. Ensure idempotent writes and basic retention/archival defaults appropriate for low-priority monitoring.",
+      "link": "https://www.onyx.app/50692"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

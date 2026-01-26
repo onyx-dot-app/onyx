@@ -1,0 +1,30 @@
+{
+  "id": "eedc801b0a524d83ad3034cca3322b98",
+  "semantic_identifier": "Design--Add positioning change log with versioning and timestamps.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add positioning change log with versioning and timestamps.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add an immutable, append-only audit log for all positioning recommendations (value props, differentiators, proof points, objections) to capture attribution-grade change history. Each user edit will be recorded as a new versioned entry rather than overwriting existing data, enabling us to reconstruct the exact positioning state at any point in time and correlate downstream outcomes to specific edits. The log will be scoped to the applicable segment/ICP so changes are attributable to the correct audience context.\n\nData model: introduce a `positioning_version` (or similarly named) entity with a stable `version_id` (UUID), a `positioning_entity_type` + `entity_id` (to cover the four recommendation types), `segment_id`/`icp_id` (or a unified audience key), `created_by`, and timestamps including `created_at` (write time) and `effective_at` (when the change should be considered active). Store the payload as the full \u201cafter\u201d snapshot plus optional `before` snapshot and/or a structured diff; snapshots simplify reads and point-in-time reconstruction, while diffs reduce storage\u2014recommend snapshot-first for correctness and simplicity. Enforce immutability via database constraints (no UPDATE/DELETE; only INSERT), and ensure writers always create a new version row on edit.\n\nWrite path: on any create/edit in the positioning UI/API, the service will validate permissions, compute/validate the intended `effective_at` (default to now), and insert a new version row in a single transaction. The \u201ccurrent\u201d positioning view can be derived by selecting the latest version per entity/audience by `effective_at` (and then `created_at` as tie-breaker), optionally materialized into a separate read model for performance. This approach supports backdated or scheduled changes (via `effective_at`) while keeping the audit trail intact.\n\nRead path: expose a read-only History endpoint (e.g., `GET /positioning/{entity_type}/{entity_id}/history?segment_id=...&icp_id=...`) that returns an ordered list of versions with metadata (who/when/effective), and optionally a computed diff between adjacent versions for UI display. Access is read-only and gated by existing permissions. This endpoint will serve later attribution/analytics work by allowing downstream systems to map outcomes to the active version at an event time using `effective_at` and stable `version_id`.",
+      "link": "https://www.onyx.app/51324"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

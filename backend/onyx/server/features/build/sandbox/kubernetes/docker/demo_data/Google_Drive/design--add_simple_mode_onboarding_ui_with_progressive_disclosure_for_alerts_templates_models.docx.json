@@ -1,0 +1,30 @@
+{
+  "id": "6f8d48e4f9904b258de30b83a35235a9",
+  "semantic_identifier": "Design--Add Simple Mode onboarding UI with progressive disclosure for alerts/templates/models.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-08",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add Simple Mode onboarding UI with progressive disclosure for alerts/templates/models.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add an onboarding step that lets new users choose between **Simple Mode** and **Advanced Mode**. Selecting Simple Mode will call a backend \u201crecommended defaults\u201d endpoint (or use existing defaults) to apply a minimal, known-good configuration for alerts/templates/models, then proceed into the product with only the core workflows surfaced: **forecasting**, **next-best-action**, and **risk alerts**. The onboarding UI will include short, explainable summaries of what each workflow does and what will be configured on the user\u2019s behalf, emphasizing clarity over configurability.\n\nIn **Simple Mode**, the main configuration surfaces for alerts, templates, and models will be progressively disclosed. We will render a reduced set of controls by default (e.g., enable/disable, key thresholds/recipients if applicable) and move all other tunables (template editing, model selection/tuning, alert routing/filters, etc.) behind an **\u201cAdvanced settings\u201d** accordion within each relevant page/section. The accordion state is purely UI and does not affect backend configuration; it simply controls visibility of advanced controls while keeping the underlying objects present and valid.\n\nMode selection will be persisted at the org/workspace level (or user level if product expectations dictate) as `uiMode = simple|advanced`. Applying Simple Mode defaults is a one-time action during onboarding that writes the recommended configuration into the same backend entities used by Advanced Mode (no separate \u201csimple config\u201d schema). This ensures users can later switch to Advanced Mode and see the already-applied defaults as their starting point, with no loss of data; switching back to Simple Mode will only re-hide advanced controls and will not overwrite any subsequent advanced edits unless the user explicitly chooses a \u201creset to recommended defaults\u201d action (out of scope unless requested).\n\nWe will implement the UI behind a feature flag, add basic analytics (mode chosen, advanced accordion opened, switched to advanced later), and include guardrails for partial configuration states (e.g., if defaults fail to apply, fall back to Advanced Mode with an error banner and retry). QA will validate: (1) Simple Mode applies backend defaults and core workflows function end-to-end, (2) advanced controls are hidden but accessible via accordion, and (3) switching to Advanced Mode preserves all entities and settings created by the defaults with no regression in behavior.",
+      "link": "https://www.onyx.app/30327"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

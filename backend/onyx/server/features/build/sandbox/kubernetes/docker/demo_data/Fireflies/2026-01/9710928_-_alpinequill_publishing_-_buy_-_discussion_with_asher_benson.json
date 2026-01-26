@@ -1,0 +1,197 @@
+{
+  "id": "FIREFLIES_9710928",
+  "semantic_identifier": "9710928 - Alpinequill Publishing - buy - Discussion with Asher Benson",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-01-30 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-01-30 00:00:00",
+    "duration_min": "39"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-01"
+      ],
+      "year_month": "2026-01",
+      "meeting_title": "9710928 - Alpinequill Publishing - buy - Discussion with Asher Benson",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Asher\u2014good to see you again. Since this is our third call, I wanted to keep it tight: confirm what you need for inbound speed-to-lead, address the \u201cwhy should reps trust this\u201d question, and if we\u2019re aligned, agree on the purchase path today. Sound good?",
+      "link": "https://www.onyx.app/8709351-1"
+    },
+    {
+      "text": "Asher Benson: Yep, that works. We\u2019re close\u2014I just need to feel confident it\u2019ll actually get used, not ignored.",
+      "link": "https://www.onyx.app/8709351-2"
+    },
+    {
+      "text": "Megan Foster: Totally. Let me restate what I heard from you last time: Alpinequill\u2019s inbound volume is healthy, but response quality and consistency varies by rep, and speed-to-lead drops outside business hours. You want a system that routes attention to the right inbound leads and gives a strong first-touch message that fits your positioning, without forcing you to redo work you already did in your CRM and Customer_Analyzer. Did I miss anything?",
+      "link": "https://www.onyx.app/8709351-3"
+    },
+    {
+      "text": "Asher Benson: That\u2019s it. And I\u2019m wary of \u201cAI recommendations\u201d that feel like a black box. If my team can\u2019t see why it suggested something, they won\u2019t follow it.",
+      "link": "https://www.onyx.app/8709351-4"
+    },
+    {
+      "text": "Megan Foster: Perfect\u2014then we\u2019ll focus on two things: (1) Sales_Accelerator\u2019s sales initiation recommendations for inbound speed-to-lead, and (2) how we make the guidance explainable so reps and managers trust it.",
+      "link": "https://www.onyx.app/8709351-5"
+    },
+    {
+      "text": "Asher Benson: Okay, walk me through how it would look for an inbound lead.",
+      "link": "https://www.onyx.app/8709351-6"
+    },
+    {
+      "text": "Megan Foster: In your CRM\u2014Salesforce for you\u2014the rep sees an \u201cInitiation\u201d panel on the lead/account. It ranks the next-best inbound follow-ups, and for each one it recommends: who to contact, the opening angle, and a ready-to-send first-touch email plus a LinkedIn opener and a call talk track. The key is: it doesn\u2019t invent your messaging from scratch. It consumes your Customer_Analyzer fit score and positioning blocks\u2014so it\u2019s anchored to your approved ICP and segment language.",
+      "link": "https://www.onyx.app/8709351-7"
+    },
+    {
+      "text": "Asher Benson: We like that part. But how does it decide priority? We already have lead scoring.",
+      "link": "https://www.onyx.app/8709351-8"
+    },
+    {
+      "text": "Megan Foster: Great question. We\u2019re not trying to replace your lead scoring; we layer on execution guidance. The priority list combines your CRM fields and activity\u2014like form source, pages viewed, time since last touch\u2014with intent/engagement signals and the Customer_Analyzer fit score. Then it explains the drivers in plain language. So the rep doesn\u2019t just see \u201cFollow up now,\u201d they see \u201cHigh fit because X and Y, engaged because Z, and here\u2019s the segment positioning to lead with.\u201d",
+      "link": "https://www.onyx.app/8709351-9"
+    },
+    {
+      "text": "Asher Benson: \u201cExplains the drivers\u201d is the part I want to pressure-test. What does that explanation actually look like?",
+      "link": "https://www.onyx.app/8709351-10"
+    },
+    {
+      "text": "Megan Foster: For each recommendation, there\u2019s a \u201cWhy this / Why now / Why this message\u201d breakdown. Example:  \n- **Why this account:** Fit score 92; matched ICP drivers: mid-market media/publishing, hiring for growth roles, and using a compatible tech stack.  \n- **Why now:** Submitted \u201cRequest a demo\u201d within the last 2 hours; visited pricing page; opened your last newsletter campaign.  \n- **Why this message:** Customer_Analyzer segment = \u201cDigital-first publisher\u201d; recommended positioning block = \u201creduce acquisition cost + improve conversion from engaged audiences\u201d; proof point pulled from your approved library; and an objection handler if they mention \u201cwe already have a CRM process.\u201d",
+      "link": "https://www.onyx.app/8709351-11"
+    },
+    {
+      "text": "Asher Benson: That\u2019s helpful. Can managers see that too? Because enforcement matters.",
+      "link": "https://www.onyx.app/8709351-12"
+    },
+    {
+      "text": "Megan Foster: Yes\u2014managers can see the same rationale and can coach to it. The goal is to make the system \u201cauditable.\u201d If a rep says \u201cthis recommendation is wrong,\u201d you can look at the drivers and either adjust the playbook rules or correct the CRM inputs, rather than arguing about vibes.",
+      "link": "https://www.onyx.app/8709351-13"
+    },
+    {
+      "text": "Asher Benson: And the initiation playbooks\u2014are they customizable by segment? We have slightly different talk tracks for education publishers vs. trade.",
+      "link": "https://www.onyx.app/8709351-14"
+    },
+    {
+      "text": "Megan Foster: Exactly. You can have initiation playbooks by segment, lead source, even by territory. Sales_Accelerator uses your Customer_Analyzer segment positioning blocks as the spine, then you can customize the first-touch email, LinkedIn opener, and call talk track around those blocks. That keeps reps from going off-message while still sounding human.",
+      "link": "https://www.onyx.app/8709351-15"
+    },
+    {
+      "text": "Asher Benson: One concern: reps hate extra tools. If this is another tab they have to remember, adoption will be rough.",
+      "link": "https://www.onyx.app/8709351-16"
+    },
+    {
+      "text": "Megan Foster: Agreed\u2014and that\u2019s why Sales_Accelerator sits on top of the CRM. The workflow lives where they already work. Practically, it\u2019s a panel in Salesforce plus a \u201cnext actions\u201d queue. Reps don\u2019t have to leave their pipeline view to get the next-best lead and the recommended message.",
+      "link": "https://www.onyx.app/8709351-17"
+    },
+    {
+      "text": "Asher Benson: Okay. Now, you mentioned speed-to-lead tracking before. We care about whether faster first-touch actually changes win rate.",
+      "link": "https://www.onyx.app/8709351-18"
+    },
+    {
+      "text": "Megan Foster: Right. For the inbound use case, we track: time-to-first-touch, whether the rep used the recommended playbook, meeting created rate, and downstream conversion. That gives you a clean way to answer, \u201cIf we reply within 15 minutes with the segment-aligned message, do we win more?\u201d And if not, we refine the playbooks.",
+      "link": "https://www.onyx.app/8709351-19"
+    },
+    {
+      "text": "Asher Benson: That\u2019s compelling. But I still want to be sure the \u201cAI\u201d won\u2019t produce weird messaging that sounds unlike us.",
+      "link": "https://www.onyx.app/8709351-20"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Two safeguards:  \n1) The system is constrained to your approved positioning blocks and proof points\u2014so it\u2019s not hallucinating a new pitch.  \n2) You can lock templates and only allow certain fields to vary, like the opening line based on the trigger event. That way, brand voice stays consistent.",
+      "link": "https://www.onyx.app/8709351-21"
+    },
+    {
+      "text": "Asher Benson: That addresses most of my concerns. If we did this, what does rollout look like? I don\u2019t want a three-month implementation.",
+      "link": "https://www.onyx.app/8709351-22"
+    },
+    {
+      "text": "Megan Foster: For your scope\u2014Sales_Accelerator focused on initiation recommendations for inbound\u2014we typically do a short rollout: connect Salesforce, connect Customer_Analyzer outputs, map the segments/fields, and stand up 2\u20133 initiation playbooks for your highest-volume inbound segments. Then we run a two-week pilot with a small group, and expand once you see the lift.",
+      "link": "https://www.onyx.app/8709351-23"
+    },
+    {
+      "text": "Asher Benson: And training?",
+      "link": "https://www.onyx.app/8709351-24"
+    },
+    {
+      "text": "Megan Foster: One manager session and two rep sessions, plus in-product rationale cards. The \u201cwhy this message\u201d view is actually what makes training easier, because you\u2019re teaching the logic, not just handing out scripts.",
+      "link": "https://www.onyx.app/8709351-25"
+    },
+    {
+      "text": "Asher Benson: Makes sense. Let\u2019s talk decision. Pricing and terms were in the proposal you sent, right?",
+      "link": "https://www.onyx.app/8709351-26"
+    },
+    {
+      "text": "Megan Foster: Yes\u2014Sales_Accelerator for your inbound team, annual term, with the Salesforce integration and the Customer_Analyzer connection included. The main open items last time were: confirming your pilot group size and agreeing on success metrics.",
+      "link": "https://www.onyx.app/8709351-27"
+    },
+    {
+      "text": "Asher Benson: I think we can commit. For success metrics, I\u2019d want improved meeting creation and faster first-touch. Maybe also adoption\u2014like percent of inbounds using the recommended playbook.",
+      "link": "https://www.onyx.app/8709351-28"
+    },
+    {
+      "text": "Megan Foster: Perfect. How about we set:  \n- Reduce median time-to-first-touch from current baseline to under 30 minutes for business hours,  \n- Increase meeting creation rate on high-fit inbound by, say, 15%,  \n- And hit 70% rep usage of the initiation playbooks for the pilot cohort.  \nIf we hit those, we expand to the full inbound team.",
+      "link": "https://www.onyx.app/8709351-29"
+    },
+    {
+      "text": "Asher Benson: Those targets feel reasonable. I\u2019ll need procurement to run the paperwork, but I\u2019m ready to move forward.",
+      "link": "https://www.onyx.app/8709351-30"
+    },
+    {
+      "text": "Megan Foster: Great. To get it over the line today, can we agree on two things: you\u2019ll be the business approver, and we\u2019ll aim for signature by end of week?",
+      "link": "https://www.onyx.app/8709351-31"
+    },
+    {
+      "text": "Asher Benson: Yes, I\u2019m the approver. End of week should be fine if legal doesn\u2019t get stuck.",
+      "link": "https://www.onyx.app/8709351-32"
+    },
+    {
+      "text": "Megan Foster: Awesome. I\u2019ll send the order form right after this call, along with a one-page rollout plan and the pilot success metrics we just defined. On legal: we can start with your standard MSA or ours\u2014whichever is faster. Do you have a preference?",
+      "link": "https://www.onyx.app/8709351-33"
+    },
+    {
+      "text": "Asher Benson: Use our MSA. It\u2019s already in place with a couple vendors, and legal is quicker with it.",
+      "link": "https://www.onyx.app/8709351-34"
+    },
+    {
+      "text": "Megan Foster: Perfect\u2014send it over and we\u2019ll redline today. Last check: the trust/explainability gap was your biggest risk. Are you satisfied that the \u201cwhy this / why now / why this message\u201d drivers and manager visibility will keep reps from ignoring it?",
+      "link": "https://www.onyx.app/8709351-35"
+    },
+    {
+      "text": "Asher Benson: Yes. As long as the rationale is visible and the templates stay aligned to our positioning, I think adoption will be strong.",
+      "link": "https://www.onyx.app/8709351-36"
+    },
+    {
+      "text": "Megan Foster: Great. Then we\u2019re aligned: Alpinequill is moving ahead with Sales_Accelerator for inbound initiation recommendations, pilot first, signature by end of week. I\u2019ll follow up with the docs and a calendar hold for kickoff early next week.",
+      "link": "https://www.onyx.app/8709351-37"
+    },
+    {
+      "text": "Asher Benson: Sounds good, Megan. Send everything over and I\u2019ll get it moving on my side.",
+      "link": "https://www.onyx.app/8709351-38"
+    },
+    {
+      "text": "Megan Foster: Will do. Thanks, Asher\u2014talk soon.",
+      "link": "https://www.onyx.app/8709351-39"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "asher_benson@alpinequill_publishing.onyx.app"
+    }
+  ]
+}

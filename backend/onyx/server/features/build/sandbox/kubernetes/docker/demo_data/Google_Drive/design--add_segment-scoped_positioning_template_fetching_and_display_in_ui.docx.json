@@ -1,0 +1,30 @@
+{
+  "id": "5b033a47e7d74917aa51d9eff84cd691",
+  "semantic_identifier": "Design--Add segment-scoped positioning template fetching + display in UI.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-02",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add segment-scoped positioning template fetching + display in UI.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add segment-scoped positioning template fetching and read-only display to the Segment Detail view. The UI will call a new positioning template API using the currently selected segment\u2019s identifier, then render the returned template sections: value props, differentiators, proof points, and objections. This ticket covers only retrieval and presentation; editing and persistence will be handled in follow-on work.\n\n### API + Data Flow\nOn Segment Detail load (and when the user switches segments), the frontend will request `GET /positioning-templates?segmentId=<id>` (exact route per backend contract). The response will include either a segment-customized template or indicate no customization; in either case the server will provide an \u201ceffective\u201d template (defaults applied) so the UI can always render a complete view. The client will treat the server response as the source of truth and will not attempt to merge defaults locally, ensuring consistent behavior across clients and reducing drift.\n\n### UI Rendering + States\nWe\u2019ll add a \u201cPositioning Template\u201d section to the Segment Detail page with four subsections (Value Props, Differentiators, Proof Points, Objections), each rendering a list or empty placeholder text depending on the effective template contents. While fetching, the section shows a skeleton/loader; on error, it shows a compact inline error with a retry action; on empty data (e.g., no items in a section), it shows \u201cNo items yet\u201d messaging rather than collapsing the section. If the segment has no customized template, the UI should still render the server-provided default content and optionally include a subtle indicator such as \u201cDefault template\u201d (non-blocking, no edit affordances).\n\n### Implementation Notes + Acceptance Criteria\nImplementation will live behind the existing Segment Detail data boundary (e.g., a new query/hook keyed by `segmentId` with caching and request cancellation on rapid segment switching). The component should be read-only and avoid introducing edit controls, inline inputs, or save endpoints. Acceptance: selecting a segment triggers a fetch; the four sections render from the effective template; loading/empty/error states behave correctly; and when a segment lacks customization, the UI displays server defaults without special-casing in the client.",
+      "link": "https://www.onyx.app/81577"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

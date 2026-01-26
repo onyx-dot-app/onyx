@@ -1,0 +1,30 @@
+{
+  "id": "0fa1bfc9853a4df8abe88b276a164789",
+  "semantic_identifier": "Design--Implement Customer_Analyzer sync job to ingest fit score, segment, and approved positioning blocks.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-26",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Implement Customer_Analyzer sync job to ingest fit score, segment, and approved positioning blocks.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "Design a backend sync job that ingests account-level **fit score**, **segment**, and **approved positioning blocks** from **Customer_Analyzer** into **Sales_Accelerator**, focusing strictly on ingestion + persistence. The job will run on a schedule (and optionally be triggerable on-demand for backfill) and call a Customer_Analyzer API endpoint scoped to accounts updated since the last successful sync. To ensure we only ingest \u201capproved\u201d content, the fetch layer will filter by an explicit approval flag/status from the source payload and will ignore drafts/unapproved blocks.\n\nPersist results into a dedicated integration model/table (e.g., `customer_analyzer_account_snapshot`) keyed by our internal CRM identifiers (CRM `account_id` and, where applicable, `opportunity_id`). The record will include: fit score (typed numeric + optional label), segment (enum/string), positioning blocks (normalized child table or JSON with block IDs, text, metadata), and source metadata required for change detection: source `updated_at`, `version`/`etag` (if provided), and `last_synced_at`. Upserts should be idempotent: if the incoming source timestamp/version matches what we already have, skip writes; otherwise update the snapshot and retain the latest source metadata.\n\nFor change detection and incremental sync, maintain a per-integration cursor/state (e.g., `customer_analyzer_sync_state`) storing last successful watermark (timestamp or version token) plus job run metadata (start/end, counts). If Customer_Analyzer supports pagination, iterate deterministically and checkpoint only after completing a page to reduce duplication risk; if not, rely on per-record version checks to maintain idempotency. The sync will map Customer_Analyzer account identifiers to our CRM account/opportunity IDs via existing CRM linkage tables; unmapped records should be logged and counted, not hard-failed.\n\nAdd basic resilience and observability: retries with exponential backoff (and jitter) for transient failures (timeouts, 429/5xx), bounded by a max attempt count; classify errors into retryable vs terminal (e.g., auth/4xx schema issues). Emit structured logs per run and per failure (including account identifiers, error class, attempt, and correlation/run ID) and persist a lightweight failure record for later inspection/replay if needed. The job should be safe to run concurrently (single-flight lock or unique run lease) to avoid overlapping cursors and write contention.",
+      "link": "https://www.onyx.app/41412"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

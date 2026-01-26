@@ -1,0 +1,30 @@
+{
+  "id": "4790048",
+  "semantic_identifier": "[GOLD-15]: Standardize capture of customer language/evidence in signal ingestion pipeline",
+  "title": "Standardize capture of customer language/evidence in signal ingestion pipeline",
+  "source": "linear",
+  "doc_updated_at": "2025-04-03",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2025-04-03"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add a consistent schema for storing customer language and supporting evidence across ingested signals (CRM notes, surveys, support tickets, interviews, usage annotations). Ensure each record captures source type, timestamp, verbatim quote/snippet, and a link/reference back to the original artifact. Backfill defaults for existing records where possible to avoid breaking downstream positioning generation.",
+      "link": "https://www.onyx.app/56300"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

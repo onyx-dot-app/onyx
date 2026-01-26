@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#56",
+  "semantic_identifier": "56: feat: Add configurable deal-dynamics gating/penalty to forecasting + best-next-action scoring",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-09-26",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "56",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "31",
+    "labels": [],
+    "created_at": "2025-09-26",
+    "updated_at": "2025-09-26",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR updates the scoring pipeline to reduce or cap recommendation scores when deal-dynamics risk signals are present, ensuring high-fit accounts do not surface as top recommendations if execution risk is high.\n\nKey changes\n- Introduces a shared `DealDynamicsAdjustment` step applied in both pipelines:\n  - Forecasting score computation\n  - Best-next-action (BNA) ranking score computation\n- Adds configurable penalty + cap behavior:\n  - Penalty: subtracts a configurable amount per triggered risk signal (optionally weighted)\n  - Cap: enforces a max achievable score per fit tier when any configured risk signal is active (e.g., Tier 1 cannot exceed X)\n  - Supports \u201cgate\u201d mode by setting cap to 0 or applying a 100% penalty.\n- Normalizes and centralizes deal-dynamics signal evaluation (e.g., `late_procurement`, `strong_competition`, `low_internal_alignment`) so both forecasting and BNA use identical logic.\n\nImplementation details\n- Adds new configuration entries (defaults are conservative since ticket priority is medium):\n  - `deal_dynamics.enabled` (bool)\n  - `deal_dynamics.signals` (list of signal keys to consider)\n  - `deal_dynamics.penalties` (per-signal or global penalty values)\n  - `deal_dynamics.tier_caps` (per-fit-tier score ceilings when any signal is triggered)\n- Updates score calculation order: base score -> fit tier adjustments -> deal-dynamics adjustment -> final clamp.\n- Emits adjustment metadata (triggered signals, applied penalty, applied cap) in scoring output for debugging/auditing.\n\nBehavioral impact\n- Forecasting and BNA outputs will rank risky deals lower and prevent high-fit deals with negative dynamics from exceeding the configured ceiling.\n- If `deal_dynamics.enabled=false`, behavior remains unchanged.\n\nTesting\n- Adds unit tests for penalty accumulation, tier cap enforcement, and parity between forecasting and BNA application.\n- Adds config-driven tests to verify no-op behavior when disabled and deterministic behavior across multiple signal combinations.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#56"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

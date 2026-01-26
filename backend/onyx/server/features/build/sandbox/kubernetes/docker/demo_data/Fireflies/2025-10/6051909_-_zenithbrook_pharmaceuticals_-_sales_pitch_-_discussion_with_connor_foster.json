@@ -1,0 +1,157 @@
+{
+  "id": "FIREFLIES_6051909",
+  "semantic_identifier": "6051909 - Zenithbrook Pharmaceuticals - sales_pitch - Discussion with Connor Foster",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-10-10 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-10-10 00:00:00",
+    "duration_min": "39"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-10"
+      ],
+      "year_month": "2025-10",
+      "meeting_title": "6051909 - Zenithbrook Pharmaceuticals - sales_pitch - Discussion with Connor Foster",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Connor\u2014Camila Vega here. Thanks for taking a few minutes. I\u2019ll keep it tight. I\u2019m calling because we work with teams that are trying to get really crisp on who their best customers are and why\u2014and then turn that into messaging and targeting that actually improves conversion.",
+      "link": "https://www.onyx.app/2103554-1"
+    },
+    {
+      "text": "Connor Foster: Hi Camila. Yeah, I\u2019ve got a few minutes. What are you reaching out about specifically?",
+      "link": "https://www.onyx.app/2103554-2"
+    },
+    {
+      "text": "Camila Vega: The product is called Customer_Analyzer. It pulls together customer signals you already have\u2014CRM fields, onboarding responses, product usage, support tickets, even interview notes\u2014and turns them into two practical outputs: a fit score by account or segment, and positioning recommendations you can use in marketing and sales.",
+      "link": "https://www.onyx.app/2103554-3"
+    },
+    {
+      "text": "Connor Foster: Okay. We\u2019re a pharma company\u2014so I\u2019m not sure how that maps. Are you thinking commercial, or something else?",
+      "link": "https://www.onyx.app/2103554-4"
+    },
+    {
+      "text": "Camila Vega: Totally fair. I\u2019m not assuming SaaS-only. The use case I see most often is: before you scale acquisition or a new go-to-market motion, you validate your \u201cideal customer profile\u201d based on evidence, not gut feel. For a team like yours, that can be figuring out which customer segments\u2014or partner types\u2014are most likely to adopt, renew, expand, or require less support friction, depending on what you\u2019re selling.",
+      "link": "https://www.onyx.app/2103554-5"
+    },
+    {
+      "text": "Connor Foster: We\u2019re not really \u201cscaling paid acquisition.\u201d And we already have segmentation work that our insights team does.",
+      "link": "https://www.onyx.app/2103554-6"
+    },
+    {
+      "text": "Camila Vega: Makes sense. Where Customer_Analyzer tends to help is when segmentation exists, but it\u2019s hard to connect it to outcomes\u2014like \u201cwhich segments actually convert faster\u201d or \u201cwhich ones churn less\u201d or \u201cwhich ones take forever to realize value.\u201d The core feature is fit_estimation: it creates a 0\u2013100 fit score at the account and segment level, with a driver breakdown for why the score is high or low.",
+      "link": "https://www.onyx.app/2103554-7"
+    },
+    {
+      "text": "Connor Foster: What exactly is the \u201cfit score\u201d based on? Because we\u2019re very careful about data, and a lot of what you listed is not something we\u2019d be comfortable piping into another system.",
+      "link": "https://www.onyx.app/2103554-8"
+    },
+    {
+      "text": "Camila Vega: Absolutely. The fit score is based on whatever drivers you choose and whatever signals you\u2019re comfortable sharing. Teams typically start lightweight\u2014firmographics, basic CRM fields, maybe onboarding survey data, and high-level engagement signals. The platform then shows segment comparisons\u2014say Segment A vs Segment B\u2014and highlights which drivers correlate to better outcomes.",
+      "link": "https://www.onyx.app/2103554-9"
+    },
+    {
+      "text": "Connor Foster: We don\u2019t have \u201cproduct usage events\u201d in the way software companies do. And support tickets are in a system we can\u2019t integrate with easily. So I\u2019m not sure the dataset would be rich enough to do anything meaningful.",
+      "link": "https://www.onyx.app/2103554-10"
+    },
+    {
+      "text": "Camila Vega: That\u2019s a common concern. Even with limited signals, you can still get directional clarity. For example, if you have accounts, deal stages, time-to-close, renewal or reorder signals, and a handful of attributes\u2014industry, size, channel, region\u2014you can start to see patterns. The output isn\u2019t just a number; it\u2019s \u201chere\u2019s what\u2019s driving success and what\u2019s driving friction.\u201d",
+      "link": "https://www.onyx.app/2103554-11"
+    },
+    {
+      "text": "Connor Foster: We already do that analysis internally in Tableau and some Python. So what\u2019s the incremental value?",
+      "link": "https://www.onyx.app/2103554-12"
+    },
+    {
+      "text": "Camila Vega: Two things. First, speed and consistency: instead of one-off analyses, you get an always-on view with driver breakdowns and segment comparisons you can share across marketing, sales, and product. Second, the positioning layer: it translates the fit insights into messaging recommendations\u2014value props, differentiators, proof points, and objection handling\u2014based on what the best-fit customers actually respond to.",
+      "link": "https://www.onyx.app/2103554-13"
+    },
+    {
+      "text": "Connor Foster: Positioning recommendations sounds\u2026 subjective. And we have brand and medical/legal review. We can\u2019t just change messaging because a tool suggests it.",
+      "link": "https://www.onyx.app/2103554-14"
+    },
+    {
+      "text": "Camila Vega: Totally understood. It\u2019s not meant to replace governance\u2014more to propose drafts grounded in evidence so your team isn\u2019t starting from a blank page. And you can constrain it to approved language and claims. But if that part is less relevant, the fit estimation alone can help you prioritize which segments are worth investing in.",
+      "link": "https://www.onyx.app/2103554-15"
+    },
+    {
+      "text": "Connor Foster: Prioritize segments for what, though? Our targeting is set at a pretty high level already, and changes take months.",
+      "link": "https://www.onyx.app/2103554-16"
+    },
+    {
+      "text": "Camila Vega: If changes are slow, it can still help with where to focus near-term effort\u2014like which segments to prioritize for field enablement, where to focus account-based outreach, or which segments are likely to expand so you can allocate resources. It also surfaces risk signals\u2014support burden, adoption friction, churn risk proxies\u2014if those are available.",
+      "link": "https://www.onyx.app/2103554-17"
+    },
+    {
+      "text": "Connor Foster: \u201cIf those are available\u201d is doing a lot of work. I\u2019m not trying to be difficult, but this feels like it\u2019s built for SaaS startups. We\u2019re not that.",
+      "link": "https://www.onyx.app/2103554-18"
+    },
+    {
+      "text": "Camila Vega: You\u2019re not being difficult at all\u2014that\u2019s helpful context. Let me ask one quick question to see if there\u2019s a fit: do you have a situation where sales and marketing disagree on what \u201cgood\u201d looks like\u2014like which accounts are worth pursuing or why certain opportunities stall?",
+      "link": "https://www.onyx.app/2103554-19"
+    },
+    {
+      "text": "Connor Foster: Not really. We have disagreements like anyone, but it\u2019s not a major pain point right now. Our bigger issues are operational\u2014systems, compliance, and internal priorities.",
+      "link": "https://www.onyx.app/2103554-20"
+    },
+    {
+      "text": "Camila Vega: Got it. In that case, it may not be the right timing. The only other angle I\u2019ll mention is: teams use the fit score to reduce wasted cycles\u2014fewer low-probability pursuits\u2014especially when pipelines get noisy. But if you\u2019re not feeling that pain, I don\u2019t want to force it.",
+      "link": "https://www.onyx.app/2103554-21"
+    },
+    {
+      "text": "Connor Foster: Yeah, we\u2019re not in a place where we\u2019re shopping for a new analytics platform. And we have a freeze on new vendors until next quarter, anyway.",
+      "link": "https://www.onyx.app/2103554-22"
+    },
+    {
+      "text": "Camila Vega: Understood. Would it be worth a 20-minute follow-up next quarter just to see if priorities shift? I can also send a one-pager that explains the fit_estimation output\u2014fit score, driver breakdown, and segment comparisons\u2014so you can evaluate whether it overlaps with what you already do.",
+      "link": "https://www.onyx.app/2103554-23"
+    },
+    {
+      "text": "Connor Foster: You can send the one-pager, sure. But I can\u2019t commit to a follow-up. If it looks relevant, I\u2019ll share it internally.",
+      "link": "https://www.onyx.app/2103554-24"
+    },
+    {
+      "text": "Camila Vega: That\u2019s fair. What\u2019s the best email? And is there anyone else on your side who owns customer segmentation or commercial analytics that I should include so it doesn\u2019t get lost?",
+      "link": "https://www.onyx.app/2103554-25"
+    },
+    {
+      "text": "Connor Foster: Email is connor.foster@zenithbrook.com. You can include our insights inbox\u2014insights@zenithbrook.com. But again, no promises. We\u2019re stretched thin.",
+      "link": "https://www.onyx.app/2103554-26"
+    },
+    {
+      "text": "Camila Vega: Perfect. I\u2019ll send a concise overview with examples of the fit score and the driver breakdown, plus what inputs are optional vs required. If it\u2019s clearly not a match, just reply \u201cnot now\u201d and I\u2019ll close the loop on my end.",
+      "link": "https://www.onyx.app/2103554-27"
+    },
+    {
+      "text": "Connor Foster: Sounds good. Thanks for keeping it brief.",
+      "link": "https://www.onyx.app/2103554-28"
+    },
+    {
+      "text": "Camila Vega: Of course. Appreciate your time, Connor. I\u2019ll send that over shortly.",
+      "link": "https://www.onyx.app/2103554-29"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "connor_foster@zenithbrook_pharmaceuticals.onyx.app"
+    }
+  ]
+}

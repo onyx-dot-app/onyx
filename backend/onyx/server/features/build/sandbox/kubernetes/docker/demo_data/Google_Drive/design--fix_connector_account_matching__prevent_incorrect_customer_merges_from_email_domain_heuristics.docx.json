@@ -1,0 +1,30 @@
+{
+  "id": "2d8db0c5197a4f86aca8dc2980060bd1",
+  "semantic_identifier": "Design--Fix connector account matching: prevent incorrect customer merges from email/domain heuristics.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix connector account matching: prevent incorrect customer merges from email/domain heuristics.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We should tighten connector account-matching so ingestion (CSV/Zendesk/Intercom) never auto-merges customers based on low-confidence email/domain heuristics. Today we can incorrectly associate conversations when multiple customers share a domain (subsidiaries/resellers), use freemail domains, or reuse a support alias across accounts. The goal is to bias toward correctness: only auto-link when we have strong evidence, otherwise keep the record \u201cunmatched\u201d and route it for review so downstream attribution (impacted customers, revenue exposure) is accurate.\n\nProposed matching logic is a tiered decision: (1) exact \u201cknown mapping\u201d wins (connector identity \u2192 CRM account id, or previously reviewed/approved mapping); (2) verified domain match where the domain is explicitly owned/validated by the CRM account and the connector identity is consistent (e.g., Zendesk org id, Intercom workspace/company id); (3) other heuristics (raw email domain, support aliases, fuzzy name) no longer auto-link and instead produce \u201cambiguous\u201d outcomes. We should explicitly treat freemail/public domains (gmail.com, outlook.com, etc.) as non-signal, and treat shared domains as non-signal unless the domain is verified and uniquely assigned to one CRM account. When multiple candidates satisfy the same tier, we mark the record ambiguous rather than selecting an arbitrary winner.\n\nFor ambiguous/unmatched ingests, we\u2019ll create a review-queue entry that captures the connector source, the incoming identifiers (email, domain, connector org/company id), the candidate accounts considered, and the reason codes for rejection/ambiguity. Review actions can be \u201clink to existing account\u201d, \u201ccreate new account\u201d, or \u201cwhitelist mapping\u201d (persist a connector\u2192CRM mapping for future ingests). This queue should be surfaced in the existing admin/ops workflow and be idempotent (same unresolved ambiguity doesn\u2019t spam duplicates).\n\nFinally, we\u2019ll add structured logging and metrics around match decisions: counts by match tier, ambiguous/unmatched rates per connector, top reason codes, and a \u201cwould-have-matched-under-old-heuristics\u201d counter to quantify behavior change. We\u2019ll also emit audit events when a human resolves an ambiguity and when a stored mapping is created/updated, enabling backfills to re-associate previously ingested conversations if needed. Rollout can be gated via feature flag per connector with a staged ramp and monitoring on unmatched rate and downstream attribution deltas.",
+      "link": "https://www.onyx.app/37227"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

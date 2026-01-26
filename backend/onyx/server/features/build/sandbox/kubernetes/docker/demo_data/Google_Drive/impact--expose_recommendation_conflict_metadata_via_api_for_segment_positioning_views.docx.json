@@ -1,0 +1,30 @@
+{
+  "id": "dce5dc22db6942e785e4bcc659e8435f",
+  "semantic_identifier": "Impact--Expose recommendation conflict metadata via API for segment positioning views.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-13",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Expose recommendation conflict metadata via API for segment positioning views.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature exposes persisted recommendation conflict metadata through our API so segment positioning views can retrieve it alongside positioning recommendations. Today, the UI can show recommendations but lacks a reliable way to surface where recommendations conflict across segments, which limits user trust and forces manual investigation.\n\nWith this change, the API will return a stable, versionable schema that includes: the set of conflicting segments, the recommendation category/field involved, and the specific conflicting statements that triggered the conflict. The endpoint will support fetching conflicts for one or more segments, and include pagination and optional filters to ensure the UI can efficiently request only what it needs for the active view.\n\nThe primary impact is improved clarity and decision-making in segment positioning workflows: users can see not just \u201cwhat we recommend,\u201d but \u201cwhere recommendations collide,\u201d enabling faster resolution and fewer contradictory updates across segments. This also reduces support burden and improves auditability since the conflict context is available programmatically and can be logged or analyzed.\n\nFrom a platform perspective, we\u2019ll ensure strict workspace scoping so conflicts are only returned for the requesting workspace, preventing cross-tenant leakage. Integration tests will validate schema stability, authorization boundaries, and correctness of returned conflicts, reducing regression risk as recommendation logic and UI surfaces evolve.",
+      "link": "https://www.onyx.app/22731"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

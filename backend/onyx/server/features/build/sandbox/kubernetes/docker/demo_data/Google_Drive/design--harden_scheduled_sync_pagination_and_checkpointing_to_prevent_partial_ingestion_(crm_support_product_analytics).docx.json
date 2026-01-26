@@ -1,0 +1,30 @@
+{
+  "id": "c8fb48a1e0c14e3ea8c30fe68c43087b",
+  "semantic_identifier": "Design--Harden scheduled sync pagination + checkpointing to prevent partial ingestion (CRM/Support/Product Analytics).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Harden scheduled sync pagination + checkpointing to prevent partial ingestion (CRM/Support/Product Analytics).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nScheduled sync jobs for CRM, Support, and Product Analytics sometimes fail mid-pagination due to transient API errors/timeouts and then resume from an incorrect cursor, causing partial ingestion (missing records) or duplicated ingestion (reprocessing pages). The core issue is that progress through pagination is not reliably persisted at a granularity that matches \u201csuccessfully processed and committed,\u201d so retries can advance incorrectly or re-run without idempotency guarantees.\n\n### Goals / Non-Goals\nWe will harden scheduled syncs by introducing per-connection checkpoint persistence that tracks (1) the last committed pagination position (cursor/page token) and (2) an `updated_at` watermark used for incremental fetch boundaries. The checkpoint must only advance after an entire page of records has been fully processed and durably committed to the destination store. On retry, the sync resumes strictly from the last committed checkpoint, and writes are idempotent (upsert by stable external ID + source) to prevent duplicates. This change does not redesign provider-specific pagination APIs; it standardizes how we checkpoint and resume across existing integrations.\n\n### Design\nIntroduce a `sync_checkpoint` record keyed by `{integration_type, connection_id, entity/resource}` containing: `cursor` (opaque provider token or page number), `watermark_updated_at` (high-water mark), and optional metadata like `last_run_id` and `checkpoint_version`. The sync loop becomes: fetch page using `(watermark, cursor)` \u2192 transform/validate \u2192 write via idempotent upserts in a single transactional commit (or equivalent atomic batch) \u2192 only then persist the new checkpoint `(next_cursor, new_watermark)`; if the run crashes or times out before commit, the checkpoint remains unchanged so the next retry re-fetches the same page safely. To support providers where `updated_at` ordering is not strict, we will treat watermark advancement conservatively (e.g., set watermark to max `updated_at` of committed records, and keep cursor as primary progress indicator within a run).\n\n### Failure Handling, Idempotency, and Rollout\nRetries will be driven by existing job retry policies; the key behavior change is deterministic resumption from the last committed checkpoint. Idempotency will be enforced by a unique key on destination records (e.g., `{connection_id, external_id, entity}`) and upsert semantics so reprocessing a page is safe. We will add metrics and logs for \u201ccheckpoint lag,\u201d \u201cpages retried,\u201d \u201crecords upserted vs inserted,\u201d and alert on repeated failures at the same cursor. Rollout will be behind a feature flag per integration, starting with a single low-risk entity, then expanding to all entities for CRM/Support/Product Analytics after validating reduced partial-ingestion incidents and stable duplicate rates.",
+      "link": "https://www.onyx.app/61118"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

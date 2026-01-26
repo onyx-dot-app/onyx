@@ -1,0 +1,213 @@
+{
+  "id": "FIREFLIES_8771293",
+  "semantic_identifier": "8771293 - Jetstream Vale Aviation - buy - Discussion with Teresa Flores",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-02-17 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-02-17 00:00:00",
+    "duration_min": "16"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-02"
+      ],
+      "year_month": "2026-02",
+      "meeting_title": "8771293 - Jetstream Vale Aviation - buy - Discussion with Teresa Flores",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Teresa\u2014good to see you again. Since this is our third call, I wanted to use the time to confirm what \u201cgood\u201d looks like for Jetstream Vale Aviation and see if we can finalize next steps toward moving ahead with Sales_Accelerator.",
+      "link": "https://www.onyx.app/6577566-1"
+    },
+    {
+      "text": "Teresa Flores: Hi Megan. Yes, I\u2019m here. I have about thirty minutes, but I\u2019ll be honest\u2014internally we still have some concerns we need to clear.",
+      "link": "https://www.onyx.app/6577566-2"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Before we get into concerns, can I quickly recap what you said mattered most? You wanted tighter forecast accuracy, fewer end-of-quarter surprises, and more consistency in follow-up after discovery\u2014especially for AEs who are juggling a lot of deals. Still accurate?",
+      "link": "https://www.onyx.app/6577566-3"
+    },
+    {
+      "text": "Teresa Flores: Yes. Our leadership is pushing hard on forecast accuracy. And our AEs are inconsistent\u2014some are great at recap emails and action plans, others just\u2026 don\u2019t do it.",
+      "link": "https://www.onyx.app/6577566-4"
+    },
+    {
+      "text": "Megan Foster: That maps directly to two parts of Sales_Accelerator we\u2019ve focused on: the forecasting layer and the post-discovery follow-up recommendations. On forecasting, we\u2019re not just reading CRM stage\u2014Sales_Accelerator combines stage with activity signals like last touch, meeting scheduled or not, stage age, and your cycle-time benchmarks. Then it produces commit/best-case/pipeline views with explainable drivers, so when a deal slips, the \u201cwhy\u201d is visible.",
+      "link": "https://www.onyx.app/6577566-5"
+    },
+    {
+      "text": "Teresa Flores: The explainable part is important. We\u2019ve had tools that spit out a number and nobody trusts it.",
+      "link": "https://www.onyx.app/6577566-6"
+    },
+    {
+      "text": "Megan Foster: Exactly. In our forecast view, if a deal drops from commit to best-case, it will tell you what changed\u2014like \u201cno next meeting scheduled,\u201d \u201cstage age above benchmark,\u201d or \u201cfit tier lower than typical wins,\u201d if you choose to include the fit score input. That\u2019s what drives adoption with managers: it\u2019s not magic, it\u2019s drivers you can audit.",
+      "link": "https://www.onyx.app/6577566-7"
+    },
+    {
+      "text": "Teresa Flores: Okay. And the AE follow-up side\u2014how does that work in practice?",
+      "link": "https://www.onyx.app/6577566-8"
+    },
+    {
+      "text": "Megan Foster: After discovery, the AE clicks \u201cGenerate Follow-Up\u201d on the opportunity. The tool drafts a recap email, pulls two proof points from your approved positioning library, and creates a mutual action plan with due dates and stakeholders\u2014so you can multi-thread and keep momentum. The big value is consistency: even newer AEs get a solid baseline, and managers can see whether next steps are actually defined.",
+      "link": "https://www.onyx.app/6577566-9"
+    },
+    {
+      "text": "Teresa Flores: That\u2019s appealing, but it\u2019s also where our biggest concern is: privacy and compliance. Drafting emails from call notes, parsing meetings\u2014there\u2019s PII. We have aviation customers and sensitive data. Our legal team is very strict.",
+      "link": "https://www.onyx.app/6577566-10"
+    },
+    {
+      "text": "Megan Foster: Understood. Let me address it directly. Sales_Accelerator can be configured to limit what it ingests and how it retains it. We can also disable certain inputs\u2014like not parsing raw emails or not storing call transcripts\u2014while still getting value from CRM fields and activity metadata like \u201cmeeting happened\u201d or \u201cnext meeting scheduled.\u201d The follow-up drafting can be constrained to use only structured fields and your approved blocks.",
+      "link": "https://www.onyx.app/6577566-11"
+    },
+    {
+      "text": "Teresa Flores: When you say \u201cconfigured,\u201d that usually means \u201cmaybe.\u201d Legal will ask for specifics: what data is processed, what\u2019s stored, where, for how long, and whether it\u2019s used for training anything.",
+      "link": "https://www.onyx.app/6577566-12"
+    },
+    {
+      "text": "Megan Foster: Fair. We don\u2019t need to hand-wave it. I can share our data handling overview and we can align on a retention policy. Also, we can turn off model training on your data\u2014so your content isn\u2019t used to improve anything outside your tenant. But I\u2019m guessing legal is also asking about consent and whether employees know their notes are being analyzed?",
+      "link": "https://www.onyx.app/6577566-13"
+    },
+    {
+      "text": "Teresa Flores: Yes. And we have union-related sensitivities around monitoring. Even if it\u2019s \u201csales productivity,\u201d it can be perceived as surveillance.",
+      "link": "https://www.onyx.app/6577566-14"
+    },
+    {
+      "text": "Megan Foster: That\u2019s important context. In deployments like yours, we position it as deal-risk and execution support\u2014not rep surveillance\u2014and we can restrict dashboards so the focus is opportunity health rather than rep-level \u201cactivity scoring.\u201d For example: managers can see \u201cdeals at risk due to no next step\u201d rather than \u201cTeresa made X calls.\u201d",
+      "link": "https://www.onyx.app/6577566-15"
+    },
+    {
+      "text": "Teresa Flores: That helps, but again, our compliance team will want assurances that we aren\u2019t extracting personal content from emails and storing it. They don\u2019t like \u201cdrafting based on emails.\u201d",
+      "link": "https://www.onyx.app/6577566-16"
+    },
+    {
+      "text": "Megan Foster: If drafting off emails is the sticking point, we can start with a narrower rollout: use the forecasting and deal-risk signals based on CRM plus meeting cadence, and keep follow-up drafting limited to manual inputs\u2014like the AE selects which approved proof points to include, and the tool only formats the recap and action plan without reading raw notes.",
+      "link": "https://www.onyx.app/6577566-17"
+    },
+    {
+      "text": "Teresa Flores: So, essentially reduce the \u201cAI reading everything\u201d aspect.",
+      "link": "https://www.onyx.app/6577566-18"
+    },
+    {
+      "text": "Megan Foster: Exactly\u2014phase it. You still get improved forecasting and early warnings on slippage. Then, once legal is comfortable, you expand to richer drafting.",
+      "link": "https://www.onyx.app/6577566-19"
+    },
+    {
+      "text": "Teresa Flores: The problem is leadership wants the follow-up standardization now. But legal is telling me we can\u2019t proceed unless we have a full review, and that review could take months.",
+      "link": "https://www.onyx.app/6577566-20"
+    },
+    {
+      "text": "Megan Foster: Got it. If the timeline is the issue, could we run a pilot in a sandbox with synthetic data, just to prove workflow and value while legal reviews? That way you\u2019re not blocked on momentum.",
+      "link": "https://www.onyx.app/6577566-21"
+    },
+    {
+      "text": "Teresa Flores: We considered that. But our ops team is swamped, and frankly we\u2019ve done \u201cpilots that go nowhere.\u201d I\u2019m trying to avoid another time sink.",
+      "link": "https://www.onyx.app/6577566-22"
+    },
+    {
+      "text": "Megan Foster: I hear you. Let me try a different angle: if we can\u2019t use unstructured content initially, the strongest immediate ROI is forecasting accuracy and slippage diagnostics. That directly supports what leadership is pushing for. Would it still be valuable enough to justify moving forward while legal reviews the follow-up module?",
+      "link": "https://www.onyx.app/6577566-23"
+    },
+    {
+      "text": "Teresa Flores: Possibly. But leadership also asked: \u201cWhy buy a layer on top of Salesforce when we can tighten our process?\u201d They want a clear justification.",
+      "link": "https://www.onyx.app/6577566-24"
+    },
+    {
+      "text": "Megan Foster: The justification is that process changes alone don\u2019t give you explainable forecasting drivers across the whole pipeline. Salesforce stages don\u2019t capture reality\u2014activity, cycle time, and \u201cnext step exists\u201d signals. Sales_Accelerator gives you a consistent system: commit/best-case/pipeline, plus scenario planning\u2014like, \u201cIf we add 20 SQLs in Tier 1, what\u2019s the expected impact?\u201d That\u2019s hard to do reliably with dashboards and spreadsheets.",
+      "link": "https://www.onyx.app/6577566-25"
+    },
+    {
+      "text": "Teresa Flores: Okay, but we\u2019re also integrating Customer_Analyzer already. My VP asked if this duplicates work.",
+      "link": "https://www.onyx.app/6577566-26"
+    },
+    {
+      "text": "Megan Foster: It shouldn\u2019t duplicate. Sales_Accelerator consumes Customer_Analyzer\u2019s fit scores and positioning blocks. So you keep your ICP and messaging foundation in Customer_Analyzer; Sales_Accelerator uses that to weight forecasts and recommend next actions. It\u2019s execution, not a second ICP tool.",
+      "link": "https://www.onyx.app/6577566-27"
+    },
+    {
+      "text": "Teresa Flores: Understood. Still, the privacy issue is non-negotiable. And I don\u2019t have a path to get legal comfortable quickly.",
+      "link": "https://www.onyx.app/6577566-28"
+    },
+    {
+      "text": "Megan Foster: If legal needs a full review before any contract, that\u2019s a hard gate. What would they need to see first\u2014DPA, SOC 2, specifics on retention, and explicit statements that you can disable unstructured ingestion?",
+      "link": "https://www.onyx.app/6577566-29"
+    },
+    {
+      "text": "Teresa Flores: Yes, plus a security questionnaire, plus an internal risk committee review. And they\u2019ll ask whether any employee communications are analyzed. Even if it\u2019s optional, they don\u2019t like the capability existing.",
+      "link": "https://www.onyx.app/6577566-30"
+    },
+    {
+      "text": "Megan Foster: That last point\u2014\u201ccapability existing\u201d\u2014is tricky. Even if disabled, some orgs still view it as risk.",
+      "link": "https://www.onyx.app/6577566-31"
+    },
+    {
+      "text": "Teresa Flores: Exactly. That\u2019s where we\u2019re landing. Our compliance stance is conservative. We may be able to revisit later, but right now it\u2019s not looking good.",
+      "link": "https://www.onyx.app/6577566-32"
+    },
+    {
+      "text": "Megan Foster: I appreciate you being direct. To make sure I\u2019m not missing a workable route: if we offered a version that only uses CRM structured fields and activity metadata\u2014no email bodies, no call transcripts, no note parsing\u2014would that change the decision?",
+      "link": "https://www.onyx.app/6577566-33"
+    },
+    {
+      "text": "Teresa Flores: Maybe in theory, but I don\u2019t think your product is positioned that way in our procurement. It would still trigger the same reviews, and we\u2019d still be buying something leadership associates with \u201cAI analyzing communications.\u201d The perception is already set.",
+      "link": "https://www.onyx.app/6577566-34"
+    },
+    {
+      "text": "Megan Foster: Understood. Given that, it sounds like pushing for a close today isn\u2019t realistic. Would it be helpful if I send a short summary you can forward internally\u2014what we can and cannot ingest, and the phased approach\u2014so you have clean documentation?",
+      "link": "https://www.onyx.app/6577566-35"
+    },
+    {
+      "text": "Teresa Flores: Yes, send that. But I want to set expectations: I don\u2019t think we\u2019ll be purchasing this quarter.",
+      "link": "https://www.onyx.app/6577566-36"
+    },
+    {
+      "text": "Megan Foster: That\u2019s clear. Do you want to pause the evaluation entirely, or should we plan a check-in after legal has weighed in\u2014say, in 8\u201312 weeks?",
+      "link": "https://www.onyx.app/6577566-37"
+    },
+    {
+      "text": "Teresa Flores: Let\u2019s pause. If something changes, I\u2019ll reach out. If you send the documentation, I can keep it on file.",
+      "link": "https://www.onyx.app/6577566-38"
+    },
+    {
+      "text": "Megan Foster: Okay. I\u2019ll send the data handling overview, options to disable unstructured content processing, and a one-page outline of the forecasting value and slippage diagnostics\u2014so if leadership revisits, you have the rationale. Anything else you need from me?",
+      "link": "https://www.onyx.app/6577566-39"
+    },
+    {
+      "text": "Teresa Flores: No, that\u2019s enough. Thanks for being straightforward about it.",
+      "link": "https://www.onyx.app/6577566-40"
+    },
+    {
+      "text": "Megan Foster: Of course. Thanks for the time, Teresa. I\u2019ll follow up by end of day with the docs, and we\u2019ll leave it there unless you want to re-engage later.",
+      "link": "https://www.onyx.app/6577566-41"
+    },
+    {
+      "text": "Teresa Flores: Sounds good. Bye, Megan.",
+      "link": "https://www.onyx.app/6577566-42"
+    },
+    {
+      "text": "Megan Foster: Bye.",
+      "link": "https://www.onyx.app/6577566-43"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "teresa_flores@jetstream_vale_aviation.onyx.app"
+    }
+  ]
+}

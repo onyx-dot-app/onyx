@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_8571771",
+  "semantic_identifier": "8571771 - Terraspire Energy - sales_pitch - Discussion with Max Chavez",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-04 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-04 00:00:00",
+    "duration_min": "35"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "8571771 - Terraspire Energy - sales_pitch - Discussion with Max Chavez",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Hi Max\u2014Sneha Reddy here. Thanks for taking a few minutes. I\u2019ll keep this quick: I wanted to share how Terraspire Energy could tighten forecast accuracy and pipeline hygiene without replacing your CRM\u2014just layering on top of it.",
+      "link": "https://www.onyx.app/7627037-1"
+    },
+    {
+      "text": "Max Chavez: Hey Sneha. Sure\u2014what are you thinking, and how does it work with what we already have?",
+      "link": "https://www.onyx.app/7627037-2"
+    },
+    {
+      "text": "Sneha Reddy: Great question. The product is called Sales_Accelerator. It sits on top of Salesforce or HubSpot and uses what\u2019s already there\u2014stages, amounts, close dates\u2014plus activity signals like emails, calls, meetings, and stage age. The two things most teams use first are: one, an explainable sales_forecast with commit/best-case/pipeline views; and two, automated pipeline hygiene that flags what\u2019s missing or stale and gives reps a prioritized \u201cfix-it\u201d task list.",
+      "link": "https://www.onyx.app/7627037-3"
+    },
+    {
+      "text": "Max Chavez: Forecasting is always a sore spot. We do a lot of spreadsheet work on top of Salesforce. What\u2019s different about your forecast?",
+      "link": "https://www.onyx.app/7627037-4"
+    },
+    {
+      "text": "Sneha Reddy: The difference is it\u2019s not just \u201cstage-based.\u201d Sales_Accelerator combines stage data with real activity signals and benchmarks\u2014like cycle-time norms for your segment\u2014so it can tell you not just \u201cthis is in stage 3,\u201d but \u201cthis has been in stage 3 too long, last touch was 12 days ago, and there\u2019s no next meeting scheduled.\u201d Then it rolls that into forecast views\u2014commit, best-case, pipeline\u2014and it\u2019s explainable. You can click into a number and see the drivers: stage age, last touch, next meeting, and historical win rate for similar deals.",
+      "link": "https://www.onyx.app/7627037-5"
+    },
+    {
+      "text": "Max Chavez: Explainable is good. We\u2019ve tried tools that spit out a number and no one trusts it. How would this fit into our weekly pipeline review?",
+      "link": "https://www.onyx.app/7627037-6"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s exactly one of the common use cases. A manager runs weekly pipeline hygiene automatically: the system alerts on missing next steps, stale opps, and single-threaded deals. Instead of you chasing reps for updates, reps get an ordered queue of the top 10 actions that will most improve forecast health\u2014things like \u201cschedule next meeting,\u201d \u201cupdate close plan,\u201d \u201cadd stakeholder,\u201d or \u201cthis opp hasn\u2019t had an outbound touch since X.\u201d",
+      "link": "https://www.onyx.app/7627037-7"
+    },
+    {
+      "text": "Max Chavez: When you say \u201csingle-threaded,\u201d you mean only one contact in the opp?",
+      "link": "https://www.onyx.app/7627037-8"
+    },
+    {
+      "text": "Sneha Reddy: Exactly. If a deal is progressing but there\u2019s only one engaged contact and no evidence of broader threading, it gets flagged as higher risk. It\u2019s not meant to be punitive\u2014just an early warning signal so you can intervene before the quarter ends and the deal slips.",
+      "link": "https://www.onyx.app/7627037-9"
+    },
+    {
+      "text": "Max Chavez: Okay. We\u2019re mid-implementation on some process changes, though. How heavy is the setup? I don\u2019t want a six-month rollout.",
+      "link": "https://www.onyx.app/7627037-10"
+    },
+    {
+      "text": "Sneha Reddy: Totally fair. Sales_Accelerator is intentionally a layer\u2014not a rip-and-replace. The baseline setup is connecting your CRM and mapping stages, fields, and activity sources. Most teams start with forecasting and hygiene alerts first, because that\u2019s the fastest time-to-value. Then you can expand into scenario planning\u2014like, \u201cIf we add 20 SQLs in our highest-fit segment, what\u2019s the expected impact on pipeline coverage and expected revenue?\u201d",
+      "link": "https://www.onyx.app/7627037-11"
+    },
+    {
+      "text": "Max Chavez: Scenario planning sounds interesting, but we\u2019d need it to match how we slice the business\u2014by segment, rep, and source. Can it do that?",
+      "link": "https://www.onyx.app/7627037-12"
+    },
+    {
+      "text": "Sneha Reddy: Yes. Forecast can be cut by segment, rep, and source, and it also shows stage conversion and slippage diagnostics\u2014so you can see, for example, where deals tend to stall and which segments are most exposed to slippage. That\u2019s useful not just for this quarter\u2019s call, but for improving your process over time.",
+      "link": "https://www.onyx.app/7627037-13"
+    },
+    {
+      "text": "Max Chavez: How does it decide \u201cthis deal is at risk\u201d? Just based on last activity?",
+      "link": "https://www.onyx.app/7627037-14"
+    },
+    {
+      "text": "Sneha Reddy: Activity is one major signal, but it\u2019s multi-factor. Think: stage age versus your historical cycle-time benchmarks, whether there\u2019s a next meeting scheduled, whether the opp is progressing through stages at a normal rate, and how similar deals have behaved historically. Then it surfaces risk drivers so your team can validate it quickly. The goal is fewer surprises at end-of-quarter\u2014no more \u201cit was in commit all month and then vanished.\u201d",
+      "link": "https://www.onyx.app/7627037-15"
+    },
+    {
+      "text": "Max Chavez: That would be nice. Our leadership cares a lot about forecast calls being consistent across managers.",
+      "link": "https://www.onyx.app/7627037-16"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s another area where this helps\u2014consistency and transparency. Because the drivers are visible, managers aren\u2019t each using a different mental model. And reps see the same signals, so the week-to-week changes are easier to explain.",
+      "link": "https://www.onyx.app/7627037-17"
+    },
+    {
+      "text": "Max Chavez: What about rep workflow? I don\u2019t want them living in yet another tool.",
+      "link": "https://www.onyx.app/7627037-18"
+    },
+    {
+      "text": "Sneha Reddy: Understood. The way most teams use it is: reps get a short ordered task queue\u2014top 10 items\u2014so it\u2019s lightweight. And managers get the alerts and the forecast views. We\u2019re not trying to replace your CRM as the system of record; we\u2019re helping it become actionable so you don\u2019t spend the week cleaning data before leadership asks for numbers.",
+      "link": "https://www.onyx.app/7627037-19"
+    },
+    {
+      "text": "Max Chavez: Makes sense. We\u2019re on Salesforce, and our activity data is a mix\u2014some logged, some not. Does that break it?",
+      "link": "https://www.onyx.app/7627037-20"
+    },
+    {
+      "text": "Sneha Reddy: It doesn\u2019t break it, but the better the activity capture, the better the signal. In practice, we start with what you have\u2014meetings on calendar, emails, calls\u2014then we can tighten coverage over time. Even with imperfect logging, stage age plus \u201cnext step exists\u201d versus \u201cno next step\u201d tends to surface meaningful hygiene issues quickly.",
+      "link": "https://www.onyx.app/7627037-21"
+    },
+    {
+      "text": "Max Chavez: If we did this, what would you want from me to evaluate it properly?",
+      "link": "https://www.onyx.app/7627037-22"
+    },
+    {
+      "text": "Sneha Reddy: For a full evaluation, I\u2019d suggest a 30-minute deeper session where we look at: your current forecast process, your stage definitions and cycle times, how you run weekly pipeline reviews, and what you consider \u201chealthy\u201d vs \u201crisky.\u201d If you\u2019re open to it, we can also outline what a pilot would look like\u2014typically one segment or one team\u2014focused on forecast accuracy and pipeline hygiene alerts.",
+      "link": "https://www.onyx.app/7627037-23"
+    },
+    {
+      "text": "Max Chavez: Yeah, I\u2019m open to that. I\u2019d want my sales ops lead involved too.",
+      "link": "https://www.onyx.app/7627037-24"
+    },
+    {
+      "text": "Sneha Reddy: Perfect. If you can bring sales ops, we can make it very practical\u2014what fields you rely on, what reports you use today, and where your biggest gaps are. Then we\u2019ll map exactly how Sales_Accelerator would generate commit/best-case/pipeline views and the hygiene task queues your managers and reps would see.",
+      "link": "https://www.onyx.app/7627037-25"
+    },
+    {
+      "text": "Max Chavez: Okay. What times are you thinking?",
+      "link": "https://www.onyx.app/7627037-26"
+    },
+    {
+      "text": "Sneha Reddy: I can do Thursday at 11:00am PT or Friday at 2:00pm PT. Which works better for you and sales ops?",
+      "link": "https://www.onyx.app/7627037-27"
+    },
+    {
+      "text": "Max Chavez: Thursday at 11:00am PT should work. Send an invite and I\u2019ll pull in our ops lead.",
+      "link": "https://www.onyx.app/7627037-28"
+    },
+    {
+      "text": "Sneha Reddy: Great\u2014Thursday 11:00am PT it is. I\u2019ll send the calendar invite and include a short agenda: current forecast workflow, pipeline hygiene pain points, and a walk-through of the explainable forecast drivers and alerting. Thanks, Max\u2014looking forward to it.",
+      "link": "https://www.onyx.app/7627037-29"
+    },
+    {
+      "text": "Max Chavez: Sounds good. Talk Thursday.",
+      "link": "https://www.onyx.app/7627037-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "max_chavez@terraspire_energy.onyx.app"
+    }
+  ]
+}

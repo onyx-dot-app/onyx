@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_9411639",
+  "semantic_identifier": "Nimbunest Snacks",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-05-08 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "9411639",
+    "domain": "nimbunest_snacks.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Nimbunest Snacks\nDomain: nimbunest_snacks.onyx.app",
+      "link": "https://www.onyx.app/45281"
+    },
+    {
+      "text": "Contact: Jade Jacobs\nEmail: jade_jacobs@nimbunest_snacks.onyx.app",
+      "link": "https://www.onyx.app/44099"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

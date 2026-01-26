@@ -1,0 +1,30 @@
+{
+  "id": "5af1aebd2491438f9dc66c3ac80c4c43",
+  "semantic_identifier": "Impact--Persist manual cluster merge/split decisions across re-ingest.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-25",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Persist manual cluster merge/split decisions across re-ingest.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "Today, manual merge and split actions in issue clustering can be lost when the same conversations are re-ingested. This means curated themes that users intentionally shaped can unexpectedly revert to an automated clustering result, causing clusters to fragment, rename, or reshuffle without any user intent.\n\nPersisting these decisions across re-ingest will make clustering behavior stable and predictable. Users will be able to trust that once they\u2019ve curated clusters\u2014merging related themes or splitting noisy ones\u2014the system will continue to honor those choices even as data is replayed, backfilled, or refreshed.\n\nThe feature adds a durable \u201ccuration override\u201d layer that records merge groups and split rules and reapplies them after automated clustering but before summaries and tags are generated. This ensures downstream outputs (cluster IDs, membership, summaries, and tags) are consistent with user curation rather than being overwritten by re-processing.\n\nImpact-wise, this reduces user rework, improves confidence in cluster-driven reporting, and prevents churn in dashboards or alerts that depend on stable cluster structure. A regression test that performs merge/split, replays ingestion, and verifies stable cluster IDs, membership, and curation metadata will also prevent future regressions and protect the reliability of the curation workflow.",
+      "link": "https://www.onyx.app/43212"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,193 @@
+{
+  "id": "FIREFLIES_5821733",
+  "semantic_identifier": "5821733 - Ridgeway Lumen Telecom - sales_call - Discussion with Carl Burke",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-06-16 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-06-16 00:00:00",
+    "duration_min": "23"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-06"
+      ],
+      "year_month": "2025-06",
+      "meeting_title": "5821733 - Ridgeway Lumen Telecom - sales_call - Discussion with Carl Burke",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Carl, good to see you again. Thanks for making time for a second call. Last time you mentioned you\u2019re trying to tighten up who you target\u2014especially splitting messaging between SMB and mid-market. Is that still the priority for Ridgeway Lumen Telecom?",
+      "link": "https://www.onyx.app/7464001-1"
+    },
+    {
+      "text": "Carl Burke: Yeah, it is. We\u2019ve got decent traction in SMB, but mid-market is inconsistent. We\u2019re trying to be clearer on why we win and why we lose.",
+      "link": "https://www.onyx.app/7464001-2"
+    },
+    {
+      "text": "Irene Shen: Perfect\u2014that\u2019s exactly where Customer_Analyzer tends to help. Today I wanted to focus on one piece: the Positioning Recommendations feature. It takes the signals you already have\u2014CRM fields, onboarding survey responses, product usage, support tickets, call notes\u2014and turns it into segment-specific messaging blocks. So you\u2019d get one set of positioning for SMB and another for mid-market, grounded in what\u2019s actually driving fit and the language customers use.",
+      "link": "https://www.onyx.app/7464001-3"
+    },
+    {
+      "text": "Carl Burke: Okay. We looked at the deck you sent. I\u2019m still trying to understand how much work this is going to be on our side. And I\u2019m also wary of tools that spit out \u201crecommended messaging\u201d that isn\u2019t really true in the field.",
+      "link": "https://www.onyx.app/7464001-4"
+    },
+    {
+      "text": "Irene Shen: Totally fair. Let me break it down in practical terms. For your use case\u2014two ICP tiers\u2014we\u2019d set up two segments and then generate: a segment-specific value proposition, top use cases, differentiators, proof points to collect, plus objection-handling. And it\u2019s not just a report\u2014it\u2019s editable blocks you can paste into a landing page hero, outbound email openers, or sales deck bullets.",
+      "link": "https://www.onyx.app/7464001-5"
+    },
+    {
+      "text": "Carl Burke: That\u2019s the part that makes me nervous, honestly. If it\u2019s auto-generating, it can become a black box. My team\u2019s going to ask, \u201cWhy did it decide that?\u201d And if we can\u2019t explain it, we won\u2019t use it.",
+      "link": "https://www.onyx.app/7464001-6"
+    },
+    {
+      "text": "Irene Shen: I hear you. The way we address that is by linking each recommendation back to the drivers and evidence. So when it suggests a differentiator for mid-market, it shows what signals drove it\u2014like higher usage of a specific workflow, or repeated language in tickets or calls. The goal is that marketing and sales can look at it and say, \u201cYes, we recognize this,\u201d or \u201cNo, that\u2019s off\u2014let\u2019s adjust.\u201d",
+      "link": "https://www.onyx.app/7464001-7"
+    },
+    {
+      "text": "Carl Burke: When you say \u201cshows what signals drove it,\u201d what does that actually look like? Is it like a source citation? Or just a generic explanation?",
+      "link": "https://www.onyx.app/7464001-8"
+    },
+    {
+      "text": "Irene Shen: It\u2019s more like a rationale panel: what inputs were used, what themes it detected, and examples of customer language it\u2019s pulling from. For example, it might surface that mid-market prospects repeatedly mention \u201chandoff between regional teams\u201d and \u201ctime-to-resolution reporting,\u201d and then those become proof points and email angles.",
+      "link": "https://www.onyx.app/7464001-9"
+    },
+    {
+      "text": "Carl Burke: But we have a lot of messy data. CRM fields aren\u2019t clean. Call notes are inconsistent. Support tickets can be noisy. I worry it\u2019ll make confident recommendations based on garbage inputs.",
+      "link": "https://www.onyx.app/7464001-10"
+    },
+    {
+      "text": "Irene Shen: That\u2019s a real risk with any system using existing data. What we typically do is start narrow: pick the sources that are most reliable\u2014say CRM closed-won/lost plus a slice of support tickets\u2014and generate an initial draft for SMB and mid-market. Then you review it with your sales leaders and tweak. It\u2019s meant to speed up the iteration, not replace judgment.",
+      "link": "https://www.onyx.app/7464001-11"
+    },
+    {
+      "text": "Carl Burke: The \u201cspeed up\u201d part is nice. But we\u2019ve been burned before. We tried an analytics tool that promised \u201cICP scoring,\u201d and it basically told us what we already knew, but with a lot of math we couldn\u2019t validate.",
+      "link": "https://www.onyx.app/7464001-12"
+    },
+    {
+      "text": "Irene Shen: Understood. Customer_Analyzer is similar in spirit but we\u2019ve tried to make the outputs more actionable\u2014especially the positioning blocks. Instead of just saying \u201cmid-market is a 72 fit,\u201d it\u2019s: \u201cHere\u2019s the recommended value prop for mid-market. Here are the use cases that correlate with expansions. Here are the objections you need to preempt.\u201d Then you can put it directly into your landing page and outbound.",
+      "link": "https://www.onyx.app/7464001-13"
+    },
+    {
+      "text": "Carl Burke: Still\u2014how do I know it\u2019s not just pattern-matching buzzwords? Like, we sell telecom solutions. There\u2019s a lot of generic \u201creliability, uptime, cost savings\u201d language out there. I don\u2019t want another tool telling us to say the same tired stuff.",
+      "link": "https://www.onyx.app/7464001-14"
+    },
+    {
+      "text": "Irene Shen: That\u2019s exactly why we focus on observed customer language, not generic templates. If your best SMB customers talk about \u201cgetting installs scheduled without back-and-forth\u201d and your mid-market wins talk about \u201cconsolidating vendors across regions,\u201d those are distinct angles. The output should reflect the real phrases and themes coming from your data.",
+      "link": "https://www.onyx.app/7464001-15"
+    },
+    {
+      "text": "Carl Burke: \u201cShould\u201d is doing a lot of work there.",
+      "link": "https://www.onyx.app/7464001-16"
+    },
+    {
+      "text": "Irene Shen: Fair. Let me ask a pointed question\u2014what would make you confident? If we could show you, for one segment, the top three differentiators and the exact evidence behind them, would that address the black-box concern?",
+      "link": "https://www.onyx.app/7464001-17"
+    },
+    {
+      "text": "Carl Burke: It would help. But there\u2019s another issue: our messaging is complicated because we have different product lines. SMB might buy one bundle, mid-market buys another. If the tool creates one narrative, it may not reflect how we actually sell.",
+      "link": "https://www.onyx.app/7464001-18"
+    },
+    {
+      "text": "Irene Shen: Great nuance. We can model segments by bundle or product line too\u2014but to keep this second call focused, I\u2019d propose we start with the simplest version: SMB vs mid-market for your primary bundle that generated interest last time. Then we can extend it once the team trusts the workflow.",
+      "link": "https://www.onyx.app/7464001-19"
+    },
+    {
+      "text": "Carl Burke: That sounds like a pilot. We\u2019re not really in a place to start new pilots right now. Budgets are tight, and leadership is asking for immediate pipeline impact.",
+      "link": "https://www.onyx.app/7464001-20"
+    },
+    {
+      "text": "Irene Shen: Understood. The way teams usually justify it is by tying it to conversion and cycle time. If your outbound and landing pages are dialed for each tier, you should see better meeting rates and fewer \u201cnot a fit\u201d calls. Can I ask\u2014what\u2019s the biggest friction right now in mid-market? Is it top-of-funnel conversion, or deals stalling later?",
+      "link": "https://www.onyx.app/7464001-21"
+    },
+    {
+      "text": "Carl Burke: Top of funnel. We get meetings, but they\u2019re lower quality than we want. And when we do get serious buyers, they grill us on specifics and we\u2019re not always consistent.",
+      "link": "https://www.onyx.app/7464001-22"
+    },
+    {
+      "text": "Irene Shen: That maps well to the Positioning Recommendations output\u2014because it includes objection handling and proof points to collect. For mid-market, you\u2019d get a playbook that says: \u201cThey\u2019ll ask about deployment timeline, integration, SLA, reporting.\u201d Then it tells you what proof to gather\u2014case study snippets, metrics, references.",
+      "link": "https://www.onyx.app/7464001-23"
+    },
+    {
+      "text": "Carl Burke: But again\u2014where does it get that? We don\u2019t have a perfect library of objections categorized. It\u2019s in people\u2019s heads or scattered in Gong and notes.",
+      "link": "https://www.onyx.app/7464001-24"
+    },
+    {
+      "text": "Irene Shen: Right, and that\u2019s why it ingests those unstructured sources. But I don\u2019t want to oversell. If you don\u2019t have consistent call recordings or notes, the objection-handling may be thinner until more data is in place.",
+      "link": "https://www.onyx.app/7464001-25"
+    },
+    {
+      "text": "Carl Burke: That\u2019s part of the problem. We\u2019re still standardizing. And I don\u2019t want a tool that requires us to fix our entire data foundation to get value.",
+      "link": "https://www.onyx.app/7464001-26"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fair. There\u2019s some minimum bar\u2014if the inputs are too sparse or messy, outputs degrade. We can still get value from the sources you trust, but I don\u2019t want you to buy something that you can\u2019t operationalize.",
+      "link": "https://www.onyx.app/7464001-27"
+    },
+    {
+      "text": "Carl Burke: Exactly. Also, I talked to our marketing lead after your last email. She\u2019s worried the team will treat the generated messaging as \u201capproved\u201d and push it live without enough review. And if it\u2019s wrong, it damages credibility.",
+      "link": "https://www.onyx.app/7464001-28"
+    },
+    {
+      "text": "Irene Shen: That\u2019s a good governance concern. We position the messaging blocks as drafts\u2014editable and reviewable. But I hear you: how teams use tools matters. We can set permissions and workflows, but it won\u2019t replace internal review.",
+      "link": "https://www.onyx.app/7464001-29"
+    },
+    {
+      "text": "Carl Burke: So we\u2019re back to: we still need to do the work, plus now we manage another tool.",
+      "link": "https://www.onyx.app/7464001-30"
+    },
+    {
+      "text": "Irene Shen: You would still do review, yes. The goal is reducing the blank-page time and making the rationale clearer. But if your team isn\u2019t ready to incorporate it into the process\u2014or leadership wants immediate pipeline impact without any iteration time\u2014this might not be the right quarter.",
+      "link": "https://www.onyx.app/7464001-31"
+    },
+    {
+      "text": "Carl Burke: That\u2019s where I\u2019m landing. I like the idea. I\u2019m not convinced it\u2019ll be accurate enough with our current data, and I don\u2019t have appetite for anything that feels like a black box. If we revisit after we clean up CRM and standardize call notes, it could make more sense.",
+      "link": "https://www.onyx.app/7464001-32"
+    },
+    {
+      "text": "Irene Shen: I appreciate the directness. Before we close it out\u2014would it be helpful if I sent a concrete example of what the evidence-linked positioning output looks like? Not a generic slide\u2014an annotated sample so you can evaluate whether it feels explainable.",
+      "link": "https://www.onyx.app/7464001-33"
+    },
+    {
+      "text": "Carl Burke: You can send it, sure. But I want to set expectations: we\u2019re not buying anything this month.",
+      "link": "https://www.onyx.app/7464001-34"
+    },
+    {
+      "text": "Irene Shen: Understood. I\u2019ll send an annotated sample and a short checklist of \u201cminimum data inputs\u201d so you can assess readiness. If it\u2019s helpful, we can also schedule a short follow-up in, say, six to eight weeks to see if conditions changed.",
+      "link": "https://www.onyx.app/7464001-35"
+    },
+    {
+      "text": "Carl Burke: That\u2019s fine. Send the sample and the checklist. And we\u2019ll see where we are next quarter.",
+      "link": "https://www.onyx.app/7464001-36"
+    },
+    {
+      "text": "Irene Shen: Sounds good. Thanks, Carl\u2014this was helpful. I\u2019ll follow up by end of day with those materials and a couple of suggested next steps that don\u2019t require a formal pilot.",
+      "link": "https://www.onyx.app/7464001-37"
+    },
+    {
+      "text": "Carl Burke: Great. Talk soon.",
+      "link": "https://www.onyx.app/7464001-38"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "carl_burke@ridgeway_lumen_telecom.onyx.app"
+    }
+  ]
+}

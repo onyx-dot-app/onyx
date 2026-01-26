@@ -1,0 +1,30 @@
+{
+  "id": "4d8c4d131e9545ed9c82b6a33468e789",
+  "semantic_identifier": "Design--Add admin controls + safe mode for auto-routing/auto-creation (manual review / dry-run).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add admin controls + safe mode for auto-routing/auto-creation (manual review / dry-run).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add workspace-level \u201cAutomation Controls\u201d that govern auto-routing and auto-creation for each integration (Jira and Linear) with explicit opt-in enablement. Today, automation can cause accidental mis-assignment or unintended ticket creation; the goal is to make automation safer by default, clearer when active, and quickly stoppable. Controls will be scoped per integration so a workspace can enable automation for Jira while leaving Linear in a restricted mode (or vice versa), and changes will be audit-friendly.\n\nThe settings will include three run modes per integration: **Off** (no automated actions), **On** (execute actions), and **Safe Mode** with two sub-modes: **Manual Review** (queue proposed actions for an admin/approved reviewer to approve/reject) and **Dry-run** (compute and display the exact actions that would be taken but do not execute). In manual review, we will persist \u201cproposed actions\u201d (e.g., create issue, transition status, assign owner, add comment/labels) with the triggering event context and a deterministic \u201capply\u201d operation to ensure the approved action matches what was reviewed. In dry-run, we\u2019ll reuse the same action planning layer but short-circuit at execution, logging the plan and surfacing it in the UI.\n\nAccess control will be tightened: only workspace admins (or a dedicated \u201cAutomation Admin\u201d permission if we already support granular roles) can enable/disable automation, switch modes, or approve manual-review actions. Non-admins can view the current automation status and dry-run previews but cannot toggle behavior. Every toggle, approval, and kill-switch activation will be recorded in an audit log with actor, timestamp, integration, previous/new mode, and (for approvals) a reference to the proposed action set.\n\nIn the product UI, we\u2019ll surface a persistent, high-signal indicator when any integration has automation **On**, including a banner warning on relevant integration pages and a status pill in the workspace header (or integrations list). We\u2019ll add a one-click **Kill Switch** (\u201cPause automation\u201d) that immediately flips all integrations to **Off** (or \u201cSafe Mode: Manual Review\u201d if we want a softer stop), preventing further executions while preserving queued proposals. The kill switch should be fast and global, with clear confirmation and an easy resume flow that requires admin action and explicitly re-enables per integration.",
+      "link": "https://www.onyx.app/40087"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

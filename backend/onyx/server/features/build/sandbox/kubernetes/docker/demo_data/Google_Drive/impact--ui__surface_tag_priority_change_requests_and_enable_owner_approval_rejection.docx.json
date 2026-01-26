@@ -1,0 +1,30 @@
+{
+  "id": "1b6cdea4556b425f9ed89195d33856da",
+  "semantic_identifier": "Impact--UI: Surface tag/priority change requests and enable owner approval/rejection.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-21",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--UI: Surface tag/priority change requests and enable owner approval/rejection.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a dedicated section on the Issue detail page that surfaces pending tag and priority change requests created when a non-owner attempts to edit restricted fields. Instead of silent failures or back-channel coordination, owners can see all outstanding requests in one place with the full context needed to act quickly: requester, proposed tag/priority, request source, and timestamp.\n\nBy enabling owners to approve or reject each request directly in the UI, we reduce friction and turnaround time for routine triage updates while preserving clear ownership controls. When approved, the Issue updates immediately so downstream workflows (queue ordering, reporting, routing) reflect the change without delay. When rejected, the owner can provide a rejection reason, helping requesters understand policy or context and reducing repeat requests.\n\nThis improves accountability and auditability by keeping both accepted and rejected requests in a persistent history. Teams gain a transparent record of what was requested, who decided, and why\u2014supporting compliance needs, retrospectives, and operational debugging when priorities or tags are disputed later.\n\nOverall, this change strengthens trust in issue metadata, accelerates decision-making for owners, and makes collaboration smoother for non-owners who need adjustments but lack direct edit permissions. It also reduces manual overhead for owners by centralizing approvals in the place they already work: the Issue detail page.",
+      "link": "https://www.onyx.app/39292"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

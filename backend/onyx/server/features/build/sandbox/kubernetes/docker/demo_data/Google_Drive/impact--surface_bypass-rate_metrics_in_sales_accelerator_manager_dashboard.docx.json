@@ -1,0 +1,30 @@
+{
+  "id": "441fd196466940bd939dea4b393d87ef",
+  "semantic_identifier": "Impact--Surface bypass-rate metrics in Sales_Accelerator manager dashboard.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Surface bypass-rate metrics in Sales_Accelerator manager dashboard.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a lightweight \u201cBypass rate\u201d panel to the Sales_Accelerator manager/sales ops dashboard, surfacing how often reps bypass recommended workflows. It will read directly from existing bypass event data in the analytics warehouse, avoiding any new instrumentation, schemas, or tracking dependencies.\n\nManagers and sales ops will be able to view bypass rate and raw bypass counts segmented by workflow (best-next-action, forecast updates, risk alerts) and by team, with a simple date filter for the last 7 or 30 days. This makes it easy to compare adoption across workflows and identify where guidance is being ignored or overridden.\n\nThe primary impact is earlier detection of organizational drift: when bypass behavior rises, leaders can intervene with coaching, process changes, or workflow tuning before it materially affects pipeline hygiene, forecast quality, or risk management. It also improves accountability and prioritization by pinpointing which teams and workflows are most affected.\n\nBecause the panel leverages existing warehouse data, implementation risk and time-to-value are low, and reporting becomes standardized in a single place used by managers. This should reduce ad-hoc data requests and help teams continuously monitor workflow adherence as part of the regular operating cadence.",
+      "link": "https://www.onyx.app/13036"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

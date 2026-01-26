@@ -1,0 +1,30 @@
+{
+  "id": "17cbe75191544a57be71630337b9adc2",
+  "semantic_identifier": "Impact--Add counterfactual \u201cwhat would improve fit\u201d suggestions to Fit Score explainability.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-20",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add counterfactual \u201cwhat would improve fit\u201d suggestions to Fit Score explainability.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds counterfactual \u201cwhat would improve fit\u201d guidance to Fit Score explainability by returning the minimal set of changes to key signals that would materially increase an account/segment\u2019s Fit Score. Instead of only describing why a score is high or low, the explainability service will also output a small, deterministic list of actionable levers (e.g., firmographics thresholds, product usage milestones, integrations adopted, support volume patterns) and the expected score lift from each.\n\nThe primary impact is making Fit Score more operational for GTM and product teams: reps and CSMs can quickly understand which controllable actions (like enabling a specific integration or hitting a usage benchmark) are most likely to move an account into a higher-fit bracket, while analysts can use consistent, bounded outputs for reporting and experimentation. For product, it creates a direct bridge between scoring inputs and activation/enablement programs by identifying the highest-impact \u201cnext best steps\u201d implied by the model\u2019s signals.\n\nTo keep outcomes trustworthy and usable, the response schema will be deterministic and capped (top N suggestions) with explicit field/value changes and an expected delta, ensuring stable results across runs and easy UI/consumer integration. Safety constraints prevent leakage of PII and avoid recommendations that are impossible or nonsensical (e.g., suggesting changes to immutable attributes), which protects customer trust and reduces the risk of guidance being misinterpreted as prescriptive or invasive.\n\nEngineering/test impact includes extending the explainability service logic and adding coverage for edge cases: low-signal accounts where few levers exist, conflicting signals where improving one dimension may worsen another, and strict enforcement of output size caps. These tests and constraints reduce regressions and ensure the feature degrades gracefully, producing either safe, limited guidance or a clear \u201cinsufficient signals\u201d style response when appropriate.",
+      "link": "https://www.onyx.app/85859"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

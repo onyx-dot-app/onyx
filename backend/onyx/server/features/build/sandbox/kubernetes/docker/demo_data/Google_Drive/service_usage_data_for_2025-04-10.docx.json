@@ -1,0 +1,28 @@
+{
+  "id": "9bb6fdee8bfb431294ff4f8b70d6e7d4",
+  "semantic_identifier": "Service Usage Data for 2025-04-10.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-10",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Service Usage Data for 2025-04-10.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "[{'account': 'Jadecircuit Electronics', 'value': 1.356410543905901, 'day': 6}]",
+      "link": "https://www.onyx.app/84415"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

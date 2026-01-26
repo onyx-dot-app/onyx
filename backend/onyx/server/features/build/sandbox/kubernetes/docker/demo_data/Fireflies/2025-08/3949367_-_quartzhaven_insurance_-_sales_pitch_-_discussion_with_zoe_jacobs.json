@@ -1,0 +1,185 @@
+{
+  "id": "FIREFLIES_3949367",
+  "semantic_identifier": "3949367 - Quartzhaven Insurance - sales_pitch - Discussion with Zoe Jacobs",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-08 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-08 00:00:00",
+    "duration_min": "31"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "3949367 - Quartzhaven Insurance - sales_pitch - Discussion with Zoe Jacobs",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Zoe, James Choi here\u2014thanks for taking a few minutes. I\u2019m calling because we\u2019ve been working with product and marketing teams who are trying to get really crisp on which customer segments are actually \u201cbest fit\u201d versus just loud demand, and I thought it might be relevant for Quartzhaven.",
+      "link": "https://www.onyx.app/6337163-1"
+    },
+    {
+      "text": "Zoe Jacobs: Hi James. I\u2019ve got a few minutes\u2014what\u2019s this about exactly?",
+      "link": "https://www.onyx.app/6337163-2"
+    },
+    {
+      "text": "James Choi: Totally. The product is called Customer_Analyzer. It pulls in signals you already have\u2014CRM fields, onboarding survey responses, product usage, support tickets, even interview notes\u2014and turns that into two things. First, a fit score by account and by segment, 0 to 100, with a breakdown of what\u2019s driving it up or down. Second, practical positioning recommendations\u2014what to lead with, proof points, and how to handle common objections for each segment.",
+      "link": "https://www.onyx.app/6337163-3"
+    },
+    {
+      "text": "Zoe Jacobs: Okay. We\u2019re an insurance company\u2014how does that map to what we do?",
+      "link": "https://www.onyx.app/6337163-4"
+    },
+    {
+      "text": "James Choi: For insurers, a common use case is segment prioritization for the next quarter\u2014especially when you\u2019re weighing industries or customer types and trying to balance retention with support cost. Customer_Analyzer looks at outcomes like renewal, expansion, support burden, and adoption patterns, then compares segments\u2014say, \u201cregional brokers\u201d versus \u201cdirect-to-consumer,\u201d or SMB employer groups versus mid-market\u2014so you can see which ones are truly healthiest and where you\u2019re paying for growth with churn or tickets.",
+      "link": "https://www.onyx.app/6337163-5"
+    },
+    {
+      "text": "Zoe Jacobs: We already have reporting in our CRM and BI tools. We can see retention by segment. What\u2019s different?",
+      "link": "https://www.onyx.app/6337163-6"
+    },
+    {
+      "text": "James Choi: Great question. Most teams can see retention rates, but they can\u2019t easily explain *why* a segment is performing that way across disparate signals\u2014or translate it into action for go-to-market. The fit estimation feature lets you define fit drivers\u2014industry, size, problem severity, time-to-value, willingness to pay, adoption/usage, support burden, churn risk\u2014and then it produces a driver breakdown. So instead of \u201cSegment A renews more,\u201d you get \u201cSegment A renews more because time-to-value is faster, adoption is higher by week two, and support burden is lower,\u201d and you can use that to make an ICP recommendation and adjust messaging.",
+      "link": "https://www.onyx.app/6337163-7"
+    },
+    {
+      "text": "Zoe Jacobs: We don\u2019t really have \u201cproduct usage events\u201d in the same way a SaaS company does. And pulling in support tickets and notes sounds messy.",
+      "link": "https://www.onyx.app/6337163-8"
+    },
+    {
+      "text": "James Choi: That\u2019s fair. We don\u2019t require product events\u2014those are optional. Many teams start with CRM + support + onboarding and interviews. Even simple proxies work: time-to-value from onboarding milestones, support burden from ticket volume and categories, and adoption from engagement touchpoints if you have them. The idea is to use what you already track, then normalize it into a fit model and segment comparisons.",
+      "link": "https://www.onyx.app/6337163-9"
+    },
+    {
+      "text": "Zoe Jacobs: But \u201cfit score\u201d sounds like a black box. My team will push back if it can\u2019t be explained.",
+      "link": "https://www.onyx.app/6337163-10"
+    },
+    {
+      "text": "James Choi: Completely agree. The score is only useful if it\u2019s transparent. That\u2019s why we show the driver breakdown\u2014what inputs contributed to the score and by how much\u2014plus comparisons across segments. You can also weight drivers based on what matters to Quartzhaven. If support burden is killing margins, you can prioritize that. If retention is the main goal, weight that more heavily.",
+      "link": "https://www.onyx.app/6337163-11"
+    },
+    {
+      "text": "Zoe Jacobs: Who typically owns this internally? Marketing? Product? Sales ops?",
+      "link": "https://www.onyx.app/6337163-12"
+    },
+    {
+      "text": "James Choi: Usually it\u2019s a cross-functional owner\u2014often product marketing or revenue ops\u2014because it touches ICP and positioning. But it can start with one team. The first outcome is usually: \u201cHere are the top two segments we should target next quarter, and here\u2019s the narrative that\u2019s working for them.\u201d That\u2019s where the positioning recommendations come in\u2014value props, differentiators, proof points, and objection handling aligned to what the data shows those segments respond to.",
+      "link": "https://www.onyx.app/6337163-13"
+    },
+    {
+      "text": "Zoe Jacobs: I\u2019m listening, but we\u2019re in the middle of planning already. I\u2019m not looking to introduce a new platform right now.",
+      "link": "https://www.onyx.app/6337163-14"
+    },
+    {
+      "text": "James Choi: Understood. I\u2019m not trying to wedge in a big implementation. The reason I reached out is that a quick analysis can help confirm whether your planned segments are the ones that actually renew with low support cost. If you\u2019re already planning, this either validates your direction\u2014or it flags a segment that looks good on pipeline but historically churns or burns support.",
+      "link": "https://www.onyx.app/6337163-15"
+    },
+    {
+      "text": "Zoe Jacobs: We also have strict data policies. Anything that touches support tickets or customer notes can be sensitive.",
+      "link": "https://www.onyx.app/6337163-16"
+    },
+    {
+      "text": "James Choi: Absolutely\u2014insurance tends to have tighter controls. We can start without any sensitive text: just structured fields and aggregated ticket metadata like counts, categories, and resolution time. And if security is a blocker, we can limit the data scope to what\u2019s already approved in your CRM exports.",
+      "link": "https://www.onyx.app/6337163-17"
+    },
+    {
+      "text": "Zoe Jacobs: What\u2019s the time commitment on our side? I don\u2019t have people to babysit another tool.",
+      "link": "https://www.onyx.app/6337163-18"
+    },
+    {
+      "text": "James Choi: Minimal, in the best case. Typically we ask for a basic export\u2014accounts, segments, a few outcome fields like renewal status, and any signals you already have around onboarding completion and support volume. Then we come back with a segment-level view: fit scores, driver breakdown, and an initial ICP recommendation. If it looks promising, then we do a deeper pass and talk about positioning.",
+      "link": "https://www.onyx.app/6337163-19"
+    },
+    {
+      "text": "Zoe Jacobs: That still sounds like work. And we\u2019re not really changing our ICP this quarter. We\u2019re more focused on execution.",
+      "link": "https://www.onyx.app/6337163-20"
+    },
+    {
+      "text": "James Choi: That makes sense. Even if you\u2019re not changing ICP, the fit estimation can help with prioritizing within the ICP\u2014like which industries inside your target are actually low support burden and high retention. And the positioning piece can help your team sharpen messaging for the segment you\u2019re executing on\u2014what proof points to emphasize, and which objections to anticipate.",
+      "link": "https://www.onyx.app/6337163-21"
+    },
+    {
+      "text": "Zoe Jacobs: We\u2019ve already got messaging. And my experience is tools that \u201crecommend positioning\u201d are pretty generic unless there\u2019s a lot of qualitative work behind it.",
+      "link": "https://www.onyx.app/6337163-22"
+    },
+    {
+      "text": "James Choi: I agree with you\u2014generic messaging doesn\u2019t help. The difference is we tie recommendations back to observed outcomes and the drivers. But you\u2019re right that the best results come when there\u2019s enough signal\u2014interview notes, win/loss, or support themes\u2014to ground the narrative.",
+      "link": "https://www.onyx.app/6337163-23"
+    },
+    {
+      "text": "Zoe Jacobs: We don\u2019t have win/loss in a clean place, and interviews are sporadic. So I\u2019m not sure you\u2019d have the inputs you need.",
+      "link": "https://www.onyx.app/6337163-24"
+    },
+    {
+      "text": "James Choi: If the inputs aren\u2019t there, we won\u2019t pretend otherwise. In that case, the value would mostly be on the quantitative side\u2014segment comparisons using retention and support burden, and a lightweight ICP confirmation. If positioning is a stretch right now, we can focus on fit scoring and the driver breakdown.",
+      "link": "https://www.onyx.app/6337163-25"
+    },
+    {
+      "text": "Zoe Jacobs: Okay, but I\u2019m not the right person to evaluate a scoring model. And I\u2019m not going to schedule a longer call unless there\u2019s a clear reason.",
+      "link": "https://www.onyx.app/6337163-26"
+    },
+    {
+      "text": "James Choi: Totally fair. Let me ask one quick question to see if this is even worth it: are you actively deciding between industries to target next quarter, and is support burden or churn a concern in any of those segments?",
+      "link": "https://www.onyx.app/6337163-27"
+    },
+    {
+      "text": "Zoe Jacobs: We have a view on industries already, and yes, support burden is always a concern. But I don\u2019t think a new tool is going to change that in the short term.",
+      "link": "https://www.onyx.app/6337163-28"
+    },
+    {
+      "text": "James Choi: Got it. If you\u2019re set on the segments and the main pain is execution, then this may not be the right timing. Would it be helpful if I sent a one-page overview of how the fit estimation works\u2014what inputs it needs, what the driver breakdown looks like\u2014so you can forward it to whoever owns segmentation or analytics?",
+      "link": "https://www.onyx.app/6337163-29"
+    },
+    {
+      "text": "Zoe Jacobs: You can send it, but I can\u2019t promise I\u2019ll get to it. And I\u2019m not going to pull data or loop in my team right now.",
+      "link": "https://www.onyx.app/6337163-30"
+    },
+    {
+      "text": "James Choi: That\u2019s completely okay. I\u2019ll keep it lightweight: one page plus a sample segment comparison view\u2014how SMB vs mid-market might differ on retention and support burden and how that rolls up into a fit score with explanations. If it sparks interest later, we can revisit when planning season opens up again.",
+      "link": "https://www.onyx.app/6337163-31"
+    },
+    {
+      "text": "Zoe Jacobs: Sure. Email it to me, and if it\u2019s relevant I\u2019ll pass it along.",
+      "link": "https://www.onyx.app/6337163-32"
+    },
+    {
+      "text": "James Choi: Will do. What\u2019s the best email\u2014still zoe.jacobs@quartzhaven.com?",
+      "link": "https://www.onyx.app/6337163-33"
+    },
+    {
+      "text": "Zoe Jacobs: Yes, that\u2019s right.",
+      "link": "https://www.onyx.app/6337163-34"
+    },
+    {
+      "text": "James Choi: Perfect. I\u2019ll send that today. Thanks for your time, Zoe.",
+      "link": "https://www.onyx.app/6337163-35"
+    },
+    {
+      "text": "Zoe Jacobs: Thanks, James. Bye.",
+      "link": "https://www.onyx.app/6337163-36"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "zoe_jacobs@quartzhaven_insurance.onyx.app"
+    }
+  ]
+}

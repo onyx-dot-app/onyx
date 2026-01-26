@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_2734422",
+  "semantic_identifier": "2734422 - Willowarc Financial - sales_pitch - Discussion with Xavier Walker",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-25 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-25 00:00:00",
+    "duration_min": "26"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "2734422 - Willowarc Financial - sales_pitch - Discussion with Xavier Walker",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Xavier\u2014Mina Park here. Did I catch you with two minutes? I\u2019ll be brief.",
+      "link": "https://www.onyx.app/1977655-1"
+    },
+    {
+      "text": "Xavier Walker: Hey Mina, yeah, I\u2019ve got a couple minutes. What\u2019s up?",
+      "link": "https://www.onyx.app/1977655-2"
+    },
+    {
+      "text": "Mina Park: Thanks. I\u2019m calling because we work with product and go-to-market teams that are trying to get really crisp on which customer segments are actually the best fit\u2014and then translate that into messaging sales and marketing can consistently use. The product is called Customer_Analyzer. Curious: at Willowarc Financial, are you feeling any pain around \u201cwe think we know our ICP,\u201d but it\u2019s hard to prove, prioritize, and align everyone on it?",
+      "link": "https://www.onyx.app/1977655-3"
+    },
+    {
+      "text": "Xavier Walker: That\u2019s pretty accurate. We have a general idea, but it gets fuzzy when we\u2019re deciding which segments to lean into next, especially for roadmap planning.",
+      "link": "https://www.onyx.app/1977655-4"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly the scenario Customer_Analyzer is built for. It ingests the signals you already have\u2014CRM fields, onboarding survey responses, product usage events, support tickets, even interview notes\u2014and turns them into two outputs teams can act on quickly. The one I think you\u2019d care about most for roadmap planning is the fit score: it ranks segments and accounts by how well they match your product\u2019s current strengths, based on the patterns in those signals.",
+      "link": "https://www.onyx.app/1977655-5"
+    },
+    {
+      "text": "Xavier Walker: Okay. How is that different from us just looking at renewal rates and a few usage dashboards?",
+      "link": "https://www.onyx.app/1977655-6"
+    },
+    {
+      "text": "Mina Park: Great question. Dashboards usually show you what happened; they don\u2019t tell you \u201cwhich type of customer is most aligned and why,\u201d in a way you can use across product planning and positioning. Customer_Analyzer pulls multiple signal types together and identifies the fit drivers\u2014like which workflows, integrations, team size bands, compliance needs, or support themes correlate with retention and expansion. So instead of \u201cSegment A renews more,\u201d you get \u201cSegment A is high-fit because they consistently use X feature weekly, have Y operational constraint, mention Z outcome in tickets and surveys, and they\u2019re the ones expanding.\u201d",
+      "link": "https://www.onyx.app/1977655-7"
+    },
+    {
+      "text": "Xavier Walker: That \u201cwhy\u201d part is interesting. We struggle to get the qualitative and quantitative into one place.",
+      "link": "https://www.onyx.app/1977655-8"
+    },
+    {
+      "text": "Mina Park: Exactly. And then the second output, which is where teams tend to see fast lift, is our positioning recommendations. Once you\u2019ve prioritized a segment, Customer_Analyzer generates segment-specific messaging blocks\u2014value proposition, top use cases, differentiators, proof points to collect, even objection handling\u2014based on the fit drivers and the actual language your customers use in tickets, calls, and surveys. The key is it\u2019s not generic copy; it\u2019s tied back to the evidence so your team can trust it and edit it.",
+      "link": "https://www.onyx.app/1977655-9"
+    },
+    {
+      "text": "Xavier Walker: When you say \u201cmessaging blocks,\u201d what does that look like in practice?",
+      "link": "https://www.onyx.app/1977655-10"
+    },
+    {
+      "text": "Mina Park: Think editable components your team can drop into what they already use: website hero copy options, sales deck bullets, email openers for outbound, and a short talk track for discovery. For example, if a segment\u2019s fit drivers show they care most about reducing manual reconciliation time and audit readiness, the system will recommend a value prop framed around those outcomes, list the top two or three use cases, and specify what proof points to capture\u2014like time-to-close improvements or audit exceptions reduced\u2014so your sales team isn\u2019t scrambling for \u201cdo we have a case study for this?\u201d",
+      "link": "https://www.onyx.app/1977655-11"
+    },
+    {
+      "text": "Xavier Walker: That would help. We have strong stories, but they\u2019re scattered, and different reps tell different versions.",
+      "link": "https://www.onyx.app/1977655-12"
+    },
+    {
+      "text": "Mina Park: Totally common. The business impact we usually see is: faster alignment on ICP, more consistent narrative, and fewer \u201crandom bets\u201d in roadmap discussions because product can see which segments have unmet needs and high fit. Since you mentioned roadmap planning\u2014one workflow I\u2019d suggest is using the fit score to identify high-fit customers with unmet needs, then feeding that into your planning cycle so you\u2019re making bets that compound: better product-market fit and easier selling.",
+      "link": "https://www.onyx.app/1977655-13"
+    },
+    {
+      "text": "Xavier Walker: Makes sense. What would you need from us to get that working?",
+      "link": "https://www.onyx.app/1977655-14"
+    },
+    {
+      "text": "Mina Park: For an initial pass, we typically start with read-only pulls from your CRM\u2014fields like industry, size, win/loss, stage velocity\u2014plus a slice of product usage events if you have them, and a bucket of qualitative text like support tickets or onboarding surveys. Even a few months of data is enough to see directional fit drivers. Then we\u2019d review the segment ranking with you and sanity-check it against what you already believe.",
+      "link": "https://www.onyx.app/1977655-15"
+    },
+    {
+      "text": "Xavier Walker: We use Salesforce and we do have product events in our warehouse. Support is in Zendesk. Is that the kind of setup you see a lot?",
+      "link": "https://www.onyx.app/1977655-16"
+    },
+    {
+      "text": "Mina Park: Yes, that\u2019s a very standard stack for us. We don\u2019t have to boil the ocean on day one either\u2014often we start with Salesforce + Zendesk + a handful of key usage events. The goal for the first full call would be to map which signals matter for Willowarc, and what a \u201chigh-fit\u201d outcome means for you\u2014renewals, expansion, product adoption milestones, or all of the above.",
+      "link": "https://www.onyx.app/1977655-17"
+    },
+    {
+      "text": "Xavier Walker: Got it. And the positioning part\u2014does it just spit out recommendations, or can we trace back why it\u2019s saying something?",
+      "link": "https://www.onyx.app/1977655-18"
+    },
+    {
+      "text": "Mina Park: You can trace it. Each recommendation is linked back to the underlying drivers and evidence. So if it suggests a differentiator like \u201cfaster compliance reporting,\u201d you can click into what it saw: the usage patterns, the ticket themes, the phrases customers used. That transparency is important because it lets your team fine-tune messaging instead of debating opinions in a vacuum.",
+      "link": "https://www.onyx.app/1977655-19"
+    },
+    {
+      "text": "Xavier Walker: That would probably cut down on internal back-and-forth. We lose time arguing about what\u2019s \u201cmost compelling.\u201d",
+      "link": "https://www.onyx.app/1977655-20"
+    },
+    {
+      "text": "Mina Park: Exactly. What I\u2019d propose is a 30-minute working session next week. We\u2019ll keep it practical: you tell me your current target segments and what\u2019s under debate for the roadmap, we walk through what signals you have, and I\u2019ll show you how the fit scoring and positioning recommendations would apply. If it\u2019s not a fit, you\u2019ll know quickly; if it is, we can define a small pilot.",
+      "link": "https://www.onyx.app/1977655-21"
+    },
+    {
+      "text": "Xavier Walker: Yeah, I\u2019m open to that. Next week is a bit tight\u2014do you have Thursday afternoon?",
+      "link": "https://www.onyx.app/1977655-22"
+    },
+    {
+      "text": "Mina Park: Thursday works. How does 2:30 pm your time sound for 30 minutes?",
+      "link": "https://www.onyx.app/1977655-23"
+    },
+    {
+      "text": "Xavier Walker: 2:30 is good. Send an invite and include an agenda so I can prep.",
+      "link": "https://www.onyx.app/1977655-24"
+    },
+    {
+      "text": "Mina Park: Will do. I\u2019ll send a calendar invite for Thursday 2:30 with a short agenda\u2014current ICP hypotheses, available data signals across Salesforce/Zendesk/usage, and a walkthrough of how we\u2019d turn that into a segment fit ranking plus a positioning playbook for one prioritized segment. Before we hop off\u2014anything specific you\u2019d want to make sure we cover for Willowarc?",
+      "link": "https://www.onyx.app/1977655-25"
+    },
+    {
+      "text": "Xavier Walker: If you can tie it back to how we decide roadmap bets, that\u2019s the big thing. We\u2019re trying to avoid building for loud but low-fit customers.",
+      "link": "https://www.onyx.app/1977655-26"
+    },
+    {
+      "text": "Mina Park: Perfect\u2014that\u2019s a great use case for this. I\u2019ll tailor the session around identifying high-fit customers with unmet needs and how that flows into roadmap prioritization. I\u2019ll send the invite shortly. Thanks, Xavier.",
+      "link": "https://www.onyx.app/1977655-27"
+    },
+    {
+      "text": "Xavier Walker: Thanks Mina. Talk Thursday.",
+      "link": "https://www.onyx.app/1977655-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "xavier_walker@willowarc_financial.onyx.app"
+    }
+  ]
+}

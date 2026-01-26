@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#141",
+  "semantic_identifier": "141: fix: Recompute and re-render confidence bands on forecast scenario/horizon changes",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-03",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "141",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "7",
+    "num_files_changed": "65",
+    "labels": [],
+    "created_at": "2025-11-03",
+    "updated_at": "2025-11-03",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR fixes an issue where confidence bands (P10/P50/P90) could become stale and visually misaligned with the currently selected forecast scenario or horizon.\n\nChanges:\n- Updated the forecast chart data pipeline so confidence bands are derived from the active scenario inputs and the current horizon on every recompute, rather than reusing cached/previous series.\n- Normalized the chart series generation to build totals, segment breakdowns, and band series from the same computed projection snapshot to ensure consistent alignment across scenario switches.\n- Adjusted UI state/selectors so scenarioId and horizon are explicit dependencies for band calculation (ensuring a re-render when either changes).\n\nTests:\n- Added a regression test that switches scenarios and then changes the forecast horizon, asserting that the band series updates alongside totals/segments and matches the expected projection for the active scenario.\n\nUser impact:\n- The uncertainty range now stays in sync with the selected scenario and horizon; no behavior change beyond correcting the displayed bands.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#141"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

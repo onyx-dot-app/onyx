@@ -1,0 +1,30 @@
+{
+  "id": "8e243a57a7a841a2848fcaafd84f5534",
+  "semantic_identifier": "Impact--Define CRM-embedded Guidance surface (UI spec + entry points).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-30",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Define CRM-embedded Guidance surface (UI spec + entry points).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature defines the minimum viable \u201cCRM-embedded Guidance\u201d surface that lets sellers consume Sales_Accelerator recommendations directly inside Salesforce and HubSpot, eliminating the need to switch tabs or leave their daily workflow. By standardizing a lightweight in-CRM UI (e.g., sidebar panel, record-page card, or extension), we reduce friction to guidance adoption and increase the likelihood that recommendations are seen at the moment decisions are made.\n\nWe will specify the entry points and placements for both core objects\u2014Accounts and Opportunities\u2014so guidance appears in predictable, high-visibility locations within each CRM. The spec will clarify when the surface is available (e.g., on record view, potentially in list contexts if applicable), what triggers/conditions show it, and how users discover it consistently across CRM variants.\n\nIn scope content blocks will include: (1) Best-next-action guidance, (2) Risk alerts, and (3) Fit/positioning snippets. For each block, we\u2019ll define wireframe-level layout, prioritization, and the \u201ccopy actions\u201d sellers can take (e.g., copy a snippet, copy a recommended step, copy notes) to quickly operationalize guidance in emails, call notes, or internal updates.\n\nThe primary impact is unblocking implementation tickets by providing a clear UI spec and acceptance criteria: required blocks, minimal interactions, placement by object, and success conditions (what \u201cworking\u201d means in Salesforce/HubSpot). This reduces engineering ambiguity and rework, aligns design/product/eng on an MVP that can ship quickly, and creates a foundation to iterate on richer guidance and deeper CRM actions later.",
+      "link": "https://www.onyx.app/14534"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

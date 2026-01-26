@@ -1,0 +1,137 @@
+{
+  "id": "FIREFLIES_3750161",
+  "semantic_identifier": "3750161 - Alpinequill Publishing - sales_pitch - Discussion with Asher Benson",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-22 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-22 00:00:00",
+    "duration_min": "30"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "3750161 - Alpinequill Publishing - sales_pitch - Discussion with Asher Benson",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Asher, it\u2019s Megan Foster\u2014thanks for taking a few minutes. I\u2019ll keep this short. I work with revenue teams that live in Salesforce or HubSpot but want a layer on top that tells reps, \u201cHere\u2019s who to contact next, here\u2019s what to say, and here\u2019s why.\u201d Does that sound relevant for Alpinequill Publishing right now?",
+      "link": "https://www.onyx.app/4129248-1"
+    },
+    {
+      "text": "Asher Benson: Yeah, potentially. We\u2019re trying to tighten up inbound follow-up and make sure reps aren\u2019t just cherry-picking leads. What are you referring to exactly?",
+      "link": "https://www.onyx.app/4129248-2"
+    },
+    {
+      "text": "Megan Foster: The product is called Sales_Accelerator. It sits on top of your CRM and turns the data you already have\u2014plus intent and engagement signals\u2014into next-best-action guidance. The piece I think is most relevant for you is our sales initiation recommendations: it prioritizes which inbound leads to touch first, recommends the best first response message, and gives your reps a ready-to-send first-touch email, LinkedIn opener, and a quick call talk track.",
+      "link": "https://www.onyx.app/4129248-3"
+    },
+    {
+      "text": "Asher Benson: We already route inbound through our CRM and have sequences. What\u2019s different about your \u201crecommendations\u201d versus basic scoring and templates?",
+      "link": "https://www.onyx.app/4129248-4"
+    },
+    {
+      "text": "Megan Foster: Two key differences. First, we don\u2019t just score\u2014we explain. The rep sees \u201cwhy this lead is high priority\u201d based on fit drivers and trigger events, not a mystery number. Second, the message isn\u2019t generic. If you\u2019re already using something like an ICP or positioning framework, Sales_Accelerator can consume those fit scores and positioning blocks\u2014so the first touch aligns with the angle you actually want in market. It recommends who to contact, what angle to lead with, and which proof points or objection handlers to include.",
+      "link": "https://www.onyx.app/4129248-5"
+    },
+    {
+      "text": "Asher Benson: Explainable scoring sounds nice, but our biggest issue is speed-to-lead. We know faster follow-up helps, but it slips when things get busy.",
+      "link": "https://www.onyx.app/4129248-6"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly one of the use cases we see work well: aligning inbound speed-to-lead. Sales_Accelerator can prioritize high-fit inbound leads the moment they come in, propose the best first response message, and then track whether faster first-touch correlates with higher win rate for Alpinequill. So it\u2019s not just \u201crespond faster,\u201d it\u2019s \u201crespond faster to the right people with the right angle,\u201d and then prove the ROI with reporting.",
+      "link": "https://www.onyx.app/4129248-7"
+    },
+    {
+      "text": "Asher Benson: How would it show up for the rep day to day? Another tool to log into?",
+      "link": "https://www.onyx.app/4129248-8"
+    },
+    {
+      "text": "Megan Foster: Ideally, no extra tool sprawl. It\u2019s designed to sit on top of the CRM experience, so reps can work from a queue or view where it\u2019s basically: \u201cNext best account/lead to contact,\u201d \u201cRecommended message,\u201d and \u201cSuggested sequence.\u201d And each recommendation links back to the rationale\u2014fit drivers, detected intent/engagement, and any relevant trigger event. The goal is fewer tabs, not more.",
+      "link": "https://www.onyx.app/4129248-9"
+    },
+    {
+      "text": "Asher Benson: We\u2019re in HubSpot for inbound and some AEs live in Salesforce. Can it handle that, or is it one CRM only?",
+      "link": "https://www.onyx.app/4129248-10"
+    },
+    {
+      "text": "Megan Foster: It\u2019s built to sit on top of existing CRMs like HubSpot and Salesforce. On the short call I\u2019m trying to earn, we\u2019d confirm your setup\u2014what\u2019s in HubSpot versus Salesforce, how leads get assigned, and what \u201cfast enough\u201d speed-to-lead means for you. Then we can show the initiation playbooks in context: first-touch email, LinkedIn opener, call track, and a meeting agenda\u2014all customized to your segments.",
+      "link": "https://www.onyx.app/4129248-11"
+    },
+    {
+      "text": "Asher Benson: We also have a lot of templates already. People just don\u2019t always use the right ones.",
+      "link": "https://www.onyx.app/4129248-12"
+    },
+    {
+      "text": "Megan Foster: Totally. That\u2019s where the \u201cnext-best-message\u201d part helps. Instead of reps hunting for the correct template, the system recommends the one that fits the lead\u2019s segment and current signals, and it includes the proof points and objection handlers you\u2019ve approved. It\u2019s less about creating more content and more about putting the right content in front of them at the moment they need it.",
+      "link": "https://www.onyx.app/4129248-13"
+    },
+    {
+      "text": "Asher Benson: Okay. What do you need from us to make that work? I\u2019m assuming there\u2019s some data lift.",
+      "link": "https://www.onyx.app/4129248-14"
+    },
+    {
+      "text": "Megan Foster: Light lift to start. For an initial walkthrough, we just need to understand: your inbound sources, your current lead scoring or fit indicators, your main segments, and what your first-touch sequences look like today. If you already have fit scores or positioning blocks from something like a customer analysis process, we plug into that rather than recreating it. Then we can show how the prioritization and messaging recommendations would look for Alpinequill.",
+      "link": "https://www.onyx.app/4129248-15"
+    },
+    {
+      "text": "Asher Benson: How quickly could we see if it\u2019s working? Leadership will ask for proof.",
+      "link": "https://www.onyx.app/4129248-16"
+    },
+    {
+      "text": "Megan Foster: For inbound, you can usually see early signals quickly\u2014speed-to-lead improvements, higher reply rates, and more meetings created. And then we track whether those improvements are translating into higher win rate over time. The key is that Sales_Accelerator ties the activity back to outcomes, so you can show: \u201cWhen we responded within X minutes to high-fit inbound leads using the recommended angle, meetings and wins increased.\u201d",
+      "link": "https://www.onyx.app/4129248-17"
+    },
+    {
+      "text": "Asher Benson: This is interesting. I\u2019d want my ops manager in the room and probably the person who owns inbound routing.",
+      "link": "https://www.onyx.app/4129248-18"
+    },
+    {
+      "text": "Megan Foster: Perfect. How about we schedule a 30-minute working session: you, your ops manager, and whoever owns inbound routing. I\u2019ll show (1) what the prioritized inbound queue looks like, (2) an example of the recommended first-touch message with the rationale, and (3) the simple reporting view that connects speed-to-lead to win rate. If it\u2019s not clearly better than what you\u2019re doing now, we\u2019ll call it there.",
+      "link": "https://www.onyx.app/4129248-19"
+    },
+    {
+      "text": "Asher Benson: That sounds reasonable. What times are you thinking?",
+      "link": "https://www.onyx.app/4129248-20"
+    },
+    {
+      "text": "Megan Foster: I can do Wednesday at 11am your time or Thursday at 2pm. Which is better?",
+      "link": "https://www.onyx.app/4129248-21"
+    },
+    {
+      "text": "Asher Benson: Thursday at 2 works. Send an invite and I\u2019ll pull in ops.",
+      "link": "https://www.onyx.app/4129248-22"
+    },
+    {
+      "text": "Megan Foster: Great\u2014Thursday at 2. I\u2019ll send a calendar invite with a couple of quick prep questions on your current inbound flow so we can make the demo specific to Alpinequill. Thanks, Asher\u2014looking forward to it.",
+      "link": "https://www.onyx.app/4129248-23"
+    },
+    {
+      "text": "Asher Benson: Sounds good. Thanks, Megan.",
+      "link": "https://www.onyx.app/4129248-24"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "asher_benson@alpinequill_publishing.onyx.app"
+    }
+  ]
+}

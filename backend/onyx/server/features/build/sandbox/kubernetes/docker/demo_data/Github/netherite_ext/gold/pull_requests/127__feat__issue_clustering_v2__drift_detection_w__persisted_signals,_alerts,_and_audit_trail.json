@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#127",
+  "semantic_identifier": "127: feat: issue_clustering v2: Drift detection w/ persisted signals, alerts, and audit trail",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-12",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "127",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "49",
+    "labels": [],
+    "created_at": "2025-11-12",
+    "updated_at": "2025-11-12",
+    "closed_at": "2025-11-23"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nAdds cluster drift detection to issue_clustering v2 and wires it into alerting + auditability.\n\nImplementation:\n- Introduces a drift evaluation step in the v2 pipeline that compares the latest run against a configurable baseline (previous successful run by default) and flags drift when thresholds are exceeded.\n- Computes drift metrics at both cluster-assignment and embedding-distribution levels (e.g., assignment churn rate and distribution distance over embeddings), emitting per-cluster and global summaries.\n- Persists drift signals in a new drift_events store/table, capturing: run_id, detected_at timestamp, baseline_run_id, affected cluster_ids, metric values, thresholds, and a severity (HIGH when thresholds breached).\n- Generates a high-priority alert when drift is detected (deduped per run) including top affected clusters and the metric deltas to speed triage.\n- Adds a lightweight audit trail by storing references from each drift event to the underlying source conversations (conversation_ids / sample issue_ids) and a field for downstream tracking (e.g., linked Linear/Jira work item id), enabling defensibility and traceability.\n\nConfig/ops:\n- Adds config knobs for drift thresholds (assignment churn %, embedding distance, minimum sample size) and baseline selection mode.\n- Includes migrations/backfill for the new drift_events persistence and updates run logs/telemetry to include drift status.\n\nUser impact:\n- No changes to clustering outputs; new drift events and alerts appear only when drift thresholds are exceeded, requiring triage due to high-priority classification.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#127"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

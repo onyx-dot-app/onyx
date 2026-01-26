@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_1812810",
+  "semantic_identifier": "Dunecrown Mining - Issue Tracker",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-04-06 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "171065",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "1812810"
+  },
+  "sections": [
+    {
+      "text": "Deal: Dunecrown Mining\nAmount: $171065\nProduct of Interest: Issue_Tracker\nFeatures of Interest: issue_clustering\nClose Date: 2025-06-07 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/51145"
+    },
+    {
+      "text": "Contact: Bianca Ramirez\nEmail: bianca_ramirez@dunecrown_mining.onyx.app",
+      "link": "https://www.onyx.app/82488"
+    },
+    {
+      "text": "Company: Dunecrown Mining\nDomain: dunecrown_mining.onyx.app",
+      "link": "https://www.onyx.app/37165"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/90889"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

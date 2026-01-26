@@ -1,0 +1,30 @@
+{
+  "id": "ab6f78c79d25412cb4e7bab4f9f2ea18",
+  "semantic_identifier": "Design--Surface segment source-of-truth and mismatch warnings in impact reporting UI.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-21",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Surface segment source-of-truth and mismatch warnings in impact reporting UI.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will update the Issue_Tracker impact-reporting API responses and the impact reporting UI to surface the canonical segment identifier/name produced by the canonicalization layer, alongside an explicit \u201csource-of-truth\u201d system label (per GOLD-180). The backend contract will be extended to return (a) the raw segment value(s) observed in upstream data, (b) the resolved canonical segment object (id, display name), (c) the source system used for the canonical definition, and (d) a resolution status enum (e.g., `MAPPED_OK`, `UNMAPPED`, `UNKNOWN`, `MISMATCH`). This makes the UI deterministic: it always renders the canonical segment when available, and can explain where it came from and how it was resolved.\n\nIn the UI, segment chips/headers in revenue and customer impact views will display the canonical segment name, with a compact \u201cSoT: <system>\u201d label. When resolution status is not `MAPPED_OK`, we will render a warning state (icon + inline text) indicating whether the segment is unmapped, unknown, or mismatched, and we will provide a tooltip that links directly to the segment mapping entry (deep link to the mapping UI or admin page) to speed triage. The tooltip will also show the raw upstream segment value(s) that triggered the warning so an analyst can quickly identify which system or field needs remediation.\n\nTo prevent incorrect reporting, we will stop blending totals across conflicting definitions. Concretely, if a grouping key contains segments with `MISMATCH` (or multiple canonical ids for the same displayed label), we will partition aggregates by canonical segment id and display them as separate rows/cards, or gate the combined total behind an explicit \u201cResolve mapping to combine\u201d message. For `UNMAPPED`/`UNKNOWN`, we will still show the impacted rows but will exclude them from any \u201cAll segments\u201d rollup unless the user filters explicitly to include unresolved segments, avoiding silent inflation/deflation.\n\nRollout will be incremental: first ship the API additions behind a versioned field or feature flag, then update the UI to prefer the canonical fields when present while maintaining backward compatibility. We\u2019ll add unit tests around canonicalization status handling and aggregation partitioning, plus a small set of snapshot/UI tests to ensure warning states render consistently. Success will be measured by reduced analyst confusion (qualitative) and a decrease in support/triage pings related to segment discrepancies, with logging/metrics on the rate of unresolved/mismatched segments to prioritize mapping cleanup.",
+      "link": "https://www.onyx.app/32709"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

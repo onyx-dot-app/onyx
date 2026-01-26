@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#58",
+  "semantic_identifier": "58: feat: Track Sales_Accelerator workflow bypass events across web + extension",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-10-18",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "58",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "42",
+    "labels": [],
+    "created_at": "2025-10-18",
+    "updated_at": "2025-10-18",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds first-class instrumentation to detect when users bypass Sales_Accelerator workflows and complete the same action directly in the CRM or outside the product. This PR emits consistent analytics events from both the web app and the browser extension for:\n- Best-next-action completion bypass\n- Forecasting update bypass\n- Risk alert resolution/dismissal bypass\n\n## Implementation (high level)\n- Introduces a shared `BypassTracking` helper (used by web + extension) to normalize event shape and required metadata.\n- Adds workflow-specific emitters at the points where we can infer bypass (e.g., user clicks \u201cOpen in CRM\u201d, navigates away to CRM action pages, dismisses/marks done outside our UI, or completes via extension surfaces without using SA flow).\n- Standardizes event name and payload:\n  - `event`: `sales_accelerator_workflow_bypassed`\n  - `workflowType`: `best_next_action | forecasting_update | risk_alert`\n  - `userId`, `teamId`\n  - `accountId` and/or `opportunityId` (when available)\n  - `timestamp`\n  - `entryPoint`: `web | extension` (+ UI surface identifier)\n  - `reasonType`: `stated | implicit | unknown`\n  - `reason` (freeform / enum where available)\n  - `crmTarget` (destination/URL category when relevant)\n- Ensures parity between web and extension by routing both through the same schema/validator and using the same internal analytics client.\n- Adds lightweight tests for schema validation + workflow type mapping, and guards to avoid emitting duplicates within a short window.\n\n## Data/Reporting\nEvents are emitted to the existing analytics pipeline and are queryable downstream via the standard event stream under `sales_accelerator_workflow_bypassed`.\n\n## Notes for reviewers\n- Focus is on consistent event emission + metadata completeness (medium priority), not on building dashboards or intervention UX.\n- Where we cannot reliably know the user\u2019s intent, `reasonType` is set to `implicit` or `unknown` and `reason` is omitted.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#58"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

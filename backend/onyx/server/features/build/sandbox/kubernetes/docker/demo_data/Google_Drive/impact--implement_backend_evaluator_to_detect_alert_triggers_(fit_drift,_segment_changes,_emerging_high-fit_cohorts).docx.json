@@ -1,0 +1,30 @@
+{
+  "id": "c5f540e586bc46a18c0b5a493ce826a2",
+  "semantic_identifier": "Impact--Implement backend evaluator to detect alert triggers (fit drift, segment changes, emerging high-fit cohorts).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-24",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Implement backend evaluator to detect alert triggers (fit drift, segment changes, emerging high-fit cohorts).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a backend evaluator that continuously monitors customer- and segment-level signals and determines when alert trigger conditions are met\u2014specifically fit drift, segment composition changes, and emerging high\u2011fit cohorts. On a scheduled cadence, the service will compute the required metrics from available signal data and compare them to the trigger definitions and thresholds specified in GOLD-40, enabling proactive detection rather than manual analysis.\n\nWhen a trigger fires, the evaluator will emit a normalized \u201calert event\u201d containing consistent fields (alert type, target entity such as customer/segment/cohort, timestamp, computed metrics, and the threshold values that were crossed). These events will be persisted in a durable store so downstream systems (notification delivery, integrations, and the UI) can reliably query, render, and route alerts without re-running expensive evaluations.\n\nTo ensure alert quality and reduce noise, the service will include idempotency and deduplication so the same underlying condition within a configured window does not generate repeated alerts. This directly improves user trust in alerting, prevents notification fatigue, and simplifies downstream delivery logic by providing a clean event stream.\n\nThe evaluator will also handle missing or low-volume data according to the spec (e.g., suppressing alerts, degrading gracefully, and/or annotating events with data-quality context). This reduces false positives in sparse segments, keeps alerting stable during data gaps, and provides predictable behavior across customers with varying traffic and signal maturity.",
+      "link": "https://www.onyx.app/34763"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "14df20348d2746a1949499825779ba14",
+  "semantic_identifier": "Design--Add configurable data retention policies for ingested conversations and issue artifacts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add configurable data retention policies for ingested conversations and issue artifacts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Goal  \nWe need configurable, per-workspace data retention policies for content ingested into `Issue_Tracker`: (1) raw support conversations, (2) extracted issue evidence/artifacts (attachments, snippets, logs), and (3) derived metadata (embeddings, summaries, classifications). The goal is to let admins set compliant time-to-live (TTL) windows, enforce deletion/expiration automatically, and prevent \u201cstore forever\u201d configurations unless explicitly allowed by policy. We must also preserve minimal references required for downstream linked tickets (e.g., ticket IDs, timestamps, and redacted pointers) so product workflows don\u2019t break when underlying content expires.\n\n### Data Model / Policy Semantics  \nIntroduce a `workspace_retention_policy` record with explicit TTLs per category (e.g., `raw_conversation_ttl_days`, `evidence_ttl_days`, `derived_metadata_ttl_days`) plus a `policy_version` and `updated_at` to support auditability. Each stored object in `Issue_Tracker` must carry `workspace_id`, `created_at`, and an `expires_at` computed from the current policy at ingest time (and optionally recomputed on policy change for non-expired objects). Expiration semantics: \u201cdelete or redact content, keep minimal reference.\u201d For raw conversations and evidence, we hard-delete payloads and keep a tombstone row containing stable identifiers (object id, workspace id, source system id, linked ticket ids, created_at/expired_at, and a `retention_reason`/`expired=true` flag). For derived metadata, we can either hard-delete or downgrade to minimal aggregates (counts, labels) depending on downstream requirements; default is delete.\n\n### Enforcement / Background Jobs  \nAdd a periodic cleanup service (e.g., hourly) that scans by `expires_at <= now()` in bounded batches per workspace and category, deletes payload blobs, and converts rows to tombstones (or removes fully when safe). Ensure referential integrity for downstream tickets by replacing foreign keys to content with nullable pointers to tombstone IDs, and by making ticket views resilient to missing content (\u201ccontent expired\u201d banner). Implement idempotency and concurrency controls (e.g., leasing by workspace/category, `deleted_at` markers) to avoid double-deletes. Emit metrics (expired count, failures, lag), and write an audit log entry on policy changes and on cleanup runs.\n\n### Admin UI + API / Defaults & Validation  \nExpose retention settings in the admin UI (workspace settings) with clear defaults (e.g., 90 days raw conversations, 180 days evidence, 365 days derived metadata\u2014final values TBD) and show an estimated impact (\u201cobjects eligible for deletion\u201d). Provide an API endpoint to read/update policy with validation: TTL must be within allowed bounds (min/max), cannot be \u201cindefinite\u201d unless a workspace is explicitly whitelisted or a compliance flag is enabled, and must enforce category-specific minimums if required. Policy changes apply going forward immediately; for existing data, we either (a) recompute `expires_at` for non-expired objects on change, or (b) apply only to new ingests\u2014choose (a) to meet compliance expectations. Add test coverage for policy validation, expiration correctness, tombstone preservation, and UI/API contract.",
+      "link": "https://www.onyx.app/96703"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "044a044e837b40ad9c56402903a2e3db",
+  "semantic_identifier": "Impact--Update stage aging calculation to use canonical stage_entered_at (with deterministic fallback).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-09",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Update stage aging calculation to use canonical stage_entered_at (with deterministic fallback).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change corrects how we calculate \u201cstage aging\u201d in `sales_forecast` by basing time-in-stage on the imported, canonical `stage_entered_at` timestamp rather than inferring it from `opportunity.created_at` / `updated_at`. As a result, stage aging will more accurately reflect when an opportunity actually entered its current stage (especially for backfilled, edited, or re-synced opportunities), reducing misleading aging spikes and inconsistencies across views.\n\nWe will update the stage aging service/queries to deterministically select the latest transition timestamp associated with the opportunity\u2019s current stage, ensuring a single, consistent source of truth for the start of the clock. This also standardizes behavior across rollups and downstream consumers so the same opportunity does not show different age depending on which report or aggregation path is used.\n\nWhen `stage_entered_at` is missing, we will apply an explicit and consistent fallback (rather than implicitly relying on create/update timestamps in an ad hoc way). This provides predictable behavior for edge cases while making data gaps visible and minimizing silent skew in aging-based KPIs.\n\nDownstream, this should improve the reliability of rollups (e.g., pipeline by stage aging buckets) and historical conversion benchmarks that rely on stage duration. We\u2019ll add lightweight regression tests to ensure the corrected stage aging output is used by these consumers and to prevent future regressions that could reintroduce inconsistent or inflated time-in-stage calculations.",
+      "link": "https://www.onyx.app/51015"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

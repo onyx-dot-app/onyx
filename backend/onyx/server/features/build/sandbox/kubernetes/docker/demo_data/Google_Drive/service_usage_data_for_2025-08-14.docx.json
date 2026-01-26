@@ -1,0 +1,28 @@
+{
+  "id": "bdd18a1a372e4e75a103aebfd61bde6a",
+  "semantic_identifier": "Service Usage Data for 2025-08-14.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Service Usage Data for 2025-08-14.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "[{'account': 'Vividcedar Marketing', 'value': 0.800956729160398, 'day': 121}, {'account': 'Jadecircuit Electronics', 'value': 1.1360416438193404, 'day': 132}, {'account': 'Wavelink Marine Systems', 'value': 1.0258423008093118, 'day': 1}, {'account': 'Northwind Parcel Services', 'value': 0.24073674910645723, 'day': 84}, {'account': 'Marinerock Outdoor Gear', 'value': 2.218144514566068, 'day': 28}]",
+      "link": "https://www.onyx.app/58185"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

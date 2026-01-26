@@ -1,0 +1,30 @@
+{
+  "id": "c5649af97ced4a66ac1f88223eb59468",
+  "semantic_identifier": "Design--Create offline benchmark + regression tests to quantify false merges across domains.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-16",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Create offline benchmark + regression tests to quantify false merges across domains.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add an offline benchmark and regression test suite to quantify and prevent \u201cfalse merges\u201d in our issue clustering/dedup pipeline, with an emphasis on measuring precision (i.e., how often we incorrectly merge unrelated issues). The benchmark will be an evaluation dataset consisting of labeled issue pairs and/or small clusters sampled from multiple domains (billing, API, mobile, etc.) and key integration sources. Labels will include \u201cshould-merge\u201d vs \u201cshould-not-merge,\u201d with optional finer-grained tags for ambiguous/partial overlap to support analysis without blocking the core metric.\n\nThe benchmark runner will execute the current clustering pipeline (or any candidate change/branch) against the frozen dataset and compute domain- and source-segmented metrics: false-merge rate, precision, and a small set of supporting counts (e.g., total proposed merges, true merges, false merges). For cluster-based evaluation, we\u2019ll derive pairwise merge decisions from clusters (all pairs within a predicted cluster are \u201cmerged\u201d) to compare against labeled pairs; this keeps the metric definition stable regardless of the underlying clustering algorithm. Results will be emitted as a machine-readable artifact (JSON) and a human-readable summary table highlighting worst domains/sources and the top false-merge examples.\n\nWe will integrate this as an automated offline test in CI for any change that touches similarity scoring, thresholds, or clustering logic. The test will fail on regressions using explicit budgets: e.g., global precision must not drop below a baseline, and per-domain/per-source false-merge rate must not increase beyond an allowed delta. To reduce flakiness and encourage iteration, we\u2019ll version the benchmark dataset and baselines together, requiring an explicit \u201cupdate baseline\u201d step when intentionally changing behavior.\n\nFinally, we will use benchmark sweeps to recommend default similarity thresholds per domain/source. The runner will optionally evaluate multiple threshold configurations and select candidates that meet false-merge budgets while preserving acceptable merge recall (as a secondary metric), producing a recommended threshold map (domain/source \u2192 threshold) that can be used as defaults in production configuration. This closes the loop: offline evaluation guides safer defaults and CI prevents future over-merging regressions where they matter most.",
+      "link": "https://www.onyx.app/81273"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

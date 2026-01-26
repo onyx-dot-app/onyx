@@ -1,0 +1,30 @@
+{
+  "id": "9e4c5b16c9814a3e8b6f166c30fb96dc",
+  "semantic_identifier": "Impact--Implement upstream sync: create/update Jira/Linear issues from Issue_Tracker issue object.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Implement upstream sync: create/update Jira/Linear issues from Issue_Tracker issue object.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds first-class \u201cupstream sync\u201d from an Issue_Tracker issue/theme to external tracking tools (Jira and Linear). From an Issue_Tracker record, users will be able to create a corresponding external issue and then push subsequent updates, making Issue_Tracker a true system of record for cross-team work that lives in multiple trackers.\n\nOnce linked, Issue_Tracker will keep the external issue aligned by updating key fields: title, description, priority, labels, customer impact summary, and backlinks. The product will store a stable mapping between the Issue_Tracker object and the external issue, and display the external issue key and URL so users can quickly navigate and verify the connection.\n\nReliability and safety are core to the impact: updates must be idempotent so repeated sync attempts don\u2019t create duplicates or drift, and the mapping ensures we always target the same external issue. This reduces manual copy/paste, prevents mis-linking, and improves consistency of customer-impact communication across tools.\n\nThe user experience will include clear, actionable error handling for common failure modes such as missing permissions, invalid projects, or misconfigured integrations. Instead of silent failures or partial syncs, users will get explicit messaging that explains what went wrong and what to do next, minimizing support burden and unblocking teams quickly.",
+      "link": "https://www.onyx.app/12127"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

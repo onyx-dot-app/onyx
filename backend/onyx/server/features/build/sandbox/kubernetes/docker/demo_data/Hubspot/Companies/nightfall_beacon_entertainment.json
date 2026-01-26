@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_7269308",
+  "semantic_identifier": "Nightfall Beacon Entertainment",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-10 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "7269308",
+    "domain": "nightfall_beacon_entertainment.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Nightfall Beacon Entertainment\nDomain: nightfall_beacon_entertainment.onyx.app",
+      "link": "https://www.onyx.app/44976"
+    },
+    {
+      "text": "Contact: Audrey Pierce\nEmail: audrey_pierce@nightfall_beacon_entertainment.onyx.app",
+      "link": "https://www.onyx.app/89247"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

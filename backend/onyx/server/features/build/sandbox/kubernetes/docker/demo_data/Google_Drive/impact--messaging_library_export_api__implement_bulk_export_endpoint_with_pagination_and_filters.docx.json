@@ -1,0 +1,30 @@
+{
+  "id": "47a7e8dae9754f0c8b366d8e90853b87",
+  "semantic_identifier": "Impact--Messaging Library Export API: implement bulk export endpoint with pagination + filters.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-17",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Messaging Library Export API: implement bulk export endpoint with pagination + filters.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a bulk export API for the Messaging Library, enabling clients to retrieve all *approved* assets for a given workspace in a predictable, paginated way. By standardizing an export endpoint with cursor/limit pagination and stable ordering, downstream systems can reliably consume the library at scale without timing out or requiring full re-downloads on every sync.\n\nThe endpoint will support optional filters\u2014asset type, segment/ICP, and `updated_since`\u2014so consumers can target only the subset they need (e.g., \u201call approved one-liners for ICP X updated in the last week\u201d). This reduces payload size and improves performance for both clients and our infrastructure, especially as the number of assets per workspace grows.\n\nTo support incremental syncing, responses will include sufficient metadata such as `next_cursor` (and `total_count` when feasible) so clients can page through deterministically and resume where they left off. Stable ordering is critical here to prevent duplicates or missed records across pages when assets are updated, and the design should make it straightforward for clients to implement \u201csync since last successful timestamp\u201d workflows.\n\nThe primary impact is improved reliability and scalability of Messaging Library integrations: faster exports, fewer repeated full syncs, and a clearer contract for third-party and internal consumers. This ticket focuses on endpoint behavior and query performance; validation around approval-state and versioning correctness is explicitly handled separately in GOLD-44.",
+      "link": "https://www.onyx.app/44897"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

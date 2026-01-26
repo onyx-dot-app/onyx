@@ -1,0 +1,30 @@
+{
+  "id": "7602079",
+  "semantic_identifier": "[GOLD-53]: Add attribution query API to correlate outcomes to positioning_version_id",
+  "title": "Add attribution query API to correlate outcomes to positioning_version_id",
+  "source": "linear",
+  "doc_updated_at": "2025-12-12",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "ryan_murphy",
+      "email": "ryan_murphy@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-12-12"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a backend endpoint that returns outcome metrics (e.g., conversion, win/loss, churn) grouped by positioning_version_id with optional filters for segment/ICP, channel/artifact type, and time window. The API should support comparing two versions over the same period and return counts plus basic rates, using the persisted join key from GOLD-52. Ensure queries are indexed and return stable, paginated results suitable for powering an attribution report UI.",
+      "link": "https://www.onyx.app/46135"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

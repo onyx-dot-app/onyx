@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_6986863",
+  "semantic_identifier": "Zenithbrook Pharmaceuticals",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-10-10 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "6986863",
+    "domain": "zenithbrook_pharmaceuticals.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Zenithbrook Pharmaceuticals\nDomain: zenithbrook_pharmaceuticals.onyx.app",
+      "link": "https://www.onyx.app/51884"
+    },
+    {
+      "text": "Contact: Connor Foster\nEmail: connor_foster@zenithbrook_pharmaceuticals.onyx.app",
+      "link": "https://www.onyx.app/20637"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

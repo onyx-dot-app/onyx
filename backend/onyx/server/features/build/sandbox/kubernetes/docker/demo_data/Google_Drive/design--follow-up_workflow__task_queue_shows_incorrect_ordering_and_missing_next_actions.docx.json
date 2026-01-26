@@ -1,0 +1,30 @@
+{
+  "id": "b3d1c504ddd5497997245bdd0d1d4fd1",
+  "semantic_identifier": "Design--Follow-up workflow: Task queue shows incorrect ordering and missing next actions.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Follow-up workflow: Task queue shows incorrect ordering and missing next actions.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nThe follow-up workflow\u2019s task queue is intermittently showing incorrect ordering and, in some cases, omitting the expected \u201cnext best action\u201d for a given account/opportunity. Users report that newly created tasks or tasks that transition state (completed, reassigned, or updated via CRM sync) may not appear, or the queue may prioritize the wrong items. This degrades trust in the queue as the canonical place to work follow-ups and increases the risk of missed or late actions.\n\n### Goals & Non-Goals\nWe will make the queue deterministically surface exactly one \u201cnext best action\u201d per account/opportunity, ordered primarily by due date and secondarily by risk/priority signals (e.g., risk score, opportunity stage, SLA breach flags). The queue must update correctly across all task lifecycle events: create, update, complete, reopen, reassign, and CRM-driven changes. Non-goals: redesigning the ranking model/heuristics, introducing new UI, or expanding task types beyond the current follow-up tasks.\n\n### Proposed Design\nWe will centralize \u201cnext action\u201d selection and ordering into a single server-side query path to avoid divergent logic between task generation and queue rendering. Concretely: (1) define an authoritative eligibility predicate (task is active, owned by current user/team, linked to an account/opportunity, not blocked/archived, within visibility rules), (2) compute \u201cnext best action\u201d by grouping tasks by account/opportunity and selecting the top candidate per group using a stable sort key: `(due_date ASC NULLS LAST, risk_priority DESC, last_updated ASC, task_id ASC)` to ensure deterministic ties, and (3) order the resulting per-group winners by the same sort key for queue display. We will also ensure all task lifecycle mutations emit an event (or trigger) that updates any derived indices/materializations used by the queue (e.g., search index, cached view, or denormalized \u201cnext_action\u201d table), and we will make the queue read from a single source of truth (preferably the DB view/table) rather than mixing cached + live reads.\n\n### Telemetry, Validation, and Rollout\nAdd minimal structured logs and counters around (a) task generation and (b) queue rendering: counts of eligible tasks, counts of grouped entities, selected task IDs per account/opportunity, and reasons tasks are excluded (inactive, missing linkage, ownership mismatch, etc.). Emit a lightweight metric for \u201cexpected vs rendered\u201d in cases where a task event occurs but the task does not appear in the next queue fetch within N minutes (sampled to avoid volume). Roll out behind a feature flag, compare ordering and inclusion against the old path in shadow mode for a subset of users, and confirm reduced discrepancy metrics before full enablement.",
+      "link": "https://www.onyx.app/69828"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

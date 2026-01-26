@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#3",
+  "semantic_identifier": "3: feat: Persist calibrated outcome + label metadata on fit model artifacts and return it in scoring APIs",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-12",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "3",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "94",
+    "labels": [],
+    "created_at": "2025-07-12",
+    "updated_at": "2025-07-12",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR makes the fit calibration pipeline persist the user-selected optimization outcome (activation/retention/expansion) and the label rule metadata onto the trained model artifact/version, and ensures both online and offline scoring consistently read from the calibrated model version.\n\nKey changes:\n- Model artifact/version metadata\n  - Extend the fit model artifact/version metadata to include:\n    - `calibrated_outcome` (selected outcome used for calibration)\n    - `label_rule` metadata (rule id/name/version/config used to generate labels)\n  - Write this metadata during calibration/fit model publish so it\u2019s immutable and auditable per model version.\n\n- Scoring model version resolution\n  - Update scoring code paths to resolve and load the correct calibrated model version (instead of implicitly using the latest uncalibrated/base fit model).\n  - Align online scoring and offline/batch scoring to use the same version selection logic.\n\n- API response surfacing\n  - Update fit score / segment endpoints to include calibrated outcome + label rule metadata in the response payload (e.g., `metadata.calibratedOutcome`, `metadata.labelRule`), so downstream UI/reporting can display what the fit score is optimized for and avoid misinterpretation.\n\n- Tests\n  - Add a regression test that recalibrates a model to a different outcome and asserts scoring responses include the updated `calibrated_outcome` metadata (and that the underlying model version used for scoring matches the calibrated version).\n\nNotes for consumers:\n- API responses now include additional metadata fields; existing fields are unchanged.\n- The fit score should now be interpreted explicitly as optimized for the returned `calibratedOutcome`.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#3"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

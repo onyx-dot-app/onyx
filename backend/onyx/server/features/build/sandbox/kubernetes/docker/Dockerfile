@@ -7,10 +7,12 @@
 #
 # Directory structure (created by init container + session setup):
 #   /workspace/
-#   ├── files/           # Shared knowledge files (synced from S3)
-#   ├── templates/       # Output templates (downloaded from S3)
+#   ├── demo-data/       # Demo data (baked into image, for demo sessions)
+#   ├── files/           # User's knowledge files (synced from S3)
+#   ├── templates/       # Output templates (baked into image)
 #   └── sessions/        # Per-session workspaces (created via exec)
 #       └── $session_id/
+#           ├── files/   # Symlink to /workspace/demo-data or /workspace/files
 #           ├── outputs/
 #           ├── AGENTS.md
 #           └── opencode.json
@@ -45,12 +47,16 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     fi
 
 # Create workspace directories
-RUN mkdir -p workspace/sessions /workspace/files /workspace/templates && \
+RUN mkdir -p workspace/sessions /workspace/files /workspace/templates /workspace/demo-data && \
     chown -R sandbox:sandbox /workspace
 
 # Copy outputs template (web app scaffold, without node_modules)
 COPY --exclude=.next --exclude=node_modules templates/outputs /workspace/templates/outputs
 RUN chown -R sandbox:sandbox /workspace/templates
+
+# Copy demo data (optional - will be empty if demo_data/ doesn't exist)
+COPY demo_data /workspace/demo-data
+RUN chown -R sandbox:sandbox /workspace/demo-data
 
 # Copy and install Python requirements into a venv
 COPY initial-requirements.txt /tmp/initial-requirements.txt

@@ -1,0 +1,30 @@
+{
+  "id": "9163472ff8b640ff8aa0cafd215d7bff",
+  "semantic_identifier": "Design--issue_history v2: Add ownership fields + assignment events to issue history model.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-13",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--issue_history v2: Add ownership fields + assignment events to issue history model.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will extend the `issue_history_v2` model to make ownership a first-class concept alongside existing timeline events. Concretely, we\u2019ll add explicit \u201ccurrent ownership\u201d fields on the issue snapshot (e.g., `current_owner_user_id`, `current_owner_team_id`, and `assignee_source`) so a consumer can answer \u201cwho owns this right now?\u201d without reconstructing state from events. Ownership will support both individual and team ownership, and `assignee_source` will distinguish where the assignment originated (e.g., `integration:linear`, `integration:jira`, `manual:triage`, `system`).\n\nIn addition, we\u2019ll introduce a new timeline event type for ownership transitions, e.g., `OWNERSHIP_CHANGED`, recorded whenever the effective owner/team/assignee changes. The event will include `from_*` and `to_*` fields (user/team/source), an optional actor (who made the change, if known), and a stable external reference when sourced from an integration (e.g., Linear assignment change id) to support idempotency/deduping. These events will be ordered and stored like other issue history events so downstream systems can compute durations, annotate decisions, and render a coherent timeline.\n\nOn ingestion/sync, we\u2019ll normalize assignment signals from connected delivery tools (Linear/Jira) and manual triage into a single ownership upsert path. The sync layer will (1) compute the new effective ownership state, (2) compare against the last persisted state, and (3) write both the updated current ownership fields and an `OWNERSHIP_CHANGED` event when a change is detected. We\u2019ll ensure idempotent writes via external event ids + a deterministic \u201cownership change fingerprint\u201d (issue_id + from/to + timestamp) to avoid duplicates on replay, and we\u2019ll handle partial data (e.g., team known but user unknown) without blocking persistence.\n\nFinally, we\u2019ll update query and display surfaces to expose ownership alongside other issue history events. The API/SQL access pattern should support: fetching current ownership directly from the issue snapshot, fetching a timeline with mixed event types including ownership changes, and computing ownership-based SLA timers by scanning `OWNERSHIP_CHANGED` boundaries. Backfill will be optional but recommended: for existing issues, we can derive current ownership from the latest known assignment and optionally emit synthetic ownership events with a `system:backfill` source to preserve timeline integrity without overstating precision.",
+      "link": "https://www.onyx.app/84911"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

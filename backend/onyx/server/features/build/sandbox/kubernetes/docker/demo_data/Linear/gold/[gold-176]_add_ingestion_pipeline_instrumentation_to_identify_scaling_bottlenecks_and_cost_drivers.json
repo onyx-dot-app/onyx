@@ -1,0 +1,30 @@
+{
+  "id": "4478665",
+  "semantic_identifier": "[GOLD-176]: Add ingestion pipeline instrumentation to identify scaling bottlenecks and cost drivers",
+  "title": "Add ingestion pipeline instrumentation to identify scaling bottlenecks and cost drivers",
+  "source": "linear",
+  "doc_updated_at": "2025-07-29",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-07-29"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement end-to-end metrics and tracing for the ingestion pipeline (fetch \u2192 parse \u2192 dedupe/cluster \u2192 persist \u2192 downstream sync) including latency, throughput, queue depth, error rates, and per-stage compute/DB cost estimates. Add structured logs with correlation IDs per source conversation/ticket to trace slow or expensive paths. Create a basic dashboard and alert thresholds to surface regressions as backlog and work-item volume grows.",
+      "link": "https://www.onyx.app/84960"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

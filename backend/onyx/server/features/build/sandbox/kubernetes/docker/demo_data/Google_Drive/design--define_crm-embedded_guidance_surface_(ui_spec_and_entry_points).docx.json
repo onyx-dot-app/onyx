@@ -1,0 +1,30 @@
+{
+  "id": "8e243a57a7a841a2848fcaafd84f5534",
+  "semantic_identifier": "Design--Define CRM-embedded Guidance surface (UI spec + entry points).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-30",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Define CRM-embedded Guidance surface (UI spec + entry points).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will define a minimum viable \u201cGuidance\u201d surface embedded inside Salesforce and HubSpot so sellers can consume Sales_Accelerator insights without leaving the CRM. The goal is a consistent, lightweight UI spec that engineering can implement via the native extension points in each CRM (Salesforce: Lightning App/Record Page components + Utility Bar; HubSpot: CRM extension/CRM card/sidebar where available). This doc will cover the UI layout at a wireframe level, supported objects (Accounts and Opportunities/Deals), and the exact content blocks and actions in scope for v1.\n\n### Entry points & placement\nFor **Accounts**, guidance should be accessible from (1) a right-side panel or record-page card on the Account record, and (2) an optional persistent entry point (e.g., Salesforce Utility Bar / HubSpot sidebar) that deep-links to the currently viewed record. For **Opportunities/Deals**, guidance should appear on the Opportunity/Deal record with the same component location for consistency, with the default state showing the highest-priority item(s). In both CRMs, the entry point must be visible without page customization beyond adding the component once, and it must render in a compact mode suitable for common sidebar widths.\n\n### Content blocks (v1 scope) & actions\nThe embedded surface will support three blocks, ordered by priority and collapsible: **Best Next Action** (single recommended action with rationale + due timeframe), **Risk Alerts** (list of detected risks with severity and short explanation), and **Fit/Positioning Snippets** (short talk tracks tailored to the account/opportunity context). Each block supports explicit copy actions: **Copy** (copies the text snippet to clipboard), **Copy w/ link** (copies text plus a deep link to the guidance item), and **Mark as done/dismiss** (per-item state stored server-side). Out of scope for v1: editing guidance, long-form playbooks, multi-step wizards, and any automated CRM field writes.\n\n### Wireframe requirements & acceptance criteria\nWireframe-level requirements: header with \u201cGuidance\u201d title + record context (Account/Opportunity name), loading/empty/error states, last-updated timestamp, and a vertical list of blocks with consistent typography and truncation rules (e.g., 2\u20133 line preview with \u201cView more\u201d expansion). Acceptance criteria: (1) On Account and Opportunity/Deal records, the component loads and displays guidance within an agreed performance budget (e.g., initial render <2s on warm cache) and never navigates the user away from the CRM; (2) Each block renders only when data exists, otherwise shows a neutral empty-state message; (3) Copy actions place expected text on clipboard and provide a lightweight confirmation; (4) Dismiss/done persists across refresh and across CRMs for the same user; (5) Component behaves correctly in narrow widths and respects CRM theming; (6) Analytics events are emitted for view, expand, copy, dismiss/done to unblock measurement.",
+      "link": "https://www.onyx.app/46578"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

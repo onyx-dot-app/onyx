@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#16",
+  "semantic_identifier": "16: feat: Backend conflict detection for cross-segment positioning recommendations",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-30",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "16",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "3",
+    "num_files_changed": "50",
+    "labels": [],
+    "created_at": "2025-07-30",
+    "updated_at": "2025-07-30",
+    "closed_at": "2025-08-13"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds backend conflict detection for positioning recommendations generated across multiple segments and persists the results for UI surfacing.\n\nChanges:\n- Introduces a canonical taxonomy for positioning recommendation categories/fields (e.g., valueProps, differentiators, objectionResponses) and normalizes generated output into this schema prior to persistence.\n- Implements a rule-based contradiction engine that runs at generation time:\n  - flags direct opposites (via a small, maintainable antonym/opposition map and explicit polarity rules)\n  - flags mutually exclusive differentiators/claims (e.g., \u201clowest cost\u201d vs \u201cpremium priced\u201d) based on category-specific incompatibility rules\n  - compares statements across segments within the same generation job and records conflicts when two segments produce contradictory statements for the same canonical field.\n- Persists conflict metadata alongside the generation result, including:\n  - segment identifiers involved\n  - canonical field/category\n  - the two conflicting statements (and their source recommendation ids, when available)\n  - conflict type/reason (rule id) for deterministic UI messaging.\n- Adds tests for normalization and contradiction rules, plus end-to-end coverage ensuring conflicts are created and stored during generation.\n\nNotes for reviewers/users:\n- Conflict detection is intentionally simple and deterministic (no ML); rules are centralized so we can iterate safely without changing UI contracts.\n- Existing generations are unaffected; conflict metadata is only produced for new/updated runs that go through the updated generation pipeline.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#16"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

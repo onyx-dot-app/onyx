@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_4759498",
+  "semantic_identifier": "Velvetcompass Travel - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-15 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed_won",
+    "pipeline": "default",
+    "amount": "200515",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "4759498"
+  },
+  "sections": [
+    {
+      "text": "Deal: Velvetcompass Travel\nAmount: $200515\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-12-15 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/73710"
+    },
+    {
+      "text": "Contact: Oscar Montgomery\nEmail: oscar_montgomery@velvetcompass_travel.onyx.app",
+      "link": "https://www.onyx.app/68186"
+    },
+    {
+      "text": "Company: Velvetcompass Travel\nDomain: velvetcompass_travel.onyx.app",
+      "link": "https://www.onyx.app/81061"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/51401"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

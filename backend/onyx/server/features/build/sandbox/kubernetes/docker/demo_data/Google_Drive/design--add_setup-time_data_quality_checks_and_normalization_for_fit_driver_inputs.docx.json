@@ -1,0 +1,30 @@
+{
+  "id": "14ff5d1804d14b4397f9ac6f554a89fa",
+  "semantic_identifier": "Design--Add setup-time data quality checks and normalization for Fit Driver inputs.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-16",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add setup-time data quality checks and normalization for Fit Driver inputs.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add setup-time data quality checks and lightweight normalization for connected data sources used as Fit Driver inputs, with the goal of reducing noisy or inconsistent values before they reach fit scoring. During Fit Driver configuration, the system will validate required fields, detect common input issues (empty strings, inconsistent enums, obvious outliers), and propose safe, reversible normalization actions (e.g., trim whitespace, normalize casing, map common synonyms). Users will see issues and suggested fixes in a compact \u201cData Quality\u201d panel and can apply fixes prior to finalizing configuration.\n\n### Data Quality Checks & Normalization\nOn ingest (or sampling during setup), we will compute per-field metrics and validations: missing/nullable rate, empty-string rate, distinct cardinality, enum consistency (including casing/spacing variants), and basic outlier detection for numeric/date fields (e.g., extreme values outside configurable percentiles or invalid dates). For normalization, we will support: trimming whitespace, collapsing repeated whitespace, normalizing casing (lower/upper/title based on field type), mapping common synonyms to canonical values (workspace-editable dictionary), and converting sentinel values (e.g., \u201cN/A\u201d, \u201cunknown\u201d, \u201c-\u201d) to null. Each suggested fix will include an estimated impact (rows affected, values changed) and a preview of before/after examples.\n\n### UX: \u201cData Quality\u201d Panel in Setup\nIn the Fit Driver setup flow, we will introduce a side panel summarizing issues by severity (Blocker/Warning/Info) and by field, with clear recommended actions. Blockers include missing required fields or fields with unusable fill rates; warnings include inconsistent enums and high empty-string rates; info includes low-confidence outliers. Users can apply auto-fixes (one-click), edit mappings for synonyms/enums, or choose to ignore with an acknowledgement. The panel should be compact: a summary header (e.g., \u201c3 issues found\u201d), an issue list with impacted field + count, and a drill-in preview for the selected issue.\n\n### Persistence & Execution Model\nNormalization rules will be persisted per workspace (and scoped to the relevant data source/table/field where appropriate) so subsequent ingests and scoring runs apply consistent transformations automatically. We will store a versioned normalization spec (rule type, parameters, field bindings, created/updated metadata) and apply it in the ingestion/feature materialization pipeline prior to fit scoring. The setup flow will write rules only after user confirmation; any future schema drift (field renamed/type changed) will surface as a new Data Quality issue and require remapping. We will also log applied transformations and provide a lightweight audit trail to support debugging and rollback.",
+      "link": "https://www.onyx.app/50508"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

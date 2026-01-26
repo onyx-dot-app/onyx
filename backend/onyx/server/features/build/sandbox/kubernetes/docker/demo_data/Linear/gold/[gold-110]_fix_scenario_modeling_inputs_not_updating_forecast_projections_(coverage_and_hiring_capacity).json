@@ -1,0 +1,30 @@
+{
+  "id": "7367302",
+  "semantic_identifier": "[GOLD-110]: Fix scenario modeling inputs not updating forecast projections (coverage + hiring capacity)",
+  "title": "Fix scenario modeling inputs not updating forecast projections (coverage + hiring capacity)",
+  "source": "linear",
+  "doc_updated_at": "2026-01-03",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "open",
+    "priority": "low",
+    "created_at": "2026-01-03"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Scenario modeling changes to pipeline coverage targets and hiring capacity are not consistently recalculating forecast projections, causing stale totals and misleading recommendations. Ensure updates to these inputs trigger a full recompute of the scenario model and refresh all dependent UI values (totals, deltas, and per-segment breakdowns). Add a lightweight regression test to verify recalculation occurs on each input change.",
+      "link": "https://www.onyx.app/25018"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

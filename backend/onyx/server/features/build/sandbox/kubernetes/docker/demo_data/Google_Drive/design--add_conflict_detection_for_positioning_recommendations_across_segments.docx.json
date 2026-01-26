@@ -1,0 +1,30 @@
+{
+  "id": "02809d82b4954a0bab6490a9a0fa77bc",
+  "semantic_identifier": "Design--Add conflict detection for positioning recommendations across segments.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add conflict detection for positioning recommendations across segments.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add backend conflict detection to the positioning-recommendation generation pipeline to identify when recommendations produced for different segments directly contradict each other (e.g., Segment A says \u201cpremium/enterprise-grade\u201d while Segment B says \u201clowest cost/budget-first\u201d for the same product claim area). The system will run at generation time, flag conflicts, and persist structured metadata so the UI can surface conflicts (and their underlying statements) in later workflows and tickets.\n\n### Canonical recommendation taxonomy\nTo make contradiction detection consistent, we will define a canonical set of recommendation categories and fields that all generated outputs are mapped into before comparison. At minimum this includes: **Value Proposition**, **Differentiators**, and **Objection Responses** (with a stable field key per item). We will treat each generated recommendation as a typed record: `{segment_id, category, field_key, statement_text, normalized_tokens}`. Any existing or new generator outputs must either emit this schema directly or be mapped into it via a small normalization layer (e.g., trimming, case-folding, and standardizing common synonyms/phrases).\n\n### Rule-based contradiction model (generation-time)\nWe will implement a simple deterministic contradiction engine that compares recommendations across segments within the same product/context. For each `(category, field_key)` group, we evaluate pairwise segment statements using rule sets: (1) **explicit negation** patterns (e.g., \u201cnot X\u201d, \u201cno Y\u201d, \u201cavoid Z\u201d vs \u201cX/Y/Z\u201d), (2) **opposing polarity lexicon** for common positioning axes (e.g., premium\u2194budget, simple\u2194powerful/complex, all-in-one\u2194best-of-breed, customizable\u2194opinionated, fast-to-implement\u2194highly tailored/long rollout), and (3) **mutual exclusivity** templates for objections (e.g., \u201cWe are expensive because\u2026\u201d vs \u201cWe are the cheapest because\u2026\u201d). The engine outputs `conflict` records with severity (e.g., high for explicit negation, medium for lexicon opposition), plus the evidence span (the two statements and matched rule).\n\n### Persistence and integration\nOn generation, we persist conflict metadata alongside the recommendation set, including: `{product_id/context_id, category, field_key, segment_a_id, segment_b_id, statement_a, statement_b, rule_id, severity, created_at}`. We will expose this via an internal API endpoint so downstream UI flows can fetch conflicts for a given context and display them with links back to the relevant segment recommendations. Conflicts do not block generation initially; they are informational flags that can be used to prompt review, editing, or regeneration in subsequent tickets and UI surfaces.",
+      "link": "https://www.onyx.app/21862"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

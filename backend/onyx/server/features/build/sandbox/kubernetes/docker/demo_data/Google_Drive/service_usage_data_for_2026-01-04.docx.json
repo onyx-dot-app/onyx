@@ -1,0 +1,28 @@
+{
+  "id": "d34e911f73fa4adab87b8776dbeb50c0",
+  "semantic_identifier": "Service Usage Data for 2026-01-04.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Service Usage Data for 2026-01-04.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "[{'account': 'Vividcedar Marketing', 'value': -0.012373244098624642, 'day': 264}, {'account': 'Jadecircuit Electronics', 'value': 1.6268798855570914, 'day': 275}, {'account': 'Firefly Meridian Labs', 'value': 1.0787135890291346, 'day': 29}, {'account': 'Xenith Argo Logistics', 'value': 0.3535885841959119, 'day': 136}, {'account': 'Wavelink Marine Systems', 'value': 0.49231898643256633, 'day': 144}, {'account': 'Indigoriver Ventures', 'value': 1.0377276540172835, 'day': 95}, {'account': 'Velvetcompass Travel', 'value': 1.8485965554925705, 'day': 20}, {'account': 'Northwind Parcel Services', 'value': 0.17568469205316387, 'day': 227}, {'account': 'Pebble & Pine Coffee', 'value': 1.7252535232728552, 'day': 104}, {'account': 'Zephyrroot Materials', 'value': 0.9746075590971859, 'day': 46}, {'account': 'Alpinequill Publishing', 'value': 1.912552110449317, 'day': 65}, {'account': 'Terraspire Energy', 'value': 2.393085694036513, 'day': 64}, {'account': 'Marinerock Outdoor Gear', 'value': 2.641556943959475, 'day': 171}, {'account': 'Xylembright Water Tech', 'value': 0.6564377340453968, 'day': 45}]",
+      "link": "https://www.onyx.app/25150"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

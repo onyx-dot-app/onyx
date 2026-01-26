@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_2801084",
+  "semantic_identifier": "2801084 - Horizoncrest Systems - sales_call - Discussion with Julian Morgan",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-19 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-19 00:00:00",
+    "duration_min": "44"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "2801084 - Horizoncrest Systems - sales_call - Discussion with Julian Morgan",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Julian\u2014good to see you again. Last time you mentioned you\u2019ve got recurring customer complaints getting lost between Zendesk and Jira, and it\u2019s hard for Sales to know what\u2019s truly \u201cknown\u201d versus one-off noise. Today I wanted to focus on Issue_Tracker, specifically how it clusters issues and then ties those clusters back to active pipeline so you can prevent deal slippage. Does that still match what you\u2019re trying to solve at Horizoncrest?",
+      "link": "https://www.onyx.app/3123967-1"
+    },
+    {
+      "text": "Julian Morgan: Yeah, that\u2019s still the problem. We\u2019re feeling it more with enterprise accounts\u2014same theme comes in through different channels and the story changes depending on who you ask internally.",
+      "link": "https://www.onyx.app/3123967-2"
+    },
+    {
+      "text": "Camila Vega: Exactly. So Issue_Tracker sits between Zendesk/Intercom, Jira/Linear, and your CRM context. The main thing I want to show conceptually is the \u201cissue object\u201d: instead of 40 tickets, you get one cluster with evidence, impacted customers, and links to the source conversations and downstream engineering work. The feature that drives that is issue_clustering\u2014automatic dedupe and grouping using semantic similarity plus rules you can control, like product area, severity, platform, keywords.  \nFor your Sales use case: when a late-stage opportunity is tied to a known issue cluster, Sales_Accelerator flags the deal at risk and Issue_Tracker shows status, ETA notes, and approved language on what\u2019s safe to communicate.",
+      "link": "https://www.onyx.app/3123967-3"
+    },
+    {
+      "text": "Julian Morgan: I get the idea. My concern is whether the clustering is trustworthy. We\u2019ve tried \u201csmart tagging\u201d tools before and they either merge stuff that isn\u2019t the same, or they split the same issue into ten variations because customers describe it differently.",
+      "link": "https://www.onyx.app/3123967-4"
+    },
+    {
+      "text": "Camila Vega: That\u2019s a fair concern, and it\u2019s one we designed around. On the merge side, we provide suggested cluster names and representative examples, plus top phrases so someone can sanity-check quickly. There\u2019s also a merge/split workflow with guardrails\u2014so you\u2019re not stuck with whatever the model decides. On the split side, the configurable rules help: you can enforce separation by product area or platform, and you can weight keywords that matter to you. The goal is to reduce duplicate triage work while still keeping human control for the edge cases.",
+      "link": "https://www.onyx.app/3123967-5"
+    },
+    {
+      "text": "Julian Morgan: But \u201chuman control\u201d is still work. Our support ops team is two people. If we have to babysit clusters, it defeats the point.",
+      "link": "https://www.onyx.app/3123967-6"
+    },
+    {
+      "text": "Camila Vega: Totally. The intent isn\u2019t that you review everything. In practice, teams usually focus review only on the clusters that matter\u2014high volume, high severity, or tied to revenue exposure. The rest can run on autopilot. For Horizoncrest, we\u2019d start with just a couple of product areas where enterprise pain is concentrated, and only set review rules around those.",
+      "link": "https://www.onyx.app/3123967-7"
+    },
+    {
+      "text": "Julian Morgan: I\u2019m also worried about the false merge problem specifically. If we tell Sales \u201cthis is a known issue with an ETA\u201d and it turns out we merged two different root causes, Sales is the one who gets burned.",
+      "link": "https://www.onyx.app/3123967-8"
+    },
+    {
+      "text": "Camila Vega: Right\u2014and that\u2019s why the cluster stores suspected root cause category and the evidence trail back to the exact tickets and conversations. So if Sales asks \u201cwhat\u2019s the proof,\u201d you can click into the cluster and see the representative examples, affected products, and the linked Zendesk/Intercom records. Also, your approved-language note can be conservative\u2014something like \u201cwe\u2019re investigating reports of X\u201d instead of \u201cfix is coming Friday,\u201d until engineering confirms.",
+      "link": "https://www.onyx.app/3123967-9"
+    },
+    {
+      "text": "Julian Morgan: That sounds like process, not tooling. We already do conservative language because we don\u2019t trust our internal signal.",
+      "link": "https://www.onyx.app/3123967-10"
+    },
+    {
+      "text": "Camila Vega: Fair. The tooling changes the signal quality and speed. Instead of someone manually assembling \u201cwhat we\u2019ve heard,\u201d Issue_Tracker continuously ingests and updates the cluster as new tickets come in. So when Sales asks, you\u2019re not scrambling to piece together 12 threads. And because it links to downstream Jira work, you can show real status\u2014like \u201cIn progress,\u201d \u201cBlocked,\u201d \u201cReleased\u201d\u2014not just a Slack rumor.",
+      "link": "https://www.onyx.app/3123967-11"
+    },
+    {
+      "text": "Julian Morgan: How does the linkage work in reality? Because our Jira hygiene is\u2026 not great. Epics get created late, or engineers rename things, or the issue is fixed in a hotfix with no proper ticket.",
+      "link": "https://www.onyx.app/3123967-12"
+    },
+    {
+      "text": "Camila Vega: In environments like that, we usually start by linking clusters to whatever exists\u2014Jira issue, epic, even a placeholder \u201cinvestigation\u201d ticket. The value is having a stable customer-facing issue record regardless of how Jira evolves. If Jira is messy, the cluster can still carry the narrative and evidence, and you can update status directly there. Over time, teams tend to improve hygiene because they can see the downstream impact on revenue risk.",
+      "link": "https://www.onyx.app/3123967-13"
+    },
+    {
+      "text": "Julian Morgan: I\u2019m not sure we want another system where people have to update status. We already have Zendesk statuses, Jira statuses, and a spreadsheet someone maintains for Sales.",
+      "link": "https://www.onyx.app/3123967-14"
+    },
+    {
+      "text": "Camila Vega: Understood. Issue_Tracker is meant to replace the spreadsheet and reduce the \u201cask three teams\u201d workflow. The status can be derived from Jira when it\u2019s linked; where Jira is missing, you can keep a lightweight status note in the cluster with an owner. It\u2019s less about adding work and more about consolidating it into something searchable and defensible.",
+      "link": "https://www.onyx.app/3123967-15"
+    },
+    {
+      "text": "Julian Morgan: Let\u2019s talk about the Sales angle you mentioned. Our Sales org uses Salesforce and they\u2019re very sensitive to anything that flags deals as \u201cat risk.\u201d They don\u2019t want automated warnings that create noise.",
+      "link": "https://www.onyx.app/3123967-16"
+    },
+    {
+      "text": "Camila Vega: That\u2019s why we typically scope it. We only surface risk when a deal is tied to a cluster that meets thresholds you define\u2014like severity \u201chigh,\u201d or revenue exposure above a certain amount, or specific ICP segments. And the \u201cflag\u201d isn\u2019t just a red badge; it\u2019s paired with the current status, ETA notes, and approved language so Sales knows what to do next.",
+      "link": "https://www.onyx.app/3123967-17"
+    },
+    {
+      "text": "Julian Morgan: Okay, but the core dependency is still the clustering quality. If it\u2019s noisy, then the risk flagging is noisy.",
+      "link": "https://www.onyx.app/3123967-18"
+    },
+    {
+      "text": "Camila Vega: Agreed\u2014clustering quality is foundational. What I can suggest is a short evaluation: we ingest, say, 60\u201390 days of Zendesk tickets for one product area, generate clusters, and then your support ops person spends an hour reviewing top clusters: merge/split where needed. We measure: reduction in duplicate triage, how accurately clusters map to real issues, and how often Sales questions the output. If it doesn\u2019t hit the bar, we stop.",
+      "link": "https://www.onyx.app/3123967-19"
+    },
+    {
+      "text": "Julian Morgan: We\u2019ve done pilots like that. They usually look decent in a demo dataset but break on our data. We have customers who describe the same thing with totally different language depending on segment\u2014healthcare vs manufacturing. That\u2019s where we see fragmentation.",
+      "link": "https://www.onyx.app/3123967-20"
+    },
+    {
+      "text": "Camila Vega: That\u2019s a good example. In that case we\u2019d tune rules by segment or channel, and we can use CRM context to help. If you know the account segment, we can see whether the same cluster appears across segments with different phrasing. The cluster still unifies the theme while preserving the segment-specific evidence.",
+      "link": "https://www.onyx.app/3123967-21"
+    },
+    {
+      "text": "Julian Morgan: \u201cTune rules\u201d sounds like ongoing ML ops. We don\u2019t have bandwidth for that. Also, our legal team is strict about pulling call notes and emails into third-party tools. Last time you mentioned ingesting call summaries\u2014how are you handling data boundaries?",
+      "link": "https://www.onyx.app/3123967-22"
+    },
+    {
+      "text": "Camila Vega: On ingestion, we can start with Zendesk only\u2014no call notes, no emails\u2014if that\u2019s your constraint. For CRM context, we can ingest just the minimal fields needed for prioritization, like ARR and segment, not full notes. But yes, if your policy blocks sharing that, we\u2019d need to work within it.",
+      "link": "https://www.onyx.app/3123967-23"
+    },
+    {
+      "text": "Julian Morgan: That\u2019s the thing\u2014I don\u2019t think we can share ARR or deal stage into another system right now. Procurement and legal will push back hard. Without that context, your \u201cprioritize by business impact\u201d pitch loses a lot of juice.",
+      "link": "https://www.onyx.app/3123967-24"
+    },
+    {
+      "text": "Camila Vega: It does limit prioritization, though you\u2019d still get volume trends and dedupe. And you can prioritize with proxies like ticket volume and severity tags.",
+      "link": "https://www.onyx.app/3123967-25"
+    },
+    {
+      "text": "Julian Morgan: We already have volume dashboards. They\u2019re not perfect, but they\u2019re ours. The incremental value has to be clear, and I\u2019m not hearing something that offsets the risk of false merges plus the legal overhead.",
+      "link": "https://www.onyx.app/3123967-26"
+    },
+    {
+      "text": "Camila Vega: Understood. If we set aside CRM-based prioritization for now, would it still be valuable to have the searchable \u201cissue object\u201d that ties Zendesk to Jira, so teams stop re-triaging the same theme?",
+      "link": "https://www.onyx.app/3123967-27"
+    },
+    {
+      "text": "Julian Morgan: Maybe, but honestly, Jira linkage is also tricky. Our engineering teams won\u2019t commit to maintaining links, and if they don\u2019t, Sales will still ask us for updates and we\u2019ll still be doing manual work.",
+      "link": "https://www.onyx.app/3123967-28"
+    },
+    {
+      "text": "Camila Vega: If engineering won\u2019t link, then you\u2019d be relying on your team to link the top few clusters to the right Jira work, which I realize is not ideal. Given what you\u2019re saying\u2014legal constraints plus low willingness to change workflows\u2014it may not be the right time to push this.",
+      "link": "https://www.onyx.app/3123967-29"
+    },
+    {
+      "text": "Julian Morgan: That\u2019s where I\u2019m landing. I like the concept, but we\u2019re not set up culturally or legally to feed the system what it needs, and I can\u2019t sponsor a tool that could mislead Sales if clusters are off.",
+      "link": "https://www.onyx.app/3123967-30"
+    },
+    {
+      "text": "Camila Vega: That\u2019s fair, Julian. Rather than forcing a fit, how about this: I\u2019ll send a one-pager outlining a \u201cZendesk-only, no-CRM\u201d configuration and the specific questions it can and can\u2019t answer. If down the road legal loosens, or engineering is ready to standardize Jira linking, we can revisit. Does that work?",
+      "link": "https://www.onyx.app/3123967-31"
+    },
+    {
+      "text": "Julian Morgan: Yeah, send it over. But I want to be transparent: we\u2019re not moving forward this quarter.",
+      "link": "https://www.onyx.app/3123967-32"
+    },
+    {
+      "text": "Camila Vega: I appreciate the clarity. I\u2019ll send that summary today, and I\u2019ll check back in a couple months unless you reach out sooner. Thanks for your time, Julian.",
+      "link": "https://www.onyx.app/3123967-33"
+    },
+    {
+      "text": "Julian Morgan: Thanks, Camila.",
+      "link": "https://www.onyx.app/3123967-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "julian_morgan@horizoncrest_systems.onyx.app"
+    }
+  ]
+}

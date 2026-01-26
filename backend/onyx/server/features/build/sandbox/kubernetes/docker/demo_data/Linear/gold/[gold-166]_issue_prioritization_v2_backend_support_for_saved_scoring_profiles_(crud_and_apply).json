@@ -1,0 +1,30 @@
+{
+  "id": "5627415",
+  "semantic_identifier": "[GOLD-166]: Issue prioritization v2: Backend support for saved scoring profiles (CRUD + apply)",
+  "title": "Issue prioritization v2: Backend support for saved scoring profiles (CRUD + apply)",
+  "source": "linear",
+  "doc_updated_at": "2025-06-22",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "open",
+    "priority": "medium",
+    "created_at": "2025-06-22"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement backend APIs and persistence for saved scoring profiles that define per-dimension weights (Support SLA risk, Product impact, Sales deal blockers) and aggregation settings. Add endpoints to create/update/delete/list profiles at the org (and optionally user-default) scope and to apply a selected profile when computing an issue\u2019s aggregated score. Ensure backward compatibility by providing a default profile that mirrors the existing single-score behavior when no profile is selected.",
+      "link": "https://www.onyx.app/86455"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

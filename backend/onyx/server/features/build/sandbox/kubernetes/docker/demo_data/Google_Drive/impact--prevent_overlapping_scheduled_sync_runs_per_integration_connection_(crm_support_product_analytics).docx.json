@@ -1,0 +1,30 @@
+{
+  "id": "58b7dd29e8e54081bac943946e435479",
+  "semantic_identifier": "Impact--Prevent overlapping scheduled sync runs per integration connection (CRM/Support/Product Analytics).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-18",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Prevent overlapping scheduled sync runs per integration connection (CRM/Support/Product Analytics).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "Today, scheduled sync jobs can start while a prior run is still executing for the same integration connection (CRM, Support, Product Analytics). This overlap creates real customer-impacting failure modes: skipped pages, partial ingestion, and noisy \u201cdata is wrong/missing\u201d reports that are difficult to reproduce because outcomes depend on timing and API behavior.\n\nOverlapping runs also amplify platform risk. Concurrent calls against the same external API increase the chance of rate-limit cascades that slow down or break other tenants and integrations, leading to retries, longer processing backlogs, and higher infrastructure/ops load. These issues tend to compound silently until customers notice missing data or delayed updates.\n\nThis feature introduces a per-connection lock/lease with a TTL so only one scheduled sync can run for a given connection at a time. On job start, the worker acquires the lease; on completion or failure it releases it safely, and the TTL provides a fail-safe if the worker crashes. If a run is already in progress, the scheduler will defer/skip the new run and record a clear reason, leveraging existing observability so support and engineering can diagnose timing-related issues quickly.\n\nImpact: higher data correctness and completeness (fewer partial ingestions), improved sync reliability during peak load, reduced rate-limit and retry storms, and faster incident triage due to explicit \u201cskipped due to lock\u201d visibility. Overall, this increases trust in integrations and reduces support burden without changing customer-facing configuration or workflow.",
+      "link": "https://www.onyx.app/65612"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

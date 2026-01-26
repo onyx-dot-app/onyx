@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#71",
+  "semantic_identifier": "71: feat: Segment Positioning: display recommendation conflicts with indicator + drill-in details",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-10-05",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "71",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "7",
+    "num_files_changed": "84",
+    "labels": [],
+    "created_at": "2025-10-05",
+    "updated_at": "2025-10-05",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nUpdates the Segment Positioning UI to consume recommendation conflict metadata from the API and surface conflicts directly in the recommendations list.\n\n## What changed\n- Wires the Segment Positioning data layer to read `conflicts` (per recommendation category) from the API response.\n- Adds a compact conflict indicator next to each recommendation category when conflicts exist (e.g., count/badge + tooltip/label).\n- Implements a drill-in panel (details drawer/popover) that lists:\n  - conflicting segment(s)\n  - the conflicting statement(s)/rationale returned by the API\n  - any available identifiers/links for quick navigation (when present in metadata).\n\n## Implementation notes\n- Keeps existing recommendation rendering unchanged; conflict UI is additive and conditionally rendered.\n- Introduces lightweight UI components:\n  - `ConflictIndicator` (pure presentational, driven by conflict count)\n  - `ConflictDetailsPanel` (renders conflict list; supports empty states)\n- Normalizes API data with defensive parsing (handles `undefined`, `null`, empty arrays, or missing keys) to support:\n  - feature flag off\n  - older workspaces with no conflict metadata\n- No API contract changes; UI only reads optional fields.\n\n## Edge cases / behavior\n- If conflict metadata is missing or empty, no indicator is shown and the recommendations UI behaves exactly as before.\n- If partial conflict data is present (e.g., missing statements), the panel renders available fields and falls back to safe placeholders.\n\n## Testing\n- Verified UI rendering with:\n  - conflicts present (indicator + panel contents)\n  - conflicts empty\n  - conflicts field absent (backwards compatibility)\n- Added/updated unit tests for conflict parsing + conditional rendering (where applicable).\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#71"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

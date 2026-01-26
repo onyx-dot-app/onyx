@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_7005390",
+  "semantic_identifier": "Lumentrail Innovations - Customer Analyzer",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-27 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "193025",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "7005390"
+  },
+  "sections": [
+    {
+      "text": "Deal: Lumentrail Innovations\nAmount: $193025\nProduct of Interest: Customer_Analyzer\nFeatures of Interest: positioning_recommendation\nClose Date: 2025-12-11 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/52491"
+    },
+    {
+      "text": "Contact: Victoria Baker\nEmail: victoria_baker@lumentrail_innovations.onyx.app",
+      "link": "https://www.onyx.app/26177"
+    },
+    {
+      "text": "Company: Lumentrail Innovations\nDomain: lumentrail_innovations.onyx.app",
+      "link": "https://www.onyx.app/36427"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/99475"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

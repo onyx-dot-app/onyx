@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_4314299",
+  "semantic_identifier": "Nimbunest Snacks - Issue Tracker",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-05-08 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "53112",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "4314299"
+  },
+  "sections": [
+    {
+      "text": "Deal: Nimbunest Snacks\nAmount: $53112\nProduct of Interest: Issue_Tracker\nFeatures of Interest: integrations_connectors\nClose Date: 2025-06-20 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/44266"
+    },
+    {
+      "text": "Contact: Jade Jacobs\nEmail: jade_jacobs@nimbunest_snacks.onyx.app",
+      "link": "https://www.onyx.app/44624"
+    },
+    {
+      "text": "Company: Nimbunest Snacks\nDomain: nimbunest_snacks.onyx.app",
+      "link": "https://www.onyx.app/76144"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/70126"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

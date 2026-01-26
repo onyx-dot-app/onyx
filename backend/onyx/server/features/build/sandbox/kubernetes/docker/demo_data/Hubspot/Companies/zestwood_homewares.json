@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_9794626",
+  "semantic_identifier": "Zestwood Homewares",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-12-14 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "9794626",
+    "domain": "zestwood_homewares.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Zestwood Homewares\nDomain: zestwood_homewares.onyx.app",
+      "link": "https://www.onyx.app/88530"
+    },
+    {
+      "text": "Contact: Timothy Hart\nEmail: timothy_hart@zestwood_homewares.onyx.app",
+      "link": "https://www.onyx.app/42147"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

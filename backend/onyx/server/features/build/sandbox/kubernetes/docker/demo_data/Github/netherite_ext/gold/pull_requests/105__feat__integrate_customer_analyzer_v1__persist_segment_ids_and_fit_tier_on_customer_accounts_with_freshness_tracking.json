@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#105",
+  "semantic_identifier": "105: feat: Integrate Customer_Analyzer v1: persist segment IDs + fit tier on customer accounts with freshness tracking",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-09-14",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "105",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "72",
+    "labels": [],
+    "created_at": "2025-09-14",
+    "updated_at": "2025-09-14",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds an initial integration layer to call Customer_Analyzer v1 for accounts referenced by ingested support conversations and persists the returned `segment_ids` and `fit_tier` on the Issue_Tracker customer/account model, including basic freshness metadata.\n\n## What changed\n- **Data model**\n  - Adds fields to the customer/account model:\n    - `customer_analyzer_segment_ids` (array/list of strings)\n    - `customer_analyzer_fit_tier` (string/enum-like)\n    - `customer_analyzer_last_fetched_at` (timestamp)\n    - (optional) `customer_analyzer_fetch_status` / `customer_analyzer_error` for lightweight observability\n- **Customer_Analyzer client**\n  - Introduces a small service wrapper (HTTP client) to request enrichment for a given account identifier.\n  - Normalizes responses into a stable internal shape and validates/guards against unexpected payloads.\n- **Enrichment workflow**\n  - When processing ingested conversations, resolves the referenced account(s) and triggers enrichment.\n  - Uses `customer_analyzer_last_fetched_at` to avoid redundant calls (freshness check) and updates only when stale or missing.\n  - Updates account records idempotently (safe to re-run on the same conversations).\n- **Graceful handling of missing/unknown values**\n  - If Customer_Analyzer returns missing/unknown segment IDs or fit tier, stores `null`/empty values without failing ingestion.\n  - Handles non-200 responses/timeouts by logging and recording fetch status/error (if enabled) while allowing the pipeline to continue.\n\n## Operational notes\n- This PR is limited to **retrieval + persistence** only; it does **not** introduce priority weighting, UI changes, or analytics slicing.\n- Ensure required configuration is set (e.g., Customer_Analyzer base URL/API key). If not configured, enrichment is skipped safely.\n\n## Testing\n- Adds unit tests for response normalization and unknown/missing value behavior.\n- Adds integration-ish tests/mocks for the enrichment workflow to verify DB persistence and freshness gating.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#105"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

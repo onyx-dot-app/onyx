@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_7385937",
+  "semantic_identifier": "7385937 - Harborloom Textiles - sales_pitch - Discussion with Armando Burke",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-10-03 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-10-03 00:00:00",
+    "duration_min": "16"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-10"
+      ],
+      "year_month": "2025-10",
+      "meeting_title": "7385937 - Harborloom Textiles - sales_pitch - Discussion with Armando Burke",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Armando\u2014this is Irene Shen. Thanks for taking a few minutes. I\u2019ll keep it brief: I work with teams that are trying to get clearer on which customer segments are actually their best customers and how to message to the next segments they want to win. Is now still okay?",
+      "link": "https://www.onyx.app/7666021-1"
+    },
+    {
+      "text": "Armando Burke: Yeah, I\u2019ve got about five minutes. What\u2019s this regarding?",
+      "link": "https://www.onyx.app/7666021-2"
+    },
+    {
+      "text": "Irene Shen: Perfect. The product is called Customer_Analyzer. It pulls together signals you already have\u2014CRM fields, onboarding survey answers, product usage events, support tickets, even interview notes\u2014and turns that into two practical things: a fit score for different segments, and positioning recommendations you can actually use in your marketing and sales motions. I noticed Harborloom Textiles has been expanding into a few industries\u2014how are you currently deciding which industries to target next quarter?",
+      "link": "https://www.onyx.app/7666021-3"
+    },
+    {
+      "text": "Armando Burke: Mostly gut and what sales is hearing. We look at revenue and maybe churn, but it\u2019s not super scientific. We\u2019re also kind of stretched thin right now.",
+      "link": "https://www.onyx.app/7666021-4"
+    },
+    {
+      "text": "Irene Shen: That\u2019s exactly the situation we built this for\u2014when it\u2019s a mix of anecdotes and spreadsheets and it\u2019s hard to align. One use case we see a lot is prioritizing which industries to target next quarter using retention and support burden signals. So rather than just \u201cwhich industry has deals,\u201d you can see \u201cwhich industry sticks, expands, and doesn\u2019t generate tons of support load.\u201d",
+      "link": "https://www.onyx.app/7666021-5"
+    },
+    {
+      "text": "Armando Burke: Okay. But we don\u2019t have a clean dataset. And honestly we\u2019ve tried dashboards. People stop using them.",
+      "link": "https://www.onyx.app/7666021-6"
+    },
+    {
+      "text": "Irene Shen: Totally fair. The difference is we\u2019re not trying to be another dashboard. The core output is a set of segment-specific messaging blocks\u2014positioning recommendations\u2014grounded in what your best customers actually say and do. For example: for Industry A, it might generate a value proposition, top use cases, differentiators, proof points you should collect, and even objection-handling. And it packages those as editable blocks like website hero copy, sales deck bullets, and email openers.",
+      "link": "https://www.onyx.app/7666021-7"
+    },
+    {
+      "text": "Armando Burke: We already have messaging. Marketing has a positioning doc somewhere. Sales has their version. Not sure we need another.",
+      "link": "https://www.onyx.app/7666021-8"
+    },
+    {
+      "text": "Irene Shen: Makes sense\u2014and I\u2019m not suggesting you throw that out. Where teams usually feel pain is when messaging isn\u2019t consistent by segment, or when you\u2019re moving into a new industry and you\u2019re not sure what to lead with. Customer_Analyzer links each recommendation back to the \u201cwhy\u201d\u2014the drivers and evidence\u2014so it\u2019s not just AI copy. It will show, \u201cThis segment retains 20% better and mentions X outcome in tickets and surveys,\u201d so your team can trust it and edit it.",
+      "link": "https://www.onyx.app/7666021-9"
+    },
+    {
+      "text": "Armando Burke: Linking to evidence sounds nice, but getting all those sources connected sounds like a project. We don\u2019t have bandwidth for a long implementation.",
+      "link": "https://www.onyx.app/7666021-10"
+    },
+    {
+      "text": "Irene Shen: Implementation is a common concern. We typically start with just two sources to keep it light\u2014say, CRM plus support tickets\u2014then expand if it\u2019s worth it. The goal is quick signal: which industries are high-fit versus high-support-burden, and what language resonates. If I asked: do you have decent retention info by industry, and can you tag support tickets by customer or industry?",
+      "link": "https://www.onyx.app/7666021-11"
+    },
+    {
+      "text": "Armando Burke: Retention by industry\u2026 kind of. Support tickets are messy. We use Zendesk but tagging is inconsistent. Also, our \u201cindustries\u201d in the CRM are not reliable.",
+      "link": "https://www.onyx.app/7666021-12"
+    },
+    {
+      "text": "Irene Shen: Got it\u2014so the taxonomy is the issue, which would definitely blunt the impact. We can sometimes help by inferring segments from other fields, but if the underlying customer/industry data isn\u2019t stable, that\u2019s harder. What\u2019s prompting the next-quarter industry decision\u2014are you seeing churn in certain segments, or just trying to grow faster?",
+      "link": "https://www.onyx.app/7666021-13"
+    },
+    {
+      "text": "Armando Burke: We\u2019re being pushed to grow, but we\u2019re also fighting fires. Support load is a big deal\u2014some customers just drain us. But, again, it\u2019s hard to quantify cleanly.",
+      "link": "https://www.onyx.app/7666021-14"
+    },
+    {
+      "text": "Irene Shen: Understood. In those cases, the \u201csupport burden\u201d angle can be really valuable\u2014like surfacing which segments generate the most tickets per active account, or the most escalations, and pairing that with retention. Then the positioning recommendations help you either avoid those segments, or set expectations and handle objections up front with better messaging.",
+      "link": "https://www.onyx.app/7666021-15"
+    },
+    {
+      "text": "Armando Burke: This all sounds reasonable, but I\u2019m not sure we\u2019re in a place to adopt a new tool. We\u2019re midstream on a CRM cleanup and a website refresh. Adding another platform might be tough politically.",
+      "link": "https://www.onyx.app/7666021-16"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fair. The last thing I want is to add noise. If you were to do anything here, what would be most helpful: (1) a clearer view of which industries are net-positive\u2014retention vs support burden\u2014or (2) segment-specific messaging your sales team can use without reinventing it every time?",
+      "link": "https://www.onyx.app/7666021-17"
+    },
+    {
+      "text": "Armando Burke: Probably the first, but again, we\u2019re not ready. And honestly, our biggest issue is internal alignment, not lack of recommendations.",
+      "link": "https://www.onyx.app/7666021-18"
+    },
+    {
+      "text": "Irene Shen: Internal alignment is exactly what this is meant to support, but I hear you on timing and readiness. Sometimes teams use it as a forcing function\u2014\u201chere\u2019s the evidence by segment\u201d\u2014but if you\u2019re already in the middle of CRM cleanup, you might not get clean outputs yet. Would it be helpful if we set up a longer call with your marketing lead to see if there\u2019s a lightweight way to pilot just CRM + Zendesk, or would that be a distraction right now?",
+      "link": "https://www.onyx.app/7666021-19"
+    },
+    {
+      "text": "Armando Burke: It would be a distraction. I don\u2019t want to pull marketing into another evaluation. We\u2019re just trying to get through the quarter.",
+      "link": "https://www.onyx.app/7666021-20"
+    },
+    {
+      "text": "Irene Shen: Okay, that\u2019s clear. Before I let you go: when do you expect the CRM cleanup to be in a better place\u2014next quarter, second half of the year?",
+      "link": "https://www.onyx.app/7666021-21"
+    },
+    {
+      "text": "Armando Burke: Maybe second half. Hard to say. We\u2019ve slipped on it before.",
+      "link": "https://www.onyx.app/7666021-22"
+    },
+    {
+      "text": "Irene Shen: Totally understand. What I can do is send a one-page overview of the positioning recommendation output\u2014like what the editable messaging blocks look like, and how they tie back to retention and support signals\u2014so you can bookmark it for later. And I can check back in, say, three months, to see if the timing is any better. Does that work?",
+      "link": "https://www.onyx.app/7666021-23"
+    },
+    {
+      "text": "Armando Burke: Sure, send it over. But yeah\u2014don\u2019t expect quick movement.",
+      "link": "https://www.onyx.app/7666021-24"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fine. What\u2019s the best email for you, Armando?",
+      "link": "https://www.onyx.app/7666021-25"
+    },
+    {
+      "text": "Armando Burke: armando.burke@harborloom.com.",
+      "link": "https://www.onyx.app/7666021-26"
+    },
+    {
+      "text": "Irene Shen: Great\u2014thanks. I\u2019ll send that one-pager and a short note summarizing the specific use case we discussed: prioritizing industries next quarter using retention and support burden, plus the segment-specific positioning blocks. Appreciate the time today.",
+      "link": "https://www.onyx.app/7666021-27"
+    },
+    {
+      "text": "Armando Burke: No problem. Thanks.",
+      "link": "https://www.onyx.app/7666021-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "armando_burke@harborloom_textiles.onyx.app"
+    }
+  ]
+}

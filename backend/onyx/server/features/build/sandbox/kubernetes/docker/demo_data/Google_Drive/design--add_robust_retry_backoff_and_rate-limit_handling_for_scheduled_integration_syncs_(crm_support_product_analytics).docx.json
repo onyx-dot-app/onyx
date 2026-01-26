@@ -1,0 +1,30 @@
+{
+  "id": "d1f4c9c5496d4b5481d628ce57dcf52d",
+  "semantic_identifier": "Design--Add robust retry/backoff + rate-limit handling for scheduled integration syncs (CRM/Support/Product Analytics).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add robust retry/backoff + rate-limit handling for scheduled integration syncs (CRM/Support/Product Analytics).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Problem / Goals  \nOur scheduled integration syncs (CRM, Support, Product Analytics) currently behave poorly under transient provider failures (HTTP 429s, 5xx, network timeouts): they either fail fast and leave data stale until the next schedule, or repeatedly error in a tight loop and create noisy cascades. We need a consistent, shared retry/backoff strategy that (a) respects provider rate limits, (b) reduces error amplification, and (c) exits cleanly with a terminal run status so existing alerting/observability can capture the failure and the next scheduled run can resume safely.\n\n### Proposed Design  \nIntroduce a shared \u201cIntegrationRetryPolicy\u201d utility used by all scheduled sync workers for outbound provider calls. The policy will classify retryable errors (429, 5xx, connection/timeouts, selected 409/425 where applicable) and non-retryable errors (4xx auth/validation except 429). For retryable failures, it will compute the next delay based on provider headers when present (prefer `Retry-After`, optionally vendor-specific rate-limit reset headers), otherwise fall back to exponential backoff with full jitter. The policy will include per-run caps: max attempts per request, max total retry budget per sync run (time and/or count), and an absolute \u201cgive up\u201d deadline to prevent long-running jobs.\n\n### Execution / Safety / Consistency  \nAll retries must be wrapped around idempotent operations or guarded by existing write semantics to avoid partial writes. The sync runner will treat \u201cretry budget exceeded\u201d or \u201cprovider unavailable\u201d as a terminal run failure status (distinct from crash) with a clear failure reason and last observed HTTP error, so we can alert and diagnose while ensuring the next scheduled run can reattempt from the normal checkpointing/resume behavior. We will also ensure backoff sleeps are cooperative with the job runner (cancellable on shutdown) and that we do not enqueue parallel retries that amplify load against rate-limited providers.\n\n### Observability / Rollout  \nEmit structured logs and metrics from the retry policy: attempt count, chosen delay, header-derived vs computed backoff, final outcome, and aggregated per-run retry budget consumption. Surface key fields on the run record (terminal status, provider, error class, last status code, next eligible run time if we deliberately delay). Roll out behind a feature flag per integration type, starting with the most error-prone provider, and validate that (1) stale periods decrease, (2) repeated error cascades drop, and (3) run durations remain bounded under sustained rate limiting.",
+      "link": "https://www.onyx.app/26679"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

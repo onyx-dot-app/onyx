@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_1924461",
+  "semantic_identifier": "Unitypeak Nonprofits - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-03-30 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "139385",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "1924461"
+  },
+  "sections": [
+    {
+      "text": "Deal: Unitypeak Nonprofits\nAmount: $139385\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-07-19 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/31265"
+    },
+    {
+      "text": "Contact: Fernando Chapman\nEmail: fernando_chapman@unitypeak_nonprofits.onyx.app",
+      "link": "https://www.onyx.app/21773"
+    },
+    {
+      "text": "Company: Unitypeak Nonprofits\nDomain: unitypeak_nonprofits.onyx.app",
+      "link": "https://www.onyx.app/40913"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/45674"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

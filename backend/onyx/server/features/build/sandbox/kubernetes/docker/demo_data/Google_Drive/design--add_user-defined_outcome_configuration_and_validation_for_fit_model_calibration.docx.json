@@ -1,0 +1,30 @@
+{
+  "id": "21783f215bca4fdca195dd806b08a1da",
+  "semantic_identifier": "Design--Add user-defined outcome configuration + validation for fit model calibration.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add user-defined outcome configuration + validation for fit model calibration.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add a backend \u201cOutcome Configuration\u201d layer for fit model calibration that allows a user (or workspace) to explicitly select the calibration outcome\u2014**activation**, **retention**, or **expansion**\u2014and define the label-generation rules for that outcome. The configuration will specify (a) the event or field mapping used to determine positive/negative labels (e.g., event name + optional property predicates, or a numeric field threshold), and (b) the time window semantics (e.g., \u201cwithin N days of signup,\u201d \u201cbetween day X\u2013Y,\u201d or \u201cwithin N days after activation\u201d). This config will be persisted as a versioned object tied to the calibration job, so recalibrations are reproducible and auditable.\n\nOn calibration start, we will introduce a validation phase that resolves the configured mappings against the workspace\u2019s available data sources (event schemas, known fields, ingestion status, and any required joins/identifiers). Validation ensures: the referenced event names exist (or are mappable), required properties/fields are present with compatible types, the time window can be evaluated given available timestamps, and there is sufficient coverage to generate labels (e.g., non-zero candidate population, non-zero positives, and a minimum sample size threshold). Validation will also check outcome-specific prerequisites (e.g., retention needs a \u201creturn\u201d signal after a baseline event; expansion needs a revenue/seat metric or an expansion event).\n\nIf validation passes, the label generation step will use the configured rules to compute labels for the calibration dataset, and will record summary stats (population size, positive rate, and any filtered reasons) alongside the calibration artifact. If validation fails, we will fail the calibration job explicitly with structured, user-facing errors (e.g., `MISSING_EVENT`, `MISSING_FIELD`, `TYPE_MISMATCH`, `INSUFFICIENT_LABELS`, `MISSING_TIMESTAMP`) that include the exact missing signal and the expected mapping/time window. Critically, we will remove any \u201csilent fallback to defaults\u201d behavior: the system will not proceed with a default outcome or default rules when the user-configured outcome cannot be computed.\n\nOperationally, this will be exposed through internal APIs used by the calibration service: `GET/PUT outcome-config` (scoped to workspace/model) and `POST validate-outcome-config` (dry-run validation, used both on save and pre-calibration). The calibration pipeline will be updated to require an explicit outcome config (or an explicitly selected default on creation) and to surface the structured validation errors in job status and logs for easy debugging and support.",
+      "link": "https://www.onyx.app/35450"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

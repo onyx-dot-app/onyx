@@ -1,0 +1,30 @@
+{
+  "id": "3449150",
+  "semantic_identifier": "[GOLD-172]: Enforce ownership checks on tag/priority updates and route non-owner edits to approval",
+  "title": "Enforce ownership checks on tag/priority updates and route non-owner edits to approval",
+  "source": "linear",
+  "doc_updated_at": "2025-06-15",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "ryan_murphy",
+      "email": "ryan_murphy@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "high",
+    "created_at": "2025-06-15"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add backend enforcement so tag and priority updates can only be applied directly by the current field owner (team/user). When a non-owner attempts to change these fields (via UI, API, or integrations), create a pending change request instead of overwriting and return a structured response indicating approval is required. Ensure all flows record the requester, proposed value, and source so later tickets can surface this in the UI and audit history.",
+      "link": "https://www.onyx.app/78924"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_6328931",
+  "semantic_identifier": "Everglow Summit Research - Customer Analyzer",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-10-02 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "25264",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "6328931"
+  },
+  "sections": [
+    {
+      "text": "Deal: Everglow Summit Research\nAmount: $25264\nProduct of Interest: Customer_Analyzer\nFeatures of Interest: fit_estimation\nClose Date: 2025-12-07 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/69078"
+    },
+    {
+      "text": "Contact: Noel Barrett\nEmail: noel_barrett@everglow_summit_research.onyx.app",
+      "link": "https://www.onyx.app/95748"
+    },
+    {
+      "text": "Company: Everglow Summit Research\nDomain: everglow_summit_research.onyx.app",
+      "link": "https://www.onyx.app/75757"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/35094"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

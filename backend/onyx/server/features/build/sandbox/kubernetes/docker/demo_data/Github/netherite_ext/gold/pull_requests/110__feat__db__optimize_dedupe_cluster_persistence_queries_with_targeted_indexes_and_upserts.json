@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#110",
+  "semantic_identifier": "110: feat: DB: Optimize dedupe/cluster persistence queries with targeted indexes and upserts",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-29",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "110",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "8",
+    "num_files_changed": "65",
+    "labels": [],
+    "created_at": "2025-08-29",
+    "updated_at": "2025-08-29",
+    "closed_at": "2025-09-07"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nImproves database performance during high-volume ingestion by reducing full table scans and lock contention in the deduplication/clustering and issue-object persistence paths. Changes are query/index focused and preserve existing idempotency and merge semantics.\n\n## Key changes\n- **Query rewrites (hot paths)**\n  - Replaced scan-heavy lookups with index-friendly predicates for:\n    - `source_ticket_id`-based issue/object resolution\n    - `conversation_id`-based thread/message association\n    - `normalized_fingerprint`-based dedupe candidate selection\n  - Ensured predicates match the left-most columns of supporting indexes and avoid function-wrapped columns in WHERE clauses (normalization happens before persistence).\n\n- **Write-path improvements**\n  - Converted select-then-insert patterns to **atomic upserts** (`INSERT ... ON CONFLICT DO UPDATE/NOTHING`) for issue-object and dedupe/cluster linking rows.\n  - Reduced transaction scope around dedupe/cluster updates to minimize lock duration.\n  - Batched persistence where safe to cut round trips without changing ordering/merge outcomes.\n\n- **Indexes added/adjusted**\n  - Added/updated **composite indexes** aligned to common access patterns (e.g., `(source_ticket_id, provider)` / `(conversation_id, provider)` / `(normalized_fingerprint, provider)` as applicable).\n  - Added **unique constraints** where required to support upsert semantics and enforce idempotency.\n  - Removed/avoided redundant single-column indexes when a covering composite index exists.\n\n## Validation\n- Ran ingestion/backfill against a backfill-sized dataset and compared:\n  - Query plans (confirmed index usage, no sequential scans on hot lookups)\n  - Throughput and DB CPU time\n  - Lock wait time during concurrent ingestion\n- Verified behavior invariants:\n  - Re-running the same backlog remains **idempotent**\n  - Dedupe/merge decisions and cluster membership results are unchanged\n\n## Operational notes\n- Includes a DB migration for new/updated indexes/constraints. Apply during a low-traffic window if possible; index creation may be the longest step depending on table size.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#110"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

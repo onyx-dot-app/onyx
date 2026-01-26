@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_7184910",
+  "semantic_identifier": "Meridianoak Holdings - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-25 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "27620",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "7184910"
+  },
+  "sections": [
+    {
+      "text": "Deal: Meridianoak Holdings\nAmount: $27620\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-10-08 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/51229"
+    },
+    {
+      "text": "Contact: Jonathan Mason\nEmail: jonathan_mason@meridianoak_holdings.onyx.app",
+      "link": "https://www.onyx.app/44903"
+    },
+    {
+      "text": "Company: Meridianoak Holdings\nDomain: meridianoak_holdings.onyx.app",
+      "link": "https://www.onyx.app/73238"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/53742"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

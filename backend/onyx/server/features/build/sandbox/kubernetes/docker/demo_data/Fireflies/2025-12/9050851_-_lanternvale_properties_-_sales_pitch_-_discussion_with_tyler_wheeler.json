@@ -1,0 +1,149 @@
+{
+  "id": "FIREFLIES_9050851",
+  "semantic_identifier": "9050851 - Lanternvale Properties - sales_pitch - Discussion with Tyler Wheeler",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-01 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-01 00:00:00",
+    "duration_min": "40"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "9050851 - Lanternvale Properties - sales_pitch - Discussion with Tyler Wheeler",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Tyler, James Choi here. Thanks for taking a few minutes\u2014did I catch you at an okay time?",
+      "link": "https://www.onyx.app/8278518-1"
+    },
+    {
+      "text": "Tyler Wheeler: Hey James. I\u2019ve got a few minutes, but I\u2019m between things. What\u2019s up?",
+      "link": "https://www.onyx.app/8278518-2"
+    },
+    {
+      "text": "James Choi: Totally get it\u2014I\u2019ll keep it tight. I\u2019m calling because we work with revenue teams that live in Salesforce or HubSpot and are trying to get more consistent deal follow-through and forecasting without adding another system. Our product is called Sales_Accelerator, and it sits on top of your CRM to recommend the best next action on each opportunity and alert you when deals are at risk.",
+      "link": "https://www.onyx.app/8278518-3"
+    },
+    {
+      "text": "Tyler Wheeler: We already have Salesforce and some dashboards. I\u2019m not really looking to add more tools right now.",
+      "link": "https://www.onyx.app/8278518-4"
+    },
+    {
+      "text": "James Choi: That makes sense. The quick distinction is: dashboards tell you what happened; Sales_Accelerator tells reps what to do next\u2014right inside the CRM. One feature that tends to resonate is our sales follow-up recommendations. For example, if a meeting happened but there\u2019s no follow-up logged, it will prompt a recap email plus concrete next steps, and it\u2019ll nudge the rep to put dates on a mutual action plan so deals don\u2019t drift.",
+      "link": "https://www.onyx.app/8278518-5"
+    },
+    {
+      "text": "Tyler Wheeler: Okay. But we\u2019ve tried \u201cnext best action\u201d stuff before. It ends up being noise, and reps ignore it.",
+      "link": "https://www.onyx.app/8278518-6"
+    },
+    {
+      "text": "James Choi: Fair pushback. We\u2019ve seen that too when recommendations are generic. Our approach is more contextual: it looks at the opportunity stage, stakeholder coverage\u2014like whether you\u2019re single-threaded\u2014mutual plan completeness, and recent activity. If it sees only one contact engaged late in the cycle, it\u2019ll recommend multi-threading and suggest a simple task queue, like \u201cadd procurement,\u201d \u201cloop in security,\u201d \u201cschedule exec alignment,\u201d based on what usually prevents stalls.",
+      "link": "https://www.onyx.app/8278518-7"
+    },
+    {
+      "text": "Tyler Wheeler: That sounds like more process. Our reps don\u2019t want another checklist.",
+      "link": "https://www.onyx.app/8278518-8"
+    },
+    {
+      "text": "James Choi: They shouldn\u2019t have to adopt a heavy methodology. This is lightweight\u2014think \u201chere are the two actions most likely to move this deal forward\u201d rather than \u201cfill out 20 fields.\u201d And sales ops can use it too. One use case we see a lot: sales ops identifies pipeline bottlenecks by stage-to-stage conversion, segmented by rep or segment, and then the system recommends process fixes\u2014like introducing a security review step earlier\u2014then monitors whether conversion improves.",
+      "link": "https://www.onyx.app/8278518-9"
+    },
+    {
+      "text": "Tyler Wheeler: We\u2019re not a huge sales org. We\u2019re a property group\u2014our pipeline is\u2026 it\u2019s not SaaS.",
+      "link": "https://www.onyx.app/8278518-10"
+    },
+    {
+      "text": "James Choi: Understood. Even outside SaaS, teams still deal with deal slippage\u2014late follow-ups, single-threading, stalled steps, missed handoffs. If you have opportunities with stages, contacts, and activities in Salesforce, the recommendations still apply. Quick question: do you have a consistent issue where deals sit in a stage longer than expected?",
+      "link": "https://www.onyx.app/8278518-11"
+    },
+    {
+      "text": "Tyler Wheeler: Honestly, our bigger issue is lead quality and timing. And we\u2019re in the middle of a CRM cleanup. So we\u2019re not in a place to layer anything on.",
+      "link": "https://www.onyx.app/8278518-12"
+    },
+    {
+      "text": "James Choi: If data hygiene is in motion, that\u2019s a real constraint. Sales_Accelerator depends on activity and stage data to be meaningful. That said, it can sometimes help highlight where the process breaks\u2014like if reps aren\u2019t logging meetings or next steps\u2014and give you visibility into those gaps. But I don\u2019t want to force-fit it if you\u2019re prioritizing cleanup.",
+      "link": "https://www.onyx.app/8278518-13"
+    },
+    {
+      "text": "Tyler Wheeler: Yeah, and we also just rolled out a new workflow in Salesforce. My team is already complaining about change fatigue.",
+      "link": "https://www.onyx.app/8278518-14"
+    },
+    {
+      "text": "James Choi: I hear you. Let me keep this to what might be worth a follow-up: the follow-up recommendations are designed to reduce rep effort, not increase it\u2014like generating a recap-and-next-steps prompt when a meeting occurred without a follow-up, or reminding them to lock mutual next steps. But if adoption is the concern, it\u2019s probably not the right timing unless there\u2019s a specific pain\u2014like forecasting accuracy or deals slipping late.",
+      "link": "https://www.onyx.app/8278518-15"
+    },
+    {
+      "text": "Tyler Wheeler: Forecasting is always hard, but we\u2019re not going to buy something for that this quarter. Budget is tight.",
+      "link": "https://www.onyx.app/8278518-16"
+    },
+    {
+      "text": "James Choi: Got it\u2014so not a near-term budget window. Would a short, later conversation still be useful, purely to see whether it could fit after your cleanup? I\u2019m thinking a 20-minute discovery with you or whoever owns sales ops, just to map your stages and see if the bottlenecks use case even applies.",
+      "link": "https://www.onyx.app/8278518-17"
+    },
+    {
+      "text": "Tyler Wheeler: I don\u2019t think so. We\u2019ve got too much going on, and I don\u2019t want to pull in sales ops for another vendor overview.",
+      "link": "https://www.onyx.app/8278518-18"
+    },
+    {
+      "text": "James Choi: Fair. Last thing I want is to be another distraction. If I send a one-pager summarizing the follow-up recommendations and the pipeline bottleneck view\u2014just so you have it on file\u2014would that be okay?",
+      "link": "https://www.onyx.app/8278518-19"
+    },
+    {
+      "text": "Tyler Wheeler: You can email it, sure. But I can\u2019t promise I\u2019ll look at it soon.",
+      "link": "https://www.onyx.app/8278518-20"
+    },
+    {
+      "text": "James Choi: That\u2019s completely fine. What\u2019s the best email for you?",
+      "link": "https://www.onyx.app/8278518-21"
+    },
+    {
+      "text": "Tyler Wheeler: tyler.wheeler@lanternvale.com.",
+      "link": "https://www.onyx.app/8278518-22"
+    },
+    {
+      "text": "James Choi: Perfect\u2014thank you. And just so I\u2019m respectful on follow-ups: when would it make sense for me to check back in\u2014after the CRM cleanup, maybe Q2?",
+      "link": "https://www.onyx.app/8278518-23"
+    },
+    {
+      "text": "Tyler Wheeler: Yeah, maybe Q2. But again, no guarantees.",
+      "link": "https://www.onyx.app/8278518-24"
+    },
+    {
+      "text": "James Choi: Understood. I\u2019ll send the one-pager today and set a reminder to reach out in early Q2. If anything changes\u2014like if you start seeing deals stalling because follow-ups aren\u2019t happening\u2014reply to that email and we can take a fresh look.",
+      "link": "https://www.onyx.app/8278518-25"
+    },
+    {
+      "text": "Tyler Wheeler: Sounds good. I\u2019ve got to jump.",
+      "link": "https://www.onyx.app/8278518-26"
+    },
+    {
+      "text": "James Choi: Thanks Tyler\u2014appreciate your time. Talk soon.",
+      "link": "https://www.onyx.app/8278518-27"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "tyler_wheeler@lanternvale_properties.onyx.app"
+    }
+  ]
+}

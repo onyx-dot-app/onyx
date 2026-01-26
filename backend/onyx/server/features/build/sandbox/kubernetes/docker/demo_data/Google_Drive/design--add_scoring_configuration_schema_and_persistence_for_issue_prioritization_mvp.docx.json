@@ -1,0 +1,30 @@
+{
+  "id": "fc5c0277ef444d338e74b495a1a75de6",
+  "semantic_identifier": "Design--Add scoring configuration schema + persistence for issue_prioritization MVP.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add scoring configuration schema + persistence for issue_prioritization MVP.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will introduce a versioned **Scoring Configuration** model for the issue_prioritization MVP that acts as the single source of truth for how issue scores are computed within a workspace. The schema will include configurable weights for the three MVP factors\u2014**frequency**, **severity**, and **ARR tier**\u2014and an optional **normalization** block (e.g., enable/disable normalization and parameters such as min/max or scaling strategy). Configs will be explicitly versioned to allow forward-compatible evolution of the scoring logic while maintaining the ability to interpret historical scores against the config version used at the time.\n\nPersistence will be implemented via a new database table/collection keyed by `workspace_id`, with fields like `id`, `workspace_id`, `version`, `status` (active/inactive), `config` (JSON blob or structured columns), `created_at`, and `updated_at`. Only one config may be **active** per workspace at a time (enforced via unique constraint or transactional update). When no config exists for a workspace, the system will provide **sensible defaults** (e.g., equal weights and normalization disabled) and optionally auto-create a persisted default on first read to ensure consistency across services.\n\nWe will add service methods and CRUD endpoints to manage these configs: `getActiveConfig(workspaceId)` (returns active or default), `createConfig(workspaceId, config, version)`, `updateConfig(configId, patch)` (or immutable create-new-version semantics), `activateConfig(configId)` (deactivates previous active), and `listConfigs(workspaceId)` for auditability. API shape can be minimal for MVP (read active + upsert/activate) but should preserve the invariant that score computations always reference a known config version. Authorization will scope access to workspace members/admins consistent with existing patterns.\n\nThis feature unblocks later work by ensuring score computation and UI explanations reference a consistent configuration source, enabling \u201cexplainable\u201d breakdowns like \u201cfrequency contributed X (weight w_f), severity contributed Y (weight w_s), ARR tier contributed Z (weight w_a), normalization applied: yes/no.\u201d We will log/attach the `scoring_config_id` and/or `config_version` alongside computed scores where applicable so downstream consumers can reliably reproduce and explain results even as configurations evolve.",
+      "link": "https://www.onyx.app/17177"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

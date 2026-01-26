@@ -1,0 +1,30 @@
+{
+  "id": "7e2619f899ef4efdafd2c4ee1929528e",
+  "semantic_identifier": "Impact--Implement CRM-embedded Guidance panel shell for Account & Opportunity views.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Implement CRM-embedded Guidance panel shell for Account & Opportunity views.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature delivers the first version of an in-CRM Guidance panel that lives directly inside Salesforce and HubSpot record pages for Accounts and Opportunities. Instead of redirecting sellers to Sales_Accelerator, we\u2019ll provide a persistent embedded surface that can host guidance content in the same place users already work, reducing context switching and making guidance easier to discover and adopt.\n\nThe core impact is enabling reliable \u201crecord-aware\u201d guidance by wiring the panel to the current CRM context (object type + record ID) and ensuring the experience loads the correct account/opportunity every time. This establishes the foundation for future guidance logic to be targeted, measurable, and actionable at the record level, which is a prerequisite for meaningful personalization and relevance.\n\nWe will also implement the necessary auth/session handoff so users can access guidance seamlessly from within the CRM without additional logins or broken states. The panel will provide clear container states (loading, empty, error) so the embedded experience feels trustworthy and production-ready even before content blocks are fully integrated.\n\nWhile this ticket does not include rendering guidance blocks or enabling copy/actions, it unlocks subsequent work by providing the stable shell and integration points those experiences depend on. Once the container is in place, we can iterate quickly on block rendering, content strategy, and in-CRM actions, ultimately improving seller efficiency and increasing engagement with guidance where it matters most.",
+      "link": "https://www.onyx.app/54301"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

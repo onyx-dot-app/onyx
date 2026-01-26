@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_2257505",
+  "semantic_identifier": "Zenithbrook Pharmaceuticals - Customer Analyzer",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-10-10 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "19893",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "2257505"
+  },
+  "sections": [
+    {
+      "text": "Deal: Zenithbrook Pharmaceuticals\nAmount: $19893\nProduct of Interest: Customer_Analyzer\nFeatures of Interest: fit_estimation\nClose Date: 2025-12-03 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/18704"
+    },
+    {
+      "text": "Contact: Connor Foster\nEmail: connor_foster@zenithbrook_pharmaceuticals.onyx.app",
+      "link": "https://www.onyx.app/74265"
+    },
+    {
+      "text": "Company: Zenithbrook Pharmaceuticals\nDomain: zenithbrook_pharmaceuticals.onyx.app",
+      "link": "https://www.onyx.app/20541"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/18442"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

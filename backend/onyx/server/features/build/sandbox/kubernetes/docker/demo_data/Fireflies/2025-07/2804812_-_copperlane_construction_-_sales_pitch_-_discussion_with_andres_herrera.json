@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_2804812",
+  "semantic_identifier": "2804812 - Copperlane Construction - sales_pitch - Discussion with Andres Herrera",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-17 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-17 00:00:00",
+    "duration_min": "25"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "2804812 - Copperlane Construction - sales_pitch - Discussion with Andres Herrera",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Andres\u2014Camila Vega here. I\u2019ll be quick. I\u2019m calling because we\u2019ve been helping construction-focused revenue teams tighten forecasting and reduce deal slippage without ripping out their CRM. Do you have five minutes?",
+      "link": "https://www.onyx.app/8039817-1"
+    },
+    {
+      "text": "Andres Herrera: Yeah, I\u2019ve got a few minutes. What are you calling about exactly?",
+      "link": "https://www.onyx.app/8039817-2"
+    },
+    {
+      "text": "Camila Vega: Awesome. The product is Sales_Accelerator. Think of it as a layer on top of Salesforce or HubSpot that turns pipeline signals into clear next steps\u2014especially around deals that look fine in the CRM but are actually at risk. The reason I reached out to Copperlane Construction is that most teams I talk to are fighting two things at once: forecasting confidence and late-stage stalls that show up too late to fix. Does that sound familiar?",
+      "link": "https://www.onyx.app/8039817-3"
+    },
+    {
+      "text": "Andres Herrera: Definitely. Our forecasts can get\u2026 optimistic. And deals can sit in a stage forever until it\u2019s suddenly \u201cpushed to next quarter.\u201d",
+      "link": "https://www.onyx.app/8039817-4"
+    },
+    {
+      "text": "Camila Vega: Exactly. Sales_Accelerator focuses on two big outcomes: one, early warning alerts when an opportunity is likely to slip; and two, guidance on what to do next so reps and managers aren\u2019t guessing. For example, it will flag things like inactivity\u2014no touches in X days\u2014stage aging beyond your benchmarks, no upcoming meeting on the books, and champion risk when the deal is single-threaded.",
+      "link": "https://www.onyx.app/8039817-5"
+    },
+    {
+      "text": "Andres Herrera: We do some of that with dashboards, but it\u2019s manual and people don\u2019t always look.",
+      "link": "https://www.onyx.app/8039817-6"
+    },
+    {
+      "text": "Camila Vega: That\u2019s the pattern. Dashboards require someone to remember to check them, interpret them, and then decide what to do. Warning alerts are proactive: they can route straight into Slack, email, or back into the CRM, and they come with a recommended remediation action. So it\u2019s not just \u201cthis deal is risky,\u201d it\u2019s \u201chere\u2019s the most likely reason and the next best move,\u201d like \u201cschedule exec alignment,\u201d \u201creconfirm timeline,\u201d or \u201csend the security pack\u201d if it\u2019s stuck at procurement.",
+      "link": "https://www.onyx.app/8039817-7"
+    },
+    {
+      "text": "Andres Herrera: Interesting. We\u2019re using HubSpot right now\u2014would this replace it or change how reps work?",
+      "link": "https://www.onyx.app/8039817-8"
+    },
+    {
+      "text": "Camila Vega: It doesn\u2019t replace HubSpot. It sits on top of it. Reps keep working where they already work; we just surface risks and next steps in the systems they already check. The goal is to make it hard to miss the deals that are quietly deteriorating.",
+      "link": "https://www.onyx.app/8039817-9"
+    },
+    {
+      "text": "Andres Herrera: Okay. How does it know what\u2019s \u201cat risk\u201d? Every team has different stages and cycle times.",
+      "link": "https://www.onyx.app/8039817-10"
+    },
+    {
+      "text": "Camila Vega: Great question\u2014and that\u2019s why the alerting is benchmark-driven. We learn your normal stage aging by segment, deal size, rep, and so on. Then when something drifts beyond what\u2019s typical, it flags it. Same with \u201cno next meeting\u201d: if a deal is in a later stage without a future calendar event, that\u2019s a strong indicator it\u2019s slipping. And for single-threading, if all communication is tied to one contact and there\u2019s no evidence of broader stakeholder mapping, it triggers champion risk.",
+      "link": "https://www.onyx.app/8039817-11"
+    },
+    {
+      "text": "Andres Herrera: That would\u2019ve helped last quarter. We had a couple big ones where our main contact went dark, and we didn\u2019t have anyone else.",
+      "link": "https://www.onyx.app/8039817-12"
+    },
+    {
+      "text": "Camila Vega: Exactly the kind of thing it catches early. And one of the most useful angles for sales ops is identifying pipeline bottlenecks\u2014not just \u201cpipeline is down,\u201d but where conversion is breaking. Sales_Accelerator shows stage-to-stage conversion by segment and rep, and then recommends process fixes. Like, if deals consistently slow down at legal/security, it may recommend pulling that step earlier and standardizing what gets sent, then monitoring whether the bottleneck improves.",
+      "link": "https://www.onyx.app/8039817-13"
+    },
+    {
+      "text": "Andres Herrera: I\u2019m on the ops side, so that part is relevant. But people always say \u201cAI recommendations\u201d\u2014how explainable is it? I don\u2019t want black-box scoring that reps ignore.",
+      "link": "https://www.onyx.app/8039817-14"
+    },
+    {
+      "text": "Camila Vega: Totally fair. The guidance is tied to observable signals\u2014things your team recognizes: days since last touch, stage duration compared to your baseline, whether there\u2019s a next meeting, whether it\u2019s single-threaded, whether notes indicate competitive or pricing risk. The alert includes the \u201cwhy\u201d and the evidence so reps don\u2019t feel like it\u2019s random. It\u2019s meant to be consistent and coachable for managers.",
+      "link": "https://www.onyx.app/8039817-15"
+    },
+    {
+      "text": "Andres Herrera: Got it. We also have an ICP scoring tool already\u2014would we have to redo that?",
+      "link": "https://www.onyx.app/8039817-16"
+    },
+    {
+      "text": "Camila Vega: No. Sales_Accelerator is designed to consume fit and positioning inputs rather than duplicate them. If you already have scoring, we can integrate that so you can prioritize \u201chigh-fit but at-risk\u201d deals for immediate intervention. The point is: if something is a great fit, you don\u2019t want it silently slipping because nobody noticed the warning signs.",
+      "link": "https://www.onyx.app/8039817-17"
+    },
+    {
+      "text": "Andres Herrera: Makes sense. What would implementation look like? I\u2019m wary of a big ops project.",
+      "link": "https://www.onyx.app/8039817-18"
+    },
+    {
+      "text": "Camila Vega: It\u2019s lighter than most CRM projects because we\u2019re not rebuilding your objects or workflows. Typically we connect to HubSpot, map stages, define a few benchmarks and alert thresholds, and choose routing\u2014Slack channel, email, CRM tasks. Then we run a short calibration period so alerts are right-sized\u2014not too noisy. Most teams start with a handful of alert types: inactivity, stage aging, and \u201cno next meeting,\u201d plus champion risk for larger deals.",
+      "link": "https://www.onyx.app/8039817-19"
+    },
+    {
+      "text": "Andres Herrera: Noise is my worry. If reps get spammed, they\u2019ll tune it out.",
+      "link": "https://www.onyx.app/8039817-20"
+    },
+    {
+      "text": "Camila Vega: 100%. The way we avoid that is by tuning alerts by segment and by focusing on \u201cactionable\u201d only\u2014alerts that have a clear remediation step. Also, we can route some alerts to managers or ops instead of directly to reps, depending on your culture. For example, stage aging might go to a manager for inspection, while inactivity goes directly to the rep.",
+      "link": "https://www.onyx.app/8039817-21"
+    },
+    {
+      "text": "Andres Herrera: Okay. And you mentioned forecasting\u2014does it change our forecast process?",
+      "link": "https://www.onyx.app/8039817-22"
+    },
+    {
+      "text": "Camila Vega: It improves it rather than forcing a new one. Because we\u2019re continuously monitoring health signals, you get a clearer view of which \u201ccommit\u201d deals are weakening before the forecast call. One common win is catching forecast risk early\u2014like commit deals with no next meeting or sudden inactivity\u2014so leaders can intervene while there\u2019s still time to fix it.",
+      "link": "https://www.onyx.app/8039817-23"
+    },
+    {
+      "text": "Andres Herrera: This is relevant. We\u2019re heading into a busy season and leadership keeps asking for tighter predictability.",
+      "link": "https://www.onyx.app/8039817-24"
+    },
+    {
+      "text": "Camila Vega: That\u2019s a perfect time to evaluate. What I\u2019d suggest is a 30-minute working session next week where we look at your current pipeline stages and agree on the first set of alerts and bottleneck views you\u2019d want. If you can bring whoever owns the forecast call or frontline management, we can make it concrete fast.",
+      "link": "https://www.onyx.app/8039817-25"
+    },
+    {
+      "text": "Andres Herrera: Yeah, I can loop in our sales manager. Next week could work. What times do you have?",
+      "link": "https://www.onyx.app/8039817-26"
+    },
+    {
+      "text": "Camila Vega: I have Tuesday at 11:00am or Thursday at 2:00pm your time. In that session, we\u2019ll walk through: your stage benchmarks, what \u201cat risk\u201d means for Copperlane, and how the Slack/CRM routing would work so reps actually adopt it.",
+      "link": "https://www.onyx.app/8039817-27"
+    },
+    {
+      "text": "Andres Herrera: Thursday at 2:00pm is better. Send an invite and I\u2019ll add our sales manager.",
+      "link": "https://www.onyx.app/8039817-28"
+    },
+    {
+      "text": "Camila Vega: Perfect. I\u2019ll send the calendar invite for Thursday at 2:00pm along with a short agenda and a couple questions\u2014mainly your current stages and which alerts you\u2019d start with. Anything else you want me to tailor to Copperlane before we meet?",
+      "link": "https://www.onyx.app/8039817-29"
+    },
+    {
+      "text": "Andres Herrera: If you can include an example of the bottleneck analysis by segment or rep, that would help me sell it internally.",
+      "link": "https://www.onyx.app/8039817-30"
+    },
+    {
+      "text": "Camila Vega: Absolutely. I\u2019ll include a sample view and how the recommendation shows up\u2014like \u201cadd security review earlier\u201d and how we track whether it improves stage-to-stage conversion. Thanks, Andres\u2014I\u2019ll get that over shortly and see you Thursday.",
+      "link": "https://www.onyx.app/8039817-31"
+    },
+    {
+      "text": "Andres Herrera: Sounds good. Talk then.",
+      "link": "https://www.onyx.app/8039817-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "andres_herrera@copperlane_construction.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_4186045",
+  "semantic_identifier": "4186045 - Moonrise Quarry Supply - sales_pitch - Discussion with Eliana Jacobs",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-19 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-19 00:00:00",
+    "duration_min": "38"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "4186045 - Moonrise Quarry Supply - sales_pitch - Discussion with Eliana Jacobs",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Eliana, it\u2019s Megan Foster\u2014thanks for taking a few minutes. I\u2019ll be brief. I\u2019m calling because we built Customer_Analyzer to help teams get really clear on who their best customers are and what to say to win more of them, and I thought it might be relevant for Moonrise Quarry Supply.",
+      "link": "https://www.onyx.app/7672205-1"
+    },
+    {
+      "text": "Eliana Jacobs: Hi Megan. Okay\u2014what exactly do you do?",
+      "link": "https://www.onyx.app/7672205-2"
+    },
+    {
+      "text": "Megan Foster: Customer_Analyzer pulls together customer signals you already have\u2014CRM fields, onboarding survey responses, product usage, even support tickets or notes\u2014and turns that into two things: a fit score by account and segment, and positioning recommendations based on what actually correlates with winning, retention, and expansion. Most teams use it to validate their ideal customer profile before they scale outbound or paid acquisition.",
+      "link": "https://www.onyx.app/7672205-3"
+    },
+    {
+      "text": "Eliana Jacobs: We\u2019re not really a \u201cSaaS startup.\u201d We\u2019re a supply company. I\u2019m not sure how that maps.",
+      "link": "https://www.onyx.app/7672205-4"
+    },
+    {
+      "text": "Megan Foster: Totally fair. The workflow isn\u2019t limited to SaaS\u2014it\u2019s really about segmenting customers and seeing where you get the best outcomes. For example, you might want to compare fit across contractor types, regions, company size, or order frequency, and then understand what the highest-fit segment has in common. The fit estimation feature gives you a 0\u2013100 score plus a breakdown of the drivers\u2014so it\u2019s not a black box.",
+      "link": "https://www.onyx.app/7672205-5"
+    },
+    {
+      "text": "Eliana Jacobs: We already know our best customers are the repeat contractors. This sounds like analytics we could do in-house.",
+      "link": "https://www.onyx.app/7672205-6"
+    },
+    {
+      "text": "Megan Foster: If you already have strong conviction, that\u2019s great. Where teams usually get stuck is proving it with data and aligning sales and marketing around it. The fit estimation piece lets you define drivers\u2014like willingness to pay, time-to-value, support burden, churn risk signals\u2014and then it compares segments side-by-side. So you can answer, \u201cAre repeat contractors actually higher margin and lower support?\u201d or \u201cWhich sub-segment expands?\u201d",
+      "link": "https://www.onyx.app/7672205-7"
+    },
+    {
+      "text": "Eliana Jacobs: We don\u2019t really track \u201cchurn\u201d the way software does. And we\u2019re not running paid acquisition at scale.",
+      "link": "https://www.onyx.app/7672205-8"
+    },
+    {
+      "text": "Megan Foster: Understood. In your world it might be: repeat purchase rate, frequency dropping off, returns, discount dependency, or accounts that become inactive. The concept is the same\u2014signals that indicate whether a segment sticks and grows. On the acquisition side, even if you\u2019re not scaling paid, the same ICP clarity helps prioritize outreach, territory planning, and what your reps emphasize.",
+      "link": "https://www.onyx.app/7672205-9"
+    },
+    {
+      "text": "Eliana Jacobs: I\u2019m still not sure it\u2019s worth another tool. We\u2019re trying to cut software spend this quarter.",
+      "link": "https://www.onyx.app/7672205-10"
+    },
+    {
+      "text": "Megan Foster: That makes sense. The reason I\u2019m reaching out is that Customer_Analyzer is designed to replace a lot of manual analysis and the \u201ceveryone has their own definition of ICP\u201d problem. If you\u2019re already doing this in spreadsheets, it can take weeks to pull together and it\u2019s hard to keep current.",
+      "link": "https://www.onyx.app/7672205-11"
+    },
+    {
+      "text": "Eliana Jacobs: We don\u2019t really do it in spreadsheets either. We use our CRM, and our team\u2019s just experienced. It\u2019s not perfect but it works.",
+      "link": "https://www.onyx.app/7672205-12"
+    },
+    {
+      "text": "Megan Foster: Experience is valuable. The question I\u2019d pose is: if you had a clear driver breakdown for why certain accounts are a great fit\u2014say, industry type plus order cadence plus low service overhead\u2014could you make your messaging tighter and reduce the time reps spend chasing marginal accounts?",
+      "link": "https://www.onyx.app/7672205-13"
+    },
+    {
+      "text": "Eliana Jacobs: Maybe, but messaging isn\u2019t our main issue. It\u2019s more operational\u2014inventory, logistics, pricing pressure.",
+      "link": "https://www.onyx.app/7672205-14"
+    },
+    {
+      "text": "Megan Foster: Got it. Customer_Analyzer is more go-to-market than ops. The positioning recommendations are meant to translate what you learn into practical messaging\u2014value props, differentiators, proof points, objection handling\u2014so your team is consistent. If pricing pressure is a factor, it can help identify segments that buy on value rather than discounting, and arm your team with the language that resonates with those segments.",
+      "link": "https://www.onyx.app/7672205-15"
+    },
+    {
+      "text": "Eliana Jacobs: We\u2019re not set up to feed you product usage events or all those signals. Our data\u2019s messy.",
+      "link": "https://www.onyx.app/7672205-16"
+    },
+    {
+      "text": "Megan Foster: That\u2019s common. Most customers start with what they have: CRM fields, basic purchase history exports, support ticket tags, maybe an onboarding survey if you have one. You define a handful of drivers that are realistic for you, and the model scores accounts and segments from there. You can expand later.",
+      "link": "https://www.onyx.app/7672205-17"
+    },
+    {
+      "text": "Eliana Jacobs: Who typically owns this internally? Because I\u2019m not the analytics person.",
+      "link": "https://www.onyx.app/7672205-18"
+    },
+    {
+      "text": "Megan Foster: Usually it\u2019s someone in revenue ops, marketing ops, or product marketing\u2014whoever is tasked with ICP, segmentation, and enablement. Sometimes it\u2019s sales leadership if they\u2019re trying to focus reps on the right accounts. I can\u2019t tell from the outside who that is at Moonrise.",
+      "link": "https://www.onyx.app/7672205-19"
+    },
+    {
+      "text": "Eliana Jacobs: It\u2019d probably be our ops manager, but they\u2019re swamped. And to be honest, we\u2019re not looking to kick off a new initiative right now.",
+      "link": "https://www.onyx.app/7672205-20"
+    },
+    {
+      "text": "Megan Foster: I hear you. My goal today was simply to see if it\u2019s worth a deeper look. The next step would be a 30-minute call where we map your current segmentation, identify 5\u20137 fit drivers you can actually measure, and show what the fit score and driver breakdown could look like using a sample dataset.",
+      "link": "https://www.onyx.app/7672205-21"
+    },
+    {
+      "text": "Eliana Jacobs: I\u2019m going to be straight\u2014this doesn\u2019t feel like a priority for us this quarter. We\u2019re focused on vendor contracts and internal systems.",
+      "link": "https://www.onyx.app/7672205-22"
+    },
+    {
+      "text": "Megan Foster: That\u2019s helpful context. If timing\u2019s the issue, would it be better to revisit in a couple of months when things settle, or should I connect with your ops manager to see if there\u2019s any appetite?",
+      "link": "https://www.onyx.app/7672205-23"
+    },
+    {
+      "text": "Eliana Jacobs: Don\u2019t loop in ops right now. We\u2019re trying to limit distractions. You can send something over, but I can\u2019t promise we\u2019ll engage.",
+      "link": "https://www.onyx.app/7672205-24"
+    },
+    {
+      "text": "Megan Foster: Absolutely. What would be most useful\u2014a one-pager on the fit estimation output and how teams use it to validate an ICP, or a short deck with an example of segment comparisons and driver breakdown?",
+      "link": "https://www.onyx.app/7672205-25"
+    },
+    {
+      "text": "Eliana Jacobs: A one-pager is fine. Keep it high level.",
+      "link": "https://www.onyx.app/7672205-26"
+    },
+    {
+      "text": "Megan Foster: Will do. Last quick question so I tailor it: is your main segmentation today by customer type, region, or something else?",
+      "link": "https://www.onyx.app/7672205-27"
+    },
+    {
+      "text": "Eliana Jacobs: Mostly by customer type and order size. That\u2019s enough for now.",
+      "link": "https://www.onyx.app/7672205-28"
+    },
+    {
+      "text": "Megan Foster: Perfect. I\u2019ll send a concise overview focused on fit estimation\u2014fit score, driver breakdown, and segment comparison\u2014framed around validating and tightening your ICP so you can prioritize the best accounts. If it becomes relevant later, we can schedule time.",
+      "link": "https://www.onyx.app/7672205-29"
+    },
+    {
+      "text": "Eliana Jacobs: Sounds good. Thanks.",
+      "link": "https://www.onyx.app/7672205-30"
+    },
+    {
+      "text": "Megan Foster: Thanks, Eliana. I\u2019ll get that over today, and I\u2019ll follow up next quarter unless you tell me otherwise.",
+      "link": "https://www.onyx.app/7672205-31"
+    },
+    {
+      "text": "Eliana Jacobs: Okay. Bye.",
+      "link": "https://www.onyx.app/7672205-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "eliana_jacobs@moonrise_quarry_supply.onyx.app"
+    }
+  ]
+}

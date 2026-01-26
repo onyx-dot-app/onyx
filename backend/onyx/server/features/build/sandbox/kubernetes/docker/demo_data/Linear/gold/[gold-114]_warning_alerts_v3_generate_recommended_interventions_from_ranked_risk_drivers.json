@@ -1,0 +1,30 @@
+{
+  "id": "6178757",
+  "semantic_identifier": "[GOLD-114]: Warning alerts v3: Generate recommended interventions from ranked risk drivers",
+  "title": "Warning alerts v3: Generate recommended interventions from ranked risk drivers",
+  "source": "linear",
+  "doc_updated_at": "2025-11-19",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jiwon_kang",
+      "email": "jiwon_kang@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-11-19"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement the recommendation layer that consumes the v3 risk score output plus the ranked driver list and returns 3\u20135 suggested interventions (with rationale, priority, and any required CRM fields/links). Recommendations should be deterministic and rule-based for v1 (e.g., \u201cschedule next meeting\u201d when next-step missing, \u201creconfirm close plan\u201d when close date slips, \u201cre-engage champion\u201d when activity decays). Add unit tests for driver-to-intervention mapping, handling of missing driver evidence, and a stable response schema for downstream UI rendering.",
+      "link": "https://www.onyx.app/22241"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

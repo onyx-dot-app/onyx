@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#165",
+  "semantic_identifier": "165: feat: Add workspace-scoped issue prioritization scoring (frequency + severity + ARR tier) with explainable breakdown",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-23",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "165",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "7",
+    "num_files_changed": "24",
+    "labels": [],
+    "created_at": "2025-06-23",
+    "updated_at": "2025-06-23",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nImplements the persisted-config-based issue prioritization score computation. The scoring service loads the active scoring configuration for a workspace and computes a deterministic total priority score for an issue from frequency, severity, and ARR tier. The API returns both the total score and a structured explanation of per-factor contributions (including any normalization).\n\n### Implementation details\n- Added a dedicated scoring module/service responsible for:\n  - Fetching the *active* scoring configuration for a given workspace (persisted config; no hardcoded weights).\n  - Computing factor sub-scores for:\n    - **Frequency** (using the configured mapping/weights and applying configured normalization where applicable).\n    - **Severity** (using configured severity levels/weights; supports incomplete severity input).\n    - **ARR tier** (using configured tiers/weights).\n  - Summing factor sub-scores into a single **total priority score**.\n- Returned payload includes:\n  - `totalScore`\n  - `breakdown`: per-factor contribution (raw input, resolved tier/level, applied weight, normalized value if applicable) and a list of applied fallbacks.\n\n### Deterministic fallbacks\nTo keep scoring stable across missing/unknown data:\n- **Unknown/missing ARR tier**: falls back to a configured default tier when present; otherwise uses a neutral 0 contribution.\n- **Missing/partial severity**: falls back to a configured default severity level when present; otherwise uses a neutral 0 contribution.\n- Any fallback is recorded in the `breakdown` for explainability.\n\n### Tests\n- Added unit tests covering:\n  - Happy-path scoring with all factors present.\n  - Unknown ARR tier fallback behavior.\n  - Missing/incomplete severity fallback behavior.\n  - Breakdown structure and determinism (same inputs/config -> same outputs).\n\n### Notes\n- No changes to scoring behavior unless a workspace has an active scoring configuration; the service reads config at runtime and does not introduce new defaults beyond the defined neutral fallbacks.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#165"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

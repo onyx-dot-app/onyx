@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_1181903",
+  "semantic_identifier": "1181903 - Apexnova Solutions - sales_pitch - Discussion with Maria Lane",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-03-30 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-03-30 00:00:00",
+    "duration_min": "26"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-03"
+      ],
+      "year_month": "2025-03",
+      "meeting_title": "1181903 - Apexnova Solutions - sales_pitch - Discussion with Maria Lane",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Maria, thanks for taking a few minutes\u2014I'll keep this tight. I\u2019m Megan with Customer_Analyzer. The reason I reached out is we help product, marketing, and sales teams get really clear on who their best-fit customers are and then turn that into messaging your team can actually use\u2014fast.",
+      "link": "https://www.onyx.app/4696334-1"
+    },
+    {
+      "text": "Maria Lane: Hi Megan\u2014sure, I have a few minutes. What exactly do you mean by \u201cturn that into messaging\u201d?",
+      "link": "https://www.onyx.app/4696334-2"
+    },
+    {
+      "text": "Megan Foster: Great question. Customer_Analyzer pulls in the customer signals you already have\u2014CRM fields, onboarding survey answers, product usage events, support tickets, even interview notes\u2014and then generates positioning recommendations for the segments you care about. So instead of debating \u201cwhat should we say to SMB vs mid-market?\u201d you get segment-specific value props, differentiators, proof points to collect, and even objection handling\u2014packaged as editable blocks like website hero copy, sales deck bullets, and outbound email openers.",
+      "link": "https://www.onyx.app/4696334-3"
+    },
+    {
+      "text": "Maria Lane: That\u2019s interesting. We actually do struggle with tailoring the story. But we\u2019ve tried \u201cICP exercises\u201d before\u2014lots of slides, not much changes.",
+      "link": "https://www.onyx.app/4696334-4"
+    },
+    {
+      "text": "Megan Foster: Totally hear that. The difference is we don\u2019t stop at a static ICP doc. We link the messaging back to evidence\u2014what the segment is doing in the product, what they\u2019re saying in tickets or calls, what closes in the CRM. Then it produces recommendations you can ship: for example, a landing page hero and three supporting bullets for SMB, and a different set for mid-market, with the underlying \u201cfit drivers\u201d called out so your team trusts it.",
+      "link": "https://www.onyx.app/4696334-5"
+    },
+    {
+      "text": "Maria Lane: When you say \u201cfit drivers,\u201d what are those?",
+      "link": "https://www.onyx.app/4696334-6"
+    },
+    {
+      "text": "Megan Foster: They\u2019re the specific signals correlated with success for a segment\u2014like shorter time-to-first-value, higher adoption of a key feature, fewer support escalations, or consistent language in onboarding surveys around a particular outcome. The product uses those to explain *why* a segment is a good fit, and then it turns that into positioning: \u201chere\u2019s the promise,\u201d \u201chere\u2019s what to lead with,\u201d \u201chere\u2019s how to frame pricing/value,\u201d and \u201chere are the top objections we should preempt.\u201d",
+      "link": "https://www.onyx.app/4696334-7"
+    },
+    {
+      "text": "Maria Lane: Okay. We\u2019re currently splitting messaging by company size\u2014SMB versus mid-market\u2014but it\u2019s messy. Sales says one thing, marketing says another.",
+      "link": "https://www.onyx.app/4696334-8"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly the use case where we see quick wins: create segment-specific landing pages and outbound messaging for two ICP tiers. We can take your existing segments\u2014SMB and mid-market\u2014prioritize them, and generate two sets of messaging blocks. The output is structured so marketing can drop it into a landing page, and sales can copy/paste it into an email opener or deck slide\u2014without reinventing the wheel.",
+      "link": "https://www.onyx.app/4696334-9"
+    },
+    {
+      "text": "Maria Lane: How much work is it to get set up? We don\u2019t have a lot of bandwidth for yet another tool.",
+      "link": "https://www.onyx.app/4696334-10"
+    },
+    {
+      "text": "Megan Foster: Low lift to start. We typically begin with just a few sources: your CRM fields for customer profile and outcomes, a slice of onboarding survey responses, and a batch of support ticket themes. If you have product usage events, great, but it\u2019s not required day one. Within that, we can generate initial positioning recommendations quickly, then refine as you add more signals.",
+      "link": "https://www.onyx.app/4696334-11"
+    },
+    {
+      "text": "Maria Lane: And how do you avoid the \u201cgeneric AI copy\u201d problem? We\u2019ve tested tools that spit out fluffy messaging.",
+      "link": "https://www.onyx.app/4696334-12"
+    },
+    {
+      "text": "Megan Foster: That\u2019s the big thing we\u2019re careful about. The recommendations are anchored to observed customer language and your own drivers\u2014so you can see, \u201cthis differentiator came from these ticket themes and these win notes,\u201d or \u201cthis value prop aligns with what activated customers do in week one.\u201d Plus, everything is editable, so your team can tweak the blocks while keeping the structure consistent across channels.",
+      "link": "https://www.onyx.app/4696334-13"
+    },
+    {
+      "text": "Maria Lane: Got it. Can it help with objections specifically? We get different pushback in mid-market than SMB.",
+      "link": "https://www.onyx.app/4696334-14"
+    },
+    {
+      "text": "Megan Foster: Yes\u2014each segment gets an objection-handling playbook. For example, mid-market might push on security, integrations, or procurement timelines; SMB might push on price or implementation time. The tool recommends how to respond in a way that matches the segment\u2019s priorities, and it suggests proof points to collect\u2014like a security one-pager, integration case studies, or \u201ctime-to-value\u201d metrics\u2014so you\u2019re not guessing.",
+      "link": "https://www.onyx.app/4696334-15"
+    },
+    {
+      "text": "Maria Lane: That\u2019s compelling. If we did this, what would a \u201cgood first outcome\u201d look like in, say, a couple weeks?",
+      "link": "https://www.onyx.app/4696334-16"
+    },
+    {
+      "text": "Megan Foster: In two weeks, a realistic first outcome is: two messaging kits\u2014one for SMB, one for mid-market\u2014each with (1) a landing page hero section draft, (2) 3\u20135 sales deck bullets, (3) a couple outbound email openers, and (4) the top objections and proof points to gather. Then you can run a simple test: update your two landing pages and give the outbound openers to one SDR pod, and measure reply rates or conversion lift.",
+      "link": "https://www.onyx.app/4696334-17"
+    },
+    {
+      "text": "Maria Lane: We\u2019re actually about to refresh our website and we\u2019ve been arguing about the hero copy. So the timing is good.",
+      "link": "https://www.onyx.app/4696334-18"
+    },
+    {
+      "text": "Megan Foster: Perfect. That\u2019s a very practical place to start because it forces alignment. And since it\u2019s segment-specific, you\u2019re not stuck with one \u201ccompromise\u201d message that\u2019s too broad to resonate.",
+      "link": "https://www.onyx.app/4696334-19"
+    },
+    {
+      "text": "Maria Lane: Who on our side usually owns this? Marketing? Product marketing? Sales enablement?",
+      "link": "https://www.onyx.app/4696334-20"
+    },
+    {
+      "text": "Megan Foster: Typically product marketing or growth marketing owns the landing page output, and sales enablement or a revenue leader partners on the objection handling and outbound blocks. But it works best when we have one point person\u2014could be you\u2014who can pull in quick feedback from sales for 15 minutes.",
+      "link": "https://www.onyx.app/4696334-21"
+    },
+    {
+      "text": "Maria Lane: Okay. What do you need from me to see if this is a fit for Apexnova?",
+      "link": "https://www.onyx.app/4696334-22"
+    },
+    {
+      "text": "Megan Foster: I\u2019d love to schedule a full 30-minute working session. In that call, we\u2019ll map your current SMB vs mid-market definitions, identify the signals you already have, and I\u2019ll show what the positioning recommendation output looks like end-to-end\u2014landing page blocks, outbound openers, objections\u2014so you can judge whether it\u2019s actionable for your team.",
+      "link": "https://www.onyx.app/4696334-23"
+    },
+    {
+      "text": "Maria Lane: Yes, I\u2019m open to that. Can you also cover how you handle data access and privacy? We have some sensitivity around support tickets and notes.",
+      "link": "https://www.onyx.app/4696334-24"
+    },
+    {
+      "text": "Megan Foster: Absolutely\u2014happy to walk through access controls, what we ingest, and how you can start with a limited dataset if needed. We can also begin with non-sensitive fields and survey data, and add other sources later once you\u2019re comfortable.",
+      "link": "https://www.onyx.app/4696334-25"
+    },
+    {
+      "text": "Maria Lane: Great. Let\u2019s do the deeper session. Do you have availability this week?",
+      "link": "https://www.onyx.app/4696334-26"
+    },
+    {
+      "text": "Megan Foster: I do. I can do Thursday at 11am or Friday at 2pm your time. Which works better?",
+      "link": "https://www.onyx.app/4696334-27"
+    },
+    {
+      "text": "Maria Lane: Friday at 2pm works.",
+      "link": "https://www.onyx.app/4696334-28"
+    },
+    {
+      "text": "Megan Foster: Perfect\u2014I'll send a calendar invite for Friday at 2pm, plus a short prep list: the CRM fields you use for segmenting, a sample of onboarding survey questions, and any notes on how you currently differentiate SMB vs mid-market. Sound good?",
+      "link": "https://www.onyx.app/4696334-29"
+    },
+    {
+      "text": "Maria Lane: Sounds good. Send it over and I\u2019ll loop in our product marketer as well.",
+      "link": "https://www.onyx.app/4696334-30"
+    },
+    {
+      "text": "Megan Foster: Great\u2014thanks, Maria. I\u2019ll get that invite out right now, and we\u2019ll make Friday very concrete with draft messaging you can react to.",
+      "link": "https://www.onyx.app/4696334-31"
+    },
+    {
+      "text": "Maria Lane: Looking forward to it. Thanks, Megan.",
+      "link": "https://www.onyx.app/4696334-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "maria_lane@apexnova_solutions.onyx.app"
+    }
+  ]
+}

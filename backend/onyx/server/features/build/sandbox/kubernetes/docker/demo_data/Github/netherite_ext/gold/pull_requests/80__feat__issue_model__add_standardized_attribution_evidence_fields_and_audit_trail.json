@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#80",
+  "semantic_identifier": "80: feat: Issue model: add standardized Attribution Evidence fields + audit trail",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-15",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "80",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "58",
+    "labels": [],
+    "created_at": "2026-01-15",
+    "updated_at": "2026-01-15",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR introduces a lightweight, structured \u201cAttribution Evidence\u201d section on Issue objects to capture attribution inputs consistently and keep them auditable over time.\n\nChanges:\n- Schema/model: adds new optional fields on `Issue` for attribution evidence:\n  - `impactedAccountIds` (array of account identifiers)\n  - `revenueAtRiskCents` (integer, currency in minor units)\n  - `expectedImpactHypothesis` (text)\n  - `downstreamWorkIds` (array of strings; e.g., Jira/Linear/Salesforce IDs)\n- API: extends Issue read/write endpoints to accept/return an `attributionEvidence` object; validates types and basic constraints (non-negative revenue, max lengths for text, deduped arrays).\n- Auditing: persists an immutable change log entry whenever `attributionEvidence` is created/updated (who/when, before/after diff) so later reporting/disputes can reference historical values.\n- UI: adds an \u201cAttribution Evidence\u201d panel on the Issue detail page with edit controls behind existing Issue edit permissions.\n- Backfill/migration: migration adds nullable columns/JSON field (depending on storage) with no required backfill; existing Issues remain unaffected until populated.\n- Tests: adds unit tests for validation and audit logging + API contract tests for serialization.\n\nNotes for reviewers/users:\n- Fields are optional and non-blocking (low priority change; no workflow gating).\n- The new data is intended as a source-of-truth baseline; reporting can be built on top in follow-ups.\n- No breaking changes: existing clients continue to work; new fields are additive.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#80"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

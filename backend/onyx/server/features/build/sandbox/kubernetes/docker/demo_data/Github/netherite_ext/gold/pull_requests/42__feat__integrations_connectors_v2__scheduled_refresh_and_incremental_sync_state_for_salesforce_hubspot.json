@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#42",
+  "semantic_identifier": "42: feat: Integrations_connectors v2: Scheduled refresh + incremental sync state for Salesforce/HubSpot",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-20",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "42",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "8",
+    "num_files_changed": "11",
+    "labels": [],
+    "created_at": "2025-06-20",
+    "updated_at": "2025-06-20",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds a scheduled refresh mechanism for the Salesforce and HubSpot v2 connectors to keep ARR and opportunity data used by issue-to-customer/value linkage up to date.\n\nKey changes:\n- Introduces a connector refresh job (worker + scheduler entry) that runs per connected account on a configurable cadence (default interval set via config/env).\n- Implements incremental sync when supported by the upstream API by querying records updated since the last successful sync (using updated/modified timestamps). Falls back to bounded full refresh when incremental filters are unavailable.\n- Persists per-connector/per-account sync state (last_success_at, last_cursor/updated_since, last_attempt_at, consecutive_failures, last_error) so downstream linkage always reads from the freshest known snapshot and the next run can resume from the correct point.\n- Adds basic retry with exponential backoff + jitter for transient failures and rate-limit responses, with a capped max retry window to avoid runaway job executions.\n- Records structured logs and metrics around sync duration, record counts, and failure reasons to aid operational visibility.\n\nOperational notes:\n- Cadence is configurable; changing it does not require a redeploy if using dynamic config.\n- First run after deploy may do an initial/backfill sync for existing accounts; subsequent runs are incremental.\n- Rate-limit handling is conservative to prioritize connector stability over aggressive throughput.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#42"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

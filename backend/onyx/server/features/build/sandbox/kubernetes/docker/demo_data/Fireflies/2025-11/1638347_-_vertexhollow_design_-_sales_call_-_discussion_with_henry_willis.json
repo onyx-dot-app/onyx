@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_1638347",
+  "semantic_identifier": "1638347 - Vertexhollow Design - sales_call - Discussion with Henry Willis",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-11-22 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-11-22 00:00:00",
+    "duration_min": "31"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-11"
+      ],
+      "year_month": "2025-11",
+      "meeting_title": "1638347 - Vertexhollow Design - sales_call - Discussion with Henry Willis",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Henry\u2014good to see you again. Last time you mentioned you were feeling the pain of repeat issues coming in through Zendesk and Intercom, and it was hard to explain \u201cwhat\u2019s actually the top thing to fix\u201d across Support, Product, and Sales. I wanted to focus today on Issue_Tracker, specifically how we dedupe into clusters and then prioritize those clusters with an explainable score tied to revenue and deal risk. Does that still map to what you\u2019re trying to solve at Vertexhollow Design?",
+      "link": "https://www.onyx.app/8750619-1"
+    },
+    {
+      "text": "Henry Willis: Yeah, broadly. The volume is growing, and we keep having the same conversations across teams. But we\u2019re also wary of adding another layer that becomes yet another system of record.",
+      "link": "https://www.onyx.app/8750619-2"
+    },
+    {
+      "text": "Camila Vega: Totally fair. We\u2019re not trying to replace Zendesk or Jira. Issue_Tracker sits between them\u2014pulls in tickets and conversations, groups them into \u201cissue objects\u201d (theme + evidence + impacted customers), and keeps the links back to source tickets and forward to Jira work. The goal is: when someone asks \u201cwhy is this priority #1,\u201d you can point to frequency, severity tags, and business impact\u2014like ARR exposure or late-stage deal blockers.  \nIf you think about a recent example: what was the last \u201cfire drill\u201d issue that came up and got debated?",
+      "link": "https://www.onyx.app/8750619-3"
+    },
+    {
+      "text": "Henry Willis: We had a permissions bug that hit a few enterprise accounts. Support escalated, Product said it\u2019s not common, Sales said it\u2019s blocking renewals. We spent two weeks arguing what the real blast radius was.",
+      "link": "https://www.onyx.app/8750619-4"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly the kind of situation Issue_Tracker is built for. On the prioritization side, it ranks clusters using configurable inputs\u2014frequency/velocity, severity, customer tier/ARR, churn risk flags, and segment importance. And because it connects to CRM and Sales_Accelerator, if you have a late-stage opportunity or renewal tied to that cluster, it can boost the priority with an explanation like \u201c3 open enterprise renewals at risk; $420K exposure.\u201d  \nHow are you currently measuring blast radius\u2014manual spreadsheet, tags in Zendesk, CRM notes?",
+      "link": "https://www.onyx.app/8750619-5"
+    },
+    {
+      "text": "Henry Willis: It\u2019s mostly manual. Support tags tickets, but they\u2019re inconsistent. Then CSMs maintain their own notes and the Product team looks at Jira counts. Nothing ties cleanly to account health in our CRM.",
+      "link": "https://www.onyx.app/8750619-6"
+    },
+    {
+      "text": "Camila Vega: Got it. Two quick workflows I wanted to highlight.  \nFirst: the prioritization views. Support can look at SLA risk; Product can look at impact; Sales can look at deal blockers. Same underlying cluster, different lens.  \nSecond: the CSM follow-up use case. A CSM can subscribe an account to a cluster. When the linked Jira ticket ships, Issue_Tracker records the release milestone and logs a history trail of which customers were notified and when\u2014so you\u2019re not guessing who got the update or losing the thread when a CSM is out.",
+      "link": "https://www.onyx.app/8750619-7"
+    },
+    {
+      "text": "Henry Willis: That follow-up automation is attractive. We miss notifications sometimes. But I\u2019m concerned about the integration side. We\u2019ve got multiple contacts per account, some duplicates, and custom CRM fields that don\u2019t always get filled. If Issue_Tracker calculates impact based on messy mappings, the prioritization could be wrong\u2014and then we\u2019re arguing about the tool instead of the issue.",
+      "link": "https://www.onyx.app/8750619-8"
+    },
+    {
+      "text": "Camila Vega: That\u2019s a valid concern, and it\u2019s one we\u2019ve seen. The key is identity resolution\u2014matching ticket submitters and contacts to the right account, and mapping the CRM fields you care about (ARR, segment, lifecycle stage). We typically start with a lightweight mapping, then tighten it with rules\u2014like domain matching, contact-to-account precedence, and handling duplicates.  \nLet me ask: what CRM are you on, and how messy is the account model? Do you have parent/child accounts, multiple brands, that sort of thing?",
+      "link": "https://www.onyx.app/8750619-9"
+    },
+    {
+      "text": "Henry Willis: Salesforce. We do have parent/child and some accounts share domains. We also use custom fields for segment and \u201cdesign partner\u201d status. And our Support org doesn\u2019t always enforce account association on tickets.",
+      "link": "https://www.onyx.app/8750619-10"
+    },
+    {
+      "text": "Camila Vega: Understood. In that environment, we\u2019d want to be careful about how we compute \u201crevenue exposure.\u201d We can start by scoping impact calculations to the accounts that are confidently matched\u2014so you\u2019re not overcounting. And we can show \u201cconfidence\u201d on the match so teams know when the score is based on solid data versus partial data.  \nWould it help if we scoped the initial rollout to a subset\u2014say enterprise accounts only, or a segment where the mappings are cleaner?",
+      "link": "https://www.onyx.app/8750619-11"
+    },
+    {
+      "text": "Henry Willis: Maybe, but we\u2019re not in a position to run a big integration project. Our RevOps team is swamped, and Product Ops is basically one person. If this takes weeks of field mapping and cleanup, it\u2019s not happening this quarter.",
+      "link": "https://www.onyx.app/8750619-12"
+    },
+    {
+      "text": "Camila Vega: That makes sense. The lowest-lift path is usually: connect Zendesk + Jira first, get clustering and dedupe working, then add CRM weighting for ARR and pipeline risk. But the prioritization is strongest when CRM is connected.  \nCan I pressure-test the timeline\u2014are you trying to solve this before a specific renewal cycle or planning window?",
+      "link": "https://www.onyx.app/8750619-13"
+    },
+    {
+      "text": "Henry Willis: Q2 planning is coming up fast. Honestly, we need something we can stand up quickly, or we\u2019ll stick with what we have.",
+      "link": "https://www.onyx.app/8750619-14"
+    },
+    {
+      "text": "Camila Vega: If speed is the priority, we can still deliver value with the clustering and a basic priority score based on frequency, velocity, and severity tags. Then later layer in CRM-based revenue weighting.  \nBut it sounds like the risk for you is: if we can\u2019t trust the account matching, you won\u2019t trust the score. Is that the main blocker?",
+      "link": "https://www.onyx.app/8750619-15"
+    },
+    {
+      "text": "Henry Willis: Yeah. And also: we already have Jira dashboards and a productboard workflow. I\u2019m worried Issue_Tracker becomes another place people have to check. Adoption is a real problem here.",
+      "link": "https://www.onyx.app/8750619-16"
+    },
+    {
+      "text": "Camila Vega: Totally. The intent is not \u201canother dashboard,\u201d but a standardized issue object that stays linked everywhere. For example, when a cluster is created, it can generate or link to a Jira ticket, and updates flow back. Support can keep working in Zendesk; Product stays in Jira; CSMs get a single source of truth for what\u2019s happening and who\u2019s impacted.  \nBut\u2014if your team is already struggling with adoption, we\u2019d need to be crisp about the one or two workflows you\u2019d enforce. Which team would actually own Issue_Tracker internally\u2014Support Ops, Product Ops, or CS leadership?",
+      "link": "https://www.onyx.app/8750619-17"
+    },
+    {
+      "text": "Henry Willis: That\u2019s part of the problem. No one wants to own another tool. Support would say Product should, Product would say Support should. And our CS leadership is focused on renewals, not tooling.",
+      "link": "https://www.onyx.app/8750619-18"
+    },
+    {
+      "text": "Camila Vega: That\u2019s helpful context. If there isn\u2019t a clear owner, implementation can stall.  \nLet me propose a narrow pilot: pick, say, 20 strategic accounts, subscribe them to top clusters, and use the \u201crelease milestone + notification history\u201d to prove the CSM follow-up value. That doesn\u2019t require perfect CRM weighting on day one. Would you have bandwidth to run something like that with one CSM manager and one support lead?",
+      "link": "https://www.onyx.app/8750619-19"
+    },
+    {
+      "text": "Henry Willis: In theory, but even that requires someone to set it up and maintain it. And if we don\u2019t connect the CRM properly, we can\u2019t reliably know which accounts are impacted, which undermines the follow-up use case too.",
+      "link": "https://www.onyx.app/8750619-20"
+    },
+    {
+      "text": "Camila Vega: Fair point\u2014if tickets aren\u2019t consistently associated to accounts, subscriptions won\u2019t be reliable.  \nDo you have any enforced process today for linking support tickets to accounts? Even a \u201cmust select organization\u201d rule in Zendesk?",
+      "link": "https://www.onyx.app/8750619-21"
+    },
+    {
+      "text": "Henry Willis: Not consistently. Some tickets come in via email and don\u2019t map. And we have shared inboxes that muddy it further.",
+      "link": "https://www.onyx.app/8750619-22"
+    },
+    {
+      "text": "Camila Vega: Okay. Given that, I don\u2019t want to oversell a magic fix. Issue_Tracker can help standardize and expose the gaps\u2014like showing a cluster with a high volume of \u201cunmatched\u201d tickets\u2014but it can\u2019t fully correct missing data without some workflow changes.  \nIf we were to move forward, I\u2019d want to align on a small set of required inputs\u2014like enforcing organization selection in Zendesk and agreeing on a single source of truth for ARR. Is that something you could realistically change soon?",
+      "link": "https://www.onyx.app/8750619-23"
+    },
+    {
+      "text": "Henry Willis: Not soon. We\u2019re mid-reorg and changing support workflows right now would be hard. I like the concept, but the prerequisites aren\u2019t there.",
+      "link": "https://www.onyx.app/8750619-24"
+    },
+    {
+      "text": "Camila Vega: I appreciate the candor. It sounds like the value is clear, but timing and data hygiene are the constraints\u2014especially identity resolution and consistent ticket-to-account matching.  \nWould it be more helpful if I sent over a short readiness checklist\u2014what needs to be true in Zendesk/Salesforce for the prioritization and CSM follow-up to work\u2014so you can gauge when Vertexhollow is in a better spot?",
+      "link": "https://www.onyx.app/8750619-25"
+    },
+    {
+      "text": "Henry Willis: Yeah, that would be useful. And maybe a rough estimate of effort on the integration mapping, so I can talk to RevOps about it for later.",
+      "link": "https://www.onyx.app/8750619-26"
+    },
+    {
+      "text": "Camila Vega: Absolutely. I\u2019ll send a checklist plus two implementation paths: \u201csupport + Jira only\u201d for quick clustering, and \u201cfull revenue-weighted prioritization\u201d with Salesforce mapping, including where identity resolution tends to get tricky with parent/child accounts and shared domains.  \nBefore we wrap: should we park the buying conversation for now and revisit after Q2 planning, or do you want to keep evaluating in parallel?",
+      "link": "https://www.onyx.app/8750619-27"
+    },
+    {
+      "text": "Henry Willis: Let\u2019s park it. If we can\u2019t implement this quarter, I don\u2019t want to drag procurement into it. Circle back in a couple months.",
+      "link": "https://www.onyx.app/8750619-28"
+    },
+    {
+      "text": "Camila Vega: Sounds good. I\u2019ll send the materials today, and I\u2019ll set a tentative follow-up for eight weeks from now\u2014easy to move if needed. Thanks, Henry.",
+      "link": "https://www.onyx.app/8750619-29"
+    },
+    {
+      "text": "Henry Willis: Thanks, Camila.",
+      "link": "https://www.onyx.app/8750619-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "henry_willis@vertexhollow_design.onyx.app"
+    }
+  ]
+}

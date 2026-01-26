@@ -1,0 +1,30 @@
+{
+  "id": "b3c846daa6ad424b9bc25676639e2f9b",
+  "semantic_identifier": "Impact--Warning alerts v3: Add backend API endpoint to fetch alert details (score + drivers + interventions).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-23",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Warning alerts v3: Add backend API endpoint to fetch alert details (score + drivers + interventions).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change adds a versioned `/alerts/v3` backend read endpoint that returns a single, fully composed \u201calert details\u201d payload for a given account/opportunity: risk score output, ranked drivers (with evidence), and recommended interventions (with rationale). By keeping it behind the existing feature flag, we can ship incrementally while enabling the UI to rely on one canonical source of truth instead of stitching together multiple services or partially computed fields.\n\nThe primary product impact is improved explainability and actionability of warning alerts. End users don\u2019t just see a score\u2014they can see the top contributing drivers and what to do next, in a consistent format, which should increase trust, shorten time-to-triage, and improve follow-through on mitigation actions. The inclusion of confidence/score thresholds and risk-type filtering also enables more targeted experiences (e.g., only show high-confidence churn risk alerts).\n\nA key requirement is a stable, versioned response schema with clear pagination and filtering semantics, deterministic ordering (especially for \u201ctop drivers\u201d), and consistent null/missing-field behavior across Salesforce and HubSpot data sources. This reduces UI edge cases, prevents regressions during backend iteration, and makes it safer to expand the alert model over time without breaking downstream rendering or analytics.\n\nIntegration tests that validate schema compatibility and ordering are essential to protect the end-to-end experience as we evolve driver ranking logic or intervention catalogs. Overall, `/alerts/v3` is a foundational API that unblocks richer alert-detail UI, improves cross-CRM consistency, and provides a durable contract for future alert enhancements.",
+      "link": "https://www.onyx.app/24230"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

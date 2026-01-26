@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_3436745",
+  "semantic_identifier": "3436745 - Crimson Meadow Brewing - sales_pitch - Discussion with Ryan Dean",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-14 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-14 00:00:00",
+    "duration_min": "19"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "3436745 - Crimson Meadow Brewing - sales_pitch - Discussion with Ryan Dean",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Hi Ryan\u2014Sneha Reddy here. Thanks for taking a few minutes. I\u2019ll keep it brief: I work with teams that want a clearer picture of who their best customers are and how to prioritize them, especially when roadmap and go-to-market decisions start competing for attention.",
+      "link": "https://www.onyx.app/7299726-1"
+    },
+    {
+      "text": "Ryan Dean: Hey Sneha. Yeah, I\u2019ve got about five minutes. What\u2019s this about?",
+      "link": "https://www.onyx.app/7299726-2"
+    },
+    {
+      "text": "Sneha Reddy: Totally. The product is called Customer_Analyzer. It pulls signals you already have\u2014CRM fields, onboarding surveys, product usage, support tickets, even interview notes\u2014and turns them into two things: a fit score for accounts and segments, and practical positioning recommendations. The quick reason I called: it\u2019s built to help product planning by highlighting high-fit customers with unmet needs, so roadmap bets are tied to who\u2019s most likely to buy, stick, and expand.",
+      "link": "https://www.onyx.app/7299726-3"
+    },
+    {
+      "text": "Ryan Dean: We\u2019re a brewery\u2014so when you say \u201ccustomers,\u201d are you talking distributors? Retail partners? Or end consumers?",
+      "link": "https://www.onyx.app/7299726-4"
+    },
+    {
+      "text": "Sneha Reddy: Great question\u2014Customer_Analyzer works whether your \u201ccustomer\u201d is a distributor account, a retail chain, a bar group, or even a DTC cohort. Most teams start with the B2B side because the signals are cleaner: account attributes, order patterns, support issues, adoption of programs, renewal/contract behaviors\u2014whatever \u201csuccess\u201d looks like for Crimson Meadow Brewing.",
+      "link": "https://www.onyx.app/7299726-5"
+    },
+    {
+      "text": "Ryan Dean: Okay. But we already segment in our CRM. Industry, size, region\u2014basic stuff. What\u2019s different?",
+      "link": "https://www.onyx.app/7299726-6"
+    },
+    {
+      "text": "Sneha Reddy: The big difference is the fit_estimation capability. Instead of static segments, you define fit drivers\u2014like order consistency, margin profile, time-to-value on new SKUs, support burden, churn risk signals, willingness to pay for seasonal releases, or even operational friction\u2014and the system computes a 0\u2013100 fit score at both account and segment level. Then it shows a driver breakdown: *why* the score is high or low, and compares segments\u2014say, independent retailers vs. regional chains, or on-premise groups vs. distributors.",
+      "link": "https://www.onyx.app/7299726-7"
+    },
+    {
+      "text": "Ryan Dean: A score is interesting, but we\u2019ve been burned by \u201cblack box\u201d scoring. I don\u2019t want a model telling us what to do without context.",
+      "link": "https://www.onyx.app/7299726-8"
+    },
+    {
+      "text": "Sneha Reddy: Same concern we hear a lot. That\u2019s why the driver breakdown is central\u2014not optional. You can see, for example: \u201cHigh fit because strong velocity on core SKUs and low support burden; lower fit because frequent returns on seasonal products and long time-to-value on new launches.\u201d It\u2019s meant to be explainable so your team can debate it, adjust drivers, and align on an ICP based on outcomes you care about\u2014retention, expansion, conversion\u2014rather than vibes.",
+      "link": "https://www.onyx.app/7299726-9"
+    },
+    {
+      "text": "Ryan Dean: Where does it get those signals? We have some in CRM, some in spreadsheets, and our support tickets are in a different system.",
+      "link": "https://www.onyx.app/7299726-10"
+    },
+    {
+      "text": "Sneha Reddy: Customer_Analyzer is designed for that reality. You can start small: CRM + a simple export of order/usage or support ticket tags. Many teams do a first pass with just 2\u20133 signal sources to get a baseline fit score and segment comparisons, then add depth over time. The goal isn\u2019t a massive data project\u2014it\u2019s a faster way to see which customer types are actually succeeding and why.",
+      "link": "https://www.onyx.app/7299726-11"
+    },
+    {
+      "text": "Ryan Dean: What would \u201cproduct planning\u201d look like for us in your world?",
+      "link": "https://www.onyx.app/7299726-12"
+    },
+    {
+      "text": "Sneha Reddy: One concrete example: let\u2019s say you\u2019re debating two roadmap bets\u2014like investing in new seasonal variety packs vs. improving consistency and forecasting for your core lineup. With fit_estimation, you\u2019d identify the customer segments with the highest fit today, then overlay unmet needs coming through tickets, interviews, or order patterns. You might find your highest-fit segment expands when they get reliable replenishment and better merchandising materials, while a lower-fit segment creates a lot of support load and churns when seasonal sell-through misses. That helps you prioritize a roadmap bet that reinforces the segment that\u2019s most profitable and most likely to renew/expand.",
+      "link": "https://www.onyx.app/7299726-13"
+    },
+    {
+      "text": "Ryan Dean: That\u2019s directionally what we want. But we\u2019re not a SaaS app\u2014what\u2019s \u201cusage\u201d in our case?",
+      "link": "https://www.onyx.app/7299726-14"
+    },
+    {
+      "text": "Sneha Reddy: Usage can be whatever indicates adoption and value realization for your business model: repeat order cadence, reorder interval, breadth of SKU adoption, participation in promos, compliance with agreed display plans, acceptance of new releases, or even response time to replenishment cycles. Customer_Analyzer doesn\u2019t force a SaaS definition\u2014it just needs consistent signals that map to \u201csuccessful customers\u201d for Crimson Meadow Brewing.",
+      "link": "https://www.onyx.app/7299726-15"
+    },
+    {
+      "text": "Ryan Dean: And you said positioning recommendations too\u2014do we need that to get value?",
+      "link": "https://www.onyx.app/7299726-16"
+    },
+    {
+      "text": "Sneha Reddy: Not to start. Many teams begin with fit_estimation because it\u2019s the fastest path to clarity: \u201cWho should we target and why?\u201d Positioning is a natural next step once you see patterns\u2014turning those drivers into messaging, proof points, and objection handling. But for this quick convo, I\u2019d focus on getting you a fit baseline and an ICP recommendation anchored in your outcomes.",
+      "link": "https://www.onyx.app/7299726-17"
+    },
+    {
+      "text": "Ryan Dean: What\u2019s the setup time for that baseline?",
+      "link": "https://www.onyx.app/7299726-18"
+    },
+    {
+      "text": "Sneha Reddy: If you can share a CRM export plus one other signal source\u2014like support ticket categories or order history\u2014we can typically generate an initial fit model quickly. On a full call, we\u2019d map 6\u201310 fit drivers together, define what \u201csuccess\u201d means (repeat purchase, expansion into more SKUs, fewer issues, etc.), and then run segment comparisons. The output is practical: top segments, what\u2019s driving fit, where unmet needs cluster, and a recommended ICP profile.",
+      "link": "https://www.onyx.app/7299726-19"
+    },
+    {
+      "text": "Ryan Dean: Who usually owns this internally? Product? Sales? Marketing?",
+      "link": "https://www.onyx.app/7299726-20"
+    },
+    {
+      "text": "Sneha Reddy: Often it\u2019s a product or growth lead, with sales ops or marketing contributing data. For product planning specifically, it\u2019s helpful when product and sales are both in the room\u2014product to translate insights into roadmap decisions, sales to sanity-check the real-world friction and win/loss context.",
+      "link": "https://www.onyx.app/7299726-21"
+    },
+    {
+      "text": "Ryan Dean: If we did this, what would you need from me before a deeper call?",
+      "link": "https://www.onyx.app/7299726-22"
+    },
+    {
+      "text": "Sneha Reddy: Minimal. Two things: (1) who at Crimson Meadow Brewing has the cleanest view of customer outcomes\u2014maybe someone in sales ops, account management, or whoever tracks repeat orders and retention; and (2) what your current big roadmap question is for the next quarter. Then on the full call we can use that to pick fit drivers and decide which signals to ingest first.",
+      "link": "https://www.onyx.app/7299726-23"
+    },
+    {
+      "text": "Ryan Dean: Our big question right now is where to focus: expanding distribution in a couple regions versus doubling down on key accounts with more tailored programs. We argue about it weekly.",
+      "link": "https://www.onyx.app/7299726-24"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s exactly the type of decision fit_estimation helps unlock. We can compare those segments head-to-head: which has higher fit, what drivers are making it work or fail, and what unmet needs are blocking expansion. Then your roadmap and go-to-market plan becomes anchored to evidence\u2014who\u2019s most likely to succeed with you\u2014rather than whoever argues loudest.",
+      "link": "https://www.onyx.app/7299726-25"
+    },
+    {
+      "text": "Ryan Dean: Alright. I\u2019m interested enough to see it. What does a full call look like?",
+      "link": "https://www.onyx.app/7299726-26"
+    },
+    {
+      "text": "Sneha Reddy: I\u2019d propose a 30-minute working session. Agenda: 10 minutes mapping your definition of \u201csuccessful customer\u201d and your top 6\u201310 fit drivers, 10 minutes on what data sources you have access to, and 10 minutes reviewing what the outputs will look like\u2014fit score breakdowns, segment comparisons, and an ICP recommendation tied to outcomes. If it\u2019s a fit, we can talk next steps; if not, you\u2019ll still leave with a clearer driver framework.",
+      "link": "https://www.onyx.app/7299726-27"
+    },
+    {
+      "text": "Ryan Dean: That\u2019s reasonable. Can you send times?",
+      "link": "https://www.onyx.app/7299726-28"
+    },
+    {
+      "text": "Sneha Reddy: Yes. Does early next week work\u2014say Tuesday or Wednesday? And would it make sense to include whoever owns your account data, maybe sales ops?",
+      "link": "https://www.onyx.app/7299726-29"
+    },
+    {
+      "text": "Ryan Dean: Wednesday is better. I can bring our ops manager\u2014she\u2019ll have the CRM and order exports.",
+      "link": "https://www.onyx.app/7299726-30"
+    },
+    {
+      "text": "Sneha Reddy: Perfect. I\u2019ll send a calendar invite for Wednesday with a short pre-read: two questions on your success definition and a list of possible fit drivers to choose from. If you reply with any notes on the regions vs key accounts debate, I\u2019ll tailor the session to that.",
+      "link": "https://www.onyx.app/7299726-31"
+    },
+    {
+      "text": "Ryan Dean: Sounds good. Send it over and I\u2019ll take a look.",
+      "link": "https://www.onyx.app/7299726-32"
+    },
+    {
+      "text": "Sneha Reddy: Will do. Thanks Ryan\u2014appreciate the time. I\u2019ll get that invite out in the next few minutes.",
+      "link": "https://www.onyx.app/7299726-33"
+    },
+    {
+      "text": "Ryan Dean: Thanks, Sneha. Talk Wednesday.",
+      "link": "https://www.onyx.app/7299726-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "ryan_dean@crimson_meadow_brewing.onyx.app"
+    }
+  ]
+}

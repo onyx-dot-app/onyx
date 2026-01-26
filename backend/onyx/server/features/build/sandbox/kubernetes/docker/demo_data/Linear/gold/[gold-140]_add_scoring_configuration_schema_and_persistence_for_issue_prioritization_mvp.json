@@ -1,0 +1,30 @@
+{
+  "id": "9892683",
+  "semantic_identifier": "[GOLD-140]: Add scoring configuration schema + persistence for issue_prioritization MVP",
+  "title": "Add scoring configuration schema + persistence for issue_prioritization MVP",
+  "source": "linear",
+  "doc_updated_at": "2025-04-06",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2025-04-06"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Define a versioned scoring configuration model that supports weights for frequency, severity, and ARR tier, plus optional normalization settings. Implement persistence (DB table/collection) and CRUD endpoints/service methods to load the active config per workspace with sensible defaults. This unblocks subsequent work to compute and display explainable score breakdowns using a consistent, configurable source of truth.",
+      "link": "https://www.onyx.app/38507"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

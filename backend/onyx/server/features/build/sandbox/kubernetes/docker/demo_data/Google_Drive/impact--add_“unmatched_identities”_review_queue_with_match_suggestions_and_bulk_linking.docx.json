@@ -1,0 +1,30 @@
+{
+  "id": "4056725eb0d84e0bbce7997e05012cf5",
+  "semantic_identifier": "Impact--Add \u201cUnmatched identities\u201d review queue with match suggestions and bulk linking.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add \u201cUnmatched identities\u201d review queue with match suggestions and bulk linking.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds an admin-facing \u201cUnmatched identities\u201d review queue for cases where our automatic account-linking fails during ticket ingest. Instead of leaving identities orphaned (or forcing manual, one-off fixes), admins get a single place to triage the backlog and ensure identities are consistently attributed to the correct account.\n\nIn the queue, each unmatched identity will display both the raw signals and the canonicalized/normalized versions we use for matching (e.g., email, domain, company name), along with the top suggested account matches. This makes it easy to understand why the auto-link failed and quickly validate the most likely destination account with higher confidence and less guesswork.\n\nAdmins can resolve each item by confirming a link to an existing account, creating a new account, or marking the identity as ignore/unknown. To reduce repetitive work, the queue supports bulk actions for repeated patterns (e.g., the same email, domain, or company), enabling fast cleanup when many identities share the same root cause.\n\nCrucially, these admin decisions are persisted as explicit mapping/override rules so future ingests automatically link similar identities without requiring repeated manual intervention. The impact is improved data quality and reporting accuracy, reduced operational toil for support/ops teams, and faster time-to-value for customers relying on correct account attribution.",
+      "link": "https://www.onyx.app/98822"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

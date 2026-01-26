@@ -1,0 +1,185 @@
+{
+  "id": "FIREFLIES_3141595",
+  "semantic_identifier": "3141595 - Copperlane Construction - sales_call - Discussion with Andres Herrera",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-13 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-13 00:00:00",
+    "duration_min": "37"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "3141595 - Copperlane Construction - sales_call - Discussion with Andres Herrera",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Andres, good to see you again. Thanks for making time for a quick follow-up. Last time you mentioned you were interested in tightening up forecasting and reducing deal slippage in Salesforce\u2014does that still feel like the priority at Copperlane?",
+      "link": "https://www.onyx.app/6699499-1"
+    },
+    {
+      "text": "Andres Herrera: Yeah, it\u2019s still a priority. We\u2019ve had a couple deals drift this month and it\u2019s hard to see it coming until it\u2019s already a problem.",
+      "link": "https://www.onyx.app/6699499-2"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly the gap Sales_Accelerator is built for. Since you already have Customer_Analyzer in motion for fit scoring and messaging, Sales_Accelerator sits on top of Salesforce and turns those signals into execution: it flags risk early and recommends what to do next\u2014rep by rep, deal by deal. If it\u2019s okay, I want to focus today on two things: the warning alerts, and how sales ops can use it to spot pipeline bottlenecks.",
+      "link": "https://www.onyx.app/6699499-3"
+    },
+    {
+      "text": "Andres Herrera: Sure. But I want to be clear\u2014we don\u2019t want another tool that just throws alerts at reps and they ignore them. Adoption is a big issue here.",
+      "link": "https://www.onyx.app/6699499-4"
+    },
+    {
+      "text": "Camila Vega: Totally fair. The alerts are only useful if they\u2019re actionable and routed where your team already works. The warning_alerts feature covers a few high-signal risks: inactivity\u2014no touches for a defined period, stage aging beyond your benchmark, no upcoming meeting on the calendar, champion risk when you\u2019re single-threaded, pricing/terms risk, competitive risk if it\u2019s mentioned in notes, and forecast risk when a \u201ccommit\u201d deal starts weakening. Then each alert includes a recommended remediation action\u2014like \u201cschedule exec alignment,\u201d \u201csend security pack,\u201d or \u201creconfirm timeline.\u201d And they can go to Slack, email, or live in Salesforce.",
+      "link": "https://www.onyx.app/6699499-5"
+    },
+    {
+      "text": "Andres Herrera: Okay, but how does it know what\u2019s \u201chigh signal\u201d for us? Our sales cycle isn\u2019t clean\u2014construction is lumpy, procurement is weird, and some deals go quiet for weeks and then come back.",
+      "link": "https://www.onyx.app/6699499-6"
+    },
+    {
+      "text": "Camila Vega: Makes sense. You\u2019d set benchmarks by segment\u2014like project type, deal size, region\u2014so stage aging is compared against your own patterns, not a generic SaaS benchmark. The point isn\u2019t \u201cquiet equals bad,\u201d it\u2019s \u201cquiet relative to what usually happens for this kind of deal.\u201d And the \u201cno upcoming meeting\u201d or \u201csingle-threaded champion\u201d alerts tend to be universal risk indicators even in lumpy cycles.",
+      "link": "https://www.onyx.app/6699499-7"
+    },
+    {
+      "text": "Andres Herrera: The \u201cnotes\u201d thing worries me. Competitive risk in notes\u2014does that mean you\u2019re reading rep notes and then making judgments? Some reps are\u2026 not consistent with how they write.",
+      "link": "https://www.onyx.app/6699499-8"
+    },
+    {
+      "text": "Camila Vega: It\u2019s not trying to editorialize; it\u2019s simply surfacing signals that are already present. If reps never capture competitor names, you won\u2019t magically get competitive alerts. Where it helps is consistency\u2014if a competitor shows up once in notes, you can prevent the \u201cwe forgot this was competitive\u201d problem. But yes, it does depend on data hygiene.",
+      "link": "https://www.onyx.app/6699499-9"
+    },
+    {
+      "text": "Andres Herrera: Data hygiene is exactly the issue. If we don\u2019t trust the data, alerts won\u2019t be trusted either.",
+      "link": "https://www.onyx.app/6699499-10"
+    },
+    {
+      "text": "Camila Vega: Understood. That\u2019s why we usually start with a narrow scope: pick one team, pick a few alert types, and tune thresholds for 2\u20133 weeks. And on your side, sales ops can use the pipeline bottleneck view to find where the process is breaking\u2014not just at the rep level. For example, Sales_Accelerator shows stage-to-stage conversion by segment and rep, and can recommend a process fix like adding a security review step earlier if deals keep stalling at procurement. Then you monitor if the bottleneck improves after the change.",
+      "link": "https://www.onyx.app/6699499-11"
+    },
+    {
+      "text": "Andres Herrera: We already have dashboards for stage conversion. It\u2019s not pretty, but it exists. The question is what\u2019s new here besides another dashboard.",
+      "link": "https://www.onyx.app/6699499-12"
+    },
+    {
+      "text": "Camila Vega: Fair. Two differences: first, it pairs the analytics with \u201cwhat to do next\u201d recommendations instead of leaving the team to interpret charts. Second, it\u2019s designed to be consistent across reps\u2014managers see the same risk language and can coach to it, instead of every rep describing risk differently. And because it consumes Customer_Analyzer fit scores, it can flag \u201chigh-fit but at-risk\u201d deals so your team intervenes where it matters most.",
+      "link": "https://www.onyx.app/6699499-13"
+    },
+    {
+      "text": "Andres Herrera: Let me pause you there. The Customer_Analyzer integration\u2014how do you avoid stepping on that tool? We\u2019ve been careful about approved messaging and positioning. I don\u2019t want Sales_Accelerator generating its own narrative and now we have inconsistent talk tracks.",
+      "link": "https://www.onyx.app/6699499-14"
+    },
+    {
+      "text": "Camila Vega: Great callout. We\u2019re very intentional about that boundary. Sales_Accelerator does not replace your positioning work; it pulls in the approved positioning blocks and fit scores from Customer_Analyzer and uses them to prioritize and guide sequences\u2014without inventing new messaging. The point is: \u201cuse what you already approved, but apply it consistently at scale.\u201d If you ever saw it trying to generate new positioning, that would be a configuration and governance issue we\u2019d lock down.",
+      "link": "https://www.onyx.app/6699499-15"
+    },
+    {
+      "text": "Andres Herrera: \u201cWould be\u201d is doing a lot of work there. Tools tend to creep. My leadership will ask: who controls the messaging, and how do we ensure SDRs don\u2019t get a different script than AEs?",
+      "link": "https://www.onyx.app/6699499-16"
+    },
+    {
+      "text": "Camila Vega: The control lives with your enablement or ops owners. You can restrict what content blocks are used, and tie them directly to the Customer_Analyzer outputs you\u2019ve approved. The system should be explainable: it can show \u201cthis recommendation is based on fit score X and positioning block Y.\u201d But if governance is a big concern, we can scope the initial rollout to alerts and forecasting only\u2014no outbound messaging guidance at first.",
+      "link": "https://www.onyx.app/6699499-17"
+    },
+    {
+      "text": "Andres Herrera: That helps, but even alerts can create noise. If reps get pinged all day, they tune it out. We\u2019ve seen that with other tools.",
+      "link": "https://www.onyx.app/6699499-18"
+    },
+    {
+      "text": "Camila Vega: That\u2019s why we don\u2019t recommend \u201cturn everything on.\u201d Typically you start with three: inactivity, stage aging, and no upcoming meeting. Those are easy to understand and tie directly to outcomes. Then we look at volume\u2014if someone gets 30 alerts a day, we raise thresholds or narrow it to key segments like high-fit deals.",
+      "link": "https://www.onyx.app/6699499-19"
+    },
+    {
+      "text": "Andres Herrera: And what does this take to implement? We\u2019re already stretched. We can\u2019t do a six-week project.",
+      "link": "https://www.onyx.app/6699499-20"
+    },
+    {
+      "text": "Camila Vega: If the scope is the warning alerts plus the bottleneck view, and we\u2019re sitting on top of Salesforce, it\u2019s usually a light lift\u2014connect CRM, map stages, define benchmarks, set routing to Slack or Salesforce. But I\u2019ll be honest: the tuning phase is where you\u2019ll spend time, because you\u2019ll want it to match your reality.",
+      "link": "https://www.onyx.app/6699499-21"
+    },
+    {
+      "text": "Andres Herrera: That tuning phase is the part I\u2019m worried about. We don\u2019t have someone who can babysit it, and our reps won\u2019t tolerate \u201cwe\u2019re experimenting\u201d messages mid-quarter.",
+      "link": "https://www.onyx.app/6699499-22"
+    },
+    {
+      "text": "Camila Vega: That\u2019s fair. The safest way is to run it quietly for a couple weeks\u2014manager view only\u2014so you validate signal quality before reps see anything. Then you roll it out to a pilot pod with clear guardrails.",
+      "link": "https://www.onyx.app/6699499-23"
+    },
+    {
+      "text": "Andres Herrera: Maybe. But I\u2019m also thinking budget. We\u2019re being asked to justify every new spend, and I\u2019m not sure I can tie this directly to revenue without a long proof period.",
+      "link": "https://www.onyx.app/6699499-24"
+    },
+    {
+      "text": "Camila Vega: The ROI case usually comes from preventing avoidable slip\u2014saving deals that would otherwise stall, and improving forecast accuracy so leadership isn\u2019t surprised. For example, catching \u201ccommit with weakening signals\u201d early gives you time to intervene. But if your leadership needs near-term proof, we\u2019d need agreement on what success looks like\u2014like reducing stage aging in two critical stages, or improving conversion from proposal to close in one segment.",
+      "link": "https://www.onyx.app/6699499-25"
+    },
+    {
+      "text": "Andres Herrera: That\u2019s hard because our sample sizes are small. One big project swings the quarter.",
+      "link": "https://www.onyx.app/6699499-26"
+    },
+    {
+      "text": "Camila Vega: Understood. In that case, the value might be more on predictability and standardization\u2014giving you explainable risk flags rather than gut feel. But I hear you: if the buying committee is focused on immediate, measurable revenue lift, it can be a tougher sell.",
+      "link": "https://www.onyx.app/6699499-27"
+    },
+    {
+      "text": "Andres Herrera: Yeah. And I\u2019m not convinced our data is clean enough for this to not become another \u201calerts we ignore\u201d system. Also, governance around messaging is a landmine for us.",
+      "link": "https://www.onyx.app/6699499-28"
+    },
+    {
+      "text": "Camila Vega: That\u2019s helpful clarity. If we can\u2019t rely on CRM activity and notes, the early warning system won\u2019t shine. And if messaging governance is sensitive, we should avoid anything that looks like it\u2019s generating talk tracks. Would it make sense for me to send a one-page pilot plan that\u2019s manager-only, alerts-only, with strict routing and thresholds\u2014so you can sanity-check whether it\u2019s even worth evaluating?",
+      "link": "https://www.onyx.app/6699499-29"
+    },
+    {
+      "text": "Andres Herrera: You can send it, sure. But I\u2019m going to be upfront: I don\u2019t see us kicking off a pilot this quarter. We\u2019re already midstream on process changes and I don\u2019t want to introduce another layer.",
+      "link": "https://www.onyx.app/6699499-30"
+    },
+    {
+      "text": "Camila Vega: Got it. If timing is the blocker, we can pause and revisit when you\u2019re through the current changes. Before we wrap: is there anything that would have to be true for this to become a \u201cyes\u201d later\u2014cleaner activity tracking, a dedicated ops owner, or a specific forecasting pain that spikes again?",
+      "link": "https://www.onyx.app/6699499-31"
+    },
+    {
+      "text": "Andres Herrera: Cleaner activity tracking and a clear owner. And leadership would need to see this as simplifying the stack, not adding to it.",
+      "link": "https://www.onyx.app/6699499-32"
+    },
+    {
+      "text": "Camila Vega: That makes sense. I\u2019ll send the pilot outline and also a quick governance note on how we prevent overlap with Customer_Analyzer messaging. If it\u2019s helpful, we can regroup in, say, six weeks once you see how your current process changes land.",
+      "link": "https://www.onyx.app/6699499-33"
+    },
+    {
+      "text": "Andres Herrera: That works. Send the info and we\u2019ll keep it on file.",
+      "link": "https://www.onyx.app/6699499-34"
+    },
+    {
+      "text": "Camila Vega: Will do. Thanks Andres\u2014appreciate the candor. I\u2019ll follow up by email with the plan and we\u2019ll tentatively pencil a check-in for six weeks out.",
+      "link": "https://www.onyx.app/6699499-35"
+    },
+    {
+      "text": "Andres Herrera: Sounds good. Thanks Camila.",
+      "link": "https://www.onyx.app/6699499-36"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "andres_herrera@copperlane_construction.onyx.app"
+    }
+  ]
+}

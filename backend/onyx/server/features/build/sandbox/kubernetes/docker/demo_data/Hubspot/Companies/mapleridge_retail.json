@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_8061223",
+  "semantic_identifier": "Mapleridge Retail",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-29 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "8061223",
+    "domain": "mapleridge_retail.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Mapleridge Retail\nDomain: mapleridge_retail.onyx.app",
+      "link": "https://www.onyx.app/92610"
+    },
+    {
+      "text": "Contact: Claire Simmons\nEmail: claire_simmons@mapleridge_retail.onyx.app",
+      "link": "https://www.onyx.app/72161"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

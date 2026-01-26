@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_6411080",
+  "semantic_identifier": "Moonrise Quarry Supply",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-19 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "6411080",
+    "domain": "moonrise_quarry_supply.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Moonrise Quarry Supply\nDomain: moonrise_quarry_supply.onyx.app",
+      "link": "https://www.onyx.app/33893"
+    },
+    {
+      "text": "Contact: Eliana Jacobs\nEmail: eliana_jacobs@moonrise_quarry_supply.onyx.app",
+      "link": "https://www.onyx.app/73616"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "88ff35e63aac4ffca15eb95414f4db03",
+  "semantic_identifier": "Design--Customer_Analyzer v2: Enforce \u201capproved messaging only\u201d in Sales_Accelerator draft generation.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Customer_Analyzer v2: Enforce \u201capproved messaging only\u201d in Sales_Accelerator draft generation.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We\u2019ll update the Sales_Accelerator draft generation pipeline to enforce \u201capproved messaging only\u201d from Customer_Analyzer v2. For any draft request (both initiation and follow-up endpoints), the generator will resolve the target record\u2019s currently active messaging version, then load only messaging blocks that (a) are explicitly marked `approved` and (b) have a `messaging_version` matching the active version. Downstream prompt assembly will be changed to accept only this filtered block set, eliminating any implicit fallback to unapproved or mismatched-version content.\n\nBefore generation, we\u2019ll add a gating step that reuses the existing sync/alignment check result on the target record. If the record is in `alignment_failed`, we will not attempt generation. Separately, if the filtered query yields zero approved blocks for the active version, we will also block generation. These checks occur early (before expensive model calls) and are applied identically for both initiation and follow-up flows to avoid inconsistent behavior.\n\nWhen generation is blocked, the API will return a structured response the UI can handle deterministically rather than treating it as an error. Concretely, the endpoints will return `status: \"blocked\"` plus a `reason` enum (e.g., `alignment_failed` | `no_approved_blocks_for_active_version`) and minimal metadata the UI may need (e.g., `active_messaging_version`, `required_state`, and optionally counts of matching approved blocks). We\u2019ll keep non-blocking failures (timeouts, provider errors) as existing error responses; \u201cblocked\u201d is a first-class, expected outcome.\n\nImplementation will include (1) a shared library function used by both endpoints to compute active version, perform alignment gating, and fetch approved/version-matching blocks, (2) query/index updates if needed to efficiently filter by `approved` + `messaging_version`, and (3) tests covering: approved-only filtering, version mismatch exclusion, alignment_failed blocking, empty-approved blocking, and parity between initiation/follow-up endpoints. This ensures drafts are generated only from sanctioned messaging and that the UI can clearly prompt users to resolve alignment or approval/version gaps.",
+      "link": "https://www.onyx.app/45333"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#101",
+  "semantic_identifier": "101: feat: Admin Compliance Settings UI: presets, validation, and policy block messaging",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-09",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "101",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "3",
+    "num_files_changed": "69",
+    "labels": [],
+    "created_at": "2026-01-09",
+    "updated_at": "2026-01-09",
+    "closed_at": "2026-01-22"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds an in-app admin UI in Sales_Accelerator to view and update tenant-level compliance settings introduced in GOLD-131. Includes one-click presets for common regulated configurations, end-to-end validation, and explicit user-facing messaging that explains why AI generation or comms ingestion is blocked by policy.\n\n## What changed\n- **Admin UI (Sales_Accelerator)**\n  - New compliance settings screen for tenant admins.\n  - Renders all tenant compliance toggles with **clear, human-readable descriptions** of what each toggle blocks/permits.\n  - Supports editing + saving with optimistic UI + failure rollback messaging.\n\n- **Presets**\n  - Adds preset selector with safe defaults:\n    - **Regulated / No AI Generation**: disables AI generation features governed by GOLD-131 flags.\n    - **PII-Restricted Comms Ingestion**: disables comms ingestion pathways governed by GOLD-131 flags.\n  - Preset application updates the local form state and shows a confirmation before persisting.\n\n- **Validation (high priority / safety)**\n  - **Client-side**: blocks invalid combinations (e.g., dependent toggles) and surfaces inline errors before submit.\n  - **Server-side**: API enforces the same rules; invalid updates return structured validation errors that the UI displays.\n\n- **Policy enforcement messaging**\n  - When AI generation or comms ingestion is disabled by compliance policy, impacted entry points now show an explicit **\u201cBlocked by tenant compliance policy\u201d** message with the specific setting(s) responsible.\n  - Adds a consistent error code/reason mapping so the UI can render \u201cwhy blocked\u201d deterministically.\n\n## Implementation notes\n- Introduces a typed settings model (aligned to GOLD-131) and a single update endpoint call used by the admin UI.\n- Centralizes preset definitions in code (name, description, and toggle values) to keep behavior deterministic and testable.\n- Adds unit coverage for preset application + validation rules, and integration coverage for blocked-message rendering based on server responses.\n\n## User impact\n- Tenant admins can configure compliance controls without backend intervention.\n- End users get clear guidance when features are unavailable due to tenant policy, reducing support escalations.\n\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#101"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

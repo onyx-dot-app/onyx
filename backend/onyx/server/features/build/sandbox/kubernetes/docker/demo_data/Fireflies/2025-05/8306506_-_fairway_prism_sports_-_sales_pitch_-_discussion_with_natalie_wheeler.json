@@ -1,0 +1,137 @@
+{
+  "id": "FIREFLIES_8306506",
+  "semantic_identifier": "8306506 - Fairway Prism Sports - sales_pitch - Discussion with Natalie Wheeler",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-05-22 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-05-22 00:00:00",
+    "duration_min": "34"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-05"
+      ],
+      "year_month": "2025-05",
+      "meeting_title": "8306506 - Fairway Prism Sports - sales_pitch - Discussion with Natalie Wheeler",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Natalie\u2014Camila Vega here. Thanks for taking a few minutes. I\u2019ll keep this quick. I\u2019m calling because we built Customer_Analyzer to help teams get really crisp on who their best customers are and then translate that into messaging your reps can actually use in deals. Does that map at all to what you\u2019re working on at Fairway Prism Sports?",
+      "link": "https://www.onyx.app/3678912-1"
+    },
+    {
+      "text": "Natalie Wheeler: Hi Camila. I can spare a few minutes, but just to set expectations\u2014we\u2019re in the middle of planning and I\u2019m not really looking at new tools right now.",
+      "link": "https://www.onyx.app/3678912-2"
+    },
+    {
+      "text": "Camila Vega: Totally fair. The 60-second version is: Customer_Analyzer ingests signals you already have\u2014CRM fields, onboarding survey answers, product usage events, support tickets, even interview notes\u2014and produces two outputs. One is a fit score from 0 to 100 at the account and segment level, and the other is positioning recommendations: value props, differentiators, proof points, and objection handling tied to what actually predicts retention and expansion.  \nWhere I see it helping teams quickly is when there\u2019s disagreement internally on ICP, or when sales is chasing deals that look good on paper but don\u2019t renew. Is that a pain you\u2019re seeing?",
+      "link": "https://www.onyx.app/3678912-3"
+    },
+    {
+      "text": "Natalie Wheeler: We\u2019ve done a lot of ICP work already. We have segments, we have personas. It\u2019s not perfect, but it\u2019s not the main blocker.",
+      "link": "https://www.onyx.app/3678912-4"
+    },
+    {
+      "text": "Camila Vega: That\u2019s great you already have it documented\u2014honestly that\u2019s a better starting point than most. What we typically find is the \u201cpaper ICP\u201d exists, but it\u2019s not anchored to outcomes.  \nWith the fit estimation feature, you can define fit drivers\u2014industry, size, problem severity, willingness to pay, time-to-value, adoption patterns, support burden, churn risk signals\u2014and we break down *why* a segment scores higher or lower, then compare segments like SMB vs mid-market. The practical result is you can say, \u201cThis is our highest-likelihood segment for renewal/expansion,\u201d and align marketing and sales around it.  \nOut of curiosity, how do you currently decide whether a deal is a great fit before you invest a lot of sales cycles?",
+      "link": "https://www.onyx.app/3678912-5"
+    },
+    {
+      "text": "Natalie Wheeler: Mostly rep judgment plus a few qualification questions. We look at basics in the CRM. But again, we\u2019re not shopping for analytics platforms right now.",
+      "link": "https://www.onyx.app/3678912-6"
+    },
+    {
+      "text": "Camila Vega: Understood. Let me connect it to something more immediate: sales enablement. One common use case is building an objection-handling guide tied to the strongest value drivers for your best-fit accounts.  \nSo instead of a generic battlecard, you get: \u201cFor high-fit Segment A, the top drivers are X and Y, here are proof points that resonate, and here\u2019s how to handle the top objections we see in that segment.\u201d That tends to shorten ramp time and keep reps from pitching the wrong story.  \nDo you have a consistent objection pattern that keeps coming up\u2014pricing, switching costs, internal buy-in?",
+      "link": "https://www.onyx.app/3678912-7"
+    },
+    {
+      "text": "Natalie Wheeler: Pricing and \u201cwhy now\u201d are the big ones. But we already have enablement materials. They\u2019re not perfect, but we iterate.",
+      "link": "https://www.onyx.app/3678912-8"
+    },
+    {
+      "text": "Camila Vega: Makes sense. The difference is we tie the content to observed signals\u2014like \u201caccounts that adopt Feature Z within 30 days renew at a higher rate,\u201d or \u201cteams with high support burden churn more,\u201d and then we make the messaging reflect that reality.  \nIf we took, say, your last 12 months of closed-won and churned accounts, we could produce a driver breakdown: what correlates with healthy customers vs risky ones, and then turn that into objection handling that\u2019s grounded in outcomes instead of anecdotes.  \nIs Natalie the right person to evaluate something like that, or is that more RevOps/Sales Enablement/Marketing?",
+      "link": "https://www.onyx.app/3678912-9"
+    },
+    {
+      "text": "Natalie Wheeler: It\u2019s a mix, but I\u2019m not leading tooling decisions. Also, pulling in support tickets and product usage data is a bigger project than it sounds. We\u2019re already stretched.",
+      "link": "https://www.onyx.app/3678912-10"
+    },
+    {
+      "text": "Camila Vega: That\u2019s a fair callout. Implementation effort is usually the first concern. For a light start, many teams begin with just CRM + a few onboarding fields, then add richer signals later. Even with that, we can often produce meaningful segment comparisons and a fit score baseline.  \nBut if bandwidth is the constraint, I don\u2019t want to push something that becomes \u201cone more system.\u201d  \nCan I ask\u2014are you actively seeing churn issues or wasted pipeline from poor-fit deals, or is it mostly \u201cnice to have\u201d right now?",
+      "link": "https://www.onyx.app/3678912-11"
+    },
+    {
+      "text": "Natalie Wheeler: It\u2019s more \u201cnice to have.\u201d Our churn is acceptable, and pipeline quality isn\u2019t the biggest fire at the moment.",
+      "link": "https://www.onyx.app/3678912-12"
+    },
+    {
+      "text": "Camila Vega: Got it. In that case, it may simply be the wrong timing. The only reason I\u2019m reaching out is because teams similar to yours have used the fit scoring to reduce time spent on low-likelihood segments and to sharpen their pitch where it matters. But if you\u2019re not feeling that pain, a full evaluation probably isn\u2019t a good use of your week.",
+      "link": "https://www.onyx.app/3678912-13"
+    },
+    {
+      "text": "Natalie Wheeler: Yeah, I appreciate that. We have too many priorities right now and I don\u2019t want to take on an initiative that requires coordination across systems.",
+      "link": "https://www.onyx.app/3678912-14"
+    },
+    {
+      "text": "Camila Vega: Completely understood. Would it be helpful if I sent a one-page overview that explains the fit score output and what an objection-handling guide looks like when it\u2019s tied to fit drivers? That way, if priorities shift later, you have it on hand.",
+      "link": "https://www.onyx.app/3678912-15"
+    },
+    {
+      "text": "Natalie Wheeler: You can send it, sure, but I can\u2019t promise when I\u2019ll look at it.",
+      "link": "https://www.onyx.app/3678912-16"
+    },
+    {
+      "text": "Camila Vega: That\u2019s totally fine. What\u2019s the best email for you, and is there anyone else you\u2019d want looped in\u2014maybe whoever owns enablement or RevOps\u2014just so it doesn\u2019t get lost?",
+      "link": "https://www.onyx.app/3678912-17"
+    },
+    {
+      "text": "Natalie Wheeler: Send it to my work email. And no, don\u2019t loop anyone else right now.",
+      "link": "https://www.onyx.app/3678912-18"
+    },
+    {
+      "text": "Camila Vega: Will do. Last quick question so I tailor it: in your world, is the bigger challenge getting reps to qualify out faster, or getting them to tell a more consistent story to the right accounts?",
+      "link": "https://www.onyx.app/3678912-19"
+    },
+    {
+      "text": "Natalie Wheeler: Consistent story, but again\u2014we\u2019re managing it with our current process.",
+      "link": "https://www.onyx.app/3678912-20"
+    },
+    {
+      "text": "Camila Vega: Helpful. I\u2019ll send a short summary focused on consistent messaging tied to best-fit accounts, plus an example of how the driver breakdown maps to objections like pricing and \u201cwhy now.\u201d  \nAnd Natalie, if in a quarter you find you\u2019re revisiting ICP or you see pipeline quality slipping, I\u2019m happy to reconnect\u2014no pressure. Sound good?",
+      "link": "https://www.onyx.app/3678912-21"
+    },
+    {
+      "text": "Natalie Wheeler: Sure. Thanks, Camila.",
+      "link": "https://www.onyx.app/3678912-22"
+    },
+    {
+      "text": "Camila Vega: Thanks for the time, Natalie. I\u2019ll get that over today. Have a good one.",
+      "link": "https://www.onyx.app/3678912-23"
+    },
+    {
+      "text": "Natalie Wheeler: You too. Bye.",
+      "link": "https://www.onyx.app/3678912-24"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "natalie_wheeler@fairway_prism_sports.onyx.app"
+    }
+  ]
+}

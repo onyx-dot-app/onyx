@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_8824119",
+  "semantic_identifier": "Umbraleaf Biotech - Issue Tracker",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-04-20 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "166118",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "8824119"
+  },
+  "sections": [
+    {
+      "text": "Deal: Umbraleaf Biotech\nAmount: $166118\nProduct of Interest: Issue_Tracker\nFeatures of Interest: issue_priotization\nClose Date: 2025-07-20 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/50009"
+    },
+    {
+      "text": "Contact: Larry Delgado\nEmail: larry_delgado@umbraleaf_biotech.onyx.app",
+      "link": "https://www.onyx.app/97215"
+    },
+    {
+      "text": "Company: Umbraleaf Biotech\nDomain: umbraleaf_biotech.onyx.app",
+      "link": "https://www.onyx.app/19053"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/82962"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

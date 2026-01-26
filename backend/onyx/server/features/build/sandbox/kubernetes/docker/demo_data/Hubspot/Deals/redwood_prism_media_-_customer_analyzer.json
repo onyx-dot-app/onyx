@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_1453365",
+  "semantic_identifier": "Redwood Prism Media - Customer Analyzer",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-11-04 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "28247",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "1453365"
+  },
+  "sections": [
+    {
+      "text": "Deal: Redwood Prism Media\nAmount: $28247\nProduct of Interest: Customer_Analyzer\nFeatures of Interest: fit_estimation\nClose Date: 2026-01-31 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/74260"
+    },
+    {
+      "text": "Contact: Kathryn Jacobs\nEmail: kathryn_jacobs@redwood_prism_media.onyx.app",
+      "link": "https://www.onyx.app/11729"
+    },
+    {
+      "text": "Company: Redwood Prism Media\nDomain: redwood_prism_media.onyx.app",
+      "link": "https://www.onyx.app/30896"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/22996"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#120",
+  "semantic_identifier": "120: feat: Workspace-level PII detection & pre-persistence redaction for conversations, evidence, and issue notes",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-10-15",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "120",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "49",
+    "labels": [],
+    "created_at": "2025-10-15",
+    "updated_at": "2025-10-15",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nThis PR adds workspace-scoped controls to detect and redact common PII from ingested support conversations and derived artifacts (evidence snippets + issue notes). Redaction is enforced **before database persistence** and **before any downstream sync/export** (e.g., Jira/Linear), with optional hashed identifiers to support matching/deduplication.\n\n## Key changes\n- **PII detection + redaction pipeline**\n  - Introduces a normalization + scan pass over all inbound text fields from ingestion and evidence extraction.\n  - Detects common PII types: emails, phone numbers, street addresses (heuristic), API keys/tokens (pattern-based), and other configurable patterns.\n  - Applies deterministic redaction tokens (e.g., `[REDACTED:EMAIL:1]`) to preserve readability and internal referential integrity within a single record.\n\n- **Pre-persistence enforcement**\n  - Redaction runs in the ingestion path prior to writing conversation messages, extracted evidence snippets, and issue notes.\n  - Adds a guard to prevent bypass (e.g., ingestion writes require a \u201csanitized payload\u201d contract).\n\n- **Downstream sync safety**\n  - Ensures all outbound sync payloads (Jira/Linear connectors and any webhook/export surfaces) source only sanitized/redacted fields.\n  - Maintains a mapping for \u201csource reference\u201d fields (conversation/message IDs) without leaking raw PII.\n\n- **Workspace-level configuration**\n  - Adds workspace settings for:\n    - Enable/disable PII redaction\n    - Allowlist/denylist patterns (regex-based)\n    - Per-type toggles (email/phone/address/token)\n    - Optional **store hashed identifiers only** (HMAC-SHA256 with workspace secret) for matching/deduplication without storing raw values\n\n- **Admin UI + API**\n  - Adds admin UI section to configure redaction settings.\n  - Adds a **redaction preview** endpoint/UI that shows what would be redacted on a sample text payload without persisting it.\n  - Exposes settings via workspace admin API (GET/PUT) with validation for patterns and limits.\n\n## Implementation details\n- Adds a `pii` module (detectors + redactors) with:\n  - Pluggable detectors (regex + lightweight heuristics)\n  - Stable replacement strategy (per-field counter-based tokenization)\n  - Optional `hashed_identifiers[]` extraction using HMAC to support dedupe\n- Updates ingestion + evidence extraction services to call `sanitizeText()` on all user-provided/freeform text.\n- Updates sync adapters to rely on sanitized fields only; adds tests to ensure raw text never enters sync payloads.\n- Database:\n  - New `workspace_redaction_settings` (or equivalent settings JSON) persisted per workspace.\n  - Optional storage for hashed identifiers (scoped to workspace) when enabled.\n\n## Tests\n- Unit tests for each detector + redaction output stability.\n- Integration tests verifying:\n  - Redaction occurs before persistence (DB contains only redacted text).\n  - Sync payloads contain no raw PII.\n  - Allow/deny patterns override defaults.\n  - Hash-only mode stores hashes and not raw values.\n\n## User impact / rollout notes\n- Default behavior is configurable per workspace; admins can enable redaction and preview results prior to enforcing.\n- When enabled, previously ingested content is not retroactively rewritten in this PR (forward-only).\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#120"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

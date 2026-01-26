@@ -1,0 +1,30 @@
+{
+  "id": "a3d3b3688b254aef9b501935e5d54094",
+  "semantic_identifier": "Design--Positioning workspace: Fix segment comparison selection & data loading.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Positioning workspace: Fix segment comparison selection & data loading.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nIn the Positioning workspace, the Segment Comparison panel can display stale or incorrect comparison data when users rapidly switch segments or navigate away/back. The root cause is likely fragmented selection state (UI vs route vs store) combined with non-deterministic async fetch behavior (in-flight requests resolving out of order). This feature will make segment selection state authoritative in one place and make data loading deterministic so the UI always reflects the currently selected primary + comparison segments.\n\n### Single source of truth for selection\nWe will introduce a single \u201ccomparison selection\u201d state model (primarySegmentId, comparisonSegmentId) owned by one layer (preferably the route/query params if comparisons are shareable/bookmarkable; otherwise a dedicated store scoped to the workspace). All comparison UI components will read from this model and only update selection through a single action (e.g., `setComparisonSelection(primaryId, comparisonId)`), eliminating ad-hoc local state. Navigation/back will hydrate from the same source, ensuring the selection shown in the UI is always the selection used to fetch data.\n\n### Deterministic data-fetch lifecycle & race prevention\nData fetching will be keyed strictly by `(primarySegmentId, comparisonSegmentId)` and driven by changes to the authoritative selection state. On each selection change, we will cancel in-flight requests where supported (e.g., `AbortController`) and/or ignore stale responses using a monotonically increasing request token/version captured at request start and checked at completion. The store will keep `status` (idle/loading/success/error) and `activeRequestKey`, and will only apply results if the completing request key/token matches the latest selection, preventing out-of-order updates after fast switching.\n\n### Logging and verification\nAdd lightweight logging (guarded to dev/debug or sampled in prod) for: selection changes (old \u2192 new IDs, source: user vs route hydration), fetch start (request key/token), fetch completion (success/error, duration), and \u201cignored/canceled stale response\u201d events. This will make it easy to verify that the UI state, active selection, and applied data always align during rapid interactions and back/forward navigation, and will provide future debugging hooks if regressions occur.",
+      "link": "https://www.onyx.app/55882"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

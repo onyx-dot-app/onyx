@@ -1,0 +1,30 @@
+{
+  "id": "9383147",
+  "semantic_identifier": "[GOLD-184]: Sales_Accelerator v2: Publish Issue_Tracker issue status + links back to deal-risk remediation",
+  "title": "Sales_Accelerator v2: Publish Issue_Tracker issue status + links back to deal-risk remediation",
+  "source": "linear",
+  "doc_updated_at": "2026-01-22",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "ryan_murphy",
+      "email": "ryan_murphy@netherite-extraction.onyx.app"
+    },
+    "state": "in_progress",
+    "priority": "low",
+    "created_at": "2026-01-22"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement the outbound sync from Issue_Tracker to Sales_Accelerator v2 so that when an issue\u2019s status changes (e.g., triaged/in progress/resolved), Sales_Accelerator receives an updated remediation signal for impacted deals. Include the issue identifier, current status, last-updated timestamp, and deep links to the Issue_Tracker issue + linked downstream eng work (Linear/Jira) for seller context. Add idempotency and retry/backoff handling, plus logging/metrics for successful vs. failed updates.",
+      "link": "https://www.onyx.app/95793"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

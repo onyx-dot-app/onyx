@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_1829267",
+  "semantic_identifier": "Jetstream Vale Aviation - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-27 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "48755",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "1829267"
+  },
+  "sections": [
+    {
+      "text": "Deal: Jetstream Vale Aviation\nAmount: $48755\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-11-12 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/66285"
+    },
+    {
+      "text": "Contact: Teresa Flores\nEmail: teresa_flores@jetstream_vale_aviation.onyx.app",
+      "link": "https://www.onyx.app/57219"
+    },
+    {
+      "text": "Company: Jetstream Vale Aviation\nDomain: jetstream_vale_aviation.onyx.app",
+      "link": "https://www.onyx.app/57946"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/51124"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#47",
+  "semantic_identifier": "47: feat: Ingestion: add configurable batching + backpressure to cap concurrency and prevent queue blowups",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-01",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "47",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "4",
+    "num_files_changed": "38",
+    "labels": [],
+    "created_at": "2025-07-01",
+    "updated_at": "2025-07-01",
+    "closed_at": "2025-07-23"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR implements batching and backpressure controls across the ingestion pipeline to keep throughput stable during large backfills without overwhelming the DB or downstream sync.\n\nKey changes\n- Adds per-stage configuration for batch size and concurrency limits for fetch/parse/dedupe/persist.\n- Reworks stage runners to process work-items in bounded batches and to enforce a global in-flight cap (preventing unbounded fan-out).\n- Introduces backpressure based on runtime signals:\n  - queue depth thresholds (high/low watermarks) to pause/resume ingestion sources\n  - elevated retry/error rates to reduce concurrency and/or temporarily pause consumers\n- Adds a lightweight rate controller that adjusts stage concurrency within configured min/max bounds and emits structured logs/metrics for visibility.\n\nIdempotency + retries\n- Ensures batch processing remains idempotent by keeping existing dedupe keys and upsert semantics and by making batch commits safe to retry.\n- Changes retry handling to re-enqueue items with jittered backoff while preserving idempotency (no duplicate DB writes; safe reprocessing when throttling triggers retries).\n\nConfiguration\n- New config knobs (with safe defaults) for:\n  - BATCH_SIZE_{FETCH,PARSE,DEDUPE,PERSIST}\n  - CONCURRENCY_{FETCH,PARSE,DEDUPE,PERSIST}\n  - INFLIGHT_MAX\n  - BACKPRESSURE_QUEUE_HIGH/LOW_WATERMARK\n  - BACKPRESSURE_RETRY_RATE_THRESHOLD + PAUSE_DURATION\n\nOperational notes\n- When backpressure engages, sources are paused and/or concurrency is reduced; ingestion resumes automatically once queue depth and retry rates recover.\n- No API changes; behavior is controlled via configuration and can be tuned per environment.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#47"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

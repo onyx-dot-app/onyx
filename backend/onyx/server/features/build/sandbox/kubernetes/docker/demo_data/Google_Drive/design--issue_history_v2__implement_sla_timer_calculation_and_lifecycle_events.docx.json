@@ -1,0 +1,30 @@
+{
+  "id": "bca808a832e3471ab09cd92bcf7e4fff",
+  "semantic_identifier": "Design--issue_history v2: Implement SLA timer calculation + lifecycle events.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--issue_history v2: Implement SLA timer calculation + lifecycle events.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature extends `issue_history v2` to support SLA timing by recording an explicit SLA lifecycle event stream and deriving authoritative SLA metrics from it. We will introduce `sla_events` for each issue with event types `{start, pause, resume, stop}` plus metadata (timestamp, actor/system, reason, prior/new state, prior/new owner, and optional milestone key). These events will be emitted deterministically from existing state/ownership transitions and triage milestones so that time-to-triage and time-to-resolution can be computed consistently across UI and reporting, without relying on ad-hoc timestamp diffs.\n\nOn write-path, we will add a rules engine that translates issue mutations into SLA events. Examples: issue creation or first entering a \u201ctriage-active\u201d state emits `start`; moving to a state where SLA should not accrue (e.g., \u201cwaiting on customer\u201d, \u201cblocked\u201d, \u201cbacklog\u201d depending on policy) emits `pause`; returning to an accruing state emits `resume`; entering a terminal resolved/closed state emits `stop`. Ownership changes will not reset the timer but will be captured as context on the event and can optionally trigger a `pause`/`resume` if ownership implies a different SLA policy; reopen flows will emit a new `resume` (or a new `start` segment if we decide to track multiple SLA runs) based on whether the SLA is defined as cumulative across reopenings. All event emission should be idempotent (e.g., by deriving from mutation + resulting state and de-duping on `(issue_id, transition_id, event_type)`).\n\nOn read-path, we will implement backend computation that folds the ordered SLA event stream into derived fields: `sla_status` (e.g., `not_started|running|paused|stopped`), `sla_elapsed_ms` (total accrued time), and milestone-specific times like `time_to_triage_ms` and `time_to_resolution_ms` (computed as elapsed at the first `triage` milestone / at `stop`). The fold logic will validate event ordering, ignore redundant transitions (double pause/resume), and handle out-of-order ingestion by sorting on event timestamp plus a stable tie-breaker. Reassignment and reopen scenarios are handled naturally by the fold: reassignment only changes metadata; reopen transitions add additional running segments if SLA resumes after stop, or keep SLA stopped if policy dictates.\n\nFinally, we will expose these computed fields via the existing issue history/API surface so downstream consumers can render consistent timers and aggregate reporting. The API will include both the derived values (for easy consumption) and the raw `sla_events` (for auditability and debugging), with pagination for long-lived issues. We will also backfill events for existing issues using historical transitions to avoid gaps, and add tests around edge cases (rapid state flips, missing milestones, reopen after stop, reassignment during pause) to ensure determinism and stable metrics over time.",
+      "link": "https://www.onyx.app/13100"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

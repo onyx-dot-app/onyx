@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_1867666",
+  "semantic_identifier": "1867666 - Cloudmason Security - sales_pitch - Discussion with Daniela Herrera",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-13 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-13 00:00:00",
+    "duration_min": "38"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "1867666 - Cloudmason Security - sales_pitch - Discussion with Daniela Herrera",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hi Daniela, thanks for taking a few minutes\u2014I'll keep it tight. I\u2019m Arjun with Customer_Analyzer. We help product, marketing, and sales teams get really crisp on who their best customers are and then turn that into messaging that actually converts. Is now still okay for a quick intro?",
+      "link": "https://www.onyx.app/9735866-1"
+    },
+    {
+      "text": "Daniela Herrera: Yeah, but I only have like five minutes. We\u2019re in the middle of a bunch of launch work.",
+      "link": "https://www.onyx.app/9735866-2"
+    },
+    {
+      "text": "Arjun Mehta: Perfect\u2014five is all I need. The reason I reached out is Cloudmason Security is probably juggling different buyer types\u2014like SMB IT leads versus mid-market security teams\u2014and the messaging that wins in one segment often falls flat in the other. Customer_Analyzer ingests the signals you already have\u2014CRM fields, onboarding notes, product usage, support tickets, even interview notes\u2014and outputs segment-level positioning recommendations you can use immediately.",
+      "link": "https://www.onyx.app/9735866-3"
+    },
+    {
+      "text": "Daniela Herrera: We already have personas and a positioning doc. I\u2019m not sure we need another tool for that.",
+      "link": "https://www.onyx.app/9735866-4"
+    },
+    {
+      "text": "Arjun Mehta: Totally fair. Most teams do have those docs\u2014our angle is making it evidence-driven and usable in day-to-day execution. The core thing I\u2019d highlight is our positioning_recommendation feature: once you pick the segment you care about\u2014say SMB vs mid-market\u2014it generates editable messaging blocks like website hero copy, sales deck bullets, and outbound email openers. And it links each recommendation back to the underlying drivers and customer language so it\u2019s not just \u201cAI wrote some copy.\u201d",
+      "link": "https://www.onyx.app/9735866-5"
+    },
+    {
+      "text": "Daniela Herrera: Okay, but we can get AI copy anywhere. What\u2019s different besides packaging?",
+      "link": "https://www.onyx.app/9735866-6"
+    },
+    {
+      "text": "Arjun Mehta: The difference is the inputs and traceability. Instead of prompting from scratch, we pull from real customer signals and observed language\u2014support ticket themes, product adoption patterns, onboarding survey responses\u2014then we map them into: value proposition, top use cases, differentiators, proof points you should collect, and an objection-handling playbook. So when someone asks, \u201cWhy is this our differentiator?\u201d you can point to the evidence.",
+      "link": "https://www.onyx.app/9735866-7"
+    },
+    {
+      "text": "Daniela Herrera: We\u2019re a security company. Our data is sensitive. I\u2019m not piping tickets and CRM notes into a random SaaS.",
+      "link": "https://www.onyx.app/9735866-8"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s a common concern, especially in security. We can start very light\u2014like exporting a limited, sanitized set of fields or a subset of notes\u2014and still get value. You can also choose which sources to connect; it\u2019s not all-or-nothing. The initial use case could be strictly: \u201cCreate segment-specific landing page and outbound messaging for SMB vs mid-market,\u201d using only the data you\u2019re comfortable sharing.",
+      "link": "https://www.onyx.app/9735866-9"
+    },
+    {
+      "text": "Daniela Herrera: Even so, we\u2019re not lacking copy. Our bigger issue is getting sales and marketing to agree on what to say, and then keeping it consistent.",
+      "link": "https://www.onyx.app/9735866-10"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s exactly what we\u2019re built for. The recommendations come out as standardized messaging blocks\u2014so marketing can use the landing page hero and proof points, and sales can use the same differentiators and objection-handling lines in a deck or an email. It\u2019s meant to reduce the \u201ceveryone has their own version\u201d problem and shorten the back-and-forth.",
+      "link": "https://www.onyx.app/9735866-11"
+    },
+    {
+      "text": "Daniela Herrera: Maybe, but we\u2019re already mid-cycle on our campaigns. If it takes weeks to set up, it\u2019s not going to happen.",
+      "link": "https://www.onyx.app/9735866-12"
+    },
+    {
+      "text": "Arjun Mehta: Understood. The lightweight path is: pick two segments\u2014SMB and mid-market\u2014and one funnel asset for each, like a landing page hero plus an outbound sequence opener. If we have basic CRM segmentation and a handful of notes or ticket themes, we can generate a first pass quickly, then you edit in-product. It\u2019s not a rip-and-replace of your process.",
+      "link": "https://www.onyx.app/9735866-13"
+    },
+    {
+      "text": "Daniela Herrera: I still don\u2019t see how this wouldn\u2019t be noisy. Our CRM data isn\u2019t clean, and our tickets are all over the place.",
+      "link": "https://www.onyx.app/9735866-14"
+    },
+    {
+      "text": "Arjun Mehta: If the signals are messy, that\u2019s actually where we can help\u2014because we\u2019re not expecting perfect taxonomy. We look for recurring themes and language, then surface what\u2019s consistently correlated with success in a segment. And we don\u2019t force a single \u201cone-size-fits-all\u201d message; we explicitly output segment-specific recommendations.",
+      "link": "https://www.onyx.app/9735866-15"
+    },
+    {
+      "text": "Daniela Herrera: Correlated with success\u2014how would you know that without a bunch of closed-won analysis and deep integration?",
+      "link": "https://www.onyx.app/9735866-16"
+    },
+    {
+      "text": "Arjun Mehta: Great question. The deeper the integration, the better\u2014but you can start with basic outcomes like deal stage or customer retention flags, plus qualitative signals like \u201cwhy they bought\u201d from notes. The output is directional, and you can refine as you add more sources. The main win early is speed and alignment\u2014getting to a defensible message set for SMB vs mid-market without weeks of workshops.",
+      "link": "https://www.onyx.app/9735866-17"
+    },
+    {
+      "text": "Daniela Herrera: We\u2019ve done workshops. They\u2019re painful, but at least everyone\u2019s in the room and bought in. Tools don\u2019t solve politics.",
+      "link": "https://www.onyx.app/9735866-18"
+    },
+    {
+      "text": "Arjun Mehta: You\u2019re right\u2014tools don\u2019t eliminate politics. What we try to do is change the conversation from opinions to evidence: \u201cHere are the fit drivers and the exact phrases customers use when describing value,\u201d and then \u201cHere\u2019s how that translates into a value prop and differentiators.\u201d It\u2019s not perfect, but it reduces circular debates.",
+      "link": "https://www.onyx.app/9735866-19"
+    },
+    {
+      "text": "Daniela Herrera: Okay, but I\u2019m not the person who owns positioning. That\u2019s product marketing, and they\u2019re slammed. Also procurement is a mess right now.",
+      "link": "https://www.onyx.app/9735866-20"
+    },
+    {
+      "text": "Arjun Mehta: Helpful to know. If you\u2019re not the owner, maybe the best next step is simply a 20-minute working session with whoever owns messaging for SMB and mid-market\u2014no procurement talk\u2014just to see if the outputs would be useful. I can tailor it to your current campaign: one SMB landing page hero and one mid-market outbound opener, plus a small objection-handling snippet.",
+      "link": "https://www.onyx.app/9735866-21"
+    },
+    {
+      "text": "Daniela Herrera: I\u2019m not going to pull product marketing into another meeting based on a maybe. They\u2019re already pushing back on extra vendor calls.",
+      "link": "https://www.onyx.app/9735866-22"
+    },
+    {
+      "text": "Arjun Mehta: Fair. Could I send you a one-pager that shows the exact format of the positioning recommendations\u2014like the editable blocks and the objection-handling playbook\u2014and you can forward it if it looks relevant?",
+      "link": "https://www.onyx.app/9735866-23"
+    },
+    {
+      "text": "Daniela Herrera: You can send it, but honestly I can\u2019t promise I\u2019ll look at it this week. And I\u2019m not sure I\u2019m the right person to forward it; we have a vendor intake process.",
+      "link": "https://www.onyx.app/9735866-24"
+    },
+    {
+      "text": "Arjun Mehta: Got it. To respect that, I\u2019ll keep it simple: a short overview and a sample output for the SMB vs mid-market use case\u2014landing page hero copy, differentiators, and proof points to collect. If it resonates, maybe you can point me to the right owner or the intake link.",
+      "link": "https://www.onyx.app/9735866-25"
+    },
+    {
+      "text": "Daniela Herrera: Yeah, send it over. But we\u2019re not evaluating new tools this quarter. If you want a real conversation, it would probably be next quarter at the earliest.",
+      "link": "https://www.onyx.app/9735866-26"
+    },
+    {
+      "text": "Arjun Mehta: Understood. If timing is next quarter, would it be okay if I follow up in, say, six weeks just to see if priorities have shifted\u2014and in the meantime I\u2019ll send that sample output?",
+      "link": "https://www.onyx.app/9735866-27"
+    },
+    {
+      "text": "Daniela Herrera: Six weeks is fine. Email is best. I can\u2019t commit to a meeting.",
+      "link": "https://www.onyx.app/9735866-28"
+    },
+    {
+      "text": "Arjun Mehta: Totally fine. I\u2019ll send the overview today and circle back in six weeks. Before I let you go\u2014quick check: for SMB vs mid-market, is the bigger challenge right now the website messaging or outbound emails from the sales team?",
+      "link": "https://www.onyx.app/9735866-29"
+    },
+    {
+      "text": "Daniela Herrera: Outbound consistency. Different reps say different things, and security buyers are skeptical by default.",
+      "link": "https://www.onyx.app/9735866-30"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s helpful\u2014I'll tailor the sample to outbound openers plus a short objection-handling playbook geared toward skeptical security buyers. Thanks Daniela\u2014appreciate the time.",
+      "link": "https://www.onyx.app/9735866-31"
+    },
+    {
+      "text": "Daniela Herrera: Okay. Thanks. Bye.",
+      "link": "https://www.onyx.app/9735866-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "daniela_herrera@cloudmason_security.onyx.app"
+    }
+  ]
+}

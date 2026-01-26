@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_4148192",
+  "semantic_identifier": "Timberline Metro Transit",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-06-03 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "4148192",
+    "domain": "timberline_metro_transit.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Timberline Metro Transit\nDomain: timberline_metro_transit.onyx.app",
+      "link": "https://www.onyx.app/90637"
+    },
+    {
+      "text": "Contact: Rhea Narang\nEmail: rhea_narang@timberline_metro_transit.onyx.app",
+      "link": "https://www.onyx.app/59715"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

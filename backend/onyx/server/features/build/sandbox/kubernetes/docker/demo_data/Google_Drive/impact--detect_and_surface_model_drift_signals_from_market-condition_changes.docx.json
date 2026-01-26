@@ -1,0 +1,30 @@
+{
+  "id": "0b57f8c18fdd4639aee73f7afd1f65a1",
+  "semantic_identifier": "Impact--Detect and surface model drift signals from market-condition changes.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-17",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Detect and surface model drift signals from market-condition changes.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds automated drift monitoring for the core Sales_Accelerator models (forecasting, best-next-action, and risk alerts) to detect when market-condition changes are degrading model reliability. By continuously checking feature distributions and prediction/label stability, we can identify when the data the models see in production no longer matches the conditions they were trained on\u2014before customers experience noticeable accuracy drops or inconsistent recommendations.\n\nThe primary impact is earlier, more actionable detection of model performance risk. Instead of relying on periodic offline evaluation or reactive support signals, the system will trigger configurable alerts when drift exceeds defined thresholds. This shortens time-to-awareness and reduces the likelihood of prolonged periods of incorrect forecasts, mis-targeted next actions, or missed/false risk alerts.\n\nWe\u2019ll also improve debuggability by surfacing context on likely drift drivers and affected segments (e.g., pricing changes, competitor mentions, packaging updates, or specific customer cohorts/regions). This helps teams quickly triage whether drift is caused by a real market shift, a data pipeline change, or product instrumentation issues, and prioritize mitigation where it matters most.\n\nFinally, exposing drift status via an internal endpoint and logs unblocks follow-on recalibration and retraining work by providing a consistent, auditable source of truth. This creates a foundation for future automation (e.g., guided rollback, scheduled recalibration, or targeted retraining) while providing immediate operational visibility into model health.",
+      "link": "https://www.onyx.app/85400"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

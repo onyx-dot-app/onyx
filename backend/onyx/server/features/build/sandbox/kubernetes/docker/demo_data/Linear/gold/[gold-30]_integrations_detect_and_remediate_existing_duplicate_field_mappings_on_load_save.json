@@ -1,0 +1,30 @@
+{
+  "id": "9430781",
+  "semantic_identifier": "[GOLD-30]: Integrations: Detect and remediate existing duplicate field mappings on load/save",
+  "title": "Integrations: Detect and remediate existing duplicate field mappings on load/save",
+  "source": "linear",
+  "doc_updated_at": "2025-07-31",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-07-31"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Some integrations have already-saved field mappings that contain duplicates or conflicting source\u2192destination pairs, causing downstream duplicate signals and slow/failed sync runs. Add backend logic to detect duplicate/conflicting mappings when fetching or persisting integration configs, and return a structured warning/error payload identifying the conflicting fields. Provide a one-time remediation path (auto-dedup where safe, otherwise require user resolution) to prevent legacy bad configs from degrading integration performance.",
+      "link": "https://www.onyx.app/25301"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

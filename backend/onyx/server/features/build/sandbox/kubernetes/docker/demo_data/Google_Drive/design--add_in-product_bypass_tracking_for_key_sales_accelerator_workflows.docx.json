@@ -1,0 +1,30 @@
+{
+  "id": "245cb12df2a6440889e5efcf31013c5a",
+  "semantic_identifier": "Design--Add in-product bypass tracking for key Sales_Accelerator workflows.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-26",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add in-product bypass tracking for key Sales_Accelerator workflows.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe need to quantify \u201corganizational drift\u201d by tracking when users choose not to complete key Sales_Accelerator workflows in-product and instead execute them directly in the CRM or outside our surfaces. This feature will add explicit in-product instrumentation across three core flows\u2014best-next-action completion, forecasting updates, and risk alert handling\u2014to log \u201cbypass\u201d events with consistent semantics from both the web app and browser extension. The output is a reliable event stream that can power reporting (who/where/when/what) and later product interventions (prompts, education, nudges).\n\n### User experience + detection points\nWe will record bypass in two ways: (1) **explicit bypass** when the user takes an action that clearly indicates intent to complete outside Sales_Accelerator (e.g., clicking \u201cOpen in CRM\u201d, copying a link, dismissing a task with an \u201cI\u2019ll do this in CRM\u201d option, or selecting a reason from a small modal), and (2) **implicit bypass** when the user abandons an in-product workflow after initiating it and then navigates to a CRM entry point within a short window (e.g., open CRM from the same account/opportunity context) without completing the in-product action. Each tracked workflow will have a well-defined \u201cstart\u201d, \u201ccomplete in-product\u201d, and \u201cbypass\u201d state machine to avoid double-counting and to enable conversion funnels per workflow and surface.\n\n### Event schema and consistency across surfaces\nWe will emit a single canonical analytics event (e.g., `sales_accelerator_workflow_bypassed`) from both web and extension via a shared tracking library and schema validation. Required metadata: `user_id`, `team_id`, `workflow_type` (`best_next_action` | `forecast_update` | `risk_alert`), `surface` (`web` | `extension`), `timestamp`, `ui_entry_point` (e.g., alert banner, opportunity page panel, inbox card), and primary object identifiers (`account_id`, `opportunity_id` when applicable). Optional metadata: `crm` (Salesforce/HubSpot/etc), `bypass_reason_type` (`stated` | `inferred`), `bypass_reason` (enum for stated reasons; heuristic label for inferred), plus `workflow_instance_id` to correlate with starts/completions and enable deduplication. Events will be emitted through the existing analytics pipeline and made available in the warehouse with a stable contract for downstream dashboards.\n\n### Rollout, validation, and guardrails\nWe\u2019ll ship behind a feature flag and validate via (a) unit tests for schema and state-machine transitions, (b) end-to-end tests that simulate bypass interactions on both surfaces, and (c) data QA comparing expected funnels (start \u2192 complete vs start \u2192 bypass) against known usage for a pilot cohort. We\u2019ll add safeguards to prevent noisy inference (conservative implicit-bypass windows, per-user rate limiting where needed, and clear \u201cunknown\u201d reasons when we can\u2019t infer reliably). Success is measured by event coverage for all three workflows, parity between web/extension semantics, and the ability to produce a weekly drift report segmented by team, workflow type, and entry point.",
+      "link": "https://www.onyx.app/16564"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

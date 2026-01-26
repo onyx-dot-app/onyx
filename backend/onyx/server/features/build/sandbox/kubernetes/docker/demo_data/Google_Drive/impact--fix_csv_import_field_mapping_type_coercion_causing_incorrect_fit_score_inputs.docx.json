@@ -1,0 +1,30 @@
+{
+  "id": "6611e558f2bc48829de3eecc9dc4e2e1",
+  "semantic_identifier": "Impact--Fix CSV import field mapping/type coercion causing incorrect fit score inputs.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-02",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Fix CSV import field mapping/type coercion causing incorrect fit score inputs.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change improves the reliability of fit_estimation CSV imports by fixing two failure modes: incorrect column-to-field mappings and inconsistent type coercion (e.g., numbers interpreted as strings/booleans). Today, these issues can feed invalid inputs into the scoring service, resulting in inaccurate fit scores and misleading driver breakdowns that are difficult for customers to detect or debug.\n\nWith the updated import pipeline, we will validate the mapping before processing, deterministically normalize types for each expected field, and ensure the scoring service consumes the normalized values (not raw CSV strings). This reduces variability across imports, removes hidden \u201cbest effort\u201d parsing behavior, and makes the scoring outcome consistent with what customers intended to upload.\n\nFor cases where values can\u2019t be mapped or coerced (e.g., non-numeric text in a numeric column), the importer will surface row-level errors rather than silently defaulting to empty/false/zero. Users will be able to identify exactly which rows and fields need correction, preventing bad data from propagating into scoring and downstream analysis.\n\nImpact: higher trust in fit scores and driver breakdowns, fewer support investigations tied to \u201cwrong score after import,\u201d and clearer import feedback loops for customers. Operationally, this should reduce data quality incidents and improve reproducibility of scoring results across repeated imports.",
+      "link": "https://www.onyx.app/56085"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

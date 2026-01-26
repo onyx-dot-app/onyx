@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_9775590",
+  "semantic_identifier": "Ivorynook Furniture",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-28 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "9775590",
+    "domain": "ivorynook_furniture.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Ivorynook Furniture\nDomain: ivorynook_furniture.onyx.app",
+      "link": "https://www.onyx.app/71889"
+    },
+    {
+      "text": "Contact: David Zimmerman\nEmail: david_zimmerman@ivorynook_furniture.onyx.app",
+      "link": "https://www.onyx.app/83044"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

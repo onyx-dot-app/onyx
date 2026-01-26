@@ -1,0 +1,30 @@
+{
+  "id": "6ce28794a9d846519e02e8d4724bcc49",
+  "semantic_identifier": "Impact--Persist positioning_version_id on customer-facing artifacts and outcome events.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Persist positioning_version_id on customer-facing artifacts and outcome events.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a durable link between the positioning recommendation a customer used and the results it drove. Today, when a recommendation is applied\u2014exported to sales enablement assets, pushed into a segment brief, or embedded in email/landing-page templates\u2014we lose the ability to reliably attribute downstream outcomes to the exact positioning version that was active at creation time.\n\nBy persisting `positioning_version_id` on all customer-facing artifacts at generation/apply time, and on any subsequent tracked outcome events (e.g., conversion, win/loss, churn), we create a consistent join key back to the existing positioning change log. This enables precise \u201cwhich positioning performed best\u201d analysis, supports audits/debugging when results change over time, and avoids ambiguity caused by later edits or new versions.\n\nThe impact for customers is clearer measurement and faster iteration: teams can compare outcomes across positioning versions, understand performance shifts after a change, and make evidence-based decisions about what to roll forward or roll back. Internally, it improves data integrity and reduces ad-hoc investigation time when stakeholders ask why a segment\u2019s results changed.\n\nImplementation-wise, this requires minimal schema/index updates to make queries efficient, and careful backfill behavior: historical artifacts/events remain `null` rather than attempting to infer versions, avoiding incorrect attribution. Forward-looking data becomes consistently attributable, unlocking reliable reporting and experimentation without risking retroactive data corruption.",
+      "link": "https://www.onyx.app/63621"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

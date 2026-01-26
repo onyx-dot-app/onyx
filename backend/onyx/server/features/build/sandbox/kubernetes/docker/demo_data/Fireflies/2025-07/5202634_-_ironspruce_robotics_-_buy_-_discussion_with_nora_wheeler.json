@@ -1,0 +1,181 @@
+{
+  "id": "FIREFLIES_5202634",
+  "semantic_identifier": "5202634 - Ironspruce Robotics - buy - Discussion with Nora Wheeler",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-09 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-09 00:00:00",
+    "duration_min": "37"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "5202634 - Ironspruce Robotics - buy - Discussion with Nora Wheeler",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Nora\u2014good to see you again. Thanks for making time for call three. My goal today is to confirm we\u2019re aligned on the use case you care about\u2014prioritizing which industries to target next quarter using retention and support-burden signals\u2014and if everything checks out, land on next steps to get Customer_Analyzer purchased and live. Does that still work?",
+      "link": "https://www.onyx.app/2381564-1"
+    },
+    {
+      "text": "Nora Wheeler: Yeah, that works. I have about half an hour, but I do want to be honest upfront\u2014we\u2019re still debating internally if we\u2019re ready for another tool right now.",
+      "link": "https://www.onyx.app/2381564-2"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Let\u2019s pressure-test that. Last time you said the pain is you\u2019re spread across too many verticals, and you want a clearer answer on \u201cwhich industries are actually good for us,\u201d not just which ones have pipeline. Still the case?",
+      "link": "https://www.onyx.app/2381564-3"
+    },
+    {
+      "text": "Nora Wheeler: Exactly. Sales wants to chase where deals are easiest to open, Support is saying certain segments are a time sink, and Product has a different opinion. We need something more objective.",
+      "link": "https://www.onyx.app/2381564-4"
+    },
+    {
+      "text": "Megan Foster: Great. Then I\u2019ll focus on two things today: the fit score output, and the positioning recommendations\u2014because those map directly to \u201cwhich industries should we target\u201d and \u201cwhat should we say to win in those industries.\u201d  \nOn fit scoring: Customer_Analyzer ingests the signals you already have\u2014CRM fields, retention, support tickets\u2014and produces a segment-level fit score with the drivers behind it. So instead of \u201cmanufacturing feels good,\u201d you\u2019d see \u201cmanufacturing scored 82 because retention is 20% higher, support burden is 30% lower, and time-to-value is faster,\u201d with the evidence attached. That\u2019s what helps your teams align.",
+      "link": "https://www.onyx.app/2381564-5"
+    },
+    {
+      "text": "Nora Wheeler: The concept is good. But we\u2019ve talked about this: our CRM is not clean. Industries aren\u2019t consistently tagged, support tickets aren\u2019t labeled the same way, and product usage events are\u2026 spotty.",
+      "link": "https://www.onyx.app/2381564-6"
+    },
+    {
+      "text": "Megan Foster: Yes\u2014and I\u2019m glad you\u2019re bringing it up because it\u2019s the biggest thing that can make or break scoring accuracy. The way we handle it is twofold.  \nFirst, we can start with a lightweight model using what\u2019s most reliable: retention and support burden signals often exist even when CRM is messy. You can still get directional segment ranking.  \nSecond, we show \u201cconfidence\u201d and \u201cmissingness\u201d explicitly: if a segment\u2019s score is based on thin data, it\u2019s flagged so you don\u2019t over-trust it.  \nGiven where you are, I\u2019d recommend starting with the retention + support-driven segmentation and then tightening CRM tagging over time.",
+      "link": "https://www.onyx.app/2381564-7"
+    },
+    {
+      "text": "Nora Wheeler: Okay, but directional doesn\u2019t always help us. Our CEO is going to ask if we\u2019re making a bet on an industry based on shaky data.",
+      "link": "https://www.onyx.app/2381564-8"
+    },
+    {
+      "text": "Megan Foster: Understood. That\u2019s where the second feature comes in: positioning recommendations tied back to observed customer language and the drivers. Even if we\u2019re cautious on the numeric score, the positioning layer gives you a practical output:  \n- segment-specific value proposition  \n- top use cases  \n- differentiators  \n- proof points to collect  \n- pricing/value framing notes  \n- objection handling playbook  \nAnd it formats that as editable messaging blocks\u2014website hero copy, sales deck bullets, email openers\u2014linked to the evidence. So your CEO sees \u201chere\u2019s the segment we\u2019re prioritizing, here\u2019s why, and here\u2019s exactly how we\u2019ll message it.\u201d",
+      "link": "https://www.onyx.app/2381564-9"
+    },
+    {
+      "text": "Nora Wheeler: I like the idea of the messaging blocks. Our marketing team is constantly reinventing copy for each vertical. But again, that requires inputs we don\u2019t have\u2014like interview notes and consistent ticket tags.",
+      "link": "https://www.onyx.app/2381564-10"
+    },
+    {
+      "text": "Megan Foster: It helps, but it doesn\u2019t require perfection. For your case, support tickets are actually one of the strongest sources if we can map categories\u2014even loosely. We can also ingest free-text notes if they exist in your CRM or in docs, but we don\u2019t need a full research program to start.  \nLet me ask: for support burden, do you have anything consistent today? Like ticket volume by account, time-to-close, CSAT, escalation flags?",
+      "link": "https://www.onyx.app/2381564-11"
+    },
+    {
+      "text": "Nora Wheeler: Ticket volume and time-to-close, yes. But mapping that to industry is hard. We don\u2019t always know the industry. We have \u201ctype,\u201d \u201cvertical,\u201d and \u201csegment,\u201d and all three are inconsistently used.",
+      "link": "https://www.onyx.app/2381564-12"
+    },
+    {
+      "text": "Megan Foster: Got it. If we can\u2019t map to industry reliably, we can still map to other slices\u2014like \u201ccompany size,\u201d \u201crobotics subcategory,\u201d or \u201cuse case cluster\u201d\u2014but I know your objective is industry targeting next quarter.  \nWould it be feasible to do a one-time cleanup pass on your top 200 accounts? Even just assigning industry for those would cover most revenue and give you a solid base.",
+      "link": "https://www.onyx.app/2381564-13"
+    },
+    {
+      "text": "Nora Wheeler: Feasible, yes. But I don\u2019t think we\u2019ll do it. We\u2019re stretched, and everyone says they\u2019ll do cleanup \u201cnext sprint.\u201d It never happens.",
+      "link": "https://www.onyx.app/2381564-14"
+    },
+    {
+      "text": "Megan Foster: That\u2019s honest\u2014and common. If the org won\u2019t commit to that, the risk is we implement Customer_Analyzer and you don\u2019t trust the results because the segmentation key is noisy. I don\u2019t want you paying for something you can\u2019t operationalize.  \nLet me try a different angle: what if we start with a pilot where the output is not \u201cindustry bet,\u201d but \u201csupport-burden vs retention quadrant\u201d across customers you *can* classify? Then we generate positioning recommendations for the \u201chigh retention / low burden\u201d cluster and arm Sales/Marketing with that narrative. You\u2019d still get value, just not labeled by industry.",
+      "link": "https://www.onyx.app/2381564-15"
+    },
+    {
+      "text": "Nora Wheeler: That\u2019s closer. But our exec ask is literally \u201cwhich industries.\u201d If I go back with \u201cclusters,\u201d I\u2019m going to get pushback.",
+      "link": "https://www.onyx.app/2381564-16"
+    },
+    {
+      "text": "Megan Foster: Fair. Then the question becomes: can we get to \u201cwhich industries\u201d with a reasonable amount of effort? If you don\u2019t have industry coverage, no tool can conjure it accurately. We can infer some things, but I don\u2019t want to overpromise.  \nIf you *could* get industry on, say, the top 100 accounts\u2014would you have the political support for that if it\u2019s tied to an initiative?",
+      "link": "https://www.onyx.app/2381564-17"
+    },
+    {
+      "text": "Nora Wheeler: Maybe, but not this quarter. We\u2019re in the middle of a territory redesign and a product launch. I don\u2019t have appetite to add data hygiene as a project.",
+      "link": "https://www.onyx.app/2381564-18"
+    },
+    {
+      "text": "Megan Foster: Understood. Let\u2019s talk buying timeline then. You had mentioned wanting something in place before next quarter planning. Is that still your target, or has that moved?",
+      "link": "https://www.onyx.app/2381564-19"
+    },
+    {
+      "text": "Nora Wheeler: It\u2019s moved. Planning is basically already underway. We\u2019re making calls with imperfect info, as usual.",
+      "link": "https://www.onyx.app/2381564-20"
+    },
+    {
+      "text": "Megan Foster: Okay. In that case, pushing to close now probably doesn\u2019t serve you\u2014unless we can get you value without that industry classification.  \nCan I ask where you landed internally on budget and procurement? Last call you said you had budget, but needed stronger consensus.",
+      "link": "https://www.onyx.app/2381564-21"
+    },
+    {
+      "text": "Nora Wheeler: Budget exists, but it\u2019s not committed. And frankly the consensus isn\u2019t there. Support is on board, marketing is lukewarm, sales leadership is skeptical of \u201canother scoring model,\u201d and our RevOps person is the loudest voice saying the data is too messy.",
+      "link": "https://www.onyx.app/2381564-22"
+    },
+    {
+      "text": "Megan Foster: That makes sense. The two objections I\u2019m hearing are: (1) data quality risk, and (2) change management\u2014getting teams to trust and use the outputs.  \nOn (2), the positioning recommendations are usually the \u201caha\u201d because they\u2019re tangible\u2014copy, deck bullets, objections\u2014so teams actually use them. But they still need confidence in the segment definition.  \nIf the segment definition is \u201cindustry,\u201d and industry is missing, we\u2019re blocked.",
+      "link": "https://www.onyx.app/2381564-23"
+    },
+    {
+      "text": "Nora Wheeler: Exactly.",
+      "link": "https://www.onyx.app/2381564-24"
+    },
+    {
+      "text": "Megan Foster: If we zoom out: would you rather (A) pause and revisit when the data foundation is better, or (B) reframe the project away from industry targeting and toward something you can execute immediately\u2014like reducing support burden by aligning onboarding and messaging to the right customers you can identify?",
+      "link": "https://www.onyx.app/2381564-25"
+    },
+    {
+      "text": "Nora Wheeler: Probably A. I don\u2019t want to buy something and then fight internally about why the outputs don\u2019t match our messy CRM reality. I\u2019d rather fix the basics first.",
+      "link": "https://www.onyx.app/2381564-26"
+    },
+    {
+      "text": "Megan Foster: I respect that. I\u2019d rather you be successful than force a close.  \nBefore we end it, can we at least agree on what \u201cready\u201d looks like, so this doesn\u2019t sit in limbo? From what you\u2019ve shared, I\u2019d propose three readiness criteria:  \n1) Industry field coverage for the top ~100\u2013200 accounts (or a single authoritative field)  \n2) A consistent mapping from support tickets to accounts (which you have)  \n3) Agreement on the segmenting dimension and owner (likely RevOps)  \nIf those are in place, Customer_Analyzer will give you a fit score you can trust and positioning blocks you can deploy quickly.",
+      "link": "https://www.onyx.app/2381564-27"
+    },
+    {
+      "text": "Nora Wheeler: That\u2019s a reasonable list. I can\u2019t promise timing, but that\u2019s the right framing.",
+      "link": "https://www.onyx.app/2381564-28"
+    },
+    {
+      "text": "Megan Foster: Great. Would it be helpful if I sent a one-page \u201cdata readiness checklist\u201d and a lightweight cleanup approach\u2014like how to do the top 100 accounts in a week without boiling the ocean?",
+      "link": "https://www.onyx.app/2381564-29"
+    },
+    {
+      "text": "Nora Wheeler: Yes, that would help. If I can show it to RevOps, maybe we can at least get it on the roadmap.",
+      "link": "https://www.onyx.app/2381564-30"
+    },
+    {
+      "text": "Megan Foster: Perfect. Last question: should we formally pause the purchase process for now, and I\u2019ll follow up in, say, six weeks? Or is there a specific internal milestone I should align to?",
+      "link": "https://www.onyx.app/2381564-31"
+    },
+    {
+      "text": "Nora Wheeler: Let\u2019s pause. Follow up after our launch\u2014maybe mid next quarter. If we\u2019ve made progress on the fields, we can re-engage.",
+      "link": "https://www.onyx.app/2381564-32"
+    },
+    {
+      "text": "Megan Foster: Sounds good. I\u2019ll send the checklist and suggested minimum dataset today, and I\u2019ll put a follow-up on the calendar for mid next quarter. If something changes sooner\u2014like you decide to do that top-accounts industry pass\u2014just email me and we can move faster.",
+      "link": "https://www.onyx.app/2381564-33"
+    },
+    {
+      "text": "Nora Wheeler: Will do. Thanks, Megan.",
+      "link": "https://www.onyx.app/2381564-34"
+    },
+    {
+      "text": "Megan Foster: Thank you, Nora. Talk soon.",
+      "link": "https://www.onyx.app/2381564-35"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "nora_wheeler@ironspruce_robotics.onyx.app"
+    }
+  ]
+}

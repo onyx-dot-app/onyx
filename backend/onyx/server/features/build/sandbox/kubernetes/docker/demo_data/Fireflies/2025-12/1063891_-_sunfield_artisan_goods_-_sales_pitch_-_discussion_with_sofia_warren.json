@@ -1,0 +1,145 @@
+{
+  "id": "FIREFLIES_1063891",
+  "semantic_identifier": "1063891 - Sunfield Artisan Goods - sales_pitch - Discussion with Sofia Warren",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-01 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-01 00:00:00",
+    "duration_min": "40"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "1063891 - Sunfield Artisan Goods - sales_pitch - Discussion with Sofia Warren",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Sofia\u2014Megan Foster here. Thanks for taking a few minutes. I\u2019ll keep this short: I\u2019m calling because a lot of VP Sales teams are trying to stop surprises at quarter-end and cut down the manual forecast spreadsheet work, and that\u2019s exactly what our Sales_Accelerator is built to help with.",
+      "link": "https://www.onyx.app/6378484-1"
+    },
+    {
+      "text": "Sofia Warren: Hi Megan. Okay\u2014quick is good. We\u2019re in the middle of planning, so I only have a few minutes.",
+      "link": "https://www.onyx.app/6378484-2"
+    },
+    {
+      "text": "Megan Foster: Totally. In one line, Sales_Accelerator sits on top of Salesforce or HubSpot and turns what\u2019s happening in your pipeline into clear \u201cwhat to do next\u201d guidance\u2014plus early warning signals when deals are quietly slipping. The piece I wanted to highlight is our sales follow-up recommendations: it looks at the stage, who\u2019s engaged, whether there\u2019s a next meeting, and recent activity, and then suggests the next action per opportunity\u2014right inside the CRM.",
+      "link": "https://www.onyx.app/6378484-3"
+    },
+    {
+      "text": "Sofia Warren: We already have Salesforce and a few dashboards. And reps have sequences. How is this different from what we can build or what our tooling already does?",
+      "link": "https://www.onyx.app/6378484-4"
+    },
+    {
+      "text": "Megan Foster: Fair question. Dashboards show you what happened; this pushes the next best action to the rep and flags risk in an explainable way. For example, if a meeting happened and there\u2019s no follow-up logged, it will prompt a recap email with next steps. If only one stakeholder is active, it recommends multi-threading and suggests who else to pull in. If the mutual plan is incomplete, it generates a lightweight mutual action plan checklist and reminders\u2014so deals don\u2019t stall because nobody captured the \u201cwho/what/when.\u201d",
+      "link": "https://www.onyx.app/6378484-5"
+    },
+    {
+      "text": "Sofia Warren: We do mutual plans already in some deals. The issue is adoption. People don\u2019t always fill things out.",
+      "link": "https://www.onyx.app/6378484-6"
+    },
+    {
+      "text": "Megan Foster: Right\u2014and we don\u2019t try to force a new methodology. The idea is a small task queue that nudges the rep based on actual activity: no next meeting on a late-stage deal, stage age creeping up, low engagement from key contacts\u2014those are the moments it surfaces a specific action to take. Managers can also see which \u201ccommit\u201d deals are weakening so they can run targeted deal reviews instead of a broad, time-consuming pipeline scrub.",
+      "link": "https://www.onyx.app/6378484-7"
+    },
+    {
+      "text": "Sofia Warren: I\u2019m not sure we\u2019d want another layer. We\u2019ve had mixed experiences with add-ons that promise \u201cAI next steps\u201d and end up being noisy.",
+      "link": "https://www.onyx.app/6378484-8"
+    },
+    {
+      "text": "Megan Foster: I hear you. The way we\u2019ve tried to avoid that is by keeping it explainable\u2014when it flags a deal, it shows the drivers, like \u201cstage age + no next meeting scheduled + low engagement in last 14 days.\u201d And the recommendations are tied to standard sales actions: recap, schedule next step, multi-thread, address an objection, tighten a mutual plan. It\u2019s not just \u201csend an email.\u201d",
+      "link": "https://www.onyx.app/6378484-9"
+    },
+    {
+      "text": "Sofia Warren: Okay, but we\u2019re pretty lean. We don\u2019t have time for a big implementation, and sales ops is maxed out.",
+      "link": "https://www.onyx.app/6378484-10"
+    },
+    {
+      "text": "Megan Foster: That\u2019s another reason I\u2019m calling now versus pitching a full overhaul. Since it sits on top of your CRM, you\u2019re not migrating data. It\u2019s more about connecting it, mapping a couple of stages and fields, and choosing what signals you care about. The quickest win I typically see is forecast accuracy\u2014replacing manual rollups with an explainable view of which commit deals are actually at risk so quarter-end isn\u2019t a fire drill.",
+      "link": "https://www.onyx.app/6378484-11"
+    },
+    {
+      "text": "Sofia Warren: Forecast accuracy is a priority, yes. But we have a process for forecast calls and spreadsheets\u2014painful, but it works. And we\u2019re not looking to add budget this quarter.",
+      "link": "https://www.onyx.app/6378484-12"
+    },
+    {
+      "text": "Megan Foster: Understood. If budget timing is the blocker, one option is just a short working session where we walk through how the risk signals and follow-up recommendations would look on a few opportunities, using a generic demo environment\u2014no integration needed. Then you can decide if it\u2019s worth revisiting when budget opens up.",
+      "link": "https://www.onyx.app/6378484-13"
+    },
+    {
+      "text": "Sofia Warren: I appreciate that, but I\u2019m not sure it\u2019s the best use of time right now. We\u2019re also evaluating some improvements directly within Salesforce, and leadership wants to keep tooling consolidated.",
+      "link": "https://www.onyx.app/6378484-14"
+    },
+    {
+      "text": "Megan Foster: That makes sense. Just to sanity-check, is the bigger pain point for you right now the rep follow-through\u2014like deals going dark\u2014or is it more about leadership confidence in the number?",
+      "link": "https://www.onyx.app/6378484-15"
+    },
+    {
+      "text": "Sofia Warren: Leadership confidence in the number, mostly. But we\u2019re addressing that with tighter definitions and manager discipline. The rep workflow stuff is important, but we\u2019re not going to roll out something new until after peak season.",
+      "link": "https://www.onyx.app/6378484-16"
+    },
+    {
+      "text": "Megan Foster: Got it. If I\u2019m hearing you: the problem resonates, but timing and tool consolidation are the constraints.",
+      "link": "https://www.onyx.app/6378484-17"
+    },
+    {
+      "text": "Sofia Warren: Yes, exactly.",
+      "link": "https://www.onyx.app/6378484-18"
+    },
+    {
+      "text": "Megan Foster: Would it be helpful if I sent a one-page overview focused specifically on the quarter-end use case\u2014explainable forecast risk for commit deals\u2014and the specific signals it uses? No deck, just something you can forward if it comes up in planning.",
+      "link": "https://www.onyx.app/6378484-19"
+    },
+    {
+      "text": "Sofia Warren: Sure, you can send that. But I can\u2019t commit to a longer call right now.",
+      "link": "https://www.onyx.app/6378484-20"
+    },
+    {
+      "text": "Megan Foster: That\u2019s fair. If it\u2019s okay, I\u2019ll send the one-pager and include two screenshots of what the \u201cat-risk commit\u201d view and the rep task queue look like. And then maybe I check back after your peak season\u2014say, in eight weeks?",
+      "link": "https://www.onyx.app/6378484-21"
+    },
+    {
+      "text": "Sofia Warren: Eight weeks is probably still busy, but you can follow up in a couple months. Email is best.",
+      "link": "https://www.onyx.app/6378484-22"
+    },
+    {
+      "text": "Megan Foster: Perfect. Last question so I tailor what I send: are you on Salesforce or HubSpot today, and do reps live in sequences in Outreach/Salesloft or mostly native?",
+      "link": "https://www.onyx.app/6378484-23"
+    },
+    {
+      "text": "Sofia Warren: Salesforce. And we use Outreach, but adoption varies.",
+      "link": "https://www.onyx.app/6378484-24"
+    },
+    {
+      "text": "Megan Foster: Helpful. I\u2019ll tailor the note to Salesforce + Outreach and keep it focused on reducing stalls with follow-up recommendations and improving forecast confidence without heavy ops lift. Thanks for the time, Sofia.",
+      "link": "https://www.onyx.app/6378484-25"
+    },
+    {
+      "text": "Sofia Warren: Thanks, Megan. Send it over and we\u2019ll take a look when we can.",
+      "link": "https://www.onyx.app/6378484-26"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sofia_warren@sunfield_artisan_goods.onyx.app"
+    }
+  ]
+}

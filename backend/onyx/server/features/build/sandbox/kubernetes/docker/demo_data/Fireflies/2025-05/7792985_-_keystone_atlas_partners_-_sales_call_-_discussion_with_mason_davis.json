@@ -1,0 +1,185 @@
+{
+  "id": "FIREFLIES_7792985",
+  "semantic_identifier": "7792985 - Keystone Atlas Partners - sales_call - Discussion with Mason Davis",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-05-15 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-05-15 00:00:00",
+    "duration_min": "45"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-05"
+      ],
+      "year_month": "2025-05",
+      "meeting_title": "7792985 - Keystone Atlas Partners - sales_call - Discussion with Mason Davis",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Mason\u2014good to see you again. Last time you mentioned the team liked the idea of tightening follow-through after discovery and getting fewer \u201csurprise\u201d slips late in the quarter. Does that still feel like the priority, or has anything shifted?",
+      "link": "https://www.onyx.app/1167175-1"
+    },
+    {
+      "text": "Mason Davis: Hi Irene. No, that\u2019s still the priority. We\u2019re generating decent pipeline, but deals stall in weird ways\u2014someone forgets to send a recap, next steps aren\u2019t clear, or we\u2019re single-threaded and don\u2019t realize it until it\u2019s too late.",
+      "link": "https://www.onyx.app/1167175-2"
+    },
+    {
+      "text": "Irene Shen: That\u2019s exactly where Sales_Accelerator tends to land well. For today, I want to focus on one core thing: our sales follow-up recommendations\u2014how we guide the AE on what to do next, right inside your CRM, based on what actually happened in the deal. Then we can talk through what it\u2019d look like at Keystone Atlas Partners to get to a \u201cyes.\u201d",
+      "link": "https://www.onyx.app/1167175-3"
+    },
+    {
+      "text": "Mason Davis: Sounds good. I remember you said it sits on top of Salesforce, right?",
+      "link": "https://www.onyx.app/1167175-4"
+    },
+    {
+      "text": "Irene Shen: Correct\u2014Sales_Accelerator sits on top of Salesforce or HubSpot. We\u2019re not replacing your CRM, and we\u2019re not redoing ICP/positioning work you\u2019ve already invested in. We integrate with Customer_Analyzer\u2014so we can consume fit scores and approved positioning blocks\u2014and then translate that into next-best-action guidance for reps on each opportunity.",
+      "link": "https://www.onyx.app/1167175-5"
+    },
+    {
+      "text": "Mason Davis: Okay. Walk me through the follow-up recommendations piece in a concrete way.",
+      "link": "https://www.onyx.app/1167175-6"
+    },
+    {
+      "text": "Irene Shen: Sure. Let\u2019s take your typical flow: an AE runs a discovery call, the meeting happens, and then\u2026 sometimes a recap email goes out, sometimes it doesn\u2019t, sometimes it\u2019s generic, and the deal gets fuzzy. Sales_Accelerator detects \u201cmeeting occurred without follow-up\u201d and recommends a next action: \u201cSend recap + confirm next steps.\u201d It can draft that recap email, and it will pull in two tailored proof points from your approved positioning library\u2014coming from Customer_Analyzer\u2014so the rep isn\u2019t inventing messaging.",
+      "link": "https://www.onyx.app/1167175-7"
+    },
+    {
+      "text": "Mason Davis: When you say \u201cdraft,\u201d is it like an email template, or is it generated each time?",
+      "link": "https://www.onyx.app/1167175-8"
+    },
+    {
+      "text": "Irene Shen: Generated each time, grounded in the opportunity context\u2014stage, stakeholders engaged, what meetings occurred, and recent activity. Reps can edit before sending, of course. The goal is to reduce the variance: every deal gets a timely recap with clear next steps and the right proof points for that account\u2019s positioning.",
+      "link": "https://www.onyx.app/1167175-9"
+    },
+    {
+      "text": "Mason Davis: That\u2019s helpful. Our best reps do that consistently, but newer reps don\u2019t. And managers end up chasing them.",
+      "link": "https://www.onyx.app/1167175-10"
+    },
+    {
+      "text": "Irene Shen: Exactly. The second part is the mutual action plan checklist. If the deal is missing basics\u2014like no agreed timeline, no economic buyer identified, or no next meeting scheduled\u2014Sales_Accelerator suggests creating a lightweight mutual action plan with due dates and stakeholders. It\u2019s not a heavy methodology; it\u2019s a checklist the rep can send to the customer and track. And it will nudge multi-threading when only one contact is active.",
+      "link": "https://www.onyx.app/1167175-11"
+    },
+    {
+      "text": "Mason Davis: Multi-threading is a big one for us. We think we have a deal and then legal or finance shows up at the end and everything pauses.",
+      "link": "https://www.onyx.app/1167175-12"
+    },
+    {
+      "text": "Irene Shen: Right\u2014so if your opportunity has, say, one active champion but no other stakeholders engaged, we recommend the next action: \u201cMulti-thread\u2014add procurement/finance/IT stakeholder based on deal type.\u201d The rep gets a suggested outreach sequence: a short cadence with channel mix\u2014email + LinkedIn, and a call task\u2014so it\u2019s not just a reminder; it\u2019s an executable plan in a task queue inside Salesforce or via a browser extension.",
+      "link": "https://www.onyx.app/1167175-13"
+    },
+    {
+      "text": "Mason Davis: Got it. Let me push on a concern: our Salesforce data hygiene is\u2026 mixed. Stages aren\u2019t always updated, close dates drift, and next steps fields aren\u2019t consistent. If your recommendations depend on that, won\u2019t we get a bunch of false alerts?",
+      "link": "https://www.onyx.app/1167175-14"
+    },
+    {
+      "text": "Irene Shen: That\u2019s a fair concern and honestly the most common risk area. Two things we do to manage it. First, the recommendations don\u2019t rely on one field; they triangulate across activity signals\u2014meetings logged, emails sent, stage age, stakeholder count, and whether a mutual plan exists. So even if stage is stale, we can still catch \u201cmeeting happened but no follow-up,\u201d which is usually activity-driven.",
+      "link": "https://www.onyx.app/1167175-15"
+    },
+    {
+      "text": "Mason Davis: Okay, but forecasts and \u201cdeal at risk\u201d alerts can still get noisy if close dates are sloppy.",
+      "link": "https://www.onyx.app/1167175-16"
+    },
+    {
+      "text": "Irene Shen: Agreed. We typically start with follow-up recommendations first\u2014because it\u2019s easiest to prove value without needing perfect data. In parallel, we identify 3\u20135 hygiene rules that matter most: consistent next-step logging, stage exit criteria, and close date update discipline. We can even configure alert thresholds so you don\u2019t get alert fatigue\u2014fewer, higher-confidence recommendations at first, then expand once reps trust it.",
+      "link": "https://www.onyx.app/1167175-17"
+    },
+    {
+      "text": "Mason Davis: That makes sense. I like the idea of starting where the data dependency is lower.",
+      "link": "https://www.onyx.app/1167175-18"
+    },
+    {
+      "text": "Irene Shen: Great. Let me sanity-check the use case with your process. After discovery, what are the most common misses? Is it recap, is it scheduling the next meeting, is it stakeholder mapping?",
+      "link": "https://www.onyx.app/1167175-19"
+    },
+    {
+      "text": "Mason Davis: Recap and next meeting are the top two. Stakeholder mapping is third, especially on larger deals.",
+      "link": "https://www.onyx.app/1167175-20"
+    },
+    {
+      "text": "Irene Shen: Perfect\u2014then we\u2019d configure your top recommended actions around those moments. Example: \u201cDiscovery held \u2192 no follow-up in 24 hours\u201d triggers a drafted recap with two positioning proof points. \u201cNo next meeting scheduled \u2192 propose 2 time options + agenda.\u201d And \u201conly one contact active \u2192 multi-thread suggestion + message tailored to the stakeholder role.\u201d",
+      "link": "https://www.onyx.app/1167175-21"
+    },
+    {
+      "text": "Mason Davis: How much work is it for us to get the positioning proof points into Customer_Analyzer? We have messaging, but it\u2019s scattered.",
+      "link": "https://www.onyx.app/1167175-22"
+    },
+    {
+      "text": "Irene Shen: Since this is your second call, I\u2019ll keep it practical: we don\u2019t need everything on day one. We can start with a small approved library\u2014like top 10 proof points and 5 common objections\u2014and map them to a few customer segments. Sales_Accelerator then uses that to populate the follow-up drafts. Over time you can expand it, but you\u2019ll see value quickly with a minimal set.",
+      "link": "https://www.onyx.app/1167175-23"
+    },
+    {
+      "text": "Mason Davis: That\u2019s good. Another concern: reps hate extra tools. If this feels like yet another system, adoption will be tough.",
+      "link": "https://www.onyx.app/1167175-24"
+    },
+    {
+      "text": "Irene Shen: Totally. That\u2019s why we deliver the task queue and recommendations inside Salesforce wherever possible. The rep sees: \u201cHere are your next 5 actions today,\u201d clicks into the opportunity, sends the drafted recap, and checks off the mutual plan item. We can also run it via extension, but the north star is: no tab-switching, no duplicate data entry.",
+      "link": "https://www.onyx.app/1167175-25"
+    },
+    {
+      "text": "Mason Davis: Okay. If we did this, what would a pilot look like?",
+      "link": "https://www.onyx.app/1167175-26"
+    },
+    {
+      "text": "Irene Shen: I\u2019d recommend a 30-day pilot with a small AE group\u2014maybe 6\u20138 reps\u2014focused only on follow-up recommendations for post-discovery and early-stage progression. Success metrics would be simple: follow-up sent within 24 hours after discovery, next meeting scheduled rate, multi-threading rate, and reduction in \u201cstalled\u201d opportunities where there\u2019s no activity for X days.",
+      "link": "https://www.onyx.app/1167175-27"
+    },
+    {
+      "text": "Mason Davis: And what do you need from us?",
+      "link": "https://www.onyx.app/1167175-28"
+    },
+    {
+      "text": "Irene Shen: Three things: (1) Salesforce access for integration, (2) a lightweight agreement on the 3\u20135 data hygiene rules we enforce during the pilot\u2014nothing crazy, just consistency, and (3) a starter positioning set in Customer_Analyzer\u2014those proof points and objections we mentioned. I can send a template for that so it\u2019s not a heavy lift.",
+      "link": "https://www.onyx.app/1167175-29"
+    },
+    {
+      "text": "Mason Davis: This feels like it maps pretty closely to what we\u2019re trying to fix. What\u2019s the typical time to get it live?",
+      "link": "https://www.onyx.app/1167175-30"
+    },
+    {
+      "text": "Irene Shen: Integration and initial configuration is usually 1\u20132 weeks, then you\u2019re running the pilot. If we start next week, you could have reps getting recommendations inside Salesforce by mid-month.",
+      "link": "https://www.onyx.app/1167175-31"
+    },
+    {
+      "text": "Mason Davis: Alright. I\u2019m interested. What are the next steps to move toward a purchase?",
+      "link": "https://www.onyx.app/1167175-32"
+    },
+    {
+      "text": "Irene Shen: Great\u2014here\u2019s what I propose. I\u2019ll send a short pilot plan today: scope, metrics, and the minimal positioning library request. Then we schedule a 30-minute working session with you to confirm the workflow triggers\u2014post-discovery recap, next meeting scheduling, and multi-threading. If you\u2019re comfortable after that, we can align on pricing for the pilot converting to an annual agreement, and get procurement started.",
+      "link": "https://www.onyx.app/1167175-33"
+    },
+    {
+      "text": "Mason Davis: That works. Send the pilot plan, and let\u2019s book that working session. If the pricing is reasonable and the Salesforce lift isn\u2019t too heavy, I think we can get this approved.",
+      "link": "https://www.onyx.app/1167175-34"
+    },
+    {
+      "text": "Irene Shen: Perfect. I\u2019ll email the plan within the hour and include two time options for early next week. Thanks, Mason\u2014this is a good fit for what you described, and I\u2019m confident we can show value quickly without drowning your team in alerts.",
+      "link": "https://www.onyx.app/1167175-35"
+    },
+    {
+      "text": "Mason Davis: Thanks, Irene. Looking forward to it.",
+      "link": "https://www.onyx.app/1167175-36"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mason_davis@keystone_atlas_partners.onyx.app"
+    }
+  ]
+}

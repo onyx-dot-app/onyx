@@ -1,0 +1,30 @@
+{
+  "id": "75cf0dad76ac4eab8d026ac5344aeda9",
+  "semantic_identifier": "Design--Add positioning recommendation versioning and channel pinning to reduce messaging drift.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add positioning recommendation versioning and channel pinning to reduce messaging drift.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nPositioning recommendations evolve over time, but our messaging channel assets (web, email, ads, in-product, etc.) implicitly reference \u201cthe latest\u201d recommendation. This creates drift: teams update copy based on outdated guidance or the audit flags inconsistencies against the wrong baseline. We need a way to (a) record recommendation history in a lightweight, auditable manner and (b) explicitly tie each channel asset to the recommendation version it is intended to follow.\n\n### Proposal\nAdd lightweight versioning to positioning recommendations keyed by **segment** with metadata: **effective date**, **version id**, and **author/approver**. Each recommendation edit creates a new immutable version record (no in-place mutation), with one \u201ccurrent\u201d version per segment inferred by effective date (or explicitly marked current if needed). Then add **channel pinning**: each messaging channel asset stores a `pinnedRecommendationVersionId` pointing to an approved version. This makes the intended baseline explicit and stable even as newer versions are created.\n\n### Data model + API changes\nIntroduce `PositioningRecommendationVersion` (id, segmentId, effectiveDate, body/content fields, createdBy, approvedBy, approvedAt, status). Update the messaging asset schema to include `pinnedRecommendationVersionId` (nullable initially). Expose both the pinned version and resolved recommendation content via the internal API: asset reads return `pinnedRecommendationVersionId` plus a hydrated `pinnedRecommendationVersion` object when present; fallback behavior (until pinned) is to resolve the latest approved version for that segment. Add endpoints to list versions by segment, create a new version, approve a version, and pin/unpin an asset to a version (with permission checks).\n\n### Audit integration, rollout, and guardrails\nUpdate the existing messaging consistency audit to compare each asset against its **pinned** recommendation version when set; otherwise compare against the latest approved version for that segment and emit a warning that the asset is unpinned. Roll out in phases: ship versioning + API read support first, then enable pinning in the UI/workflows and backfill pins for high-traffic assets (or set pins on next edit). Guardrails: only **approved** versions can be pinned; pin changes are logged for auditability; and we provide a simple \u201cpin to latest approved\u201d action to reduce workflow friction.",
+      "link": "https://www.onyx.app/21708"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

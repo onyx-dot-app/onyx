@@ -1,0 +1,30 @@
+{
+  "id": "bbc146a7e084474282b9d5c7525f0359",
+  "semantic_identifier": "Design--Sales_Accelerator v2: Boost Issue_Tracker issue priority using deal-risk context.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Sales_Accelerator v2: Boost Issue_Tracker issue priority using deal-risk context.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Sales_Accelerator v2: Deal-risk priority boost for Issue_Tracker\n\nWe will introduce a deterministic \u201cdeal-risk priority boost\u201d layer in Issue_Tracker that reads normalized Sales_Accelerator fields already persisted on the issue context record: `risk_score`, `deal_stage`, `arr`, and `impacted_deal_count`. The goal is to elevate issues that are blocking high-risk, high-value, late-stage deals, while keeping the system explainable and stable. The boost is computed at priority-evaluation time (e.g., on context update and on issue refresh) and produces an \u201ceffective priority\u201d used for sorting/queues, without mutating the user\u2019s manually set base priority.\n\nBoosting uses a transparent points-based rubric with caps and hard stops. Example: compute `boost_points` as the sum of (a) risk score bucket points (e.g., 0\u20130.39: 0, 0.40\u20130.69: +1, 0.70\u20130.84: +2, 0.85\u20131.0: +3), (b) deal stage points (e.g., Prospecting/Discovery: 0, Evaluation: +1, Negotiation/Legal: +2, Commit/Closed-Won pending: +3), (c) ARR points (e.g., <25k: 0, 25\u2013100k: +1, 100\u2013500k: +2, >500k: +3), and (d) impacted deal count points (e.g., 1: 0, 2\u20133: +1, 4\u201310: +2, >10: +3). Map `boost_points` to a bounded priority increment (e.g., 0\u20132 points \u2192 +0, 3\u20135 \u2192 +1 level, 6\u20138 \u2192 +2 levels, \u22659 \u2192 +3 levels), capped so the boost cannot raise an issue above a configured ceiling (e.g., cannot exceed P1), and never overrides \u201ccritical manual\u201d settings (e.g., if manually set to P0/P1 or a \u201cDo not auto-boost\u201d flag is present, then boost is skipped).\n\nFor explainability and governance, every evaluation emits an audit trail entry on the issue, capturing: whether a boost was applied, the computed `boost_points`, the contributing factors (each field\u2019s bucket), the resulting effective priority, and the reason when skipped (missing context, invalid values, manual override, already at cap). This audit entry is updated idempotently (e.g., latest boost explanation) to avoid spam, while retaining a change history if the effective priority changes. We will also add structured logging and metrics counters for `boost_applied`, `boost_skipped_missing_context`, `boost_skipped_invalid_context`, `boost_skipped_manual_override`, and distribution metrics for boost levels and points to validate behavior and tune thresholds.\n\nImplementation-wise, we\u2019ll extend the Issue_Tracker priority computation pipeline with a `DealRiskPriorityBoost` module that validates context schema, normalizes units (e.g., ARR currency assumptions), and computes `boost_points` deterministically. The effective priority is stored as derived fields (e.g., `priority_effective`, `priority_boost_level`, `priority_boost_reason`) so downstream consumers can sort/filter without re-computation. We\u2019ll ship behind a feature flag with per-project enablement, add unit tests for all thresholds/caps/override cases, and a backfill/recompute job to populate derived fields for existing issues that already have Sales_Accelerator context.",
+      "link": "https://www.onyx.app/20520"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "113c7df4fc304b52a8af2f074d2ad148",
+  "semantic_identifier": "Design--Define canonical Issue_Tracker status model and cross-system mapping table.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-26",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Define canonical Issue_Tracker status model and cross-system mapping table.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will define a canonical `Issue_Tracker.Status` model that represents the lifecycle of an issue across Support, Engineering, and Sales without leaking tool-specific semantics. The model will be a small, stable enum (e.g., `New`, `Triaged`, `In Progress`, `Waiting on Customer`, `Waiting on Internal`, `Blocked`, `Resolved`, `Closed`, `Canceled`) plus an explicit set of allowed transitions to support validation and automation (e.g., `New \u2192 Triaged`, `In Progress \u2192 Resolved`, `Waiting* \u2194 In Progress`, `Resolved \u2192 Closed`, with controlled reopen paths). This transition graph will be owned centrally and versioned so downstream systems can rely on predictable behavior.\n\nWe will implement a cross-system status mapping table that links external status values from Zendesk/Intercom, Jira/Linear, and the CRM to the canonical status. Each mapping row will include `(system, external_status_id/code, external_status_name, canonical_status, is_deprecated, replacement_external_status?, notes, updated_at)` to support both machine matching and operational maintenance. The mapping layer will explicitly handle missing/unknown external statuses by mapping them to `Unknown` (or `Needs Mapping`) and emitting a structured warning/metric, and it will preserve deprecated external statuses for historical data while preventing them from being used for new outbound writes.\n\nThe mapping will be exposed via configuration with seeded defaults and an editable override layer. Seeded defaults will ship with the application (or migrations) for common/known statuses in each integration; customers/ops can edit mappings in an admin UI or config file to accommodate customized Jira workflows, CRM stages, or newly introduced Support statuses. The effective mapping used by the application will be \u201coverrides win, otherwise seeded default,\u201d and we\u2019ll add basic validation (no unmapped \u201cactive\u201d external statuses without an explicit `Unknown` policy; canonical status must exist; deprecated rows must have a replacement if used for outbound).\n\nThis feature\u2019s primary output is a single source of truth API consumed by later sync logic: `toCanonical(system, externalStatus) -> canonicalStatus` and `toExternal(system, canonicalStatus) -> preferredExternalStatus` (where \u201cpreferred\u201d comes from configuration). We\u2019ll add lightweight observability (counts of unknown/unmapped statuses, deprecated usage) and a safe fallback behavior (never block reads; block outbound writes only when no valid external mapping exists and surface an actionable error). This isolates integration churn and ensures consistent state semantics across Support, Engineering, and Sales workflows.",
+      "link": "https://www.onyx.app/22765"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

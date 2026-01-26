@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#63",
+  "semantic_identifier": "63: feat: Inbound sync for Jira/Linear: poll and apply external issue updates to Issue_Tracker",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-10",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "63",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "3",
+    "num_files_changed": "33",
+    "labels": [],
+    "created_at": "2025-05-10",
+    "updated_at": "2025-05-10",
+    "closed_at": "2025-05-25"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nImplements the inbound (downstream) sync path to ingest updates from Jira/Linear and apply them to the linked `Issue_Tracker` issue. This enables changes made in the external tracker (status/state, priority, title, labels, assignee) to be reflected back in `Issue_Tracker`.\n\n### What\u2019s included\n- **Polling-based inbound sync** for Jira and Linear (webhooks intentionally deferred).\n- **Field-level, mapping-aware updates**: only updates fields that are explicitly mapped/configured for the integration, preventing overwrites of `Issue_Tracker`-specific context.\n- **Incremental + idempotent processing**:\n  - Persists `last_synced_at` per link.\n  - Persists last seen external `updated_at` (and/or equivalent cursor) to fetch only changed issues.\n  - Skips processing when external `updated_at` has not advanced.\n- **Robust error handling**:\n  - Permission errors (401/403) and missing external issues (404) are logged and alertable.\n  - These failures **do not break/unlink** the existing relationship; the link remains intact for future retries.\n\n### Implementation details (high-level)\n- Adds an inbound sync runner that:\n  1. Loads active Issue_Tracker\u2194external issue links.\n  2. For each link, polls the provider API for changes since the stored cursor (`external_updated_at` / `last_synced_at`).\n  3. Transforms provider payloads into a normalized \u201cexternal issue update\u201d shape.\n  4. Applies updates via a patch layer that enforces the configured mapping (per-field gates).\n  5. Writes back sync state (`last_synced_at`, external `updated_at`) after successful apply.\n- Provider-specific adapters handle Jira vs Linear field extraction (state/status mapping, priority mapping, label normalization, assignee identity mapping).\n\n### Operational notes\n- This PR is intentionally **low-risk**: polling only, conservative updates (mapped fields only), and non-destructive error behavior.\n- Requires the scheduled job/worker that runs sync polling to be enabled in the deployment environment.\n\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#63"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

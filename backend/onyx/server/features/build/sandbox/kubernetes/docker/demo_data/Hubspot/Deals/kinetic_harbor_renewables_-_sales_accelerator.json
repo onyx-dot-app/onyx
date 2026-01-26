@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_3901338",
+  "semantic_identifier": "Kinetic Harbor Renewables - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-31 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "151169",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "3901338"
+  },
+  "sections": [
+    {
+      "text": "Deal: Kinetic Harbor Renewables\nAmount: $151169\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-11-08 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/88873"
+    },
+    {
+      "text": "Contact: Miguel Dean\nEmail: miguel_dean@kinetic_harbor_renewables.onyx.app",
+      "link": "https://www.onyx.app/85422"
+    },
+    {
+      "text": "Company: Kinetic Harbor Renewables\nDomain: kinetic_harbor_renewables.onyx.app",
+      "link": "https://www.onyx.app/34061"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/35983"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "d931e0e6b41943188c5ee2355c77dfea",
+  "semantic_identifier": "Design--Ingest + persist closed-loop learning telemetry with attribution keys.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-20",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Ingest + persist closed-loop learning telemetry with attribution keys.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Ingest + persist closed-loop learning telemetry with attribution keys \u2014 design\n\nWe will add a backend telemetry ingestion endpoint that accepts \u201cclosed-loop learning outcome\u201d events in the canonical schema defined in GOLD-106. The endpoint\u2019s responsibility is to validate, normalize, and durably persist events without introducing coupling or latency that could impact core recommendation workflows. The ingestion path will be treated as best-effort and resilient: events that fail validation are rejected (or routed to a dead-letter path), while valid events are stored with sufficient attribution keys to enable reliable downstream joins and aggregation.\n\n**API + validation:** Expose a new authenticated HTTP endpoint (e.g., `POST /telemetry/closed-loop/outcomes`) that accepts a batch of events. Validate the payload against the GOLD-106 schema, including required fields (event type, timestamp, outcome metadata) and join keys: `recommendation_instance_id` plus business identifiers (`account_id`/`opportunity_id` and corresponding CRM IDs), and attribution dimensions (`segment`, `rep_id`, `motion`). Apply minimal normalization (e.g., timestamp coercion, enum validation, trimming) and enforce size/rate limits to protect the service. For invalid events, return per-event errors in the response for batch requests; do not retry internally.\n\n**Storage model:** Persist events to a durable, query-friendly store (primary option: relational DB table; alternative: append-only log + warehouse sink if we already have that pipeline). The table will be append-only with an immutable event row keyed by a generated `event_id`, plus indexed columns for `recommendation_instance_id`, `account_id`, `opportunity_id`, `crm_account_id`, `crm_opportunity_id`, `rep_id`, `segment`, `motion`, and `event_timestamp`. Store the raw payload (JSON) alongside extracted columns to preserve forward compatibility as the canonical schema evolves, and add idempotency via an optional client-provided `idempotency_key` (or hash of stable fields) to prevent duplicates on retries. This schema enables reliable joins from outcome events \u2192 recommendation instances and CRM entities for attribution and aggregation.\n\n**Observability + operational behavior:** Add minimal but actionable observability: counters for `ingest_requests`, `events_received`, `events_persisted`, `events_invalid`, and `events_dropped` (by reason); a histogram for end-to-end ingest latency; and structured logs for validation failures and persistence errors (with sampling to avoid log floods). Failures in telemetry ingestion must not block recommendation workflows: the endpoint is isolated from synchronous recommendation serving paths, uses bounded queues/connection pools, and degrades gracefully (e.g., returning 5xx on storage outages while keeping core services unaffected). This provides a stable foundation for downstream attribution/aggregation jobs to consume trustworthy, joinable outcome telemetry.",
+      "link": "https://www.onyx.app/95158"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

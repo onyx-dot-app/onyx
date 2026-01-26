@@ -1,0 +1,30 @@
+{
+  "id": "427fa07353db43218eeb0dff0dd45e8b",
+  "semantic_identifier": "Impact--[BUG][Ticket 3/5] Implement inline editing UI for segment positioning templates.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--[BUG][Ticket 3/5] Implement inline editing UI for segment positioning templates.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change adds inline editing for segment positioning templates directly within the Segment Detail view. Each section\u2014value props, differentiators, proof points, and objections\u2014will render as readable content by default and can be toggled into an edit mode with editable fields that match the template payload schema established in GOLD-4, ensuring consistency across the product.\n\nFrom a user impact perspective, this reduces friction by letting users customize positioning content where they already work, without navigating to a separate configuration surface. The UI will also preserve the existing behavior when no custom template exists by showing server-provided defaults, so segments remain usable out of the box and editing is strictly additive.\n\nFrom a product quality standpoint, the feature introduces local form state with dirty tracking so users can clearly tell when they\u2019ve made changes in the current session. Basic client-side validation (required fields and length limits) will prevent obviously invalid inputs and improve the likelihood that future save/persist flows succeed once backend wiring is added.\n\nThis ticket intentionally does not include persistence, so edits will not survive refresh/navigation and will primarily support UI/UX validation and iteration. Key risks to watch are confusing expectations around \u201csaving\u201d and ensuring the read/edit toggle and defaults behavior are unambiguous; copy and visual cues should make clear that changes are local-only until persistence ships.",
+      "link": "https://www.onyx.app/85432"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

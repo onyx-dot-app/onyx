@@ -1,0 +1,30 @@
+{
+  "id": "7aa8aee63628497c94a287379bbccee0",
+  "semantic_identifier": "Design--Add forecast explainability breakdown to align with manager intuition.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-15",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add forecast explainability breakdown to align with manager intuition.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We\u2019ll add a \u201cForecast explainability\u201d panel wherever a forecast number is shown (initially Account and Opportunity detail views) to make the model\u2019s drivers legible and align with manager intuition. The panel will decompose the forecast into a small set of human-readable contributing signals\u2014e.g., pipeline stage, recent activity, fit score, historical conversion, and slippage risk\u2014and show each signal\u2019s directional impact on the forecast (up/down) plus its magnitude in the same units as the displayed forecast (e.g., probability points or expected $). The panel will also display a \u201clast updated\u201d timestamp per signal to indicate data freshness and help managers understand whether a change is due to new inputs vs. model recalibration.\n\nTo ensure trust and consistency, the breakdown must be generated from the exact same feature values used by the forecasting model at the time of scoring. We\u2019ll persist a \u201cscore snapshot\u201d alongside each forecast result that includes: model version, overall forecast output, per-feature (or grouped-feature) contributions, and per-signal source timestamps (e.g., last activity event time, stage updated time). The UI will consume this snapshot directly, rather than recomputing drivers on the fly, guaranteeing that the explanation matches the number managers see and stays stable across Account vs. Opportunity contexts.\n\nOn the backend, we\u2019ll extend the forecasting service to emit contribution data during inference (e.g., SHAP-like attributions or model-native contribution vectors) and map raw features into a small curated set of signals suitable for managers. This mapping is a deterministic configuration (per model version) so we can evolve signals without breaking historical explanations. We\u2019ll also add lightweight validation: the sum of signal impacts must reconcile to the final forecast (within tolerance), and we\u2019ll log/alert on mismatches to catch drift between model inputs and explanation inputs.\n\nUX details: the panel will default to a compact list (top contributors first), with an expand affordance to show all signals and \u201cwhat changed\u201d deltas when comparing the latest snapshot to the prior one. Each signal row includes: label, impact, supporting detail (e.g., \u201cNo activity in 14 days\u201d), and last-updated time; tooltips link to the underlying data where applicable. We\u2019ll ship behind a feature flag, instrument usage (panel views, expands, time-on-panel), and track whether the feature reduces \u201cforecast mismatch\u201d feedback and increases early adoption/trust as measured by manager engagement and fewer manual overrides.",
+      "link": "https://www.onyx.app/50980"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

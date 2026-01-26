@@ -1,0 +1,30 @@
+{
+  "id": "5048143825734010a4b8f2f207f3c4e4",
+  "semantic_identifier": "Impact--Integrations: Detect and remediate existing duplicate field mappings on load/save.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-31",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Integrations: Detect and remediate existing duplicate field mappings on load/save.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds backend detection and remediation for legacy integration configurations that contain duplicate or conflicting field mappings. Today, some integrations have multiple mappings that point from the same source field to multiple destination fields (or repeat the same pair), which results in duplicated signals, ambiguous overwrite behavior, and increased sync timeouts/failures. By validating mappings on both load (fetch) and save (persist), we prevent bad configs from silently continuing to degrade sync reliability.\n\nOn load, the backend will scan the stored mapping set and return a structured warning/error payload that precisely identifies conflicts (e.g., duplicated pairs, one-to-many source collisions, or other invalid combinations) so the UI and logs can surface actionable details. This makes issues discoverable before a sync run starts and reduces time spent debugging \u201cmysterious\u201d duplication or performance regressions caused by configuration drift over time.\n\nOn save, the backend will enforce the same validation, blocking persistence of new invalid mapping states and ensuring that once a config is cleaned up it stays clean. Where remediation is safe and unambiguous (e.g., exact duplicate pairs), we will apply a one-time auto-dedup to normalize the config without user involvement. Where intent can\u2019t be inferred (e.g., a single source mapped to two different destinations), we will require explicit user resolution rather than guessing.\n\nImpact-wise, this reduces downstream duplicate events and improves sync throughput and success rates by eliminating redundant work and preventing conflicting writes. It also improves supportability by providing clear, structured diagnostics and a defined remediation workflow for affected customers, minimizing manual intervention and preventing legacy bad configs from recurring.",
+      "link": "https://www.onyx.app/55514"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

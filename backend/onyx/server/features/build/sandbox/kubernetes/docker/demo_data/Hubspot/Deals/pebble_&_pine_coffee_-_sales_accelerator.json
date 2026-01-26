@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_3930514",
+  "semantic_identifier": "Pebble & Pine Coffee - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-05-30 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed_won",
+    "pipeline": "default",
+    "amount": "180904",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "3930514"
+  },
+  "sections": [
+    {
+      "text": "Deal: Pebble & Pine Coffee\nAmount: $180904\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-09-22 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/52254"
+    },
+    {
+      "text": "Contact: Allison Peterson\nEmail: allison_peterson@pebble_&_pine_coffee.onyx.app",
+      "link": "https://www.onyx.app/65364"
+    },
+    {
+      "text": "Company: Pebble & Pine Coffee\nDomain: pebble_&_pine_coffee.onyx.app",
+      "link": "https://www.onyx.app/19990"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/84909"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

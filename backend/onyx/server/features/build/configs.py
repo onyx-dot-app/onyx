@@ -1,5 +1,6 @@
 import os
 from enum import Enum
+from pathlib import Path
 
 
 class SandboxBackend(str, Enum):
@@ -29,6 +30,14 @@ PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
 # Example: /var/onyx/indexed-docs or /app/indexed-docs
 PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
     "PERSISTENT_DOCUMENT_STORAGE_PATH", ""
+)
+
+# Demo Data Path
+# Local: Source tree path (relative to this file)
+# Kubernetes: Baked into container image at /workspace/demo-data
+_THIS_FILE = Path(__file__)
+DEMO_DATA_PATH = str(
+    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "demo_data"
 )
 
 # Sandbox filesystem paths

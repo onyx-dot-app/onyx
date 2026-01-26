@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_9498242",
+  "semantic_identifier": "9498242 - Umbraleaf Biotech - sales_pitch - Discussion with Larry Delgado",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-04-20 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-04-20 00:00:00",
+    "duration_min": "30"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-04"
+      ],
+      "year_month": "2025-04",
+      "meeting_title": "9498242 - Umbraleaf Biotech - sales_pitch - Discussion with Larry Delgado",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Hi Larry\u2014Sneha Reddy here. Thanks for taking a few minutes. I\u2019ll keep this short: I wanted to share how Umbraleaf Biotech could cut support noise and get a clearer, revenue-grounded view of what issues to fix next using our Issue_Tracker.",
+      "link": "https://www.onyx.app/5929235-1"
+    },
+    {
+      "text": "Larry Delgado: Hi Sneha. Sure\u2014what exactly is it, and how is it different from what we already do in Zendesk and Jira?",
+      "link": "https://www.onyx.app/5929235-2"
+    },
+    {
+      "text": "Sneha Reddy: Great question. Issue_Tracker isn\u2019t trying to replace Zendesk or Jira. It sits between them and standardizes what we call an \u201cissue object\u201d\u2014a theme or root cause with evidence, impacted customers, and links back to the original conversations and forward to the engineering work. So instead of hundreds of tickets and scattered Jira items, you get a deduped set of themes that stays connected to both sides.",
+      "link": "https://www.onyx.app/5929235-3"
+    },
+    {
+      "text": "Larry Delgado: Okay. We definitely have duplicate tickets. But we\u2019ve tried tagging and macros\u2014still messy. How does this actually help day to day?",
+      "link": "https://www.onyx.app/5929235-4"
+    },
+    {
+      "text": "Sneha Reddy: The most immediate win is clustering and deduplication. If you\u2019re getting, say, thousands of tickets a month, Issue_Tracker groups them into a manageable set of active themes\u2014think dozens, not thousands\u2014then merges duplicates and keeps representative examples. Support ops can route the top themes to product/engineering weekly with a clean packet: what\u2019s happening, how often, which customers are impacted, and the source links.",
+      "link": "https://www.onyx.app/5929235-5"
+    },
+    {
+      "text": "Larry Delgado: That sounds useful. But prioritization is the hard part for us. We argue about what\u2019s loud versus what matters.",
+      "link": "https://www.onyx.app/5929235-6"
+    },
+    {
+      "text": "Sneha Reddy: Exactly\u2014and that\u2019s where our explainable issue prioritization comes in. Issue_Tracker assigns each cluster a priority score based on inputs you control: frequency and velocity, severity tags, customer tier or ARR, churn risk flags, and segment importance. It\u2019s transparent\u2014so it\u2019s not a black box \u201cAI says fix this,\u201d it\u2019s \u201chere\u2019s why this cluster is ranked #3.\u201d",
+      "link": "https://www.onyx.app/5929235-7"
+    },
+    {
+      "text": "Larry Delgado: When you say \u201csegment importance,\u201d what does that mean for a biotech company like ours?",
+      "link": "https://www.onyx.app/5929235-8"
+    },
+    {
+      "text": "Sneha Reddy: You can weight issues based on your ideal customer profile and strategic segments\u2014so if a theme hits high-fit, high-value customers, it rises. And if you want, it can integrate with your CRM context so issues tied to revenue exposure or key accounts are naturally elevated. The goal is to align Support, Product, and Sales around the same logic instead of each team having their own list.",
+      "link": "https://www.onyx.app/5929235-9"
+    },
+    {
+      "text": "Larry Delgado: We do have different perspectives. Support is focused on SLA and ticket volume, product wants impact versus effort, and sales only escalates when a deal is at risk.",
+      "link": "https://www.onyx.app/5929235-10"
+    },
+    {
+      "text": "Sneha Reddy: We built for that reality. Issue_Tracker supports different views off the same underlying issue set: Support can see SLA risk and volume; Product can see impact signals; Sales can see deal blockers; Execs can see revenue exposure. Everyone\u2019s looking at the same clusters and evidence\u2014just filtered and scored for their workflow.",
+      "link": "https://www.onyx.app/5929235-11"
+    },
+    {
+      "text": "Larry Delgado: How painful is implementation? We don\u2019t have appetite for a big migration.",
+      "link": "https://www.onyx.app/5929235-12"
+    },
+    {
+      "text": "Sneha Reddy: It\u2019s light. Since we\u2019re not replacing Zendesk or Jira, there\u2019s no rip-and-replace. We connect to your support channel, ingest ticket and conversation data, then connect downstream to Jira so issues can link to epics or tickets you already use. You keep working where you work; Issue_Tracker becomes the triage and intelligence layer that keeps everything coherent.",
+      "link": "https://www.onyx.app/5929235-13"
+    },
+    {
+      "text": "Larry Delgado: What about false clustering? Sometimes two issues look similar but have different root causes.",
+      "link": "https://www.onyx.app/5929235-14"
+    },
+    {
+      "text": "Sneha Reddy: Totally fair. We handle that in two ways. First, clusters maintain traceability\u2014so you can inspect the underlying tickets and evidence quickly. Second, your team can split or merge clusters, and those decisions are remembered. Over time, you build a defensible history of what you considered \u201cthe same issue\u201d and why, which helps when teams revisit old debates six months later.",
+      "link": "https://www.onyx.app/5929235-15"
+    },
+    {
+      "text": "Larry Delgado: That \u201chistory of decisions\u201d piece is interesting. We lose context constantly when people change roles.",
+      "link": "https://www.onyx.app/5929235-16"
+    },
+    {
+      "text": "Sneha Reddy: Exactly. Issue_Tracker keeps a searchable record of the theme, impacted customers, status, linked Jira work, and the reasoning behind prioritization changes. So when an exec asks, \u201cWhy didn\u2019t we fix this last quarter?\u201d you can answer with evidence instead of tribal memory.",
+      "link": "https://www.onyx.app/5929235-17"
+    },
+    {
+      "text": "Larry Delgado: You mentioned a weekly packet to engineering. What does that look like?",
+      "link": "https://www.onyx.app/5929235-18"
+    },
+    {
+      "text": "Sneha Reddy: A typical support ops workflow is: the system clusters, then your ops lead reviews the top themes and pushes the top 10 to product/engineering each week. Each theme includes representative ticket examples, volume trends, severity distribution, and a list of impacted customers. Engineering gets fewer, higher-quality inputs; support stops forwarding noisy threads; product gets a prioritized queue grounded in customer and business impact.",
+      "link": "https://www.onyx.app/5929235-19"
+    },
+    {
+      "text": "Larry Delgado: That would help. Right now, we\u2019re sending long Slack threads and spreadsheets.",
+      "link": "https://www.onyx.app/5929235-20"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s exactly what we see most teams doing\u2014manual triage and re-triage. Our goal is to compress that into something consistent and easy to act on, while making sure the \u201cwhat matters\u201d conversation is anchored in revenue exposure and customer importance, not whoever shouts loudest.",
+      "link": "https://www.onyx.app/5929235-21"
+    },
+    {
+      "text": "Larry Delgado: What kind of results do you typically see?",
+      "link": "https://www.onyx.app/5929235-22"
+    },
+    {
+      "text": "Sneha Reddy: The common pattern is a big reduction in duplicate noise\u2014teams taking thousands of monthly tickets and managing them as a small set of active themes\u2014and faster alignment on priorities because the scoring is shared and explainable. It tends to reduce escalations and rework because product and engineering get clearer signals earlier.",
+      "link": "https://www.onyx.app/5929235-23"
+    },
+    {
+      "text": "Larry Delgado: This is sounding relevant. For us, the biggest pain is that critical customer issues don\u2019t always get surfaced until late, and then everyone scrambles.",
+      "link": "https://www.onyx.app/5929235-24"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s a perfect fit for the prioritization model\u2014especially if we incorporate customer tier, churn risk flags, and segment weighting. It makes \u201cquiet but high-risk\u201d issues rise. And because the themes stay linked back to the original conversations, your team can quickly show what customers are experiencing without hunting through systems.",
+      "link": "https://www.onyx.app/5929235-25"
+    },
+    {
+      "text": "Larry Delgado: Okay. What would you need from us to see if this would work?",
+      "link": "https://www.onyx.app/5929235-26"
+    },
+    {
+      "text": "Sneha Reddy: For a first step, I\u2019d suggest a 30-minute working session. We\u2019d map your current flow\u2014Zendesk to Jira, how you tag severity, how you define customer tiers\u2014and identify the inputs that should drive your priority score. If you\u2019re open to it, we can also look at a small sample of recent tickets to show how clustering would reduce noise and what the top themes would look like.",
+      "link": "https://www.onyx.app/5929235-27"
+    },
+    {
+      "text": "Larry Delgado: That seems reasonable. I\u2019d want someone from support ops and maybe a product ops person on that call.",
+      "link": "https://www.onyx.app/5929235-28"
+    },
+    {
+      "text": "Sneha Reddy: Perfect. If you bring support ops and product ops, I\u2019ll tailor the demo to your workflows: a Support view for SLA risk and volume, and a Product view focused on impact signals. We\u2019ll keep it practical\u2014how you\u2019d run your weekly routing, and how engineering would consume it.",
+      "link": "https://www.onyx.app/5929235-29"
+    },
+    {
+      "text": "Larry Delgado: All right\u2014let\u2019s do it. When can you meet?",
+      "link": "https://www.onyx.app/5929235-30"
+    },
+    {
+      "text": "Sneha Reddy: I have Thursday at 11am or Friday at 2pm. Which works better for you?",
+      "link": "https://www.onyx.app/5929235-31"
+    },
+    {
+      "text": "Larry Delgado: Friday at 2pm works. Send an invite and I\u2019ll loop in the right folks.",
+      "link": "https://www.onyx.app/5929235-32"
+    },
+    {
+      "text": "Sneha Reddy: Great\u2014Friday at 2pm it is. I\u2019ll send a calendar invite with a couple of quick questions in advance\u2014mainly what support tool you\u2019re on, what Jira project structure looks like, and how you segment customers\u2014so we can make the session productive.",
+      "link": "https://www.onyx.app/5929235-33"
+    },
+    {
+      "text": "Larry Delgado: Sounds good. Looking forward to it.",
+      "link": "https://www.onyx.app/5929235-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "larry_delgado@umbraleaf_biotech.onyx.app"
+    }
+  ]
+}

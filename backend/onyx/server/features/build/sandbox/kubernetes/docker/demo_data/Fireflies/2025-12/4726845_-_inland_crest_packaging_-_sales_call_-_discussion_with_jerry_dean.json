@@ -1,0 +1,201 @@
+{
+  "id": "FIREFLIES_4726845",
+  "semantic_identifier": "4726845 - Inland Crest Packaging - sales_call - Discussion with Jerry Dean",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-27 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-27 00:00:00",
+    "duration_min": "45"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "4726845 - Inland Crest Packaging - sales_call - Discussion with Jerry Dean",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hey Jerry, good to see you again. Thanks for making time for a second chat. Last time you mentioned you\u2019re trying to get more disciplined about which customer segments Inland Crest should really lean into\u2014especially for product planning. I wanted to show you one piece of Customer_Analyzer that tends to get teams to a decision quickly: our fit estimation and the driver breakdown behind it.",
+      "link": "https://www.onyx.app/5225117-1"
+    },
+    {
+      "text": "Jerry Dean: Hey Arjun. Yeah, we\u2019re still interested, but I\u2019m juggling a few priorities. So if we can keep this tight, that\u2019d help.",
+      "link": "https://www.onyx.app/5225117-2"
+    },
+    {
+      "text": "Arjun Mehta: Absolutely. Quick agenda: confirm what \u201cgood\u201d looks like for you, walk through how the fit score works with the data you already have, and then see if it\u2019s worth moving to procurement or if there are blockers. Sound good?",
+      "link": "https://www.onyx.app/5225117-3"
+    },
+    {
+      "text": "Jerry Dean: Sure. Though I\u2019ll tell you upfront\u2014internally we don\u2019t always agree on what \u201cgood customer\u201d means. Product, sales, marketing\u2026 they all argue.",
+      "link": "https://www.onyx.app/5225117-4"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s actually the most common reason teams adopt this. Customer_Analyzer is designed to create a shared view using signals you already collect. For Inland Crest, when you say product planning, are you trying to identify high-fit customers with unmet needs to guide roadmap bets? Or is it more about sales targeting?",
+      "link": "https://www.onyx.app/5225117-5"
+    },
+    {
+      "text": "Jerry Dean: Product planning first. We\u2019ve had a couple roadmap projects based on loud customers that didn\u2019t pan out. But sales is going to push back if we tell them to stop chasing certain accounts.",
+      "link": "https://www.onyx.app/5225117-6"
+    },
+    {
+      "text": "Arjun Mehta: Makes sense. So here\u2019s how fit estimation would help without it being \u201cArjun\u2019s opinion\u201d or \u201cProduct\u2019s opinion.\u201d You define fit drivers\u2014industry, size, problem severity, willingness to pay, time-to-value, adoption patterns, even support burden\u2014and then we compute a fit score 0\u2013100 at the account and segment level. The key is the driver breakdown: you can show exactly why a segment scores high or low.",
+      "link": "https://www.onyx.app/5225117-7"
+    },
+    {
+      "text": "Jerry Dean: Okay, but define \u201cwe.\u201d Is this your team doing consulting, or is it automated?",
+      "link": "https://www.onyx.app/5225117-8"
+    },
+    {
+      "text": "Arjun Mehta: Mostly product. We provide a guided setup, but the system computes it continuously once connected. Typically we connect CRM fields, onboarding survey answers if you have them, and product usage events if applicable. Support tickets can be useful too, especially for support burden and churn risk signals.",
+      "link": "https://www.onyx.app/5225117-9"
+    },
+    {
+      "text": "Jerry Dean: We\u2019re a packaging company\u2014usage events are limited. We have Salesforce, support tickets in Zendesk, and some onboarding forms. But it\u2019s messy. Sales reps don\u2019t fill in half the fields.",
+      "link": "https://www.onyx.app/5225117-10"
+    },
+    {
+      "text": "Arjun Mehta: Totally fair. When fields are sparse, we start with what\u2019s reliable\u2014closed-won history, renewal outcomes, ticket volume, onboarding survey themes\u2014and we can weight drivers accordingly. Even with imperfect data, you can still get segment comparisons: like mid-market manufacturers versus smaller distributors, and see which group actually retains and expands.",
+      "link": "https://www.onyx.app/5225117-11"
+    },
+    {
+      "text": "Jerry Dean: I get the concept. I\u2019m more worried that we\u2019ll spend a bunch of time integrating and still end up with a score that sales doesn\u2019t trust.",
+      "link": "https://www.onyx.app/5225117-12"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s exactly why we emphasize transparency. It\u2019s not a black box score\u2014every score comes with \u201chere are the drivers.\u201d For example, a segment might score 82 because time-to-value is fast, support burden is low, and willingness to pay is high. Another might score 51 because support tickets spike and churn risk signals are elevated. You can take that into a product planning meeting and argue from evidence rather than gut feel.",
+      "link": "https://www.onyx.app/5225117-13"
+    },
+    {
+      "text": "Jerry Dean: Evidence is good, but our internal issue is political as much as it is analytical. Marketing will say \u201cwe need a broader ICP to grow.\u201d Sales will say \u201cdon\u2019t tell me no.\u201d Product wants to focus.",
+      "link": "https://www.onyx.app/5225117-14"
+    },
+    {
+      "text": "Arjun Mehta: Understood. One way teams handle that is agreeing upfront on what outcomes matter. If the goal is roadmap bets that drive retention and expansion, then the fit drivers align to that: retention, adoption, support burden, expansion. It reframes the conversation. Instead of \u201cwho do we like,\u201d it\u2019s \u201cwho succeeds with us.\u201d",
+      "link": "https://www.onyx.app/5225117-15"
+    },
+    {
+      "text": "Jerry Dean: That sounds nice in theory. In practice, we\u2019ve tried \u201cshared definitions\u201d before. It becomes a workshop that everyone nods at and then ignores.",
+      "link": "https://www.onyx.app/5225117-16"
+    },
+    {
+      "text": "Arjun Mehta: Then I\u2019d recommend avoiding a big workshop. We can do a lightweight pilot: pick two segments you\u2019re debating today, run fit estimation using your last 12\u201318 months of accounts, and show a comparison with driver breakdown and recommended ICP profile based on observed outcomes. If it doesn\u2019t resonate, you stop. If it does, you\u2019ve got something concrete to take back internally.",
+      "link": "https://www.onyx.app/5225117-17"
+    },
+    {
+      "text": "Jerry Dean: What do you need from us to run that pilot?",
+      "link": "https://www.onyx.app/5225117-18"
+    },
+    {
+      "text": "Arjun Mehta: Minimum: Salesforce export or read-only connection for key fields and outcomes\u2014close dates, deal size, industry, employee count if you track it\u2014plus a Zendesk connection or export for ticket volume and categories. Optional: onboarding forms. We can get to a first set of fit scores in about two weeks.",
+      "link": "https://www.onyx.app/5225117-19"
+    },
+    {
+      "text": "Jerry Dean: Two weeks isn\u2019t terrible. But we\u2019ve been burned by \u201crecommended ICP profile\u201d tools that just restate whatever data we fed it. Like, \u201cyour best customers are the ones that renew.\u201d Not helpful.",
+      "link": "https://www.onyx.app/5225117-20"
+    },
+    {
+      "text": "Arjun Mehta: Fair critique. The differentiation is in the driver analysis and segment comparison. It\u2019s not just \u201crenewers.\u201d It\u2019s identifying what characteristics correlate with renewals and expansion\u2014like time-to-value under 30 days, certain operational pain points, or lower support burden. And it flags where you\u2019re winning deals that later churn, which is often the hidden cost.",
+      "link": "https://www.onyx.app/5225117-21"
+    },
+    {
+      "text": "Jerry Dean: Another concern: our data is not clean enough to make those correlations. If a sales rep doesn\u2019t log the industry correctly, you\u2019ll tell us the wrong segment is best.",
+      "link": "https://www.onyx.app/5225117-22"
+    },
+    {
+      "text": "Arjun Mehta: Data quality impacts any model, agreed. In those cases, we lean on the signals that are hardest to fake: renewal status, support volume, and whatever objective firmographics you do have. We also surface \u201cconfidence\u201d in the score\u2014if the drivers are based on thin data, you\u2019ll see it.",
+      "link": "https://www.onyx.app/5225117-23"
+    },
+    {
+      "text": "Jerry Dean: Okay. But here\u2019s where I\u2019m stuck. Even if you give us a fit score and driver breakdown, how does that turn into a decision? We still have to convince leadership. And frankly, we\u2019re in budget season\u2014anything new is scrutinized.",
+      "link": "https://www.onyx.app/5225117-24"
+    },
+    {
+      "text": "Arjun Mehta: Totally. Let me ask directly: what would you need to see to move this to buying? Is it proof it will change roadmap decisions, or proof it will reduce churn, or something else?",
+      "link": "https://www.onyx.app/5225117-25"
+    },
+    {
+      "text": "Jerry Dean: It\u2019d have to show that we can actually get alignment across teams. And I\u2019m not sure software solves that. Also, I don\u2019t own the budget. That\u2019s part of the issue.",
+      "link": "https://www.onyx.app/5225117-26"
+    },
+    {
+      "text": "Arjun Mehta: Who does? If we can get them into a quick readout after the pilot, we can tie results to business value\u2014better segment focus, fewer wasted roadmap bets, lower churn risk. Would your VP Product or RevOps be the right person?",
+      "link": "https://www.onyx.app/5225117-27"
+    },
+    {
+      "text": "Jerry Dean: VP Product is involved, but she\u2019s skeptical of \u201cscoring.\u201d RevOps is swamped and won\u2019t prioritize another tool integration right now.",
+      "link": "https://www.onyx.app/5225117-28"
+    },
+    {
+      "text": "Arjun Mehta: If RevOps bandwidth is the bottleneck, we can do exports instead of full integration for the pilot. That reduces lift.",
+      "link": "https://www.onyx.app/5225117-29"
+    },
+    {
+      "text": "Jerry Dean: Exports might be possible, but then we\u2019re back to the \u201cmessy data\u201d problem. And my VP is going to ask why we can\u2019t do this in a spreadsheet with our BI team.",
+      "link": "https://www.onyx.app/5225117-30"
+    },
+    {
+      "text": "Arjun Mehta: You can do some of it in BI, but it\u2019s usually expensive in analyst time and doesn\u2019t stay current. Customer_Analyzer keeps the fit score updated and makes the driver breakdown accessible to non-analysts. The ongoing value is consistency.",
+      "link": "https://www.onyx.app/5225117-31"
+    },
+    {
+      "text": "Jerry Dean: I hear you. But I don\u2019t think I can sell \u201cconsistency\u201d right now. We\u2019re under pressure to cut tools, not add them. And the internal disagreement you\u2019re describing\u2014honestly, it\u2019s not something we\u2019ve solved with dashboards.",
+      "link": "https://www.onyx.app/5225117-32"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s fair. If adding a tool is a hard no right now, we can pause. Before we do, is there any scenario where a small pilot\u2014say limited to product planning\u2014could be funded as a one-time evaluation?",
+      "link": "https://www.onyx.app/5225117-33"
+    },
+    {
+      "text": "Jerry Dean: Not this quarter. Maybe later in the year. Right now we\u2019re locked. Also, I don\u2019t want to pull data and then have it go nowhere. That\u2019s a bad look internally.",
+      "link": "https://www.onyx.app/5225117-34"
+    },
+    {
+      "text": "Arjun Mehta: Understood. Would it be helpful if I sent a one-page outline of a pilot plan and the specific data fields we\u2019d need, so when timing opens up you\u2019re not starting from scratch?",
+      "link": "https://www.onyx.app/5225117-35"
+    },
+    {
+      "text": "Jerry Dean: You can send it, sure. But I\u2019m not committing to anything. And I\u2019d rather not schedule another meeting until I know budgets are loosening.",
+      "link": "https://www.onyx.app/5225117-36"
+    },
+    {
+      "text": "Arjun Mehta: Completely fine. I\u2019ll send a concise pilot brief\u2014focus on fit estimation, driver breakdown, and a segment comparison tied to product planning decisions. If you\u2019re open to it, I can also include a way to handle stakeholder disagreement\u2014basically a lightweight decision framework around drivers and outcomes.",
+      "link": "https://www.onyx.app/5225117-37"
+    },
+    {
+      "text": "Jerry Dean: Send it over. I\u2019ll skim it. Just keep in mind: if this requires cross-team alignment work, that\u2019s where we usually stall.",
+      "link": "https://www.onyx.app/5225117-38"
+    },
+    {
+      "text": "Arjun Mehta: Got it. I\u2019ll keep it practical and minimal lift. Thanks, Jerry\u2014appreciate the candor. I\u2019ll follow up by email today, and you can tell me if it\u2019s worth revisiting later this year.",
+      "link": "https://www.onyx.app/5225117-39"
+    },
+    {
+      "text": "Jerry Dean: Sounds good. Thanks, Arjun.",
+      "link": "https://www.onyx.app/5225117-40"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "jerry_dean@inland_crest_packaging.onyx.app"
+    }
+  ]
+}

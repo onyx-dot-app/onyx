@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_8871769",
+  "semantic_identifier": "Jadecircuit Electronics",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-02-08 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "8871769",
+    "domain": "jadecircuit_electronics.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Jadecircuit Electronics\nDomain: jadecircuit_electronics.onyx.app",
+      "link": "https://www.onyx.app/47630"
+    },
+    {
+      "text": "Contact: Liliana Zamora\nEmail: liliana_zamora@jadecircuit_electronics.onyx.app",
+      "link": "https://www.onyx.app/81840"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

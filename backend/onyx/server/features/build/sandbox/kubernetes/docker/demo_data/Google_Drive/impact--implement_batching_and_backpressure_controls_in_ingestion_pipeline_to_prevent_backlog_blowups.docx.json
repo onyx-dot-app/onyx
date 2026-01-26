@@ -1,0 +1,30 @@
+{
+  "id": "69951a957a3a42f4a1684769d209ccd6",
+  "semantic_identifier": "Impact--Implement batching + backpressure controls in ingestion pipeline to prevent backlog blowups.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-29",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Implement batching + backpressure controls in ingestion pipeline to prevent backlog blowups.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds batching and backpressure controls to the ingestion pipeline so we can scale ingestion throughput without creating runaway backlogs. Today, large backfills or spikes in source activity can cause unbounded growth in queued work, which then cascades into increased retries, longer processing delays, and degraded system performance. By making ingestion \u201cself-regulating,\u201d we keep the system stable under load while still maximizing throughput when capacity is available.\n\nWe will introduce configurable batch sizing and concurrency limits across each major stage\u2014fetch, parse, dedupe, and persist\u2014so we can tune how much work is in-flight at any given time. This reduces burstiness (especially on the persist/DB layer) and gives us predictable resource usage. The batching model is designed to improve efficiency (fewer round trips, better DB utilization) while ensuring we don\u2019t overload downstream sync processes that depend on steady, manageable write rates.\n\nBackpressure will be driven by operational signals like queue depth and retry rates. When these indicate congestion (e.g., slow consumers, DB contention, elevated failure/retry loops), the pipeline will automatically slow consumption, pause/resume specific sources, or reduce concurrency to prevent further accumulation. The expected impact is fewer backlog \u201cblowups,\u201d shorter time-to-recover after incidents, and more reliable completion of large backfills without manual intervention.\n\nCritically, we will preserve idempotency throughout batching and throttling behavior, so retries do not create duplicates or inconsistent state. This ensures correctness even when the system deliberately slows down or reprocesses work due to transient failures. Overall, this feature improves reliability, protects database health, and provides a controllable lever for operations to balance throughput vs. system stability as load patterns change.",
+      "link": "https://www.onyx.app/50947"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

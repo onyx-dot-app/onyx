@@ -1,0 +1,30 @@
+{
+  "id": "7799875",
+  "semantic_identifier": "[GOLD-132]: Add compliance presets + in-app admin UI for tenant content/comms controls",
+  "title": "Add compliance presets + in-app admin UI for tenant content/comms controls",
+  "source": "linear",
+  "doc_updated_at": "2025-12-31",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "high",
+    "created_at": "2025-12-31"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a UI in Sales_Accelerator for admins to view and update the tenant-level compliance settings added in GOLD-131, including clear descriptions of what each toggle blocks. Add one-click presets for common regulated environments (e.g., \u201cRegulated/No AI Generation\u201d, \u201cPII-Restricted Comms Ingestion\u201d) with safe defaults to reduce implementation time. Ensure changes are validated client/server-side and display an explicit \u201cwhy blocked\u201d message when generation or ingestion is disabled by policy.",
+      "link": "https://www.onyx.app/65511"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

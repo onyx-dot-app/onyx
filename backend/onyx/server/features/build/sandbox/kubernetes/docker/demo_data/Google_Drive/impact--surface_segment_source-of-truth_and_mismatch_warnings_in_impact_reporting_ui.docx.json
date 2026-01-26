@@ -1,0 +1,30 @@
+{
+  "id": "ab6f78c79d25412cb4e7bab4f9f2ea18",
+  "semantic_identifier": "Impact--Surface segment source-of-truth and mismatch warnings in impact reporting UI.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-21",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Surface segment source-of-truth and mismatch warnings in impact reporting UI.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature improves trust and debuggability in Impact Reporting by explicitly surfacing the canonical segment identifier/name and the system designated as the segment \u201csource of truth.\u201d Today, the same segment label can resolve differently depending on upstream mappings, which leads to confusing or silently blended totals. By aligning the UI and Issue_Tracker impact-reporting responses with the canonicalization layer (per GOLD-180), we make it clear which segment definition the numbers represent.\n\nWhen the canonicalization layer marks a segment as unmapped, unknown, or mismatched, the UI will shift into a warning state that is hard to miss. In these cases, we will also prevent blending/aggregating totals across conflicting segment definitions, avoiding misleading \u201crolled up\u201d impact numbers that appear precise but are not comparable. This protects decision-making by ensuring users don\u2019t unknowingly compare or combine inconsistent segment data.\n\nTo support faster triage, we will add a lightweight tooltip/label that links directly to the relevant segment mapping entry. This gives analysts and on-call engineers immediate context (what mapping is being applied and where it lives) without leaving the workflow, reducing back-and-forth and shortening time-to-resolution for data discrepancies.\n\nOverall impact: higher confidence in segment-based revenue/customer impact views, fewer misinterpretations caused by silent mapping differences, and reduced operational overhead when investigating segment inconsistencies. This change also establishes a clearer contract between the impact-reporting service and UI around canonical segment semantics, making future segment-related enhancements safer to ship.",
+      "link": "https://www.onyx.app/63285"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

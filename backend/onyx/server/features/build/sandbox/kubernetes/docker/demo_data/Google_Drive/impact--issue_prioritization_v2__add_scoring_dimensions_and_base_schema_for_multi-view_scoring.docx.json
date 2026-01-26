@@ -1,0 +1,30 @@
+{
+  "id": "9b871f73b1e14fdab42a62ffc7065597",
+  "semantic_identifier": "Impact--Issue prioritization v2: Add scoring dimensions + base schema for multi-view scoring.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-01",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Issue prioritization v2: Add scoring dimensions + base schema for multi-view scoring.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change lays the foundation for Issue Prioritization v2 by moving from a single, one-size-fits-all score to a normalized scoring model that can capture multiple prioritization \u201cviews.\u201d Instead of treating priority as a single number, we\u2019ll be able to represent distinct dimensions like Support SLA risk, Product impact, and Sales deal blockers in a consistent structure.\n\nOn the backend, we will introduce new fields/structures to store per-dimension scores and weights, plus a computed aggregated score. This enables repeatable scoring logic, clearer auditability (\u201cwhy is this issue high priority?\u201d), and future extensibility to add new dimensions without redesigning the model.\n\nA key requirement is backward compatibility: the current single-score setup must continue to work for existing consumers. The API contract will evolve to expose the new multi-dimension schema while still supporting legacy fields/behavior, minimizing disruption as downstream services and clients adopt v2 incrementally.\n\nThis ticket is intentionally scoped to schema and API contract changes only. It unlocks subsequent work for UI updates, saved scoring profiles, and tuning controls, which will build on this model to deliver different prioritization views for different teams and workflows.",
+      "link": "https://www.onyx.app/33712"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

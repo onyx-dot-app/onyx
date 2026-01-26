@@ -1,0 +1,30 @@
+{
+  "id": "fc42f981552945debb567cc06468a230",
+  "semantic_identifier": "Impact--Add Fit Driver input preview + field mapping step during setup.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add Fit Driver input preview + field mapping step during setup.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a new \u201cFit Driver Input Preview + Mapping\u201d step to the setup flow so customers can validate what data is powering each selected Fit Driver before they finish onboarding. The step surfaces the top candidate source fields/events the system has inferred (e.g., CRM properties, event names, survey questions), along with sample values and fill-rate/coverage, making the underlying inputs transparent and reviewable.\n\nUsers can then explicitly map, swap, or correct the source used for each Fit Driver\u2014choosing the right property, selecting the correct event, or picking an alternate question\u2014rather than discovering mis-mappings after launch. This reduces setup friction for complex data models, improves customer confidence, and prevents downstream confusion when Fit Drivers don\u2019t behave as expected due to missing or incorrect fields.\n\nThe impact is higher data quality and more reliable Fit Driver performance from day one. By highlighting coverage gaps and examples during setup, customers can proactively select better-populated sources, leading to fewer nulls, better model signal, and fewer support escalations tied to \u201cwhy is this driver empty/wrong?\u201d scenarios.\n\nMappings are persisted per workspace so future ingests reuse the same field bindings without requiring repeated user effort. This creates a more scalable onboarding experience for teams with multiple data refreshes or evolving schemas, while also making the system more resilient to initial inference errors and reducing ongoing maintenance cost.",
+      "link": "https://www.onyx.app/63704"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

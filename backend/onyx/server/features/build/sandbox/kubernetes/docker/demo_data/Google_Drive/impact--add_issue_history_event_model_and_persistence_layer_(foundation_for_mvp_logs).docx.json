@@ -1,0 +1,30 @@
+{
+  "id": "bd81d632e0c84d9aa632277b4ed5d79a",
+  "semantic_identifier": "Impact--Add issue_history event model + persistence layer (foundation for MVP logs).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-02",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add issue_history event model + persistence layer (foundation for MVP logs).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This work lays the foundation for a first MVP of audit-style issue logs by introducing an append-only `issue_history` event stream tied to our standardized Issue object. Instead of encoding each change directly into rigid columns, we\u2019ll persist a chronological record of what happened to an issue, when it happened, and who initiated it\u2014creating a durable source of truth for future activity timelines and compliance needs.\n\nThe ticket delivers the underlying database schema and backend domain model, including an initial taxonomy of event types and a flexible payload structure. The payload design is intended to accommodate upcoming events\u2014status and priority changes, merge/split actions, notes, and external link additions\u2014without requiring new database migrations every time we add an event variant.\n\nIt also includes basic persistence and service-layer write APIs/helpers so the platform can reliably record history events with actor and timestamp as changes occur. This enables other backend workflows to start emitting events immediately and ensures consistent formatting and validation across producers.\n\nNo user-facing UI is included in this scope; the impact is entirely foundational. Once shipped, subsequent work can build read/query APIs and UI rendering on top of this event log, enabling activity feeds, change auditing, and richer issue provenance with minimal incremental backend changes.",
+      "link": "https://www.onyx.app/92206"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "4170b0fae5ba4987b29a34a49e31aebf",
+  "semantic_identifier": "Design--Fix stalled-deal rule: avoid false positives for \u201cno next meeting scheduled\u201d in sales_followup_recommendations.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-10",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix stalled-deal rule: avoid false positives for \u201cno next meeting scheduled\u201d in sales_followup_recommendations.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Summary / Problem\nThe `sales_followup_recommendations` stalled-deal rule is generating false positives for the reason \u201cno next meeting scheduled\u201d even when a future meeting exists in synced CRM or calendar data. This erodes trust in stalled-deal alerts and creates unnecessary follow-up actions for reps. The root cause is that rule evaluation either (a) only checks a single source or a narrow event type, or (b) fails to filter out events that should not count (canceled/no-show) while also missing legitimate future meetings due to reschedules, missing IDs, or timezone handling.\n\n### Goals / Non-goals\n**Goal:** Update the rule evaluation to accurately detect an upcoming meeting by considering all synced sources (CRM events + calendar-linked meetings) and excluding events that should not satisfy \u201cnext meeting scheduled\u201d (canceled, no-show). **Non-goals:** Changing the overall stalled-deal scoring framework, modifying sync pipelines, or redefining what constitutes a \u201cmeeting\u201d beyond the existing event types we already ingest (we\u2019ll only improve selection/filtering and source coverage).\n\n### Proposed behavior / Implementation\nWhen evaluating \u201cno next meeting scheduled,\u201d compute `next_meeting_at` by scanning both (1) CRM events and (2) calendar-linked meetings for the opportunity/contact/account (per current association rules). Normalize all event start times to UTC and select the earliest event with `start_time > now + grace_window` (small buffer to avoid near-past ambiguity). Filter out events with statuses indicating canceled/declined/no-show, and treat rescheduled meetings as distinct events: if both old and new exist, the earliest *valid* upcoming instance wins; if an event is marked canceled and has a replacement without a shared ID, the replacement should still count based on participant/opportunity association + time. The rule triggers \u201cno next meeting scheduled\u201d only if `next_meeting_at` is absent after this merged, filtered scan; otherwise it should not fire (or should choose another stalled reason as applicable).\n\n### Testing / Edge cases\nAdd unit tests around the event-selection function: (a) rescheduled meeting where original is canceled and replacement exists (with and without shared event ID), (b) timezone normalization (event stored in local tz, \u201cnow\u201d in UTC) ensuring future detection is correct, (c) missing event IDs but still associated via contact/opportunity mapping, (d) canceled/no-show events in the future should not satisfy the rule, and (e) multiple sources where CRM has none but calendar does (and vice versa). Add a small integration test (or fixture-based evaluation test) that exercises the full `sales_followup_recommendations` rule evaluation path to ensure the recommendation reason does not emit false positives when a valid upcoming meeting exists.",
+      "link": "https://www.onyx.app/78024"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

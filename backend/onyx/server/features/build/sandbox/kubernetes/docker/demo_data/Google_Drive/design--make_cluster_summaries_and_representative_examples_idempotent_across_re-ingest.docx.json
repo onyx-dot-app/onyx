@@ -1,0 +1,30 @@
+{
+  "id": "503d8463970540a08d72a5c9d8677edd",
+  "semantic_identifier": "Design--Make cluster summaries and representative examples idempotent across re-ingest.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-17",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Make cluster summaries and representative examples idempotent across re-ingest.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Goal\nWhen the same source conversations are re-ingested, cluster IDs and membership remain stable, but our derived artifacts (cluster summaries and \u201crepresentative examples\u201d) can shift or duplicate due to non-deterministic ordering/sampling and write paths that create new records. This feature makes summary/exemplar generation deterministic and idempotent across re-ingests so that identical inputs produce identical outputs, and reprocessing updates the same stored artifact rather than adding a new one.\n\n### Approach (determinism)\nIn the generation step, we will enforce stable input ordering and fixed selection. For each cluster, build a canonical ordered list of member conversation IDs (e.g., sort by conversation_id, then message_id, then timestamp as tie-breakers) and use a deterministic exemplar selection strategy (e.g., take the first K by the canonical order, or use a seeded hash-based sampler with seed = cluster_id + ingestion_source_id to keep the chosen set stable). We will also version all LLM inputs: prompt template version, model identifier, and key generation parameters (temperature=0, top_p=1, max_tokens fixed) so the \u201cgeneration version\u201d is an explicit part of the artifact identity and can be bumped intentionally when we want outputs to change.\n\n### Storage and idempotent writes\nReplace \u201ccreate new summary/exemplar records\u201d with upserts keyed by `(cluster_id, generation_version)` (and, if needed, environment/tenant). Store both the generated text and the exact conversation IDs used to generate it (selected exemplar IDs / input set hash) so we can verify stability and debug drift. On re-ingest, if the cluster membership and generation_version are unchanged, the pipeline will compute the same selected inputs and produce the same outputs, and the upsert will overwrite-in-place (or no-op if identical), preventing duplicates. If membership changes, the upsert updates the existing row for that cluster/version rather than creating another row.\n\n### Regression test\nAdd an integration regression test that ingests a fixed fixture dataset twice (same conversations, same clustering outcome), runs summary/exemplar generation both times, and asserts: (1) for every cluster, summary text is identical across runs, and (2) exemplar selection is identical (either exact exemplar record IDs or the stable selected conversation IDs). The test should also assert the database contains a single summary/exemplar record per `(cluster_id, generation_version)` after the second run, ensuring idempotent persistence.",
+      "link": "https://www.onyx.app/36645"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

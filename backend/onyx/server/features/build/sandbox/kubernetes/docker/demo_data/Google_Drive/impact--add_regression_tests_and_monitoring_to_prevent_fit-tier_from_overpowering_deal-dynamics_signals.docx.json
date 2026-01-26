@@ -1,0 +1,30 @@
+{
+  "id": "0202f0f92dc443d4aa02d629b808bfb0",
+  "semantic_identifier": "Impact--Add regression tests and monitoring to prevent fit-tier from overpowering deal-dynamics signals.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add regression tests and monitoring to prevent fit-tier from overpowering deal-dynamics signals.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds automated regression tests and lightweight monitoring to ensure our forecasting and best-next-action models don\u2019t over-reward \u201cfit-tier\u201d when deal-dynamics signals indicate real risk. Today, high-fit accounts can incorrectly float to the top even when procurement friction, competitive pressure, or internal misalignment should meaningfully reduce confidence and change recommended actions.\n\nThe primary impact is improved model trust and decision quality: scores and rankings will be explicitly penalized/capped in the presence of negative procurement/competition/alignment signals, preventing reps and leaders from being guided toward overly optimistic forecasts or misprioritized next steps. This reduces false positives in \u201chigh-confidence\u201d deals, improves calibration of forecasts, and aligns recommendations with the reality of deal execution risk\u2014especially for high-fit segments where the downside of over-scoring is largest.\n\nWe\u2019ll operationalize this through (1) scenario-based regression tests that encode expected score and ranking behavior under combinations of fit-tier and adverse deal dynamics, with thresholds and cases derived from the GOLD-97 audit, and (2) monitoring that tracks score-component distributions over time and flags workspaces where fit-tier contribution exceeds configured limits when negative signals are present. This creates a durable guardrail against future scoring regressions caused by model changes, feature drift, or configuration differences across workspaces.\n\nSuccess will be measured by fewer audit violations similar to GOLD-97, reduced instances of high-fit deals appearing in top-ranked actions while carrying strong negative risk signals, and faster detection of scoring anomalies via alerts. The result is a safer, more predictable scoring system that maintains the value of fit-tier while ensuring deal dynamics appropriately moderate recommendations and forecasts.",
+      "link": "https://www.onyx.app/45382"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

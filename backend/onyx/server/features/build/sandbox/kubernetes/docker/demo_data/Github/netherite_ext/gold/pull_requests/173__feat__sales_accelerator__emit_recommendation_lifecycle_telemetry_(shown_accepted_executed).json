@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#173",
+  "semantic_identifier": "173: feat: Sales_Accelerator: Emit recommendation lifecycle telemetry (shown/accepted/executed)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-27",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "173",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "3",
+    "num_files_changed": "54",
+    "labels": [],
+    "created_at": "2025-11-27",
+    "updated_at": "2025-11-27",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds closed-loop telemetry for Sales_Accelerator recommendations, emitting canonical GOLD-106 events when a recommendation is (1) displayed, (2) accepted/applied by a rep, and (3) results in an executed action/sequence.\n\nImplementation details:\n- Client instrumentation\n  - Emits `recommendation_shown` when a recommendation card is rendered/visible.\n  - Emits `recommendation_accepted` when the rep clicks apply/accept.\n  - Threads a stable `recommendation_instance_id` through UI interactions and API calls.\n- Server instrumentation\n  - Emits `recommendation_executed` when the downstream action/sequence execution completes (or is enqueued, per existing execution semantics), linked to the same `recommendation_instance_id`.\n  - Ensures events conform to the GOLD-106 schema and include required context fields: segment, rep identifiers, motion, account/opportunity context, CRM IDs, and event timestamp.\n- Delivery reliability (lightweight, non-blocking)\n  - Adds basic batching + retry with backoff for telemetry dispatch.\n  - Validates payloads against required fields; invalid events are dropped with structured logs.\n  - Telemetry failures never block user workflows; only best-effort delivery.\n\nOperational notes:\n- Logs include event name, recommendation_instance_id, and validation/dispatch errors to help detect dropped/invalid events.\n- No user-facing behavior changes expected beyond telemetry emission.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#173"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

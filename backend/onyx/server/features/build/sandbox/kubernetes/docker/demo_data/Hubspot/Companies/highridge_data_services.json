@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_9318371",
+  "semantic_identifier": "Highridge Data Services",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-11-29 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "9318371",
+    "domain": "highridge_data_services.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Highridge Data Services\nDomain: highridge_data_services.onyx.app",
+      "link": "https://www.onyx.app/72862"
+    },
+    {
+      "text": "Contact: Tatum Green\nEmail: tatum_green@highridge_data_services.onyx.app",
+      "link": "https://www.onyx.app/31009"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

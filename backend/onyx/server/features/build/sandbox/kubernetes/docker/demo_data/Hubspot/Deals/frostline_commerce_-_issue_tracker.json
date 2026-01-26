@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_9018220",
+  "semantic_identifier": "Frostline Commerce - Issue Tracker",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-12-10 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "54679",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "9018220"
+  },
+  "sections": [
+    {
+      "text": "Deal: Frostline Commerce\nAmount: $54679\nProduct of Interest: Issue_Tracker\nFeatures of Interest: issue_clustering\nClose Date: 2026-02-28 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/48151"
+    },
+    {
+      "text": "Contact: Wayne Barrett\nEmail: wayne_barrett@frostline_commerce.onyx.app",
+      "link": "https://www.onyx.app/60496"
+    },
+    {
+      "text": "Company: Frostline Commerce\nDomain: frostline_commerce.onyx.app",
+      "link": "https://www.onyx.app/63749"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/87443"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,173 @@
+{
+  "id": "FIREFLIES_1973715",
+  "semantic_identifier": "1973715 - Xenith Argo Logistics - sales_call - Discussion with Claire Bell",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-27 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-27 00:00:00",
+    "duration_min": "42"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "1973715 - Xenith Argo Logistics - sales_call - Discussion with Claire Bell",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Claire\u2014good to see you again. Thanks for making time. Last time you mentioned you\u2019re getting serious about defining your ICP before you scale outbound and paid. I\u2019d love to use today to confirm what \u201cgood fit\u201d looks like for Xenith Argo Logistics and get you to a clear next step with Customer_Analyzer. Sound good?",
+      "link": "https://www.onyx.app/3573425-1"
+    },
+    {
+      "text": "Claire Bell: Yes, that\u2019s exactly what we need. We\u2019ve got demand gen plans for Q2, but we\u2019re not confident we\u2019re targeting the right types of shippers and brokers yet.",
+      "link": "https://www.onyx.app/3573425-2"
+    },
+    {
+      "text": "Megan Foster: Great. Quick recap of what you said on the first call: you have a few customer pockets that renew and expand, but you also have segments that look excited in the sales cycle and then don\u2019t adopt, which creates churn risk and a support burden. Is that still accurate?",
+      "link": "https://www.onyx.app/3573425-3"
+    },
+    {
+      "text": "Claire Bell: That\u2019s accurate. We see \u201clooks great in demo\u201d but then they don\u2019t get to value fast enough. It\u2019s hard to tell if it\u2019s product gaps or just the wrong customer type.",
+      "link": "https://www.onyx.app/3573425-4"
+    },
+    {
+      "text": "Megan Foster: Perfect framing. The piece I want to focus on today is our fit_estimation\u2014because it directly answers that question. We ingest the signals you already have\u2014CRM fields, onboarding surveys, product usage events, and support tickets\u2014and generate a fit score from 0 to 100 at both the account level and segment level. Then it gives you the driver breakdown for why the score is high or low, plus segment comparisons like \u201cmid-market shippers vs SMB brokers,\u201d and a recommended ICP profile based on outcomes like retention and expansion.",
+      "link": "https://www.onyx.app/3573425-5"
+    },
+    {
+      "text": "Claire Bell: Okay. The fit score is the part we were interested in. My team\u2019s skeptical of \u201cscores\u201d though. They want to know what\u2019s behind it, and whether we can trust it.",
+      "link": "https://www.onyx.app/3573425-6"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Two things make it trustworthy. First, the driver breakdown is explicit\u2014so you\u2019re never staring at a magic number. For example, we might weight time-to-value, adoption patterns, and support burden signals heavily if your goal is reducing churn while scaling acquisition. Second, you can start with drivers you already believe in\u2014industry, size, and operational complexity\u2014and then let the system validate which ones correlate with outcomes. It\u2019s not just scoring; it\u2019s explaining what\u2019s actually happening in your data.",
+      "link": "https://www.onyx.app/3573425-7"
+    },
+    {
+      "text": "Claire Bell: That explanation piece is key. Another concern: things change fast for us. We\u2019ve been iterating onboarding and adding integrations. I don\u2019t want recommendations getting stale and then we bake the wrong messaging into campaigns.",
+      "link": "https://www.onyx.app/3573425-8"
+    },
+    {
+      "text": "Megan Foster: That\u2019s a real risk\u2014model drift and outdated messaging can happen if you treat positioning as \u201cset it and forget it.\u201d The way we handle it in practice is we tie scoring and recommendations to fresh signals: product usage events and support tickets update continuously. Then we set a review cadence\u2014most teams do a lightweight monthly refresh and a deeper quarterly ICP check. Also, when you ship major capability changes\u2014like a new integration\u2014we can flag that as an event so the system re-evaluates the driver impact post-release rather than relying on older patterns.",
+      "link": "https://www.onyx.app/3573425-9"
+    },
+    {
+      "text": "Claire Bell: Monthly feels doable. Quarterly deeper review makes sense. How much work is it on our side to get this going?",
+      "link": "https://www.onyx.app/3573425-10"
+    },
+    {
+      "text": "Megan Foster: For the first phase, we keep it small. We\u2019d start with three inputs: your CRM fields for closed-won and closed-lost, a basic onboarding survey dataset if you have it, and one product usage signal set\u2014like activation milestones. That\u2019s enough to generate a first fit model and segment comparisons. Then, if you want to refine it, we add support tickets to capture support burden and churn risk signals.",
+      "link": "https://www.onyx.app/3573425-11"
+    },
+    {
+      "text": "Claire Bell: We can provide Salesforce fields and product events. Support tickets are in Zendesk; we can probably do that too, but it might take longer. If we start without Zendesk, does the output become misleading?",
+      "link": "https://www.onyx.app/3573425-12"
+    },
+    {
+      "text": "Megan Foster: It won\u2019t be misleading\u2014it just means your first model will be stronger on \u201cwho buys and activates\u201d than on \u201cwho becomes costly to support.\u201d Many teams start exactly that way. Then as soon as Zendesk is connected, we add that dimension and re-run the segment comparisons. The point is: you\u2019ll still get actionable clarity fast, then improve accuracy as you add signals.",
+      "link": "https://www.onyx.app/3573425-13"
+    },
+    {
+      "text": "Claire Bell: Actionable clarity is what I\u2019m after. What does \u201cactionable\u201d look like for my marketing and sales teams? We need to pick targets and change messaging quickly.",
+      "link": "https://www.onyx.app/3573425-14"
+    },
+    {
+      "text": "Megan Foster: Concretely, you\u2019ll be able to say: \u201cThese are the top two segments with fit scores above, say, 80, and here\u2019s why.\u201d For example, Segment A might score high because they reach time-to-value in under two weeks and have repeat usage patterns; Segment B might score low because adoption stalls after week one and the support burden spikes. Then you use the driver breakdown to shape targeting and enablement: who you prioritize, what you qualify on, and what you position in first-touch messaging.",
+      "link": "https://www.onyx.app/3573425-15"
+    },
+    {
+      "text": "Claire Bell: That would help. Right now our SDRs qualify mostly on size and geography, which doesn\u2019t really predict success.",
+      "link": "https://www.onyx.app/3573425-16"
+    },
+    {
+      "text": "Megan Foster: Exactly. We can keep size and geography in, but the system usually finds better predictors\u2014like operational complexity, integration needs, or willingness to pay signals\u2014whatever correlates in your data. And then your reps can qualify based on drivers tied to retention, not just \u201ccan they buy.\u201d",
+      "link": "https://www.onyx.app/3573425-17"
+    },
+    {
+      "text": "Claire Bell: If we do this, I want my sales leads to actually adopt it. They\u2019ll ask: \u201cHow do we know the recommended ICP isn\u2019t just biased toward our current customer base?\u201d",
+      "link": "https://www.onyx.app/3573425-18"
+    },
+    {
+      "text": "Megan Foster: Great question. The recommended ICP is grounded in observed outcomes\u2014retention, expansion, conversion\u2014so it\u2019s not just mirroring who you already have; it\u2019s identifying who succeeds. And we can explicitly compare \u201ccurrent customer distribution\u201d versus \u201cbest-outcome customer distribution.\u201d If there\u2019s a gap\u2014like you currently sell to lots of Segment X but Segment Y retains better\u2014you\u2019ll see that. That\u2019s typically the aha moment for sales leadership.",
+      "link": "https://www.onyx.app/3573425-19"
+    },
+    {
+      "text": "Claire Bell: That would be useful for internal alignment. What would you need from me to validate this quickly?",
+      "link": "https://www.onyx.app/3573425-20"
+    },
+    {
+      "text": "Megan Foster: Let\u2019s define a tight pilot. Two segments you care about\u2014maybe mid-market shippers and brokers\u2014and a success metric like \u201cimprove win rate in target accounts\u201d or \u201creduce early churn risk.\u201d We\u2019ll ingest Salesforce closed-won/closed-lost plus your activation events. Then in two weeks we\u2019ll come back with: fit scores by segment, top fit drivers, and an initial ICP recommendation. You bring your head of sales and head of marketing to that readout so we can turn it into targeting and messaging decisions.",
+      "link": "https://www.onyx.app/3573425-21"
+    },
+    {
+      "text": "Claire Bell: Two weeks is fast. What do you need technically\u2014do we need engineering involved?",
+      "link": "https://www.onyx.app/3573425-22"
+    },
+    {
+      "text": "Megan Foster: Minimal. If you can export Salesforce fields and provide an events table from your product analytics, we can start. If you prefer a direct connector later, we can do that, but for the pilot we\u2019re optimizing for speed and learning. No heavy lift.",
+      "link": "https://www.onyx.app/3573425-23"
+    },
+    {
+      "text": "Claire Bell: Okay. One more concern: if we change onboarding in the middle of the pilot, does that mess up the model?",
+      "link": "https://www.onyx.app/3573425-24"
+    },
+    {
+      "text": "Megan Foster: It\u2019s actually helpful\u2014because we can mark that change as a breakpoint. Then we can see whether time-to-value improves and how it impacts fit drivers. The key is to document the date and what changed. That way the insights stay current instead of becoming stale.",
+      "link": "https://www.onyx.app/3573425-25"
+    },
+    {
+      "text": "Claire Bell: Got it. This is sounding like what we need. What\u2019s the commercial side for a pilot?",
+      "link": "https://www.onyx.app/3573425-26"
+    },
+    {
+      "text": "Megan Foster: We can structure it as a short pilot that rolls into an annual plan if it\u2019s successful. For today, I\u2019d propose we agree on scope\u2014two segments, the two data sources, and the two-week readout\u2014and I\u2019ll send a simple pilot agreement and a data checklist. If the readout gives you a clear ICP and driver-based qualification criteria, you move forward.",
+      "link": "https://www.onyx.app/3573425-27"
+    },
+    {
+      "text": "Claire Bell: That works. I\u2019m comfortable committing to a pilot if it\u2019s contained and we can get those outputs.",
+      "link": "https://www.onyx.app/3573425-28"
+    },
+    {
+      "text": "Megan Foster: Perfect. Next step: I\u2019ll email the data checklist today\u2014Salesforce fields, definitions for closed-won/closed-lost, and the activation milestone events you mentioned. Can you introduce me to whoever owns product analytics so we can get the events export this week?",
+      "link": "https://www.onyx.app/3573425-29"
+    },
+    {
+      "text": "Claire Bell: Yes, I\u2019ll connect you with our product ops manager this afternoon. And I\u2019ll make sure we can pull the Salesforce export by Friday.",
+      "link": "https://www.onyx.app/3573425-30"
+    },
+    {
+      "text": "Megan Foster: Great. I\u2019ll also put a tentative readout on the calendar two weeks from now with you, plus placeholders for your head of sales and head of marketing. If anything slips on the data side, we\u2019ll adjust, but we\u2019ll aim for that date.",
+      "link": "https://www.onyx.app/3573425-31"
+    },
+    {
+      "text": "Claire Bell: Sounds good. Send the invite and the checklist. I\u2019m looking forward to seeing the segment comparison\u2014if we can stop chasing the wrong accounts, that\u2019s a big win.",
+      "link": "https://www.onyx.app/3573425-32"
+    },
+    {
+      "text": "Megan Foster: Exactly the goal. Thanks, Claire\u2014I\u2019ll follow up shortly with everything, and we\u2019ll get you to a confident ICP and buying motion.",
+      "link": "https://www.onyx.app/3573425-33"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "claire_bell@xenith_argo_logistics.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "d253c42ee1e94672806c01cfb88b87d2",
+  "semantic_identifier": "Impact--Add lifecycle mapping validation + noise guards for analytics inputs.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-29",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add lifecycle mapping validation + noise guards for analytics inputs.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a dedicated validation step to our CRM ingestion/normalization pipeline to ensure lifecycle stages and required fields are correctly mapped per connected CRM instance. It will detect unmapped stages, ambiguous mappings (including custom stage names), and missing required fields before records flow into lifecycle-based reporting.\n\nWhen validation fails, affected records will be tagged with a clear `mapping_error` reason and excluded from lifecycle analytics and forecasting aggregates. This prevents a small number of misconfigured or newly introduced stages/fields from distorting funnel conversion rates, stage duration metrics, pipeline coverage, and forecast accuracy.\n\nTo make issues actionable, the system will emit structured logs and metrics scoped by CRM instance and by the specific field/stage that failed validation. This gives Sales Ops and support a precise view into which mappings are drifting (and how often), enabling faster remediation without engineering deep-dives.\n\nOverall impact is cleaner, more trustworthy lifecycle reporting and more predictable forecasting for customers with customized CRMs, at the cost of temporarily omitting invalid records until mappings are corrected. The primary risk is perceived \u201cmissing data,\u201d which is mitigated by explicit error tagging and instance-level diagnostics that guide users to fix configuration rather than silently degrading analytics quality.",
+      "link": "https://www.onyx.app/17332"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

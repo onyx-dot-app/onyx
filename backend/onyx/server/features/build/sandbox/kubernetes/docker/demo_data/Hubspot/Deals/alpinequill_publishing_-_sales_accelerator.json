@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_4050241",
+  "semantic_identifier": "Alpinequill Publishing - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-22 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed_won",
+    "pipeline": "default",
+    "amount": "153056",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "4050241"
+  },
+  "sections": [
+    {
+      "text": "Deal: Alpinequill Publishing\nAmount: $153056\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_initiation_recommendations\nClose Date: 2025-10-31 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/77271"
+    },
+    {
+      "text": "Contact: Asher Benson\nEmail: asher_benson@alpinequill_publishing.onyx.app",
+      "link": "https://www.onyx.app/84016"
+    },
+    {
+      "text": "Company: Alpinequill Publishing\nDomain: alpinequill_publishing.onyx.app",
+      "link": "https://www.onyx.app/38434"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/68735"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

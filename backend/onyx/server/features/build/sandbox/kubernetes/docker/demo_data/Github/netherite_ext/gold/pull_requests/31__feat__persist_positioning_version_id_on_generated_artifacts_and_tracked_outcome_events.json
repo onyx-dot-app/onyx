@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#31",
+  "semantic_identifier": "31: feat: Persist positioning_version_id on generated artifacts and tracked outcome events",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-20",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "31",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "82",
+    "labels": [],
+    "created_at": "2026-01-20",
+    "updated_at": "2026-01-20",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds durable linkage between customer-facing assets/outcomes and the exact positioning version that produced them.\n\nChanges:\n- Schema: adds a nullable `positioning_version_id` foreign key column to customer-facing artifact records (e.g., exported sales enablement assets, segment briefs, email/landing-page templates) and to outcome event records (conversion, win/loss, churn).\n- Write-path: when applying a positioning recommendation, the service now captures the currently active `positioning_version_id` and persists it on the newly generated artifact; any subsequently created outcome events originating from that artifact/context also include the same `positioning_version_id`.\n- Indexing: adds lightweight indexes on `positioning_version_id` (and where applicable `(artifact_id, positioning_version_id)` / `(customer_id, positioning_version_id)`) to support common join/filter queries.\n- Backfill/migrations: migrations are non-blocking and leave `positioning_version_id` as NULL for historical artifacts/events; no backfill is performed to avoid incorrect attribution.\n\nNotes for reviewers/users:\n- No behavior change for existing records; attribution is only available for newly generated artifacts and newly tracked outcome events after deployment.\n- Enables reliable joins to the existing positioning change log for reporting/analysis.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#31"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

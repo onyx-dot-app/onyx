@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_3085500",
+  "semantic_identifier": "3085500 - Pinewell Logistics - buy - Discussion with Grace Pierce",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-05-04 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-05-04 00:00:00",
+    "duration_min": "29"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-05"
+      ],
+      "year_month": "2026-05",
+      "meeting_title": "3085500 - Pinewell Logistics - buy - Discussion with Grace Pierce",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Grace\u2014good to see you again. Since this is our third call, I was hoping we could use today to confirm scope, address the clustering accuracy concerns you raised, and\u2014if it feels right\u2014lock in next steps toward a purchase. Does that still work?",
+      "link": "https://www.onyx.app/9756859-1"
+    },
+    {
+      "text": "Grace Pierce: Hi Mina. Yes, that\u2019s fine. I do want to be upfront though: we\u2019re interested, but we\u2019re still not convinced it\u2019s worth buying right now.",
+      "link": "https://www.onyx.app/9756859-2"
+    },
+    {
+      "text": "Mina Park: Totally fair. Let\u2019s make it concrete. Last time you mentioned you\u2019re swimming in ticket noise\u2014around 5,000 tickets a month across channels\u2014and you\u2019re trying to get that down to a manageable set of themes for product and engineering. Issue_Tracker\u2019s core value is clustering and dedupe into something like ~80 active themes, and then helping you route the top 10 with evidence and impacted customer lists. Is that still the biggest pain?",
+      "link": "https://www.onyx.app/9756859-3"
+    },
+    {
+      "text": "Grace Pierce: Yes. Our support ops team spends too much time tagging and summarizing. But our product team doesn\u2019t trust summaries unless the links back to source conversations are clean and accurate.",
+      "link": "https://www.onyx.app/9756859-4"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly why I want to focus on two things today: the clustering workflow for reducing noise, and the issue_history feature\u2014because it\u2019s what keeps trust over time. On clustering: we ingest from Zendesk/Intercom, dedupe and cluster, then your team can review the clusters and adjust before they become \u201cofficial\u201d themes. On issue_history: every cluster has a full timeline\u2014creation, merges and splits, priority changes with rationale, linked Jira items, status milestones like investigating \u2192 in progress \u2192 released, plus customer communication history. So when product asks \u201cwhy did we deprioritize this?\u201d it\u2019s not tribal knowledge; it\u2019s documented.",
+      "link": "https://www.onyx.app/9756859-5"
+    },
+    {
+      "text": "Grace Pierce: The audit trail sounds good. But our biggest concern is still the false merges. If two distinct issues get merged, we look sloppy. If one issue gets fragmented across multiple clusters, we miss the real volume and urgency. We\u2019ve been burned by automation that overpromises.",
+      "link": "https://www.onyx.app/9756859-6"
+    },
+    {
+      "text": "Mina Park: Yep\u2014if clustering is wrong, everything downstream is wrong. Let me ask: where do you see the language variation most? Different segments describing the same root cause differently? Or different channels like phone vs chat?",
+      "link": "https://www.onyx.app/9756859-7"
+    },
+    {
+      "text": "Grace Pierce: Both. Our enterprise customers describe problems in operational terms. Smaller customers describe symptoms. And chat is messy\u2014typos, shorthand, screenshots. Email tickets are more structured.",
+      "link": "https://www.onyx.app/9756859-8"
+    },
+    {
+      "text": "Mina Park: Got it. So two points. First, we don\u2019t position this as \u201cset it and forget it.\u201d We position it as \u201c80% automated, 20% human-in-the-loop,\u201d with controls. Your ops lead can review the top clusters weekly, approve merges, split clusters when needed, and add a note on why. Second, issue_history helps reduce rework even when you do have to correct a cluster\u2014because the changes are tracked. If you split a cluster, you don\u2019t lose the story: what got moved, why, which customers were impacted, and which Jira work items were linked.",
+      "link": "https://www.onyx.app/9756859-9"
+    },
+    {
+      "text": "Grace Pierce: But that still assumes our team has time to review and correct clusters. We\u2019re trying to reduce workload, not add a new review process.",
+      "link": "https://www.onyx.app/9756859-10"
+    },
+    {
+      "text": "Mina Park: Fair. The way teams usually do this is they don\u2019t review everything. They review the top 10\u201320 clusters by volume or revenue exposure, because those are the ones that matter. The long tail can stay automated and still be helpful for search and pattern detection. Also, the point is to replace the manual tagging and summary work you\u2019re doing today. Instead of support ops reading hundreds of tickets to write a weekly \u201cthemes\u201d doc, the system generates the clusters and the evidence set automatically.",
+      "link": "https://www.onyx.app/9756859-11"
+    },
+    {
+      "text": "Grace Pierce: That\u2019s attractive. But I\u2019m not sure we\u2019re set up internally to operationalize it. Our product team already has a Jira intake process and they\u2019re protective of it.",
+      "link": "https://www.onyx.app/9756859-12"
+    },
+    {
+      "text": "Mina Park: We\u2019re not trying to replace Jira intake. Issue_Tracker sits between support and Jira. The \u201cissue object\u201d stays linked: cluster with root cause hypothesis + evidence + affected customers on our side, and then one or more Jira tickets on their side. The benefit for product is: when they open a Jira item, it\u2019s not just \u201csupport says this is bad.\u201d It\u2019s \u201chere are the representative examples, here are the customers, here\u2019s the history, here\u2019s what we told them.\u201d That tends to reduce the back-and-forth.",
+      "link": "https://www.onyx.app/9756859-13"
+    },
+    {
+      "text": "Grace Pierce: If it worked that cleanly, yes. But we\u2019d need to prove it. And we don\u2019t have bandwidth for a heavy implementation.",
+      "link": "https://www.onyx.app/9756859-14"
+    },
+    {
+      "text": "Mina Park: Understood. Implementation-wise, for Pinewell, I\u2019d propose a lightweight start: connect Zendesk, connect Jira, and import your last 90 days of tickets. Then we\u2019d configure your cluster review rules and set up a weekly export of the top 10 themes to your product meeting. That\u2019s it to start. If we can\u2019t show \u201c5,000 tickets \u2192 ~80 themes\u201d with something your team trusts, we stop.",
+      "link": "https://www.onyx.app/9756859-15"
+    },
+    {
+      "text": "Grace Pierce: That sounds like a pilot. Are you asking us to buy first or pilot first?",
+      "link": "https://www.onyx.app/9756859-16"
+    },
+    {
+      "text": "Mina Park: Ideally, we start with a paid pilot\u2014short term\u2014so we can give you full functionality and proper support, and so your team treats it as real. Then we convert into an annual. That\u2019s the cleanest path.",
+      "link": "https://www.onyx.app/9756859-17"
+    },
+    {
+      "text": "Grace Pierce: I\u2019m going to be honest, Mina: I don\u2019t think we can do a paid pilot right now. Budget is tight, and procurement is slow. We\u2019re in the middle of renegotiating our Zendesk contract and leadership wants us to limit new tools this quarter.",
+      "link": "https://www.onyx.app/9756859-18"
+    },
+    {
+      "text": "Mina Park: Okay, thanks for being direct. If budget and procurement are the blockers, can I ask: is the value still compelling enough that we should plan for next quarter? Or is it more that the clustering trust issue makes it a \u201cmaybe later\u201d even if budget freed up?",
+      "link": "https://www.onyx.app/9756859-19"
+    },
+    {
+      "text": "Grace Pierce: It\u2019s both. I like the concept and the issue history piece\u2014having a defensible timeline and consistent customer comms would help. But the trust risk is big for us. If we have to spend time policing false merges, leadership will call it a failed tool.",
+      "link": "https://www.onyx.app/9756859-20"
+    },
+    {
+      "text": "Mina Park: Makes sense. If we could reduce that risk with a success criterion\u2014say, \u201ctop 20 clusters have under X% merge/split corrections after the first two weeks\u201d\u2014would that change things? Or is the organizational constraint the bigger factor?",
+      "link": "https://www.onyx.app/9756859-21"
+    },
+    {
+      "text": "Grace Pierce: Organizational constraint. Even if you gave me perfect clustering, I can\u2019t get a new purchase through this quarter. And I\u2019m not sure I can even get the product team to participate in a pilot until we finish the Zendesk work.",
+      "link": "https://www.onyx.app/9756859-22"
+    },
+    {
+      "text": "Mina Park: Got it. Then instead of trying to force a close today, let\u2019s land on a realistic path. Would you be open to a no-cost dataset assessment? You give us an export\u201490 days\u2014so we can show you what your themes would look like, and we can quantify how often clusters would need correction. That way, when budget opens up, you have evidence internally.",
+      "link": "https://www.onyx.app/9756859-23"
+    },
+    {
+      "text": "Grace Pierce: Possibly, but even that takes time to coordinate with our data/security folks. And our legal team is cautious about exporting ticket data.",
+      "link": "https://www.onyx.app/9756859-24"
+    },
+    {
+      "text": "Mina Park: Understood. What if we keep it even simpler: we schedule a 30-minute working session next month with you and whoever owns support ops reporting, and we map your current \u201cweekly themes\u201d workflow end-to-end\u2014where the time goes, what breaks, what signals product trusts. I can then send a one-page ROI and risk assessment you can share internally. No data transfer required.",
+      "link": "https://www.onyx.app/9756859-25"
+    },
+    {
+      "text": "Grace Pierce: That\u2019s more doable. But I want to set expectations: I\u2019m not committing to a purchase off the back of that.",
+      "link": "https://www.onyx.app/9756859-26"
+    },
+    {
+      "text": "Mina Park: Completely fair. Given what you\u2019ve said, I don\u2019t think it\u2019s responsible for me to push you into procurement this quarter. My goal would be: help you build the internal case, and if the timing aligns next quarter, we pick up and run with minimal rework.",
+      "link": "https://www.onyx.app/9756859-27"
+    },
+    {
+      "text": "Grace Pierce: That sounds reasonable.",
+      "link": "https://www.onyx.app/9756859-28"
+    },
+    {
+      "text": "Mina Park: Before we wrap, can I confirm the two decision blockers so I reflect them accurately? One: timing/budget/procurement due to Zendesk renegotiation and tool freeze this quarter. Two: risk of false merges/fragmented clusters and the perception cost if your team has to babysit it.",
+      "link": "https://www.onyx.app/9756859-29"
+    },
+    {
+      "text": "Grace Pierce: Yes, that\u2019s exactly it.",
+      "link": "https://www.onyx.app/9756859-30"
+    },
+    {
+      "text": "Mina Park: Great. I\u2019ll send an invite for that workflow session\u2014mid-February\u2014along with an agenda focused on (1) your current ticket-to-theme process, (2) what \u201ctrust\u201d means for your product team, and (3) what success criteria would need to be true for a pilot. Does Feb 12 or Feb 14 work better?",
+      "link": "https://www.onyx.app/9756859-31"
+    },
+    {
+      "text": "Grace Pierce: Feb 14 is better.",
+      "link": "https://www.onyx.app/9756859-32"
+    },
+    {
+      "text": "Mina Park: Perfect. I\u2019ll send that. And Grace\u2014thanks for the candor today. I know this isn\u2019t a \u201cyes\u201d right now, but this was still really helpful to align on what would make it a yes later.",
+      "link": "https://www.onyx.app/9756859-33"
+    },
+    {
+      "text": "Grace Pierce: Thanks, Mina. I appreciate you not pushing. We\u2019ll talk on the 14th.",
+      "link": "https://www.onyx.app/9756859-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "grace_pierce@pinewell_logistics.onyx.app"
+    }
+  ]
+}

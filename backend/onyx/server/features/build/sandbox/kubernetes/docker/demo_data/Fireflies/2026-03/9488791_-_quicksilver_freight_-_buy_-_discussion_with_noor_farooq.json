@@ -1,0 +1,173 @@
+{
+  "id": "FIREFLIES_9488791",
+  "semantic_identifier": "9488791 - Quicksilver Freight - buy - Discussion with Noor Farooq",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-03-01 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-03-01 00:00:00",
+    "duration_min": "21"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-03"
+      ],
+      "year_month": "2026-03",
+      "meeting_title": "9488791 - Quicksilver Freight - buy - Discussion with Noor Farooq",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Noor\u2014good to see you again. Since this is our third call, I wanted to use today to nail down whether Sales_Accelerator is a fit for Quicksilver Freight and, if so, what it would take to move to purchase. Does that still work?",
+      "link": "https://www.onyx.app/9691629-1"
+    },
+    {
+      "text": "Noor Farooq: Yep, that\u2019s fine. I\u2019m interested, but I\u2019ll be blunt\u2014we\u2019re getting pressure to limit new tools this quarter. So I need to be convinced this isn\u2019t just \u201canother layer\u201d over Salesforce.",
+      "link": "https://www.onyx.app/9691629-2"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Let\u2019s keep it tight and tied to outcomes. From our last call, the two areas you cared most about were forecast reliability and catching deal risk earlier\u2014especially late-stage slip. If we solve those two, is there a clear business owner internally who\u2019d champion it?",
+      "link": "https://www.onyx.app/9691629-3"
+    },
+    {
+      "text": "Noor Farooq: Potentially sales ops\u2014me\u2014but I\u2019d need leadership buy-in. Our VP has been burned by forecasting tools that felt like a black box. Reps didn\u2019t trust the outputs, managers ignored it, and it became shelfware.",
+      "link": "https://www.onyx.app/9691629-4"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly the failure mode we try to avoid. Let me focus on two things: our forecasting drivers and our slippage diagnostics. On forecasting, Sales_Accelerator doesn\u2019t just spit out a number\u2014it shows the \u201cwhy\u201d per opportunity. So if a deal moved to Commit, you can see the drivers: stage age, last touch, next meeting scheduled, activity levels, and\u2014if you choose\u2014your Customer_Analyzer fit tier as a weighting factor. It\u2019s explainable down to the deal level.",
+      "link": "https://www.onyx.app/9691629-5"
+    },
+    {
+      "text": "Noor Farooq: Explainable is the word everyone uses. In practice, reps argue with it. \u201cI know this account,\u201d \u201cthe champion said it\u2019s coming,\u201d that kind of thing. How do you prevent endless debates?",
+      "link": "https://www.onyx.app/9691629-6"
+    },
+    {
+      "text": "Megan Foster: Good question. Two ways. First, we separate \u201crep judgment\u201d from \u201cmodel signal\u201d so managers can see where the gap is. It\u2019s not trying to replace their call; it flags when the data contradicts the narrative\u2014like no next meeting on calendar and no meaningful activity in 14 days for a late-stage deal. Second, the drivers are consistent, not opaque. So instead of \u201cthe AI thinks it\u2019s risky,\u201d it\u2019s \u201cthis deal is 22 days older than your historical median for this stage and hasn\u2019t had a decision-maker meeting scheduled.\u201d That shifts it from opinion to observable facts.",
+      "link": "https://www.onyx.app/9691629-7"
+    },
+    {
+      "text": "Noor Farooq: Okay, but our data isn\u2019t perfect. Activities live partly in Gmail, partly in Outreach, some reps log calls inconsistently. If the signals are noisy, the \u201cfacts\u201d are questionable.",
+      "link": "https://www.onyx.app/9691629-8"
+    },
+    {
+      "text": "Megan Foster: That\u2019s real. In most teams, activity data is uneven. What we typically do is start with what\u2019s already reliable\u2014CRM stage history, stage age, meeting scheduled, and whatever activity signals are available via your existing integrations. The forecast explains which inputs were used. If a rep has zero logged activity, the system doesn\u2019t pretend it saw emails\u2014it will lean more on stage-time benchmarks and conversion history. That transparency actually helps adoption because reps can see, \u201cOh, it\u2019s flagging me because nothing is logged.\u201d",
+      "link": "https://www.onyx.app/9691629-9"
+    },
+    {
+      "text": "Noor Farooq: That can also backfire. If reps feel policed, they\u2019ll hate it.",
+      "link": "https://www.onyx.app/9691629-10"
+    },
+    {
+      "text": "Megan Foster: Absolutely. The positioning matters. The best implementations treat it as early warning and coaching, not surveillance. Which brings me to the second feature: stage conversion and slippage diagnostics. For sales ops, you can break down conversion rates stage-to-stage by segment or rep and identify bottlenecks. Then the tool recommends process fixes\u2014like introducing security review earlier\u2014and you can monitor if the bottleneck improves over a few weeks.",
+      "link": "https://www.onyx.app/9691629-11"
+    },
+    {
+      "text": "Noor Farooq: The bottleneck view sounds useful. We\u2019ve suspected our \u201cProposal to Legal\u201d handoff is killing cycle time in enterprise. But again, we can do some of that reporting in Salesforce dashboards.",
+      "link": "https://www.onyx.app/9691629-12"
+    },
+    {
+      "text": "Megan Foster: You can, but it\u2019s usually static and after-the-fact. What teams tell us they\u2019re missing is the combination of: (1) diagnosing conversion and slippage with benchmarks, and (2) turning that into next actions. For example, if enterprise deals tend to slip when there\u2019s no security step by a certain point, Sales_Accelerator can alert on \u201cat-risk\u201d deals before they miss the date, and it can recommend the specific action\u2014book security review, confirm procurement timeline, re-qualify decision criteria\u2014based on patterns from similar wins and losses.",
+      "link": "https://www.onyx.app/9691629-13"
+    },
+    {
+      "text": "Noor Farooq: That\u2019s where the trust issue comes back. \u201cBased on patterns\u201d is exactly what our VP pushes back on. He\u2019ll ask: why this deal, why now, why that action?",
+      "link": "https://www.onyx.app/9691629-14"
+    },
+    {
+      "text": "Megan Foster: And the answer has to be visible. For an at-risk alert, you\u2019d see something like: \u201cClose date within 21 days; stage age exceeds benchmark by 30%; no meeting scheduled; last meaningful activity 12 days ago; similar deals with these signals closed at 18% vs your baseline 32%.\u201d Then the recommended action is tied to the driver. If the issue is \u201cno next meeting,\u201d the recommendation isn\u2019t generic\u2014it\u2019s \u201cschedule a decision meeting\u201d and suggests the right stakeholder to pull in based on your CRM contacts and past patterns.",
+      "link": "https://www.onyx.app/9691629-15"
+    },
+    {
+      "text": "Noor Farooq: I get the concept. My worry is adoption. Reps already juggle Salesforce, Outreach, Gong, and Slack. Adding another console is a non-starter unless it\u2019s truly embedded.",
+      "link": "https://www.onyx.app/9691629-16"
+    },
+    {
+      "text": "Megan Foster: That\u2019s why we sit on top of the CRM rather than replacing it. Most reps live in Salesforce; Sales_Accelerator surfaces guidance and risk in the opportunity view and in a simple \u201ctoday\u2019s priorities\u201d queue. It\u2019s meant to reduce tab-sprawl, not add to it. And because you already use Customer_Analyzer for fit scoring and positioning blocks, we consume that rather than making you re-do ICP work.",
+      "link": "https://www.onyx.app/9691629-17"
+    },
+    {
+      "text": "Noor Farooq: You keep mentioning Customer_Analyzer integration. We do have that, yes. But we\u2019ve barely rolled it out. So I\u2019m hesitant to buy something that depends on it.",
+      "link": "https://www.onyx.app/9691629-18"
+    },
+    {
+      "text": "Megan Foster: It doesn\u2019t depend on it, it benefits from it. Forecasting works with or without fit weighting. The lift you get with Customer_Analyzer is better prioritization\u2014like weighting pipeline scenarios based on your Tier 1 accounts\u2014but it\u2019s optional. If your rollout is early, we can start with forecasting + slippage diagnostics using CRM and activity signals, then layer in fit weighting later.",
+      "link": "https://www.onyx.app/9691629-19"
+    },
+    {
+      "text": "Noor Farooq: Alright. Let\u2019s talk about the decision. Pricing aside, I\u2019m still stuck on \u201cprove it will be used.\u201d We don\u2019t have bandwidth for a big change management program.",
+      "link": "https://www.onyx.app/9691629-20"
+    },
+    {
+      "text": "Megan Foster: Understood. The lowest-friction path we usually recommend is a short pilot focused on forecasting accuracy and slippage reduction for one segment\u2014say enterprise\u2014owned by sales ops with one manager sponsor. Success criteria could be: improved forecast accuracy week-over-week, reduction in late-stage deals with no next meeting, and clear bottleneck visibility. If we can\u2019t show measurable impact quickly, you don\u2019t proceed.",
+      "link": "https://www.onyx.app/9691629-21"
+    },
+    {
+      "text": "Noor Farooq: That sounds reasonable in theory. But procurement here won\u2019t approve pilots that require new contracts, and security is slammed. If it\u2019s a net-new vendor, the lead time is weeks.",
+      "link": "https://www.onyx.app/9691629-22"
+    },
+    {
+      "text": "Megan Foster: If security/procurement timing is the constraint, we can still do a light \u201cdata-backed assessment\u201d using exported opportunity history to show where the drivers would have flagged risk\u2014no integration needed. It\u2019s not the full experience, but it helps you build the internal case.",
+      "link": "https://www.onyx.app/9691629-23"
+    },
+    {
+      "text": "Noor Farooq: Maybe. But candidly, I don\u2019t know if I can get internal time for even that. Our VP just froze discretionary spend for Q1. Unless this is replacing something, it\u2019s hard.",
+      "link": "https://www.onyx.app/9691629-24"
+    },
+    {
+      "text": "Megan Foster: Thanks for being direct. If we can\u2019t get budget this quarter, the right move might be to pause rather than force it. Before we do, can I ask one thing: is the freeze absolute, or could a forecast initiative be funded if it\u2019s tied to hitting a revenue target or avoiding a miss?",
+      "link": "https://www.onyx.app/9691629-25"
+    },
+    {
+      "text": "Noor Farooq: It\u2019s not absolute, but the bar is high. And I don\u2019t have an executive sponsor lined up. I can\u2019t take another tool forward without that, especially with the trust concerns.",
+      "link": "https://www.onyx.app/9691629-26"
+    },
+    {
+      "text": "Megan Foster: That makes sense. The trust/explainability gap is solvable, but only if leadership wants to tackle it. Without sponsorship, it will stall. Here\u2019s what I propose: I\u2019ll send a one-page summary of the two capabilities we discussed\u2014explainable forecasting drivers and slippage diagnostics\u2014plus a lightweight assessment option and a sample \u201cdriver-based\u201d risk explanation. You can share it with your VP. If he\u2019s open, we schedule a 20-minute exec check-in. If not, we table it until budget and priorities shift. Would that be helpful?",
+      "link": "https://www.onyx.app/9691629-27"
+    },
+    {
+      "text": "Noor Farooq: Yes, send that. I\u2019m not committing to an exec meeting, but I can float the doc and see if there\u2019s appetite.",
+      "link": "https://www.onyx.app/9691629-28"
+    },
+    {
+      "text": "Megan Foster: Perfect. One more quick question so I tailor the doc: is the bigger pain right now forecast accuracy at the quarter level, or deal slippage in late stage?",
+      "link": "https://www.onyx.app/9691629-29"
+    },
+    {
+      "text": "Noor Farooq: Quarter-level forecast. We keep getting surprised in the last two weeks, and it\u2019s hurting credibility.",
+      "link": "https://www.onyx.app/9691629-30"
+    },
+    {
+      "text": "Megan Foster: Got it\u2014so I\u2019ll anchor it on quarter forecast accuracy, with the slippage diagnostics as the mechanism to improve it. I\u2019ll send that over today. If you get a \u201cmaybe,\u201d just reply with a couple times and I\u2019ll make it easy.",
+      "link": "https://www.onyx.app/9691629-31"
+    },
+    {
+      "text": "Noor Farooq: Sounds good. Thanks, Megan.",
+      "link": "https://www.onyx.app/9691629-32"
+    },
+    {
+      "text": "Megan Foster: Thanks, Noor. Talk soon\u2014either way, appreciate the candor.",
+      "link": "https://www.onyx.app/9691629-33"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "noor_farooq@quicksilver_freight.onyx.app"
+    }
+  ]
+}

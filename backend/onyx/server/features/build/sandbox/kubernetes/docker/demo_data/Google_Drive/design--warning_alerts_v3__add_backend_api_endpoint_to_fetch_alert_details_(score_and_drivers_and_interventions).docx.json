@@ -1,0 +1,30 @@
+{
+  "id": "b3c846daa6ad424b9bc25676639e2f9b",
+  "semantic_identifier": "Design--Warning alerts v3: Add backend API endpoint to fetch alert details (score + drivers + interventions).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-23",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Warning alerts v3: Add backend API endpoint to fetch alert details (score + drivers + interventions).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add a new versioned read endpoint, `GET /alerts/v3`, that returns the fully composed \u201cwarning alert\u201d payload for a given CRM object (account/opportunity) under the existing feature flag. The endpoint\u2019s job is composition, not re-computation: it will fetch the latest risk score output, attach ranked drivers (with evidence), and attach recommended interventions (with rationale) into a single stable response for downstream UI rendering. The endpoint will support both Salesforce and HubSpot identifiers, using a unified internal lookup layer to resolve to our canonical entity IDs and select the appropriate latest alert run.\n\nThe response schema will be explicitly versioned and stable, with top-level metadata and a deterministic, ordered list of alert items. Filtering and pagination will be first-class: query params will include `risk_type`, `min_score`, `min_confidence`, and paging (`limit`, `cursor`), and the server will apply a consistent sort order (e.g., highest score, then confidence, then updated_at) to ensure repeatable results. Each alert item will include: score block (score, confidence, model/version, computed_at), drivers array (rank, driver_type, description, evidence list), and interventions array (rank, intervention_type, title, rationale, expected_impact, optional link/playbook reference). We will document and enforce null/missing-field handling: required fields always present; optional fields either omitted or set to `null` consistently (e.g., evidence may be empty array, rationale nullable), with the same behavior across Salesforce/HubSpot.\n\nImplementation-wise, the handler will sit behind the existing feature flag and call into a composition service that merges data from (1) risk scoring output storage, (2) driver attribution storage, and (3) intervention recommendation storage. Where one component is unavailable, we return partial data with explicit indicators (e.g., empty drivers/interventions) rather than failing the whole request, except when the base alert/score cannot be found (404). We\u2019ll also include standard error responses (401/403/404/422) and request validation for unsupported filters or invalid IDs.\n\nWe will add integration tests that assert: (a) schema compatibility (contract tests on JSON shape/types), (b) deterministic ordering of drivers and interventions for the same input, (c) cursor pagination correctness and stability under filtering, and (d) consistent null/omission behavior across Salesforce vs HubSpot fixtures. These tests will run in CI and gate changes to the v3 schema, ensuring downstream UI can rely on stable fields, ordering, and pagination semantics.",
+      "link": "https://www.onyx.app/23297"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

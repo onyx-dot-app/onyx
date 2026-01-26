@@ -1,0 +1,30 @@
+{
+  "id": "14df20348d2746a1949499825779ba14",
+  "semantic_identifier": "Impact--Add configurable data retention policies for ingested conversations and issue artifacts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add configurable data retention policies for ingested conversations and issue artifacts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature introduces configurable, per-workspace data retention policies for all customer support content we ingest and store: raw conversations, extracted issue evidence/artifacts, and derived metadata in `Issue_Tracker`. Admins will be able to set explicit time-to-live (TTL) values via the admin UI and API, with sensible defaults to reduce setup burden and clear validation to prevent non-compliant \u201cstore forever\u201d configurations.\n\nFrom a customer impact perspective, retention controls unlock stronger compliance and privacy posture (e.g., SOC2/GDPR-aligned minimization), reduce long-term data risk, and give regulated customers a concrete lever to adopt the product at scale. It also improves operational efficiency by limiting storage growth and lowering the blast radius of any future data exposure.\n\nOperationally, we\u2019ll add background cleanup jobs that continuously enforce TTLs by deleting or expiring eligible records once they age out. The system will preserve the minimal references required to keep downstream linked tickets functional (e.g., stable IDs, linkage metadata), ensuring users don\u2019t lose traceability or break integrations even as underlying content is purged.\n\nSuccess will be measured by policy adoption (workspaces with configured retention), enforcement reliability (deletions occurring within SLA of TTL), and safety (no broken downstream links or unexpected data loss). This work also creates a platform foundation for future controls (e.g., legal hold, per-source retention, and audit reporting) without expanding our default data footprint.",
+      "link": "https://www.onyx.app/27746"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

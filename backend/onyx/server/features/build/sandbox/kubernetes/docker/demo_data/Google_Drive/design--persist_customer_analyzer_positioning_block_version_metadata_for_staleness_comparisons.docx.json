@@ -1,0 +1,30 @@
+{
+  "id": "0c44b65032c341e28760588a507750ed",
+  "semantic_identifier": "Design--Persist Customer_Analyzer positioning block version metadata for staleness comparisons.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Persist Customer_Analyzer positioning block version metadata for staleness comparisons.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe need staleness detection for the Customer_Analyzer \u201cpositioning\u201d block rendered inside Sales_Accelerator account/opportunity records. The core requirement is to persist, per record, which canonical positioning block version was used at render time (identifier/version) plus when that canonical version was last updated. With that metadata stored alongside the rendered/pasted content, the UI can later determine whether the embedded block is stale relative to the current canonical Customer_Analyzer block and prompt replacement flows.\n\n### Data model changes\nExtend the existing Sales_Accelerator storage for rendered positioning blocks (account/opportunity scoped) to include a small immutable \u201csource metadata\u201d object: `customerAnalyzerBlockId` (stable identifier), `customerAnalyzerBlockVersion` (monotonic or semver-like), and `customerAnalyzerBlockLastUpdatedAt` (timestamp of the canonical block at time of render). This metadata should be written whenever we initially render/insert the block and whenever we intentionally replace it with a newer canonical version. If the rendered content is user-edited, we still retain the last known canonical metadata so comparisons remain possible (the UI can also track a local \u201cedited\u201d flag, but that is out of scope here).\n\n### Retrieval plumbing / API\nAdd a lightweight service method (internal API) to fetch the latest canonical Customer_Analyzer metadata for a given Sales_Accelerator record: inputs `recordType` (account/opportunity) and `recordId`; output the current canonical `{blockId, version, lastUpdatedAt}` plus the stored metadata for that record (or a derived `isStale` boolean). The service should read the record\u2019s stored metadata from Sales_Accelerator storage and fetch the latest metadata from Customer_Analyzer (or its backing store) without returning full block content\u2014metadata only\u2014to keep it fast and safe for frequent UI checks.\n\n### Behavior and non-goals\nThe UI will use the method to compare the stored `{blockId, version, lastUpdatedAt}` against the latest canonical metadata and decide whether to show \u201cupdate available\u201d (and later trigger replacement). This ticket does not define the replacement UX, diffing logic, or how edited content is detected/merged; it only ensures the metadata is persisted and can be retrieved reliably. We will add basic migration/defaulting for existing records (null metadata treated as \u201cunknown; cannot assess staleness\u201d) and instrument read/write paths to confirm adoption and staleness-check success rates.",
+      "link": "https://www.onyx.app/12763"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

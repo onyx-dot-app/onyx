@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_4367049",
+  "semantic_identifier": "Frostline Commerce",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-12-10 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "4367049",
+    "domain": "frostline_commerce.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Frostline Commerce\nDomain: frostline_commerce.onyx.app",
+      "link": "https://www.onyx.app/34454"
+    },
+    {
+      "text": "Contact: Wayne Barrett\nEmail: wayne_barrett@frostline_commerce.onyx.app",
+      "link": "https://www.onyx.app/28786"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

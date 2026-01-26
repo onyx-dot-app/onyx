@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_7475889",
+  "semantic_identifier": "Zephyrroot Materials",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-07-29 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "7475889",
+    "domain": "zephyrroot_materials.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Zephyrroot Materials\nDomain: zephyrroot_materials.onyx.app",
+      "link": "https://www.onyx.app/37288"
+    },
+    {
+      "text": "Contact: Colton Medina\nEmail: colton_medina@zephyrroot_materials.onyx.app",
+      "link": "https://www.onyx.app/37834"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

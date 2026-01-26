@@ -1,0 +1,30 @@
+{
+  "id": "3121129",
+  "semantic_identifier": "[GOLD-23]: Wire calibration job to use user-defined outcome labels (no fallback to default)",
+  "title": "Wire calibration job to use user-defined outcome labels (no fallback to default)",
+  "source": "linear",
+  "doc_updated_at": "2025-08-02",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "kevin_sullivan",
+      "email": "kevin_sullivan@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2025-08-02"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Update the fit model calibration pipeline to consume the configured outcome selection and label rules (activation/retention/expansion) when generating training labels and features. Remove any implicit fallback to a default outcome when configuration is present, and fail the calibration job with a clear, surfaced error if labels cannot be produced. Add a minimal integration test to verify each outcome path produces distinct labels given the same input signals.",
+      "link": "https://www.onyx.app/15745"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

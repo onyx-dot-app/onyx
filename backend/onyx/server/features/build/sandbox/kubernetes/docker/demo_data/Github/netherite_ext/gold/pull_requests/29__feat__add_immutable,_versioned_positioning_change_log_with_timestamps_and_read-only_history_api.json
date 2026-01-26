@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#29",
+  "semantic_identifier": "29: feat: Add immutable, versioned positioning change log with timestamps + read-only history API",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-12-19",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "29",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "4",
+    "num_files_changed": "20",
+    "labels": [],
+    "created_at": "2025-12-19",
+    "updated_at": "2025-12-19",
+    "closed_at": "2026-01-05"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nImplements an immutable audit log for positioning recommendations (value props, differentiators, proof points, objections). Every edit is persisted as a new version with a stable `version_id`, `effective_at` timestamp, and attribution metadata (who/what/where), and a read-only endpoint is added to retrieve history by segment/ICP.\n\n### Implementation details\n- **Data model**\n  - Adds `positioning_recommendation_versions` (append-only) storing:\n    - `version_id` (stable identifier), `previous_version_id` (optional link), `recommendation_id`\n    - `segment_id` / `icp_id` (scope)\n    - `category` (value_prop | differentiator | proof_point | objection)\n    - `content` (snapshot payload for the recommendation)\n    - `effective_at` (when the change is considered in effect), `created_at`\n    - `actor_id` / `actor_type` (attribution)\n    - `change_reason` (optional)\n  - Enforces immutability via application-level write path (no updates/deletes; inserts only) and DB constraints where applicable.\n\n- **Write path changes**\n  - Updates positioning edit flows to **insert a new version row** instead of updating the existing recommendation content in place.\n  - Computes `previous_version_id` from the latest version for the same `recommendation_id` + segment/ICP scope.\n  - Keeps current recommendation reads using the latest version by `effective_at`/`created_at`.\n\n- **Read-only history endpoint**\n  - Adds `GET /api/positioning/history` with filters: `segmentId`, `icpId`, `recommendationId`, `category`, optional date range.\n  - Returns versions ordered descending by `effective_at` then `created_at`.\n  - Endpoint is **read-only** and guarded by existing auth/permissions.\n\n- **Migrations/backfill**\n  - Adds schema migrations.\n  - Backfills an initial version for existing recommendations so all records have at least one version.\n\n- **Tests**\n  - Unit/integration coverage for: append-only behavior, correct version chaining, actor attribution, and history endpoint ordering/filtering.\n\n### Notes for reviewers\n- This is a foundational (low-priority) capability intended for later attribution/analytics work; UI changes are intentionally minimal/none beyond ensuring edits create new versions.\n- No breaking API changes; existing reads continue to return the latest effective content.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#29"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

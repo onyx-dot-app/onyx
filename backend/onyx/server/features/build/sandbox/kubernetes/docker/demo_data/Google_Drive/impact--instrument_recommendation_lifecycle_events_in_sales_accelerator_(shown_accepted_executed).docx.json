@@ -1,0 +1,30 @@
+{
+  "id": "8ec0767570984becbc932cea644951c2",
+  "semantic_identifier": "Impact--Instrument recommendation lifecycle events in Sales_Accelerator (shown/accepted/executed).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-18",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Instrument recommendation lifecycle events in Sales_Accelerator (shown/accepted/executed).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds end-to-end (closed-loop) telemetry for Sales_Accelerator recommendations by instrumenting three key lifecycle events: when a recommendation is shown to a rep, when it\u2019s accepted/applied, and when the resulting action or sequence is executed. It will emit these events from the client and/or server using the canonical schema defined in GOLD-106, enabling consistent downstream analytics and attribution.\n\nEach emitted event will include a stable `recommendation_instance_id` to connect the lifecycle steps together, plus the required context to make the data actionable: segment, rep identity, motion, account/opportunity identifiers, relevant CRM IDs, and an accurate timestamp. This ensures we can reliably measure exposure \u2192 adoption \u2192 execution and slice results by cohort, motion, and customer/CRM object.\n\nWith this instrumentation in place, Product and GTM teams can quantify recommendation effectiveness (e.g., acceptance rates, time-to-execution, drop-off points), compare different recommendation types/motions, and validate whether recommendations drive meaningful rep activity. It also unlocks experimentation and model iteration by providing the feedback loop needed to evaluate changes to ranking, content, and targeting.\n\nTo protect core workflows, the implementation will add basic batching/retry behavior and structured logging so telemetry failures don\u2019t block rep actions. Dropped or invalid events will be detectable through logs/metrics, improving observability and data quality without introducing user-visible latency or reliability risk.",
+      "link": "https://www.onyx.app/62592"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_1700960",
+  "semantic_identifier": "1700960 - Aurorakite Software - sales_pitch - Discussion with Marco Aguilar",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-07 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-07 00:00:00",
+    "duration_min": "42"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "1700960 - Aurorakite Software - sales_pitch - Discussion with Marco Aguilar",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Hi Marco\u2014Sneha Reddy here. Thanks for taking a few minutes. I\u2019ll be brief: I\u2019m calling from Customer_Analyzer. We help product, marketing, and sales teams get really crisp on which customer segments are actually a great fit right now\u2014and then turn that into messaging your teams can use immediately.",
+      "link": "https://www.onyx.app/4506306-1"
+    },
+    {
+      "text": "Marco Aguilar: Hey Sneha. Yeah, I\u2019ve got a few minutes. What do you mean by \u201cget crisp\u201d exactly?",
+      "link": "https://www.onyx.app/4506306-2"
+    },
+    {
+      "text": "Sneha Reddy: Totally. Most teams have an ICP slide, but it\u2019s often based on a mix of anecdotes and outdated assumptions. Customer_Analyzer ingests signals you already have\u2014CRM fields, onboarding surveys, product usage events, support tickets, even interview notes\u2014and outputs two things: a fit score by segment, and positioning recommendations tailored to the segments you should prioritize.",
+      "link": "https://www.onyx.app/4506306-3"
+    },
+    {
+      "text": "Marco Aguilar: Okay. We\u2019re actually trying to decide which industries to lean into next quarter. But it gets messy\u2014some verticals retain well but are a pain for support.",
+      "link": "https://www.onyx.app/4506306-4"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s exactly one of the use cases we see a lot: \u201cWhich industries should we target next quarter using retention and support burden signals?\u201d We\u2019ll combine retention metrics with support burden\u2014like ticket volume, categories, time-to-resolution\u2014then score segments so you\u2019re not just chasing top-of-funnel or logos. You can see, for example, \u201cIndustry A retains 15% better but generates 2x support load,\u201d versus \u201cIndustry B retains slightly lower but scales cleanly.\u201d",
+      "link": "https://www.onyx.app/4506306-5"
+    },
+    {
+      "text": "Marco Aguilar: Interesting. We do have that data, but it\u2019s spread across tools. How heavy is the setup?",
+      "link": "https://www.onyx.app/4506306-6"
+    },
+    {
+      "text": "Sneha Reddy: Setup is usually lightweight because we start with what you already track. For Aurorakite Software, we\u2019d typically pull core CRM fields for industry and deal context, product usage events for adoption, and support ticket metadata for burden. If you don\u2019t have perfect instrumentation, that\u2019s fine\u2014we\u2019ll still produce a first-pass segment fit score and then show you what signals would improve confidence.",
+      "link": "https://www.onyx.app/4506306-7"
+    },
+    {
+      "text": "Marco Aguilar: And the \u201cpositioning\u201d part\u2014what does that look like? We don\u2019t want another dashboard nobody uses.",
+      "link": "https://www.onyx.app/4506306-8"
+    },
+    {
+      "text": "Sneha Reddy: Completely agree. Our most-used feature is the positioning_recommendation output. Once the fit score identifies, say, two segments worth prioritizing next quarter, Customer_Analyzer generates editable messaging blocks for each segment: a segment-specific value proposition, top use cases, differentiators, proof points you should collect, pricing/value framing notes, and an objection-handling playbook.",
+      "link": "https://www.onyx.app/4506306-9"
+    },
+    {
+      "text": "Marco Aguilar: Editable messaging blocks\u2014like what, exactly?",
+      "link": "https://www.onyx.app/4506306-10"
+    },
+    {
+      "text": "Sneha Reddy: Think practical, not theoretical. For example: website hero copy tailored to the segment, sales deck bullets, and even email openers SDRs can use. And the key is it\u2019s linked back to evidence\u2014what drivers we saw in usage, what language shows up in support tickets or survey responses\u2014so your team can trust it and iterate instead of debating opinions.",
+      "link": "https://www.onyx.app/4506306-11"
+    },
+    {
+      "text": "Marco Aguilar: That \u201clinked back to evidence\u201d part is compelling. We constantly argue internally about why we win or lose in a vertical.",
+      "link": "https://www.onyx.app/4506306-12"
+    },
+    {
+      "text": "Sneha Reddy: Yes\u2014Customer_Analyzer is built to reduce those circular conversations. If your team says, \u201cHealthcare is our best segment,\u201d the system can show: retention trend, time-to-value, support burden, and which product behaviors correlate with renewals. Then the positioning recommendation translates that into, \u201cLead with X benefit, prove it with Y proof point, and handle the Z objection this way.\u201d",
+      "link": "https://www.onyx.app/4506306-13"
+    },
+    {
+      "text": "Marco Aguilar: How does it handle objections? That sounds a bit\u2026 generic if it\u2019s auto-generated.",
+      "link": "https://www.onyx.app/4506306-14"
+    },
+    {
+      "text": "Sneha Reddy: Fair question. We don\u2019t just spit out generic scripts. The objection playbook is anchored to what we see in your real customer language\u2014support tickets, call notes, onboarding feedback\u2014so it reflects what prospects in that segment actually push back on. And it\u2019s editable, so your sales leaders can tune it and roll it out consistently.",
+      "link": "https://www.onyx.app/4506306-15"
+    },
+    {
+      "text": "Marco Aguilar: Got it. We\u2019re mid-refresh on messaging, but I\u2019m worried about change management. Marketing and sales rarely align perfectly.",
+      "link": "https://www.onyx.app/4506306-16"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s one of the reasons customers adopt us. The output is designed to be shared across functions: product can see the fit drivers, marketing gets segment-specific positioning, and sales gets usable talk tracks and email openers. It becomes a single \u201csource of truth\u201d you can review in a working session rather than a static deck.",
+      "link": "https://www.onyx.app/4506306-17"
+    },
+    {
+      "text": "Marco Aguilar: How quickly would we see something useful? We\u2019re planning next quarter now.",
+      "link": "https://www.onyx.app/4506306-18"
+    },
+    {
+      "text": "Sneha Reddy: Typically within the first couple weeks you\u2019ll have a clear ranking of segments using retention and support burden signals, plus draft positioning blocks for the top one or two segments. Many teams use that directly in quarterly planning: \u201cHere are the two industries we\u2019re leaning into, here\u2019s the narrative, here are the proof points we need to collect.\u201d",
+      "link": "https://www.onyx.app/4506306-19"
+    },
+    {
+      "text": "Marco Aguilar: Proof points to collect\u2014like customer stories?",
+      "link": "https://www.onyx.app/4506306-20"
+    },
+    {
+      "text": "Sneha Reddy: Exactly\u2014case studies, metrics, quotes, before/after outcomes. The positioning recommendation will flag what proof points are missing for a segment. So instead of \u201cwe should get more case studies,\u201d it\u2019s, \u201cFor Segment B, we need a quantified time-to-value story and a support reduction angle, because that\u2019s what correlates with retention and shows up in customer language.\u201d",
+      "link": "https://www.onyx.app/4506306-21"
+    },
+    {
+      "text": "Marco Aguilar: That\u2019s pretty practical. What do you need from me to evaluate this?",
+      "link": "https://www.onyx.app/4506306-22"
+    },
+    {
+      "text": "Sneha Reddy: The best next step is a 30-minute working session with you and whoever owns growth or GTM planning. In that session, we\u2019ll map your current industries, confirm where retention and support burden live, and I\u2019ll show you a sample of the positioning blocks\u2014hero copy, deck bullets, objection handling\u2014so you can judge if it\u2019s the kind of output your teams would actually use.",
+      "link": "https://www.onyx.app/4506306-23"
+    },
+    {
+      "text": "Marco Aguilar: Okay. I\u2019d want our Head of Marketing in that, and maybe someone from RevOps since the data is in a few places.",
+      "link": "https://www.onyx.app/4506306-24"
+    },
+    {
+      "text": "Sneha Reddy: Perfect\u2014those are the right folks. If you\u2019re open to it, I\u2019ll send a calendar invite for 30 minutes. Beforehand, I\u2019ll send a short checklist: which CRM fields you use for industry, where support ticket tags live, and what retention metric you trust (logo vs. revenue). That way we can spend the meeting on insights, not plumbing.",
+      "link": "https://www.onyx.app/4506306-25"
+    },
+    {
+      "text": "Marco Aguilar: Sounds good. What times are you thinking?",
+      "link": "https://www.onyx.app/4506306-26"
+    },
+    {
+      "text": "Sneha Reddy: I have Wednesday at 11:00am or Thursday at 2:00pm your time. Do either work for you?",
+      "link": "https://www.onyx.app/4506306-27"
+    },
+    {
+      "text": "Marco Aguilar: Thursday at 2:00 works. Send it over and I\u2019ll loop in Marketing and RevOps.",
+      "link": "https://www.onyx.app/4506306-28"
+    },
+    {
+      "text": "Sneha Reddy: Great\u2014Thursday at 2:00 it is. I\u2019ll include the checklist and a quick agenda: segment fit scoring using retention + support burden, then positioning recommendations for the top two industries. Thanks, Marco\u2014looking forward to it.",
+      "link": "https://www.onyx.app/4506306-29"
+    },
+    {
+      "text": "Marco Aguilar: Thanks, Sneha. Talk Thursday.",
+      "link": "https://www.onyx.app/4506306-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "marco_aguilar@aurorakite_software.onyx.app"
+    }
+  ]
+}

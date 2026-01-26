@@ -1,0 +1,30 @@
+{
+  "id": "7859546",
+  "semantic_identifier": "[GOLD-75]: Detect and flag manually pasted positioning blocks that are stale vs Customer_Analyzer",
+  "title": "Detect and flag manually pasted positioning blocks that are stale vs Customer_Analyzer",
+  "source": "linear",
+  "doc_updated_at": "2025-04-11",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-04-11"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add a comparison step when a user pastes/edits a positioning block to detect mismatch with the latest Customer_Analyzer block for the same account/opportunity. If the pasted content is stale, surface a non-blocking warning and offer a one-click \u201cReplace with latest from Customer_Analyzer\u201d action. Log an event with account/opportunity ID, detected version/timestamp, and user action (kept vs replaced) to support follow-on fixes.",
+      "link": "https://www.onyx.app/14632"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_3579725",
+  "semantic_identifier": "Riverstone Aeroworks - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-29 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "58976",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "3579725"
+  },
+  "sections": [
+    {
+      "text": "Deal: Riverstone Aeroworks\nAmount: $58976\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-10-29 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/38435"
+    },
+    {
+      "text": "Contact: Addison Simmons\nEmail: addison_simmons@riverstone_aeroworks.onyx.app",
+      "link": "https://www.onyx.app/42364"
+    },
+    {
+      "text": "Company: Riverstone Aeroworks\nDomain: riverstone_aeroworks.onyx.app",
+      "link": "https://www.onyx.app/98208"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/83582"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

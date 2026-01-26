@@ -1,0 +1,30 @@
+{
+  "id": "fc42f981552945debb567cc06468a230",
+  "semantic_identifier": "Design--Add Fit Driver input preview + field mapping step during setup.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add Fit Driver input preview + field mapping step during setup.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe\u2019ll extend the setup flow with a new \u201cFit Driver Preview & Mapping\u201d step that appears after users select Fit Drivers and before they finalize setup. This step will show, for each chosen Fit Driver, the top candidate source fields/events we inferred (e.g., CRM property, event name, survey question), a small sample of representative values, and basic data quality indicators (fill-rate/coverage over a recent window). The goal is to let users validate that our auto-binding is correct and correct it when it isn\u2019t, reducing downstream \u201cwhy is this metric wrong/empty?\u201d issues.\n\n### UX + Behavior\nIn the step UI, each Fit Driver is listed as a row/card with: (1) the currently selected binding (candidate field/event), (2) fill-rate/coverage, (3) a value preview (e.g., top 5 values + types), and (4) a \u201cChange mapping\u201d control. Changing mapping opens a selector scoped to the relevant source type (CRM properties, event names, survey questions) with search and a quick preview panel; selecting a new binding immediately updates the fill-rate and sample values. If the inferred candidates are weak (below a threshold), we surface a warning state and prompt the user to choose a mapping explicitly.\n\n### Data + Persistence\nWe\u2019ll introduce a workspace-scoped \u201cFit Driver binding\u201d model that maps `{workspace_id, fit_driver_id}` \u2192 `{source_type, source_id/name, optional transforms}` plus metadata like `created_by`, `updated_at`, and `confidence`. During setup, we write the selected bindings; on subsequent ingests and feature computation, we resolve Fit Drivers via this binding first (falling back to inference only if no binding exists). If a source field/event later disappears or becomes incompatible (type mismatch), we mark the binding invalid and prompt remapping in the next admin visit (and optionally in an ingest health alert).\n\n### Implementation Notes\nBackend needs endpoints to (a) fetch candidate bindings per Fit Driver with computed fill-rate/coverage and sample values, and (b) upsert bindings for a workspace. Candidate generation can reuse existing inference logic, augmented with lightweight profiling queries over a recent time window to compute coverage and sample values. Frontend adds a new setup step component plus a reusable mapping selector; the setup \u201cContinue\u201d action validates that each selected Fit Driver has a valid binding. We\u2019ll add analytics for mapping changes and completion rate, and guardrails (timeouts/caching for profiling, pagination for large property/event lists) to keep setup snappy.",
+      "link": "https://www.onyx.app/38676"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

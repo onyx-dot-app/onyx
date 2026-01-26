@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#116",
+  "semantic_identifier": "116: feat: Sync Issue_Tracker status updates to Sales_Accelerator v2 remediation signals",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-20",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "116",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "13",
+    "labels": [],
+    "created_at": "2026-01-20",
+    "updated_at": "2026-01-20",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements the outbound status sync pipeline from Issue_Tracker -> Sales_Accelerator v2 so deal-risk remediation signals stay current when an Issue_Tracker issue transitions state.\n\nKey changes\n- Added Issue_Tracker webhook/event consumer for issue status lifecycle updates (triaged/in_progress/resolved + generic status changes).\n- Introduced `SalesAcceleratorRemediationUpdate` payload including:\n  - `issue_id` (source identifier)\n  - `status` (normalized status string)\n  - `last_updated_at` (source timestamp)\n  - `issue_url` (deep link to Issue_Tracker)\n  - `work_links[]` (deep links to linked downstream work items like Linear/Jira, when present)\n- Implemented Sales_Accelerator v2 client endpoint call to upsert remediation signal for all impacted deals referenced by the issue.\n\nReliability\n- Idempotency: computes a stable idempotency key per (issue_id, status, last_updated_at) and sends it with the outbound request; duplicate events are safely ignored.\n- Retries: adds exponential backoff with jitter for transient failures (5xx/timeouts/429), with max attempts and circuit logging.\n- Failure handling: non-retryable errors (4xx excluding 429) are surfaced and not retried.\n\nObservability\n- Structured logs for each sync attempt including issue_id, impacted deal ids, response code, retry count, and latency.\n- Metrics counters/gauges:\n  - `sa_v2_issue_sync_success_total`\n  - `sa_v2_issue_sync_failure_total` (tagged by error class)\n  - `sa_v2_issue_sync_retry_total`\n  - `sa_v2_issue_sync_latency_ms`\n\nNotes\n- No user-facing UI changes; sellers will see updated remediation status + links in Sales_Accelerator as events propagate.\n- Feature is guarded by config/env toggle to enable per environment and can be rolled out gradually.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#116"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

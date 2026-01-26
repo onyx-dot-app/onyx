@@ -1,0 +1,30 @@
+{
+  "id": "f8fd43c097c94599b09b68203c8df934",
+  "semantic_identifier": "Design--Add configurable weight caps for fit tier when deal-dynamics risks are present (scoring config only).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add configurable weight caps for fit tier when deal-dynamics risks are present (scoring config only).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds new, workspace/environment-scoped configuration fields to the scoring pipeline that cap the *fit-tier* score contribution when specific deal-dynamics risk signals are present: procurement stage risk, competition risk, and internal alignment risk. The goal is to introduce \u201cconfig plumbing\u201d only\u2014no changes to downstream ranking, sorting, or weighting logic beyond applying a cap at fit-tier component calculation time.\n\nWe will extend the scoring config schema with three independent cap settings (one per risk signal) plus an optional \u201cno-risk\u201d default (or implicit \u201cno cap\u201d when no signals fire). At score-component computation time, after the fit-tier contribution is computed via existing logic, the pipeline will check which risk flags are true and apply the most restrictive cap (e.g., `min(fitTierContribution, capProcurement, capCompetition, capInternalAlignment)` for triggered signals). This keeps the change localized to score-component calculation, with the total score remaining the sum of components as today\u2014except that fit-tier is bounded under risk.\n\nConfigs will be persisted in the existing scoring config store (same mechanism as other scoring settings) and loaded at runtime as part of config hydration. Defaults will be seeded from the GOLD-97 audit report recommendations (exact values captured in code/config as initial defaults), with per-workspace overrides supported and optional per-environment overrides (e.g., dev/staging/prod) via the same override layering used elsewhere in scoring configuration. If config is missing or partially specified, the system falls back to defaults, ensuring backward compatibility and safe rollout.\n\nOut of scope: any UI for editing these fields, admin validation rules, and experiments/ranking adjustments beyond the capped component computation. We will add basic telemetry to measure how often each cap is applied and its magnitude (pre-cap vs post-cap contribution) to support follow-up tuning and future UX/validation work.",
+      "link": "https://www.onyx.app/74032"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "ca522a745526453bb2853bbe52cb04df",
+  "semantic_identifier": "Design--Fix non-deterministic semantic clustering creating duplicate clusters on re-ingest.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-16",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix non-deterministic semantic clustering creating duplicate clusters on re-ingest.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nOur semantic grouping pipeline is currently non-deterministic across repeated ingestion of the same source conversations. When we re-ingest identical content, we sometimes generate new clusters/themes instead of reusing existing ones, which fragments analytics and creates user-visible duplicates. This indicates instability in either the inputs to clustering (text/embedding differences across runs) and/or non-idempotent persistence logic during cluster creation.\n\n### Goals / Non-goals\n**Goals:** (1) Make clustering deterministic for the same set of source conversations and pipeline configuration. (2) Ensure re-ingestion is idempotent: existing clusters are updated (if needed) rather than forked into new clusters. (3) Add a regression test that replays the same ingest twice and asserts identical cluster IDs and identical membership. **Non-goals:** Improving clustering quality/accuracy, changing the clustering algorithm fundamentally, or migrating historical clusters beyond what is required to stop new duplication.\n\n### Proposed Changes (Determinism + Idempotency)\nWe will stabilize clustering inputs by introducing a canonical text normalization step (e.g., consistent whitespace, Unicode normalization, lowercasing where appropriate, stable ordering of concatenated fields, removal of volatile tokens like timestamps/IDs if present) and by enforcing explicit embedding versioning (model name + parameters + preprocessor version) stored with each embedding. Clustering will operate only on these canonical embeddings, and we will fix any ordering-related nondeterminism by sorting inputs deterministically (e.g., by stable conversation/message IDs) before batching and clustering. On the persistence side, we will add an idempotent \u201ccluster key\u201d derived from (workspace/project scope + embedding version + clustering config version + deterministic cluster signature) and implement an upsert path: if a cluster with that key exists, we update membership; otherwise we create it once. Membership updates should also be idempotent via upserting a (cluster_id, source_item_id) join row rather than append-only inserts.\n\n### Testing / Rollout\nAdd an integration-style regression test that seeds a fixed set of source conversations, runs the full semantic grouping pipeline twice with identical configuration, and asserts: (1) the set of cluster IDs is identical between runs, (2) each cluster\u2019s membership set is identical, and (3) no additional clusters are created on the second run. We will also add lightweight runtime metrics/logging: count of clusters created vs. updated per ingest, and a \u201cduplicate-theme\u201d detector that flags when highly similar cluster signatures appear in the same scope. Rollout behind a feature flag for the new idempotent upsert path; run in shadow mode for a short period to compare cluster counts before fully enabling.",
+      "link": "https://www.onyx.app/19086"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

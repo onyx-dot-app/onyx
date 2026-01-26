@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#53",
+  "semantic_identifier": "53: feat: Forecasting: Add fit-tier segment weighting to forecast aggregation and API response",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-10-16",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "53",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "14",
+    "labels": [],
+    "created_at": "2025-10-16",
+    "updated_at": "2025-10-16",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements segment-weighted forecast totals in the forecasting aggregation pipeline using Customer_Analyzer fit tiers (e.g., A/B/C).\n\nChanges:\n- Adds a weighting step in the aggregation layer that multiplies opportunity amount and probability-derived values by a configurable per-fit-tier weight.\n- Computes and returns both raw totals (existing behavior) and weighted totals side-by-side for each scenario bucket (baseline/commit/best-case), so the UI can toggle views without re-implementing logic.\n- Introduces a server-side weight configuration (defaulting to 1.0 per tier) and applies it consistently across all scenario groupings.\n- Handles missing/unknown fit tiers gracefully by applying a default weight (1.0) and still including the opportunity in raw totals.\n\nAPI:\n- Extends the forecast API response schema to include weighted totals alongside existing totals (non-breaking additive fields).\n\nNotes:\n- No UI changes included; consumers can opt into the new weighted fields.\n- Includes unit/integration coverage for tier weighting, scenario bucket parity, and fallback behavior.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#53"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "f1e0a63098ec4098b5fb0f86c0f85c09",
+  "semantic_identifier": "Design--issue_clustering v2: Generate automatic split suggestions for overly broad clusters.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--issue_clustering v2: Generate automatic split suggestions for overly broad clusters.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add an `issue_clustering v2` post-processing job that runs after the primary clustering pipeline completes and identifies clusters that are likely \u201ctoo broad\u201d to be actionable. \u201cToo broad\u201d will be determined via a small set of cohesion/dispersion signals (e.g., low intra-cluster similarity, high topic entropy, and/or exceeding size thresholds). For clusters that breach configured thresholds, the job will generate candidate sub-cluster splits and attach enough supporting evidence that triage can evaluate the recommendation without needing to re-run clustering.\n\n### Detection + split generation\nFor each produced cluster, the job computes and persists a metrics snapshot: cluster size, distribution statistics of pairwise (or centroid) similarity, cohesion score, dispersion score, and topic entropy (computed from the distribution of latent topics/keywords/labels already available in the pipeline). A cluster is flagged when one or more metrics exceed thresholds (with a tunable ruleset). For flagged clusters, we run a lightweight sub-clustering step on the members of that cluster only (e.g., k-means/agglomerative over existing embeddings) to produce 2..N candidate child clusters. We will rank candidate splits by improvement in cohesion/entropy reduction and keep the top K split options per parent cluster to avoid noise.\n\n### Persistence model and \u201crepresentative examples\u201d\nWe will persist split suggestions as first-class records keyed by `(clustering_run_id, parent_cluster_id)`, each containing: the triggering metrics, the thresholds/rules that fired, the chosen split algorithm + parameters, and the proposed child clusters with member IDs. Each proposed child cluster will store \u201crepresentative examples\u201d for triage: top conversations/issues (by proximity to child centroid and/or high-confidence members) plus short summaries (if already produced elsewhere) to make the split interpretable. This enables triage and downstream workflows to reference stable suggestions even if the underlying clustering system evolves, and avoids recomputation.\n\n### Access + integration points\nWe will expose an internal API to fetch split suggestions by clustering run, cluster ID, and status (e.g., `GET /internal/issue-clustering/runs/{run_id}/clusters/{cluster_id}/split-suggestions`). The response will include parent metrics, the \u201ctoo broad\u201d rationale, and the ranked candidate split(s) with representative examples. The triage UI can surface these suggestions inline on a cluster detail page, and provide a link/action to create downstream engineering work (e.g., tickets for each proposed child cluster) while preserving the suggestion record ID for traceability and later analysis.",
+      "link": "https://www.onyx.app/66605"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#121",
+  "semantic_identifier": "121: fix: Normalize CRM/CSV stage entry timestamps to fix Sales Forecast stage aging",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-26",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "121",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "4",
+    "num_files_changed": "86",
+    "labels": [],
+    "created_at": "2025-06-26",
+    "updated_at": "2025-06-26",
+    "closed_at": "2025-07-21"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Problem\nStage aging in Sales Forecast was incorrect for CRM/CSV-imported opportunities because stage entry timestamps were parsed inconsistently (missing timezone handling / multiple formats) and could silently fall back to `created_at`, skewing aging rollups and downstream benchmarks.\n\n### What this PR changes\n- Adds a canonicalization step in the CRM/CSV import pipeline to derive a reliable `stage_entered_at` for each stage transition.\n- Normalizes imported timestamps by:\n  - Parsing supported CRM/CSV datetime formats deterministically.\n  - Applying timezone normalization (treating timezone-less values as a configured default, then storing consistently, e.g., UTC).\n  - Rejecting/flagging invalid timestamps instead of implicitly defaulting.\n- Updates stage transition construction so that each transition persists a canonical `stage_entered_at` used by stage aging.\n- Implements deterministic fallbacks when stage entry timestamps are missing:\n  1) Use the earliest known timestamp for the transition from import metadata (e.g., stage history rows) when available.\n  2) Otherwise, fall back to the opportunity\u2019s `created_at` (explicitly and consistently), ensuring reproducible results.\n\n### Implementation notes\n- Centralizes timestamp parsing/normalization in a shared import utility used by both CRM and CSV code paths.\n- Ensures `stage_entered_at` is always written in a single canonical format/timezone to avoid downstream recomputation.\n- Adds/updates tests covering:\n  - Multiple datetime formats.\n  - Timezone-less inputs.\n  - Missing stage history (fallback behavior).\n  - Regression for incorrect aging on imported records.\n\n### User impact\n- Newly imported opportunities will have correct stage entry dates and accurate stage aging.\n- Existing incorrectly imported records are not automatically backfilled in this PR; a separate backfill/re-import would be needed if historical correction is required.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#121"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

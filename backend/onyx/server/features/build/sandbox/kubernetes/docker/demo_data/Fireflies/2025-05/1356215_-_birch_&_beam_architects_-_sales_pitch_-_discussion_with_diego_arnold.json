@@ -1,0 +1,145 @@
+{
+  "id": "FIREFLIES_1356215",
+  "semantic_identifier": "1356215 - Birch & Beam Architects - sales_pitch - Discussion with Diego Arnold",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-05-20 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-05-20 00:00:00",
+    "duration_min": "25"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-05"
+      ],
+      "year_month": "2025-05",
+      "meeting_title": "1356215 - Birch & Beam Architects - sales_pitch - Discussion with Diego Arnold",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Diego, Camila Vega here\u2014thanks for taking a few minutes. I\u2019ll keep this brief. I\u2019m calling because we work with teams that are trying to get really clear on who their best customers are and stop wasting time on \u201cmaybe\u201d leads. Does that hit anything you\u2019re dealing with at Birch & Beam Architects?",
+      "link": "https://www.onyx.app/4844763-1"
+    },
+    {
+      "text": "Diego Arnold: Hey Camila. We\u2019re in the middle of a few initiatives, but sure\u2014what are you talking about specifically?",
+      "link": "https://www.onyx.app/4844763-2"
+    },
+    {
+      "text": "Camila Vega: Totally. The product is called Customer_Analyzer. It pulls together the signals you already have\u2014CRM fields, onboarding notes, project outcomes, support or change-order requests, even interview notes\u2014and turns them into a simple fit score by account and by segment. The goal is to help you define an ICP you can actually trust, so marketing and sales aren\u2019t guessing.",
+      "link": "https://www.onyx.app/4844763-3"
+    },
+    {
+      "text": "Diego Arnold: We\u2019re not a SaaS company. We\u2019re an architecture firm. Not sure how relevant an \u201cICP\u201d tool is for us.",
+      "link": "https://www.onyx.app/4844763-4"
+    },
+    {
+      "text": "Camila Vega: Fair question. When we say ICP, we mean \u201cbest-fit client profile.\u201d In your case it could be things like project type, client size, timeline realism, decision process, budget reliability, revision load\u2014whatever predicts profitable projects and smoother delivery. Customer_Analyzer\u2019s fit estimation feature gives you a 0\u2013100 fit score and a driver breakdown\u2014so you can see why a client is high fit or low fit and compare segments like commercial developers vs. institutional clients.",
+      "link": "https://www.onyx.app/4844763-5"
+    },
+    {
+      "text": "Diego Arnold: We already have a general sense of what good clients look like. It\u2019s not super scientific, but we know.",
+      "link": "https://www.onyx.app/4844763-6"
+    },
+    {
+      "text": "Camila Vega: That makes sense\u2014and honestly most teams do. Where we see Customer_Analyzer help is when the \u201cgeneral sense\u201d breaks down as you grow, add new services, or pursue new verticals. For example, if you\u2019re considering scaling outbound or paid acquisition, it validates which segment actually retains well and expands\u2014rather than just \u201ccloses.\u201d Then the fit estimation highlights the drivers: time-to-value, support burden, revision cycles, payment issues\u2014so you can operationalize it.",
+      "link": "https://www.onyx.app/4844763-7"
+    },
+    {
+      "text": "Diego Arnold: We don\u2019t do paid acquisition, and we\u2019re not really scaling the way a startup is. We\u2019re mostly referral-driven.",
+      "link": "https://www.onyx.app/4844763-8"
+    },
+    {
+      "text": "Camila Vega: Got it\u2014so referrals are primary. Even then, the same problem can show up as inconsistent project profitability or teams getting stretched thin because the wrong work sneaks in. The other output is positioning recommendations\u2014basically messaging guidance based on what high-fit clients value and what objections come up. That can show up on your website, proposals, or qualification scripts.",
+      "link": "https://www.onyx.app/4844763-9"
+    },
+    {
+      "text": "Diego Arnold: We just refreshed our website and proposal templates. And messaging isn\u2019t our main pain right now.",
+      "link": "https://www.onyx.app/4844763-10"
+    },
+    {
+      "text": "Camila Vega: Understood. Let me ask one quick diagnostic\u2014are you seeing any patterns in projects that become time sinks? Like certain client types that create lots of scope churn, change orders, or delays?",
+      "link": "https://www.onyx.app/4844763-11"
+    },
+    {
+      "text": "Diego Arnold: Sure, some clients are harder than others. But it\u2019s not something we\u2019re going to buy software for. We handle it in process.",
+      "link": "https://www.onyx.app/4844763-12"
+    },
+    {
+      "text": "Camila Vega: That\u2019s fair. The reason I ask is the fit estimation can quantify those patterns from your existing data\u2014say, which attributes correlate with smoother delivery and repeat work. Even a lightweight setup can show, \u201cThese 3 drivers predict the projects that renew or expand,\u201d versus the ones that churn you out with headaches.",
+      "link": "https://www.onyx.app/4844763-13"
+    },
+    {
+      "text": "Diego Arnold: I\u2019m also thinking about the effort. We don\u2019t have a bunch of clean data lying around, and I don\u2019t have time to instrument everything.",
+      "link": "https://www.onyx.app/4844763-14"
+    },
+    {
+      "text": "Camila Vega: Totally hear you. We don\u2019t require heavy instrumentation to start. Many teams begin with what they already have: CRM fields, a few tags on project type, basic timeline/budget outcomes, maybe a short survey. Then Customer_Analyzer produces segment comparisons and a recommended best-fit profile based on observed outcomes. But if data isn\u2019t centralized, it can feel like work up front.",
+      "link": "https://www.onyx.app/4844763-15"
+    },
+    {
+      "text": "Diego Arnold: Yeah. And honestly, we\u2019re trying to reduce tools, not add another dashboard.",
+      "link": "https://www.onyx.app/4844763-16"
+    },
+    {
+      "text": "Camila Vega: Makes sense. If we kept this to a single outcome\u2014like \u201cidentify the top 2 client segments to prioritize and a short qualification checklist\u201d\u2014would that be worth a 30-minute deeper look? I can show exactly how the fit score and driver breakdown works with a sample dataset.",
+      "link": "https://www.onyx.app/4844763-17"
+    },
+    {
+      "text": "Diego Arnold: I don\u2019t think so. We\u2019ve got internal planning for the next couple weeks, and this doesn\u2019t feel like a priority.",
+      "link": "https://www.onyx.app/4844763-18"
+    },
+    {
+      "text": "Camila Vega: No problem. Before I let you go, is there someone else on your side who owns pipeline quality or client selection\u2014maybe whoever runs business development or operations\u2014who would be a better fit for this conversation?",
+      "link": "https://www.onyx.app/4844763-19"
+    },
+    {
+      "text": "Diego Arnold: Not really. We\u2019re pretty small, and those decisions are shared. If it becomes a pain later, we\u2019ll revisit, but right now we\u2019re set.",
+      "link": "https://www.onyx.app/4844763-20"
+    },
+    {
+      "text": "Camila Vega: Understood. Last thing\u2014would it be okay if I sent a one-pager that summarizes the fit estimation output and how it\u2019s used to validate an ideal client profile? If it resonates later, you can forward it internally.",
+      "link": "https://www.onyx.app/4844763-21"
+    },
+    {
+      "text": "Diego Arnold: Sure, you can send something. But I can\u2019t promise I\u2019ll look at it soon.",
+      "link": "https://www.onyx.app/4844763-22"
+    },
+    {
+      "text": "Camila Vega: That\u2019s completely fine. What\u2019s the best email for you?",
+      "link": "https://www.onyx.app/4844763-23"
+    },
+    {
+      "text": "Diego Arnold: Use diego@birchbeam.com.",
+      "link": "https://www.onyx.app/4844763-24"
+    },
+    {
+      "text": "Camila Vega: Perfect. I\u2019ll send a short overview and a couple example screenshots of the fit score and segment comparison. If in a quarter you\u2019re revisiting what work to pursue\u2014or noticing certain client types dragging margins\u2014we can pick it back up. Thanks again for your time, Diego.",
+      "link": "https://www.onyx.app/4844763-25"
+    },
+    {
+      "text": "Diego Arnold: Thanks, Camila. Take care.",
+      "link": "https://www.onyx.app/4844763-26"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "diego_arnold@birch_&_beam_architects.onyx.app"
+    }
+  ]
+}

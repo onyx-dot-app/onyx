@@ -1,0 +1,30 @@
+{
+  "id": "6e7a2f880b8d4360b5053e66a5327688",
+  "semantic_identifier": "Impact--Add compliance requirements checklist to deployment readiness workflow.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-25",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add compliance requirements checklist to deployment readiness workflow.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a lightweight, configurable compliance requirements checklist to the deployment readiness workflow so teams can explicitly track gating items like security review completion, DPA status, and retention constraints. The checklist can be attached to an issue/theme and specific items can be marked as \u201crequired\u201d to meet deployment readiness, creating a consistent definition of \u201cready\u201d that includes compliance\u2014not just engineering status.\n\nBy exposing checklist status directly on the issue object and in downstream engineering tooling links (Jira/Linear), the requirement state becomes visible where teams already work. This makes compliance blockers discoverable earlier in planning and execution, rather than surfacing only at release time.\n\nThe primary impact is reduced late-stage compliance surprises that currently cause deployment delays, context switching, and emergency escalations. With clearer upfront expectations and a shared view of what\u2019s missing, teams can sequence work appropriately, involve the right approvers sooner, and avoid \u201cstop-the-line\u201d moments.\n\nOperationally, this improves cross-functional coordination between Product, Engineering, Security, and Legal by making requirements explicit and auditable at the issue/theme level. It also creates a foundation for future reporting (e.g., common blockers, average time-to-clear) without adding heavy process overhead.",
+      "link": "https://www.onyx.app/22006"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

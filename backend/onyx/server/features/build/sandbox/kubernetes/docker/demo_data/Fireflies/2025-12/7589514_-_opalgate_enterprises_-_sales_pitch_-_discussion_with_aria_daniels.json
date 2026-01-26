@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_7589514",
+  "semantic_identifier": "7589514 - Opalgate Enterprises - sales_pitch - Discussion with Aria Daniels",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-13 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-13 00:00:00",
+    "duration_min": "29"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "7589514 - Opalgate Enterprises - sales_pitch - Discussion with Aria Daniels",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Hi Aria\u2014thanks for taking a few minutes. I\u2019ll keep this brief. I work with teams that are drowning in duplicate support tickets and \u201cis this the same issue?\u201d debates between Support, CS, and Engineering. I wanted to share how Issue_Tracker helps create a single, trustworthy view of customer issues without replacing your existing tools. Does that sound relevant?",
+      "link": "https://www.onyx.app/9825397-1"
+    },
+    {
+      "text": "Aria Daniels: Possibly, but I\u2019m heads-down today. We already use Zendesk and Jira, so I\u2019m not looking to add another system.",
+      "link": "https://www.onyx.app/9825397-2"
+    },
+    {
+      "text": "Sneha Reddy: Totally fair\u2014and Issue_Tracker is meant to sit between Zendesk and Jira, not replace them. The main thing it does is automatically cluster and dedupe incoming tickets, chats, and even call note summaries into issue themes. So instead of 60 separate \u201clogin broken\u201d tickets, you get one cluster with the top phrases, representative examples, and links back to every source ticket in Zendesk. Then you can merge or split clusters with guardrails when something\u2019s actually two different root causes. Does Opalgate see a lot of repeated issues that are hard to quantify?",
+      "link": "https://www.onyx.app/9825397-3"
+    },
+    {
+      "text": "Aria Daniels: We do get repeats, but our support leads already tag tickets and we run reports. It\u2019s not perfect, but it works.",
+      "link": "https://www.onyx.app/9825397-4"
+    },
+    {
+      "text": "Sneha Reddy: Makes sense. Where we typically help teams like yours is reducing the manual tagging overhead and making trends visible earlier\u2014especially when issues are phrased differently across channels. Because the clustering uses semantic similarity, it catches duplicates even when the wording is all over the place. Then each cluster keeps a clean \u201cissue object\u201d: suspected category like bug vs UX vs missing feature, affected product area, and the evidence trail back to the original conversations.",
+      "link": "https://www.onyx.app/9825397-5"
+    },
+    {
+      "text": "Aria Daniels: Okay, but we still need engineering to act, and that\u2019s all in Jira. I don\u2019t want another queue for my team to manage.",
+      "link": "https://www.onyx.app/9825397-6"
+    },
+    {
+      "text": "Sneha Reddy: You wouldn\u2019t be managing a second queue. One practical workflow is: Support or CS reviews the cluster, then links the cluster to an existing Jira issue\u2014or creates one if needed. After that, Issue_Tracker just maintains the connection so everyone can see, \u201cThis theme maps to Jira-1234, status in progress, shipped in release X.\u201d It becomes a searchable history of decisions and status across teams, without making people change where they work day to day.",
+      "link": "https://www.onyx.app/9825397-7"
+    },
+    {
+      "text": "Aria Daniels: We can already link Zendesk tickets to Jira. That\u2019s been fine.",
+      "link": "https://www.onyx.app/9825397-8"
+    },
+    {
+      "text": "Sneha Reddy: You can\u2014and that\u2019s helpful at a ticket level. The gap we see is at the theme level. Linking 200 individual tickets to one Jira item is tedious, and teams often stop after linking a handful, so leadership underestimates impact. With clustering, you get the roll-up automatically: \u201cThis Jira bug affects 214 tickets, 38 accounts,\u201d and you can drill in if needed. It\u2019s less about the link existing and more about the completeness and the trend visibility.",
+      "link": "https://www.onyx.app/9825397-9"
+    },
+    {
+      "text": "Aria Daniels: I\u2019m not sure we\u2019d trust automated clustering. False merges would be a mess.",
+      "link": "https://www.onyx.app/9825397-10"
+    },
+    {
+      "text": "Sneha Reddy: That concern comes up a lot. Two points: first, clusters come with representative examples and top phrases so a human can quickly sanity-check what\u2019s grouped. Second, the merge/split workflow is designed to be reversible and auditable, so if two similar issues get lumped together, you can split them and preserve the decision trail. We also use configurable rules\u2014like product area, platform, severity keywords\u2014so you can constrain clustering to reduce risky merges.",
+      "link": "https://www.onyx.app/9825397-11"
+    },
+    {
+      "text": "Aria Daniels: Even if it works, what\u2019s the actual win for CS? My team cares about follow-ups and renewals, not prettier triage.",
+      "link": "https://www.onyx.app/9825397-12"
+    },
+    {
+      "text": "Sneha Reddy: Exactly\u2014and the CS win is consistent customer follow-up without spreadsheets. Your CSMs can subscribe an account to relevant issue clusters. Then when the linked Jira ticket ships, Issue_Tracker records the release milestone and creates a history trail: which customers were impacted, who was notified, and when. That means fewer \u201cDid anyone tell Aria\u2019s accounts this got fixed?\u201d moments, and it helps you show proactive value in QBRs.",
+      "link": "https://www.onyx.app/9825397-13"
+    },
+    {
+      "text": "Aria Daniels: We already have a process for that. It\u2019s manual, but it\u2019s controlled. Automating customer notifications can create mistakes, and our customers are sensitive.",
+      "link": "https://www.onyx.app/9825397-14"
+    },
+    {
+      "text": "Sneha Reddy: I\u2019m with you\u2014most teams don\u2019t auto-notify externally. The automation is more about tracking and prompting internally: \u201cThis cluster shipped; these accounts were subscribed; here are draft notes or a reminder to follow up.\u201d You can keep human approval in the loop. The key is having a reliable list of affected customers tied to the theme, not trying to reconstruct it after the fact.",
+      "link": "https://www.onyx.app/9825397-15"
+    },
+    {
+      "text": "Aria Daniels: I get it conceptually. But this still feels like added tooling and change management. We just went through a big ops cleanup and I don\u2019t have appetite for another rollout.",
+      "link": "https://www.onyx.app/9825397-16"
+    },
+    {
+      "text": "Sneha Reddy: Understood. If it helps, teams often start small: one product area, connect Zendesk + Jira, and let clustering run in the background for a couple weeks. Then you compare: what did the cluster view surface that tags and reports missed? If it\u2019s not materially better, you stop. I\u2019m not trying to force a heavy implementation on you.",
+      "link": "https://www.onyx.app/9825397-17"
+    },
+    {
+      "text": "Aria Daniels: We\u2019re also pretty locked in on budget right now. Anything new would have to be next cycle.",
+      "link": "https://www.onyx.app/9825397-18"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s helpful context. In that case, my ask would just be a deeper 30-minute discovery to see if there\u2019s a clear ROI case for when budget opens\u2014like reducing duplicate triage time, or improving visibility into widespread issues that are impacting key accounts. Would next week be realistic?",
+      "link": "https://www.onyx.app/9825397-19"
+    },
+    {
+      "text": "Aria Daniels: Honestly, no. We\u2019re in renewal season and I\u2019m not taking vendor meetings unless we have an urgent gap. This sounds nice-to-have.",
+      "link": "https://www.onyx.app/9825397-20"
+    },
+    {
+      "text": "Sneha Reddy: Got it. Before I let you go\u2014quick check: is your biggest pain more around identifying patterns early, or more around tracking which customers are impacted and ensuring follow-up?",
+      "link": "https://www.onyx.app/9825397-21"
+    },
+    {
+      "text": "Aria Daniels: If anything, it\u2019s pattern identification, but we\u2019re not resourced to overhaul the process. And Engineering prioritization is the bottleneck anyway.",
+      "link": "https://www.onyx.app/9825397-22"
+    },
+    {
+      "text": "Sneha Reddy: That makes sense. The reason I asked is clustering tends to reduce the \u201cpattern finding\u201d burden on Support/CS, so Engineering gets clearer signal sooner\u2014volume, affected accounts, and evidence in one place\u2014without asking your team to do more. But I hear you on timing.",
+      "link": "https://www.onyx.app/9825397-23"
+    },
+    {
+      "text": "Aria Daniels: Yeah. Maybe send me a one-pager and I can circulate it, but I can\u2019t commit to a call.",
+      "link": "https://www.onyx.app/9825397-24"
+    },
+    {
+      "text": "Sneha Reddy: Absolutely. I\u2019ll send a concise overview focused on clustering and the CS follow-up workflow, plus an example of how the theme-to-Jira linkage looks with the history trail. If it\u2019s useful, could I check back in a month or two?",
+      "link": "https://www.onyx.app/9825397-25"
+    },
+    {
+      "text": "Aria Daniels: Sure, follow up in a couple months. If something changes, I\u2019ll reach out.",
+      "link": "https://www.onyx.app/9825397-26"
+    },
+    {
+      "text": "Sneha Reddy: Perfect. Thanks, Aria\u2014I\u2019ll keep it short in email and won\u2019t spam you. Appreciate your time today.",
+      "link": "https://www.onyx.app/9825397-27"
+    },
+    {
+      "text": "Aria Daniels: Thanks. Bye.",
+      "link": "https://www.onyx.app/9825397-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "aria_daniels@opalgate_enterprises.onyx.app"
+    }
+  ]
+}

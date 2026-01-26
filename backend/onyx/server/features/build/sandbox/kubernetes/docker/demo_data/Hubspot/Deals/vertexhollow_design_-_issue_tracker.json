@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_4859657",
+  "semantic_identifier": "Vertexhollow Design - Issue Tracker",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-28 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "174206",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "4859657"
+  },
+  "sections": [
+    {
+      "text": "Deal: Vertexhollow Design\nAmount: $174206\nProduct of Interest: Issue_Tracker\nFeatures of Interest: issue_priotization\nClose Date: 2025-11-12 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/66976"
+    },
+    {
+      "text": "Contact: Henry Willis\nEmail: henry_willis@vertexhollow_design.onyx.app",
+      "link": "https://www.onyx.app/36190"
+    },
+    {
+      "text": "Company: Vertexhollow Design\nDomain: vertexhollow_design.onyx.app",
+      "link": "https://www.onyx.app/58778"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/70201"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

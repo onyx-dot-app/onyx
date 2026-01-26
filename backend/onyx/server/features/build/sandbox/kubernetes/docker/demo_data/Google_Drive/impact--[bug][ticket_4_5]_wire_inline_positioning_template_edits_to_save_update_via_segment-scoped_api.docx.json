@@ -1,0 +1,30 @@
+{
+  "id": "e8f646de14f246d39b31aad99c0e1a55",
+  "semantic_identifier": "Impact--[BUG][Ticket 4/5] Wire inline positioning template edits to save/update via segment-scoped API.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-11",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--[BUG][Ticket 4/5] Wire inline positioning template edits to save/update via segment-scoped API.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change connects the inline \u201cpositioning template\u201d editor to the segment-scoped CRUD API so edits made in the UI are actually persisted per segment. Today, users can make changes inline but can\u2019t reliably save them in a way that reflects segment-specific behavior, which undermines trust and creates rework when templates revert or differ from what\u2019s expected.\n\nWith this wiring in place, users will be able to edit a segment\u2019s positioning template, save to create/update the segment-scoped configuration, or cancel to discard changes. The editor will correctly track \u201cdirty\u201d state and reset it after save/cancel, reducing accidental overwrites and making it clear when there are unsaved changes.\n\nThe experience will include robust feedback and error handling: server-side validation errors will be surfaced in the UI (inline where relevant), and users will get clear success/failure feedback via toasts and/or inline messaging. After a successful save, the UI will refresh from the server response to ensure the displayed template exactly matches what was persisted.\n\nImportantly, this maintains expected defaults: if a segment has no custom template, the UI will continue to show the default template rather than forcing an empty state or implicitly creating a customization. This preserves current behavior while enabling intentional segment-level overrides, improving consistency and confidence for users managing multiple segments.",
+      "link": "https://www.onyx.app/80893"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

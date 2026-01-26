@@ -1,0 +1,30 @@
+{
+  "id": "4d01e16315654742abe95c5c2cabdc74",
+  "semantic_identifier": "Impact--Add default sales stage templates and guided stage mapping during setup.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-03-31",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add default sales stage templates and guided stage mapping during setup.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a guided setup step that automatically proposes a default \u201cSales_Accelerator\u201d sales stage template (e.g., Prospecting \u2192 Qualification \u2192 Proposal \u2192 Negotiation \u2192 Closed Won/Lost) based on a customer\u2019s detected CRM pipeline configuration. During onboarding, users are prompted to map existing CRM stages to the canonical model, with the option to merge synonymous stages and resolve gaps. The result is a standardized stage foundation that is still anchored to the customer\u2019s real pipeline.\n\nThe primary user impact is a significant reduction in setup time and ambiguity: instead of starting from a blank stage model, customers start with a proven template and a clear mapping workflow. This makes it easier for RevOps and sales leaders to align on what each stage means, while keeping day-to-day CRM workflows unchanged. It also reduces onboarding friction for customers with messy or highly customized pipelines by explicitly handling duplicates and inconsistencies.\n\nProduct capability impact is improved reliability and comparability of downstream features that depend on stage semantics. By normalizing customer-specific stages into a canonical set, we can deliver more accurate stage-based forecasting, next-best-action recommendations, and risk alerts with less customer-specific configuration. It creates a consistent \u201csource of truth\u201d for interpreting pipeline progress across accounts and pipelines.\n\nQuality and correctness improve through validation requirements: every active CRM stage must be mapped, and key milestones (e.g., commit/closed outcomes) must be represented before setup can be completed. This prevents partial or incorrect configurations that lead to misleading analytics and alerts, reducing support burden and increasing trust in the product\u2019s insights from day one.",
+      "link": "https://www.onyx.app/60158"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

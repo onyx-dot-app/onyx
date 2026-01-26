@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_3019959",
+  "semantic_identifier": "Radiant Vale Utilities - Issue Tracker",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-06 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "27520",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "3019959"
+  },
+  "sections": [
+    {
+      "text": "Deal: Radiant Vale Utilities\nAmount: $27520\nProduct of Interest: Issue_Tracker\nFeatures of Interest: issue_clustering\nClose Date: 2025-11-08 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/61829"
+    },
+    {
+      "text": "Contact: Sophia Chen\nEmail: sophia_chen@radiant_vale_utilities.onyx.app",
+      "link": "https://www.onyx.app/50138"
+    },
+    {
+      "text": "Company: Radiant Vale Utilities\nDomain: radiant_vale_utilities.onyx.app",
+      "link": "https://www.onyx.app/48684"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/77733"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

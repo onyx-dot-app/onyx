@@ -1,0 +1,30 @@
+{
+  "id": "024ab503c6714280a60ff0f6f8eae965",
+  "semantic_identifier": "Design--Fix scenario modeling inputs not updating forecast projections (coverage + hiring capacity).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix scenario modeling inputs not updating forecast projections (coverage + hiring capacity).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Design: Ensure Scenario Modeling Inputs Recompute Forecast Projections\n\nScenario modeling currently allows users to adjust pipeline coverage targets and hiring capacity, but these inputs do not reliably trigger a full recomputation of forecast projections. This results in stale totals, incorrect deltas, and misleading per-segment recommendations shown in the UI. The goal of this change is to make recalculation deterministic: every change to coverage targets or hiring capacity must produce an updated scenario model and refresh all dependent UI values.\n\nOn the implementation side, we\u2019ll centralize \u201cscenario inputs\u201d into a single immutable state object (e.g., `ScenarioInputs`) and ensure the forecast computation runs from that source of truth. Any UI control that edits coverage targets or hiring capacity will update `ScenarioInputs` via a single reducer/action path, and a recompute will be triggered whenever `ScenarioInputs` changes (e.g., using a derived selector/memoization keyed by a stable hash of inputs, or an explicit `recomputeScenario(inputs)` call in the state layer). The recompute must regenerate all derived outputs\u2014overall totals, deltas vs baseline, and per-segment breakdowns\u2014and replace them atomically to prevent mixed \u201cold/new\u201d UI states.\n\nIn the UI, we\u2019ll ensure all displayed values read only from the computed scenario outputs rather than partially from inputs or cached intermediate values. While recomputing, we\u2019ll preserve responsiveness by debouncing rapid input edits if needed (e.g., typing into numeric fields), but still guarantee that the final state after each committed change reflects a full recomputation. We\u2019ll also audit any existing memoization/caching to ensure it keys on the full set of relevant inputs (coverage targets + hiring capacity + any segment-specific knobs) to prevent accidental cache hits that yield stale projections.\n\nFor regression coverage, we\u2019ll add a lightweight test at the state/compute boundary: initialize a baseline scenario, update coverage target, assert projections/totals changed accordingly; then update hiring capacity, assert projections/totals change again; and finally verify per-segment breakdowns/deltas are updated in lockstep. This can be implemented as a unit test of the scenario model reducer + compute function, or a minimal component test that simulates input changes and asserts rendered totals update after each change.",
+      "link": "https://www.onyx.app/48240"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

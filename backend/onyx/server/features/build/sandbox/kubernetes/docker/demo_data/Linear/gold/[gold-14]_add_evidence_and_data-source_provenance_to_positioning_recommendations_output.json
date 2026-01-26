@@ -1,0 +1,30 @@
+{
+  "id": "8710442",
+  "semantic_identifier": "[GOLD-14]: Add evidence + data-source provenance to Positioning Recommendations output",
+  "title": "Add evidence + data-source provenance to Positioning Recommendations output",
+  "source": "linear",
+  "doc_updated_at": "2025-04-20",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jason_morris",
+      "email": "jason_morris@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2025-04-20"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Positioning Recommendations currently lack clear grounding, which reduces trust when datasets are small. Add backend support to attach lightweight provenance to each recommendation (top contributing signals/sources, counts, and recency\u2014e.g., CRM fields used, # interviews/tickets referenced, latest event date). Expose this in the recommendations API response so the UI can display \u201cwhy we think this\u201d context without changing the recommendation logic.",
+      "link": "https://www.onyx.app/73773"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

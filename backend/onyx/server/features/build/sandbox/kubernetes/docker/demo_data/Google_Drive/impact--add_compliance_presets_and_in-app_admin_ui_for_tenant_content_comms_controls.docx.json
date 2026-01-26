@@ -1,0 +1,30 @@
+{
+  "id": "891dec6513fc4b80834345d116f5926c",
+  "semantic_identifier": "Impact--Add compliance presets + in-app admin UI for tenant content/comms controls.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-31",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add compliance presets + in-app admin UI for tenant content/comms controls.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds an in-app Admin UI in Sales_Accelerator for managing tenant-level compliance controls, making previously backend-only settings (from GOLD-131) visible, understandable, and actionable. Admins will be able to view and update toggles that govern content generation and communications ingestion, with clear, plain-language descriptions of what each control blocks so policy intent is unambiguous.\n\nTo speed up rollout in regulated environments, the UI will include one-click compliance presets (e.g., \u201cRegulated / No AI Generation\u201d and \u201cPII-Restricted Comms Ingestion\u201d) that apply safe default configurations. This reduces implementation time and support burden by giving teams a vetted starting point rather than requiring manual interpretation and configuration of multiple controls.\n\nThe experience will be resilient and auditable: settings changes will be validated both client-side and server-side to prevent invalid configurations, mismatched state, or accidental policy relaxation. The UI should also make it hard to misconfigure by clearly surfacing the impact of each toggle before and after changes.\n\nFor end users, when a policy blocks AI generation or ingestion, the product will show an explicit \u201cwhy blocked\u201d message instead of failing silently or presenting confusing errors. This improves trust and clarity, reduces repeated attempts and support tickets, and ensures user behavior aligns with the tenant\u2019s compliance posture.",
+      "link": "https://www.onyx.app/80523"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

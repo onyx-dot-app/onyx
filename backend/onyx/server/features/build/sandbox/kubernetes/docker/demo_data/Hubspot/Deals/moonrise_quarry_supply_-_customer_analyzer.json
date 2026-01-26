@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_1275479",
+  "semantic_identifier": "Moonrise Quarry Supply - Customer Analyzer",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-19 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "54134",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "1275479"
+  },
+  "sections": [
+    {
+      "text": "Deal: Moonrise Quarry Supply\nAmount: $54134\nProduct of Interest: Customer_Analyzer\nFeatures of Interest: fit_estimation\nClose Date: 2026-01-17 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/33399"
+    },
+    {
+      "text": "Contact: Eliana Jacobs\nEmail: eliana_jacobs@moonrise_quarry_supply.onyx.app",
+      "link": "https://www.onyx.app/80564"
+    },
+    {
+      "text": "Company: Moonrise Quarry Supply\nDomain: moonrise_quarry_supply.onyx.app",
+      "link": "https://www.onyx.app/30650"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/86562"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

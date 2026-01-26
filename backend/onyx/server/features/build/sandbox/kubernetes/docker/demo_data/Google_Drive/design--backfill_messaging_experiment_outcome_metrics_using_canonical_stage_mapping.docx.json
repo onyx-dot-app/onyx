@@ -1,0 +1,30 @@
+{
+  "id": "c645511058cd4db39a0e0084e6bdb638",
+  "semantic_identifier": "Design--Backfill messaging experiment outcome metrics using canonical stage mapping.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Backfill messaging experiment outcome metrics using canonical stage mapping.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We need to backfill historical outcome metrics (win rate, pipeline velocity, conversion) for existing messaging experiments once the new canonical stage/event normalization is live, so that experiment reporting is consistent across time. Today, older experiment snapshots were computed against pre-normalized stage names/events, causing drift or incomparability with newly computed results. The goal is to recompute outcomes by replaying the underlying funnel events through the canonical stage mapping, then persist updated snapshots while keeping newly created experiments unaffected.\n\nWe\u2019ll implement an idempotent backfill job that iterates through messaging experiments within a target time range (initially all historical), loads the experiment cohort definition and attributed deals/opportunities, and re-aggregates outcomes from normalized funnel stages. The aggregation will use the canonical stage mapping as the single source of truth, producing the same metric schema as current experiment outcome snapshots (win rate from \u201cwon\u201d terminal stage, pipeline velocity from time deltas between canonical stages, and conversion rates between defined stage transitions). The job will write results back by either (a) versioning snapshots with a new `computed_with_canonical_mapping_version` field and marking the latest as active, or (b) overwriting in place if downstream consumers don\u2019t require historical snapshot immutability; preference is versioning to support auditability and easy rollback.\n\nTo ensure safety and rerunnability, the backfill will be keyed by `(experiment_id, mapping_version)` and upsert results so repeated runs produce identical stored outputs. We\u2019ll add batching, checkpointing, and rate limiting, and run it as a one-off worker/task with metrics on processed experiments, recompute duration, and write success/failure counts. If canonical mapping changes again, we can rerun the same job with a new mapping version to generate a new set of snapshots without clobbering prior versions.\n\nValidation will include (1) a handpicked set of known experiments where pre-normalization metrics are trusted, comparing recomputed metrics within expected tolerances and investigating deltas attributable to corrected stage semantics, and (2) regression checks that newly created experiments continue to compute outcomes identically before/after the backfill (i.e., the backfill only affects experiments whose snapshots were computed pre-normalization). We\u2019ll also add a spot-check query/report to compare old vs new snapshots distribution-wide (e.g., percent change histograms for win rate/velocity) to detect unexpected systemic shifts before fully marking canonical-backed snapshots as the default in the UI/API.",
+      "link": "https://www.onyx.app/74153"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

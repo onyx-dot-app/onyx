@@ -1,0 +1,30 @@
+{
+  "id": "dd3b772b2d7b4e2486c0c3d69ff80639",
+  "semantic_identifier": "Impact--Fix CRM/CSV import: normalize stage entry dates to prevent incorrect stage aging.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Fix CRM/CSV import: normalize stage entry dates to prevent incorrect stage aging.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change fixes incorrect Sales Forecast \u201cstage aging\u201d values that occur when opportunities are imported via CRM or CSV. Today, stage entry dates are parsed inconsistently (timezone and format differences), and in some cases we fall back implicitly to `created_at`, which can make an opportunity appear much older or newer in a stage than it actually is.\n\nWe will update the import pipeline to normalize and persist a canonical `stage_entered_at` for each stage transition. Where the source system does not provide a reliable stage entry timestamp, we\u2019ll apply a deterministic fallback (consistent rules, documented behavior) rather than ad-hoc defaults, ensuring the same input always produces the same stage aging output.\n\nThe primary impact is improved accuracy and trust in stage aging across Sales Forecast. This directly affects downstream rollups, funnel/conversion benchmarks, and any reporting or workflows that use stage time-in-stage to evaluate pipeline health and forecast quality.\n\nOperationally, this reduces confusion for Sales Ops and leadership reviewing forecast dashboards, and lowers support burden tied to \u201cwhy is this deal aging incorrectly?\u201d questions. It also makes CRM/CSV imports a safer on-ramp for teams migrating data, by ensuring imported opportunities behave consistently with natively-created ones in analytics.",
+      "link": "https://www.onyx.app/27441"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

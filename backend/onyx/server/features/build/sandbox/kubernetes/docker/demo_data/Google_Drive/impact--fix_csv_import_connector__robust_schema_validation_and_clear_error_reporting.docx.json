@@ -1,0 +1,30 @@
+{
+  "id": "cde1b25640414c95bb80c73fa6f9863c",
+  "semantic_identifier": "Impact--Fix CSV import connector: robust schema validation and clear error reporting.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-05",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Fix CSV import connector: robust schema validation and clear error reporting.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature will materially improve the reliability and trustworthiness of our CSV import connector by ensuring we validate input schemas up front and prevent malformed issues from being created. Today, imports can intermittently fail or silently produce incorrect objects when required columns are missing, renamed, or contain invalid values, which creates downstream cleanup work and reduces confidence in bulk import workflows.\n\nBy adding strict schema validation (explicit required vs. optional fields and type/value checks), we will fail fast with clear, actionable feedback. Users will see row-level error reporting that pinpoints exactly what is wrong (e.g., missing column, invalid type, invalid enum/value), enabling them to correct the file quickly rather than guessing or retrying. This reduces support burden and shortens time-to-success for onboarding and migrations.\n\nCritically, this work will eliminate partial side effects: failed rows will not partially create themes/issues or leave the system in an inconsistent state. We will ensure successful rows import deterministically and consistently across runs, which improves data integrity and makes imports repeatable and auditable\u2014especially important for large batches where manual verification is impractical.\n\nOverall, the impact is fewer broken imports, higher-quality imported data, and a clearer user experience when errors occur. This should drive higher completion rates for CSV-based onboarding, reduce cleanup/support costs, and increase user confidence in using imports as a primary workflow.",
+      "link": "https://www.onyx.app/57703"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

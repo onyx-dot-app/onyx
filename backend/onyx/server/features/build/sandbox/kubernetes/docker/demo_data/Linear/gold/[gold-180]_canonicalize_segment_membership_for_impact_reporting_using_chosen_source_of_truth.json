@@ -1,0 +1,30 @@
+{
+  "id": "7513640",
+  "semantic_identifier": "[GOLD-180]: Canonicalize segment membership for impact reporting using chosen source of truth",
+  "title": "Canonicalize segment membership for impact reporting using chosen source of truth",
+  "source": "linear",
+  "doc_updated_at": "2025-08-13",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "kevin_sullivan",
+      "email": "kevin_sullivan@netherite-extraction.onyx.app"
+    },
+    "state": "in_progress",
+    "priority": "low",
+    "created_at": "2025-08-13"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a segment canonicalization layer in Issue_Tracker\u2019s impact-reporting pipeline based on the \u201csource of truth\u201d decisions from GOLD-179. Normalize segment identifiers/names and compute membership from the selected system (CRM or Customer_Analyzer) before aggregating impacted customers/revenue. Add a fallback for unmapped segments that flags them as \u201cunknown/mismatched\u201d rather than silently mixing definitions.",
+      "link": "https://www.onyx.app/60612"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

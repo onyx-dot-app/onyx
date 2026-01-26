@@ -1,0 +1,30 @@
+{
+  "id": "86ed337d79644bdba8d2bd1c6d624ae3",
+  "semantic_identifier": "Impact--Add drift-triggered evaluation + calibration pipeline for Sales_Accelerator models.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-30",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add drift-triggered evaluation + calibration pipeline for Sales_Accelerator models.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds an automated, drift-triggered evaluation and calibration pipeline for the Sales_Accelerator model suite (forecasting, best-next-action, and risk alerts). When our existing drift signals flag a segment, an offline job will snapshot the most recent data for that segment and run a standardized evaluation pass without requiring manual analyst intervention.\n\nThe pipeline will quantify whether the drift corresponds to real performance degradation by computing both ML quality metrics and calibration health. In addition to core evaluation outputs per model type, it will generate calibration diagnostics (e.g., reliability curves and Brier score) to detect over/under-confidence that can silently degrade downstream decisioning even when ranking metrics look stable.\n\nTo translate technical changes into business impact, the job will also compute deltas in key business KPIs versus the currently deployed model for the same segment/timeframe. This creates a consistent, repeatable \u201cis it actually worse?\u201d gate that helps prevent unnecessary retraining while ensuring we react quickly when user-facing outcomes are at risk.\n\nAll results will be stored with model/version and timeframe metadata, enabling downstream retraining or recalibration work to reference an authoritative baseline. The expected impact is faster and more reliable drift response, fewer false-positive retraining cycles, and improved trust in Sales_Accelerator recommendations through continuous calibration monitoring.",
+      "link": "https://www.onyx.app/21789"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

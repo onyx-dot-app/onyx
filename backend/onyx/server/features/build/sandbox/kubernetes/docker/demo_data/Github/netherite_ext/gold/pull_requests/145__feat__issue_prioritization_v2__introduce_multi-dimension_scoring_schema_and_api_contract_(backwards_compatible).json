@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#145",
+  "semantic_identifier": "145: feat: Issue prioritization v2: introduce multi-dimension scoring schema + API contract (backwards compatible)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-25",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "145",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "10",
+    "labels": [],
+    "created_at": "2025-07-25",
+    "updated_at": "2025-07-25",
+    "closed_at": "2025-08-01"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds the backend schema and API contract needed for Issue Prioritization v2 to support multi-view scoring, while keeping the existing single-score behavior intact.\n\nChanges\n- Data model: introduces a normalized representation for per-dimension scoring.\n  - Stores scores per dimension (e.g., support_sla_risk, product_impact, sales_deal_blocker).\n  - Stores per-dimension weights.\n  - Stores a computed aggregated score.\n  - Keeps the existing legacy single-score field(s) and treats them as the fallback source of truth when v2 fields are absent.\n- Migrations: adds new tables/columns needed for v2 scoring and includes a safe backfill path so existing issues continue to return the same prioritization score.\n- API contract:\n  - Extends issue prioritization read responses to optionally return `scoresByDimension`, `weightsByDimension`, and `aggregatedScore`.\n  - Accepts v2 scoring payloads on write/update endpoints while still supporting legacy single-score inputs.\n  - Defines deterministic aggregation behavior (weighted sum) when v2 fields are provided; otherwise returns the legacy score.\n- Compatibility/rollout:\n  - No UI changes.\n  - No saved profile/tuning controls included.\n  - Existing clients can continue using the legacy score without changes; newer clients can start sending/reading v2 fields.\n\nNotes\n- This is intentionally scoped to schema + API surfaces only (low priority): scoring dimensions, profile management, and tuning controls will be implemented in follow-up PRs.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#145"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

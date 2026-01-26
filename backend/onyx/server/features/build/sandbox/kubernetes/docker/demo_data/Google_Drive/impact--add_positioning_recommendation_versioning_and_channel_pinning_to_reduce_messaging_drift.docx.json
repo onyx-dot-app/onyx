@@ -1,0 +1,30 @@
+{
+  "id": "75cf0dad76ac4eab8d026ac5344aeda9",
+  "semantic_identifier": "Impact--Add positioning recommendation versioning and channel pinning to reduce messaging drift.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add positioning recommendation versioning and channel pinning to reduce messaging drift.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature reduces \u201cmessaging drift\u201d by introducing lightweight versioning for positioning recommendations and making that version explicit everywhere copy is authored and reviewed. Today, teams can update channel assets (e.g., web, email, paid) while implicitly relying on whatever the \u201ccurrent\u201d recommendation is, which makes it easy to unintentionally mix old and new guidance across channels.\n\nWe will add a simple recommendation version model keyed by segment, effective date, and author/approver, so there is a clear, auditable baseline of what was approved and when. This makes positioning changes intentional and traceable, enabling teams to evolve messaging without losing historical context or creating ambiguity about which guidance was used.\n\nEach messaging channel asset will be able to \u201cpin\u201d to an approved recommendation version, storing the pinned version ID directly on the asset. This turns the baseline from an assumption into a concrete reference per channel, allowing teams to update one channel at a time while still remaining consistent with the intended recommendation for that asset.\n\nFinally, we\u2019ll expose the pinned version ID via the internal API so the existing messaging consistency audit can compare copy against the correct baseline for that asset, rather than a potentially newer recommendation. The expected impact is fewer cross-channel inconsistencies, less rework during reviews, and higher confidence that approved positioning is applied correctly as recommendations evolve.",
+      "link": "https://www.onyx.app/50401"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

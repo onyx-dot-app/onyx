@@ -1,0 +1,145 @@
+{
+  "id": "FIREFLIES_2959037",
+  "semantic_identifier": "2959037 - Tideglass Ocean Research - sales_pitch - Discussion with Victoria Herrera",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-05 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-05 00:00:00",
+    "duration_min": "26"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "2959037 - Tideglass Ocean Research - sales_pitch - Discussion with Victoria Herrera",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Victoria\u2014Camila Vega here. Thanks for taking a few minutes. I\u2019ll keep this quick. I\u2019m calling because we\u2019ve been helping VP Sales teams reduce end-of-quarter surprises by adding a lightweight sales execution layer on top of Salesforce or HubSpot. It\u2019s called Sales_Accelerator, and it\u2019s focused on forecasting and early warning signals\u2014so teams don\u2019t find out a \u201ccommit\u201d deal is actually slipping when it\u2019s too late.",
+      "link": "https://www.onyx.app/6534984-1"
+    },
+    {
+      "text": "Victoria Herrera: Hi Camila. I\u2019ve got about five minutes. We\u2019re not really looking at new sales tools right now\u2014what exactly is it?",
+      "link": "https://www.onyx.app/6534984-2"
+    },
+    {
+      "text": "Camila Vega: Totally understood. Sales_Accelerator sits on top of your CRM\u2014so it\u2019s not a rip-and-replace\u2014and it looks at the actual deal signals that predict slippage: stage aging beyond benchmark, inactivity, no upcoming meeting, and things like being single-threaded or having pricing/terms risk. The big value is it proactively alerts reps and managers when a deal is weakening, and it recommends the next best action to stabilize it.",
+      "link": "https://www.onyx.app/6534984-3"
+    },
+    {
+      "text": "Victoria Herrera: We already do deal reviews and our managers track deal health. Is this basically just another dashboard?",
+      "link": "https://www.onyx.app/6534984-4"
+    },
+    {
+      "text": "Camila Vega: Fair question\u2014it\u2019s not just a dashboard. The difference is the warning_alerts are proactive and explainable. Instead of someone remembering to check a report, it pushes alerts to Slack, email, or into the CRM when, say, a commit deal has aged too long, has no next meeting on the calendar, and engagement is dropping. Then it suggests a remediation play\u2014like \u201creconfirm timeline,\u201d \u201cschedule exec alignment,\u201d or \u201csend security pack\u201d\u2014depending on what\u2019s missing.",
+      "link": "https://www.onyx.app/6534984-5"
+    },
+    {
+      "text": "Victoria Herrera: We don\u2019t use Slack, and we\u2019re pretty careful about notifications. We already have too many systems sending alerts people ignore.",
+      "link": "https://www.onyx.app/6534984-6"
+    },
+    {
+      "text": "Camila Vega: That\u2019s a common concern. The alerts can be tuned so it\u2019s only the high-impact situations\u2014like commit deals that are actually weakening\u2014rather than everything that\u2019s slightly off. And if Slack isn\u2019t in play, we can route into CRM tasks or a weekly manager digest. The goal is fewer, higher-quality signals so your team focuses on what matters.",
+      "link": "https://www.onyx.app/6534984-7"
+    },
+    {
+      "text": "Victoria Herrera: I\u2019m still not sure who would own this. I\u2019m not VP Sales\u2014I handle operations, but we\u2019re slammed and not adding more admin work.",
+      "link": "https://www.onyx.app/6534984-8"
+    },
+    {
+      "text": "Camila Vega: Makes sense. The ops lift is typically low because we leverage what\u2019s already in the CRM\u2014activities, stage timestamps, meeting fields\u2014so you\u2019re not maintaining another spreadsheet process. The use case we see most is VP Sales improving quarter-end accuracy by replacing manual rollups with an explainable forecast that highlights which commit deals are weakening\u2014stage age plus no next meeting plus low engagement\u2014and then running more targeted deal reviews.",
+      "link": "https://www.onyx.app/6534984-9"
+    },
+    {
+      "text": "Victoria Herrera: We do have manual rollups, but it\u2019s not the biggest pain. And forecasting accuracy\u2026 honestly, our leadership cares, but they\u2019re not going to buy something new mid-year.",
+      "link": "https://www.onyx.app/6534984-10"
+    },
+    {
+      "text": "Camila Vega: Understood. If timing is the blocker, one option is a small pilot focused just on warning signals\u2014no process overhaul. Even within a quarter, it can help prevent avoidable slippage by surfacing issues early, especially on deals that look fine until they don\u2019t.",
+      "link": "https://www.onyx.app/6534984-11"
+    },
+    {
+      "text": "Victoria Herrera: We\u2019re also in a niche space. Tideglass isn\u2019t a high-volume sales org. Our pipeline is smaller, longer cycles. Tools that work for SaaS don\u2019t always translate.",
+      "link": "https://www.onyx.app/6534984-12"
+    },
+    {
+      "text": "Camila Vega: That\u2019s helpful context. Sales_Accelerator is more about deal momentum than high volume. Long cycles are exactly where stage aging, inactivity, and \u201cno next meeting\u201d become silent killers. If a deal sits in the same stage with no meeting scheduled, that\u2019s a strong indicator regardless of industry. The system just makes that visible earlier and consistent across reps.",
+      "link": "https://www.onyx.app/6534984-13"
+    },
+    {
+      "text": "Victoria Herrera: We already have CRM hygiene issues. If meetings aren\u2019t logged perfectly, won\u2019t this just produce false alarms?",
+      "link": "https://www.onyx.app/6534984-14"
+    },
+    {
+      "text": "Camila Vega: The quality of signals depends on data, yes. In practice, we start with the signals you already trust and can measure reliably. For example: stage age is usually clean. \u201cNo upcoming meeting\u201d depends on whether the calendar integration is consistent. We can start with a conservative set so it doesn\u2019t spam people. But if hygiene is a big gap, this might feel noisy at first.",
+      "link": "https://www.onyx.app/6534984-15"
+    },
+    {
+      "text": "Victoria Herrera: That\u2019s kind of what I\u2019m worried about. Also, we\u2019re in the middle of a CRM cleanup and a territory redesign. I can\u2019t take on another system implementation conversation.",
+      "link": "https://www.onyx.app/6534984-16"
+    },
+    {
+      "text": "Camila Vega: I hear you. If it helps, because we sit on top of the CRM, the implementation is typically lighter than a core-system change\u2014but it still requires time and attention from ops, and I don\u2019t want to pretend otherwise. Maybe the better question is: is there a concrete forecasting or slippage problem leadership is pushing you to solve right now?",
+      "link": "https://www.onyx.app/6534984-17"
+    },
+    {
+      "text": "Victoria Herrera: Not urgently. They complain at quarter-end like everyone does, but it\u2019s not at \u201cbuy software\u201d level. Our bigger priority is data cleanliness and process consistency.",
+      "link": "https://www.onyx.app/6534984-18"
+    },
+    {
+      "text": "Camila Vega: That\u2019s fair. Sales_Accelerator can support consistency, but it\u2019s not a magic fix for data cleanliness. If your team is focused on foundation work this quarter, it may be better to revisit once the CRM cleanup is further along\u2014so the alerts and forecasting are more trustworthy from day one.",
+      "link": "https://www.onyx.app/6534984-19"
+    },
+    {
+      "text": "Victoria Herrera: Yeah, I think that\u2019s right. Also, I\u2019m not the decision maker for new sales tools. I\u2019d have to pull in our VP Sales and I don\u2019t want to do that unless there\u2019s a real initiative.",
+      "link": "https://www.onyx.app/6534984-20"
+    },
+    {
+      "text": "Camila Vega: Completely reasonable. Would it be helpful if I sent a short one-pager on the warning_alerts concept and the forecasting use case\u2014just so you have it for later if leadership asks about improving commit accuracy?",
+      "link": "https://www.onyx.app/6534984-21"
+    },
+    {
+      "text": "Victoria Herrera: You can send something, sure. But I can\u2019t promise it\u2019ll get attention right now.",
+      "link": "https://www.onyx.app/6534984-22"
+    },
+    {
+      "text": "Camila Vega: That\u2019s okay. What\u2019s the best email for you? And if you don\u2019t mind\u2014when would be a better time to re-check in? After your CRM cleanup milestone, or after territory work settles?",
+      "link": "https://www.onyx.app/6534984-23"
+    },
+    {
+      "text": "Victoria Herrera: Email is victoria.herrera@tideglass\u2026 and check back maybe in late Q2. But again, no guarantees.",
+      "link": "https://www.onyx.app/6534984-24"
+    },
+    {
+      "text": "Camila Vega: Perfect\u2014late Q2 it is. I\u2019ll send a concise overview focused on the two things we discussed: early warning alerts for weakening commit deals\u2014stage aging, inactivity, no next meeting\u2014and how that supports more targeted deal reviews without spreadsheets. Thanks for your time today, Victoria.",
+      "link": "https://www.onyx.app/6534984-25"
+    },
+    {
+      "text": "Victoria Herrera: Thanks, Camila. Bye.",
+      "link": "https://www.onyx.app/6534984-26"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "victoria_herrera@tideglass_ocean_research.onyx.app"
+    }
+  ]
+}

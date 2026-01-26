@@ -1,0 +1,165 @@
+{
+  "id": "FIREFLIES_9413408",
+  "semantic_identifier": "9413408 - Kestrelbloom Agriculture - sales_call - Discussion with Sami Hamdan",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-06-16 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-06-16 00:00:00",
+    "duration_min": "35"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-06"
+      ],
+      "year_month": "2025-06",
+      "meeting_title": "9413408 - Kestrelbloom Agriculture - sales_call - Discussion with Sami Hamdan",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Sami\u2014good to see you again. Last time you mentioned you liked the idea of using your Customer_Analyzer fit scores to focus reps and clean up the \u201cspray and pray\u201d follow-up. Today I wanted to show how Sales_Accelerator takes that interest and gets you to consistent execution: tighter forecasting and really practical best-next actions after discovery. Does that still line up with what you\u2019re trying to solve this quarter?",
+      "link": "https://www.onyx.app/6349311-1"
+    },
+    {
+      "text": "Sami Hamdan: Yeah, it does. The fit scoring is helping, but the follow-through is inconsistent. And forecasting\u2026 we\u2019re still doing a lot of gut feel in the last two weeks of the month.",
+      "link": "https://www.onyx.app/6349311-2"
+    },
+    {
+      "text": "Camila Vega: Perfect\u2014those are exactly the two areas I want to focus on for this call: (1) sales_forecast, and (2) post-discovery follow-up recommendations for AEs. I\u2019ll keep it concrete and tied to how your team works at Kestrelbloom. Quick check: are you still on Salesforce and logging meetings in your calendar with notes in the CRM?",
+      "link": "https://www.onyx.app/6349311-3"
+    },
+    {
+      "text": "Sami Hamdan: Yes\u2014Salesforce, and meetings are mostly on Google Calendar. Notes are mixed. Some reps are great, some are\u2026 not.",
+      "link": "https://www.onyx.app/6349311-4"
+    },
+    {
+      "text": "Camila Vega: That\u2019s common. On forecasting first: Sales_Accelerator sits on top of Salesforce. It takes your stage data, but it doesn\u2019t stop there\u2014it blends in activity signals like last touch, meeting scheduled, email engagement, and stage age. Optionally, it weights forecasts by Customer_Analyzer fit tier, so a Tier 1 ICP deal with clean activity looks different than a Tier 3 \u201crandom inbound\u201d sitting stale in stage 2.",
+      "link": "https://www.onyx.app/6349311-5"
+    },
+    {
+      "text": "Sami Hamdan: Okay. How is that different from a standard pipeline report plus some custom fields? We\u2019ve tried a few dashboards.",
+      "link": "https://www.onyx.app/6349311-6"
+    },
+    {
+      "text": "Camila Vega: Great question. The difference is twofold: explainable drivers and diagnostics. You don\u2019t just get a commit number\u2014you get \u201cwhy.\u201d For example, it will show: this deal is in proposal, but stage age is 2x your benchmark, there hasn\u2019t been a meeting scheduled in 14 days, and historical win rate for deals like this\u2014same segment, similar ACV, same fit tier\u2014is 18%, not 55%. Then it flags slippage risk and recommends a concrete next step, like \u201cschedule mutual action plan review with economic buyer\u201d rather than \u201cfollow up.\u201d",
+      "link": "https://www.onyx.app/6349311-7"
+    },
+    {
+      "text": "Sami Hamdan: The \u201cwhy\u201d part matters. My team will push back hard if it feels like a black box scoring them.",
+      "link": "https://www.onyx.app/6349311-8"
+    },
+    {
+      "text": "Camila Vega: Totally\u2014and that\u2019s one of the potential pitfalls we see: trust and explainability. We designed the forecast to be \u201cshow your work.\u201d Managers can click into the drivers\u2014stage age, last touch, next meeting, fit tier\u2014and see the benchmarks it\u2019s using. Reps see the same thing, so it\u2019s not a mysterious grade; it\u2019s a set of observable signals. And you can tune which drivers matter most for your business\u2014like if you want \u201cnext meeting scheduled\u201d to be a stronger predictor than email activity, that\u2019s configurable.",
+      "link": "https://www.onyx.app/6349311-9"
+    },
+    {
+      "text": "Sami Hamdan: That helps. Another concern: reps already complain about too many tools. If this is another screen they have to live in, adoption will be rough.",
+      "link": "https://www.onyx.app/6349311-10"
+    },
+    {
+      "text": "Camila Vega: Fair. We\u2019re not trying to replace Salesforce\u2014Sales_Accelerator is an execution layer on top. The way most teams roll it out is lightweight: managers use the forecast and risk views in their weekly pipeline meeting, and reps use the \u201cnext action\u201d cards tied to their opps. It\u2019s integrated so they can jump from an opp record, see the drivers, and one-click create the recommended follow-up tasks\u2014without re-entering data. The goal is fewer manual updates, not more.",
+      "link": "https://www.onyx.app/6349311-11"
+    },
+    {
+      "text": "Sami Hamdan: Okay. Talk to me about the post-discovery follow-up piece. That\u2019s where deals stall for us\u2014people do a discovery call, then the recap is either late or generic.",
+      "link": "https://www.onyx.app/6349311-12"
+    },
+    {
+      "text": "Camila Vega: Exactly. Here\u2019s the AE use case you described last time, and how it works in Sales_Accelerator: right after discovery, it drafts a recap email based on the meeting notes and CRM fields. Then it suggests two tailored proof points pulled from the approved positioning library\u2014importantly, the same positioning blocks Customer_Analyzer already maintains, so you\u2019re not duplicating messaging. Finally, it creates a mutual action plan: due dates, stakeholders, and next meeting milestone, so you can multi-thread and keep momentum.",
+      "link": "https://www.onyx.app/6349311-13"
+    },
+    {
+      "text": "Sami Hamdan: When you say \u201cpositioning library,\u201d does that mean we have to build a bunch of assets from scratch?",
+      "link": "https://www.onyx.app/6349311-14"
+    },
+    {
+      "text": "Camila Vega: Not from scratch. Since you\u2019re already using Customer_Analyzer for fit scores and positioning blocks, Sales_Accelerator consumes that. Practically, you\u2019d start with your top two segments\u2014say, your mid-market growers vs. enterprise co-ops\u2014and map your existing proof points into those blocks. Then the system recommends the right ones based on fit tier and what came up in discovery.",
+      "link": "https://www.onyx.app/6349311-15"
+    },
+    {
+      "text": "Sami Hamdan: That could be valuable. But again\u2014how does it decide what proof points to use? I don\u2019t want reps sending something that doesn\u2019t match what the customer cares about.",
+      "link": "https://www.onyx.app/6349311-16"
+    },
+    {
+      "text": "Camila Vega: That\u2019s the other trust angle, and we handle it the same way: transparency. The tool shows, \u201cI\u2019m recommending proof point A because the account is Tier 1 ICP and the discovery notes mention X pain; and proof point B because similar deals won on Y outcome.\u201d And you can require rep approval before anything is sent\u2014nothing has to go out automatically. Over time, you can also lock the library to approved content only.",
+      "link": "https://www.onyx.app/6349311-17"
+    },
+    {
+      "text": "Sami Hamdan: Good. What about forecasting accuracy\u2014how quickly does it get better? We have some messy historical data.",
+      "link": "https://www.onyx.app/6349311-18"
+    },
+    {
+      "text": "Camila Vega: You\u2019ll see value quickly even with imperfect history because stage age, last touch, and meeting scheduled are real-time signals. For the historical win-rate benchmarks, we typically start with what you have and improve as you normalize a few fields\u2014segment, source, ACV band, and outcome. Most teams run it in parallel for a few weeks: compare your current commit to Sales_Accelerator\u2019s commit, then calibrate. The important part is it gives you early warning signals before the last two weeks of the month.",
+      "link": "https://www.onyx.app/6349311-19"
+    },
+    {
+      "text": "Sami Hamdan: That early warning is what I want. Our leadership keeps asking, \u201cWhich deals are real?\u201d and I\u2019m stuck chasing reps.",
+      "link": "https://www.onyx.app/6349311-20"
+    },
+    {
+      "text": "Camila Vega: Exactly. The forecast view will highlight \u201cat risk\u201d deals with the reasons\u2014like no next meeting, stakeholder missing, or slippage pattern. That gives you a clean coaching moment: \u201cHere\u2019s what needs to happen by Friday to keep this in commit,\u201d and the mutual action plan makes that concrete.",
+      "link": "https://www.onyx.app/6349311-21"
+    },
+    {
+      "text": "Sami Hamdan: If we did this, what would implementation look like? I don\u2019t want a six-month project.",
+      "link": "https://www.onyx.app/6349311-22"
+    },
+    {
+      "text": "Camila Vega: It\u2019s not. Since it sits on Salesforce and connects to Customer_Analyzer, the first phase is integration and mapping\u2014usually a couple of weeks. Then we pick one team\u2014maybe your four AEs covering the Midwest region\u2014and run a pilot focused on two motions: post-discovery follow-up and weekly forecast. Success metrics are simple: recap email sent within 2 hours of discovery, mutual action plan created for qualified opps, reduction in stage slippage, and forecast delta vs. actuals.",
+      "link": "https://www.onyx.app/6349311-23"
+    },
+    {
+      "text": "Sami Hamdan: That\u2019s reasonable. Pricing aside, my last hurdle is internal buy-in. My VP will ask, \u201cHow do we know reps won\u2019t ignore it?\u201d",
+      "link": "https://www.onyx.app/6349311-24"
+    },
+    {
+      "text": "Camila Vega: The best lever is making it part of existing rituals. For example: in pipeline review, managers pull the Sales_Accelerator forecast and risk drivers\u2014not a rep\u2019s spreadsheet. And for reps, we focus on what saves time: the drafted recap email and one-click mutual action plan. When the tool consistently removes busywork and helps them progress deals, adoption follows. We can also set it up so key actions\u2014like creating the action plan\u2014are the default next step after discovery for qualified opps.",
+      "link": "https://www.onyx.app/6349311-25"
+    },
+    {
+      "text": "Sami Hamdan: Alright. I\u2019m interested. What do you need from me to move to the next step?",
+      "link": "https://www.onyx.app/6349311-26"
+    },
+    {
+      "text": "Camila Vega: Great\u2014two things. First, let\u2019s align on the pilot scope: Midwest AEs, focus on post-discovery follow-up plus sales_forecast in weekly reviews. Second, I\u2019d like to book a 45-minute working session next week where you bring your Salesforce admin for the mapping checklist\u2014no big prep, just access and confirmation of fields. If that goes well, I\u2019ll send a short pilot proposal with timelines and success metrics for your VP to approve. Does Tuesday or Wednesday work?",
+      "link": "https://www.onyx.app/6349311-27"
+    },
+    {
+      "text": "Sami Hamdan: Wednesday morning is best. I can bring our admin. Send me a calendar invite and a one-pager I can forward to my VP.",
+      "link": "https://www.onyx.app/6349311-28"
+    },
+    {
+      "text": "Camila Vega: Done. I\u2019ll send the invite for Wednesday 10am and a one-pager summarizing the pilot goals\u2014forecast accuracy and faster, higher-quality follow-up\u2014with the explainability piece highlighted so your VP knows it\u2019s not a black box. Anything else you want me to include for her?",
+      "link": "https://www.onyx.app/6349311-29"
+    },
+    {
+      "text": "Sami Hamdan: Emphasize the \u201cwhy this is at risk\u201d drivers. That\u2019s what leadership keeps asking for.",
+      "link": "https://www.onyx.app/6349311-30"
+    },
+    {
+      "text": "Camila Vega: Perfect\u2014I\u2019ll make that front and center. Thanks, Sami. I\u2019ll follow up in the next hour with the materials and the invite.",
+      "link": "https://www.onyx.app/6349311-31"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sami_hamdan@kestrelbloom_agriculture.onyx.app"
+    }
+  ]
+}

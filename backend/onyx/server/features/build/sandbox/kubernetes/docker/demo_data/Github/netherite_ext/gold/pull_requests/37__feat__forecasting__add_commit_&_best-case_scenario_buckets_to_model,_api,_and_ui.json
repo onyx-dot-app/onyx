@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#37",
+  "semantic_identifier": "37: feat: Forecasting: Add Commit & Best-Case scenario buckets to model, API, and UI",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-09-07",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "37",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "3",
+    "labels": [],
+    "created_at": "2025-09-07",
+    "updated_at": "2025-09-07",
+    "closed_at": "2025-10-05"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds first-class support for Commit and Best-Case forecast scenarios end-to-end (storage \u2192 aggregation \u2192 API \u2192 UI) alongside the existing baseline forecast.\n\nKey changes\n- Data model / schema\n  - Introduces scenario-aware forecast storage by adding a scenario dimension (enum: BASELINE, COMMIT, BEST_CASE) to forecast records (or equivalent schema extension), with indexes/unique constraints to prevent duplicate scenario rows per (org/account/opportunity, period).\n  - Adds a migration/backfill to populate BASELINE for existing records and initializes COMMIT/BEST_CASE aggregates where applicable.\n\n- Scenario assignment\n  - Derives scenario from CRM stage/forecast category for each opportunity (e.g., CRM forecastCategory: \"Commit\" \u2192 COMMIT, \"BestCase\" \u2192 BEST_CASE, otherwise \u2192 BASELINE).\n  - Applies a single mapping function in the ingestion/normalization layer so categorization is consistent across all accounts/opportunities and stable across runs.\n  - Includes a safe default mapping when CRM category is missing/unknown.\n\n- Forecast aggregation pipeline\n  - Updates rollups to compute totals by scenario per time bucket (e.g., month/quarter) without changing baseline behavior.\n  - Ensures scenario totals are computed from the same underlying opportunity set and filters as baseline; only the scenario bucket differs.\n\n- API changes\n  - Extends the forecast endpoint response to include scenario totals (commitTotal, bestCaseTotal) next to the existing baseline total, and returns a per-period breakdown for each scenario where applicable.\n  - Maintains backward compatibility: baseline fields are unchanged; new fields are additive.\n\n- UI updates\n  - Updates forecast UI components to display Commit and Best-Case totals alongside baseline, including per-period values where shown.\n  - Adds labels/legend and keeps existing baseline charts/tables intact.\n\nOperational notes\n- Includes migrations; deploy requires running DB migrations before/with application rollout.\n- Adds/updates tests covering CRM\u2192scenario mapping, aggregation correctness, and API contract for the new fields.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#37"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

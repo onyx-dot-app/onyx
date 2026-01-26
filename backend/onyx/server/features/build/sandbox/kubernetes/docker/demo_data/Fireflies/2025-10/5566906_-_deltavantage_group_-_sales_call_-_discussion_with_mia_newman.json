@@ -1,0 +1,165 @@
+{
+  "id": "FIREFLIES_5566906",
+  "semantic_identifier": "5566906 - Deltavantage Group - sales_call - Discussion with Mia Newman",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-10-19 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-10-19 00:00:00",
+    "duration_min": "41"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-10"
+      ],
+      "year_month": "2025-10",
+      "meeting_title": "5566906 - Deltavantage Group - sales_call - Discussion with Mia Newman",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Mia\u2014good to see you again. Last time you mentioned you were interested in tightening SDR prioritization and making outbound more consistent without forcing everyone into rigid scripts. Today I wanted to focus on Sales_Accelerator\u2014specifically how it uses your Customer_Analyzer fit tiers to recommend the next accounts to work and the best opening angle for each. If we can line that up with how Deltavantage runs outbound today, we should be able to get to a clear \u201cyes/no\u201d on next steps. Sound good?",
+      "link": "https://www.onyx.app/6392339-1"
+    },
+    {
+      "text": "Mia Newman: Yes, that\u2019s perfect. We definitely have interest\u2014our SDRs are busy, but not always on the right accounts, and messaging varies a lot by rep.",
+      "link": "https://www.onyx.app/6392339-2"
+    },
+    {
+      "text": "Camila Vega: Great. Let me anchor on one workflow: your SDR lead logs in Monday morning, and Sales_Accelerator pulls in the latest CRM account data plus engagement/intent signals and the Customer_Analyzer fit score and positioning blocks. Then it generates a \u201cnext 50 accounts\u201d list\u2014ranked\u2014with a recommended contact, angle, and a first-touch package: an email draft, a LinkedIn opener, and a quick call talk track. The idea is fewer hours spent guessing, more hours executing.",
+      "link": "https://www.onyx.app/6392339-3"
+    },
+    {
+      "text": "Mia Newman: The \u201cnext 50\u201d is interesting. But we\u2019ve tried prioritization tools before and adoption was rough. Reps didn\u2019t trust the list, and managers couldn\u2019t explain why an account was ranked higher.",
+      "link": "https://www.onyx.app/6392339-4"
+    },
+    {
+      "text": "Camila Vega: Totally fair\u2014and that\u2019s actually one of the main pitfalls we see: the trust/explainability gap. The way we handle it is the recommendations are always linked to rationale. So for each account, the rep can see: (1) the Customer_Analyzer fit drivers\u2014like \u201cmatches tier-1 ICP, 3 of 4 firmographic signals,\u201d (2) the segment positioning block that the message is based on, and (3) detected trigger events\u2014like recent hiring, tech changes, or inbound engagement. Managers can also roll that up so coaching is \u201chere\u2019s why this was a good pick,\u201d not \u201cbecause the tool said so.\u201d",
+      "link": "https://www.onyx.app/6392339-5"
+    },
+    {
+      "text": "Mia Newman: Okay, that helps. But I want to be careful: we have a very specific positioning doc. If your system is generating openers, I don\u2019t want it going off-brand or inventing claims.",
+      "link": "https://www.onyx.app/6392339-6"
+    },
+    {
+      "text": "Camila Vega: Completely agree. Sales_Accelerator isn\u2019t trying to replace your positioning work\u2014it consumes what you already approved in Customer_Analyzer. The \u201cpositioning blocks\u201d are the source of truth, and the drafts are assembled from those blocks and your proof points/objection handlers. In practice, teams set guardrails: approved value props by segment, approved proof points, and \u201cdo not say\u201d language. Then the rep can personalize within that, but it stays aligned.",
+      "link": "https://www.onyx.app/6392339-7"
+    },
+    {
+      "text": "Mia Newman: That\u2019s good. How much setup is that on our side? Because Sales Ops is stretched.",
+      "link": "https://www.onyx.app/6392339-8"
+    },
+    {
+      "text": "Camila Vega: Minimal, especially since you already have Customer_Analyzer outputs in place from the first call. The setup is basically: connect CRM, map your fit tiers and segments, and choose what intent/engagement signals you want to weight. Then we create one or two initiation playbooks\u2014say, \u201cTier 1 Outbound\u201d and \u201cInbound Follow-up\u201d\u2014and you can start with just email + talk track before adding LinkedIn if you want.",
+      "link": "https://www.onyx.app/6392339-9"
+    },
+    {
+      "text": "Mia Newman: When you say \u201cconnect CRM,\u201d are we talking a big implementation?",
+      "link": "https://www.onyx.app/6392339-10"
+    },
+    {
+      "text": "Camila Vega: No big rip-and-replace. It sits on top of Salesforce or HubSpot. We\u2019re reading account/opportunity fields and writing back recommended next steps and playbooks as activity suggestions. Typically it\u2019s a light integration plus permissions. We can scope it tightly for a pilot: SDR team only, a single region, or a single segment.",
+      "link": "https://www.onyx.app/6392339-11"
+    },
+    {
+      "text": "Mia Newman: I like the pilot idea. Our SDR manager will ask: \u201cWhat metric improves, and how fast?\u201d",
+      "link": "https://www.onyx.app/6392339-12"
+    },
+    {
+      "text": "Camila Vega: For this specific feature\u2014sales initiation recommendations\u2014the primary metrics are reply rate, meetings set, and time-to-first-touch on the right accounts. The fastest signal is usually within 2\u20133 weeks: you\u2019ll see whether reps are getting more positive replies and whether the meeting conversion is higher on Tier 1 accounts. We also track adoption: how often reps accept recommendations, and where they override them\u2014because that feeds coaching and helps tune weighting.",
+      "link": "https://www.onyx.app/6392339-13"
+    },
+    {
+      "text": "Mia Newman: The override tracking is useful. But I\u2019m still thinking about trust. If an SDR says, \u201cThis account is wrong,\u201d do they have an easy way to say why?",
+      "link": "https://www.onyx.app/6392339-14"
+    },
+    {
+      "text": "Camila Vega: Yes. They can tag the reason when they override\u2014wrong segment, wrong contact, timing issue, already in a sequence, not a real fit, etc. And because the rationale is visible, you can have a much more productive conversation: \u201cIt\u2019s Tier 1 because of these drivers\u2014do we disagree with the drivers, or is the timing just off?\u201d Over time, that closes the trust gap because it\u2019s explainable and correctable.",
+      "link": "https://www.onyx.app/6392339-15"
+    },
+    {
+      "text": "Mia Newman: That makes sense. Another thing: our SDRs already use sequences in Outreach. Do they have to jump between tools?",
+      "link": "https://www.onyx.app/6392339-16"
+    },
+    {
+      "text": "Camila Vega: They don\u2019t have to. Sales_Accelerator can hand off the recommended message and the account to the sequence workflow you already use. Think of it as: it tells you who to work and how to start, then your existing sequencing engine does the execution at scale. We can keep the rep workflow simple\u2014one place to see the list and the rationale, then one click to launch their sequence.",
+      "link": "https://www.onyx.app/6392339-17"
+    },
+    {
+      "text": "Mia Newman: Okay. If we did a pilot, what would you need from us to make it real\u2014not just a demo?",
+      "link": "https://www.onyx.app/6392339-18"
+    },
+    {
+      "text": "Camila Vega: Three things. First, confirm the SDR team scope\u2014like 8\u201312 reps, one manager. Second, identify the segments or fit tiers you want to prioritize\u2014usually Tier 1 and Tier 2. Third, give us access to the Customer_Analyzer outputs you already have plus the CRM fields needed for routing. Then we\u2019ll stand up two initiation playbooks: a Tier 1 outbound playbook with segment-aligned openers and proof points, and an inbound follow-up playbook so leads don\u2019t cool off.",
+      "link": "https://www.onyx.app/6392339-19"
+    },
+    {
+      "text": "Mia Newman: And what would success look like in that pilot?",
+      "link": "https://www.onyx.app/6392339-20"
+    },
+    {
+      "text": "Camila Vega: We can define it together, but a common bar is: 15\u201325% lift in reply rate on Tier 1 outbound, measurable improvement in meeting creation per SDR, and at least 70% weekly adoption of the recommended list. Plus qualitative feedback: managers can explain \u201cwhy this account/message\u201d in 30 seconds, and reps feel it saves time rather than adding steps.",
+      "link": "https://www.onyx.app/6392339-21"
+    },
+    {
+      "text": "Mia Newman: Those are reasonable. I\u2019d want to make sure the positioning blocks are locked down before the SDRs see generated drafts.",
+      "link": "https://www.onyx.app/6392339-22"
+    },
+    {
+      "text": "Camila Vega: Absolutely. We\u2019d start with a \u201cmessage QA\u201d step: your team reviews the segment blocks and proof points in Customer_Analyzer, we import them, then we generate samples for your sign-off. Only after that do we roll it out to reps. That tends to build confidence early.",
+      "link": "https://www.onyx.app/6392339-23"
+    },
+    {
+      "text": "Mia Newman: Good. Last question: how do managers actually use it day-to-day? I don\u2019t want another dashboard that no one checks.",
+      "link": "https://www.onyx.app/6392339-24"
+    },
+    {
+      "text": "Camila Vega: Fair. Managers typically use two views: (1) the team\u2019s recommended next accounts and where reps are spending time\u2014so they can course-correct fast\u2014and (2) the \u201cwhy\u201d view for coaching: which fit drivers and triggers are leading to wins, and where reps are overriding. It turns pipeline hygiene meetings into execution coaching: \u201cWork these five accounts next, use this angle, here\u2019s the proof point, and here\u2019s why.\u201d",
+      "link": "https://www.onyx.app/6392339-25"
+    },
+    {
+      "text": "Mia Newman: That\u2019s exactly the kind of coaching we\u2019re trying to do, but it\u2019s manual right now.",
+      "link": "https://www.onyx.app/6392339-26"
+    },
+    {
+      "text": "Camila Vega: Perfect. Given what you\u2019ve shared, I\u2019d suggest we move to a 30-day pilot for Deltavantage: SDR team prioritization using Customer_Analyzer fit tiers, plus initiation playbooks for Tier 1 outbound and inbound follow-up. If we hit the lift and adoption targets, we roll it out broader. Are you comfortable if I send a pilot plan and we loop in your SDR manager for a working session this week?",
+      "link": "https://www.onyx.app/6392339-27"
+    },
+    {
+      "text": "Mia Newman: Yes\u2014send the pilot plan. I\u2019ll bring in our SDR manager and Sales Ops for the working session. I think this is worth moving forward.",
+      "link": "https://www.onyx.app/6392339-28"
+    },
+    {
+      "text": "Camila Vega: Great. I\u2019ll email a one-page pilot scope with success metrics, the integration checklist, and a few example initiation playbooks tailored to your Tier 1 segments. How\u2019s Thursday morning for the working session?",
+      "link": "https://www.onyx.app/6392339-29"
+    },
+    {
+      "text": "Mia Newman: Thursday morning works. Send an invite and we\u2019ll get it on the calendar.",
+      "link": "https://www.onyx.app/6392339-30"
+    },
+    {
+      "text": "Camila Vega: Will do. Thanks, Mia\u2014talk Thursday.",
+      "link": "https://www.onyx.app/6392339-31"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mia_newman@deltavantage_group.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "2d9442c978a94b8081a242d115474ce0",
+  "semantic_identifier": "Impact--Add audit trail for AI-generated content lifecycle (create/edit/export/delete).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-26",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add audit trail for AI-generated content lifecycle (create/edit/export/delete).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds an immutable, server-side audit trail for the full lifecycle of AI-generated artifacts in Sales_Accelerator\u2014emails, call notes, and next-best-action recommendations. We will capture and persist events for generate, view, edit, export, and delete actions across both UI-initiated and API-initiated flows, ensuring a complete, consistent system of record.\n\nEach audit event will store the key compliance fields needed for investigation and reporting: actor (user/service identity), timestamp, artifact ID and type, and the source business context (e.g., account and/or opportunity). For edit actions, we will additionally record before/after diffs to make content changes traceable without relying on user memory or external tooling.\n\nThe primary impact is improved compliance, governance, and operational readiness: Sales Ops and Admins will be able to query audit logs to support internal reviews, customer requests, and regulatory obligations (e.g., demonstrating who generated content, who modified it, and what was exported). Because logs are retained independently of RBAC UI gating and are captured server-side, this reduces the risk of tampering, missed events, or visibility gaps caused by front-end-only tracking.\n\nFrom a product and risk perspective, this increases customer trust in AI-assisted workflows and reduces support burden during escalations by making \u201cwhat happened\u201d quickly answerable. It also creates a foundation for future enhancements such as alerting on suspicious exports, retention policies, and standardized compliance reporting across additional artifact types.",
+      "link": "https://www.onyx.app/91613"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

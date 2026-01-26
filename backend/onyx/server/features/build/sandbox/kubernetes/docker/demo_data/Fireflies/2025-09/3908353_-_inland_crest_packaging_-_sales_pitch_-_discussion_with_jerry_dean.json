@@ -1,0 +1,193 @@
+{
+  "id": "FIREFLIES_3908353",
+  "semantic_identifier": "3908353 - Inland Crest Packaging - sales_pitch - Discussion with Jerry Dean",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-29 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-29 00:00:00",
+    "duration_min": "22"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "3908353 - Inland Crest Packaging - sales_pitch - Discussion with Jerry Dean",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hi Jerry\u2014Arjun Mehta here. Thanks for taking a few minutes. I work with product and go-to-market teams on getting really crisp about who their best customers are and where to focus next. How are things at Inland Crest Packaging?",
+      "link": "https://www.onyx.app/9622920-1"
+    },
+    {
+      "text": "Jerry Dean: Hey Arjun. Doing well, thanks. Busy as always. What can I help with?",
+      "link": "https://www.onyx.app/9622920-2"
+    },
+    {
+      "text": "Arjun Mehta: I\u2019ll be quick. I\u2019m calling because a lot of packaging and manufacturing-adjacent teams hit the same wall: you have a decent spread of customers, but it\u2019s hard to say\u2014based on data\u2014which segments are truly your \u201cbest fit,\u201d and which ones look good in pipeline but end up high-support or churn-risk. Does that resonate at all?",
+      "link": "https://www.onyx.app/9622920-3"
+    },
+    {
+      "text": "Jerry Dean: Yeah, it does. We\u2019ve got a mix\u2014some customers are great, some are a grind. We\u2019re trying to be more intentional about who we target.",
+      "link": "https://www.onyx.app/9622920-4"
+    },
+    {
+      "text": "Arjun Mehta: Exactly. The product is called Customer_Analyzer. It\u2019s a SaaS tool that pulls in signals you already have\u2014CRM fields, onboarding surveys, product usage, support tickets, even interview notes\u2014and turns that into a fit score per account and segment, plus very practical positioning recommendations.",
+      "link": "https://www.onyx.app/9622920-5"
+    },
+    {
+      "text": "Jerry Dean: Fit score how? Like a lead score?",
+      "link": "https://www.onyx.app/9622920-6"
+    },
+    {
+      "text": "Arjun Mehta: Similar idea, but it\u2019s grounded in outcomes, not just activity. The core feature is fit_estimation: it computes a 0\u2013100 customer-product fit score at the account level and then rolls that up by segment\u2014say SMB vs mid-market, or by industry, or by use case. You define fit drivers\u2014things like firmographics, problem severity, willingness to pay, time-to-value, adoption patterns, support burden, and churn-risk signals. Then it shows you two key things: the score, and a driver breakdown of why the score is high or low.",
+      "link": "https://www.onyx.app/9622920-7"
+    },
+    {
+      "text": "Jerry Dean: Okay. We do some of that manually in spreadsheets. It\u2019s\u2026 not great.",
+      "link": "https://www.onyx.app/9622920-8"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s usually how it starts. Spreadsheets, a few gut-feel categories, and it\u2019s hard to keep current. With Customer_Analyzer, you can answer questions like: \u201cWhich segment converts fastest and renews most reliably?\u201d and \u201cWhich segment is consuming support capacity but not expanding?\u201d\u2014and you can see it backed by the signals you\u2019re already collecting.",
+      "link": "https://www.onyx.app/9622920-9"
+    },
+    {
+      "text": "Jerry Dean: What would you need from us to do that? We have CRM data, and we have support tickets in a separate system.",
+      "link": "https://www.onyx.app/9622920-10"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s perfect. Typically we start with CRM fields\u2014industry, size, deal size, sales cycle length\u2014plus any onboarding or implementation milestones you track. Then we layer in support burden signals: ticket volume, categories, time-to-resolution, escalations. If you have product usage events, great, but it\u2019s not required on day one. The idea is to quickly get a first pass fit model, then refine.",
+      "link": "https://www.onyx.app/9622920-11"
+    },
+    {
+      "text": "Jerry Dean: And the output is basically \u201cgo after these customers\u201d?",
+      "link": "https://www.onyx.app/9622920-12"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s one output. But where teams get the most value is using it for product planning. If you\u2019re deciding where to place roadmap bets, you can identify the high-fit customers who still have unmet needs\u2014so you\u2019re not just building for the loudest accounts, you\u2019re building for the accounts most likely to renew and expand.",
+      "link": "https://www.onyx.app/9622920-13"
+    },
+    {
+      "text": "Jerry Dean: That\u2019s interesting. We\u2019re in planning right now, actually. We\u2019re debating two or three directions and it\u2019s a lot of opinion.",
+      "link": "https://www.onyx.app/9622920-14"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s a great time to do this. In practice, the workflow is: we generate the fit scores and segment comparisons, then you look at \u201chigh fit, high retention/expansion\u201d segments versus \u201clow fit, high support\u201d segments. You can make a call like, \u201cLet\u2019s prioritize features that remove friction for the high-fit segment,\u201d or, \u201cLet\u2019s stop chasing a segment that looks big but consistently under-adopts.\u201d",
+      "link": "https://www.onyx.app/9622920-15"
+    },
+    {
+      "text": "Jerry Dean: How long does it take to get something usable? I don\u2019t want a six-month data project.",
+      "link": "https://www.onyx.app/9622920-16"
+    },
+    {
+      "text": "Arjun Mehta: Totally fair. The goal is a fast first insight. If you can give us access to a CRM export and a support ticket export, we can usually turn around an initial fit scoring and driver breakdown in a couple of weeks. Then the next step is a review session where we validate whether the drivers match what your team knows\u2014and adjust.",
+      "link": "https://www.onyx.app/9622920-17"
+    },
+    {
+      "text": "Jerry Dean: And the driver breakdown\u2014what does that look like?",
+      "link": "https://www.onyx.app/9622920-18"
+    },
+    {
+      "text": "Arjun Mehta: Think of it like: this account scored 82 because it\u2019s in your target industry, reached time-to-value quickly, shows strong adoption signals, and has low support burden; whereas another account scored 41 because time-to-value is long, usage is sporadic, support tickets are high, and expansion historically doesn\u2019t happen in that segment. It makes the \u201cwhy\u201d explicit, so Sales, Product, and Marketing can align instead of debating anecdotes.",
+      "link": "https://www.onyx.app/9622920-19"
+    },
+    {
+      "text": "Jerry Dean: That alignment part would help. Sales says one thing, support says another, and product is in the middle.",
+      "link": "https://www.onyx.app/9622920-20"
+    },
+    {
+      "text": "Arjun Mehta: Exactly. Fit scoring gives you a shared language. Then, separately, we generate positioning recommendations\u2014value props, differentiators, proof points, and objection handling\u2014based on what\u2019s actually working with the highest-fit segments. So when you do target a segment, the messaging is consistent with the reality of what those customers care about.",
+      "link": "https://www.onyx.app/9622920-21"
+    },
+    {
+      "text": "Jerry Dean: Got it. But for now you\u2019re thinking start with fit scoring and segment analysis?",
+      "link": "https://www.onyx.app/9622920-22"
+    },
+    {
+      "text": "Arjun Mehta: Yes. For Inland Crest Packaging, I\u2019d suggest we focus on two things in the first pass: (1) account and segment-level fit scores with a driver breakdown, and (2) using that specifically for product planning\u2014identifying high-fit customers with unmet needs to guide your roadmap bets. If we get those right, the rest becomes much easier.",
+      "link": "https://www.onyx.app/9622920-23"
+    },
+    {
+      "text": "Jerry Dean: What would you need from me to evaluate whether this is worth it?",
+      "link": "https://www.onyx.app/9622920-24"
+    },
+    {
+      "text": "Arjun Mehta: Great question. I\u2019d propose a 45-minute working session next week with you and whoever owns product planning\u2014could be a product leader or ops\u2014where we map your current segments and agree on 6\u201310 fit drivers that matter for your business. After that, we can do a lightweight data pull and come back with a sample fit model and a segment comparison.",
+      "link": "https://www.onyx.app/9622920-25"
+    },
+    {
+      "text": "Jerry Dean: I can do that. I\u2019d probably pull in our product manager for the planning piece. Next week is okay.",
+      "link": "https://www.onyx.app/9622920-26"
+    },
+    {
+      "text": "Arjun Mehta: Perfect. Before we schedule, two quick checks so I don\u2019t waste your time: First, do you have a clear definition today of your \u201cbest customer,\u201d or is it still a bit fuzzy?",
+      "link": "https://www.onyx.app/9622920-27"
+    },
+    {
+      "text": "Jerry Dean: It\u2019s fuzzy. We have a couple hypotheses, but they\u2019re not validated.",
+      "link": "https://www.onyx.app/9622920-28"
+    },
+    {
+      "text": "Arjun Mehta: Second, are you seeing meaningful differences in support load or retention across customer types?",
+      "link": "https://www.onyx.app/9622920-29"
+    },
+    {
+      "text": "Jerry Dean: Yes. Certain customers open a ton of tickets and never really expand. Others barely need us and buy more.",
+      "link": "https://www.onyx.app/9622920-30"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s exactly the pattern Customer_Analyzer is designed to quantify. If we can turn that into a clear ICP recommendation and show the segment comparisons, you\u2019ll have something actionable for both targeting and roadmap prioritization.",
+      "link": "https://www.onyx.app/9622920-31"
+    },
+    {
+      "text": "Jerry Dean: Sounds promising. What days are you thinking?",
+      "link": "https://www.onyx.app/9622920-32"
+    },
+    {
+      "text": "Arjun Mehta: I have Tuesday at 11 a.m. or Thursday at 2 p.m. your time. We\u2019ll keep it tight: 10 minutes on your current segments, 20 minutes on fit drivers and available data, 15 minutes on what a good output would look like for your roadmap discussion.",
+      "link": "https://www.onyx.app/9622920-33"
+    },
+    {
+      "text": "Jerry Dean: Thursday at 2 works better. Send an invite and I\u2019ll add our product manager.",
+      "link": "https://www.onyx.app/9622920-34"
+    },
+    {
+      "text": "Arjun Mehta: Will do. I\u2019ll send a calendar invite for Thursday at 2, plus a short checklist of the data exports that are helpful\u2014CRM fields and a support ticket snapshot. No heavy lift before the call; even a sample export is fine.",
+      "link": "https://www.onyx.app/9622920-35"
+    },
+    {
+      "text": "Jerry Dean: Okay. Send it over and we\u2019ll take a look.",
+      "link": "https://www.onyx.app/9622920-36"
+    },
+    {
+      "text": "Arjun Mehta: Great, Jerry. Appreciate the time today. I\u2019ll get that invite out in the next few minutes, and we\u2019ll use Thursday to see if the fit scoring and driver breakdown can give you clearer direction for planning.",
+      "link": "https://www.onyx.app/9622920-37"
+    },
+    {
+      "text": "Jerry Dean: Sounds good. Talk Thursday.",
+      "link": "https://www.onyx.app/9622920-38"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "jerry_dean@inland_crest_packaging.onyx.app"
+    }
+  ]
+}

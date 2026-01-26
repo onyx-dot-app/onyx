@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#138",
+  "semantic_identifier": "138: feat: Persist DriftEvent records with model/version + segment context and internal retrieval API",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-10-27",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "138",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "6",
+    "labels": [],
+    "created_at": "2025-10-27",
+    "updated_at": "2025-10-27",
+    "closed_at": "2025-11-04"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds durable persistence for drift detections emitted by GOLD-125 by introducing a DriftEvent record that captures the full context needed for downstream recalibration workflows.\n\n## What changed\n- **New persistence model**: Introduces a `DriftEvent` entity/table to store:\n  - `model_name`, `model_version`\n  - `window_start`, `window_end` (time window evaluated)\n  - triggering metric details (e.g., `metric_name`, observed value(s), threshold(s), comparison/operator, evaluation run id)\n  - **affected segments** as structured key/value pairs (e.g., `icp_tier`, `industry`, `region`) with support for multi-value segments\n  - **data snapshot pointer** to reproduce the exact slice later (stored as either query parameters JSON and/or a dataset identifier)\n  - metadata: `created_at`, `source` (GOLD-125), `status` (e.g., `open/triaged/ignored/resolved`)\n\n- **GOLD-125 integration**: When drift is flagged, GOLD-125 now emits a DriftEvent write in the same execution path (best-effort, non-blocking to existing alerting).\n\n- **Internal API**: Adds internal endpoints for sales ops/engineering triage:\n  - `GET /internal/drift-events` with filters (model, version, time range, status, segment keys/values)\n  - `GET /internal/drift-events/:id` to fetch a single event including metrics + snapshot pointer\n\n## Implementation notes\n- Uses an append-only write pattern to preserve auditability; status updates are performed via a dedicated field rather than mutating core event payload.\n- Segment context is stored as normalized JSON (or equivalent structured type) to avoid schema churn as segment definitions evolve.\n- Snapshot pointer is intentionally lightweight (query params or dataset id) and does not store full datasets.\n\n## User impact / rollout\n- No changes to external/public APIs.\n- Enables downstream evaluation/retraining jobs to consume DriftEvents and reproduce slices without re-deriving segment logic.\n\n## Testing\n- Added unit tests for DriftEvent creation/validation and GOLD-125 emission.\n- Added API tests for list/get filtering and payload shape.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#138"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

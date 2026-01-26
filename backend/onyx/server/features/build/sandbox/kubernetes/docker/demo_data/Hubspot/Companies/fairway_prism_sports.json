@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_6721010",
+  "semantic_identifier": "Fairway Prism Sports",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-05-22 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "6721010",
+    "domain": "fairway_prism_sports.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Fairway Prism Sports\nDomain: fairway_prism_sports.onyx.app",
+      "link": "https://www.onyx.app/30411"
+    },
+    {
+      "text": "Contact: Natalie Wheeler\nEmail: natalie_wheeler@fairway_prism_sports.onyx.app",
+      "link": "https://www.onyx.app/15901"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

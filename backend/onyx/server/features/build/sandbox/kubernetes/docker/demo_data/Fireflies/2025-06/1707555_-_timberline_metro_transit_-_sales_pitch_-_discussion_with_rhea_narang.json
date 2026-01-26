@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_1707555",
+  "semantic_identifier": "1707555 - Timberline Metro Transit - sales_pitch - Discussion with Rhea Narang",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-06-03 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-06-03 00:00:00",
+    "duration_min": "40"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-06"
+      ],
+      "year_month": "2025-06",
+      "meeting_title": "1707555 - Timberline Metro Transit - sales_pitch - Discussion with Rhea Narang",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Rhea\u2014James Choi here. Thanks for taking a few minutes. I\u2019ll keep it tight. I\u2019m calling because we built Customer_Analyzer to help teams like yours get really clear on which customer segments are actually your best fit\u2014and then use that to prioritize roadmap and messaging. Does that map to anything you\u2019re working on at Timberline Metro Transit right now?",
+      "link": "https://www.onyx.app/2155036-1"
+    },
+    {
+      "text": "Rhea Narang: Hi James. We\u2019re in the middle of a few initiatives, but I\u2019m not sure we\u2019re looking for new tooling at the moment. What exactly does it do?",
+      "link": "https://www.onyx.app/2155036-2"
+    },
+    {
+      "text": "James Choi: Totally fair. In one sentence: we ingest the customer signals you already have\u2014CRM fields, onboarding surveys, product usage events, support tickets, even interview notes\u2014and we turn it into a fit score from 0 to 100 at the account and segment level, plus a breakdown of why. The practical outcome is you can see, for example, \u201cSegment A renews and expands, Segment B churns,\u201d and which drivers are behind that.",
+      "link": "https://www.onyx.app/2155036-3"
+    },
+    {
+      "text": "Rhea Narang: Okay. We already have reporting in our CRM and some dashboards. How is this different from analytics we can build internally?",
+      "link": "https://www.onyx.app/2155036-4"
+    },
+    {
+      "text": "James Choi: Great question. The difference is it\u2019s not just reporting\u2014it\u2019s fit estimation that\u2019s oriented around outcomes. You define fit drivers that matter to you\u2014industry or size, problem severity, willingness to pay, time-to-value, adoption patterns, support burden, churn risk signals\u2014then we score accounts and segments and show a driver-level explanation. So rather than \u201cusage is down,\u201d it becomes \u201cthis segment\u2019s support burden and time-to-value make them low-fit, and that\u2019s correlated with churn.\u201d It\u2019s meant to help teams align on an ICP and make sharper calls.",
+      "link": "https://www.onyx.app/2155036-5"
+    },
+    {
+      "text": "Rhea Narang: I get the concept. But we\u2019re a transit organization\u2014our \u201ccustomers\u201d are a mix of internal stakeholders, riders, partners. I\u2019m not sure your model applies cleanly.",
+      "link": "https://www.onyx.app/2155036-6"
+    },
+    {
+      "text": "James Choi: That makes sense, and it\u2019s a common question. When I say \u201ccustomer,\u201d it can be any account or segment you\u2019re trying to serve consistently\u2014partners, agencies, departments, even rider cohorts if you have the signals. The use case I see most for teams like yours is product planning: identifying the high-fit segments with unmet needs, so roadmap bets are driven by the groups most likely to adopt and stick.",
+      "link": "https://www.onyx.app/2155036-7"
+    },
+    {
+      "text": "Rhea Narang: We do product planning, but our constraints are often policy and budget cycles. I\u2019m not sure a fit score changes that.",
+      "link": "https://www.onyx.app/2155036-8"
+    },
+    {
+      "text": "James Choi: Understood. It may not change constraints, but it can help you decide where you invest within them. For instance, if you\u2019re choosing between two initiatives, the fit estimation can show which segment will reach value faster and require less support burden\u2014so you\u2019re not unintentionally prioritizing segments that look loud but are historically low adoption or high churn risk.",
+      "link": "https://www.onyx.app/2155036-9"
+    },
+    {
+      "text": "Rhea Narang: We don\u2019t really think in terms of churn, and support burden is hard to quantify for us. Also, we have limited engineering bandwidth to integrate anything new.",
+      "link": "https://www.onyx.app/2155036-10"
+    },
+    {
+      "text": "James Choi: On integration, we try to keep it light. A lot of teams start with just CRM exports plus onboarding or survey data, and optionally support tickets. You can add product usage events later if that\u2019s available. On support burden, we can proxy it from ticket volumes, categories, time-to-resolution, or even qualitative tags from notes\u2014doesn\u2019t have to be perfect to be directional.",
+      "link": "https://www.onyx.app/2155036-11"
+    },
+    {
+      "text": "Rhea Narang: But we\u2019d still have to clean and map all that data. And I\u2019m not convinced we\u2019d trust an automated scoring model enough to base decisions on it.",
+      "link": "https://www.onyx.app/2155036-12"
+    },
+    {
+      "text": "James Choi: That\u2019s fair. The way we address trust is with the driver breakdown. It\u2019s not a black box \u201cthis is your ICP.\u201d It shows why a segment scored high or low\u2014like time-to-value, adoption, ticket volume\u2014so your team can sanity-check it. If you disagree with a driver, you can adjust weights or definitions and see the impact.",
+      "link": "https://www.onyx.app/2155036-13"
+    },
+    {
+      "text": "Rhea Narang: That sounds like a lot of tuning. Honestly, we have a pretty good sense of who our priority segments are already, even if it\u2019s not quantified.",
+      "link": "https://www.onyx.app/2155036-14"
+    },
+    {
+      "text": "James Choi: If you already have strong intuition, Customer_Analyzer can help validate it quickly\u2014and sometimes reveal edge cases. For example, a segment you assume is high value might convert, but require outsized support and never expands; while another segment quietly renews with low effort. The tool helps make those trade-offs explicit for planning.",
+      "link": "https://www.onyx.app/2155036-15"
+    },
+    {
+      "text": "Rhea Narang: I\u2019m not saying it\u2019s useless. I just don\u2019t have a current project where I could justify evaluating and implementing this. We\u2019re also in a procurement freeze for new SaaS for at least this quarter.",
+      "link": "https://www.onyx.app/2155036-16"
+    },
+    {
+      "text": "James Choi: Got it\u2014thanks for being direct. In that case, would it be helpful if I sent a one-pager focused on the product planning use case\u2014how teams use fit estimation to identify high-fit customers with unmet needs\u2014so you have it if priorities shift?",
+      "link": "https://www.onyx.app/2155036-17"
+    },
+    {
+      "text": "Rhea Narang: You can send it, but I can\u2019t promise I\u2019ll get to it soon.",
+      "link": "https://www.onyx.app/2155036-18"
+    },
+    {
+      "text": "James Choi: Totally understood. Before I do\u2014quick check: who usually owns ICP or segment prioritization on your side? Is that product, strategy, or someone in analytics?",
+      "link": "https://www.onyx.app/2155036-19"
+    },
+    {
+      "text": "Rhea Narang: It\u2019s shared. Product has input, but strategy and operations are heavily involved. Analytics supports when we can.",
+      "link": "https://www.onyx.app/2155036-20"
+    },
+    {
+      "text": "James Choi: That helps. If you think it\u2019s appropriate, I can address the one-pager to that broader group and keep it non-salesy\u2014more \u201chere\u2019s a framework and what data signals it uses.\u201d And if later you want to explore, we can do a short working session rather than a full pitch.",
+      "link": "https://www.onyx.app/2155036-21"
+    },
+    {
+      "text": "Rhea Narang: Maybe. But again, we can\u2019t buy tools right now, and I\u2019m hesitant to pull more people into something we can\u2019t act on.",
+      "link": "https://www.onyx.app/2155036-22"
+    },
+    {
+      "text": "James Choi: Completely fair. Then I\u2019ll keep it simple: I\u2019ll send a concise overview and a sample fit driver list\u2014things like time-to-value proxies, adoption indicators, and support load\u2014so you can see whether it matches your environment. No follow-up cadence unless you reply.",
+      "link": "https://www.onyx.app/2155036-23"
+    },
+    {
+      "text": "Rhea Narang: Okay, that\u2019s fine. Send it over.",
+      "link": "https://www.onyx.app/2155036-24"
+    },
+    {
+      "text": "James Choi: Will do. Last quick question so I tailor it: do you have any consistent sources like ticketing, surveys, or a CRM-like system for partner engagements, or is it mostly ad hoc?",
+      "link": "https://www.onyx.app/2155036-25"
+    },
+    {
+      "text": "Rhea Narang: We have a ticketing system and some survey data, but it\u2019s fragmented. And we\u2019re not looking to connect more systems right now.",
+      "link": "https://www.onyx.app/2155036-26"
+    },
+    {
+      "text": "James Choi: Understood. I\u2019ll frame it as \u201cstart with what you have,\u201d and I\u2019ll include an example of using just tickets and survey signals to estimate fit at a segment level. Thanks again for the time, Rhea.",
+      "link": "https://www.onyx.app/2155036-27"
+    },
+    {
+      "text": "Rhea Narang: Thanks, James. I\u2019ll look when I can.",
+      "link": "https://www.onyx.app/2155036-28"
+    },
+    {
+      "text": "James Choi: Appreciate it. I\u2019ll send that shortly. Have a good rest of your day.",
+      "link": "https://www.onyx.app/2155036-29"
+    },
+    {
+      "text": "Rhea Narang: You too.",
+      "link": "https://www.onyx.app/2155036-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "rhea_narang@timberline_metro_transit.onyx.app"
+    }
+  ]
+}

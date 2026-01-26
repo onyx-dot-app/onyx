@@ -1,0 +1,30 @@
+{
+  "id": "c5649af97ced4a66ac1f88223eb59468",
+  "semantic_identifier": "Impact--Create offline benchmark + regression tests to quantify false merges across domains.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-16",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Create offline benchmark + regression tests to quantify false merges across domains.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature introduces an offline benchmark and automated regression tests to measure and prevent \u201cfalse merges\u201d in issue clustering across different domains and integration sources. By curating a labeled evaluation dataset of issue pairs/clusters spanning areas like billing, API, and mobile, we\u2019ll establish a consistent ground truth for whether two issues should (or should not) be clustered together.\n\nThe primary impact is improved precision and reduced over-merging, which directly improves user trust in clustering and reduces the downstream cost of incorrect grouping (misrouted ownership, noisy rollups, missed root causes, and time spent unmerging). By explicitly focusing metrics on false-merge rate and precision, the system will optimize for \u201cdo no harm\u201d behavior, especially in domains where language overlap is high but underlying causes differ.\n\nOperationally, the automated offline test will run on every clustering-relevant change and flag regressions at the domain/source level (e.g., a model change that harms mobile but improves billing). This creates a safety net that speeds up iteration while preventing silent quality drops, and it gives engineering and product a shared, quantitative definition of \u201cbetter\u201d beyond anecdotal feedback.\n\nFinally, benchmark results will be used to recommend default similarity thresholds per domain and integration source. This enables domain-aware defaults (rather than one global threshold), reducing false merges without requiring manual tuning by customers, and providing a clear path for future improvements (expanding domains, adding new sources, and tracking quality over time).",
+      "link": "https://www.onyx.app/29024"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

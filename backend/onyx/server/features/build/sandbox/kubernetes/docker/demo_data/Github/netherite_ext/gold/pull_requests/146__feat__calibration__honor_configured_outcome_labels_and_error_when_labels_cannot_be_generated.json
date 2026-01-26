@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#146",
+  "semantic_identifier": "146: feat: Calibration: honor configured outcome labels and error when labels cannot be generated",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-14",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "146",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "8",
+    "num_files_changed": "20",
+    "labels": [],
+    "created_at": "2025-08-14",
+    "updated_at": "2025-08-14",
+    "closed_at": "2025-08-27"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR updates the fit-model calibration pipeline to exclusively use the user-configured outcome selection + label rules (activation/retention/expansion) when generating training labels/features.\n\nChanges:\n- Wiring: calibration job now reads the configured outcome type and its label rules from the job/model config and passes them through the label/feature generation stages.\n- Behavior: removes implicit fallback to a default outcome whenever configuration is present. The job will only compute labels for the configured outcome.\n- Validation + failures: adds explicit validation and hard-fails the calibration run with a clear surfaced error (including outcome type and which rule/inputs were missing) when labels cannot be produced (e.g., no eligible events, missing required signals/windows, or rule evaluation yields empty/undefined labels).\n- Observability: emits structured log/error context to make misconfiguration/debugging straightforward.\n- Tests: adds a minimal integration test that feeds the same input signals through each outcome path (activation vs retention vs expansion) and asserts the generated label vectors differ, ensuring the outcome wiring is effective and no default fallback is used.\n\nUser impact:\n- If your calibration config specifies an outcome, the job will no longer silently fall back to a default outcome; misconfigured/insufficient data scenarios will now fail fast with an actionable error message.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#146"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

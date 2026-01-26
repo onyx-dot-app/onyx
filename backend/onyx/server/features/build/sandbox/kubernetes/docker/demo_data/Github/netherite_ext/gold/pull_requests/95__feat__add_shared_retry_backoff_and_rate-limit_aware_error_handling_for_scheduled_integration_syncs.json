@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#95",
+  "semantic_identifier": "95: feat: Add shared retry/backoff + rate-limit aware error handling for scheduled integration syncs",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-13",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "95",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "98",
+    "labels": [],
+    "created_at": "2025-06-13",
+    "updated_at": "2025-06-13",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR hardens scheduled integration sync jobs (CRM/Support/Product Analytics) against transient provider failures by introducing a shared retry policy with exponential backoff + jitter and explicit rate-limit handling.\n\nChanges:\n- Adds a common `RetryPolicy` used by all scheduled sync runners for outbound API calls.\n- Retries on transient failures: HTTP 429, 5xx, network timeouts, and connection resets.\n- Rate-limit aware backoff:\n  - If `Retry-After` is present, it is honored (bounded by a max sleep).\n  - Otherwise uses exponential backoff with jitter (configurable base/max delays).\n- Caps work per scheduled run:\n  - Limits retries per request and total retry budget per job run to prevent unbounded execution.\n  - When the budget is exhausted, the job fails fast.\n- Improves run status semantics:\n  - If a run aborts due to retry exhaustion or non-retryable errors (e.g., 4xx other than 429), the sync is marked as a terminal failure status so existing alerting/observability triggers.\n  - Ensures the job exits cleanly so the next scheduled run can resume without leaving the system in a looping error state.\n- Adds structured logging/metrics around retry attempts (attempt count, delay chosen, header-based vs computed backoff, final failure reason).\n\nNotes for reviewers/operators:\n- Backoff/retry parameters are configurable via existing job config/env (defaults chosen to be conservative given medium priority).\n- No behavior change for successful runs; only transient failure paths now delay/retry instead of failing immediately or repeatedly cascading.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#95"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

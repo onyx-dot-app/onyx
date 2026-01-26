@@ -1,0 +1,30 @@
+{
+  "id": "0c0510aeeead402a915c22f4c8b4cde3",
+  "semantic_identifier": "Impact--Messaging Library Export API: add webhook notifications for approved asset publish/update events.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-13",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Messaging Library Export API: add webhook notifications for approved asset publish/update events.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds outbound webhook notifications to the Messaging Library Export API so downstream systems can react immediately when an asset becomes **Approved** or when an **already-approved** asset is updated (i.e., a new version is published). Today, consumers typically rely on polling or broad re-sync jobs; webhooks shift this to an event-driven model, reducing latency between publishing and availability in connected tools.\n\nThe primary impact is faster and more reliable propagation of approved content to external destinations (e.g., CMS, marketing automation, localization, internal content mirrors). Each webhook will include `asset_id`, `external_id`, `asset_version`, `approved_at/updated_at`, and a minimal summary, enabling receivers to perform a targeted fetch using existing export endpoints rather than re-downloading entire libraries. This improves performance, reduces API load, and lowers operational toil for both our platform and integrators.\n\nSecurity and trust are improved via webhook signing using a shared secret, allowing receivers to verify authenticity and prevent spoofed events. From an integrator standpoint, the contract is clear: webhooks are a trigger, and the export endpoints remain the source of truth\u2014minimizing payload size while ensuring receivers can always reconcile state if they miss an event.\n\nOperationally, delivery retries and dead-letter logging introduce resilience and observability for webhook failures. This reduces silent data drift and support burden by making it easier to detect and troubleshoot unreachable endpoints or misconfigurations, while also enabling us to measure delivery success rates and proactively identify problematic destinations.",
+      "link": "https://www.onyx.app/39134"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "9b239d0495614ecbb35fc38b1603449c",
+  "semantic_identifier": "Design--Add messaging consistency audit for positioning recommendations across channels.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-30",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add messaging consistency audit for positioning recommendations across channels.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add a scheduled backend \u201cMessaging Consistency Audit\u201d job that evaluates how closely each channel\u2019s current messaging assets (website copy, sales deck snippets, email templates) match the latest approved positioning recommendations for the same segment. The job will run on a configurable cadence (e.g., daily) and operate per `(segment, channel)` pair, pulling (1) the most recent approved positioning record for the segment and (2) the current asset snapshots for that channel/segment from our existing content sources (or a thin ingestion layer if needed). The output is a time-series audit record that can be queried internally and later surfaced in UI/alerting.\n\nThe core of the job is a lightweight comparison pipeline that normalizes both positioning recommendations and assets into comparable \u201cclaims\u201d buckets: value props, differentiators, and proof points. For each bucket we compute a divergence score using simple heuristics (token/phrase matching with configurable synonym maps, missing/extra claims, and \u201caltered\u201d claims based on similarity threshold). The final score per bucket rolls up into a single divergence score for the channel/segment, and we attach a structured list of findings (e.g., missing differentiator X, proof point Y modified, extra claim Z present) so downstream consumers can explain \u201cwhy\u201d a segment was flagged.\n\nWe will store results in a new table (or collection) keyed by `(segment_id, channel, asset_id/version, positioning_version, audit_run_id)` with timestamps to support trend analysis over time. Each run writes an immutable audit record plus a compact \u201clatest status\u201d view/materialization for fast reads. We will also emit structured logs for each flagged inconsistency (including segment, channel, score, and top findings) to support operations and future alerting, and we\u2019ll ensure idempotency by de-duping on the asset/positioning version pair.\n\nFinally, we will expose an internal-only endpoint (e.g., `GET /internal/messaging-audit?segment=...&channel=...`) that returns the latest audit status and optional history window, including divergence score, bucket breakdown, findings, and links/ids to the compared asset snapshots and positioning version. Access will be restricted to internal auth, and the endpoint contract will be stable to enable follow-on UI tickets. Initial scope intentionally avoids automatic remediation or notifications; it focuses on reliable comparison, persistence, and a queryable surface for flagged inconsistencies.",
+      "link": "https://www.onyx.app/32947"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

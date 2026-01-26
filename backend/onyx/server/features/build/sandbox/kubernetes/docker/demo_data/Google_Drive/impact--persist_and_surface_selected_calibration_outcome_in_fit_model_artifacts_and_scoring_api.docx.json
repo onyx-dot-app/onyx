@@ -1,0 +1,30 @@
+{
+  "id": "dc9dacdc12464ad682c5245b518449c1",
+  "semantic_identifier": "Impact--Persist and surface selected calibration outcome in fit model artifacts + scoring API.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Persist and surface selected calibration outcome in fit model artifacts + scoring API.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature ensures that whenever a user calibrates a fit model for a specific business outcome (activation, retention, or expansion), that choice is persisted directly on the trained model artifact/version along with the associated label rule metadata. Today, downstream consumers can lose or infer this context, which creates a risk that the same \u201cfit score\u201d is interpreted as optimizing for the wrong outcome depending on which model version is being used.\n\nBy storing the selected calibration outcome on the model artifact and ensuring both offline and online scoring read from the correct calibrated model version, we make scoring behavior deterministic and auditable. This reduces the likelihood of silent mismatches where a recalibration occurs but scoring continues using an older or differently-calibrated version, which can cause inconsistent segments, reporting discrepancies, and degraded trust in the score.\n\nWe will also update the fit score/segment endpoints to return the calibrated outcome metadata (and label rule identifiers/metadata as needed) in scoring responses. This gives downstream UI and reporting a first-class, machine-readable way to display what the score is optimized for and prevents mislabeling in dashboards, experiments, and customer-facing views.\n\nFinally, adding a regression test that validates scoring responses include the correct outcome after recalibration protects against future changes that might reintroduce this ambiguity. Overall impact: higher reliability of fit score interpretation, safer iteration on calibration, and clearer downstream communication of what \u201cfit\u201d means for a given model version.",
+      "link": "https://www.onyx.app/28192"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

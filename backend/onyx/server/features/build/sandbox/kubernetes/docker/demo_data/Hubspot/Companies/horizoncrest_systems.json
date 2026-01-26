@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_8790060",
+  "semantic_identifier": "Horizoncrest Systems",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-05-12 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "8790060",
+    "domain": "horizoncrest_systems.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Horizoncrest Systems\nDomain: horizoncrest_systems.onyx.app",
+      "link": "https://www.onyx.app/87271"
+    },
+    {
+      "text": "Contact: Julian Morgan\nEmail: julian_morgan@horizoncrest_systems.onyx.app",
+      "link": "https://www.onyx.app/81424"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

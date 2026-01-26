@@ -1,0 +1,30 @@
+{
+  "id": "e60888243fcb4a28bee6b5e456233375",
+  "semantic_identifier": "Design--Add segment-based impact slicing on issues/themes using Customer_Analyzer segment IDs.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add segment-based impact slicing on issues/themes using Customer_Analyzer segment IDs.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add segment-based impact slicing for each Issue/Theme by aggregating impacted customers using existing `Customer_Analyzer.segment_id` data (and `fit_tier` when present), without introducing or recalculating any ICP/segmentation logic. The backend will compute a per-issue/per-theme breakdown of impacted accounts grouped by `(segment_id, fit_tier)` and store the results in the Issue_Tracker persistence layer so all downstream consumers (UI, analytics, exports) can query the same canonical representation.\n\nOn ingestion/aggregation, for each impacted account already associated to an Issue/Theme, we will join to Customer_Analyzer on account identifier to fetch `segment_id` and optional `fit_tier`. The aggregator will produce counts (and any existing \u201cimpact\u201d metrics we already compute\u2014e.g., impacted accounts, ARR, seats\u2014mirrored per bucket) for each unique `(segment_id, fit_tier)` pair. Any account lacking `segment_id` and/or `fit_tier` will be assigned to an explicit \u201cunknown\u201d bucket (e.g., `segment_id = \"unknown\"`, `fit_tier = \"unknown\"`), ensuring missing attributes never block overall impact computation and the sum across buckets matches the existing total impact.\n\nWe will expose the breakdown via stable Issue_Tracker DB/API fields, likely as a versioned JSON blob or a normalized child table keyed by `issue_id/theme_id` and bucket dimensions (`segment_id`, `fit_tier`) with metric columns. The Issue_Tracker API will return this as a structured field (e.g., `impact_by_segment: [{segment_id, fit_tier, impacted_accounts, ...}]`) and support optional query filters on segment/fit tier for downstream slicing without requiring clients to re-implement joins or bucketing logic.\n\nKey considerations: aggregation should be incremental/idempotent (recomputable on demand) and resilient to late-arriving Customer_Analyzer updates; we\u2019ll define a clear refresh strategy (e.g., recompute on issue impact changes and periodic backfill). We will validate correctness with invariants (bucket totals equal overall totals, \u201cunknown\u201d bucket present when needed) and add migration/backfill to populate the new fields for existing issues/themes.",
+      "link": "https://www.onyx.app/89148"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

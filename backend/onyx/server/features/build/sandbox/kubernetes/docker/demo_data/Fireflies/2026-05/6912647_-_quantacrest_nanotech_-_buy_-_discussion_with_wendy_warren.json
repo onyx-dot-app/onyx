@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_6912647",
+  "semantic_identifier": "6912647 - Quantacrest Nanotech - buy - Discussion with Wendy Warren",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-05-02 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-05-02 00:00:00",
+    "duration_min": "34"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-05"
+      ],
+      "year_month": "2026-05",
+      "meeting_title": "6912647 - Quantacrest Nanotech - buy - Discussion with Wendy Warren",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Wendy\u2014good to see you again. Since this is our third call, I wanted to use the time to align on what it would take to get Sales_Accelerator approved and kicked off this month. Does that still match what you\u2019re aiming for at Quantacrest Nanotech?",
+      "link": "https://www.onyx.app/8084448-1"
+    },
+    {
+      "text": "Wendy Warren: Hi Camila. I\u2019m open to it, but I\u2019ll be upfront\u2014there are a couple of concerns we need to resolve before we can commit.",
+      "link": "https://www.onyx.app/8084448-2"
+    },
+    {
+      "text": "Camila Vega: Totally fair. Let\u2019s make it practical. Last time you mentioned two pain points: your weekly forecast swings late in the quarter, and managers spend too much time chasing pipeline hygiene. If we solve those with minimal disruption to Salesforce, would you feel comfortable moving forward?",
+      "link": "https://www.onyx.app/8084448-3"
+    },
+    {
+      "text": "Wendy Warren: If it truly doesn\u2019t create extra work for reps, then maybe. But we\u2019ve been burned by \u201clayers\u201d that become another place to log in and another dashboard nobody uses.",
+      "link": "https://www.onyx.app/8084448-4"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly the adoption trap we try to avoid. Let me focus on two things only: our forecasting and the pipeline hygiene workflow\u2014both designed to run off your existing CRM data and activity signals. On forecasting, Sales_Accelerator doesn\u2019t just mirror Salesforce stages; it combines stage data with activity\u2014emails, calls, meetings\u2014plus cycle-time benchmarks and your historical win rates. And it\u2019s explainable: it shows the drivers, like stage age, last touch, whether a next meeting is scheduled, and optionally a fit tier if you\u2019re using Customer_Analyzer.",
+      "link": "https://www.onyx.app/8084448-5"
+    },
+    {
+      "text": "Wendy Warren: The explainable part is appealing. Our leadership hates \u201cblack box\u201d forecasts. But what\u2019s the actual day-to-day change for reps? Because they already complain about Salesforce being heavy.",
+      "link": "https://www.onyx.app/8084448-6"
+    },
+    {
+      "text": "Camila Vega: For reps, the value is less data entry, not more. The pipeline hygiene use case is the simplest example: managers get weekly alerts for missing next steps, stale opps, and single-threaded deals. Reps don\u2019t have to hunt through reports\u2014they get an ordered top-10 task queue of fixes that will most improve forecast health: \u201cschedule next meeting,\u201d \u201cupdate close date,\u201d \u201cidentify a second contact,\u201d that kind of thing.",
+      "link": "https://www.onyx.app/8084448-7"
+    },
+    {
+      "text": "Wendy Warren: That sounds good on paper, but that queue lives where? If it\u2019s in your tool, that\u2019s the problem. They live in Salesforce and Slack. Anything else becomes a ghost town.",
+      "link": "https://www.onyx.app/8084448-8"
+    },
+    {
+      "text": "Camila Vega: Understood. Our standard deployment is: the insights are visible in our layer, but the actions push back into Salesforce\u2014so updating next steps, dates, contact roles, that\u2019s all done in Salesforce. And we can notify in Slack or email for the alerts so they\u2019re not dependent on logging in.",
+      "link": "https://www.onyx.app/8084448-9"
+    },
+    {
+      "text": "Wendy Warren: But you still just said \u201cvisible in our layer.\u201d That\u2019s exactly the context switching. If the rep has to open something else to understand why an opp is flagged, adoption drops.",
+      "link": "https://www.onyx.app/8084448-10"
+    },
+    {
+      "text": "Camila Vega: Let me ask a clarifying question: is it a hard requirement that the full experience be inside Salesforce\u2014like embedded views\u2014or is it acceptable if the rep gets a Slack alert and can click through only when needed?",
+      "link": "https://www.onyx.app/8084448-11"
+    },
+    {
+      "text": "Wendy Warren: For our culture, it\u2019s basically a hard requirement. We\u2019ve rolled out tools before where \u201conly managers use it,\u201d and then it dies. If this becomes another manager-only dashboard, we won\u2019t buy it.",
+      "link": "https://www.onyx.app/8084448-12"
+    },
+    {
+      "text": "Camila Vega: That\u2019s helpful. We do have customers who run it manager-first\u2014weekly pipeline review, forecast calls, hygiene automation\u2014then expand to reps once they see it helps. Could that pattern work at Quantacrest? Start with managers to stabilize the forecast, prove the impact, then roll out to reps?",
+      "link": "https://www.onyx.app/8084448-13"
+    },
+    {
+      "text": "Wendy Warren: Possibly, but our goal isn\u2019t just forecasting accuracy. We\u2019re trying to reduce rep admin time. If reps don\u2019t engage, we\u2019re not solving the underlying problem. Also, our RevOps team is small. They won\u2019t support a big change-management effort.",
+      "link": "https://www.onyx.app/8084448-14"
+    },
+    {
+      "text": "Camila Vega: Got it. On RevOps effort: implementation is light because we\u2019re not replacing Salesforce\u2014we sit on top, ingest your opportunity and activity data, then generate the forecast views\u2014commit, best-case, pipeline\u2014plus diagnostics like stage conversion and slippage. We also do scenario planning, like \u201cif we add 20 SQLs in Tier-1 ICP, what happens,\u201d but you can ignore that if you want. The most immediate value is those explainable drivers: you can finally see which deals are drifting because there\u2019s no next meeting, or because the stage age is off relative to your benchmarks.",
+      "link": "https://www.onyx.app/8084448-15"
+    },
+    {
+      "text": "Wendy Warren: We can already see stage age in Salesforce, though. It\u2019s not elegant, but it exists. The question is: why add another product?",
+      "link": "https://www.onyx.app/8084448-16"
+    },
+    {
+      "text": "Camila Vega: Because stage age alone doesn\u2019t tell you what\u2019s likely to close or what to do next. Sales_Accelerator connects the dots between stage, actual activity signals, and your historical patterns. And it doesn\u2019t just report\u2014this is the execution layer part\u2014it recommends next actions. The forecast becomes something you can improve during the month, not just defend at the end.",
+      "link": "https://www.onyx.app/8084448-17"
+    },
+    {
+      "text": "Wendy Warren: I hear you. But I\u2019m still stuck on the \u201cwhere.\u201d Our reps won\u2019t click into another tool just to see recommendations. Even Slack alerts can become noise.",
+      "link": "https://www.onyx.app/8084448-18"
+    },
+    {
+      "text": "Camila Vega: If Salesforce-native is the bar, we should be honest about whether we\u2019re the right fit right now. We can do Salesforce write-back and Slack notifications, but a fully embedded experience as the primary UI\u2014today\u2014that\u2019s not our strongest motion. I don\u2019t want to oversell it.",
+      "link": "https://www.onyx.app/8084448-19"
+    },
+    {
+      "text": "Wendy Warren: I appreciate that. We\u2019ve got another vendor in the mix that\u2019s fully embedded. Their forecasting isn\u2019t as deep, but adoption might be higher.",
+      "link": "https://www.onyx.app/8084448-20"
+    },
+    {
+      "text": "Camila Vega: That makes sense. Before you decide, can I sanity-check one thing: if we could prove, in a short pilot, that managers save time on weekly pipeline hygiene and your forecast variance shrinks\u2014even with light rep involvement\u2014would that be enough to justify starting manager-only?",
+      "link": "https://www.onyx.app/8084448-21"
+    },
+    {
+      "text": "Wendy Warren: Leadership might like it, but I don\u2019t think I can get budget approval for something reps won\u2019t adopt. Our CRO has been clear: no more \u201ctools for managers.\u201d",
+      "link": "https://www.onyx.app/8084448-22"
+    },
+    {
+      "text": "Camila Vega: Understood. Then the question becomes: is there a path where reps do adopt without full Salesforce embedding? For example, a rep gets a daily top-10 task list via email/Slack, and they execute inside Salesforce. They don\u2019t need to live in our UI\u2014just consume the prioritized list. Is that workable, or is it still a no?",
+      "link": "https://www.onyx.app/8084448-23"
+    },
+    {
+      "text": "Wendy Warren: It\u2019s still risky for us. People ignore those lists after week one. And if they need to click out to understand \u201cwhy,\u201d they won\u2019t. We\u2019ve seen it too many times.",
+      "link": "https://www.onyx.app/8084448-24"
+    },
+    {
+      "text": "Camila Vega: Okay. Let\u2019s not drag this out. Based on what you\u2019re saying, the workflow friction\u2014anything outside Salesforce\u2014is a deal-breaker for this cycle. Is that accurate?",
+      "link": "https://www.onyx.app/8084448-25"
+    },
+    {
+      "text": "Wendy Warren: Yes. I think it is. I don\u2019t want to waste your time or mine.",
+      "link": "https://www.onyx.app/8084448-26"
+    },
+    {
+      "text": "Camila Vega: I appreciate the clarity. One last option: we can pause the commercial process and revisit when we have deeper Salesforce embedding on our roadmap, or if your requirements change. Would you prefer we close the loop for now and reconnect in, say, two quarters?",
+      "link": "https://www.onyx.app/8084448-27"
+    },
+    {
+      "text": "Wendy Warren: That\u2019s probably best. We\u2019re making a decision in the next few weeks, and I don\u2019t see this getting through procurement given the adoption concern.",
+      "link": "https://www.onyx.app/8084448-28"
+    },
+    {
+      "text": "Camila Vega: Completely fair. I\u2019ll mark Quantacrest as \u201cclosed for now\u201d rather than keep pushing. If you\u2019re open to it, I can send a short recap of what Sales_Accelerator would have solved\u2014forecast drivers, slippage diagnostics, and the pipeline hygiene automation\u2014so you have it as a reference, and then we can check in later.",
+      "link": "https://www.onyx.app/8084448-29"
+    },
+    {
+      "text": "Wendy Warren: Yes, send that. And if you do get to a more Salesforce-native rep experience, I\u2019d be willing to take another look.",
+      "link": "https://www.onyx.app/8084448-30"
+    },
+    {
+      "text": "Camila Vega: Will do. Thanks, Wendy. I appreciate how direct you were\u2014better to make the right call than force a fit. I\u2019ll follow up with that recap and a proposed time to reconnect later in the year.",
+      "link": "https://www.onyx.app/8084448-31"
+    },
+    {
+      "text": "Wendy Warren: Sounds good. Thanks, Camila.",
+      "link": "https://www.onyx.app/8084448-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "wendy_warren@quantacrest_nanotech.onyx.app"
+    }
+  ]
+}

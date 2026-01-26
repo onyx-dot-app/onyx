@@ -1,0 +1,30 @@
+{
+  "id": "3c65c8a6318b4a51a9b8ce8c51dacc9b",
+  "semantic_identifier": "Design--Build attribution + aggregation pipeline for closed-loop learning metrics (by segment/rep/motion).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Build attribution + aggregation pipeline for closed-loop learning metrics (by segment/rep/motion).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will build a backend attribution + aggregation pipeline that links persisted outcome events (from GOLD-108) back to `recommendation_instance_id` and produces daily closed-loop learning metrics. The pipeline will compute funnel and downstream outcome rates (e.g., show\u2192accept, accept\u2192execute, execute\u2192meeting, stage change, win/loss) and break them down by segment, rep, and motion. Outputs will be written to a queryable metrics store and exposed via a lightweight API to support optimization and experimentation workflows.\n\n### Data model & attribution logic\nInputs are (1) recommendation-serving logs/records that define the universe of recommendations and their dimensions (segment/rep/motion, timestamp, etc.) and (2) outcome events persisted by GOLD-108 (accept/execute/meeting/stage-change/win-loss). Attribution will be performed by joining outcome events to the originating `recommendation_instance_id` (direct key when present; otherwise via a deterministic fallback key strategy if available, e.g., `(customer_id, rec_type, created_at window)`), with clear precedence rules and a configurable attribution window per event type to handle delayed outcomes. We will treat the recommendation lifecycle as partially observed: aggregates should count a recommendation as \u201cshown\u201d if served, and independently count later events if they arrive, without requiring earlier steps to exist.\n\n### Aggregation, storage, and API\nA daily scheduled job (or streaming-to-daily rollup) will compute aggregates for `day` \u00d7 `segment` \u00d7 `rep_id` \u00d7 `motion` (and possibly `rec_type`) with counts and derived rates. We will store results in a dedicated table (e.g., `learning_metrics_daily`) with idempotent upserts keyed by the dimension tuple, and include both numerator/denominator fields to support flexible rate calculation downstream. An internal read API will provide filtered access (date range, segment, rep, motion) and return both raw counts and standard rates, enabling dashboards and model/strategy optimization without querying raw event logs.\n\n### Reliability, data quality, and backfill\nTo avoid impacting recommendation serving, the pipeline will run asynchronously off persisted logs/events and will be fully decoupled from online paths. We will implement data-quality checks and monitoring: missing join keys rate, duplicate event detection/dedup keys, late-arriving event rate, and reconciliation checks (e.g., shown \u2265 accepted \u2265 executed is not enforced, but anomalies are flagged). The job will be idempotent and support backfill for a configurable recent history window (e.g., last N days) to account for late events; backfills will re-run attribution and overwrite daily aggregates for affected partitions.",
+      "link": "https://www.onyx.app/17507"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_1867194",
+  "semantic_identifier": "Kinetic Harbor Renewables",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-31 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "1867194",
+    "domain": "kinetic_harbor_renewables.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Kinetic Harbor Renewables\nDomain: kinetic_harbor_renewables.onyx.app",
+      "link": "https://www.onyx.app/43122"
+    },
+    {
+      "text": "Contact: Miguel Dean\nEmail: miguel_dean@kinetic_harbor_renewables.onyx.app",
+      "link": "https://www.onyx.app/14364"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

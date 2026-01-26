@@ -1,0 +1,30 @@
+{
+  "id": "c04842feff4a4b9bbae0557a95da35db",
+  "semantic_identifier": "Impact--Add configurable data retention policies for ingested customer signals.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add configurable data retention policies for ingested customer signals.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds configurable data retention policies for ingested customer signals at the workspace level. Today, signals like CRM fields, survey responses, usage events, support tickets, and notes can persist indefinitely once stored. With retention controls, admins can define how long these signals are kept before they automatically expire and are deleted.\n\nThe primary impact is improved compliance and customer trust for teams with strict data minimization requirements (e.g., GDPR/CCPA policies, internal security standards). It also reduces long-term data footprint and operational risk by ensuring older, no-longer-needed signals are routinely removed rather than accumulating over time.\n\nFrom a product behavior standpoint, retention will be per-workspace, configurable, and safe by default: if unset, the system preserves current behavior (no change to existing retention). Deletions will be applied consistently across primary storage and downstream search/index layers so that expired data is not retrievable via UI, APIs, or search once the retention period has elapsed.\n\nAdministratively, this introduces an admin-only configuration surface (API and/or settings) and auditing for governance. Retention configuration changes will be recorded for audit purposes, enabling customers to prove who changed policies, when they changed them, and what the effective settings were\u2014supporting security reviews and compliance reporting.",
+      "link": "https://www.onyx.app/23030"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

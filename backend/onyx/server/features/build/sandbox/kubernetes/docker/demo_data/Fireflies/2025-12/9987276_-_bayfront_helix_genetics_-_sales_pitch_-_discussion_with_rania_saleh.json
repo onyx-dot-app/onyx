@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_9987276",
+  "semantic_identifier": "9987276 - Bayfront Helix Genetics - sales_pitch - Discussion with Rania Saleh",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-03 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-03 00:00:00",
+    "duration_min": "31"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "9987276 - Bayfront Helix Genetics - sales_pitch - Discussion with Rania Saleh",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Rania\u2014thanks for taking a few minutes. I\u2019ll keep this brief. I\u2019m Irene. I work with teams that get a lot of customer-reported issues coming in from Zendesk, Intercom, emails, and internal notes, and they struggle to turn that noise into something engineering and CS can actually act on.",
+      "link": "https://www.onyx.app/3677981-1"
+    },
+    {
+      "text": "Rania Saleh: Hi Irene. Sure, but I only have a few minutes. What is this about exactly?",
+      "link": "https://www.onyx.app/3677981-2"
+    },
+    {
+      "text": "Irene Shen: Totally. The product is called Issue_Tracker. It sits between your support channels and delivery tools like Jira or Linear, and it standardizes an \u201cissue object\u201d\u2014so instead of hundreds of tickets that all say the same thing differently, you get deduped clusters like \u201cSample upload fails on Safari\u201d with evidence, impacted customers, and links back to the original tickets and conversations.",
+      "link": "https://www.onyx.app/3677981-3"
+    },
+    {
+      "text": "Rania Saleh: We already have Zendesk and Jira. We do some tagging and reporting. How is this different?",
+      "link": "https://www.onyx.app/3677981-4"
+    },
+    {
+      "text": "Irene Shen: Great question. Tagging helps, but it usually breaks down when wording varies or when multiple teams use different tags. Issue_Tracker\u2019s issue_clustering automatically groups raw inputs using semantic similarity plus rules you control\u2014like product area, platform, severity, or keywords\u2014so you can see \u201cthis is actually one underlying problem\u201d even if it came in through 40 tickets and a couple CSM notes.",
+      "link": "https://www.onyx.app/3677981-5"
+    },
+    {
+      "text": "Rania Saleh: Okay. But we\u2019re not looking to add another system that people have to maintain.",
+      "link": "https://www.onyx.app/3677981-6"
+    },
+    {
+      "text": "Irene Shen: That\u2019s exactly what we try to avoid. It doesn\u2019t replace Zendesk or Jira\u2014those remain the systems of record. Issue_Tracker links back to them. The workflow is typically: clusters get created automatically, someone can quickly merge or split with guardrails, and then you connect a cluster to an existing Jira ticket or create one. After that, everyone sees the same status without manually stitching together spreadsheets or searching through ticket threads.",
+      "link": "https://www.onyx.app/3677981-7"
+    },
+    {
+      "text": "Rania Saleh: Who on our side would actually use it day to day?",
+      "link": "https://www.onyx.app/3677981-8"
+    },
+    {
+      "text": "Irene Shen: Usually Support Ops or a triage lead owns the clustering review, but CSMs get a lot of value too. One common use case: CSMs subscribe key accounts to specific clusters\u2014so if Bayfront Helix Genetics has a few strategic customers hitting the same issue, you can track which customers are impacted and make follow-up consistent. When the linked Jira ticket ships, Issue_Tracker records the release milestone and keeps a history of who was notified and when.",
+      "link": "https://www.onyx.app/3677981-9"
+    },
+    {
+      "text": "Rania Saleh: We do customer follow-up now\u2014CSMs just watch Jira tickets and keep notes.",
+      "link": "https://www.onyx.app/3677981-10"
+    },
+    {
+      "text": "Irene Shen: Makes sense. The gap we see is that Jira is built around engineering work items, not customer impact. Issue_Tracker keeps the issue cluster tied to the source evidence and affected accounts, so you can answer: \u201cHow widespread is this? Which segments are impacted? Are we underestimating it because it\u2019s spread across channels?\u201d And your CSMs don\u2019t have to hunt for status or wonder which customers they already updated.",
+      "link": "https://www.onyx.app/3677981-11"
+    },
+    {
+      "text": "Rania Saleh: I get the concept, but our volume isn\u2019t enormous. Also, we\u2019re in a regulated environment\u2014anything touching customer data gets scrutinized.",
+      "link": "https://www.onyx.app/3677981-12"
+    },
+    {
+      "text": "Irene Shen: Understood. On volume, even moderate volumes can hide trends because the same problem shows up with different phrasing. The clustering is mostly about surfacing the true \u201ctheme count\u201d and making prioritization defensible. On data, we can scope what\u2019s ingested\u2014some teams start with metadata and summaries rather than full transcripts, and keep the links pointing back to Zendesk where permissions already live.",
+      "link": "https://www.onyx.app/3677981-13"
+    },
+    {
+      "text": "Rania Saleh: We\u2019d still need security review, and honestly we\u2019re slammed this quarter. I\u2019m not sure we can take on a new tool rollout.",
+      "link": "https://www.onyx.app/3677981-14"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fair. Just to calibrate\u2014when issues come in today, do you have a consistent way to dedupe across Support tickets versus CSM notes, and then show engineering \u201cthis is one cluster impacting these specific accounts\u201d?",
+      "link": "https://www.onyx.app/3677981-15"
+    },
+    {
+      "text": "Rania Saleh: Not really. We do weekly triage and we try our best, but it\u2019s manual. Still, it works \u201cwell enough,\u201d and we have bigger priorities right now.",
+      "link": "https://www.onyx.app/3677981-16"
+    },
+    {
+      "text": "Irene Shen: Got it. If the status quo is acceptable, it may not be worth the change management. The reason I asked for time is that teams often realize they\u2019re missing revenue risk or repeat churn drivers because the evidence is fragmented. Issue_Tracker makes the volume and trends visible, and it reduces duplicate triage work.",
+      "link": "https://www.onyx.app/3677981-17"
+    },
+    {
+      "text": "Rania Saleh: That\u2019s interesting, but I\u2019m not the owner of Support Ops, and my leadership is very cautious about adding platforms. Also, we just renewed some tooling\u2014budget is tight.",
+      "link": "https://www.onyx.app/3677981-18"
+    },
+    {
+      "text": "Irene Shen: Completely understood. Would it help if I shared a one-page overview showing how the issue_clustering works and the CSM subscription/follow-up workflow, and you can forward it to whoever owns triage? If it resonates, we could do a deeper call later.",
+      "link": "https://www.onyx.app/3677981-19"
+    },
+    {
+      "text": "Rania Saleh: You can send it, but I can\u2019t promise we\u2019ll review it soon. And I don\u2019t want to set up another meeting right now.",
+      "link": "https://www.onyx.app/3677981-20"
+    },
+    {
+      "text": "Irene Shen: No problem. To make it relevant, is there a specific pain you\u2019ve had recently\u2014like recurring bugs that keep coming back across tickets, or customers asking for the same feature and it\u2019s hard to quantify?",
+      "link": "https://www.onyx.app/3677981-21"
+    },
+    {
+      "text": "Rania Saleh: We have recurring themes, sure, but we\u2019re managing. Our immediate focus is internal delivery and compliance work. New process is a hard sell.",
+      "link": "https://www.onyx.app/3677981-22"
+    },
+    {
+      "text": "Irene Shen: That\u2019s clear. I\u2019ll keep this lightweight: I\u2019ll email a short overview and a couple screenshots of what a cluster looks like\u2014naming suggestions, representative examples, and how it links back to Zendesk and Jira\u2014so you can quickly judge if it\u2019s worth revisiting next quarter.",
+      "link": "https://www.onyx.app/3677981-23"
+    },
+    {
+      "text": "Rania Saleh: Okay, send it over. But again, we\u2019re not committing to anything.",
+      "link": "https://www.onyx.app/3677981-24"
+    },
+    {
+      "text": "Irene Shen: Absolutely. What\u2019s the best email for you, and should I copy whoever owns Support Ops or customer experience tooling at Bayfront Helix Genetics?",
+      "link": "https://www.onyx.app/3677981-25"
+    },
+    {
+      "text": "Rania Saleh: Use my work email\u2014you should have it from the invite. Don\u2019t copy others yet; I\u2019ll decide if it\u2019s worth passing along.",
+      "link": "https://www.onyx.app/3677981-26"
+    },
+    {
+      "text": "Irene Shen: Perfect. Thanks, Rania. I\u2019ll send that today, and I won\u2019t push for a meeting. If in a few months you\u2019re revisiting how you dedupe issues and track customer follow-up tied to Jira releases, I\u2019d be happy to reconnect.",
+      "link": "https://www.onyx.app/3677981-27"
+    },
+    {
+      "text": "Rania Saleh: Sounds good. Thanks for keeping it short.",
+      "link": "https://www.onyx.app/3677981-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "rania_saleh@bayfront_helix_genetics.onyx.app"
+    }
+  ]
+}

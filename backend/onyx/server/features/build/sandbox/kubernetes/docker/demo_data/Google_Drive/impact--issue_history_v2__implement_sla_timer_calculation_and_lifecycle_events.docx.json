@@ -1,0 +1,30 @@
+{
+  "id": "bca808a832e3471ab09cd92bcf7e4fff",
+  "semantic_identifier": "Impact--issue_history v2: Implement SLA timer calculation + lifecycle events.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--issue_history v2: Implement SLA timer calculation + lifecycle events.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds first-class SLA timer support to `issue_history v2` by recording a canonical set of SLA lifecycle events\u2014start, pause, resume, and stop\u2014driven by issue state changes, ownership transitions, and key triage milestones. Instead of inferring SLA behavior from loosely related history entries, we will explicitly capture the moments that should count (or not count) toward SLA measurement, creating a durable audit trail for how an issue\u2019s SLA clock evolved over time.\n\nOn the backend, we will compute elapsed SLA time and current SLA status directly from the SLA event stream, ensuring consistent results across all consumers. The calculation will support real-world workflows such as reassignment, pauses during waiting states, and reopen scenarios, so elapsed time reflects our intended SLA policy rather than simplistic \u201ccreated-to-closed\u201d deltas. This also enables \u201cas of now\u201d SLA status (running/paused/stopped, in/out of breach) to be derived reliably at any point.\n\nWe will expose these computed SLA fields via API, enabling downstream UI and reporting to display time-to-triage and time-to-resolution using the same logic everywhere. This removes duplicated calculations across clients, reduces discrepancies between dashboards, exports, and in-product views, and makes SLA metrics trustworthy for both operational monitoring and executive reporting.\n\nOverall impact is improved accuracy, explainability, and consistency of SLA reporting, with better support for complex lifecycle behaviors (handoffs, pauses, reopens) that previously caused metric drift. It also sets a foundation for future SLA policy changes, since updating event generation rules and computation centrally will automatically propagate to all downstream experiences without requiring client-side rewrites.",
+      "link": "https://www.onyx.app/24564"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

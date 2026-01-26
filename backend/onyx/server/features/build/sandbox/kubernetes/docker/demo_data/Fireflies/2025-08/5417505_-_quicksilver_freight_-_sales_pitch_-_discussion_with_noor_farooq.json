@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_5417505",
+  "semantic_identifier": "5417505 - Quicksilver Freight - sales_pitch - Discussion with Noor Farooq",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-13 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-13 00:00:00",
+    "duration_min": "44"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "5417505 - Quicksilver Freight - sales_pitch - Discussion with Noor Farooq",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Noor\u2014Megan Foster here. Thanks for taking a few minutes. I\u2019ll keep this short: I wanted to share how Sales_Accelerator helps teams like Quicksilver Freight tighten forecast accuracy and catch deal slippage early, without ripping out your CRM.",
+      "link": "https://www.onyx.app/3870371-1"
+    },
+    {
+      "text": "Noor Farooq: Hi Megan\u2014sure. We can do a quick overview. What is it exactly, and how is it different from what we already do in Salesforce?",
+      "link": "https://www.onyx.app/3870371-2"
+    },
+    {
+      "text": "Megan Foster: Great question. Sales_Accelerator sits on top of Salesforce or HubSpot as a sales execution layer. It doesn\u2019t replace your CRM\u2014it uses your existing stage data plus activity signals like calls, emails, meetings, and stage age. Then it produces explainable forecasts and flags risk drivers\u2014so you\u2019re not just seeing \u201cpipeline is light,\u201d you\u2019re seeing *why* and what to do about it.",
+      "link": "https://www.onyx.app/3870371-3"
+    },
+    {
+      "text": "Noor Farooq: We already have dashboards. Our challenge is that the numbers still feel\u2026 optimistic until the last two weeks of the quarter.",
+      "link": "https://www.onyx.app/3870371-4"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly the problem we designed for. Our core feature is sales_forecast: opportunity- and pipeline-level forecasting that blends CRM stage with activity signals and cycle-time benchmarks. It gives you commit, best-case, and pipeline views, but also slippage diagnostics\u2014like which stages are aging, where conversion is dropping, and which deals have gone \u201cquiet.\u201d",
+      "link": "https://www.onyx.app/3870371-5"
+    },
+    {
+      "text": "Noor Farooq: Okay. When you say \u201cquiet,\u201d what do you mean? We have reps who don\u2019t log everything.",
+      "link": "https://www.onyx.app/3870371-6"
+    },
+    {
+      "text": "Megan Foster: Totally normal. We look at multiple drivers, so it\u2019s not dependent on perfect data entry. For example: last meaningful touch, whether there\u2019s a next meeting scheduled, stage age relative to your historical cycle times, and conversion rates for similar deals. If you *do* have activity capture via email/calendar integrations, it becomes even stronger\u2014but we can still add value with what\u2019s in Salesforce today.",
+      "link": "https://www.onyx.app/3870371-7"
+    },
+    {
+      "text": "Noor Farooq: And it can actually tell me what\u2019s driving the forecast? That\u2019s been a sticking point\u2014leadership doesn\u2019t trust a \u201cblack box.\u201d",
+      "link": "https://www.onyx.app/3870371-8"
+    },
+    {
+      "text": "Megan Foster: Yes\u2014explainability is a big differentiator. Every forecast rollup is backed by drivers you can click into: \u201cThis segment is down because Stage 2-to-3 conversion dropped 12%,\u201d or \u201cThese five deals are at risk because stage age is 2x normal and there\u2019s no next meeting.\u201d The goal is to make it defensible in forecast calls.",
+      "link": "https://www.onyx.app/3870371-9"
+    },
+    {
+      "text": "Noor Farooq: That would help. We spend a lot of time arguing about numbers instead of fixing the pipeline. How does it help us fix things, though?",
+      "link": "https://www.onyx.app/3870371-10"
+    },
+    {
+      "text": "Megan Foster: That\u2019s where the sales ops use case comes in. Sales_Accelerator shows stage-to-stage conversion by segment and rep so you can identify bottlenecks\u2014then it recommends process adjustments and helps you monitor if they\u2019re working. A common example is adding a security or procurement step earlier so deals don\u2019t stall late. In your world\u2014freight and logistics\u2014I often see stalls around compliance paperwork, carrier onboarding, or IT integrations. If those steps are happening too late, you get end-of-quarter surprises.",
+      "link": "https://www.onyx.app/3870371-11"
+    },
+    {
+      "text": "Noor Farooq: That hits close to home. We\u2019ve had deals sit because requirements surface late\u2014then we lose momentum.",
+      "link": "https://www.onyx.app/3870371-12"
+    },
+    {
+      "text": "Megan Foster: Exactly. Instead of discovering that in week 12, you\u2019d see the pattern in week 3: \u201cDeals in Segment A are aging in this stage, and reps with earlier \u2018requirements confirmed\u2019 steps convert faster.\u201d Then you can operationalize that into your process, coaching, or even stage definitions.",
+      "link": "https://www.onyx.app/3870371-13"
+    },
+    {
+      "text": "Noor Farooq: Interesting. How much work is it to set up? We don\u2019t have a lot of bandwidth in ops right now.",
+      "link": "https://www.onyx.app/3870371-14"
+    },
+    {
+      "text": "Megan Foster: The initial lift is usually light because we\u2019re layering on top of the CRM. We connect to Salesforce, ingest opportunity and stage history, and map a few key fields. Then we calibrate benchmarks like typical stage duration and conversion by segment. Most teams can start seeing useful diagnostics quickly, then refine over time.",
+      "link": "https://www.onyx.app/3870371-15"
+    },
+    {
+      "text": "Noor Farooq: We also have different motions\u2014mid-market is faster, enterprise is slower. Does it separate those out?",
+      "link": "https://www.onyx.app/3870371-16"
+    },
+    {
+      "text": "Megan Foster: Yes. Forecasts can be broken down by segment, source, rep, and motion\u2014so you\u2019re not comparing apples to oranges. The scenario planning is useful too: you can ask, \u201cIf we add X more SQLs in our best segment, what\u2019s the expected revenue impact?\u201d It helps ops and leadership align on what to do, not just what happened.",
+      "link": "https://www.onyx.app/3870371-17"
+    },
+    {
+      "text": "Noor Farooq: Scenario planning sounds helpful. We\u2019re constantly debating whether we need more top-of-funnel or if we just need to unblock late-stage deals.",
+      "link": "https://www.onyx.app/3870371-18"
+    },
+    {
+      "text": "Megan Foster: We can support both perspectives with data. You\u2019ll see whether the problem is pipeline coverage, stage conversion, or slippage. And because the drivers are transparent, it turns into an action-oriented conversation: \u201cThese deals need next meetings scheduled,\u201d \u201cThese are stalled because procurement step is missing,\u201d \u201cThis segment is converting fine but needs more volume.\u201d",
+      "link": "https://www.onyx.app/3870371-19"
+    },
+    {
+      "text": "Noor Farooq: How do you handle rep adoption? If it\u2019s yet another tool they have to live in, it\u2019ll be a hard sell internally.",
+      "link": "https://www.onyx.app/3870371-20"
+    },
+    {
+      "text": "Megan Foster: We try to meet reps where they already work. The idea is not to create a second CRM; it\u2019s to give them a clear view of what\u2019s at risk and what\u2019s driving their number. For managers and sales ops, it reduces the manual spreadsheet work before forecast calls. We typically position it as: fewer status-chasing meetings, more targeted coaching.",
+      "link": "https://www.onyx.app/3870371-21"
+    },
+    {
+      "text": "Noor Farooq: Makes sense. If we wanted to evaluate this, what would you need from us?",
+      "link": "https://www.onyx.app/3870371-22"
+    },
+    {
+      "text": "Megan Foster: For a proper assessment, I\u2019d suggest a longer working session\u2014maybe 45 minutes\u2014with you and whoever owns forecasting or pipeline reporting. We\u2019d cover: your current Salesforce setup, how you define stages, what \u201ccommit\u201d means internally, and where you\u2019ve seen the biggest forecast misses. If you can share a few anonymized examples of slipped deals, we can show how Sales_Accelerator would have flagged them earlier and what the drivers would have been.",
+      "link": "https://www.onyx.app/3870371-23"
+    },
+    {
+      "text": "Noor Farooq: That seems reasonable. I\u2019d want our sales ops manager involved\u2014she owns the dashboards and forecast meetings.",
+      "link": "https://www.onyx.app/3870371-24"
+    },
+    {
+      "text": "Megan Foster: Perfect. If you\u2019re open to it, I\u2019ll send a calendar link for a deeper dive: we can tailor it to Quicksilver Freight\u2019s segments and look at stage-to-stage conversion and slippage patterns you\u2019re seeing. Even if you don\u2019t move forward, you\u2019ll walk away with a clearer picture of where the bottleneck is.",
+      "link": "https://www.onyx.app/3870371-25"
+    },
+    {
+      "text": "Noor Farooq: Okay\u2014let\u2019s do that. Next week is better for me. Tuesday or Wednesday afternoon?",
+      "link": "https://www.onyx.app/3870371-26"
+    },
+    {
+      "text": "Megan Foster: Wednesday afternoon works. How about 2:00 PM your time? I\u2019ll invite you and your sales ops manager, and I\u2019ll include a short agenda: current forecast process, bottlenecks by stage, and what an explainable forecast model would look like layered on Salesforce.",
+      "link": "https://www.onyx.app/3870371-27"
+    },
+    {
+      "text": "Noor Farooq: 2:00 PM Wednesday works. Send it over and I\u2019ll add our ops lead.",
+      "link": "https://www.onyx.app/3870371-28"
+    },
+    {
+      "text": "Megan Foster: Great\u2014thanks Noor. I\u2019ll send the invite today along with a couple of prep questions so we can make the session useful. Talk next Wednesday.",
+      "link": "https://www.onyx.app/3870371-29"
+    },
+    {
+      "text": "Noor Farooq: Sounds good. Talk then.",
+      "link": "https://www.onyx.app/3870371-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "noor_farooq@quicksilver_freight.onyx.app"
+    }
+  ]
+}

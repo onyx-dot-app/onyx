@@ -1,0 +1,30 @@
+{
+  "id": "2bb24ef4d0b04e4ea4fa5495efba76c4",
+  "semantic_identifier": "Impact--Add CRM field mapping auto-discovery and mapping suggestions during setup.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add CRM field mapping auto-discovery and mapping suggestions during setup.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a new onboarding step that automatically scans a customer\u2019s connected CRM to identify standard and commonly used opportunity/account fields (e.g., stage, close date, amount, owner, last activity). Based on what it finds, Sales_Accelerator will propose default mappings into our canonical schema so customers don\u2019t need to start from a blank slate.\n\nDuring setup, users will see suggested mappings with a clear confidence indicator for each field. They can quickly accept a suggestion, edit it (choose a different CRM field), or skip it before saving\u2014making the experience fast for straightforward cases while still safe and controllable for edge cases or custom CRM configurations.\n\nThe primary impact is reduced time-to-value and fewer setup errors. Auto-discovery and suggestions eliminate much of the manual \u201chunt and map\u201d work that slows onboarding today, and confidence cues help users trust the system while catching mismatches early.\n\nThis step also establishes critical data foundations for downstream product value. Accurate mappings enable benchmarks, stage-based guidance, and activity-driven insights in later setup steps and ongoing usage, improving the reliability of recommendations and reporting across the product.",
+      "link": "https://www.onyx.app/52062"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

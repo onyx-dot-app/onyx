@@ -1,0 +1,141 @@
+{
+  "id": "FIREFLIES_2953274",
+  "semantic_identifier": "2953274 - Starfall Terra Analytics - sales_pitch - Discussion with Audrey Rogers",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-10 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-10 00:00:00",
+    "duration_min": "27"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "2953274 - Starfall Terra Analytics - sales_pitch - Discussion with Audrey Rogers",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hi Audrey\u2014Arjun Mehta here. Thanks for taking a few minutes. I\u2019ll keep it tight: we built Customer_Analyzer to help product, marketing, and sales teams get clear on who their best customers are and how to talk to them in a way that actually converts. I was looking at Starfall Terra Analytics and thought this could help with segment focus and roadmap decisions. Do you have five minutes for a quick overview?",
+      "link": "https://www.onyx.app/9526247-1"
+    },
+    {
+      "text": "Audrey Rogers: Yep, I\u2019ve got a few minutes. What are you seeing that makes you think it\u2019s relevant for us?",
+      "link": "https://www.onyx.app/9526247-2"
+    },
+    {
+      "text": "Arjun Mehta: From what I can tell, you\u2019re juggling multiple customer types and probably getting mixed signals\u2014sales wants one set of deals, product sees different usage patterns, and marketing is trying to craft messaging that speaks to everyone. Customer_Analyzer pulls in your customer signals\u2014CRM fields, onboarding survey responses, product usage events, support tickets, even interview notes\u2014and turns that into two practical outputs. For today, I\u2019ll focus on the piece that tends to create the fastest lift: positioning recommendations by segment, grounded in evidence.",
+      "link": "https://www.onyx.app/9526247-3"
+    },
+    {
+      "text": "Audrey Rogers: Positioning recommendations sounds like\u2026 a nicer way of saying \u201cAI writes copy.\u201d How is it actually different?",
+      "link": "https://www.onyx.app/9526247-4"
+    },
+    {
+      "text": "Arjun Mehta: Fair question. The difference is it\u2019s not generic copy\u2014it\u2019s segment-specific messaging tied back to the \u201cwhy.\u201d We identify fit drivers and the language your customers already use, then generate editable messaging blocks you can actually deploy: website hero copy, sales deck bullets, and email openers. Alongside that, it gives your team a playbook: segment-specific value proposition, top use cases, key differentiators, proof points to collect, pricing/value framing notes, and objection handling. And every recommendation links back to the underlying signals so your team can trust it and debate the inputs, not opinions.",
+      "link": "https://www.onyx.app/9526247-5"
+    },
+    {
+      "text": "Audrey Rogers: Okay. Where do the segments come from? We already have a few hypotheses, but it\u2019s messy.",
+      "link": "https://www.onyx.app/9526247-6"
+    },
+    {
+      "text": "Arjun Mehta: You can start with your existing hypotheses\u2014say industries, company size, tech stack, or a \u201cjob to be done\u201d framing\u2014and we\u2019ll validate them against what your data is saying. Or we can discover segments from patterns in usage and tickets and then map them back to CRM fields so they\u2019re operational. The goal isn\u2019t to create some academic segmentation exercise\u2014it\u2019s to prioritize: which segments are high-fit today, and what do they need that you\u2019re uniquely good at delivering.",
+      "link": "https://www.onyx.app/9526247-7"
+    },
+    {
+      "text": "Audrey Rogers: And you mentioned roadmap decisions. That\u2019s mostly my world\u2014product planning and prioritizing bets. How does this help there?",
+      "link": "https://www.onyx.app/9526247-8"
+    },
+    {
+      "text": "Arjun Mehta: This is where it clicks for product planning: once you have prioritized segments, you can see unmet needs and recurring friction points for the high-fit customers\u2014based on tickets, survey responses, and behavioral patterns. Then your roadmap bets get tied to \u201cthis improves retention and expansion in our best-fit segment,\u201d not just \u201cthis feature is loud.\u201d But even before you change the roadmap, teams usually see quick wins by aligning messaging and qualification around the right segment, so you stop pulling in low-fit customers that churn.",
+      "link": "https://www.onyx.app/9526247-9"
+    },
+    {
+      "text": "Audrey Rogers: We do have a churn problem in one segment, but we\u2019re not sure if it\u2019s product gap or mis-selling.",
+      "link": "https://www.onyx.app/9526247-10"
+    },
+    {
+      "text": "Arjun Mehta: Exactly the kind of problem we\u2019re designed for. With the positioning recommendations, you\u2019ll get two things that help diagnose that: first, the differentiators and value props that resonate with the high-fit cohort; second, an objection-handling playbook that tells reps what to say when a prospect is actually a mismatch. It\u2019s like giving sales guardrails\u2014so you don\u2019t win deals you shouldn\u2019t. That, paired with the evidence trail\u2014tickets and usage patterns\u2014helps product see whether churn is coming from unmet needs in a segment you should double down on, or from attracting the wrong segment in the first place.",
+      "link": "https://www.onyx.app/9526247-11"
+    },
+    {
+      "text": "Audrey Rogers: What does \u201ceditable messaging blocks\u201d look like in practice? We already have a website, decks, sequences\u2026 I don\u2019t want another doc that no one uses.",
+      "link": "https://www.onyx.app/9526247-12"
+    },
+    {
+      "text": "Arjun Mehta: Totally. It\u2019s structured so it can drop into the places teams already work. For example, for Segment A you\u2019ll get a website hero option, 3\u20135 sales deck bullets, and a cold email opener that mirrors the customer\u2019s language. The blocks are editable, so marketing can refine tone, and sales enablement can standardize. The key is consistency: marketing and sales stop telling slightly different stories. And because the blocks are linked to the evidence and fit drivers, when someone asks \u201cwhy are we saying this?\u201d you can point to actual customer signals rather than gut feel.",
+      "link": "https://www.onyx.app/9526247-13"
+    },
+    {
+      "text": "Audrey Rogers: What would you need from us to get started? I\u2019m cautious about heavy integrations.",
+      "link": "https://www.onyx.app/9526247-14"
+    },
+    {
+      "text": "Arjun Mehta: We can start light. For an initial pass, you could give us a CRM export plus a sample of onboarding survey responses and a handful of support ticket tags or summaries\u2014whatever is easiest. If you want deeper accuracy, product usage events help a lot, but they\u2019re not required to get value early. The goal for the first couple weeks is to produce a clear prioritized segment view and a set of positioning recommendations you can sanity-check with your team.",
+      "link": "https://www.onyx.app/9526247-15"
+    },
+    {
+      "text": "Audrey Rogers: Who typically owns this internally\u2014product, marketing, or sales?",
+      "link": "https://www.onyx.app/9526247-16"
+    },
+    {
+      "text": "Arjun Mehta: Usually product marketing or growth owns the messaging piece day-to-day, but the value comes when product and sales are in the loop. Since you\u2019re thinking about product planning and segment strategy, you\u2019re a great anchor. For the deeper session, I\u2019d recommend pulling in whoever owns GTM messaging and someone from sales enablement or sales ops\u2014so we can map recommendations into decks and qualification quickly.",
+      "link": "https://www.onyx.app/9526247-17"
+    },
+    {
+      "text": "Audrey Rogers: If we did a full call, what would we actually cover? I don\u2019t want a generic demo.",
+      "link": "https://www.onyx.app/9526247-18"
+    },
+    {
+      "text": "Arjun Mehta: Makes sense. In a full call, we\u2019d do three things: (1) walk through your current segments/hypotheses and what signals you already have, (2) show a concrete example of segment-specific positioning recommendations\u2014value prop, differentiators, proof points to collect, and objection handling\u2014using a sample structure aligned to your world, and (3) outline a short pilot plan focused on product planning: identifying high-fit customers with unmet needs to guide your next roadmap bets, plus a quick messaging rollout for the highest-fit segment.",
+      "link": "https://www.onyx.app/9526247-19"
+    },
+    {
+      "text": "Audrey Rogers: That\u2019s closer to what I\u2019d want. Timing-wise, I can do next week. Any prep needed?",
+      "link": "https://www.onyx.app/9526247-20"
+    },
+    {
+      "text": "Arjun Mehta: Minimal prep. If you can come with: your top 2\u20133 segments you\u2019re debating, the KPIs you care about\u2014conversion, retention, expansion\u2014and any known churn patterns, we\u2019re good. If it\u2019s easy, a small CRM export with basic fields like industry, size, ARR, and stage would help, but we can also just talk through it and map what we\u2019d ingest.",
+      "link": "https://www.onyx.app/9526247-21"
+    },
+    {
+      "text": "Audrey Rogers: Okay. I\u2019d like to include our product marketing lead as well. Can you send an agenda so it\u2019s clear what we\u2019ll get out of it?",
+      "link": "https://www.onyx.app/9526247-22"
+    },
+    {
+      "text": "Arjun Mehta: Absolutely. I\u2019ll send a tight agenda: segment prioritization framework, sample positioning recommendation outputs, and a pilot plan tied to product planning and unmet needs discovery. Does Tuesday at 11am work for a 45-minute working session?",
+      "link": "https://www.onyx.app/9526247-23"
+    },
+    {
+      "text": "Audrey Rogers: Tuesday at 11 works. Send the invite and include our product marketing lead\u2014I'll forward you their email.",
+      "link": "https://www.onyx.app/9526247-24"
+    },
+    {
+      "text": "Arjun Mehta: Perfect. I\u2019ll send the calendar invite and agenda right after this, and I\u2019ll include a short list of optional data we can use if you want to accelerate. Thanks, Audrey\u2014looking forward to digging in with you next week.",
+      "link": "https://www.onyx.app/9526247-25"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "audrey_rogers@starfall_terra_analytics.onyx.app"
+    }
+  ]
+}

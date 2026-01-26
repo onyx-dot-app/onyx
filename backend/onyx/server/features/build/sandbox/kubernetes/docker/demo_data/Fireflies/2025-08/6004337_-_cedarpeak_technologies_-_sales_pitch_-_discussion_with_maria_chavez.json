@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_6004337",
+  "semantic_identifier": "6004337 - Cedarpeak Technologies - sales_pitch - Discussion with Maria Chavez",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-01 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-01 00:00:00",
+    "duration_min": "25"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "6004337 - Cedarpeak Technologies - sales_pitch - Discussion with Maria Chavez",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Maria, this is James Choi. Thanks for taking a few minutes\u2014did I catch you at an okay time?",
+      "link": "https://www.onyx.app/4948534-1"
+    },
+    {
+      "text": "Maria Chavez: Hi James\u2014yeah, I\u2019ve got a few minutes now. What\u2019s up?",
+      "link": "https://www.onyx.app/4948534-2"
+    },
+    {
+      "text": "James Choi: Great. I\u2019ll keep it tight. I\u2019m calling because we work with product, marketing, and sales teams to get a clearer answer to a question most teams argue about: \u201cWho are our best customers, and how do we win more of them?\u201d Our product is called Customer_Analyzer, and it turns the customer signals you already have\u2014CRM fields, onboarding survey responses, product usage, support tickets\u2014into a simple fit score and practical positioning guidance your reps can actually use.",
+      "link": "https://www.onyx.app/4948534-3"
+    },
+    {
+      "text": "Maria Chavez: Okay. When you say \u201cfit score,\u201d what exactly are you scoring, and how is it different from what we do in Salesforce reports?",
+      "link": "https://www.onyx.app/4948534-4"
+    },
+    {
+      "text": "James Choi: Totally fair. The core difference is that it\u2019s not just slicing by one or two fields\u2014Customer_Analyzer estimates customer-product fit at both the account and segment level, then explains *why* the score is high or low. You define fit drivers\u2014like industry, size, problem severity, willingness to pay, time-to-value, adoption patterns, support burden, churn risk signals\u2014and the system produces a 0\u2013100 score, a driver breakdown, and comparisons across segments, like SMB vs. mid-market. The idea is to connect \u201cwho we sell to\u201d with \u201cwho actually converts, retains, and expands.\u201d",
+      "link": "https://www.onyx.app/4948534-5"
+    },
+    {
+      "text": "Maria Chavez: That sounds useful in theory. But we already have an ICP doc, and we do win/loss reviews. What\u2019s the practical outcome for sales?",
+      "link": "https://www.onyx.app/4948534-6"
+    },
+    {
+      "text": "James Choi: The practical outcome is sales enablement that\u2019s anchored to evidence. One use case teams love is building an objection-handling guide tied to the strongest value drivers for best-fit accounts. Instead of generic battlecards, you can say: \u201cFor high-fit manufacturing accounts, the top drivers are time-to-value and adoption\u2014here are proof points and talk tracks.\u201d And for low-fit segments, you can spot patterns early\u2014like high support burden or slow adoption\u2014and adjust targeting or messaging before deals stall.",
+      "link": "https://www.onyx.app/4948534-7"
+    },
+    {
+      "text": "Maria Chavez: Interesting. We definitely see deals stall when the prospect looks good on paper but then adoption doesn\u2019t happen. How hard is it to set up? We don\u2019t have a ton of ops bandwidth.",
+      "link": "https://www.onyx.app/4948534-8"
+    },
+    {
+      "text": "James Choi: Setup is usually lighter than people expect because you\u2019re not starting from scratch\u2014you\u2019re using signals you already collect. Most teams start with a few drivers that are easiest to instrument: firmographics from CRM, a couple product usage events, and maybe support ticket volume. Then Customer_Analyzer computes fit estimation and gives you the driver breakdown. You don\u2019t need perfect data on day one; the value often comes from seeing which drivers correlate with renewals and expansions, then iterating.",
+      "link": "https://www.onyx.app/4948534-9"
+    },
+    {
+      "text": "Maria Chavez: How do you avoid it being a black box model that reps don\u2019t trust?",
+      "link": "https://www.onyx.app/4948534-10"
+    },
+    {
+      "text": "James Choi: That\u2019s exactly why we emphasize the driver breakdown. The score is the headline, but the \u201cwhy\u201d is what makes it usable. For each account or segment you\u2019ll see which drivers are pushing the score up or down\u2014like \u201cfast time-to-value,\u201d \u201chigh feature adoption,\u201d or \u201celevated support burden.\u201d In sales conversations, that transparency makes it easier for managers and reps to agree on where to focus and what messaging to lean on.",
+      "link": "https://www.onyx.app/4948534-11"
+    },
+    {
+      "text": "Maria Chavez: Got it. If we did this, what would you recommend we start with at Cedarpeak? We sell into a few verticals, and it gets messy.",
+      "link": "https://www.onyx.app/4948534-12"
+    },
+    {
+      "text": "James Choi: I\u2019d start by comparing two or three of your biggest segments\u2014say the verticals you think are core\u2014then validate with outcomes you care about: conversion rate, retention, expansion. The fit estimation feature will show segment comparisons and a recommended ICP profile based on observed outcomes. Then we\u2019d translate the top value drivers for that best-fit segment into positioning recommendations: value propositions, differentiators, proof points, and the objection handling you want the team to standardize.",
+      "link": "https://www.onyx.app/4948534-13"
+    },
+    {
+      "text": "Maria Chavez: The objection-handling piece is appealing. We have battlecards, but they\u2019re not tailored by segment and they get stale quickly.",
+      "link": "https://www.onyx.app/4948534-14"
+    },
+    {
+      "text": "James Choi: Exactly. What usually happens is teams create one set of messaging for everyone, but your strongest proof points differ by segment. With Customer_Analyzer, you can keep the guide \u201calive\u201d because it\u2019s tied to the signals\u2014if a segment\u2019s adoption pattern changes or support burden spikes, you\u2019ll see it reflected in the drivers and you can adjust talk tracks. It helps marketing and sales stay aligned instead of updating docs based on whoever yells loudest in the pipeline meeting.",
+      "link": "https://www.onyx.app/4948534-15"
+    },
+    {
+      "text": "Maria Chavez: Makes sense. What do you need from us to see if it\u2019s a fit? I don\u2019t want a huge procurement process for a \u201cmaybe.\u201d",
+      "link": "https://www.onyx.app/4948534-16"
+    },
+    {
+      "text": "James Choi: Totally. The next step I\u2019d propose is a short working session\u201430 to 45 minutes\u2014where we map your current segments, pick 5\u20137 fit drivers that reflect how you *actually* win and retain, and identify what signals you already have in Salesforce, your product analytics, and support system. If it looks promising, we can outline what a quick pilot would include: segment-level fit scores, driver breakdowns, and an initial objection-handling guide for your top segment.",
+      "link": "https://www.onyx.app/4948534-17"
+    },
+    {
+      "text": "Maria Chavez: That sounds reasonable. Before we schedule, can you give me an example of what the output looks like for a sales leader?",
+      "link": "https://www.onyx.app/4948534-18"
+    },
+    {
+      "text": "James Choi: Sure. Imagine a dashboard where Cedarpeak can view: (1) fit score by account and by segment, (2) a ranked list of fit drivers with explanations\u2014like \u201chigh willingness to pay\u201d or \u201cslow time-to-value,\u201d (3) comparisons across segments showing which segment has the best retention and expansion outcomes, and (4) a recommended ICP profile. Then, for enablement, a simple page that says: \u201cFor best-fit segment X, lead with these value props, use these proof points, and when you hear objection Y, here\u2019s the response that maps to the segment\u2019s strongest drivers.\u201d",
+      "link": "https://www.onyx.app/4948534-19"
+    },
+    {
+      "text": "Maria Chavez: Okay, that\u2019s clear. Who usually owns this internally\u2014sales ops, marketing ops, product?",
+      "link": "https://www.onyx.app/4948534-20"
+    },
+    {
+      "text": "James Choi: It varies, but the best results come when sales and marketing co-own it, with light support from ops for the data connections. Since the immediate use case we\u2019re discussing is sales enablement\u2014objection handling tied to best-fit drivers\u2014it often starts with revenue leadership. Then product and marketing also benefit because it sharpens ICP and positioning across the board.",
+      "link": "https://www.onyx.app/4948534-21"
+    },
+    {
+      "text": "Maria Chavez: We\u2019ve been trying to tighten our ICP going into Q2 planning, so the timing might be good. What would you want me to prepare for that working session?",
+      "link": "https://www.onyx.app/4948534-22"
+    },
+    {
+      "text": "James Choi: If you can bring two things, it\u2019ll be super productive: first, your current segmentation\u2014however you define it today\u2014and second, any outcomes you track that you trust, like renewal rate, expansion, time-to-close, or implementation time. Even a rough view is fine. On our side, I\u2019ll come with a simple template for fit drivers and a few example driver sets we\u2019ve seen work.",
+      "link": "https://www.onyx.app/4948534-23"
+    },
+    {
+      "text": "Maria Chavez: Alright. I\u2019m interested. Can we do next week? Preferably Tuesday or Wednesday morning.",
+      "link": "https://www.onyx.app/4948534-24"
+    },
+    {
+      "text": "James Choi: Perfect. I can do Tuesday at 10:00am or Wednesday at 11:00am your time\u2014what\u2019s better?",
+      "link": "https://www.onyx.app/4948534-25"
+    },
+    {
+      "text": "Maria Chavez: Wednesday at 11 works.",
+      "link": "https://www.onyx.app/4948534-26"
+    },
+    {
+      "text": "James Choi: Great\u2014Wednesday at 11. I\u2019ll send a calendar invite for a 45-minute session with an agenda: current segments, pick fit drivers, identify signals, and outline what an initial objection-handling guide would look like for your top segment. Sound good?",
+      "link": "https://www.onyx.app/4948534-27"
+    },
+    {
+      "text": "Maria Chavez: Yes, send it over. I\u2019ll invite our sales ops manager too since they\u2019ll have the CRM context.",
+      "link": "https://www.onyx.app/4948534-28"
+    },
+    {
+      "text": "James Choi: Awesome. I\u2019ll include a couple pre-reads\u2014one page on fit estimation and an example of a driver breakdown\u2014so we can jump straight into your specifics. Thanks, Maria. Looking forward to it.",
+      "link": "https://www.onyx.app/4948534-29"
+    },
+    {
+      "text": "Maria Chavez: Thanks, James. Talk Wednesday.",
+      "link": "https://www.onyx.app/4948534-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "maria_chavez@cedarpeak_technologies.onyx.app"
+    }
+  ]
+}

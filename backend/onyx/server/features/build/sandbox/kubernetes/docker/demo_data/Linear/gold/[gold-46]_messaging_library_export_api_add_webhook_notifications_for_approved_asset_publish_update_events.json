@@ -1,0 +1,30 @@
+{
+  "id": "5887997",
+  "semantic_identifier": "[GOLD-46]: Messaging Library Export API: add webhook notifications for approved asset publish/update events",
+  "title": "Messaging Library Export API: add webhook notifications for approved asset publish/update events",
+  "source": "linear",
+  "doc_updated_at": "2025-12-13",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "kevin_sullivan",
+      "email": "kevin_sullivan@netherite-extraction.onyx.app"
+    },
+    "state": "open",
+    "priority": "high",
+    "created_at": "2025-12-13"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement outbound webhooks that fire when a Messaging Library asset transitions to Approved or when an already-approved asset is updated (new version). Webhook payload should include asset_id, external_id, asset_version, approved_at/updated_at, and a minimal summary so downstream tools can trigger a targeted re-sync via the existing export endpoints. Include webhook signing (shared secret) and delivery retries with dead-letter logging for failed destinations.",
+      "link": "https://www.onyx.app/27189"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

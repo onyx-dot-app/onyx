@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_4864163",
+  "semantic_identifier": "4864163 - Unitypeak Nonprofits - sales_call - Discussion with Fernando Chapman",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-06-17 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-06-17 00:00:00",
+    "duration_min": "40"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-06"
+      ],
+      "year_month": "2025-06",
+      "meeting_title": "4864163 - Unitypeak Nonprofits - sales_call - Discussion with Fernando Chapman",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Fernando, thanks for making the time again. Last time you mentioned Unitypeak\u2019s biggest pain is the end-of-month \u201csurprise\u201d on pipeline\u2014things look fine in the CRM and then three deals slip at once. I wanted to focus today on one piece of Sales_Accelerator that directly targets that: our sales_forecast view and the drivers behind it. Does that still feel like the priority?",
+      "link": "https://www.onyx.app/6774703-1"
+    },
+    {
+      "text": "Fernando Chapman: Yeah, forecast accuracy is still a priority. But I\u2019m also cautious\u2014our CRM data isn\u2019t always perfect, and I don\u2019t want another dashboard that\u2019s only as good as what people remember to enter.",
+      "link": "https://www.onyx.app/6774703-2"
+    },
+    {
+      "text": "Megan Foster: Totally fair, and that\u2019s actually the right lens for this. Sales_Accelerator sits on top of your CRM, so we don\u2019t try to replace Salesforce discipline\u2014we surface where the discipline is breaking the forecast. The difference from a standard CRM forecast is we combine stage with activity signals\u2014email/call/meeting patterns\u2014and cycle-time benchmarks, and we can optionally use Customer_Analyzer\u2019s fit score as a weighting factor. So if a deal is \u201clate\u201d for the stage and hasn\u2019t had a meaningful touch, it drops out of commit even if it\u2019s still marked \u201cverbal yes.\u201d",
+      "link": "https://www.onyx.app/6774703-3"
+    },
+    {
+      "text": "Fernando Chapman: That sounds helpful in theory. But we\u2019ve tried \u201cactivity-based\u201d tools before. The reps complained about false alerts and it became noise. And honestly, our stages are inconsistent across teams\u2014some folks skip stages, some don\u2019t update close dates until the last second.",
+      "link": "https://www.onyx.app/6774703-4"
+    },
+    {
+      "text": "Megan Foster: Understood. Let me anchor on how it\u2019s explainable so it\u2019s not a black box. For any forecast number\u2014commit, best-case, pipeline\u2014you can click into the drivers: stage age, last touch, whether a next meeting is scheduled, fit tier if you bring in Customer_Analyzer, and historical win rate for similar deals. Then you can see \u201cwhy\u201d it\u2019s at risk, not just \u201cit\u2019s at risk.\u201d It\u2019s less \u201calerts everywhere\u201d and more \u201cthese five deals are the reason your commit is inflated.\u201d",
+      "link": "https://www.onyx.app/6774703-5"
+    },
+    {
+      "text": "Fernando Chapman: I get the value of explainable drivers. But if our close dates and next steps aren\u2019t reliable, won\u2019t your \u201cstage age\u201d and \u201cnext meeting scheduled\u201d driver just reflect bad inputs? We\u2019ve fought that battle for years.",
+      "link": "https://www.onyx.app/6774703-6"
+    },
+    {
+      "text": "Megan Foster: You\u2019re right that hygiene matters. Where teams see traction quickly is using the system to *highlight* hygiene problems in a way that\u2019s tied to outcomes. For example, Sales ops can view stage slippage diagnostics and conversion by segment and rep. If one segment shows a big drop from discovery to evaluation, we can recommend a process fix\u2014like moving security review earlier\u2014and then monitor whether conversion improves. The tool becomes a feedback loop, not just a report.",
+      "link": "https://www.onyx.app/6774703-7"
+    },
+    {
+      "text": "Fernando Chapman: We\u2019re a nonprofit org. Our \u201csegments\u201d aren\u2019t clean like enterprise SaaS. We have donors, partners, institutional grants, and different cycles. I\u2019m not sure benchmarking would be meaningful.",
+      "link": "https://www.onyx.app/6774703-8"
+    },
+    {
+      "text": "Megan Foster: That\u2019s fair. The benchmarks don\u2019t have to be generic industry averages. We base them on *your* historical cycle times and win rates by whatever breakdown is meaningful\u2014source, motion, rep, or even \u201cgrant-funded vs. donor-led.\u201d The system learns patterns from your own pipeline history. And on top of that, the scenario planning can help you quantify what you need\u2014like \u201cIf we add 20 SQLs in the highest-fit tier, what\u2019s the expected impact this quarter?\u201d That\u2019s especially useful for planning around board expectations.",
+      "link": "https://www.onyx.app/6774703-9"
+    },
+    {
+      "text": "Fernando Chapman: Scenario planning is interesting. But again, it assumes the underlying data is accurate. Our reps are not great at logging emails and meetings either. Some of it is in Gmail, some in calendar, and some just\u2026 not tracked.",
+      "link": "https://www.onyx.app/6774703-10"
+    },
+    {
+      "text": "Megan Foster: That\u2019s the other side of \u201cactivity signals.\u201d If you connect email/calendar, we can pull signals without reps logging every touch manually. It\u2019s not perfect, but it reduces reliance on manual entry. And we can set thresholds so it\u2019s not pinging people for minor things\u2014more like \u201cno touch in 14 days on a late-stage deal\u201d rather than \u201cyou didn\u2019t send an email today.\u201d",
+      "link": "https://www.onyx.app/6774703-11"
+    },
+    {
+      "text": "Fernando Chapman: We\u2019d have to get IT and security comfortable with connecting email and calendars. That can take months here. And I\u2019m also wary that if reps feel monitored, adoption drops.",
+      "link": "https://www.onyx.app/6774703-12"
+    },
+    {
+      "text": "Megan Foster: Completely. We can start without inbox/calendar and still add value with CRM-stage and the data you already have, then expand. In terms of rep sentiment, we try to position it as *deal protection*. The output is manager-facing too\u2014so instead of \u201cWhy didn\u2019t you log activity?\u201d it becomes \u201cThis deal is slipping because there\u2019s no next meeting scheduled and it\u2019s exceeded typical time in stage.\u201d It\u2019s a coaching artifact.",
+      "link": "https://www.onyx.app/6774703-13"
+    },
+    {
+      "text": "Fernando Chapman: Okay, but then we\u2019re back to inconsistent stages. If the stage is wrong, you\u2019re diagnosing the wrong thing.",
+      "link": "https://www.onyx.app/6774703-14"
+    },
+    {
+      "text": "Megan Foster: True. One practical approach we\u2019ve seen: start with a narrow scope\u2014one team, one motion\u2014and use the stage conversion report to *expose* inconsistencies. If Team A has 40% conversion to proposal and Team B has 10%, either they\u2019re doing something different or their stage definitions differ. Sales ops can then standardize. The forecast then becomes a forcing function to clean things up because leadership starts trusting it and asks for it.",
+      "link": "https://www.onyx.app/6774703-15"
+    },
+    {
+      "text": "Fernando Chapman: That sounds like a lot of change management. We don\u2019t have a big sales ops bench. It\u2019s basically me and one analyst, and we\u2019re already stretched.",
+      "link": "https://www.onyx.app/6774703-16"
+    },
+    {
+      "text": "Megan Foster: That\u2019s helpful context. If ops bandwidth is limited, we can keep the initial rollout lightweight: one forecast view that leadership cares about, plus a simple \u201cslippage\u201d diagnostic. The goal would be to reduce end-of-quarter surprises rather than do a full process re-architecture on day one.",
+      "link": "https://www.onyx.app/6774703-17"
+    },
+    {
+      "text": "Fernando Chapman: So what would you actually need from us to get started? Last time you mentioned integrating with Customer_Analyzer\u2014our team liked that fit scoring, but we haven\u2019t rolled it out widely.",
+      "link": "https://www.onyx.app/6774703-18"
+    },
+    {
+      "text": "Megan Foster: Great memory. Sales_Accelerator can consume Customer_Analyzer\u2019s fit tiers to weight forecast\u2014so high-fit deals get treated differently than low-fit ones even at the same stage. But you don\u2019t have to have it perfect. Minimum to start is: Salesforce access, your current stage definitions, and 12 months of historical opp data if possible. Optional: Customer_Analyzer feed and email/calendar signals later.",
+      "link": "https://www.onyx.app/6774703-19"
+    },
+    {
+      "text": "Fernando Chapman: The 12 months of historical data is fine. Stage definitions are the messy part. And Salesforce access approvals take time. Also, budget is\u2026 tight. We\u2019re in a hiring freeze.",
+      "link": "https://www.onyx.app/6774703-20"
+    },
+    {
+      "text": "Megan Foster: Understood on budget. If we can get agreement on scope, I can propose a phased plan: start with forecasting for one pipeline slice and prove improved accuracy and fewer slips. Then you\u2019d have a concrete ROI story internally. Would it be fair to say your biggest concern is that without hygiene, the tool becomes noise and you don\u2019t have time to manage it?",
+      "link": "https://www.onyx.app/6774703-21"
+    },
+    {
+      "text": "Fernando Chapman: That\u2019s exactly it. We\u2019ve bought tools that promised \u201cinsights\u201d and then we ended up babysitting the data and turning off alerts. I can\u2019t take on another system that needs constant tuning.",
+      "link": "https://www.onyx.app/6774703-22"
+    },
+    {
+      "text": "Megan Foster: That\u2019s a valid risk. What I\u2019d suggest is a short evaluation where we run Sales_Accelerator against your existing pipeline and show you: (1) forecast accuracy compared to your current method, and (2) the top drivers of slippage. If it\u2019s noisy because of data gaps, we\u2019ll see that quickly\u2014and you can decide not to proceed.",
+      "link": "https://www.onyx.app/6774703-23"
+    },
+    {
+      "text": "Fernando Chapman: Evaluation is fine, but what does that mean in practice? I don\u2019t want a \u201cpilot\u201d that becomes a sunk-cost project.",
+      "link": "https://www.onyx.app/6774703-24"
+    },
+    {
+      "text": "Megan Foster: In practice it\u2019s two weeks of data access and a working session. We\u2019ll generate the forecast views\u2014commit/best-case/pipeline\u2014plus the diagnostics by segment/rep/source. Then we review with you: \u201cHere are the deals driving risk, here\u2019s why.\u201d If it\u2019s not credible, we stop. No long implementation.",
+      "link": "https://www.onyx.app/6774703-25"
+    },
+    {
+      "text": "Fernando Chapman: Two weeks might be optimistic for access and approvals. And even if we get through it, I\u2019m not sure I can get purchasing over the line this quarter. We\u2019re prioritizing donor platform work and compliance projects.",
+      "link": "https://www.onyx.app/6774703-26"
+    },
+    {
+      "text": "Megan Foster: That\u2019s helpful. Timing-wise, are you saying this is more of a next-quarter conversation even if the evaluation goes well?",
+      "link": "https://www.onyx.app/6774703-27"
+    },
+    {
+      "text": "Fernando Chapman: Likely, yes. And honestly, even then, I\u2019d need to see a very clear case that it won\u2019t create extra work for ops. If the answer is \u201cclean your CRM first,\u201d that\u2019s a non-starter right now.",
+      "link": "https://www.onyx.app/6774703-28"
+    },
+    {
+      "text": "Megan Foster: I hear you. I don\u2019t want to oversell it\u2014Sales_Accelerator does benefit from cleaner data. We can reduce manual effort with activity signals, and we can surface where hygiene is hurting outcomes, but it won\u2019t magically fix inconsistent stages overnight. If that foundational work can\u2019t happen, it may not be the right time.",
+      "link": "https://www.onyx.app/6774703-29"
+    },
+    {
+      "text": "Fernando Chapman: That\u2019s where I\u2019m landing. I like the idea, and I think the forecasting drivers could help, but we\u2019re not in a position to tackle the prerequisites or add another tool this quarter.",
+      "link": "https://www.onyx.app/6774703-30"
+    },
+    {
+      "text": "Megan Foster: That makes sense. How about we do this: I\u2019ll send a one-page outline of what the evaluation would require\u2014access, timeline, and what we\u2019d deliver\u2014so you can sanity-check effort internally. And if it\u2019s not feasible, we can revisit when your donor platform work settles. Would you prefer I circle back in, say, 90 days?",
+      "link": "https://www.onyx.app/6774703-31"
+    },
+    {
+      "text": "Fernando Chapman: Yes\u2014send the outline, and let\u2019s plan to reconnect in a few months. If we can improve CRM discipline by then, this might be back on the table.",
+      "link": "https://www.onyx.app/6774703-32"
+    },
+    {
+      "text": "Megan Foster: Perfect. I\u2019ll send that today. Thanks, Fernando\u2014this was really clear, and it helps me not push you into something that won\u2019t stick.",
+      "link": "https://www.onyx.app/6774703-33"
+    },
+    {
+      "text": "Fernando Chapman: Appreciate it, Megan. Talk soon.",
+      "link": "https://www.onyx.app/6774703-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "fernando_chapman@unitypeak_nonprofits.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "76bce74f678f4d2a92c8d8247eae569d",
+  "semantic_identifier": "Design--issue_clustering v2: Add per-product-area clustering configuration + model selection.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--issue_clustering v2: Add per-product-area clustering configuration + model selection.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a product-area\u2013scoped configuration layer to `issue_clustering v2`, allowing clustering behavior to be tuned per product area without changing global defaults. Each product area will be able to specify the embedding model (and version), similarity threshold, and minimum cluster size; any unspecified fields inherit from the global default config to keep behavior stable and reduce rollout risk. This enables, for example, higher thresholds in noisy areas or a newer embedding model in areas with more semantic variance while keeping the rest of the system unchanged.\n\nOn ingestion (or at clustering time, depending on current architecture), the service will determine the issue\u2019s product area from the linked metadata and select the corresponding config via a resolver: `product_area_id -> effective_config = merge(global_default, area_override)`. If the product area is missing, unknown, or fails validation, the resolver will fall back to the global default and emit a structured warning/metric for observability. Model selection is handled as part of the config (e.g., `embedding_provider=model_x`, `embedding_version=vN`), ensuring that the similarity computation and thresholds remain compatible with the chosen embedding space.\n\nFor auditability and reproducibility, the system will persist a \u201cconfig snapshot\u201d with each clustering decision (e.g., when assigning an issue to an existing cluster or creating a new cluster). This snapshot should include an immutable identifier (config hash / version), the resolved effective config fields, and relevant runtime inputs (selected product area, resolver fallback reason if any, embedding model/version used). This allows us to explain \u201cwhy did this issue join cluster C\u201d even after configs evolve, and supports backfills by re-running with the original snapshot.\n\nGuardrails include schema validation (bounds on thresholds, min cluster size >= 2, allowed model/version list), safe rollout (start with no overrides, then enable per-area overrides behind a feature flag), and fallback behavior when product area is misclassified. We\u2019ll add metrics and logs for: percentage of issues using overrides, fallback rate, distribution of selected models/versions, and clustering quality signals (e.g., average similarity within cluster per area) to ensure per-area tuning improves outcomes without degrading global clustering stability.",
+      "link": "https://www.onyx.app/94350"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

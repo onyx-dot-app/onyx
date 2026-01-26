@@ -1,0 +1,30 @@
+{
+  "id": "b2c5bbdb7c69405db444e1b6f6158724",
+  "semantic_identifier": "Impact--Follow-up workflow: Fix contact coverage calculation used for multi-threading prompts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Follow-up workflow: Fix contact coverage calculation used for multi-threading prompts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change improves the accuracy of the \u201ccontact coverage\u201d signal that determines whether follow-up multi-threading prompts should fire for a given account or opportunity. Today, coverage can become stale or incorrect due to CRM sync timing, contact merges, or opportunity stage changes, which causes prompts to be skipped when they\u2019re needed or shown when they\u2019re not relevant.\n\nBy correcting the backend coverage calculation (roles/personas mapping, active-contact qualification, and engagement recency), we\u2019ll trigger multi-threading prompts based on the true state of who is engaged and who is missing in the buying group. This should increase prompt precision and user trust, because the workflow will align with what sellers actually see in the CRM and in recent activity.\n\nThe primary user impact is better prompt reliability: fewer false negatives (missing prompts that would help expand stakeholders) and fewer false positives (nudges that suggest contacts already covered or not applicable). For the business, this supports higher adoption of the follow-up workflow and increases the likelihood that sellers add/engage the right contacts at the right time, improving downstream conversion and deal progression.\n\nWe\u2019ll also add lightweight telemetry around the coverage inputs and computed outputs to validate eligibility decisions in production and quickly spot regressions. This instrumentation will enable faster debugging across edge cases (syncs, merges, stage transitions) and provide a measurable baseline for prompt quality improvements post-release.",
+      "link": "https://www.onyx.app/59976"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

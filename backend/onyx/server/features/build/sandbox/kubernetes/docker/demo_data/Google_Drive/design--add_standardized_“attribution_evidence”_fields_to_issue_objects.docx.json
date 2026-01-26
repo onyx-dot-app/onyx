@@ -1,0 +1,30 @@
+{
+  "id": "6bfbd82690264701b111584b68d8c46c",
+  "semantic_identifier": "Design--Add standardized \u201cAttribution Evidence\u201d fields to Issue objects.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-31",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add standardized \u201cAttribution Evidence\u201d fields to Issue objects.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We should add a standardized \u201cAttribution Evidence\u201d section to the Issue object to capture the minimum structured inputs needed for impact attribution and to make later reporting/audits consistent. The section will include fields such as: impacted account(s) (IDs + names), revenue at risk / expected impact amount (currency + range/confidence), impact hypothesis (short freeform narrative with optional category tags), and linked downstream work (e.g., opportunity IDs, support ticket IDs, customer escalation IDs, project/task IDs). This section is explicitly not a computed attribution result; it is the source-of-truth evidence captured at the time the Issue is created/triaged.\n\nOn the data model, we\u2019ll extend the Issue schema with a single nested object (e.g., `attributionEvidence`) containing typed subfields and metadata. Each field should support \u201cunknown/not provided\u201d states and store normalization details (system type, external ID, display label) for linked entities. We will also add audit metadata: `createdBy`, `createdAt`, and a change history that records each update as an immutable entry (old/new value, actor, timestamp, and optional reason). This ensures attribution inputs remain reviewable over time even as account ownership, pipeline amounts, or hypotheses evolve.\n\nFor capture consistency, the Issue creation/edit UI will include a compact panel with required/optional indicators and validation (e.g., numeric format, currency, entity ID format). We\u2019ll support lightweight prefill from context when available: if an Issue is created from a support/CRM/pipeline integration, we populate impacted accounts and linked work IDs automatically and mark the source. For existing Issues, the section will default to empty and be editable by authorized roles; we should provide a simple \u201crequest evidence\u201d workflow (e.g., a status check or warning) rather than blocking Issue creation.\n\nSuccess criteria: the fields are present on all Issues, can be filled quickly during triage, and can be queried/exported for reporting using consistent types. We\u2019ll measure adoption (% Issues with at least one impacted account and one linked downstream ID), completeness over time, and audit integrity (every change is attributable to an actor and timestamp). Rollout should include a backfill plan for Issues created via integrations (best-effort prefill) and a migration that does not disrupt existing Issue APIs/clients by making the new object optional and versioned.",
+      "link": "https://www.onyx.app/91181"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

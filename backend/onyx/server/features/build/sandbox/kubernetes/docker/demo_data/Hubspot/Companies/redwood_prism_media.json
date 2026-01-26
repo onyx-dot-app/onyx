@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_5199188",
+  "semantic_identifier": "Redwood Prism Media",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-11-04 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "5199188",
+    "domain": "redwood_prism_media.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Redwood Prism Media\nDomain: redwood_prism_media.onyx.app",
+      "link": "https://www.onyx.app/91038"
+    },
+    {
+      "text": "Contact: Kathryn Jacobs\nEmail: kathryn_jacobs@redwood_prism_media.onyx.app",
+      "link": "https://www.onyx.app/91917"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

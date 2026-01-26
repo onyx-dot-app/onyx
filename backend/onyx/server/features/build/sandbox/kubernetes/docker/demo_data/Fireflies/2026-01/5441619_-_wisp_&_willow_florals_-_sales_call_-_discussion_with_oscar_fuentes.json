@@ -1,0 +1,185 @@
+{
+  "id": "FIREFLIES_5441619",
+  "semantic_identifier": "5441619 - Wisp & Willow Florals - sales_call - Discussion with Oscar Fuentes",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-01-04 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-01-04 00:00:00",
+    "duration_min": "41"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-01"
+      ],
+      "year_month": "2026-01",
+      "meeting_title": "5441619 - Wisp & Willow Florals - sales_call - Discussion with Oscar Fuentes",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Oscar, good to see you again. Last time you mentioned you\u2019re getting a lot of \u201csomething\u2019s broken\u201d messages coming in from Zendesk and Intercom, and then your team has to translate that into Jira tickets\u2014often with duplicates and unclear impact. Today I\u2019d love to focus on how Issue_Tracker can help you get to a clear \u201cwhat do we fix next\u201d list that both Support and Engineering trust. Does that still match what\u2019s most urgent?",
+      "link": "https://www.onyx.app/3894723-1"
+    },
+    {
+      "text": "Oscar Fuentes: Yeah, that\u2019s still the pain. We\u2019re spending too much time figuring out if an issue is real, how many customers it\u2019s hitting, and whether it\u2019s actually hurting revenue. It\u2019s noisy.",
+      "link": "https://www.onyx.app/3894723-2"
+    },
+    {
+      "text": "Megan Foster: Perfect. Let\u2019s zoom in on one capability: issue_prioritization. The core idea is Issue_Tracker clusters similar customer-reported issues across your channels, then ranks those clusters with an explainable score\u2014so you can see, \u201cThis is high because it\u2019s spiking in volume, tagged severe, hitting high-ARR customers, and it\u2019s tied to churn risk or a late-stage deal.\u201d Where are you prioritizing today\u2014Support SLA, Product impact/effort, or Sales deal blockers?",
+      "link": "https://www.onyx.app/3894723-3"
+    },
+    {
+      "text": "Oscar Fuentes: Honestly, it\u2019s a mix and that\u2019s part of the problem. Support escalates what\u2019s loud. Product tries to be rational. And Sales only jumps in when a deal is at risk. There\u2019s no shared logic.",
+      "link": "https://www.onyx.app/3894723-4"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly the gap Issue_Tracker is meant to close. It doesn\u2019t replace Zendesk or Jira\u2014it sits between them and standardizes the \u201cissue object\u201d: the theme or root cause, evidence from real conversations, and the list of impacted customers. Then prioritization gives each team a view that matches how they work: Support can see SLA-risk clusters, Engineering can see trend velocity and representative examples, and leadership can see revenue exposure.",
+      "link": "https://www.onyx.app/3894723-5"
+    },
+    {
+      "text": "Oscar Fuentes: The \u201cevidence\u201d part is interesting. Engineering always asks, \u201cIs this one customer, or is it widespread?\u201d And then someone has to go hunting across tickets.",
+      "link": "https://www.onyx.app/3894723-6"
+    },
+    {
+      "text": "Megan Foster: Exactly. For engineering managers, one of the most used workflows is opening a cluster and seeing: top examples, platform or channel breakdown, trend line over time, and which customers are affected. So before someone gets paged or you spin up an on-call fix, they can validate whether it\u2019s actually widespread and getting worse.",
+      "link": "https://www.onyx.app/3894723-7"
+    },
+    {
+      "text": "Oscar Fuentes: That would help. But I\u2019m a little worried about clustering accuracy. If the system merges different issues because customers describe them similarly, or splits one issue into five clusters because the language varies, we\u2019ll lose trust fast.",
+      "link": "https://www.onyx.app/3894723-8"
+    },
+    {
+      "text": "Megan Foster: Totally fair\u2014and it\u2019s the right concern to raise on call two. Two things we do to protect trust. First, the priority score is explainable even if clustering needs tuning\u2014you can see why something is ranking high and inspect the evidence. Second, we build in a \u201ccluster hygiene\u201d workflow: your team can quickly merge or split clusters, and Issue_Tracker learns from that feedback. In practice, we typically start with your top few categories\u2014like checkout errors, delivery scheduling, or account access\u2014so we tune where it matters most.",
+      "link": "https://www.onyx.app/3894723-9"
+    },
+    {
+      "text": "Oscar Fuentes: Okay. How much effort is that tuning? I don\u2019t have someone who can babysit this daily.",
+      "link": "https://www.onyx.app/3894723-10"
+    },
+    {
+      "text": "Megan Foster: You shouldn\u2019t need to. In week one, we do a short calibration pass\u2014usually 60\u201390 minutes with someone from Support Ops or Product Ops\u2014to review the top clusters and correct the obvious merges/splits. After that, it\u2019s light-touch: your team only adjusts when they notice something off, and those adjustments reduce future errors. The goal is \u201cgood enough to drive decisions,\u201d not perfection.",
+      "link": "https://www.onyx.app/3894723-11"
+    },
+    {
+      "text": "Oscar Fuentes: Makes sense. You also mentioned weighting by customer tier and revenue exposure. We\u2019re on HubSpot for CRM. Can you pull in deal stage and customer value?",
+      "link": "https://www.onyx.app/3894723-12"
+    },
+    {
+      "text": "Megan Foster: Yes. Issue_Tracker integrates with your CRM so we can weight clusters by ARR tier, segment, and deal stage. So if an issue is impacting, say, your highest-value wholesale floral accounts\u2014or it\u2019s showing up in conversations tied to late-stage opportunities\u2014it gets boosted. That\u2019s where the prioritization becomes more than \u201cmost frequent\u201d; it becomes \u201cmost important to the business.\u201d",
+      "link": "https://www.onyx.app/3894723-13"
+    },
+    {
+      "text": "Oscar Fuentes: That\u2019s compelling. We\u2019ve had situations where a lower-volume bug affected a couple of big accounts, and it was more damaging than a noisy but minor issue.",
+      "link": "https://www.onyx.app/3894723-14"
+    },
+    {
+      "text": "Megan Foster: Exactly. Frequency alone misses that. The score can incorporate severity tags, velocity, tier/ARR, and churn risk flags\u2014so you can configure it to match how Wisp & Willow thinks about impact. And each team can use the view they care about without arguing about whose list is \u201cright.\u201d",
+      "link": "https://www.onyx.app/3894723-15"
+    },
+    {
+      "text": "Oscar Fuentes: What does this look like day-to-day? Like, does my support lead log in and triage clusters instead of tickets?",
+      "link": "https://www.onyx.app/3894723-16"
+    },
+    {
+      "text": "Megan Foster: They can keep working tickets as normal. Issue_Tracker runs in parallel as the \u201cintelligence layer.\u201d Your support lead might start the day with a cluster view: \u201cWhat\u2019s rising fast? What\u2019s severe? What\u2019s hitting premium customers?\u201d Then, when they escalate, they escalate the cluster\u2014complete with evidence and impacted accounts\u2014rather than forwarding five separate tickets and a Slack summary.",
+      "link": "https://www.onyx.app/3894723-17"
+    },
+    {
+      "text": "Oscar Fuentes: And then Engineering links that to Jira work?",
+      "link": "https://www.onyx.app/3894723-18"
+    },
+    {
+      "text": "Megan Foster: Exactly. The cluster stays linked to the downstream Jira issue or epic, and it stays linked back to the original Zendesk/Intercom conversations. That means you have a defensible history of decisions: when it was identified, why it was prioritized, what work was done, and current status. That\u2019s huge for internal alignment and for customer follow-up.",
+      "link": "https://www.onyx.app/3894723-19"
+    },
+    {
+      "text": "Oscar Fuentes: That history would be useful. We\u2019ve had debates like \u201cdid we decide not to fix this?\u201d and nobody can find the rationale.",
+      "link": "https://www.onyx.app/3894723-20"
+    },
+    {
+      "text": "Megan Foster: Right. And since this is your second call, I want to connect it to the business outcome you mentioned last time\u2014reducing fire drills and preventing revenue surprises. With issue_prioritization, you can build an Exec view that answers, \u201cWhat issues are exposing revenue right now?\u201d and a Sales view for deal blockers. But we can keep scope tight for rollout: Support + Engineering first.",
+      "link": "https://www.onyx.app/3894723-21"
+    },
+    {
+      "text": "Oscar Fuentes: Good. I\u2019d rather start small and prove it.",
+      "link": "https://www.onyx.app/3894723-22"
+    },
+    {
+      "text": "Megan Foster: Great. Let me sanity-check your top use case. You said Engineering wants to validate if a bug is real and widespread before committing an on-call fix. If we set this up, your engineering manager can open a cluster and immediately see representative examples, platform breakdown, and velocity\u2014so they know if it\u2019s escalating. Does that match how you\u2019d measure success in the first month?",
+      "link": "https://www.onyx.app/3894723-23"
+    },
+    {
+      "text": "Oscar Fuentes: Yes. If we can cut down the \u201cis this real?\u201d cycle and stop creating duplicate Jira tickets, that\u2019s a win.",
+      "link": "https://www.onyx.app/3894723-24"
+    },
+    {
+      "text": "Megan Foster: Perfect. The other success metric I\u2019d suggest is agreement: Support and Engineering align on the top 5 issues without a 30-minute debate. Because the ranking is explainable\u2014\u201cthis is high because it\u2019s severe, rising fast, and impacting high-tier customers\u201d\u2014it reduces the \u201cloudest voice wins\u201d problem.",
+      "link": "https://www.onyx.app/3894723-25"
+    },
+    {
+      "text": "Oscar Fuentes: I like that. One more concern: if the clustering is off early, engineers might dismiss it and go back to gut feel.",
+      "link": "https://www.onyx.app/3894723-26"
+    },
+    {
+      "text": "Megan Foster: Totally. To prevent that, we\u2019ll do two things in the pilot. First, we\u2019ll focus on a narrow slice\u2014your top 2\u20133 categories\u2014so accuracy is high where you\u2019re looking most. Second, we\u2019ll create a simple feedback loop: when Engineering says \u201cthis cluster is mixed,\u201d we split it and mark the patterns. You\u2019ll see the quality improve quickly, and we\u2019ll review the before/after together at the end of week two.",
+      "link": "https://www.onyx.app/3894723-27"
+    },
+    {
+      "text": "Oscar Fuentes: Okay. So what are you proposing as next steps? Pilot?",
+      "link": "https://www.onyx.app/3894723-28"
+    },
+    {
+      "text": "Megan Foster: Yes. A 30-day pilot with Issue_Tracker focused on Zendesk/Intercom ingestion and Jira linking, plus issue_prioritization configured around your tiers and segments. Week 1 is setup and calibration. Weeks 2\u20134 are real usage with a weekly 20-minute check-in. At the end, we\u2019ll evaluate on: reduction in duplicate Jira issues, time-to-validate for Engineering, and whether your top issues reflect revenue impact.",
+      "link": "https://www.onyx.app/3894723-29"
+    },
+    {
+      "text": "Oscar Fuentes: That sounds reasonable. What would you need from us to get started?",
+      "link": "https://www.onyx.app/3894723-30"
+    },
+    {
+      "text": "Megan Foster: Two things: access for the integrations\u2014read access to Zendesk/Intercom and Jira, and CRM access for customer tier/ARR fields\u2014and one point person for calibration, maybe your support operations lead. Also, I\u2019d like you involved for 30 minutes in the first week to confirm your weighting inputs: what counts as \u201csevere,\u201d how you define tiers, and which segments matter most.",
+      "link": "https://www.onyx.app/3894723-31"
+    },
+    {
+      "text": "Oscar Fuentes: I can do that. Support Ops is Jenna\u2014she can be the point person. And I can get you the integration approvals.",
+      "link": "https://www.onyx.app/3894723-32"
+    },
+    {
+      "text": "Megan Foster: Great. If you\u2019re aligned, I\u2019ll send a pilot plan today with the exact scope and success metrics, plus a simple agreement for the 30 days. Then we can schedule the kickoff early next week. If the pilot hits those metrics, we roll into the full subscription\u2014sound good?",
+      "link": "https://www.onyx.app/3894723-33"
+    },
+    {
+      "text": "Oscar Fuentes: Yes, that works. Send it over, and let\u2019s target a kickoff on Tuesday if possible.",
+      "link": "https://www.onyx.app/3894723-34"
+    },
+    {
+      "text": "Megan Foster: Tuesday works. I\u2019ll email the pilot plan and a couple of time options in the next hour. Thanks, Oscar\u2014this feels like a strong fit for how you\u2019re trying to reduce noise and make prioritization more business-grounded.",
+      "link": "https://www.onyx.app/3894723-35"
+    },
+    {
+      "text": "Oscar Fuentes: Thanks, Megan. Looking forward to seeing it in action.",
+      "link": "https://www.onyx.app/3894723-36"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "oscar_fuentes@wisp_&_willow_florals.onyx.app"
+    }
+  ]
+}

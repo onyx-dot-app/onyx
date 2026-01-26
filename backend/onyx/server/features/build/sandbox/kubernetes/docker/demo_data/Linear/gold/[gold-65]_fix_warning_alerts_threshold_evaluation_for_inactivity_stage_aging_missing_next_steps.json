@@ -1,0 +1,30 @@
+{
+  "id": "6315605",
+  "semantic_identifier": "[GOLD-65]: Fix warning_alerts threshold evaluation for inactivity/stage aging/missing next steps",
+  "title": "Fix warning_alerts threshold evaluation for inactivity/stage aging/missing next steps",
+  "source": "linear",
+  "doc_updated_at": "2025-05-26",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "high",
+    "created_at": "2025-05-26"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Resolve incorrect or inconsistent triggering of threshold-based warning_alerts by standardizing how inactivity days, stage aging, and missing-next-step conditions are computed from CRM data. Ensure calculations use a single time basis (timezone/now), handle null/missing fields safely, and do not double-count due to sync delays or partial updates. Add unit tests covering edge cases (no activity history, stage change today, next-step cleared) to prevent regressions.",
+      "link": "https://www.onyx.app/78093"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

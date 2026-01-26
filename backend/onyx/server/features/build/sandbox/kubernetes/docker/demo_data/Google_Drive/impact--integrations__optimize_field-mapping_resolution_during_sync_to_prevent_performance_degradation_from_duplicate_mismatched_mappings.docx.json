@@ -1,0 +1,30 @@
+{
+  "id": "385604d0e7414455934322bd10aada9e",
+  "semantic_identifier": "Impact--Integrations: Optimize field-mapping resolution during sync to prevent performance degradation from duplicate/mismatched mappings.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Integrations: Optimize field-mapping resolution during sync to prevent performance degradation from duplicate/mismatched mappings.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change improves the reliability and performance of our integration syncs when customers\u2019 field-mapping configurations include duplicates or conflicting source\u2192destination pairs. Today those \u201cmessy\u201d configs can cause the sync pipeline to do redundant work (repeated lookups and transforms), which slows runs and can amplify downstream signals in non-obvious ways. As integrations scale in data volume and mapping complexity, this becomes a meaningful source of performance degradation and hard-to-debug outcomes.\n\nWe will update the sync pipeline to compute a canonical mapping set once per sync run: deduplicating equivalent mappings and applying deterministic conflict resolution when multiple mappings compete for the same source or destination. With a single, precomputed mapping plan, the pipeline can apply mappings in one pass rather than repeatedly resolving mappings per record/field (avoiding N+1 behavior). The expected impact is faster, more stable sync runtimes and reduced variance in sync performance driven by configuration quality.\n\nFunctionally, this also makes downstream data more consistent. By ensuring only the resolved canonical mappings are applied, we reduce redundant or contradictory transforms that can distort the resulting field values and the signals derived from them. This should improve the consistency of inputs into fit scoring and positioning, reducing cases where customers see unexpected scoring shifts caused by mapping configuration artifacts rather than real data changes.\n\nTo keep behavior transparent and debuggable, each sync run will emit structured diagnostics summarizing mapping cleanup: counts of mappings dropped, merged, or overridden by conflict resolution, and which fields were affected. This will help Support and customers quickly identify configuration issues, explain changes in downstream results, and validate that the sync is behaving deterministically run-to-run.",
+      "link": "https://www.onyx.app/69036"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

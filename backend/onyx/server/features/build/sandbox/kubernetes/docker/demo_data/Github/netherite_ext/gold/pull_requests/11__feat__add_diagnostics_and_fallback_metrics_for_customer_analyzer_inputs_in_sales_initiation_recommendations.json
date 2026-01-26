@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#11",
+  "semantic_identifier": "11: feat: Add diagnostics + fallback metrics for Customer_Analyzer inputs in sales initiation recommendations",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-28",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "11",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "8",
+    "num_files_changed": "20",
+    "labels": [],
+    "created_at": "2025-04-28",
+    "updated_at": "2025-04-28",
+    "closed_at": "2025-05-20"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nThis PR adds render-time diagnostics for sales initiation recommendations when required Customer_Analyzer inputs are missing/invalid, and provides optional (feature-flagged) debug context for SDRs/sales ops.\n\n### What changed\n- **Validation + structured logging** in the recommendations render path for these Customer_Analyzer fields:\n  - `fitScore`\n  - `segment`\n  - `positioningBlock`\n- When a field is **missing or fails basic validation**, the system:\n  - records which field(s) were unavailable/invalid\n  - applies the existing fallback behavior (no change to recommendation logic), and\n  - emits a **structured log event** (account id, recommendation id, missing/invalid fields, fallback types applied).\n\n### Debug payload / tooltip (feature-flagged)\n- Adds a small debug payload attached to the recommendation response and a UI tooltip that lists:\n  - fields used from Customer_Analyzer\n  - fields that fell back (and what fallback was used)\n- Controlled via a feature flag (off by default) so it\u2019s safe for low-priority rollout and can be enabled for internal users only.\n\n### Metrics\n- Adds basic counters for observability:\n  - fallback occurrences by field (`fitScore`, `segment`, `positioningBlock`)\n  - overall fallback rate for sales initiation recommendations\n- Metrics are tagged to support breakdown by environment and integration source (where available).\n\n### Notes for reviewers / operators\n- No changes to recommendation ordering/template selection logic beyond additional instrumentation.\n- To test end-to-end, enable the feature flag and use an account with missing/invalid Customer_Analyzer data to confirm logs, metrics increments, and tooltip contents.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#11"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "503d8463970540a08d72a5c9d8677edd",
+  "semantic_identifier": "Impact--Make cluster summaries and representative examples idempotent across re-ingest.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-17",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Make cluster summaries and representative examples idempotent across re-ingest.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "Today, cluster summaries and \u201crepresentative examples\u201d are not stable when customers re-ingest the same source conversations. Even when cluster IDs and membership remain unchanged, the summary text can shift and exemplar selections can reorder or duplicate, which makes the product feel inconsistent and undermines confidence in insights over time.\n\nThis feature makes summary and exemplar generation deterministic across re-ingests by enforcing stable ordering, a fixed sampling/selection strategy, and versioned prompt/model inputs. Instead of creating new summary/exemplar records on every run, the pipeline will upsert the result for each cluster so the cluster\u2019s narrative and examples remain consistent unless the underlying cluster membership actually changes (or the versioned inputs change intentionally).\n\nCustomer impact is improved trust and usability: dashboards stop \u201cmoving,\u201d links and references to representative examples don\u2019t break, and teams can reliably compare insights over time without wondering whether changes are real or artifacts of reprocessing. Operationally, this reduces duplicate data, simplifies downstream consumption, and lowers support burden related to \u201cwhy did my summary change?\u201d questions.\n\nTo protect the behavior, we\u2019ll add a regression test that replays the same ingestion twice and asserts identical outputs per cluster (same summary text and exemplar IDs, or equivalently stable selected conversation IDs). This makes determinism an explicit contract and prevents future changes to ordering, sampling, or prompt/model configuration from reintroducing drift without intentional versioning.",
+      "link": "https://www.onyx.app/50305"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

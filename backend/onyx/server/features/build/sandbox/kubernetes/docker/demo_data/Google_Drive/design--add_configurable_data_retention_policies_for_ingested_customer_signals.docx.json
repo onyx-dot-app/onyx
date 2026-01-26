@@ -1,0 +1,30 @@
+{
+  "id": "c04842feff4a4b9bbae0557a95da35db",
+  "semantic_identifier": "Design--Add configurable data retention policies for ingested customer signals.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add configurable data retention policies for ingested customer signals.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Overview / Goals\nWe will add per-workspace, configurable data retention policies for ingested customer signals so customers can automatically expire and delete stored signal records (CRM fields, surveys, usage events, support tickets, notes, etc.) after a defined period. The goal is to support compliance and cost control while preserving current behavior by default: if a workspace has no retention policy configured, signals are retained indefinitely as they are today. This feature will be admin-only and will include auditing of configuration changes.\n\n## Product surface and configuration model\nIntroduce a workspace-scoped retention configuration with a default of \u201cunset\u201d (meaning no expiry). Configuration will be exposed via an admin-only API (and optionally an internal/admin UI later) that allows setting a retention duration (e.g., N days) and applying it to all signal types initially; we can extend to per-signal-type overrides in a follow-up without changing the core deletion mechanism. Every change to retention settings will be recorded in an audit log with actor, timestamp, old/new values, and request metadata. The configuration will be validated (minimum/maximum bounds) and will take effect prospectively for deletion eligibility based on each record\u2019s ingestion timestamp (or a canonical \u201ccreated_at\u201d for the stored signal record).\n\n## Data lifecycle, deletion semantics, and system interactions\nWe will implement an automated deletion pipeline that periodically identifies expired records per workspace (where `now - ingested_at >= retention_period`) and performs hard deletion in primary storage and all derived/indexed layers (search index, analytics/event indices, caches/materialized views as applicable). Deletions should be idempotent and safe to retry, with a two-phase approach: (1) mark candidates for deletion (optional tombstone/queued jobs) and (2) execute deletions across storage layers with backpressure controls. Where referential integrity exists (e.g., signals linked to customers/accounts), we delete the signal rows/documents while preserving parent entities; downstream denormalized views are refreshed or updated to remove references. Observability includes metrics on deleted records by workspace/type, job lag, and error rates.\n\n## Security, auditing, and rollout plan\nAccess control will restrict retention configuration APIs to workspace admins (and internal operators if needed), enforced at the API gateway/service layer. Audit events will be emitted on create/update/disable of retention settings and retained per existing audit retention practices. Rollout will be staged: ship configuration storage + API behind a feature flag, then enable the deletion worker in \u201cdry-run\u201d mode (metrics only), then gradually enable real deletions for internal workspaces, followed by opt-in external workspaces. This approach minimizes risk, ensures defaults preserve current behavior, and provides clear operational visibility before broad enablement.",
+      "link": "https://www.onyx.app/94343"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

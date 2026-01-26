@@ -1,0 +1,30 @@
+{
+  "id": "352bb83c290b4e97b3d57f2a39e0827b",
+  "semantic_identifier": "Design--Introduce versioned positioning blocks from Customer_Analyzer in Sales_Accelerator.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-11",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Introduce versioned positioning blocks from Customer_Analyzer in Sales_Accelerator.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nSales_Accelerator currently consumes Customer_Analyzer \u201cpositioning blocks\u201d as an effectively unversioned \u201clatest\u201d payload. This creates drift risk: recommendations/messaging can change over time without an attributable cause, and we lack strong auditability (which exact content was used, when, and from whom). We need explicit versioning so every downstream generation can be tied to a specific published snapshot of positioning content.\n\n### Proposed Solution\nIntroduce a versioned data model for positioning blocks in Sales_Accelerator. The ingestion pipeline will accept and persist (a) the positioning block content and (b) required version metadata: `version_id`, `published_at` (timestamp), and `author/source` (string or structured enum + identifier). When generating recommendations/messaging, Sales_Accelerator will resolve and reference a specific *published* version (by `version_id`), never an implicit \u201clatest\u201d view. \u201cLatest\u201d may still exist as a convenience lookup, but generation must store and pass an explicit `version_id` end-to-end.\n\n### Data / API / Workflow Changes\nOn ingest, we\u2019ll upsert versions keyed by `(customer_id, positioning_block_id, version_id)` (or equivalent identifiers provided by Customer_Analyzer) and store the metadata alongside the content. We\u2019ll add a lightweight resolver that selects the correct version for a request (e.g., \u201cmost recent published at time of run\u201d or \u201cexplicitly requested version\u201d), and persist the chosen `version_id` on the generation record so reruns and audits are deterministic. Backfills can populate `version_id` for existing records as \u201clegacy\u201d with `published_at` set to first-seen time, but new writes must require real version metadata from Customer_Analyzer.\n\n### Observability / Auditability\nUpdate internal logs and telemetry events to include `positioning_block_version_id`, `published_at`, and `author/source` whenever positioning blocks are fetched, selected, and used in generation. Add dashboards/alerts for version resolution failures (missing version, unpublished version requested) and mismatch scenarios (generation references a version that is no longer retrievable). This ensures we can answer \u201cwhat content drove this output?\u201d and reduces silent behavior changes from upstream updates.",
+      "link": "https://www.onyx.app/31357"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

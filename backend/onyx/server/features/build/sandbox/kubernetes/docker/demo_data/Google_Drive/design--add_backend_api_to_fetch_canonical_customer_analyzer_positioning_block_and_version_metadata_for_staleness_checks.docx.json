@@ -1,0 +1,30 @@
+{
+  "id": "7c8618d8faee413f818c530246826108",
+  "semantic_identifier": "Design--Add backend API to fetch canonical Customer_Analyzer positioning block + version metadata for staleness checks.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add backend API to fetch canonical Customer_Analyzer positioning block + version metadata for staleness checks.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add a new backend API in the Sales_Accelerator service that returns the canonical \u201cCustomer_Analyzer positioning block\u201d for a given account/opportunity, along with versioning metadata needed for staleness checks. The endpoint will accept an identifier (accountId and/or opportunityId) and respond with the latest positioning block `content`, a stable `blockId` (or equivalent canonical identifier from Customer_Analyzer), a `version` (or etag/hash), and `lastUpdatedAt`. This allows the UI to compare a locally stored block against the canonical source and to power a \u201cReplace with latest from Customer_Analyzer\u201d action without treating manually pasted text as authoritative.\n\nOn the backend, Sales_Accelerator will act as a thin proxy over Customer_Analyzer: resolve the CA entity corresponding to the supplied account/opportunity, call CA to fetch the positioning block, and normalize the response into a stable schema. If Customer_Analyzer already provides an explicit version/etag, we will pass it through; otherwise we will compute a deterministic hash of the canonical content as `version` for reliable equality comparisons. We will also include a `source`/`retrievedAt` field to support debugging and to make edit-flow behavior explicit.\n\nError handling will be explicit and actionable: return `404` when no CA positioning block exists for the provided identifier, `403` when the caller is not authorized to access CA data, and `502`/`503` for upstream failures with a structured error payload so the UI can display appropriate messaging (e.g., \u201cNo Customer_Analyzer block found\u201d vs \u201cYou don\u2019t have access\u201d vs \u201cTry again later\u201d). We will ensure requests are authorized using existing Sales_Accelerator auth and will forward user identity/permissions to CA as required to avoid data leakage.\n\nTo reduce repeated upstream calls during editing flows, we will add short-lived caching in Sales_Accelerator keyed by (account/opportunity, user/tenant) with a small TTL (e.g., 30\u2013120 seconds) and cache negative lookups briefly to avoid thundering herds. The response will remain strongly consistent enough for \u201clatest\u201d replacement while minimizing latency/cost; clients should treat the returned `version` + `lastUpdatedAt` as the authoritative basis for staleness checks and only re-fetch when the TTL expires or on explicit user refresh.",
+      "link": "https://www.onyx.app/27294"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

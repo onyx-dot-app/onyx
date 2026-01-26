@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_1069984",
+  "semantic_identifier": "1069984 - Xylembright Water Tech - sales_pitch - Discussion with Drew Cox",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-07-31 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-07-31 00:00:00",
+    "duration_min": "18"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-07"
+      ],
+      "year_month": "2025-07",
+      "meeting_title": "1069984 - Xylembright Water Tech - sales_pitch - Discussion with Drew Cox",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Drew, thanks for taking a few minutes today. I\u2019ll keep it tight\u2014wanted to share a quick idea that could help Xylembright Water Tech get more consistent messaging across segments, especially if you\u2019re running different motions for SMB versus mid-market.",
+      "link": "https://www.onyx.app/4815675-1"
+    },
+    {
+      "text": "Drew Cox: Sure, Megan. We are definitely trying to tighten up our segmentation and messaging. What are you thinking?",
+      "link": "https://www.onyx.app/4815675-2"
+    },
+    {
+      "text": "Megan Foster: Great. The product is Customer_Analyzer. It pulls in the customer signals you already have\u2014CRM fields, onboarding survey responses, product usage events, support tickets, even interview notes\u2014and turns them into two things teams actually use: a fit score by segment, and positioning recommendations you can deploy in marketing and sales.",
+      "link": "https://www.onyx.app/4815675-3"
+    },
+    {
+      "text": "Drew Cox: Fit score and positioning\u2026 okay. We have a CRM and some survey data, but it\u2019s messy. How does it become something actionable?",
+      "link": "https://www.onyx.app/4815675-4"
+    },
+    {
+      "text": "Megan Foster: That messiness is exactly the point. Customer_Analyzer doesn\u2019t just summarize\u2014it identifies the \u201cfit drivers\u201d that correlate with strong outcomes for you, and then generates segment-specific messaging based on what high-fit customers actually say and do. So instead of debating internally, you get evidence-backed positioning blocks you can edit and ship.",
+      "link": "https://www.onyx.app/4815675-5"
+    },
+    {
+      "text": "Drew Cox: When you say \u201cpositioning blocks,\u201d what does that look like in practice?",
+      "link": "https://www.onyx.app/4815675-6"
+    },
+    {
+      "text": "Megan Foster: Concretely: for a prioritized segment\u2014say SMB utilities versus mid-market industrial customers\u2014it produces an editable package: a segment-specific value proposition, top use cases, differentiators, proof points to collect, pricing/value framing notes, and an objection-handling playbook. And it formats the output into usable pieces like website hero copy, sales deck bullets, and outbound email openers. Every line is linked back to the drivers and evidence it used.",
+      "link": "https://www.onyx.app/4815675-7"
+    },
+    {
+      "text": "Drew Cox: That\u2019s interesting. We\u2019ve been trying to build separate landing pages for two ICP tiers, but it turns into a lot of subjective opinions.",
+      "link": "https://www.onyx.app/4815675-8"
+    },
+    {
+      "text": "Megan Foster: Exactly the use case I had in mind. For example, you could spin up two landing pages\u2014SMB and mid-market\u2014where the hero, the problem framing, and the proof points actually reflect what those segments care about. Then your outbound team gets matching email openers and objection handling, so it\u2019s consistent from first click to sales call.",
+      "link": "https://www.onyx.app/4815675-9"
+    },
+    {
+      "text": "Drew Cox: How does it handle objection handling? That\u2019s one of our gaps\u2014reps aren\u2019t consistent.",
+      "link": "https://www.onyx.app/4815675-10"
+    },
+    {
+      "text": "Megan Foster: The system looks at what comes up in tickets, notes, and call summaries\u2014things like \u201cintegration effort,\u201d \u201ctime-to-value,\u201d \u201cbudget cycle,\u201d \u201csecurity reviews\u201d\u2014and it maps those objections to the fit drivers. Then it recommends responses tied to evidence: which proof points to use, what differentiators to emphasize for that segment, and how to frame pricing/value. It\u2019s not generic; it\u2019s segmented.",
+      "link": "https://www.onyx.app/4815675-11"
+    },
+    {
+      "text": "Drew Cox: Okay. And what do you need from us to do that? I\u2019m assuming there\u2019s some setup.",
+      "link": "https://www.onyx.app/4815675-12"
+    },
+    {
+      "text": "Megan Foster: Minimal to start. Typically we begin with CRM fields plus one or two additional sources\u2014like onboarding surveys and support tickets\u2014just to get the first pass. You don\u2019t need perfect data on day one. The goal is to quickly generate a \u201cversion one\u201d positioning package for two tiers\u2014SMB vs mid-market\u2014so you can validate it with your team and in-market.",
+      "link": "https://www.onyx.app/4815675-13"
+    },
+    {
+      "text": "Drew Cox: We\u2019ve got HubSpot for CRM, Zendesk for support, and Typeform for onboarding surveys. Would that work?",
+      "link": "https://www.onyx.app/4815675-14"
+    },
+    {
+      "text": "Megan Foster: Yes, that\u2019s a very common combo. We\u2019d ingest those signals, then you\u2019d pick the segments you care about\u2014like employee size, industry, or geography\u2014and Customer_Analyzer would produce fit scores and positioning recommendations for each. Most teams start with two ICP tiers like you mentioned.",
+      "link": "https://www.onyx.app/4815675-15"
+    },
+    {
+      "text": "Drew Cox: How fast can you get to something we can use? We\u2019re trying to refresh our site messaging this quarter.",
+      "link": "https://www.onyx.app/4815675-16"
+    },
+    {
+      "text": "Megan Foster: If we can get access to the basics, we usually have initial segment recommendations in about a week or two\u2014enough to draft two landing page variants and a corresponding outbound sequence. Then you iterate: tweak the blocks, add proof points you want to collect, and keep tightening based on what\u2019s resonating.",
+      "link": "https://www.onyx.app/4815675-17"
+    },
+    {
+      "text": "Drew Cox: And how do you make sure it\u2019s not just \u201cAI copywriting\u201d? We\u2019ve tried tools that produce nice-sounding text but it doesn\u2019t match reality.",
+      "link": "https://www.onyx.app/4815675-18"
+    },
+    {
+      "text": "Megan Foster: Totally fair. The difference here is the linkage to evidence. The recommendations are generated from the drivers we observe in your data\u2014what correlates with renewals, expansion, activation, fewer tickets, faster onboarding, whatever metrics you choose. And it uses real customer language from surveys and tickets, so the messaging reflects how your customers describe the problem and value. You can click into \u201cwhy this was recommended\u201d and see the underlying signals.",
+      "link": "https://www.onyx.app/4815675-19"
+    },
+    {
+      "text": "Drew Cox: That transparency matters. Our leadership will ask, \u201cWhy are we saying this?\u201d",
+      "link": "https://www.onyx.app/4815675-20"
+    },
+    {
+      "text": "Megan Foster: Exactly. Customer_Analyzer is designed for alignment\u2014marketing, product, and sales can all see the same drivers and the same segment story. Instead of five different narratives, you get one consistent positioning per segment that everyone can use.",
+      "link": "https://www.onyx.app/4815675-21"
+    },
+    {
+      "text": "Drew Cox: This does sound relevant. What would a \u201cfull call\u201d look like?",
+      "link": "https://www.onyx.app/4815675-22"
+    },
+    {
+      "text": "Megan Foster: In a longer session, we\u2019d do three things: first, map your two ICP tiers and the outcomes you care about; second, review what signals you have in HubSpot/Zendesk/Typeform and pick a starter set; third, walk through an example output\u2014landing page blocks, outbound openers, and the objection playbook\u2014so you can see how your team would actually use it. If it makes sense, we\u2019d outline a short pilot focused on SMB vs mid-market messaging.",
+      "link": "https://www.onyx.app/4815675-23"
+    },
+    {
+      "text": "Drew Cox: I\u2019m interested. I\u2019d want our head of marketing involved, maybe someone from sales enablement too.",
+      "link": "https://www.onyx.app/4815675-24"
+    },
+    {
+      "text": "Megan Foster: Perfect. That\u2019s usually the right group. How about we schedule 45 minutes next week\u2014bring your head of marketing and sales enablement\u2014and I\u2019ll tailor the demo around your SMB vs mid-market landing pages and outbound messaging?",
+      "link": "https://www.onyx.app/4815675-25"
+    },
+    {
+      "text": "Drew Cox: Yeah, let\u2019s do that. Next week Tuesday afternoon could work.",
+      "link": "https://www.onyx.app/4815675-26"
+    },
+    {
+      "text": "Megan Foster: Great\u2014Tuesday afternoon. I\u2019ll send a calendar invite with a couple time options and a short pre-read: the sources we typically connect and a few questions to confirm your two ICP tiers. Anything specific you want to make sure we cover?",
+      "link": "https://www.onyx.app/4815675-27"
+    },
+    {
+      "text": "Drew Cox: Make sure we cover how we\u2019d use it for outbound, not just the website. Our SDR team needs help.",
+      "link": "https://www.onyx.app/4815675-28"
+    },
+    {
+      "text": "Megan Foster: Absolutely\u2014website plus outbound, end-to-end. I\u2019ll include examples of segment-specific email openers and the objection-handling playbook tied to those segments. Thanks, Drew\u2014I\u2019ll get that invite over shortly.",
+      "link": "https://www.onyx.app/4815675-29"
+    },
+    {
+      "text": "Drew Cox: Sounds good. Looking forward to it.",
+      "link": "https://www.onyx.app/4815675-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "drew_cox@xylembright_water_tech.onyx.app"
+    }
+  ]
+}

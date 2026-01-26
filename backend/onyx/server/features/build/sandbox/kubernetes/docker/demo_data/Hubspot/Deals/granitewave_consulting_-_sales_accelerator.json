@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_9547032",
+  "semantic_identifier": "Granitewave Consulting - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-20 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "108657",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "9547032"
+  },
+  "sections": [
+    {
+      "text": "Deal: Granitewave Consulting\nAmount: $108657\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: warning_alerts\nClose Date: 2025-11-02 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/42590"
+    },
+    {
+      "text": "Contact: Debra Hawkins\nEmail: debra_hawkins@granitewave_consulting.onyx.app",
+      "link": "https://www.onyx.app/40892"
+    },
+    {
+      "text": "Company: Granitewave Consulting\nDomain: granitewave_consulting.onyx.app",
+      "link": "https://www.onyx.app/96906"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/36708"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

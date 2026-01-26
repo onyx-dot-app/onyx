@@ -124,6 +124,7 @@ class SandboxManager(ABC):
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
+        use_demo_data: bool = False,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -131,21 +132,23 @@ class SandboxManager(ABC):
         - sessions/$session_id/outputs/ (from snapshot or template)
         - sessions/$session_id/venv/
         - sessions/$session_id/skills/
-        - sessions/$session_id/files/ (symlink to file_system_path)
+        - sessions/$session_id/files/ (symlink to demo data or user files)
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/opencode.json
         - sessions/$session_id/attachments/
+        - sessions/$session_id/org_info/ (if demo data enabled)
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            file_system_path: Path to knowledge/source files (for files/ symlink)
+            file_system_path: Path to user's knowledge/source files
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
+            use_demo_data: If True, symlink files/ to demo data; else to user files
 
         Raises:
             RuntimeError: If workspace setup fails

@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_4125578",
+  "semantic_identifier": "4125578 - Meridianoak Holdings - sales_call - Discussion with Jonathan Mason",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-10-20 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-10-20 00:00:00",
+    "duration_min": "41"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-10"
+      ],
+      "year_month": "2025-10",
+      "meeting_title": "4125578 - Meridianoak Holdings - sales_call - Discussion with Jonathan Mason",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Jonathan, good to see you again. Thanks for making the time. Last call you mentioned the team\u2019s biggest pain is knowing what to do next in outbound and having leadership trust the number at the end of the month. I wanted to focus today on Sales_Accelerator\u2014specifically forecast plus next-best-action for your SDRs\u2014so we can see if it\u2019s something you\u2019d feel comfortable moving forward with. Sound good?",
+      "link": "https://www.onyx.app/5291343-1"
+    },
+    {
+      "text": "Jonathan Mason: Yeah, that\u2019s fine. I\u2019ve got about 25 minutes, but I\u2019m happy to hear where you think this fits.",
+      "link": "https://www.onyx.app/5291343-2"
+    },
+    {
+      "text": "James Choi: Perfect\u2014I\u2019ll keep it tight. Quick recap: Sales_Accelerator sits on top of Salesforce, pulls in activity signals like emails, calls, meetings, and it can also ingest the fit tiers you\u2019re already generating in Customer_Analyzer. Then it does two things that matter most here: one, more explainable forecasting\u2014commit/best case, pipeline coverage, slippage. Two, it guides reps on what account to touch next and how, based on fit, activity, and what\u2019s working for similar deals.  \nBefore I go deeper, what\u2019s changed since we spoke? Any updates on outbound volume or forecast pressure?",
+      "link": "https://www.onyx.app/5291343-3"
+    },
+    {
+      "text": "Jonathan Mason: Forecast pressure is constant. Outbound hasn\u2019t been great\u2014SDRs are doing activity, but leadership doesn\u2019t believe the pipeline. And honestly, we\u2019ve tried \u201cpriority lists\u201d before. They get ignored if they don\u2019t match reality in Salesforce.",
+      "link": "https://www.onyx.app/5291343-4"
+    },
+    {
+      "text": "James Choi: That\u2019s helpful. Let me anchor on the one area where I think we can deliver value fastest: the forecasting driver model.  \nWith the sales_forecast feature, we\u2019re not just reading stage and close date. We\u2019re combining stage age, last meaningful touch, next meeting scheduled\u2014or not\u2014and cycle-time benchmarks by segment. Then, if you want, we weight opportunities by Customer_Analyzer fit tier so Tier 1 accounts have a different baseline expectation than long-shot accounts.  \nThe point isn\u2019t a black box score. It\u2019s explainable: \u201cThis deal moved from best-case to pipeline because it\u2019s 22 days past typical stage age and no next meeting is booked.\u201d Would that kind of driver-based explanation help you sell the forecast internally?",
+      "link": "https://www.onyx.app/5291343-5"
+    },
+    {
+      "text": "Jonathan Mason: The explainable part is good. But I\u2019m worried you\u2019re assuming our CRM is clean enough for that. It\u2019s\u2026 not. Close dates get pushed, stages don\u2019t change, next steps are missing half the time. So wouldn\u2019t the output just be garbage, or worse, a bunch of alerts that everyone learns to ignore?",
+      "link": "https://www.onyx.app/5291343-6"
+    },
+    {
+      "text": "James Choi: Totally fair\u2014and that\u2019s one of the main failure modes of forecasting tools. If the CRM is stale, you get false positives and alert fatigue.  \nTwo thoughts: First, Sales_Accelerator uses activity signals as a counterbalance, so even if a stage isn\u2019t updated, the system sees there hasn\u2019t been a meeting in 30 days, no emails replied to, and flags slippage risk. Second, we typically start with a short data hygiene baseline\u2014like three fields we ask reps and managers to keep consistent: stage, next step, and close date range. We don\u2019t need perfection to start improving accuracy.  \nHow bad is it today on those three\u2014stage, next step, close date?",
+      "link": "https://www.onyx.app/5291343-7"
+    },
+    {
+      "text": "Jonathan Mason: Stage is inconsistent. Next step is basically optional unless a manager is looking. Close dates are\u2026 aspirational. And I\u2019m not sure we can enforce more process right now. The team is already stretched.",
+      "link": "https://www.onyx.app/5291343-8"
+    },
+    {
+      "text": "James Choi: Understood. If asking for more fields is a non-starter, we can still drive value on the SDR side where the inputs are simpler.  \nThe SDR use case you mentioned last time\u2014prioritizing outbound\u2014comes straight from Customer_Analyzer. We\u2019d take your fit tiers, bring them into Sales_Accelerator, and then it recommends the next 50 accounts to contact, daily or weekly. For each account, it can suggest an opener and proof points aligned to that segment\u2019s positioning blocks from Customer_Analyzer. That way reps aren\u2019t staring at a list\u2014they\u2019re getting \u201cwho, why, and what to say\u201d in one place.  \nIf we could improve connect-to-meeting rates by focusing on Tier 1 and Tier 2 with better openers, would that be meaningful this quarter?",
+      "link": "https://www.onyx.app/5291343-9"
+    },
+    {
+      "text": "Jonathan Mason: In theory, sure. But we already have sequences in Outreach. And reps don\u2019t love switching tools. If your \u201cnext 50\u201d list lives somewhere else, they\u2019ll ignore it and go back to what\u2019s easy.",
+      "link": "https://www.onyx.app/5291343-10"
+    },
+    {
+      "text": "James Choi: Makes sense. We\u2019re not trying to replace Outreach sequences. The way most teams use Sales_Accelerator is as the prioritization and guidance layer: it tells Outreach what the priority accounts are and provides the messaging inputs\u2014so reps can still run sequences, but they\u2019re aimed at the right accounts with the right angle.  \nWhere do reps spend the most time today\u2014finding accounts, choosing messaging, or just grinding through tasks?",
+      "link": "https://www.onyx.app/5291343-11"
+    },
+    {
+      "text": "Jonathan Mason: Finding good accounts and deciding who\u2019s actually worth it. Messaging is mostly templated. But again\u2014if the list isn\u2019t trustworthy, they won\u2019t follow it.",
+      "link": "https://www.onyx.app/5291343-12"
+    },
+    {
+      "text": "James Choi: Let\u2019s test trust directly. What would make a \u201cnext 50\u201d list trustworthy for you? Is it purely fit tier? Or do you need it to incorporate engagement and intent\u2014like recent site visits, reply behavior, meeting history?",
+      "link": "https://www.onyx.app/5291343-13"
+    },
+    {
+      "text": "Jonathan Mason: Fit tier is a start, but we\u2019ve had \u201cTier 1\u201d accounts that never respond. So you\u2019d need engagement signals. And we\u2019d need to see why an account is in the top 50, not just \u201cbecause the system says so.\u201d",
+      "link": "https://www.onyx.app/5291343-14"
+    },
+    {
+      "text": "James Choi: Great\u2014so two requirements: include engagement, and explainability.  \nThat\u2019s aligned with how Sales_Accelerator works: it ranks accounts using fit tier plus activity/engagement signals, and it shows drivers like \u201cTier 1 fit + opened last two emails + recent meeting with a sister business unit,\u201d versus \u201cTier 1 fit but no engagement in 60 days\u2014deprioritized.\u201d  \nIf we did a pilot, we could start with one SDR pod, one segment, and compare outcomes: meeting rate, time-to-first-touch on Tier 1, and pipeline created. Is that the kind of validation you\u2019d need before rolling it out?",
+      "link": "https://www.onyx.app/5291343-15"
+    },
+    {
+      "text": "Jonathan Mason: Maybe. But I\u2019m still stuck on data. Engagement in our systems is messy too. Emails logged inconsistently, meetings not always captured. I don\u2019t want to buy another layer that depends on perfect tracking.",
+      "link": "https://www.onyx.app/5291343-16"
+    },
+    {
+      "text": "James Choi: That\u2019s fair. The minimum viable setup would be: connect Salesforce, ingest Customer_Analyzer fit tiers, and capture enough activity signals to avoid blind spots. But if email and meeting data are incomplete, it will reduce ranking quality and make forecasts noisy.  \nLet me ask bluntly: do you have a mandate\u2014or appetite\u2014to fix activity capture this quarter?",
+      "link": "https://www.onyx.app/5291343-17"
+    },
+    {
+      "text": "Jonathan Mason: Honestly? No. We\u2019ve tried. It becomes a change management project. And I don\u2019t have air cover for that right now.",
+      "link": "https://www.onyx.app/5291343-18"
+    },
+    {
+      "text": "James Choi: Got it. If activity capture and CRM hygiene can\u2019t improve, we\u2019re at risk of you paying for something and then being disappointed because the guidance feels off. I don\u2019t want that outcome.  \nCould we shift the scope to something less dependent on perfect logging\u2014like using Customer_Analyzer fit tiers to power a simple prioritized target list and messaging library, without turning on full forecasting and alerts yet?",
+      "link": "https://www.onyx.app/5291343-19"
+    },
+    {
+      "text": "Jonathan Mason: That sounds closer, but we already get fit tiers from Customer_Analyzer. If we\u2019re not turning on forecasting and the alerts, what am I really buying with Sales_Accelerator? Another UI?",
+      "link": "https://www.onyx.app/5291343-20"
+    },
+    {
+      "text": "James Choi: Fair challenge. The incremental value would be the \u201cexecution layer\u201d\u2014the next-best-action workflow, the daily recommended accounts, and the segment-aligned openers tied to each account\u2014so managers can coach to a consistent plan and reps don\u2019t improvise. But if your team won\u2019t adopt another workflow, that value won\u2019t land.  \nLet me ask: what systems do your SDRs actually live in day to day\u2014Salesforce, Outreach, something else?",
+      "link": "https://www.onyx.app/5291343-21"
+    },
+    {
+      "text": "Jonathan Mason: Outreach and Slack. Salesforce only when they\u2019re forced to.",
+      "link": "https://www.onyx.app/5291343-22"
+    },
+    {
+      "text": "James Choi: That\u2019s helpful context. If Salesforce is a compliance tool and Outreach is the workbench, then a Salesforce-adjacent layer will struggle unless it pushes actions into Outreach. We can integrate, but it\u2019s still a rollout.  \nAt this point, it sounds like timing and operational readiness might be the bigger blockers than the product itself. Would it be accurate to say you\u2019re interested, but you can\u2019t take on a process/tool change until you\u2019ve stabilized the basics?",
+      "link": "https://www.onyx.app/5291343-23"
+    },
+    {
+      "text": "Jonathan Mason: Yeah, that\u2019s basically it. I don\u2019t want to be the guy who bought a forecasting tool and then everyone complains the CRM is garbage. And I don\u2019t have the leverage to fix the CRM right now.",
+      "link": "https://www.onyx.app/5291343-24"
+    },
+    {
+      "text": "James Choi: Understood. I\u2019d rather be candid than force a deal that doesn\u2019t succeed.  \nTwo options: we pause and revisit in a quarter when you\u2019re ready to tackle hygiene and activity capture, or we do a very small proof-of-concept that\u2019s scoped to one motion\u2014like prioritizing Tier 1 outbound\u2014provided we can deliver it inside Outreach where reps already work. Would either of those be worth exploring?",
+      "link": "https://www.onyx.app/5291343-25"
+    },
+    {
+      "text": "Jonathan Mason: Not right now. We\u2019re in the middle of a re-org, and tools are basically frozen unless it\u2019s mission-critical. Let\u2019s revisit later.",
+      "link": "https://www.onyx.app/5291343-26"
+    },
+    {
+      "text": "James Choi: That makes sense. What\u2019s a realistic checkpoint\u2014end of Q1? And between now and then, would it be helpful if I sent over a short readiness checklist\u2014like the minimum CRM/activity signals needed for reliable forecast and recommendations\u2014so you can assess where things stand without committing?",
+      "link": "https://www.onyx.app/5291343-27"
+    },
+    {
+      "text": "Jonathan Mason: Sure, send it. End of Q1 is fine. If we get through the re-org and leadership wants better forecasting again, I\u2019ll bring you back in.",
+      "link": "https://www.onyx.app/5291343-28"
+    },
+    {
+      "text": "James Choi: Perfect. I\u2019ll email a one-pager: minimum data requirements, what we can do with just Customer_Analyzer fit tiers, and what improves when activity capture is solid. I\u2019ll also include an example of the explainable forecast drivers so you can show your VP what \u201cnot a black box\u201d looks like.  \nThanks, Jonathan. I\u2019ll follow up by email and then we\u2019ll pencil something for late Q1.",
+      "link": "https://www.onyx.app/5291343-29"
+    },
+    {
+      "text": "Jonathan Mason: Sounds good. Thanks, James.",
+      "link": "https://www.onyx.app/5291343-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "jonathan_mason@meridianoak_holdings.onyx.app"
+    }
+  ]
+}

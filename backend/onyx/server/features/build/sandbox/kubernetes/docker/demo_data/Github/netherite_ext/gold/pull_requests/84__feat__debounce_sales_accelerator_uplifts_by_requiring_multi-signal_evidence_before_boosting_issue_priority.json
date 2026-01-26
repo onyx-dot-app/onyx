@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#84",
+  "semantic_identifier": "84: feat: Debounce Sales Accelerator uplifts by requiring multi-signal evidence before boosting issue priority",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-25",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "84",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "3",
+    "num_files_changed": "61",
+    "labels": [],
+    "created_at": "2025-07-25",
+    "updated_at": "2025-07-25",
+    "closed_at": "2025-08-14"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds evidence-based gating to Sales_Accelerator opportunity linkage so a single, one-off deal ask can\u2019t materially increase an issue/theme priority score.\n\nImplementation details:\n- Introduces an \"uplift eligibility\" check in the priority scoring pipeline that evaluates sales-driven signals before applying the sales uplift.\n- Requires a minimum evidence threshold to apply uplift:\n  - >= 2 distinct linked opportunities (deduped by opportunity_id/account_id), OR\n  - 1 linked opportunity + >= 1 corroborating support conversation (per issue/theme) within the configured lookback window.\n- If the threshold is not met, the sales uplift component is suppressed (treated as 0 / ignored) while the rest of the scoring inputs remain unchanged.\n- Persists suppression metadata on the issue/theme object for auditability:\n  - salesUpliftStatus: APPLIED | SUPPRESSED\n  - salesUpliftSuppressionReason: e.g., INSUFFICIENT_OPPORTUNITY_COUNT | MISSING_CORROBORATION\n  - salesUpliftEvidenceSummary: counts of distinct opportunities / support conversations used for the decision\n  - salesUpliftEvaluatedAt timestamp\n- Updates the UI to surface when an uplift was suppressed (and why) alongside the sales/opportunity section so prioritization remains defensible.\n- Adds tests covering: single-opportunity suppression, multi-opportunity acceptance, opportunity+support acceptance, dedupe behavior, and stable scoring across re-evaluations.\n\nUser impact:\n- Issues/themes will no longer jump in priority from a single linked deal ask; sales uplift will only apply once sufficient evidence is present, and the UI will indicate when/why uplift was suppressed.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#84"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

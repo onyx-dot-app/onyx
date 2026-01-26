@@ -1,0 +1,30 @@
+{
+  "id": "8668370",
+  "semantic_identifier": "[GOLD-182]: Sales_Accelerator v2: Ingest deal-risk context and map to Issue_Tracker issue objects",
+  "title": "Sales_Accelerator v2: Ingest deal-risk context and map to Issue_Tracker issue objects",
+  "source": "linear",
+  "doc_updated_at": "2026-01-01",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "open",
+    "priority": "low",
+    "created_at": "2026-01-01"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement the initial integration wiring to pull deal-risk signals from Sales_Accelerator v2 and attach them to the correct Issue_Tracker issue objects (theme/root cause) via stable identifiers (account/customer + related conversations). Persist the normalized deal-risk fields (e.g., risk score, impacted deal ids, stage, ARR) on the issue context record for later priority boosting. Add basic validation and logging for missing/ambiguous mappings without changing prioritization logic yet.",
+      "link": "https://www.onyx.app/12389"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

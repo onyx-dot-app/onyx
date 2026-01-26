@@ -1,0 +1,30 @@
+{
+  "id": "22684c83432a475f8c8223b27d1a733a",
+  "semantic_identifier": "Impact--Follow-up workflow: Mutual Action Plan templates not loading/applying correctly.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Follow-up workflow: Mutual Action Plan templates not loading/applying correctly.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This work fixes reliability issues in the Mutual Action Plan (MAP) template workflow where the wrong template list can load for a selected account/opportunity, or a selected template doesn\u2019t consistently apply. Today, users can see templates fail to populate (especially after CRM sync or opportunity stage changes) and end up creating MAPs with empty/default steps, or with steps that are dropped or duplicated. These failures undermine confidence in MAPs at the moment users are trying to operationalize next steps with a customer.\n\nThe expected impact is a more deterministic, repeatable MAP creation experience: the template picker will reliably reflect the correct templates for the current account/opportunity context, and applying a template will consistently produce the intended set of steps exactly once and in the right order. This reduces manual rework (rebuilding plans, re-adding steps), prevents accidental misalignment with customers caused by incomplete plans, and increases adoption of MAP templates as the default starting point rather than \u201cnice-to-have.\u201d\n\nFrom a business perspective, improved MAP integrity supports better deal execution and forecast hygiene by ensuring reps and CS teams can quickly generate accurate plans tied to the right opportunity stage. It also reduces support burden and internal escalations related to \u201cmissing templates\u201d or \u201cblank plans,\u201d and it protects the credibility of MAPs as a core workflow, particularly for teams with frequent CRM updates.\n\nTo verify the fix holds in production, we\u2019ll add lightweight instrumentation around template fetch, template apply, and MAP creation events. This will allow us to confirm that template loads succeed for the intended context, that apply operations result in expected step counts (no empty, dropped, or duplicated steps), and to detect regressions early by monitoring failure rates and anomalous MAP creations post-release.",
+      "link": "https://www.onyx.app/44423"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

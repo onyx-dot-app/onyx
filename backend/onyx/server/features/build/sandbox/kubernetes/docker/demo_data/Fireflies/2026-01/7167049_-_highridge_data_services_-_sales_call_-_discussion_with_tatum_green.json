@@ -1,0 +1,181 @@
+{
+  "id": "FIREFLIES_7167049",
+  "semantic_identifier": "7167049 - Highridge Data Services - sales_call - Discussion with Tatum Green",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-01-04 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-01-04 00:00:00",
+    "duration_min": "39"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-01"
+      ],
+      "year_month": "2026-01",
+      "meeting_title": "7167049 - Highridge Data Services - sales_call - Discussion with Tatum Green",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Tatum\u2014good to see you again. Last time you mentioned you were trying to get sharper on which customer segments are truly \u201cbest fit\u201d for Highridge, especially for product planning. Does that still feel like the priority for today?",
+      "link": "https://www.onyx.app/6468361-1"
+    },
+    {
+      "text": "Tatum Green: Hi Irene, yes. We\u2019ve got a roadmap planning cycle coming up, and we keep debating which segment\u2019s needs to optimize for. We have opinions, but not a lot of evidence.",
+      "link": "https://www.onyx.app/6468361-2"
+    },
+    {
+      "text": "Irene Shen: Perfect. Then I\u2019d focus us on Customer_Analyzer\u2019s fit_estimation\u2014because it directly answers \u201cwho\u2019s most likely to succeed with us and why,\u201d and it\u2019s very actionable for roadmap bets. Before I walk through it, what data sources do you have that could signal success today\u2014CRM fields, product usage, support tickets, surveys?",
+      "link": "https://www.onyx.app/6468361-3"
+    },
+    {
+      "text": "Tatum Green: CRM and product usage are solid. Support tickets are there but messy. We also have onboarding survey answers, but they\u2019re inconsistent.",
+      "link": "https://www.onyx.app/6468361-4"
+    },
+    {
+      "text": "Irene Shen: That\u2019s a common mix. The way fit_estimation works is: you define a small set of fit drivers\u2014say industry, size, time-to-value, adoption patterns, support burden, and churn risk signals\u2014and we compute a fit score from 0\u2013100 at the account level, then roll it up to segment-level views. The key output for product planning is the driver breakdown. It shows why a segment scores high or low\u2014so you can connect \u201cthis segment retains and expands\u201d to \u201cthese needs are actually being met.\u201d",
+      "link": "https://www.onyx.app/6468361-5"
+    },
+    {
+      "text": "Tatum Green: When you say \u201csegment,\u201d how flexible is that? Because one issue we run into is overlapping segment definitions. Like, industries overlap with personas, and then size buckets overlap with use cases.",
+      "link": "https://www.onyx.app/6468361-6"
+    },
+    {
+      "text": "Irene Shen: Great callout\u2014and it\u2019s one of the places teams can get tripped up if they don\u2019t set guardrails. In Customer_Analyzer, segments can be built on multiple attributes, but we recommend starting with a simple segmentation model: one primary dimension at a time, like \u201cindustry + size,\u201d then layer persona as a secondary cut only after you\u2019ve validated the baseline. The product helps by showing segment comparisons side-by-side\u2014SMB vs mid-market, or healthcare vs financial services\u2014and it flags when segments are too small or too overlapping to draw strong conclusions.",
+      "link": "https://www.onyx.app/6468361-7"
+    },
+    {
+      "text": "Tatum Green: Okay. My worry is we\u2019ll end up with confusing recommendations if the segments aren\u2019t clean. We\u2019ve had analytics tools do that\u2014lots of charts, not a lot of clarity.",
+      "link": "https://www.onyx.app/6468361-8"
+    },
+    {
+      "text": "Irene Shen: Totally fair. The way we avoid \u201cchart overload\u201d is by forcing the output into two decisions: (1) what\u2019s your recommended ICP profile based on observed outcomes, and (2) what are the top fit drivers that explain it. So instead of giving you 30 slices, it highlights \u201cthese 2\u20133 segments are outperforming, and here\u2019s the evidence.\u201d Then for product planning, you can ask: \u201cWhat unmet needs exist in the high-fit segments?\u201d and prioritize roadmap items that increase adoption or reduce support burden for those segments.",
+      "link": "https://www.onyx.app/6468361-9"
+    },
+    {
+      "text": "Tatum Green: That\u2019s useful. How quickly can we get to a fit score that\u2019s credible? Because we don\u2019t want to wait months.",
+      "link": "https://www.onyx.app/6468361-10"
+    },
+    {
+      "text": "Irene Shen: Typical time-to-value is a couple weeks for a strong first pass. If you can connect CRM plus product usage, we can produce an initial fit model quickly\u2014then refine it. We usually start with a workshop where you pick 5\u20137 fit drivers. For example: firmographics (industry, size), time-to-value (how quickly do they reach activation), adoption depth (feature usage frequency), support burden (ticket volume/severity), and churn risk indicators. Then you get a fit score with a driver breakdown per segment.",
+      "link": "https://www.onyx.app/6468361-11"
+    },
+    {
+      "text": "Tatum Green: What about the messy support tickets? If that\u2019s inconsistent, doesn\u2019t it distort the model?",
+      "link": "https://www.onyx.app/6468361-12"
+    },
+    {
+      "text": "Irene Shen: If support data is noisy, we can downweight it initially or use simpler proxies\u2014like \u201ctickets per active user\u201d or tagged categories you trust. The fit model isn\u2019t \u201call or nothing.\u201d You can start with higher-confidence drivers\u2014usage and retention signals\u2014and then add support signals once you\u2019ve cleaned up tags or standardized categories. The output will show you which drivers are contributing most, so you can sanity-check whether something weird is dominating the score.",
+      "link": "https://www.onyx.app/6468361-13"
+    },
+    {
+      "text": "Tatum Green: Got it. And how does this translate into product planning? I\u2019m trying to picture using this in our roadmap meeting.",
+      "link": "https://www.onyx.app/6468361-14"
+    },
+    {
+      "text": "Irene Shen: Think of it as a structured argument. In your roadmap meeting, you\u2019d pull up: \u201cSegment A has a fit score of 82 with strong retention and expansion; Segment B has 61 with longer time-to-value and higher support burden.\u201d Then you can dig into why\u2014maybe Segment B struggles with onboarding steps or a specific workflow. That tells product: \u201cIf we want Segment B, we need these improvements,\u201d or \u201cIf we want to win faster, double down on Segment A\u2019s unmet needs.\u201d It turns the roadmap debate from opinion into evidence tied to outcomes.",
+      "link": "https://www.onyx.app/6468361-15"
+    },
+    {
+      "text": "Tatum Green: That would help. We\u2019re currently arguing based on who shouts the loudest\u2014sales, product, or CS.",
+      "link": "https://www.onyx.app/6468361-16"
+    },
+    {
+      "text": "Irene Shen: Exactly. And because the fit score is tied to outcomes like retention or expansion, it gives you a common scoreboard. Quick question: for Highridge, is the planning goal more about improving retention in your current base, or expanding into a new segment?",
+      "link": "https://www.onyx.app/6468361-17"
+    },
+    {
+      "text": "Tatum Green: Mostly improving retention and expansion in the current base, but we\u2019re also testing a mid-market push.",
+      "link": "https://www.onyx.app/6468361-18"
+    },
+    {
+      "text": "Irene Shen: Perfect. Then we can set up two segment comparisons: current base vs the mid-market cohort, and within the current base, identify the highest-fit sub-segments. You\u2019d see whether mid-market is actually higher fit\u2014or whether it just \u201cfeels\u201d bigger. If mid-market\u2019s time-to-value is worse and support burden is higher, you\u2019ll see that early, before you over-invest.",
+      "link": "https://www.onyx.app/6468361-19"
+    },
+    {
+      "text": "Tatum Green: That\u2019s actually a big question for us. Some of the team thinks mid-market is the answer, but onboarding has been rough there.",
+      "link": "https://www.onyx.app/6468361-20"
+    },
+    {
+      "text": "Irene Shen: Then fit_estimation will surface that as driver-level evidence. And we can convert it into a straightforward recommendation: either \u201cmid-market is promising but needs onboarding investment,\u201d or \u201cmid-market is a distraction right now\u2014focus on X.\u201d It\u2019s not just a score; it\u2019s the \u201cwhy.\u201d",
+      "link": "https://www.onyx.app/6468361-21"
+    },
+    {
+      "text": "Tatum Green: Okay. What do you need from us to get a first model? And what does the process look like?",
+      "link": "https://www.onyx.app/6468361-22"
+    },
+    {
+      "text": "Irene Shen: For a first model: a CRM export or connection (accounts, industry, size, stage, win/loss if you have it), your product usage events (activation and key feature usage), and whatever retention/churn markers you track. Then we do a 60\u201390 minute fit driver workshop with you and one stakeholder from product or CS\u2014though if you prefer, we can start with just you and keep it simple. After that, you\u2019ll get an initial dashboard: fit scores by segment, driver breakdown, and an initial recommended ICP profile based on your historical outcomes.",
+      "link": "https://www.onyx.app/6468361-23"
+    },
+    {
+      "text": "Tatum Green: I can do CRM and product usage. Win/loss is decent. Churn markers are okay. I\u2019d like to keep the workshop small at first.",
+      "link": "https://www.onyx.app/6468361-24"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fine. We can keep it to you and maybe one product lead later. One more thing on the segmentation ambiguity: we\u2019ll propose a \u201csegment dictionary\u201d upfront\u2014basically, clear definitions for each segment so the results don\u2019t get debated endlessly. If you already have segment definitions, we\u2019ll align to them and make sure they don\u2019t overlap in a way that breaks comparisons.",
+      "link": "https://www.onyx.app/6468361-25"
+    },
+    {
+      "text": "Tatum Green: I like that. If we do this, I want the output to be something we can actually take into planning, not just \u201cdata science says so.\u201d",
+      "link": "https://www.onyx.app/6468361-26"
+    },
+    {
+      "text": "Irene Shen: Absolutely. Our goal is to produce a one-page ICP recommendation and a short list of \u201croadmap implications\u201d\u2014for example, \u201cInvest in onboarding automation for mid-market because time-to-value is the biggest negative driver,\u201d or \u201cBuild feature X because it correlates with expansion in the highest-fit segment.\u201d It stays grounded in drivers and outcomes.",
+      "link": "https://www.onyx.app/6468361-27"
+    },
+    {
+      "text": "Tatum Green: This sounds like what we need. What are the next steps to get moving?",
+      "link": "https://www.onyx.app/6468361-28"
+    },
+    {
+      "text": "Irene Shen: Two options. Option A: we start with a lightweight pilot\u2014two segments, five fit drivers, CRM + usage\u2014and deliver an initial fit readout in two weeks. Option B: we go straight to a full rollout with more drivers and additional sources like support tickets once you\u2019re comfortable. Given where you are, I\u2019d recommend Option A.",
+      "link": "https://www.onyx.app/6468361-29"
+    },
+    {
+      "text": "Tatum Green: Let\u2019s do Option A. Two weeks works. If the initial readout is solid, we can expand.",
+      "link": "https://www.onyx.app/6468361-30"
+    },
+    {
+      "text": "Irene Shen: Great. I\u2019ll send a short checklist for the data connections and propose times for the fit driver workshop early next week. Also, if you can share your current segment definitions\u2014even if they\u2019re messy\u2014I\u2019ll come back with a cleaner, non-overlapping draft for us to confirm.",
+      "link": "https://www.onyx.app/6468361-31"
+    },
+    {
+      "text": "Tatum Green: Sounds good. I can send our current definitions today. And I\u2019ll loop in our analytics person to help with the usage events connection.",
+      "link": "https://www.onyx.app/6468361-32"
+    },
+    {
+      "text": "Irene Shen: Perfect. Once we have that, we\u2019ll build the initial fit model and bring you a readout focused on product planning: which segment is highest fit, what unmet needs show up, and what that implies for the next roadmap cycle.",
+      "link": "https://www.onyx.app/6468361-33"
+    },
+    {
+      "text": "Tatum Green: Great. I\u2019m in\u2014send the checklist and the proposed times, and we\u2019ll get it scheduled.",
+      "link": "https://www.onyx.app/6468361-34"
+    },
+    {
+      "text": "Irene Shen: Will do. Thanks, Tatum\u2014excited to get you something concrete before the roadmap meeting.",
+      "link": "https://www.onyx.app/6468361-35"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "tatum_green@highridge_data_services.onyx.app"
+    }
+  ]
+}

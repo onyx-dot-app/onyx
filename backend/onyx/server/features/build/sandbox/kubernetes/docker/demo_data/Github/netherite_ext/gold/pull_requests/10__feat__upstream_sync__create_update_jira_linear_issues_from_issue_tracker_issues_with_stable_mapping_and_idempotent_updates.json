@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#10",
+  "semantic_identifier": "10: feat: Upstream sync: create/update Jira/Linear issues from Issue_Tracker issues with stable mapping and idempotent updates",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-27",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "10",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "10",
+    "labels": [],
+    "created_at": "2025-04-27",
+    "updated_at": "2025-04-27",
+    "closed_at": "2025-05-24"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nImplements first-class upstream sync from an `Issue_Tracker` issue/theme to Jira or Linear. An `Issue_Tracker` issue can now create an external issue and subsequently push updates for: title, description, priority, labels, customer impact summary, and backlinks. The integration stores and displays the external issue key/URL and maintains a stable mapping to the originating `Issue_Tracker` issue object.\n\n### Implementation details\n- **Data model / persistence**\n  - Adds an `ExternalIssueLink` (or equivalent) record keyed by `{provider, issue_tracker_issue_id}` that stores:\n    - `external_key` (e.g., JIRA-123 / Linear identifier)\n    - `external_url`\n    - `provider`, `project_id`/`team_id`\n    - `last_synced_hash` (content fingerprint) and `last_synced_at`\n  - Enforces uniqueness to prevent duplicate external issues per provider.\n\n- **Sync service**\n  - Introduces `UpstreamSyncService` with `sync(issue_id, provider)`:\n    - `ensure_external_issue_exists`: creates the external issue if no mapping exists.\n    - `push_updates`: performs update calls using a deterministic payload.\n  - Builds provider-specific payloads via adapters:\n    - `JiraAdapter` and `LinearAdapter` map fields from `Issue_Tracker` to provider formats.\n\n- **Idempotency**\n  - Generates a canonical payload (sorted labels, normalized text) and computes a hash.\n  - Skips update calls when the computed hash matches `last_synced_hash`.\n  - Retries are safe: create path checks for an existing mapping first and update path is patch-style.\n\n- **Backlinks / formatting**\n  - Adds a backlink to the `Issue_Tracker` issue URL in the external issue description (provider-specific formatting).\n  - Stores external URL/key and surfaces it on the `Issue_Tracker` issue detail page.\n\n- **Error handling**\n  - Handles missing permissions, invalid project/team, and misconfigured credentials gracefully.\n  - Returns clear, user-facing error messages (provider error mapped to actionable text) and logs structured details for debugging.\n\n### User-facing behavior\n- Users can trigger upstream sync for an `Issue_Tracker` issue to Jira/Linear.\n- On first sync, an external issue is created and linked; subsequent syncs update the same external issue.\n- If the configured project/team is invalid or the token lacks permissions, the UI/API returns a clear error and no partial mapping is persisted.\n\n### Testing\n- Adds unit tests for payload mapping and idempotency hashing.\n- Adds integration-style tests using mocked Jira/Linear clients for create/update flows and error cases (403/404/invalid project).\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#10"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

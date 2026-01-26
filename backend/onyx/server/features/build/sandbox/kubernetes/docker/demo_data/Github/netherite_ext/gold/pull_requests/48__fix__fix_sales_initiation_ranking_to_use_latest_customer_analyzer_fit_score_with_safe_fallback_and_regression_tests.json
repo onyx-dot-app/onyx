@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#48",
+  "semantic_identifier": "48: fix: Fix sales initiation ranking to use latest Customer_Analyzer fit score with safe fallback + regression tests",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-22",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "48",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "49",
+    "labels": [],
+    "created_at": "2025-04-22",
+    "updated_at": "2025-04-22",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nFixes inconsistent ordering in the sales initiation MVP rule-based recommendations by correctly consuming Customer_Analyzer fit scores per account.\n\n## What changed\n- Updated the prioritization/ranking logic to retrieve the **latest available fit score per account** (instead of relying on stale/indirect values).\n- Applied fit score as the primary tie-breaker in the rule-based ordering to ensure accounts with higher fit scores surface first.\n- Added a **graceful fallback** path when a fit score is missing (e.g., treat as `nil`/lowest priority or preserve previous deterministic ordering) to avoid exceptions and ranking instability.\n\n## Implementation (high level)\n- Introduced/updated a single data-access path that:\n  - fetches fit scores for the candidate account set in one query/batch,\n  - selects the most recent score per account (by timestamp/version),\n  - returns a map keyed by `account_id` consumed by the ranker.\n- Refactored the rank comparator to explicitly handle:\n  - score present vs missing,\n  - deterministic ordering when both are missing or equal (e.g., stable secondary key such as existing rule rank / account id).\n\n## Tests\n- Added a minimal regression test covering:\n  - accounts with scores rank ahead of accounts without scores,\n  - higher score ranks ahead of lower score,\n  - missing-score fallback remains deterministic.\n\n## User impact\nSales initiation recommendations should now be consistently ordered according to the latest Customer_Analyzer fit scores, with predictable behavior when scores are unavailable.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#48"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

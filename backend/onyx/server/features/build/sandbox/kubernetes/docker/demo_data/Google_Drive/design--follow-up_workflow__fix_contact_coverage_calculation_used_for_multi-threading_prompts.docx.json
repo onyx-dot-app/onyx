@@ -1,0 +1,30 @@
+{
+  "id": "b2c5bbdb7c69405db444e1b6f6158724",
+  "semantic_identifier": "Design--Follow-up workflow: Fix contact coverage calculation used for multi-threading prompts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Follow-up workflow: Fix contact coverage calculation used for multi-threading prompts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview  \nWe need to correct the backend \u201ccontact coverage\u201d computation that determines whether multi-threading prompts should trigger for a given account/opportunity. Today, coverage can become stale or incorrect after CRM syncs, contact merges, or opportunity stage changes, causing prompts to be missing (false negatives) or irrelevant (false positives). This work will make coverage a deterministic, recomputable derived view from source CRM/contact/activity data rather than a partially persisted state that can drift.\n\n### Proposed changes  \nRefactor coverage into a single authoritative calculation function that takes explicit inputs: (1) required roles/personas for the opportunity (or default account-level requirements), (2) eligible active contacts mapped to those roles/personas, and (3) engagement recency per contact (e.g., last inbound/outbound touch within a configurable window). The function outputs a normalized \u201ccoverage snapshot\u201d (e.g., per-role coverage status, counts of active/engaged contacts, overall coverage score/boolean eligibility) used by the multi-threading prompt eligibility engine. Store the computed snapshot with a version and `computed_at` timestamp (optional), but always recompute on relevant events to avoid drift.\n\n### Data freshness & event handling  \nAdd explicit recomputation triggers on: CRM sync completion for accounts/opps, contact merge events, contact role/persona changes, contact active/inactive changes, engagement/activity ingestion, and opportunity stage changes. Use an idempotent job keyed by `(account_id, opportunity_id, coverage_version)` to prevent duplicate work, and ensure merges correctly re-map \u201cwinner\u201d contact IDs before computing engagement recency. If an opportunity has no stage (or stage not eligible for prompts), the calculator should still produce a snapshot but eligibility should gate prompts downstream to avoid mixing business logic into the calculator.\n\n### Telemetry & validation  \nAdd lightweight structured telemetry for coverage calculations to validate production behavior without high cardinality risk: log inputs (counts only: #required roles, #active contacts, #contacts with recent engagement), key outputs (coverage eligibility boolean, per-role covered count, overall score), and the trigger source (sync, merge, stage change, activity). Emit metrics for recomputation rate and \u201celigibility flipped\u201d events (true\u2194false) to catch regressions after deploy. This will let us confirm that prompt eligibility correlates with correct coverage signals and identify remaining edge cases quickly.",
+      "link": "https://www.onyx.app/54047"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

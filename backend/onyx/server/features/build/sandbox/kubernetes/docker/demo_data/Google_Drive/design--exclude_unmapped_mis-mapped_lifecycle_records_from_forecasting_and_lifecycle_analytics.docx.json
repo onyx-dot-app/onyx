@@ -1,0 +1,30 @@
+{
+  "id": "b1bd13eb7c344d1aad65ff8c855b2be0",
+  "semantic_identifier": "Design--Exclude unmapped/mis-mapped lifecycle records from forecasting + lifecycle analytics.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-21",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Exclude unmapped/mis-mapped lifecycle records from forecasting + lifecycle analytics.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Design: Exclude unmapped/mis-mapped lifecycle records from forecasting + lifecycle analytics\n\nWe will update the forecasting and lifecycle-analytics aggregation pipeline to operate exclusively on canonical lifecycle values (our normalized stage enum) and to explicitly exclude any record flagged with a lifecycle mapping error (e.g., unmapped CRM stage, missing required fields to map, or invalid mapping configuration). Today, some aggregations implicitly fall back to raw CRM stage names when canonical mapping is absent, which introduces \u201cunknown\u201d buckets into stage-based rollups and skews conversion/slippage metrics. The new behavior is: if `canonical_lifecycle_stage` is not present/valid, the record is dropped from lifecycle-driven aggregations and forecasting inputs rather than coerced or bucketed by raw stage.\n\nImplementation-wise, we\u2019ll centralize filtering and stage selection in a shared helper used by both forecasting and lifecycle analytics jobs (batch and/or streaming, depending on our current architecture). The helper will: (1) require `canonical_lifecycle_stage` to be non-null and within the allowed enum set, (2) require `lifecycle_mapping_error` (or equivalent) to be false/empty, and (3) optionally emit counters for excluded records by error type for observability. All downstream queries/rollups (stage counts, conversion rates between stages, velocity/slippage signals, funnel reports) will be refactored to reference only the canonical stage field and will remove any logic that uses raw CRM stage as a fallback dimension.\n\nFor data correctness and product behavior, we\u2019ll treat excluded records as \u201cnot eligible for lifecycle-based analytics/forecasting\u201d rather than \u201cUnknown stage.\u201d This avoids distorting rates and rollups, and it makes mapping issues visible via monitoring rather than silently included in metrics. We\u2019ll also ensure that any UI/reporting layer that expects a complete funnel doesn\u2019t synthesize missing stages from raw values; instead, it should surface the mapped-only view and rely on the new exclusion counters/alerts to prompt mapping fixes if exclusion volume spikes.\n\nWe\u2019ll add a small regression test suite covering mixed mapped/unmapped inputs: a fixture dataset containing (a) valid mapped stages, (b) unmapped raw stages, (c) mapped-but-invalid records (missing required fields), and (d) explicitly mis-mapped records flagged with mapping error. Tests will assert that rollups, conversion rates, and slippage calculations match expected outputs when only valid canonical records are considered, and that excluded records do not appear under any stage bucket (including raw CRM names). We\u2019ll also add one test that verifies the observability counters increment for each exclusion reason, preventing silent regressions.",
+      "link": "https://www.onyx.app/17035"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

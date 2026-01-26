@@ -1,0 +1,30 @@
+{
+  "id": "2eefc5e7d52141198f1e197a29f16505",
+  "semantic_identifier": "Design--Add attribution query API to correlate outcomes to positioning_version_id.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add attribution query API to correlate outcomes to positioning_version_id.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add a backend \u201cattribution query\u201d API that returns outcome metrics grouped by `positioning_version_id`, enabling correlation between a given positioning version and downstream outcomes (conversion, win/loss, churn). The endpoint will rely on the persisted join key introduced in GOLD-52 to connect events/outcomes to the positioning exposure (or artifact) that carried that `positioning_version_id`. The primary consumer is an attribution report UI that needs stable, paginated results and the ability to compare versions over the same time window.\n\n### API shape & functionality\nIntroduce `GET /api/attribution/outcomes` with query params: `start_time`, `end_time`, optional `segment_id`/`icp_id`, optional `channel` and `artifact_type`, and pagination (`limit`, `cursor`). The response will return rows grouped by `positioning_version_id` with: raw counts per outcome type (e.g., `conversions`, `wins`, `losses`, `churned_accounts`) plus basic derived rates (e.g., `conversion_rate = conversions / exposures`, `win_rate = wins / (wins+losses)`, `churn_rate = churned_accounts / active_accounts_at_start` where applicable/available). For comparison, support `compare_positioning_version_id` (or `positioning_version_id[]=A&B`) and guarantee both versions are computed over the same filtered population/time window; the response includes both rows and an optional `delta` section (absolute and relative differences) computed server-side for UI simplicity.\n\n### Data model & query approach\nQueries will join the outcome/event tables to the positioning exposure (or attribution) table via the GOLD-52 join key, then aggregate by `positioning_version_id`. Filters apply consistently at the exposure/join layer (segment/ICP) and at the artifact/channel dimension, with time-window filtering done on the exposure timestamp (and, where needed, constrained on outcome timestamps to avoid attributing outcomes far outside the window). To ensure correctness and stable pagination, we\u2019ll use deterministic ordering (e.g., `ORDER BY positioning_version_id ASC`) and cursor pagination keyed on `(positioning_version_id)`; for more complex ordering (e.g., by conversions), we can support an explicit `sort` param but still include a tie-breaker on `positioning_version_id` to keep pagination stable.\n\n### Performance, indexing, and operational considerations\nWe will add/validate composite indexes to support the primary access patterns: `(join_key)`, `(positioning_version_id, exposure_time)`, and selective filter indexes such as `(segment_id, exposure_time)`, `(icp_id, exposure_time)`, `(channel, artifact_type, exposure_time)`, plus any necessary indexes on outcome tables for `(join_key, outcome_time)` depending on the join strategy. The endpoint will enforce reasonable defaults/limits (e.g., max 90-day window unless elevated) and return consistent totals for pagination (either `next_cursor` only, or optionally `total_count` behind a flag if expensive). We\u2019ll add query-plan coverage tests (explain/analyze in CI for representative queries), contract tests for pagination stability, and metrics/logging (latency, rows scanned, cacheability) to ensure this can reliably power the attribution report UI at scale.",
+      "link": "https://www.onyx.app/15148"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

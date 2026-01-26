@@ -1,0 +1,30 @@
+{
+  "id": "21783f215bca4fdca195dd806b08a1da",
+  "semantic_identifier": "Impact--Add user-defined outcome configuration + validation for fit model calibration.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add user-defined outcome configuration + validation for fit model calibration.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a user-defined configuration layer for fit model calibration outcomes, allowing customers to explicitly choose what \u201csuccess\u201d means for calibration\u2014activation, retention, or expansion\u2014rather than relying on implicit defaults. Users will be able to define label rules for the selected outcome, including the underlying event/field mappings and the time window used to construct labels, ensuring the calibration process aligns with their business definition and data reality.\n\nThe primary impact is improved model relevance and trust. By calibrating against the outcome that matters to a given team (e.g., retention for CS-led motions vs. expansion for sales-led growth), we reduce the mismatch between model scoring and downstream decision-making. This also creates clearer cross-functional alignment because the outcome definition becomes explicit, reviewable, and repeatable across environments.\n\nA key part of the work is robust validation: the system will verify that required data sources and signals exist and that labels can actually be generated for the chosen outcome before calibration runs. If a required event or field is missing, we will surface actionable error messages that identify what\u2019s missing and why the outcome cannot be computed, instead of silently falling back to defaults or producing misleading calibration results.\n\nOperationally, this should reduce support burden and debugging time by turning common \u201cwhy do my results look wrong?\u201d issues into upfront, deterministic configuration errors. It also lays groundwork for future outcome types and richer labeling schemes, since the backend now has a formal contract for outcome definition, dependency checks, and failure modes.",
+      "link": "https://www.onyx.app/98643"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

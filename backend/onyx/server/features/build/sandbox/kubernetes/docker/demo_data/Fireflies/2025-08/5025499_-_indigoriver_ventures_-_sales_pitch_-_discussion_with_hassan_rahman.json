@@ -1,0 +1,145 @@
+{
+  "id": "FIREFLIES_5025499",
+  "semantic_identifier": "5025499 - Indigoriver Ventures - sales_pitch - Discussion with Hassan Rahman",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-27 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-27 00:00:00",
+    "duration_min": "32"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "5025499 - Indigoriver Ventures - sales_pitch - Discussion with Hassan Rahman",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Hassan\u2014Camila Vega here. Thanks for taking a few minutes. I\u2019ll be brief: I wanted to share how Sales_Accelerator can help Indigoriver Ventures catch deal risk earlier and keep opportunities moving without adding more admin for your reps.",
+      "link": "https://www.onyx.app/2891090-1"
+    },
+    {
+      "text": "Hassan Rahman: Hi Camila. Sure\u2014what is Sales_Accelerator exactly, and how is it different from what we already do in our CRM?",
+      "link": "https://www.onyx.app/2891090-2"
+    },
+    {
+      "text": "Camila Vega: Great question. Sales_Accelerator sits on top of your existing CRM\u2014so you keep Salesforce or HubSpot as the system of record\u2014but it adds a \u201csales execution layer.\u201d It continuously looks at your opportunities and accounts and does two things really well: first, it pushes proactive warning alerts when a deal is likely to slip or stall; second, it recommends the best next action so reps know exactly what to do next on each deal, not just what stage it\u2019s in.",
+      "link": "https://www.onyx.app/2891090-3"
+    },
+    {
+      "text": "Hassan Rahman: We already have dashboards and some basic alerts. What makes your warning alerts any better?",
+      "link": "https://www.onyx.app/2891090-4"
+    },
+    {
+      "text": "Camila Vega: The difference is it\u2019s not just \u201cdata visibility\u201d\u2014it\u2019s early-warning signals tied to concrete remediation steps. For example, we alert on inactivity\u2014no touches logged, or no meeting scheduled\u2014stage aging beyond your benchmarks, and also more nuanced risks like being single-threaded with one champion, pricing or terms risk, competitive signals from notes, and forecast risk where a \u201ccommit\u201d deal is weakening. Then the alert isn\u2019t just a red flag\u2014it includes what to do: schedule exec alignment, send a security pack, reconfirm timeline, or prompt multi-threading with specific stakeholders.",
+      "link": "https://www.onyx.app/2891090-5"
+    },
+    {
+      "text": "Hassan Rahman: Okay, but that depends on good inputs. Our CRM data quality is\u2026 not perfect.",
+      "link": "https://www.onyx.app/2891090-6"
+    },
+    {
+      "text": "Camila Vega: Totally fair. We\u2019re designed for the reality that CRM hygiene varies. We ingest what\u2019s already there\u2014activities, meetings, stage history, notes\u2014and we can route alerts to where teams actually pay attention, like Slack or email, not just inside CRM. The goal is to drive the behavior change even when the data isn\u2019t pristine. And because it\u2019s explainable, a rep or manager can see why an alert fired\u2014like \u201cno meeting in 14 days\u201d plus \u201cstage age 2x benchmark\u201d\u2014so it doesn\u2019t feel like a black box.",
+      "link": "https://www.onyx.app/2891090-7"
+    },
+    {
+      "text": "Hassan Rahman: Explainable helps. What does \u201cbest next action\u201d look like in practice?",
+      "link": "https://www.onyx.app/2891090-8"
+    },
+    {
+      "text": "Camila Vega: Let me ground it in a common AE workflow: after discovery, reps usually need to send a recap, reinforce value, and keep momentum. Sales_Accelerator can draft a discovery recap email, suggest two tailored proof points from your approved positioning library, and generate a mutual action plan\u2014MAP\u2014with due dates and named stakeholders so you\u2019re not stuck with vague \u201cnext steps.\u201d It also nudges multi-threading when it detects champion risk\u2014so you don\u2019t get surprised in procurement or security late in the cycle.",
+      "link": "https://www.onyx.app/2891090-9"
+    },
+    {
+      "text": "Hassan Rahman: We\u2019ve tried mutual action plans before. Adoption is usually the issue\u2014reps don\u2019t keep them updated.",
+      "link": "https://www.onyx.app/2891090-10"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly where the warning alerts help. If the MAP has overdue items, or if there\u2019s no upcoming meeting on the calendar, or if the opportunity is aging, Sales_Accelerator surfaces it early and ties it to the rep\u2019s next step. Instead of \u201cupdate the MAP,\u201d it\u2019s \u201cstakeholder X hasn\u2019t confirmed timeline\u2014send this follow-up\u201d or \u201cno security contact identified\u2014introduce security thread now.\u201d Managers also get a clean view of which deals are at risk and why, so coaching becomes specific.",
+      "link": "https://www.onyx.app/2891090-11"
+    },
+    {
+      "text": "Hassan Rahman: Interesting. How does this fit with our existing ICP and messaging work? We\u2019ve invested a lot there.",
+      "link": "https://www.onyx.app/2891090-12"
+    },
+    {
+      "text": "Camila Vega: Perfect\u2014Sales_Accelerator is meant to complement that, not replace it. If you\u2019re already using something like Customer_Analyzer\u2014or you have fit scores and positioning blocks elsewhere\u2014we can consume those. That way the system can prioritize \u201chigh-fit but at-risk\u201d deals for intervention and pull in approved messaging and proof points so reps aren\u2019t improvising. You keep your positioning work; we operationalize it into next steps and follow-ups.",
+      "link": "https://www.onyx.app/2891090-13"
+    },
+    {
+      "text": "Hassan Rahman: Got it. We\u2019re especially sensitive to forecast accuracy. Does this actually improve forecasting, or is it mainly workflow?",
+      "link": "https://www.onyx.app/2891090-14"
+    },
+    {
+      "text": "Camila Vega: Both, but we usually earn trust through the risk and workflow first. Forecast improves because we\u2019re continuously monitoring \u201ccommit\u201d deals for weakening signals\u2014like slipping activity, stage stagnation, or no upcoming meeting\u2014and flagging forecast risk early. So instead of finding out at the end of the month that a \u201ccommit\u201d is soft, you get a proactive alert with the likely driver and the recommended fix. That tends to reduce surprise slippage and makes rollups more reliable.",
+      "link": "https://www.onyx.app/2891090-15"
+    },
+    {
+      "text": "Hassan Rahman: And implementation\u2014are we talking months, or can this be lighter?",
+      "link": "https://www.onyx.app/2891090-16"
+    },
+    {
+      "text": "Camila Vega: It\u2019s typically light because we\u2019re not replacing CRM. We connect to your CRM, configure your benchmarks\u2014like typical stage aging by segment\u2014and choose alert routes (Slack/email/CRM). Then we start with a narrow slice: one team, one region, or a set of opportunities, focusing on warning alerts and the post-discovery follow-up recommendations. That\u2019s usually enough to prove value quickly before expanding.",
+      "link": "https://www.onyx.app/2891090-17"
+    },
+    {
+      "text": "Hassan Rahman: Who usually owns this internally\u2014sales ops or frontline managers?",
+      "link": "https://www.onyx.app/2891090-18"
+    },
+    {
+      "text": "Camila Vega: Sales ops typically owns configuration and rollout, and frontline managers love it because it turns pipeline reviews into action. Reps benefit because it saves time on the follow-up pieces\u2014recap emails, proof points, MAP creation\u2014and reduces the \u201cwhat should I do next?\u201d overhead.",
+      "link": "https://www.onyx.app/2891090-19"
+    },
+    {
+      "text": "Hassan Rahman: This sounds relevant. I\u2019d want to see it on our data and understand how you\u2019d set benchmarks for stage aging and what the alerts look like in Slack.",
+      "link": "https://www.onyx.app/2891090-20"
+    },
+    {
+      "text": "Camila Vega: Absolutely. The best next step is a full working session\u201430 to 45 minutes\u2014where we walk through a few of your active opportunities, show the warning alerts that would trigger, and demo the post-discovery flow: recap email draft, proof point suggestions, and MAP creation. If you can bring someone from sales ops, we can also cover setup and governance.",
+      "link": "https://www.onyx.app/2891090-21"
+    },
+    {
+      "text": "Hassan Rahman: Okay. I can bring our sales ops lead. Next week could work\u2014Tuesday or Wednesday afternoon?",
+      "link": "https://www.onyx.app/2891090-22"
+    },
+    {
+      "text": "Camila Vega: Perfect. How about Tuesday at 2:30 PM your time? I\u2019ll send an invite with a short pre-read and a couple of questions\u2014like which pipeline segment matters most and what you consider \u201cstage aging\u201d today\u2014so we can tailor the demo.",
+      "link": "https://www.onyx.app/2891090-23"
+    },
+    {
+      "text": "Hassan Rahman: Tuesday at 2:30 works. Send it over and include the questions\u2014happy to prep.",
+      "link": "https://www.onyx.app/2891090-24"
+    },
+    {
+      "text": "Camila Vega: Will do. Thanks, Hassan\u2014looking forward to showing you this on real Indigoriver deals and making the risk signals and next steps concrete.",
+      "link": "https://www.onyx.app/2891090-25"
+    },
+    {
+      "text": "Hassan Rahman: Sounds good. Talk Tuesday.",
+      "link": "https://www.onyx.app/2891090-26"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "hassan_rahman@indigoriver_ventures.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#2",
+  "semantic_identifier": "2: feat: issue_clustering v2: Add post-cluster split-suggestion job + persistence + internal API",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-11",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "2",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "47",
+    "labels": [],
+    "created_at": "2026-01-11",
+    "updated_at": "2026-01-11",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements an issue_clustering v2 post-processing step that detects overly broad clusters and generates persisted split suggestions for triage review.\n\nWhat this PR adds:\n- Post-clustering job (`GenerateClusterSplitSuggestionsJob`) executed after a clustering run completes.\n- \u201cToo broad\u201d detection using configurable heuristics/metrics:\n  - Cluster size threshold\n  - Intra-cluster cohesion (avg/percentile pairwise similarity vs centroid)\n  - Dispersion (distance-to-centroid spread)\n  - Topic entropy (from top-N token/topic distribution)\n  - A combined score + boolean `too_broad` flag with stored thresholds used\n- Candidate split generation for flagged clusters:\n  - Runs a lightweight sub-clustering on members (k chosen via bounded sweep + silhouette/score heuristic; capped to avoid heavy compute)\n  - Produces 2..K child cluster proposals with per-child metrics (size, cohesion/dispersion, top terms)\n  - Selects representative examples per proposed child cluster (top conversations/issues closest to child centroid)\n- Persistence model/storage:\n  - New DB records to store: parent cluster id, run id, metrics snapshot, split proposals, and representative example ids\n  - Idempotent upsert keyed by (run_id, parent_cluster_id) so re-runs don\u2019t duplicate suggestions\n- Internal API surface:\n  - Read endpoints to fetch split suggestions by run/cluster, including metrics + examples, without re-running clustering\n  - Payload shaped for the triage UI (parent summary, `too_broad` reason(s), ordered proposals)\n\nOperational notes:\n- Thresholds and caps are configurable (env/config) and default to conservative values (medium priority: safe + incremental).\n- Job is designed to be bounded (limits clusters analyzed and max sub-cluster K) and logs metrics for observability.\n- No UI changes in this PR; it only persists and exposes data for the triage UI to consume.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#2"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

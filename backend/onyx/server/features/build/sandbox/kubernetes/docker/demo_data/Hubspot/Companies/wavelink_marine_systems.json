@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_7445157",
+  "semantic_identifier": "Wavelink Marine Systems",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-07-06 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "7445157",
+    "domain": "wavelink_marine_systems.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Wavelink Marine Systems\nDomain: wavelink_marine_systems.onyx.app",
+      "link": "https://www.onyx.app/45647"
+    },
+    {
+      "text": "Contact: Joaquin Bennett\nEmail: joaquin_bennett@wavelink_marine_systems.onyx.app",
+      "link": "https://www.onyx.app/65917"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

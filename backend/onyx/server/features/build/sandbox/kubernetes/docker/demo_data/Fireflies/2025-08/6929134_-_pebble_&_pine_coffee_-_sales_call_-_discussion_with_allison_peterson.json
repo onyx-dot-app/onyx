@@ -1,0 +1,201 @@
+{
+  "id": "FIREFLIES_6929134",
+  "semantic_identifier": "6929134 - Pebble & Pine Coffee - sales_call - Discussion with Allison Peterson",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-13 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-13 00:00:00",
+    "duration_min": "23"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "6929134 - Pebble & Pine Coffee - sales_call - Discussion with Allison Peterson",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Allison\u2014good to see you again. Last time you mentioned two pain points at Pebble & Pine: forecasting feels like a scramble at month-end, and AEs aren\u2019t always sure what the best follow-up is after discovery. I\u2019d love to focus today on how Sales_Accelerator tackles those two specifically and what \u201cbuying\u201d could look like if it fits.",
+      "link": "https://www.onyx.app/6562740-1"
+    },
+    {
+      "text": "Allison Peterson: Hi Megan. Yes, that\u2019s right. We\u2019re getting better, but our forecasts still swing, and the follow-up quality varies by rep. If you can show me something practical, I\u2019m all ears.",
+      "link": "https://www.onyx.app/6562740-2"
+    },
+    {
+      "text": "Megan Foster: Perfect. The two pieces I want to zero in on are: (1) our sales_forecast\u2014more accurate, explainable commit/best-case views\u2014and (2) the post-discovery follow-up recommendations: recap email drafting, proof points pulled from your approved positioning library, and a mutual action plan that helps multi-thread.",
+      "link": "https://www.onyx.app/6562740-3"
+    },
+    {
+      "text": "Allison Peterson: Okay. Forecasting is the bigger pain for leadership. The follow-up part is more of an enablement issue, but still important.",
+      "link": "https://www.onyx.app/6562740-4"
+    },
+    {
+      "text": "Megan Foster: Totally. On forecasting: Sales_Accelerator sits on top of Salesforce for you\u2014so we\u2019re not asking reps to live in yet another CRM. We combine your stage data with activity signals\u2014calls, emails, meetings\u2014plus cycle-time benchmarks and, optionally, the Customer_Analyzer fit score as a weighting factor. The point is the forecast is not just a guess based on stage; it\u2019s driven by what\u2019s actually happening and how similar deals performed.",
+      "link": "https://www.onyx.app/6562740-5"
+    },
+    {
+      "text": "Allison Peterson: When you say \u201cactivity signals,\u201d is that like scraping inboxes? We\u2019re careful about privacy and also about getting reps to consent.",
+      "link": "https://www.onyx.app/6562740-6"
+    },
+    {
+      "text": "Megan Foster: Good question. It\u2019s based on whatever you already track through your sales engagement tools and CRM activity logging. If you have email/calendar integrations in place, we can use metadata like \u201clast touch,\u201d \u201cmeeting scheduled,\u201d \u201cno next step,\u201d rather than reading sensitive content. And we can scope it: if you only want call/meeting events and Salesforce tasks, that\u2019s fine. The forecast drivers still work\u2014they\u2019re just less rich.",
+      "link": "https://www.onyx.app/6562740-7"
+    },
+    {
+      "text": "Allison Peterson: Got it. And what makes it \u201cexplainable\u201d? Our CRO hates black boxes.",
+      "link": "https://www.onyx.app/6562740-8"
+    },
+    {
+      "text": "Megan Foster: Same. Every forecast rollup shows the drivers: stage age, last touch date, whether a next meeting is scheduled, historical win rate for similar deals, and optionally fit tier. So if it says \u201ccommit dropped,\u201d you can click into the why\u2014like \u201cthis opportunity is 23 days past typical cycle time for this segment\u201d or \u201cno customer meeting scheduled and no outbound activity in 10 days.\u201d",
+      "link": "https://www.onyx.app/6562740-9"
+    },
+    {
+      "text": "Allison Peterson: That would help. Right now we just argue about whether a deal is real. But we also have weird segments\u2014retail vs. wholesale, and then franchise locations\u2014our CRM data isn\u2019t always clean.",
+      "link": "https://www.onyx.app/6562740-10"
+    },
+    {
+      "text": "Megan Foster: That\u2019s a very real constraint. We can start with what\u2019s reliable\u2014maybe retail vs wholesale\u2014and progressively refine. Where Customer_Analyzer helps is it already has your ICP and segment definitions; Sales_Accelerator consumes those fit scores and positioning blocks rather than duplicating the work. But it does require the segment mapping between systems to be consistent. If Salesforce says \u201cWholesale\u201d and Customer_Analyzer says \u201cB2B Wholesale,\u201d we\u2019d want to normalize that so the weighting and benchmarks aren\u2019t off.",
+      "link": "https://www.onyx.app/6562740-11"
+    },
+    {
+      "text": "Allison Peterson: That\u2019s one of my concerns. We\u2019ve had integrations where everything looks good until you realize \u201csegment\u201d means five different things across tools.",
+      "link": "https://www.onyx.app/6562740-12"
+    },
+    {
+      "text": "Megan Foster: Completely fair. For a successful rollout, we\u2019d do a quick mapping workshop: confirm the segment fields, pick the source of truth, and run a validation report\u2014like \u201ctop 50 opportunities by value, do they line up with expected fit tiers?\u201d If the mapping is messy, the output can feel generic or just wrong. I want to be upfront about that.",
+      "link": "https://www.onyx.app/6562740-13"
+    },
+    {
+      "text": "Allison Peterson: I appreciate that. Assuming we can map it, what does the forecast actually look like? Is it just a dashboard?",
+      "link": "https://www.onyx.app/6562740-14"
+    },
+    {
+      "text": "Megan Foster: It\u2019s dashboards plus diagnostics and scenarios. You get commit/best-case/pipeline views by rep, by segment, by source. You also get stage conversion and slippage diagnostics\u2014like \u201cmost losses are stalling in proposal,\u201d or \u201cdiscovery-to-demo conversion dipped for Tier 1 accounts.\u201d And scenario planning: \u201cIf we add 20 SQLs in ICP Tier 1, what\u2019s the expected impact?\u201d That\u2019s useful for planning outreach pushes instead of hoping pipeline appears.",
+      "link": "https://www.onyx.app/6562740-15"
+    },
+    {
+      "text": "Allison Peterson: Scenario planning is interesting. Our marketing team always asks how many leads we need, and we hand-wave.",
+      "link": "https://www.onyx.app/6562740-16"
+    },
+    {
+      "text": "Megan Foster: Exactly. It becomes a shared model: \u201cGiven historical win rate and cycle times, here\u2019s the expected revenue impact.\u201d And because it\u2019s explainable, you can defend it in leadership meetings.",
+      "link": "https://www.onyx.app/6562740-17"
+    },
+    {
+      "text": "Allison Peterson: Okay. Now on the follow-up recommendations\u2014tell me how that doesn\u2019t become canned templates. Our brand voice matters a lot.",
+      "link": "https://www.onyx.app/6562740-18"
+    },
+    {
+      "text": "Megan Foster: Great point. The follow-up guidance is only as good as the positioning blocks it pulls from\u2014those come from Customer_Analyzer. After a discovery call, the AE gets a suggested recap email draft based on key fields: what the customer cares about, relevant proof points from your approved library, and then a mutual action plan. It\u2019s not trying to \u201cinvent\u201d messaging; it\u2019s assembling from what you\u2019ve already approved and tailoring based on segment/fit.",
+      "link": "https://www.onyx.app/6562740-19"
+    },
+    {
+      "text": "Allison Peterson: But if our positioning library isn\u2019t current, the email could be off, right?",
+      "link": "https://www.onyx.app/6562740-20"
+    },
+    {
+      "text": "Megan Foster: Yes\u2014if Customer_Analyzer positioning blocks are stale, the recommendations can feel generic or misaligned. The way teams solve that is with a simple governance cadence: once a month, sales enablement reviews the top-used proof points and updates what\u2019s no longer relevant. The benefit is reps stop freelancing and you get consistency without sounding robotic.",
+      "link": "https://www.onyx.app/6562740-21"
+    },
+    {
+      "text": "Allison Peterson: I like the idea, but my AEs will push back if it feels like more admin.",
+      "link": "https://www.onyx.app/6562740-22"
+    },
+    {
+      "text": "Megan Foster: That\u2019s why we position it as speed and quality, not compliance. The mutual action plan is the best example: it auto-creates the next steps with due dates and stakeholders so reps can multi-thread\u2014looping in, say, operations and finance early. Most reps already do this in messy notes; we just make it repeatable and visible.",
+      "link": "https://www.onyx.app/6562740-23"
+    },
+    {
+      "text": "Allison Peterson: Multi-threading is something we\u2019re trying to improve. Deals die when the champion goes quiet.",
+      "link": "https://www.onyx.app/6562740-24"
+    },
+    {
+      "text": "Megan Foster: Exactly. The system can also flag \u201crisk\u201d signals\u2014like no next meeting scheduled or key stakeholder missing\u2014so a manager can coach before the deal slips.",
+      "link": "https://www.onyx.app/6562740-25"
+    },
+    {
+      "text": "Allison Peterson: So if we wanted to move forward, what does the buying process look like? And what would you need from us to prove this works?",
+      "link": "https://www.onyx.app/6562740-26"
+    },
+    {
+      "text": "Megan Foster: I\u2019d suggest a short pilot with a clear success plan. Two parts: first, forecasting\u2014pick one segment, like wholesale, and 2\u20133 reps. We\u2019ll measure forecast accuracy vs. your current commit process and track slippage diagnostics. Second, post-discovery follow-up\u2014use the recap email + proof points + mutual action plan workflow for a defined set of new opportunities and measure time-to-next-step and stakeholder coverage.",
+      "link": "https://www.onyx.app/6562740-27"
+    },
+    {
+      "text": "Allison Peterson: How long?",
+      "link": "https://www.onyx.app/6562740-28"
+    },
+    {
+      "text": "Megan Foster: Four weeks is usually enough to see signal without dragging it out. Week one is integration and mapping: Salesforce fields, activity sources, and Customer_Analyzer segment alignment. Weeks two through four are usage and review: a weekly 30-minute check-in where we look at forecast drivers and whether recommendations feel on-brand.",
+      "link": "https://www.onyx.app/6562740-29"
+    },
+    {
+      "text": "Allison Peterson: What about implementation effort? I don\u2019t have a big ops team.",
+      "link": "https://www.onyx.app/6562740-30"
+    },
+    {
+      "text": "Megan Foster: Minimal lift if your Salesforce is in decent shape. We\u2019ll need an admin for permissions and field mapping, and someone from enablement to validate the positioning blocks. If that\u2019s you plus maybe one ops person for a few hours, that\u2019s typically enough. If we hit the \u201csegment mismatch\u201d issue you mentioned, that\u2019s the main variable\u2014we\u2019d pause and fix that before judging results.",
+      "link": "https://www.onyx.app/6562740-31"
+    },
+    {
+      "text": "Allison Peterson: Pricing-wise, I\u2019m not signing today, but I need a ballpark before I take it to our CRO.",
+      "link": "https://www.onyx.app/6562740-32"
+    },
+    {
+      "text": "Megan Foster: Totally. Based on your team size from our last call, you\u2019d be in our mid-tier package for Sales_Accelerator, with forecasting and the follow-up guidance included. I can send a written range today and then a formal quote after we confirm pilot scope\u2014number of users, segments, and data sources.",
+      "link": "https://www.onyx.app/6562740-33"
+    },
+    {
+      "text": "Allison Peterson: Okay. I\u2019m leaning toward a pilot, as long as we\u2019re deliberate about the segment mapping and we don\u2019t end up with generic emails.",
+      "link": "https://www.onyx.app/6562740-34"
+    },
+    {
+      "text": "Megan Foster: That\u2019s fair. Here\u2019s what I propose as next steps: I\u2019ll send a one-page pilot plan with success metrics, a checklist for the Salesforce/Customer_Analyzer mapping, and the pricing range. If you can introduce me to whoever owns Salesforce admin\u2014maybe your sales ops lead\u2014we\u2019ll schedule a 45-minute working session this week. Then we can target pilot kickoff next Monday.",
+      "link": "https://www.onyx.app/6562740-35"
+    },
+    {
+      "text": "Allison Peterson: Yes, I can loop in Jordan in ops. Send me the plan, and I\u2019ll get time on the calendar for the mapping session.",
+      "link": "https://www.onyx.app/6562740-36"
+    },
+    {
+      "text": "Megan Foster: Great. I\u2019ll also include a couple examples of the explainable forecast drivers and what the mutual action plan output looks like, so you can share internally. Anything else you need to feel comfortable taking this to your CRO?",
+      "link": "https://www.onyx.app/6562740-37"
+    },
+    {
+      "text": "Allison Peterson: Just make sure the plan is clear on what data you\u2019re using and what we can control. If that\u2019s solid, I think we can get approval to run the pilot.",
+      "link": "https://www.onyx.app/6562740-38"
+    },
+    {
+      "text": "Megan Foster: Absolutely. I\u2019ll get that over in the next hour, and we\u2019ll lock the working session with Jordan. Thanks, Allison\u2014excited to make forecasting a lot less painful for Pebble & Pine.",
+      "link": "https://www.onyx.app/6562740-39"
+    },
+    {
+      "text": "Allison Peterson: Thanks, Megan. Talk soon.",
+      "link": "https://www.onyx.app/6562740-40"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "allison_peterson@pebble_&_pine_coffee.onyx.app"
+    }
+  ]
+}

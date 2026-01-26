@@ -1,0 +1,30 @@
+{
+  "id": "45ec7bba11ba49bc926dbd190792f00b",
+  "semantic_identifier": "Design--Customer_Analyzer v2: Add automatic alignment check for segment definition + messaging version on sync.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-18",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Customer_Analyzer v2: Add automatic alignment check for segment definition + messaging version on sync.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add an automatic \u201calignment check\u201d to the Sales_Accelerator \u2192 Customer_Analyzer v2 sync path to ensure that the account/opportunity being synced is aligned to the currently active segment definition ID and messaging version at the time of sync. The check compares the record\u2019s segment_definition_id and messaging_version (as stored on the source entity or the CAv2 payload input) against the expected/active values resolved from our canonical configuration (e.g., \u201ccurrently active segment definition for this org/workspace\u201d and the \u201cexpected messaging version for that segment\u201d). This runs on every sync attempt and is intentionally non-blocking: the sync continues, but we record misalignment for follow-up.\n\nBackend implementation: during sync preparation (before writing to Customer_Analyzer v2), we introduce an AlignmentResolver that returns {expected_segment_definition_id, expected_messaging_version} for the entity\u2019s context (org/workspace, segment, etc.). We then compute an alignment result with a simple equality check (exact match), producing either aligned or mismatched with a reason code (segment_mismatch, messaging_version_mismatch, both). The resolver should be deterministic and auditable (based on config tables/feature flags rather than derived from the payload), and we should include the \u201cexpected vs actual\u201d values in the internal diagnostics object (but not necessarily in the public log message if sensitive).\n\nPersistence: extend the sync record (or the CAv2 sync tracking table we already have) to include alignment_status (enum: aligned, alignment_failed, unknown) and alignment_checked_at, plus optional alignment_failure_reason and alignment_expected_values for debugging. On mismatch, set alignment_status=alignment_failed and persist the reason and expected/actual IDs/versions. On match, set alignment_status=aligned. If we cannot resolve expected values (missing config, transient read error), set alignment_status=unknown and log a warning; do not block sync.\n\nObservability and non-blocking warning: emit a structured integration log entry whenever alignment_status != aligned with severity=warning, including identifiers (org, account/opportunity, sync_job_id) and a compact reason code. This provides operators a breadcrumb without gating downstream behavior. We will add counters/metrics for alignment_failed and unknown to monitor incidence and to validate rollout. UI gating and \u201capproved messaging only\u201d enforcement are explicitly out of scope and will be implemented in follow-up tickets that consume this recorded alignment status.",
+      "link": "https://www.onyx.app/12710"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

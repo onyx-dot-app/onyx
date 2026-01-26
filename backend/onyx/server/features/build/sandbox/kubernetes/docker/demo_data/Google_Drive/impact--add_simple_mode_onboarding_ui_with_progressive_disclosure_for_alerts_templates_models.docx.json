@@ -1,0 +1,30 @@
+{
+  "id": "6f8d48e4f9904b258de30b83a35235a9",
+  "semantic_identifier": "Impact--Add Simple Mode onboarding UI with progressive disclosure for alerts/templates/models.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-08",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add Simple Mode onboarding UI with progressive disclosure for alerts/templates/models.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a new \u201cSimple Mode\u201d onboarding path that helps first-time users get to value quickly by applying a recommended, minimal configuration sourced from backend defaults. During onboarding, users can explicitly choose Simple Mode, and the product will provision the essential setup automatically instead of asking them to configure alerts, templates, or models upfront.\n\nIn Simple Mode, the UI will use progressive disclosure: advanced controls for alerts/templates/models are hidden behind an \u201cAdvanced settings\u201d accordion, while the main experience foregrounds only the core workflows\u2014forecasting, next-best-action, and risk alerts. Each surfaced workflow will include clear, explainable summaries so users understand what\u2019s enabled and why, without needing to navigate complex configuration screens.\n\nThis should reduce onboarding friction and time-to-first-success by minimizing decision fatigue and preventing misconfiguration. It also creates a cleaner mental model for new users by focusing on a small set of high-signal capabilities, while still preserving access to the full power of the product when needed.\n\nImportantly, users can switch from Simple Mode to Advanced Mode later without losing the defaults already applied. This maintains continuity (no rework or unexpected resets), supports gradual adoption of advanced features, and allows teams to start with a safe baseline configuration and iterate as they mature.",
+      "link": "https://www.onyx.app/76196"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

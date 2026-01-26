@@ -1,0 +1,30 @@
+{
+  "id": "5c7164f736734d4db5de72699092ca28",
+  "semantic_identifier": "Impact--Follow-up workflow: Ensure multi-threading prompts refresh and de-duplicate after CRM/contact changes.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Follow-up workflow: Ensure multi-threading prompts refresh and de-duplicate after CRM/contact changes.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature ensures our Follow-up workflow stays accurate and trustworthy when underlying CRM/contact data changes. Today, multi-threading prompts can become stale, disappear, or duplicate after CRM syncs, contact merges, role/persona updates, or opportunity stage transitions\u2014creating confusion about what the user should do next and reducing confidence in the workflow.\n\nWith this update, prompt eligibility will recompute and the UI will re-render whenever relevant contact or opportunity changes occur. Users will consistently see the correct set of multi-threading prompts for the current account/opportunity state, without requiring manual refreshes or workarounds. This directly improves continuity during active deal work, especially in high-change environments where CRM data is frequently updated.\n\nDe-duplication will address cases where cached eligibility results cause the same prompt to render multiple times. By enforcing uniqueness at render time (and ensuring refreshed eligibility replaces cached/stale results), we reduce noise and prevent users from acting on redundant or outdated guidance, improving overall completion rates for follow-up actions.\n\nFinally, we\u2019ll add minimal instrumentation to validate the behavior in production: tracking refresh triggers and the prompt IDs rendered per account/opportunity. This gives us a lightweight way to confirm prompts are refreshing when expected, detect regressions quickly, and quantify the reduction in stale/duplicate prompt issues post-release.",
+      "link": "https://www.onyx.app/35100"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

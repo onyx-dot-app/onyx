@@ -1,0 +1,30 @@
+{
+  "id": "327a863dfe1d4200afd6cd512e09a058",
+  "semantic_identifier": "Impact--Positioning workspace: Add basic version history persistence for positioning recommendations.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-18",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Positioning workspace: Add basic version history persistence for positioning recommendations.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds basic backend persistence and version history for outputs generated in the Positioning workspace. Each time a user generates a positioning recommendation, we will save a versioned snapshot so users can reliably return to prior outputs instead of treating results as ephemeral.\n\nSnapshots will be keyed to the workspace and segment context (including a comparison segment when applicable) and will store both history metadata and the full recommendation payload. Minimum metadata includes created_at, created_by, the segment identifiers used, and the model/run ID so teams can understand what produced a given version and trace changes over time.\n\nWe will expose APIs to (1) list versions for a given workspace/segment context, ordered most-recent-first with sensible limits, and (2) fetch a specific version by identifier. This enables product surfaces like a \u201cVersion history\u201d panel, restore/view flows, and links to share or audit prior recommendations without re-running generation.\n\nImpact: teams gain continuity and accountability\u2014supporting review cycles, comparisons between iterations, and reproducibility for stakeholder conversations. It also reduces redundant generations (time/cost) and improves trust by making the recommendation lifecycle inspectable and durable.",
+      "link": "https://www.onyx.app/55677"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

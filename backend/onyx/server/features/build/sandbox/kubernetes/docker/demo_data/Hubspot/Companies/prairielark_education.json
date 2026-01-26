@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_1343958",
+  "semantic_identifier": "Prairielark Education",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-02-28 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "1343958",
+    "domain": "prairielark_education.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Prairielark Education\nDomain: prairielark_education.onyx.app",
+      "link": "https://www.onyx.app/56552"
+    },
+    {
+      "text": "Contact: David Green\nEmail: david_green@prairielark_education.onyx.app",
+      "link": "https://www.onyx.app/13126"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "27585736dd134088afdae2a44db750d5",
+  "semantic_identifier": "Design--Fix segment-to-template mapping in sales initiation recommendations (positioning block insertion).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-03-31",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix segment-to-template mapping in sales initiation recommendations (positioning block insertion).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nSales initiation recommendations currently pick an outreach template and insert a `Customer_Analyzer` positioning block based on an account \u201csegment\u201d value that can be missing, stale, or change over time. When that happens, the recommender can apply the wrong segment-to-template mapping and/or insert the wrong positioning block, resulting in incorrect messaging. We need to make segment resolution deterministic at recommendation time, ensure the template and positioning block are selected from the resolved segment, and guarantee a safe fallback when segment data (or the block for that segment) is unavailable.\n\n### Proposed Approach\nIntroduce a single \u201csegment resolver\u201d used by the recommendations pipeline that computes the *current* segment for an account at the time the recommendation is generated (source-of-truth field or derived logic, with explicit precedence). The recommendation builder will then select the outreach template via a segment\u2192template mapping table keyed by the resolved segment, and separately select the `Customer_Analyzer` positioning block via a segment\u2192block mapping. Template selection and block insertion must use the same resolved segment value (no mixing cached/previous segment fields), and the decision should be logged/annotated on the recommendation for auditability (resolved segment, mapping version, fallback reason if any).\n\n### Fallback / Safety Behavior\nIf the resolver cannot determine a segment, or if no template exists for the resolved segment, the system will use a safe default template (explicitly configured, non-segmented). For positioning blocks: if the segment is unknown or the segment\u2019s `Customer_Analyzer` block is missing, we will omit the block (or insert a default generic block if product requirements mandate one), rather than inserting an incorrect segment-specific block. This prevents cross-segment messaging while keeping recommendations usable.\n\n### Testing / Regression Coverage\nAdd a regression test suite around the recommendation builder covering: (1) segment change between two recommendation runs (ensure the second run uses the new segment\u2019s template and block), (2) missing segment (uses default template and no/ default block), and (3) known segment with missing block mapping (uses correct segment template but omits/uses default block). Tests should assert both the selected template ID and the inserted block ID (or absence), and should validate that the resolved segment and fallback reason metadata are populated as expected.",
+      "link": "https://www.onyx.app/69655"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

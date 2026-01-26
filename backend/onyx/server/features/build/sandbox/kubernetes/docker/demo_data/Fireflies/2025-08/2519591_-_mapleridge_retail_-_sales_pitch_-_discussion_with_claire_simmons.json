@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_2519591",
+  "semantic_identifier": "2519591 - Mapleridge Retail - sales_pitch - Discussion with Claire Simmons",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-29 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-29 00:00:00",
+    "duration_min": "39"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "2519591 - Mapleridge Retail - sales_pitch - Discussion with Claire Simmons",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hi Claire\u2014Arjun Mehta here. Thanks for taking a few minutes. I\u2019ll be brief: I wanted to share how Customer_Analyzer can help Mapleridge Retail get sharper on which customer segments are actually your best fit, and then turn that into messaging you can use immediately for outbound and landing pages.",
+      "link": "https://www.onyx.app/7117219-1"
+    },
+    {
+      "text": "Claire Simmons: Hi Arjun\u2014sure, I\u2019ve got a bit. What are you seeing as the main problem it solves?",
+      "link": "https://www.onyx.app/7117219-2"
+    },
+    {
+      "text": "Arjun Mehta: Totally. Most teams have a working ICP, but it\u2019s based on partial signals\u2014like industry and size\u2014while the real indicators of \u201cwill they buy, adopt, renew, expand\u201d are scattered across CRM fields, onboarding surveys, product usage, support tickets, even call notes. Customer_Analyzer pulls those signals together and produces two things: a fit score by account and by segment, and a breakdown of why the score is high or low so you can act on it.",
+      "link": "https://www.onyx.app/7117219-3"
+    },
+    {
+      "text": "Claire Simmons: We do struggle with that. We\u2019ve got SMB and mid-market motions, but honestly our messaging is pretty generic across both. How does your fit scoring actually work?",
+      "link": "https://www.onyx.app/7117219-4"
+    },
+    {
+      "text": "Arjun Mehta: The core feature is fit estimation. You define\u2014or select\u2014fit drivers that matter for your business. Typical ones are firmographics like retail sub-vertical and employee count, technographics, problem severity, willingness to pay, time-to-value, adoption patterns, support burden, and churn-risk signals. Then we compute a 0\u2013100 fit score at the account level, roll that up to segment comparisons\u2014say SMB vs mid-market\u2014and show the driver breakdown so you can see what\u2019s pulling each segment up or down.",
+      "link": "https://www.onyx.app/7117219-5"
+    },
+    {
+      "text": "Claire Simmons: Okay, but we already have a bunch of fields in our CRM. How is this different than just doing a report and slicing it?",
+      "link": "https://www.onyx.app/7117219-6"
+    },
+    {
+      "text": "Arjun Mehta: Great question. Two differences. First, the scoring ties fit drivers to outcomes\u2014conversion, retention, expansion\u2014so you\u2019re not just describing segments, you\u2019re measuring which signals actually correlate with success for you. Second, it\u2019s not limited to CRM. For example, if mid-market accounts have higher ACV but also higher support burden early on, we\u2019ll surface that tradeoff and quantify it. Or if SMB accounts have faster time-to-value and better adoption, that becomes a driver that informs both prioritization and messaging.",
+      "link": "https://www.onyx.app/7117219-7"
+    },
+    {
+      "text": "Claire Simmons: That outcome linkage is interesting. We\u2019ve had cases where bigger logos look great in pipeline but churn later. How quickly do you get to something usable?",
+      "link": "https://www.onyx.app/7117219-8"
+    },
+    {
+      "text": "Arjun Mehta: Usually fast. The first pass is about pulling in what you already have\u2014CRM basics plus any onboarding survey responses and product usage events if you track them. Within a couple of weeks, teams typically have an initial fit model that\u2019s \u201cdirectionally correct,\u201d and then you iterate as you add richer signals like support tickets or interview notes.",
+      "link": "https://www.onyx.app/7117219-9"
+    },
+    {
+      "text": "Claire Simmons: And the output is what\u2014just a dashboard?",
+      "link": "https://www.onyx.app/7117219-10"
+    },
+    {
+      "text": "Arjun Mehta: There\u2019s a dashboard, but the practical output is: (1) fit score + driver breakdown, (2) segment comparisons, and (3) a recommended ICP profile based on observed outcomes. Then, for messaging, we translate those insights into positioning recommendations\u2014what value props resonate for each segment, what proof points to emphasize, and which objections to preempt.",
+      "link": "https://www.onyx.app/7117219-11"
+    },
+    {
+      "text": "Claire Simmons: We\u2019re specifically trying to create segment-specific landing pages and outbound messaging for SMB vs mid-market. Can you walk me through how you\u2019d support that?",
+      "link": "https://www.onyx.app/7117219-12"
+    },
+    {
+      "text": "Arjun Mehta: Definitely. Let\u2019s say we run the fit estimation and find SMB has a higher fit score driven by fast time-to-value and strong adoption\u2014maybe they activate key features in week one and submit fewer support tickets. Mid-market might score high on willingness to pay but lower on time-to-value and higher on integration complexity.  \nFrom that, your SMB landing page messaging becomes: \u201cGet value in days,\u201d \u201cSimple setup,\u201d \u201cProven adoption,\u201d with proof points like activation rate or time-to-first-value. Your outbound can be punchier and ROI-focused with quick wins.  \nFor mid-market, the messaging shifts to: \u201cScales across locations,\u201d \u201cDe-risks rollout,\u201d \u201cIntegration-ready,\u201d with proof points like successful deployments, security/compliance, and objection handling around implementation effort. It\u2019s not guessing\u2014it\u2019s grounded in the signals and outcomes you already see.",
+      "link": "https://www.onyx.app/7117219-13"
+    },
+    {
+      "text": "Claire Simmons: That\u2019s pretty aligned with what we suspect, but we haven\u2019t been able to prove it internally. How do you avoid the \u201cblack box score\u201d problem? I need my team to trust it.",
+      "link": "https://www.onyx.app/7117219-14"
+    },
+    {
+      "text": "Arjun Mehta: 100%. We\u2019re very explicit about transparency. Every score comes with the driver breakdown\u2014so you can see, for example, \u201cSupport burden is lowering this segment by 12 points,\u201d or \u201cAdoption pattern is contributing +18.\u201d You can click into which signals are being used, adjust weights, and sanity-check against a set of known accounts\u2014your best customers and your worst-fit ones\u2014to validate it matches reality.",
+      "link": "https://www.onyx.app/7117219-15"
+    },
+    {
+      "text": "Claire Simmons: That would help. What do you need from us to run something like that? We\u2019re pretty careful with data access.",
+      "link": "https://www.onyx.app/7117219-16"
+    },
+    {
+      "text": "Arjun Mehta: For an initial evaluation, we can keep it lightweight: a CSV export from your CRM with a handful of fields\u2014industry, size, deal stage, closed-won/lost, ACV\u2014plus any retention/renewal outcomes you track. If you\u2019re open to it, we can also connect product usage events, but it\u2019s optional for a first model. We can also do this under a standard security review and scope access tightly.",
+      "link": "https://www.onyx.app/7117219-17"
+    },
+    {
+      "text": "Claire Simmons: Got it. If we did a full call, what would we cover\u2014demo, or more discovery?",
+      "link": "https://www.onyx.app/7117219-18"
+    },
+    {
+      "text": "Arjun Mehta: I\u2019d suggest a 30-minute working session. First 10 minutes: quick discovery on your SMB vs mid-market motions, what \u201cgood customer\u201d means at Mapleridge, and what outcomes matter most right now\u2014conversion vs churn reduction vs expansion. Next 15: a focused demo of fit estimation\u2014fit score, driver breakdown, and segment comparison\u2014using an example dataset so it\u2019s concrete. Last 5: agree on what data you can share for a lightweight pilot and what success looks like\u2014like producing two segment-specific messaging outlines and a recommended ICP profile.",
+      "link": "https://www.onyx.app/7117219-19"
+    },
+    {
+      "text": "Claire Simmons: That sounds reasonable. One concern: we\u2019ve had tooling that spits out recommendations but doesn\u2019t fit our reality. How customizable are the fit drivers?",
+      "link": "https://www.onyx.app/7117219-20"
+    },
+    {
+      "text": "Arjun Mehta: Very. You can start from a template, but you can customize fit drivers to match Mapleridge\u2019s context\u2014like store count, retail sub-vertical, integration requirements, support burden thresholds, or adoption milestones you care about. And because it\u2019s tied to outcomes, you can test hypotheses: \u201cDo accounts with X adoption pattern actually renew more?\u201d If yes, it becomes a stronger driver; if not, you downweight it.",
+      "link": "https://www.onyx.app/7117219-21"
+    },
+    {
+      "text": "Claire Simmons: Okay. If we can get to two distinct landing page narratives and outbound angles for SMB and mid-market, that would be a win for us this quarter.",
+      "link": "https://www.onyx.app/7117219-22"
+    },
+    {
+      "text": "Arjun Mehta: Perfect\u2014that\u2019s exactly the use case where teams see value quickly. We can aim for: (1) a segment comparison showing which tier is your highest-fit ICP right now, (2) the \u201cwhy\u201d behind it via driver breakdown, and (3) messaging guidance for each tier\u2014value props, differentiators, proof points, and top objections.",
+      "link": "https://www.onyx.app/7117219-23"
+    },
+    {
+      "text": "Claire Simmons: Let\u2019s do it. Do you have availability next week?",
+      "link": "https://www.onyx.app/7117219-24"
+    },
+    {
+      "text": "Arjun Mehta: Yes\u2014how\u2019s Tuesday at 11am or Wednesday at 2pm your time?",
+      "link": "https://www.onyx.app/7117219-25"
+    },
+    {
+      "text": "Claire Simmons: Wednesday at 2pm works. Send an invite and a quick outline of what you need from us beforehand.",
+      "link": "https://www.onyx.app/7117219-26"
+    },
+    {
+      "text": "Arjun Mehta: Will do. I\u2019ll send the calendar invite for Wednesday at 2pm, plus a short pre-read and a minimal data checklist for the fit estimation starter\u2014nothing heavy. Thanks, Claire\u2014looking forward to it.",
+      "link": "https://www.onyx.app/7117219-27"
+    },
+    {
+      "text": "Claire Simmons: Thanks, Arjun. Talk Wednesday.",
+      "link": "https://www.onyx.app/7117219-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "claire_simmons@mapleridge_retail.onyx.app"
+    }
+  ]
+}
