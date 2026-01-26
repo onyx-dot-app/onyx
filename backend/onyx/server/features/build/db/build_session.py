@@ -7,6 +7,8 @@ from uuid import UUID
 
 from sqlalchemy import desc
 from sqlalchemy import exists
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
@@ -15,10 +17,12 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import Artifact
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
+from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -472,3 +476,44 @@ def allocate_nextjs_port(db_session: Session) -> int:
     raise RuntimeError(
         f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
     )
+
+
+def fetch_llm_provider_by_type_for_build_mode(
+    db_session: Session, provider_type: str
+) -> LLMProviderView | None:
+    """Fetch an LLM provider by its provider type (e.g., "anthropic", "openai").
+
+    Resolution priority:
+    1. First try to find a provider named "build-mode-{type}" (e.g., "build-mode-anthropic")
+    2. If not found, fall back to any provider that matches the type
+
+    Args:
+        db_session: Database session
+        provider_type: The provider type (e.g., "anthropic", "openai", "openrouter")
+
+    Returns:
+        LLMProviderView if found, None otherwise
+    """
+    from onyx.db.llm import fetch_existing_llm_provider
+
+    # First try to find a "build-mode-{type}" provider
+    build_mode_name = f"build-mode-{provider_type}"
+    provider_model = fetch_existing_llm_provider(
+        name=build_mode_name, db_session=db_session
+    )
+
+    # If not found, fall back to any provider that matches the type
+    if not provider_model:
+        provider_model = db_session.scalar(
+            select(LLMProviderModel)
+            .where(LLMProviderModel.provider == provider_type)
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
+        )
+
+    if not provider_model:
+        return None
+    return LLMProviderView.from_model(provider_model)

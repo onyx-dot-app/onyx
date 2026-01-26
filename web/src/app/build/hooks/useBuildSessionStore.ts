@@ -3,7 +3,10 @@
 import { create } from "zustand";
 import Cookies from "js-cookie";
 import { BUILD_DEMO_DATA_COOKIE_NAME } from "@/app/build/v1/constants";
-import { getBuildUserPersona } from "@/app/build/onboarding/constants";
+import {
+  getBuildUserPersona,
+  getBuildLlmSelection,
+} from "@/app/build/onboarding/constants";
 
 import {
   ApiSandboxResponse,
@@ -478,6 +481,8 @@ interface BuildSessionStore {
   // Pre-provisioning Actions
   ensurePreProvisionedSession: () => Promise<string | null>;
   consumePreProvisionedSession: () => Promise<string | null>;
+  /** Clear and delete any pre-provisioned session (used when settings change) */
+  clearPreProvisionedSession: () => Promise<void>;
 
   // Demo Data Actions
   setDemoDataEnabled: (enabled: boolean) => void;
@@ -1160,9 +1165,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     updateSessionData(tempId, { status: "creating" });
 
     try {
+      // Get LLM selection from cookie
+      const llmSelection = getBuildLlmSelection();
       const sessionData = await apiCreateSession({
         name: prompt.slice(0, 50),
         demoDataEnabled,
+        llmProviderType: llmSelection?.provider || null,
+        llmModelName: llmSelection?.modelName || null,
       });
       const realSessionId = sessionData.id;
 
@@ -1415,13 +1424,16 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     // Start new provisioning with current demoDataEnabled value
     const promise = (async (): Promise<string | null> => {
       try {
-        // Parse user persona from cookie
+        // Parse user persona and LLM selection from cookies
         const persona = getBuildUserPersona();
+        const llmSelection = getBuildLlmSelection();
 
         const sessionData = await apiCreateSession({
           demoDataEnabled,
           userWorkArea: persona?.workArea || null,
           userLevel: persona?.level || null,
+          llmProviderType: llmSelection?.provider || null,
+          llmModelName: llmSelection?.modelName || null,
         });
         set({
           preProvisioning: {
@@ -1490,6 +1502,38 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // No session available
     return null;
+  },
+
+  clearPreProvisionedSession: async () => {
+    const { preProvisioning } = get();
+
+    // If provisioning is in progress, wait for it to complete
+    if (preProvisioning.status === "provisioning") {
+      await preProvisioning.promise;
+    }
+
+    // Re-check state after awaiting
+    const { preProvisioning: currentState } = get();
+
+    if (currentState.status === "ready") {
+      const { sessionId } = currentState;
+
+      // Reset to idle first
+      set({ preProvisioning: { status: "idle" } });
+
+      // Delete the session and wait for completion
+      try {
+        await apiDeleteSession(sessionId);
+      } catch (err) {
+        console.error(
+          "[PreProvision] Failed to delete pre-provisioned session:",
+          err
+        );
+      }
+    } else {
+      // Just reset to idle if not ready
+      set({ preProvisioning: { status: "idle" } });
+    }
   },
 
   // ===========================================================================

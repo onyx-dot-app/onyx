@@ -11,6 +11,7 @@ import {
   WORK_AREA_OPTIONS,
   LEVEL_OPTIONS,
   WORK_AREAS_WITH_LEVEL,
+  setBuildLlmSelection,
 } from "@/app/build/onboarding/constants";
 import {
   LLMProviderDescriptor,
@@ -191,6 +192,8 @@ interface BuildOnboardingModalProps {
   onLlmComplete?: () => Promise<void>;
   initialValues?: InitialValues;
   skipInfoSlides?: boolean;
+  /** Provider to pre-select when opening directly to LLM setup (e.g., "anthropic", "openai") */
+  initialProvider?: string;
 }
 
 export default function BuildOnboardingModal({
@@ -201,9 +204,12 @@ export default function BuildOnboardingModal({
   onLlmComplete,
   initialValues,
   skipInfoSlides = false,
+  initialProvider,
 }: BuildOnboardingModalProps) {
-  // Navigation
-  const [currentStep, setCurrentStep] = useState<Step>("user-info");
+  // Navigation - start at llm-setup if skipping info slides and showing LLM setup
+  const [currentStep, setCurrentStep] = useState<Step>(
+    skipInfoSlides && showLlmSetup ? "llm-setup" : "user-info"
+  );
 
   // User info state - pre-fill from initialValues if available
   const [firstName, setFirstName] = useState(initialValues?.firstName || "");
@@ -223,6 +229,24 @@ export default function BuildOnboardingModal({
       if (initialValues.level && !level) setLevel(initialValues.level);
     }
   }, [initialValues]);
+
+  // Set initial provider and step when modal opens with initialProvider
+  useEffect(() => {
+    if (open && initialProvider) {
+      const providerConfig = PROVIDERS.find((p) => p.key === initialProvider);
+      if (providerConfig) {
+        setSelectedProvider(providerConfig.key);
+        // Set the first model as default
+        if (providerConfig.models[0]) {
+          setSelectedModel(providerConfig.models[0].name);
+        }
+      }
+      // Navigate to LLM setup step
+      if (skipInfoSlides && showLlmSetup) {
+        setCurrentStep("llm-setup");
+      }
+    }
+  }, [open, initialProvider, skipInfoSlides, showLlmSetup]);
 
   // LLM setup state
   const [selectedProvider, setSelectedProvider] =
@@ -380,6 +404,14 @@ export default function BuildOnboardingModal({
           });
         }
       }
+
+      // Set the LLM selection cookie with user's choice
+      // The provider name format is "build-mode-{provider}" (e.g., "build-mode-anthropic")
+      setBuildLlmSelection({
+        providerName: providerName,
+        provider: currentProviderConfig.providerName,
+        modelName: selectedModel,
+      });
 
       // Don't call onLlmComplete here - it will update the flow state and close the modal
       // We'll call it when the user completes onboarding in handleSubmit
@@ -744,7 +776,9 @@ export default function BuildOnboardingModal({
             {currentStep === "user-info" && (
               <button
                 type="button"
-                onClick={skipInfoSlides ? handleSubmit : handleNext}
+                onClick={
+                  skipInfoSlides && !showLlmSetup ? handleSubmit : handleNext
+                }
                 disabled={!canProceedUserInfo || isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
@@ -761,13 +795,13 @@ export default function BuildOnboardingModal({
                       : "text-text-02"
                   )}
                 >
-                  {skipInfoSlides
+                  {skipInfoSlides && !showLlmSetup
                     ? isSubmitting
                       ? "Saving..."
                       : "Save"
                     : "Continue"}
                 </Text>
-                {!skipInfoSlides && (
+                {(!skipInfoSlides || showLlmSetup) && (
                   <SvgArrowRight
                     className={cn(
                       "w-4 h-4",
