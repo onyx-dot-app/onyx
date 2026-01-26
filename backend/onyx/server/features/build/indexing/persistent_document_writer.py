@@ -20,6 +20,7 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
+from mypy_boto3_s3.client import S3Client
 
 from onyx.connectors.models import Document
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
@@ -281,9 +282,9 @@ class S3PersistentDocumentWriter:
         self.tenant_id = tenant_id
         self.user_id = user_id
         self.bucket = SANDBOX_S3_BUCKET
-        self._s3_client = None
+        self._s3_client: S3Client | None = None
 
-    def _get_s3_client(self):
+    def _get_s3_client(self) -> S3Client:
         """Lazily initialize S3 client.
 
         Uses the default boto3 credential chain which supports:
@@ -349,7 +350,7 @@ class S3PersistentDocumentWriter:
 
         return "/".join(parts)
 
-    def _write_document(self, s3_client, doc: Document, s3_key: str) -> None:
+    def _write_document(self, s3_client: S3Client, doc: Document, s3_key: str) -> None:
         """Serialize and write document to S3."""
         content = serialize_document(doc)
         json_content = json.dumps(content, indent=2, default=str)
