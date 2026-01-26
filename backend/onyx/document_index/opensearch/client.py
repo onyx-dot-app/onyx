@@ -576,7 +576,7 @@ class OpenSearchClient:
             body = {"persistent": {"action.auto_create_index": enabled}}
             response = self._client.cluster.put_settings(body=body)
             if response.get("acknowledged", False):
-                logger.debug(f"Successfully set action.auto_create_index to {enabled}.")
+                logger.info(f"Successfully set action.auto_create_index to {enabled}.")
                 return True
             else:
                 logger.error(f"Failed to update setting: {response}.")
