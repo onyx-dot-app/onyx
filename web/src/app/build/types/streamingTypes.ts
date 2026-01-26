@@ -131,7 +131,13 @@ export interface SessionHistoryItem {
 
 export interface ApiSandboxResponse {
   id: string;
-  status: "provisioning" | "running" | "idle" | "terminated" | "failed";
+  status:
+    | "provisioning"
+    | "running"
+    | "idle"
+    | "sleeping"
+    | "terminated"
+    | "failed";
   container_id: string | null;
   created_at: string;
   last_heartbeat: string | null;

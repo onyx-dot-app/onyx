@@ -213,6 +213,7 @@ class SandboxStatus(str, PyEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
     IDLE = "idle"
+    SLEEPING = "sleeping"  # Pod terminated, snapshots saved to S3
     TERMINATED = "terminated"
     FAILED = "failed"
 
@@ -223,6 +224,10 @@ class SandboxStatus(str, PyEnum):
     def is_terminal(self) -> bool:
         """Check if sandbox is in a terminal state."""
         return self in (SandboxStatus.TERMINATED, SandboxStatus.FAILED)
+
+    def is_sleeping(self) -> bool:
+        """Check if sandbox is sleeping (pod terminated but can be restored)."""
+        return self == SandboxStatus.SLEEPING
 
 
 class ArtifactType(str, PyEnum):

@@ -23,6 +23,11 @@ const STATUS_CONFIG = {
     label: "Sandbox running",
   },
   idle: { color: "bg-status-warning-05", pulse: false, label: "Sandbox idle" },
+  sleeping: {
+    color: "bg-status-info-05",
+    pulse: false,
+    label: "Sandbox sleeping",
+  },
   terminated: {
     color: "bg-status-error-05",
     pulse: false,

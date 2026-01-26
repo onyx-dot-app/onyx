@@ -177,6 +177,34 @@ export async function deleteSession(sessionId: string): Promise<void> {
   }
 }
 
+/**
+ * Restore a sleeping sandbox and load the session's snapshot.
+ * This is a blocking call that waits until the restore is complete.
+ *
+ * Handles two cases:
+ * 1. Sandbox is SLEEPING: Re-provisions pod, then loads session snapshot
+ * 2. Sandbox is RUNNING but session not loaded: Just loads session snapshot
+ *
+ * Returns immediately if session workspace already exists in pod.
+ */
+export async function restoreSession(
+  sessionId: string
+): Promise<ApiSessionResponse> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/restore`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to restore session: ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
 // =============================================================================
 // Messages API
 // =============================================================================

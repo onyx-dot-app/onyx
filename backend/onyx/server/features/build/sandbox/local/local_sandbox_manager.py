@@ -447,6 +447,56 @@ class LocalSandboxManager(SandboxManager):
             size_bytes=size_bytes,
         )
 
+    def session_workspace_exists(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Check if a session's workspace directory exists.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to check
+
+        Returns:
+            True if the session workspace exists, False otherwise
+        """
+        session_path = self._get_session_path(sandbox_id, session_id)
+        outputs_path = session_path / "outputs"
+        return outputs_path.exists()
+
+    def restore_snapshot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        snapshot_storage_path: str,
+        tenant_id: str,
+    ) -> None:
+        """Restore a snapshot into a session's workspace directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to restore
+            snapshot_storage_path: Path to the snapshot in storage
+            tenant_id: Tenant identifier for storage access
+
+        Raises:
+            RuntimeError: If snapshot restoration fails
+            FileNotFoundError: If snapshot does not exist
+        """
+        session_path = self._get_session_path(sandbox_id, session_id)
+
+        # Ensure session directory exists
+        session_path.mkdir(parents=True, exist_ok=True)
+
+        # Use SnapshotManager to restore
+        self._snapshot_manager.restore_snapshot(
+            storage_path=snapshot_storage_path,
+            target_path=session_path,
+        )
+
+        logger.info(f"Restored snapshot for session {session_id}")
+
     def health_check(
         self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
     ) -> bool:
