@@ -279,14 +279,6 @@ def restore_session(
     sandbox_manager = get_sandbox_manager()
     tenant_id = get_current_tenant_id()
 
-    # Quick check - if sandbox is running and session exists, return immediately
-    if sandbox.status == SandboxStatus.RUNNING:
-        if sandbox_manager.session_workspace_exists(sandbox.id, session_id):
-            logger.info(
-                f"Session {session_id} workspace already exists, no restore needed"
-            )
-            return SessionResponse.from_model(session, sandbox)
-
     # Need to do some work - acquire Redis lock
     redis_client = get_redis_client(tenant_id=tenant_id)
     lock_key = f"sandbox_restore:{sandbox.id}"
@@ -309,17 +301,38 @@ def restore_session(
         # Also re-check if session workspace exists (another request may have
         # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
-            if sandbox_manager.session_workspace_exists(sandbox.id, session_id):
+            # Verify pod is healthy before proceeding
+            is_healthy = sandbox_manager.health_check(
+                sandbox.id, nextjs_port=session.nextjs_port, timeout=5.0
+            )
+            if is_healthy and sandbox_manager.session_workspace_exists(
+                sandbox.id, session_id
+            ):
                 logger.info(
                     f"Session {session_id} workspace was restored by another request"
                 )
                 return SessionResponse.from_model(session, sandbox)
 
+            if not is_healthy:
+                logger.warning(
+                    f"Sandbox {sandbox.id} marked as RUNNING but pod is "
+                    f"unhealthy/missing. Entering recovery mode."
+                )
+                # Terminate to clean up any lingering K8s resources
+                sandbox_manager.terminate(sandbox.id)
+
+                update_sandbox_status__no_commit(
+                    db_session, sandbox.id, SandboxStatus.TERMINATED
+                )
+                db_session.commit()
+                db_session.refresh(sandbox)
+                # Fall through to TERMINATED handling below
+
         session_manager = SessionManager(db_session)
 
-        if sandbox.status == SandboxStatus.SLEEPING:
+        if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
             # 1. Re-provision the pod
-            logger.info(f"Re-provisioning sleeping sandbox {sandbox.id}")
+            logger.info(f"Re-provisioning {sandbox.status.value} sandbox {sandbox.id}")
             llm_config = session_manager._get_llm_config(None, None)
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,

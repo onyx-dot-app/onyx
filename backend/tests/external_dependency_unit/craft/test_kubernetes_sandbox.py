@@ -790,3 +790,164 @@ def test_kubernetes_sandbox_file_sync() -> None:
             except ApiException as e:
                 # 404 means pod was successfully deleted
                 assert e.status == 404
+
+
+@pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
+)
+def test_health_check_returns_true_for_running_pod() -> None:
+    """Test that health_check() returns True for a healthy, running pod.
+
+    This test:
+    1. Creates a sandbox pod
+    2. Calls health_check() and verifies it returns True
+    3. Cleans up by terminating the sandbox
+    """
+    _is_kubernetes_available()
+
+    # Initialize the database engine
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+
+    # Set up tenant context
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+
+    manager = KubernetesSandboxManager()
+    sandbox_id = uuid4()
+
+    llm_config = LLMProviderConfig(
+        provider="openai",
+        model_name="gpt-4",
+        api_key="test-key",
+        api_base=None,
+    )
+
+    try:
+        # Provision the sandbox
+        sandbox_info = manager.provision(
+            sandbox_id=sandbox_id,
+            user_id=TEST_USER_ID,
+            tenant_id=TEST_TENANT_ID,
+            llm_config=llm_config,
+        )
+
+        assert sandbox_info.status == SandboxStatus.RUNNING
+
+        # Wait for pod to be fully healthy (it may take a few seconds)
+        is_healthy = False
+        for _ in range(10):
+            is_healthy = manager.health_check(
+                sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
+            )
+            if is_healthy:
+                break
+            time.sleep(2)
+
+        assert (
+            is_healthy
+        ), "health_check() should return True for a running, healthy pod"
+
+    finally:
+        if sandbox_id:
+            manager.terminate(sandbox_id)
+
+
+@pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
+)
+def test_health_check_returns_false_for_missing_pod() -> None:
+    """Test that health_check() returns False when the pod doesn't exist.
+
+    This test:
+    1. Uses a random UUID that has no corresponding pod
+    2. Calls health_check() and verifies it returns False
+    """
+    _is_kubernetes_available()
+
+    # Initialize the database engine
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+
+    # Set up tenant context
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+
+    manager = KubernetesSandboxManager()
+
+    # Use a random UUID that definitely has no pod
+    nonexistent_sandbox_id = uuid4()
+
+    # health_check should return False for non-existent pod
+    is_healthy = manager.health_check(
+        nonexistent_sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
+    )
+
+    assert not is_healthy, "health_check() should return False for a non-existent pod"
+
+
+@pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="SANDBOX_BACKEND must be 'kubernetes' to run this test",
+)
+def test_health_check_returns_false_after_termination() -> None:
+    """Test that health_check() returns False after a pod has been terminated.
+
+    This test:
+    1. Creates a sandbox pod
+    2. Verifies health_check() returns True
+    3. Terminates the sandbox
+    4. Verifies health_check() returns False
+    """
+    _is_kubernetes_available()
+
+    # Initialize the database engine
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+
+    # Set up tenant context
+    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+
+    manager = KubernetesSandboxManager()
+    sandbox_id = uuid4()
+
+    llm_config = LLMProviderConfig(
+        provider="openai",
+        model_name="gpt-4",
+        api_key="test-key",
+        api_base=None,
+    )
+
+    # Provision the sandbox
+    sandbox_info = manager.provision(
+        sandbox_id=sandbox_id,
+        user_id=TEST_USER_ID,
+        tenant_id=TEST_TENANT_ID,
+        llm_config=llm_config,
+    )
+
+    assert sandbox_info.status == SandboxStatus.RUNNING
+
+    # Wait for pod to be fully healthy
+    is_healthy = False
+    for _ in range(10):
+        is_healthy = manager.health_check(
+            sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
+        )
+        if is_healthy:
+            break
+        time.sleep(2)
+
+    assert is_healthy, "Pod should be healthy before termination"
+
+    # Terminate the sandbox
+    manager.terminate(sandbox_id)
+
+    # Wait for pod to be deleted
+    time.sleep(3)
+
+    # health_check should now return False
+    is_healthy_after = manager.health_check(
+        sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
+    )
+
+    assert (
+        not is_healthy_after
+    ), "health_check() should return False after pod has been terminated"
