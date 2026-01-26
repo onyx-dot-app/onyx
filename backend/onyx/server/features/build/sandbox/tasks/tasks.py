@@ -1,7 +1,5 @@
 """Celery tasks for sandbox cleanup operations."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -10,7 +8,6 @@ from celery import Task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -28,10 +25,13 @@ if TYPE_CHECKING:
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
 
+# 100 minutes - snapshotting can take time
+TIMEOUT_SECONDS = 6000
+
 
 @shared_task(
     name=OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
-    soft_time_limit=6000,  # 100 minutes - snapshotting can take time
+    soft_time_limit=TIMEOUT_SECONDS,
     bind=True,
     ignore_result=True,
 )
@@ -63,7 +63,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
     redis_client = get_redis_client(tenant_id=tenant_id)
     lock: RedisLock = redis_client.lock(
         OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK,
-        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+        timeout=TIMEOUT_SECONDS,
     )
 
     # Prevent overlapping runs of this task
@@ -187,8 +187,8 @@ def _list_session_directories(
     Returns:
         List of session ID strings (directory names)
     """
-    from kubernetes.client.rest import ApiException
-    from kubernetes.stream import stream as k8s_stream
+    from kubernetes.client.rest import ApiException  # type: ignore
+    from kubernetes.stream import stream as k8s_stream  # type: ignore
 
     pod_name = sandbox_manager._get_pod_name(str(sandbox_id))
 
@@ -232,64 +232,65 @@ def _list_session_directories(
         return []
 
 
-@shared_task(
-    name=OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
-    soft_time_limit=300,
-    bind=True,
-    ignore_result=True,
-)
-def cleanup_old_snapshots_task(self: Task, *, tenant_id: str) -> None:
-    """Delete snapshots older than the retention period.
+# NOTE: in the future, may need to add this. For now, will do manual cleanup.
+# @shared_task(
+#     name=OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
+#     soft_time_limit=300,
+#     bind=True,
+#     ignore_result=True,
+# )
+# def cleanup_old_snapshots_task(self: Task, *, tenant_id: str) -> None:
+#     """Delete snapshots older than the retention period.
 
-    This task cleans up old snapshots to manage storage usage.
-    Snapshots older than SNAPSHOT_RETENTION_DAYS are deleted.
+#     This task cleans up old snapshots to manage storage usage.
+#     Snapshots older than SNAPSHOT_RETENTION_DAYS are deleted.
 
-    NOTE: This task is a no-op for local backend since snapshots are disabled.
+#     NOTE: This task is a no-op for local backend since snapshots are disabled.
 
-    Args:
-        tenant_id: The tenant ID for multi-tenant isolation
-    """
-    # Skip for local backend - no snapshots to clean up
-    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-        task_logger.debug(
-            "cleanup_old_snapshots_task skipped (local backend - snapshots disabled)"
-        )
-        return
+#     Args:
+#         tenant_id: The tenant ID for multi-tenant isolation
+#     """
+#     # Skip for local backend - no snapshots to clean up
+#     if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+#         task_logger.debug(
+#             "cleanup_old_snapshots_task skipped (local backend - snapshots disabled)"
+#         )
+#         return
 
-    task_logger.info(f"cleanup_old_snapshots_task starting for tenant {tenant_id}")
+#     task_logger.info(f"cleanup_old_snapshots_task starting for tenant {tenant_id}")
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    lock: RedisLock = redis_client.lock(
-        OnyxRedisLocks.CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK,
-        timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-    )
+#     redis_client = get_redis_client(tenant_id=tenant_id)
+#     lock: RedisLock = redis_client.lock(
+#         OnyxRedisLocks.CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK,
+#         timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+#     )
 
-    # Prevent overlapping runs of this task
-    if not lock.acquire(blocking=False):
-        task_logger.debug("cleanup_old_snapshots_task - lock not acquired, skipping")
-        return
+#     # Prevent overlapping runs of this task
+#     if not lock.acquire(blocking=False):
+#         task_logger.debug("cleanup_old_snapshots_task - lock not acquired, skipping")
+#         return
 
-    try:
-        from onyx.server.features.build.db.sandbox import delete_old_snapshots
+#     try:
+#         from onyx.server.features.build.db.sandbox import delete_old_snapshots
 
-        with get_session_with_current_tenant() as db_session:
-            deleted_count = delete_old_snapshots(
-                db_session, tenant_id, SNAPSHOT_RETENTION_DAYS
-            )
+#         with get_session_with_current_tenant() as db_session:
+#             deleted_count = delete_old_snapshots(
+#                 db_session, tenant_id, SNAPSHOT_RETENTION_DAYS
+#             )
 
-            if deleted_count > 0:
-                task_logger.info(
-                    f"Deleted {deleted_count} old snapshots for tenant {tenant_id}"
-                )
-            else:
-                task_logger.debug("No old snapshots to delete")
+#             if deleted_count > 0:
+#                 task_logger.info(
+#                     f"Deleted {deleted_count} old snapshots for tenant {tenant_id}"
+#                 )
+#             else:
+#                 task_logger.debug("No old snapshots to delete")
 
-    except Exception:
-        task_logger.exception("Error in cleanup_old_snapshots_task")
-        raise
+#     except Exception:
+#         task_logger.exception("Error in cleanup_old_snapshots_task")
+#         raise
 
-    finally:
-        if lock.owned():
-            lock.release()
+#     finally:
+#         if lock.owned():
+#             lock.release()
 
-    task_logger.info("cleanup_old_snapshots_task completed")
+#     task_logger.info("cleanup_old_snapshots_task completed")

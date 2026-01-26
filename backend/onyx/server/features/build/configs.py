@@ -50,7 +50,7 @@ OPENCODE_DISABLED_TOOLS: list[str] = [
 
 # Sandbox lifecycle configuration
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(
-    os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "900")
+    os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "3600")
 )
 SANDBOX_MAX_CONCURRENT_PER_ORG = int(
     os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10")
