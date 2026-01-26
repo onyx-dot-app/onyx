@@ -8,7 +8,7 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import {
   iconClasses,
-  MIN_WIDTH_CLASS,
+  sizes,
   textClasses,
   Variants,
   wrapperClasses,
@@ -17,6 +17,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
 import Separator, { SeparatorProps } from "@/refresh-components/Separator";
 import { WithoutStyles } from "@/types";
+import { Section } from "@/layouts/general-layouts";
 
 // ============================================================================
 // Context
@@ -90,10 +91,12 @@ const useInputSelectContext = () => {
  */
 interface InputSelectRootProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> {
-  /** Whether to show error styling */
-  error?: boolean;
   /** Whether the select is disabled */
   disabled?: boolean;
+  /** Whether to show error styling */
+  error?: boolean;
+  /** Visual variant for the select */
+  variant?: Variants;
   /** Additional CSS classes for the wrapper element */
   className?: string;
   children: React.ReactNode;
@@ -103,6 +106,7 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     {
       disabled,
       error,
+      variant: variantProp,
       value,
       defaultValue,
       onValueChange,
@@ -112,11 +116,12 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     },
     ref
   ) => {
+    // Compute variant from props
     const variant: Variants = disabled
       ? "disabled"
       : error
         ? "error"
-        : "primary";
+        : variantProp ?? "primary";
 
     // Support both controlled and uncontrolled modes
     const isControlled = value !== undefined;
@@ -161,7 +166,7 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     );
 
     return (
-      <div className={cn("w-full relative", MIN_WIDTH_CLASS)}>
+      <div className="relative w-full">
         <InputSelectContext.Provider value={contextValue}>
           <SelectPrimitive.Root
             {...(isControlled ? { value: currentValue } : { defaultValue })}
@@ -184,6 +189,8 @@ InputSelectRoot.displayName = "InputSelect";
 // InputSelect Trigger
 // ============================================================================
 
+type InputSelectTriggerWidth = "fit" | "md";
+
 /**
  * InputSelect Trigger Component
  *
@@ -191,82 +198,94 @@ InputSelectRoot.displayName = "InputSelect";
  *
  * @example
  * ```tsx
- * // With placeholder
+ * // With placeholder (primary variant - default)
  * <InputSelect.Trigger placeholder="Select..." />
+ *
+ * // Fit-content width (auto-sizes to content)
+ * <InputSelect.Trigger placeholder="Select..." width="fit" />
  *
  * // With right section
  * <InputSelect.Trigger placeholder="Select..." rightSection={<Badge>New</Badge>} />
  * ```
  */
 interface InputSelectTriggerProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> {
+  extends WithoutStyles<
+    Omit<
+      React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>,
+      "children"
+    >
+  > {
   /** Placeholder when no value selected */
   placeholder?: React.ReactNode;
-  /** Content to render on the right side of the trigger */
-  rightSection?: React.ReactNode;
+  /**
+   * Width behavior for the trigger:
+   * - **md** (default): Standard width with min-width constraint
+   * - **fit**: Auto-sizes to content (removes min-width)
+   */
+  width?: InputSelectTriggerWidth;
 }
 const InputSelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
   InputSelectTriggerProps
->(({ placeholder, rightSection, className, children, ...props }, ref) => {
+>(({ placeholder, width = "md", ...props }, ref) => {
   const { variant, selectedItemDisplay } = useInputSelectContext();
 
   // Don't memoize - we need to read the latest ref values on every render
   let displayContent: React.ReactNode;
 
-  if (!selectedItemDisplay) {
+  if (selectedItemDisplay) {
+    const Icon = selectedItemDisplay.iconRef.current;
+    displayContent = (
+      <>
+        {Icon && <Icon className={cn(iconClasses[variant])} size={30} />}
+        <Truncated
+          className={cn(
+            textClasses[variant],
+            variant === "secondary" && "text-center"
+          )}
+          mainUiAction
+        >
+          {selectedItemDisplay.childrenRef.current}
+        </Truncated>
+      </>
+    );
+  } else {
     displayContent = placeholder ? (
       typeof placeholder === "string" ? (
-        <Text as="p" text03>
-          {placeholder}
-        </Text>
+        <Text text03>{placeholder}</Text>
       ) : (
         placeholder
       )
     ) : (
-      <Text as="p" text03>
-        Select an option
-      </Text>
-    );
-  } else {
-    const Icon = selectedItemDisplay.iconRef.current;
-    displayContent = (
-      <div className="flex flex-row items-center gap-2 flex-1 w-full">
-        {Icon && <Icon className={cn("h-4 w-4", iconClasses[variant])} />}
-        <Truncated className={cn(textClasses[variant])}>
-          {selectedItemDisplay.childrenRef.current}
-        </Truncated>
-      </div>
+      <Text text03>Select an option</Text>
     );
   }
 
   return (
     <SelectPrimitive.Trigger
       ref={ref}
+      style={width === "md" ? { minWidth: sizes.md } : undefined}
       className={cn(
-        "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-none",
+        "group/InputSelect flex items-center justify-between px-3 py-2 rounded-12 focus:outline-none gap-0.5 h-[2.25rem]",
+        width === "md" && "w-full",
+        width === "fit" && "w-fit",
         wrapperClasses[variant],
-        variant === "primary" && "data-[state=open]:border-border-05",
-        className
+        "data-[state=open]:bg-background-tint-00"
       )}
+      asChild
       {...props}
     >
-      <div className="flex flex-row items-center justify-between w-full p-0.5 gap-1">
-        {children ?? displayContent}
-
-        <div className="flex flex-row items-center gap-1">
-          {rightSection}
-
-          <SelectPrimitive.Icon asChild>
-            <SvgChevronDownSmall
-              className={cn(
-                "h-4 w-4 transition-transform",
-                iconClasses[variant],
-                "group-data-[state=open]/InputSelect:-rotate-180"
-              )}
-            />
-          </SelectPrimitive.Icon>
-        </div>
+      <div>
+        {displayContent}
+        <SelectPrimitive.Icon>
+          <SvgChevronDownSmall
+            className={cn(
+              iconClasses[variant],
+              "transition-all group-data-[state=open]/InputSelect:-rotate-180"
+            )}
+            size={16}
+          />
+        </SelectPrimitive.Icon>
       </div>
     </SelectPrimitive.Trigger>
   );
@@ -300,7 +319,7 @@ const InputSelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "z-[4000] w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
+        "z-[4000] w-64 max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
         "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
@@ -535,6 +554,7 @@ export default Object.assign(InputSelectRoot, {
 export {
   type InputSelectRootProps,
   type InputSelectTriggerProps,
+  type InputSelectTriggerWidth,
   type InputSelectContentProps,
   type InputSelectItemProps,
   type InputSelectGroupProps,
