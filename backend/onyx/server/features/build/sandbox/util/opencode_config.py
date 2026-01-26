@@ -118,9 +118,9 @@ def build_opencode_config(
             else {
                 "*": "deny",  # Deny all external directories by default
                 "/workspace/files": "allow",  # Allow files directory
-                "/workspace/files/*": "allow",  # Allow files directory contents
+                "/workspace/files/**": "allow",  # Allow files directory contents
                 "/workspace/demo-data": "allow",  # Allow demo data directory
-                "/workspace/demo-data/*": "allow",  # Allow demo data directory contents
+                "/workspace/demo-data/**": "allow",  # Allow demo data directory contents
             }
         ),
     }
