@@ -295,7 +295,7 @@ class TestHealthCheck:
 
         Note: nextjs_port is now passed by the caller instead of being fetched from DB.
         """
-        result = sandbox_manager.health_check(sandbox_record.id, nextjs_port=1)
+        result = sandbox_manager.health_check(sandbox_record.id)
 
         assert result is False
 

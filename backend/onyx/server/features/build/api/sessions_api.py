@@ -321,9 +321,7 @@ def restore_session(
         # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
             # Verify pod is healthy before proceeding
-            is_healthy = sandbox_manager.health_check(
-                sandbox.id, nextjs_port=session.nextjs_port, timeout=5.0
-            )
+            is_healthy = sandbox_manager.health_check(sandbox.id, timeout=10.0)
             if is_healthy and sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             ):
