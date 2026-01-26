@@ -479,9 +479,7 @@ class SessionManager:
                 self._db_session.flush()
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
-                if not self._sandbox_manager.health_check(
-                    sandbox_id, nextjs_port=nextjs_port, timeout=5.0
-                ):
+                if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
                     logger.warning(
                         f"Sandbox {sandbox_id} marked as {sandbox.status} but pod is "
                         f"unhealthy/missing. Entering recovery mode."
@@ -602,9 +600,7 @@ class SessionManager:
 
             if sandbox and sandbox.status.is_active():
                 # Quick health check to verify sandbox is actually responsive
-                if self._sandbox_manager.health_check(
-                    sandbox.id, nextjs_port=existing.nextjs_port, timeout=5.0
-                ):
+                if self._sandbox_manager.health_check(sandbox.id, timeout=5.0):
                     logger.info(
                         f"Returning existing empty session {existing.id} for user {user_id}"
                     )

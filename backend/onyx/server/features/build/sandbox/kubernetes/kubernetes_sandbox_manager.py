@@ -1394,14 +1394,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                         f"Failed to cleanup temp file {tmp_path}: {cleanup_error}"
                     )
 
-    def health_check(
-        self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
-    ) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
         """Check if the sandbox pod is healthy (can exec into it).
 
         Args:
             sandbox_id: The sandbox ID to check
-            nextjs_port: Not used in kubernetes
             timeout: Health check timeout in seconds
 
         Returns:
