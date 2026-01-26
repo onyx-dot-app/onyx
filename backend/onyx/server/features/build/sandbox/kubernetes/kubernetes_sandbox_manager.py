@@ -330,7 +330,12 @@ class KubernetesSandboxManager(SandboxManager):
         file_sync_container = client.V1Container(
             name="file-sync",
             image="amazon/aws-cli:latest",
-            env=_get_local_aws_credential_env_vars(),
+            env=_get_local_aws_credential_env_vars()
+            + [
+                # Set HOME to a writable directory so AWS CLI can create .aws config dir
+                # Without this, AWS CLI tries to access /.aws which fails with permission denied
+                client.V1EnvVar(name="HOME", value="/tmp"),
+            ],
             command=["/bin/sh", "-c"],
             args=[
                 f"""
