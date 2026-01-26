@@ -341,11 +341,11 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             client.V1Volume(
                 name="workspace",
                 # Increased size: holds sessions/ directory with per-session outputs
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="10Gi"),
+                empty_dir=client.V1EmptyDirVolumeSource(size_limit="50Gi"),
             ),
             client.V1Volume(
                 name="files",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="1Gi"),
+                empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
             ),
         ]
 
@@ -356,7 +356,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             containers=[sandbox_container],
             volumes=volumes,
             restart_policy="Never",
-            termination_grace_period_seconds=300,
+            termination_grace_period_seconds=600,
             # Node selection for sandbox nodes
             node_selector={"onyx.app/workload": "sandbox"},
             tolerations=[
@@ -375,9 +375,9 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
                 seccomp_profile=client.V1SeccompProfile(type="RuntimeDefault"),
             ),
             # Disable host access
-            # host_network=False,
-            # host_pid=False,
-            # host_ipc=False,
+            host_network=False,
+            host_pid=False,
+            host_ipc=False,
         )
 
         return client.V1Pod(
