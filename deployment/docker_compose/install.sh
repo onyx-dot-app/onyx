@@ -586,7 +586,8 @@ else
     print_info "Which authentication schema would you like to set up?"
     echo ""
     echo "1) Basic - Username/password authentication"
-    echo "2) No Auth - Open access (development/testing)"
+    # TODO (jessica): Uncomment this once no auth users still have an account
+    # echo "2) No Auth - Open access (development/testing)"
     echo ""
     read -p "Choose an option (1-2) [default 1]: " -r AUTH_CHOICE
     echo ""
