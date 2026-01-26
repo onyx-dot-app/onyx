@@ -22,6 +22,42 @@ _GATED_STATUSES = frozenset(
 )
 
 
+def check_ee_features_enabled() -> bool:
+    """EE version: checks if EE features should be available.
+
+    Returns True if:
+    - LICENSE_ENFORCEMENT_ENABLED is False (legacy/rollout mode)
+    - Cloud mode (MULTI_TENANT) - cloud handles its own gating
+    - Self-hosted with a valid (non-expired) license
+
+    Returns False if:
+    - Self-hosted with no license (never subscribed)
+    - Self-hosted with expired license
+    """
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        # License enforcement disabled - allow EE features (legacy behavior)
+        return True
+
+    if MULTI_TENANT:
+        # Cloud mode - EE features always available (gating handled by is_tenant_gated)
+        return True
+
+    # Self-hosted with enforcement - check for valid license
+    tenant_id = get_current_tenant_id()
+    try:
+        metadata = get_cached_license_metadata(tenant_id)
+        if metadata and metadata.status != ApplicationStatus.GATED_ACCESS:
+            # Has a valid (non-expired) license
+            return True
+    except RedisError as e:
+        logger.warning(f"Failed to check license for EE features: {e}")
+        # Fail open - don't break the UI if Redis is down
+        return True
+
+    # No license or expired license - no EE features
+    return False
+
+
 def apply_license_status_to_settings(settings: Settings) -> Settings:
     """EE version: checks license status for self-hosted deployments.
 
@@ -45,9 +81,8 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
         metadata = get_cached_license_metadata(tenant_id)
         if metadata and metadata.status in _GATED_STATUSES:
             settings.application_status = metadata.status
-        elif not metadata:
-            # No license = gated access for self-hosted EE
-            settings.application_status = ApplicationStatus.GATED_ACCESS
+        # No license = user hasn't purchased yet, allow access for upgrade flow
+        # This is different from an expired license - community features should work
     except RedisError as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
 

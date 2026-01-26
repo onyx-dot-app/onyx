@@ -1,4 +1,19 @@
-"""Middleware to enforce license status application-wide."""
+"""Middleware to enforce license status application-wide.
+
+License enforcement has three states for self-hosted deployments:
+
+1. No license (never subscribed):
+   - Allow community features (basic connectors, search, chat)
+   - Block EE-only features (analytics, user groups, etc.)
+
+2. Expired license (GATED_ACCESS):
+   - Block all routes except billing/auth/license
+   - User must renew subscription to continue
+
+3. Valid license (ACTIVE):
+   - Full access to all EE features
+   - Seat limits enforced
+"""
 
 import logging
 from collections.abc import Awaitable
@@ -12,7 +27,9 @@ from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
+from ee.onyx.db.license import refresh_license_cache
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -33,16 +50,56 @@ ALLOWED_PATH_PREFIXES = {
     "/me",
     "/settings",
     "/enterprise-settings",
+    # Billing endpoints (unified API for both MT and self-hosted)
+    "/billing",
+    # Proxy endpoints for self-hosted billing (no tenant context)
+    "/proxy",
+    # Legacy tenant billing endpoints (kept for backwards compatibility)
     "/tenants/billing-information",
     "/tenants/create-customer-portal-session",
     "/tenants/create-subscription-session",
-    "/proxy",
+    # User management - needed to remove users when seat limit exceeded
+    "/manage/users",
+    "/manage/admin/users",
+    "/manage/admin/valid-domains",
+    "/manage/admin/deactivate-user",
+    "/manage/admin/delete-user",
+    "/users",
+    # Notifications - needed for UI to load properly
+    "/notifications",
+}
+
+# EE-only paths that require a valid license.
+# Users without a license (community edition) cannot access these.
+# These are blocked even when user has never subscribed (no license).
+EE_ONLY_PATH_PREFIXES = {
+    # User groups and access control
+    "/manage/admin/user-group",
+    # Analytics and reporting
+    "/analytics",
+    # Query history (admin chat session endpoints)
+    "/admin/chat-sessions",
+    "/admin/chat-session-history",
+    "/admin/query-history",
+    # Usage reporting/export
+    "/admin/usage-report",
+    # Standard answers (canned responses)
+    "/manage/admin/standard-answer",
+    # Token rate limits
+    "/admin/token-rate-limits",
+    # Evals
+    "/evals",
 }
 
 
 def _is_path_allowed(path: str) -> bool:
     """Check if path is in allowlist (prefix match)."""
     return any(path.startswith(prefix) for prefix in ALLOWED_PATH_PREFIXES)
+
+
+def _is_ee_only_path(path: str) -> bool:
+    """Check if path requires EE license (prefix match)."""
+    return any(path.startswith(prefix) for prefix in EE_ONLY_PATH_PREFIXES)
 
 
 def add_license_enforcement_middleware(
@@ -78,12 +135,64 @@ def add_license_enforcement_middleware(
         else:
             try:
                 metadata = get_cached_license_metadata(tenant_id)
+
+                # If no cached metadata, check database (cache may have been cleared)
+                if not metadata:
+                    logger.debug(
+                        f"[license_enforcement] No cached license for tenant {tenant_id}, "
+                        "checking database..."
+                    )
+                    try:
+                        with get_session_with_current_tenant() as db_session:
+                            metadata = refresh_license_cache(db_session, tenant_id)
+                            if metadata:
+                                logger.info(
+                                    f"[license_enforcement] Loaded license from DB for tenant {tenant_id}"
+                                )
+                    except Exception as db_error:
+                        logger.warning(
+                            f"[license_enforcement] Failed to check database for license: {db_error}"
+                        )
+
                 if metadata:
+                    # User HAS a license (current or expired)
                     if metadata.status == ApplicationStatus.GATED_ACCESS:
+                        # License expired - gate the user
                         is_gated = True
+                    else:
+                        # License is active - check seat limit
+                        # used_seats in cache is kept accurate via invalidation
+                        # when users are added/removed
+                        if metadata.used_seats > metadata.seats:
+                            logger.info(
+                                f"Blocking request for tenant {tenant_id}: "
+                                f"seat limit exceeded ({metadata.used_seats}/{metadata.seats})"
+                            )
+                            return JSONResponse(
+                                status_code=402,
+                                content={
+                                    "detail": f"Seat limit exceeded: {metadata.used_seats} of {metadata.seats} seats used."
+                                },
+                            )
                 else:
-                    # No license metadata = gated for self-hosted EE
-                    is_gated = True
+                    # No license in cache OR database = never subscribed
+                    # Allow community features, but block EE-only features
+                    if _is_ee_only_path(path):
+                        logger.info(
+                            f"[license_enforcement] Blocking EE-only path for unlicensed tenant {tenant_id}: {path}"
+                        )
+                        return JSONResponse(
+                            status_code=402,
+                            content={
+                                "detail": "This feature requires an Enterprise license. "
+                                "Please upgrade to access this functionality.",
+                            },
+                        )
+                    logger.debug(
+                        f"[license_enforcement] No license for tenant {tenant_id}, "
+                        "allowing community features"
+                    )
+                    is_gated = False
             except RedisError as e:
                 logger.warning(f"Failed to check license metadata: {e}")
                 # Fail open - don't block users due to Redis connectivity issues
@@ -91,14 +200,22 @@ def add_license_enforcement_middleware(
 
         if is_gated:
             logger.info(f"Blocking request for gated tenant: {tenant_id}, path={path}")
+
+            if MULTI_TENANT:
+                message = "Access restricted. Please check your subscription status."
+            else:
+                # Determine if this is "no license" vs "expired license"
+                cached = get_cached_license_metadata(tenant_id)
+                if cached and cached.status == ApplicationStatus.GATED_ACCESS:
+                    message = (
+                        "Your subscription has expired. Please update your billing."
+                    )
+                else:
+                    message = "A valid license is required to access this feature."
+
             return JSONResponse(
                 status_code=402,
-                content={
-                    "detail": {
-                        "error": "license_expired",
-                        "message": "Your subscription has expired. Please update your billing.",
-                    }
-                },
+                content={"detail": message},
             )
 
         return await call_next(request)
