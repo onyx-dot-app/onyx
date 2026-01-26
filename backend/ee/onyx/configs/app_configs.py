@@ -136,4 +136,6 @@ LICENSE_ENFORCEMENT_ENABLED = (
 
 # Cloud data plane URL - self-hosted instances call this to reach cloud proxy endpoints
 # Used when MULTI_TENANT=false (self-hosted mode)
-CLOUD_DATA_PLANE_URL = os.environ.get("CLOUD_DATA_PLANE_URL", "https://cloud.onyx.app")
+CLOUD_DATA_PLANE_URL = os.environ.get(
+    "CLOUD_DATA_PLANE_URL", "https://cloud.onyx.app/api"
+)
