@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#137",
+  "semantic_identifier": "137: feat: Setup: add Fit Driver preview + field mapping step with workspace-level persistence",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-13",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "137",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "60",
+    "labels": [],
+    "created_at": "2025-06-13",
+    "updated_at": "2025-06-13",
+    "closed_at": "2025-06-17"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds a new step to the Fit Driver setup flow that lets users preview and map the underlying source fields/events before completing setup.\n\nKey changes:\n- New \u201cPreview & map\u201d step after Fit Driver selection.\n- For each selected Fit Driver, we surface top candidate bindings (e.g., CRM property, event name, survey question) with:\n  - sample values\n  - fill-rate/coverage metrics\n  - ability to swap/select an alternate candidate\n- Selected bindings are persisted per workspace as Fit Driver mappings so future ingests reuse the same field/event/question without requiring remapping.\n\nImplementation (high level):\n- Backend:\n  - Added endpoints to fetch candidate fields/events per Fit Driver and compute lightweight coverage metrics + sample values.\n  - Added workspace-scoped persistence for Fit Driver \u2192 source binding (including source type + identifier) and wired ingestion to resolve bindings from this mapping.\n- Frontend:\n  - Added a setup wizard step with per-driver mapping UI and validation (must have a valid binding to continue).\n  - Updated setup completion to save mappings and prefill them on subsequent runs.\n\nUser impact:\n- Users will see an additional step during setup where they can confirm/adjust the data source behind each Fit Driver.\n- Once saved, mappings are reused automatically for that workspace on future ingests.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#137"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

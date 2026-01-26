@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#82",
+  "semantic_identifier": "82: feat: Setup wizard: default sales stage template + guided CRM stage mapping with validation",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-21",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "82",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "56",
+    "labels": [],
+    "created_at": "2025-04-21",
+    "updated_at": "2025-04-21",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds a new setup-wizard step that proposes a default canonical Sales_Accelerator stage model and guides users through mapping their CRM pipeline stages into it.\n\nKey changes:\n- Introduces a canonical default stage template (Prospecting \u2192 Qualification \u2192 Proposal \u2192 Negotiation \u2192 Closed Won/Lost) used as a starting point during setup.\n- Detects the active CRM pipeline configuration and pre-populates suggested mappings using name/semantic matching (e.g., \u201cCommit\u201d, \u201cClosed Won\u201d, \u201cClosed Lost\u201d, \u201cNegotiation\u201d).\n- Adds an interactive mapping/merge flow that lets users:\n  - map each active CRM stage to a canonical stage,\n  - merge multiple CRM stages into a single canonical stage when appropriate,\n  - mark closed outcomes explicitly (Won vs Lost).\n- Implements validation rules:\n  - every active CRM stage must be mapped before continuing,\n  - key milestones must be covered (at minimum: a \u201ccommit/late-stage\u201d equivalent and both closed outcomes).\n- Persists the mapping as the org\u2019s stage configuration used by stage-based forecasting, next-best-action, and risk alerts.\n\nImplementation notes (high-level):\n- Backend:\n  - Adds stage-template and mapping suggestion logic (pipeline stage ingestion \u2192 normalized labels \u2192 suggested canonical mapping).\n  - Adds endpoints to fetch detected pipeline stages + suggestions and to save validated mappings.\n  - Adds server-side validation to prevent incomplete/invalid mappings from being saved.\n- Frontend:\n  - Adds a setup step UI to display canonical stages and allow mapping/merging CRM stages via selection controls.\n  - Adds inline validation/error states and blocks progression until requirements are met.\n\nUser impact:\n- During initial setup, users will now see a suggested stage model and mapping step, reducing manual configuration and improving consistency of downstream stage-based features.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#82"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

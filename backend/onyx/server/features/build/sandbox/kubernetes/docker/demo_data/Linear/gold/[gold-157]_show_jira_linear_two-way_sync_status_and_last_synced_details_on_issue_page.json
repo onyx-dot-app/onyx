@@ -1,0 +1,30 @@
+{
+  "id": "5768697",
+  "semantic_identifier": "[GOLD-157]: Show Jira/Linear two-way sync status + last synced details on Issue page",
+  "title": "Show Jira/Linear two-way sync status + last synced details on Issue page",
+  "source": "linear",
+  "doc_updated_at": "2025-05-03",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "backlog",
+    "priority": "low",
+    "created_at": "2025-05-03"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add a sync status panel on the Issue_Tracker issue object when a Jira/Linear issue is linked, showing external key/link, current sync state (healthy/error), and last_synced_at + last_external_updated_at. Surface actionable error messaging (e.g., missing permissions, issue not found) and provide a \u201cRefresh from Jira/Linear\u201d / \u201cPush update\u201d manual re-sync action that calls the existing sync endpoints. This reduces the perceived \u201clink-only\u201d workflow by making two-way sync visible and self-serve.",
+      "link": "https://www.onyx.app/48582"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

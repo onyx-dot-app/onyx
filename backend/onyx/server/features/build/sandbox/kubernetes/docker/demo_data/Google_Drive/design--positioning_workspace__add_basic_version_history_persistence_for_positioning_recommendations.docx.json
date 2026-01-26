@@ -1,0 +1,30 @@
+{
+  "id": "327a863dfe1d4200afd6cd512e09a058",
+  "semantic_identifier": "Design--Positioning workspace: Add basic version history persistence for positioning recommendations.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-18",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Positioning workspace: Add basic version history persistence for positioning recommendations.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Design: Version history persistence for Positioning workspace recommendations\n\nWe will add backend persistence for Positioning workspace outputs by storing each generated positioning recommendation as an immutable, versioned snapshot associated with a `(workspace_id, segment_id)` pair, and optionally a `comparison_segment_id` when the output is comparative. A \u201cversion\u201d represents the full recommendation payload exactly as produced at generation time, plus minimal metadata required for history and auditability. This enables users to view prior outputs, compare changes over time, and reliably re-open a specific recommendation state without re-running generation.\n\n**Data model.** Introduce a `positioning_recommendation_versions` table (or equivalent collection) with: `id` (version id), `workspace_id`, `segment_id`, `comparison_segment_id` (nullable), `created_at`, `created_by` (user id/service), `model_id` and/or `run_id` (generation trace), and `payload` (JSON blob containing the full recommendation output). Versions are append-only; we do not update historical payloads. Add indexes on `(workspace_id, segment_id, comparison_segment_id, created_at desc)` to efficiently list most recent versions first. Optionally store a `payload_schema_version` to support forward-compatible rendering if the output format evolves.\n\n**Write path / lifecycle.** On successful generation in the Positioning workspace, the service will write a new version row in the same request flow (or via an async job with idempotency keyed by `run_id` to prevent duplicates on retries). For comparative runs, we persist the exact pair of segments in the version record; for non-comparative runs, `comparison_segment_id` is null. We will apply sensible retention limits at read time (e.g., return the latest N versions) and can add a future cleanup policy if needed, but initial scope focuses on persistence and retrieval.\n\n**Read APIs.** Expose endpoints to (1) list versions and (2) fetch a specific version. Example: `GET /workspaces/{workspaceId}/positioning/versions?segmentId=...&comparisonSegmentId=...&limit=20&cursor=...` returning versions ordered by `created_at desc` with pagination; and `GET /workspaces/{workspaceId}/positioning/versions/{versionId}` returning metadata + full payload. Authorization follows existing workspace access controls; users can only list/fetch versions within workspaces they can access. We will enforce maximum `limit` (e.g., 50) and default `limit` (e.g., 20) to keep responses bounded.",
+      "link": "https://www.onyx.app/72102"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

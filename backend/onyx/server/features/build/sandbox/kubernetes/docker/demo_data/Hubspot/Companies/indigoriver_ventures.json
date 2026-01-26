@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_9508704",
+  "semantic_identifier": "Indigoriver Ventures",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-27 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "9508704",
+    "domain": "indigoriver_ventures.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Indigoriver Ventures\nDomain: indigoriver_ventures.onyx.app",
+      "link": "https://www.onyx.app/22203"
+    },
+    {
+      "text": "Contact: Hassan Rahman\nEmail: hassan_rahman@indigoriver_ventures.onyx.app",
+      "link": "https://www.onyx.app/74386"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

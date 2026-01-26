@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_7656866",
+  "semantic_identifier": "Elmspire Telecom",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-07-10 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "7656866",
+    "domain": "elmspire_telecom.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Elmspire Telecom\nDomain: elmspire_telecom.onyx.app",
+      "link": "https://www.onyx.app/22749"
+    },
+    {
+      "text": "Contact: Zain Mahmood\nEmail: zain_mahmood@elmspire_telecom.onyx.app",
+      "link": "https://www.onyx.app/74770"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

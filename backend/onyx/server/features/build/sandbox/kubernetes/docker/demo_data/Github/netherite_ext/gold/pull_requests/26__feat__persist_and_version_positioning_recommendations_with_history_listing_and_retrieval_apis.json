@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#26",
+  "semantic_identifier": "26: feat: Persist and version Positioning recommendations with history listing + retrieval APIs",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-16",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "26",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "92",
+    "labels": [],
+    "created_at": "2025-08-16",
+    "updated_at": "2025-08-16",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds backend persistence for Positioning workspace recommendation outputs so each generation is stored as an immutable, versioned snapshot scoped to (workspace_id, segment_id, comparison_segment_id?).\n\nImplementation overview:\n- Schema\n  - Introduces `positioning_recommendation_versions` (name may vary) with:\n    - `id` (UUID/PK), `workspace_id`\n    - `segment_id` (required) and `comparison_segment_id` (nullable)\n    - `created_at`, `created_by` (user/service identity)\n    - `model_id`/`run_id` (for traceability)\n    - `payload` (JSONB) containing the full recommendation output for exact replay\n  - Adds indexes to support history queries efficiently:\n    - `(workspace_id, segment_id, comparison_segment_id, created_at DESC)`\n\n- Write path\n  - On successful recommendation generation, the service now inserts a new version row with metadata + full payload.\n  - Versions are append-only (no updates), enabling reliable history.\n\n- Read APIs\n  - `GET /workspaces/:workspaceId/positioning/versions?segmentId=...&comparisonSegmentId=...` returns a paginated list ordered by `created_at DESC` (most recent first), with a sensible default limit and a max limit enforced server-side.\n  - `GET /workspaces/:workspaceId/positioning/versions/:versionId` returns the full snapshot payload + metadata.\n  - Responses include lightweight metadata in list view (no large payload) and full payload in the fetch-by-id endpoint.\n\n- Validation and access control\n  - Ensures the requested version belongs to the workspace and matches the segment(s) scope.\n  - Handles missing/invalid IDs with appropriate 404/400 responses.\n\n- Tests\n  - Adds unit/integration coverage for version creation, ordering/limits, and fetch-by-id workspace scoping.\n\nUser impact:\n- Enables basic version history in Positioning: generated recommendations are now recoverable and comparable over time via the new history endpoints.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#26"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

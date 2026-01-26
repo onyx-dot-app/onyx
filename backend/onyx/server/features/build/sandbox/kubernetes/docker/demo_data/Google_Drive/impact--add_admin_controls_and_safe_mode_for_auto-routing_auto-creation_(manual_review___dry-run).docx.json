@@ -1,0 +1,30 @@
+{
+  "id": "4d8c4d131e9545ed9c82b6a33468e789",
+  "semantic_identifier": "Impact--Add admin controls + safe mode for auto-routing/auto-creation (manual review / dry-run).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add admin controls + safe mode for auto-routing/auto-creation (manual review / dry-run).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds workspace-level admin controls for our auto-routing and auto-creation automations, making it explicit when and where automation is enabled. Each integration (e.g., Jira, Linear) will require deliberate opt-in, and the product will clearly signal in the UI when automation is active to avoid \u201csilent\u201d behavior that surprises teams.\n\nIt introduces two safety modes that reduce risk during setup and iteration: **Manual Review**, where proposed routing/creation actions are queued for human approval, and **Dry-Run**, which previews exactly what actions would be taken (create, update, route, assign) without executing anything. Together, these modes let teams validate rules, permissions, and mapping logic before any real tickets are created or reassigned.\n\nBy restricting toggles to **admins only**, we reduce accidental misconfiguration and the operational cost of unwinding incorrect automation (mis-assignment, duplicate issues, noisy updates). The addition of a prominent warning state when enabled also improves trust and auditability\u2014teams can quickly understand why work is moving automatically and who has the authority to change it.\n\nFinally, a **one-click kill switch** provides an immediate way to pause automation during incidents, large migrations, or rule changes. This reduces downtime and escalation burden by giving workspace owners a fast, centralized control to stop further automated actions while preserving existing data and allowing investigation.",
+      "link": "https://www.onyx.app/26046"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

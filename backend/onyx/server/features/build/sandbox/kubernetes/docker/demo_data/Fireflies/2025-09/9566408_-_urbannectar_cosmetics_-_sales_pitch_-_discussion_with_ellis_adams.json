@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_9566408",
+  "semantic_identifier": "9566408 - Urbannectar Cosmetics - sales_pitch - Discussion with Ellis Adams",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-28 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-28 00:00:00",
+    "duration_min": "37"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "9566408 - Urbannectar Cosmetics - sales_pitch - Discussion with Ellis Adams",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Ellis, it\u2019s Mina Park. Thanks for taking a few minutes\u2014did I catch you at an okay time?",
+      "link": "https://www.onyx.app/4496975-1"
+    },
+    {
+      "text": "Ellis Adams: I\u2019ve got a hard stop in about five minutes. What\u2019s this about?",
+      "link": "https://www.onyx.app/4496975-2"
+    },
+    {
+      "text": "Mina Park: Totally fair. I\u2019ll keep it tight. I work with teams that are trying to sharpen who they sell to and, more importantly, what they say to win those deals. The product is called Customer_Analyzer\u2014SaaS that pulls together customer signals from things you already have like CRM fields, onboarding surveys, product usage, support tickets, even interview notes, and turns it into practical messaging that sales and marketing can actually use.",
+      "link": "https://www.onyx.app/4496975-3"
+    },
+    {
+      "text": "Ellis Adams: Okay. We already have a CRM and some reporting. What\u2019s different?",
+      "link": "https://www.onyx.app/4496975-4"
+    },
+    {
+      "text": "Mina Park: Great question. Most reporting tells you what happened. Customer_Analyzer is focused on two outputs that help you sell better: first, it identifies which customer segments are the best fit\u2014so you\u2019re not wasting cycles\u2014and second, it generates positioning recommendations for those segments. So instead of \u201cwe think this is our value prop,\u201d it\u2019s grounded in the language and drivers that show up across your best customers.",
+      "link": "https://www.onyx.app/4496975-5"
+    },
+    {
+      "text": "Ellis Adams: When you say \u201cpositioning recommendations,\u201d what does that look like? Is it like AI copy?",
+      "link": "https://www.onyx.app/4496975-6"
+    },
+    {
+      "text": "Mina Park: It includes copy, but it\u2019s more structured than that. For a prioritized segment, it generates an editable set of messaging blocks: a segment-specific value proposition, top use cases, key differentiators, proof points you should collect, pricing/value framing notes, and an objection-handling playbook. The key part is it\u2019s linked back to the evidence\u2014what signals and customer language drove each recommendation\u2014so your team can trust it and tweak it.",
+      "link": "https://www.onyx.app/4496975-7"
+    },
+    {
+      "text": "Ellis Adams: We\u2019re a cosmetics brand. Our sales is mostly retail partners and distributors. We\u2019re not doing complex enterprise selling.",
+      "link": "https://www.onyx.app/4496975-8"
+    },
+    {
+      "text": "Mina Park: That makes sense. In retail and distributor conversations, objections still come up\u2014margin, differentiation, velocity, promo support, why your line versus another clean beauty line. One use case we see a lot is sales enablement: building a tight objection-handling guide tied to the strongest value drivers for your best-fit accounts. So when a retailer pushes back on, say, \u201cyour price point is high,\u201d your team has a consistent, evidence-based response and proof points ready.",
+      "link": "https://www.onyx.app/4496975-9"
+    },
+    {
+      "text": "Ellis Adams: We already have battlecards and a deck. Marketing owns that.",
+      "link": "https://www.onyx.app/4496975-10"
+    },
+    {
+      "text": "Mina Park: You\u2019re ahead of many teams then. Where we typically add value is consistency and speed. If your battlecards are based on a couple anecdotes or whoever yelled the loudest in a meeting, they get stale. Customer_Analyzer continuously ingests real signals\u2014support tickets, usage patterns if you have any digital product signals, survey responses, win/loss notes\u2014and refreshes what\u2019s actually resonating with segments. Then it outputs those battlecard components in a way sales can use immediately: email openers, deck bullets, objection responses.",
+      "link": "https://www.onyx.app/4496975-11"
+    },
+    {
+      "text": "Ellis Adams: We don\u2019t have product usage events. We sell physical products. So I\u2019m not sure your data sources fit.",
+      "link": "https://www.onyx.app/4496975-12"
+    },
+    {
+      "text": "Mina Park: Totally understood. Product usage events are just one signal type\u2014we don\u2019t require them. For a brand like Urbannectar Cosmetics, the common inputs are CRM fields, account notes, onboarding/retailer intake forms, support tickets from partners, returns and complaint reasons if you track them, NPS or survey feedback, and interview notes from key accounts. If you have call notes or even snippets from retailer conversations, those are very helpful for capturing the language that becomes the positioning.",
+      "link": "https://www.onyx.app/4496975-13"
+    },
+    {
+      "text": "Ellis Adams: Still sounds like a lot of setup and data wrangling. We\u2019re slammed.",
+      "link": "https://www.onyx.app/4496975-14"
+    },
+    {
+      "text": "Mina Park: If the setup is heavy, it\u2019s not worth your time. The quick-start path is: connect your CRM, import a small set of existing notes or ticket categories, and then choose one segment you care about\u2014like mid-size specialty retailers or a particular distributor type. Then the system generates a first pass of positioning plus an objection-handling guide. The goal of the longer call would be to map what data you already have and confirm whether there\u2019s enough signal to be useful without a big lift.",
+      "link": "https://www.onyx.app/4496975-15"
+    },
+    {
+      "text": "Ellis Adams: I\u2019m also wary of \u201cAI-generated messaging.\u201d Our brand voice is pretty specific.",
+      "link": "https://www.onyx.app/4496975-16"
+    },
+    {
+      "text": "Mina Park: Completely fair. The output is editable, and we expect teams to refine for brand voice. What tends to be valuable is that the structure is done for you\u2014what to lead with for that segment, what differentiators to emphasize, what proof points to collect, and the top objections to address. And because the recommendations are tied back to the underlying drivers and evidence, you can keep it grounded in what your customers actually respond to, not generic copy.",
+      "link": "https://www.onyx.app/4496975-17"
+    },
+    {
+      "text": "Ellis Adams: Who typically owns this internally? Because I\u2019m not the messaging person.",
+      "link": "https://www.onyx.app/4496975-18"
+    },
+    {
+      "text": "Mina Park: Usually it\u2019s a partnership\u2014marketing or product marketing owns the core positioning, and sales enablement or sales ops helps operationalize it. I\u2019m calling you because you\u2019re close to the revenue conversations and you\u2019ll feel the pain of inconsistent objections and messaging first. If it\u2019s not you, I can also speak with whoever owns partner enablement or go-to-market messaging.",
+      "link": "https://www.onyx.app/4496975-19"
+    },
+    {
+      "text": "Ellis Adams: Marketing\u2019s in a planning cycle right now and not taking on new tools. And to be honest, we\u2019re more focused on expanding distribution than reworking messaging.",
+      "link": "https://www.onyx.app/4496975-20"
+    },
+    {
+      "text": "Mina Park: Got it. Expanding distribution is exactly where tighter segmentation and positioning can help\u2014if you\u2019re going after new retailers, knowing which segment is most likely to convert and what narrative wins can shorten those cycles. But I hear you on bandwidth. Let me ask one quick question: are you seeing repeated objections from retail partners\u2014like price point, differentiation, or sell-through risk\u2014that are slowing deals down?",
+      "link": "https://www.onyx.app/4496975-21"
+    },
+    {
+      "text": "Ellis Adams: Price and \u201cwhy you over the other clean brands\u201d comes up, sure. But we handle it. It\u2019s not the main blocker.",
+      "link": "https://www.onyx.app/4496975-22"
+    },
+    {
+      "text": "Mina Park: That\u2019s helpful. If it\u2019s not a major blocker, then a full evaluation probably isn\u2019t the best use of your time right now. The only reason I\u2019d still suggest a 20-minute follow-up is if you want to pressure-test your current battlecards against actual customer language and see if there are a couple missing proof points that would help distribution conversations. But I don\u2019t want to force a meeting.",
+      "link": "https://www.onyx.app/4496975-23"
+    },
+    {
+      "text": "Ellis Adams: Yeah, I don\u2019t think I can justify another tool or a project. We\u2019re trying to keep systems steady this quarter.",
+      "link": "https://www.onyx.app/4496975-24"
+    },
+    {
+      "text": "Mina Park: Understood. Would it be better if I sent a one-page overview specifically on the objection-handling playbook output\u2014just so you can share it with marketing when timing is better?",
+      "link": "https://www.onyx.app/4496975-25"
+    },
+    {
+      "text": "Ellis Adams: You can send it, but I can\u2019t promise I\u2019ll review it soon.",
+      "link": "https://www.onyx.app/4496975-26"
+    },
+    {
+      "text": "Mina Park: That\u2019s totally fine. What\u2019s the best email for you, and should I include anyone on the marketing or enablement side so it doesn\u2019t get stuck with you?",
+      "link": "https://www.onyx.app/4496975-27"
+    },
+    {
+      "text": "Ellis Adams: Send it to ellis.adams@urbannectar.com. Don\u2019t loop anyone else in yet.",
+      "link": "https://www.onyx.app/4496975-28"
+    },
+    {
+      "text": "Mina Park: Will do. I\u2019ll keep it short\u2014one page with an example of the segment-specific objection guide and how it ties back to evidence. If it looks relevant later, we can revisit. Thanks for the time today, Ellis.",
+      "link": "https://www.onyx.app/4496975-29"
+    },
+    {
+      "text": "Ellis Adams: Alright. Thanks.",
+      "link": "https://www.onyx.app/4496975-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "ellis_adams@urbannectar_cosmetics.onyx.app"
+    }
+  ]
+}

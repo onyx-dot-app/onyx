@@ -1,0 +1,30 @@
+{
+  "id": "1984957",
+  "semantic_identifier": "[GOLD-117]: Add audit trail for AI-generated content lifecycle (create/edit/export/delete)",
+  "title": "Add audit trail for AI-generated content lifecycle (create/edit/export/delete)",
+  "source": "linear",
+  "doc_updated_at": "2025-09-26",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-09-26"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement immutable audit logging for all AI-generated artifacts in Sales_Accelerator (emails, call notes, next-best-action recommendations) covering generate, view, edit, export, and delete events. Each event should record actor, timestamp, artifact ID/type, source context (account/opportunity), and before/after diffs for edits, and be queryable by Sales Ops/Admin for compliance reviews. Ensure logs are captured server-side for both UI and API actions and are retained independent of RBAC UI gating.",
+      "link": "https://www.onyx.app/43843"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_5357389",
+  "semantic_identifier": "5357389 - Wildstone Paper Co - sales_call - Discussion with Hailey Lane",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-11-24 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-11-24 00:00:00",
+    "duration_min": "42"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-11"
+      ],
+      "year_month": "2025-11",
+      "meeting_title": "5357389 - Wildstone Paper Co - sales_call - Discussion with Hailey Lane",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Hi Hailey, good to see you again. Thanks for making time for a second call. Last time you mentioned you\u2019re trying to get crisper on which industries to lean into next quarter and that you\u2019ve got retention and support burden data, but it\u2019s hard to turn that into a clear \u201cgo here, not there\u201d plan. Does that still feel like the priority?",
+      "link": "https://www.onyx.app/7576371-1"
+    },
+    {
+      "text": "Hailey Lane: Yeah, that\u2019s still the priority. We have a lot of opinions internally, and we keep circling. We can pull numbers, but translating it into a decision and then messaging is where it falls apart.",
+      "link": "https://www.onyx.app/7576371-2"
+    },
+    {
+      "text": "Sneha Reddy: Totally. For today, I wanted to focus on one core part of Customer_Analyzer that maps directly to that\u2014our positioning recommendations. In plain terms: once we ingest your signals\u2014CRM fields, retention, support tickets, product usage\u2014we generate segment-specific messaging blocks you can actually use. Like: a value proposition for, say, \u201cmid-market publishing\u201d versus \u201centerprise packaging,\u201d top use cases, differentiators, proof points to collect, and a short objection-handling playbook. The idea is to take the debate out of it and tie it back to evidence. How are you currently building positioning for a target segment?",
+      "link": "https://www.onyx.app/7576371-3"
+    },
+    {
+      "text": "Hailey Lane: It\u2019s\u2026 messy. Marketing writes something, sales tweaks it, product says it\u2019s not accurate, then support says customers complain about totally different things. So we end up with a deck that changes every two weeks. That\u2019s kind of what worries me with a tool like this\u2014who decides what\u2019s \u201cright\u201d?",
+      "link": "https://www.onyx.app/7576371-4"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s a fair concern. The way we reduce that churn is by linking each recommendation back to the drivers and the underlying evidence. So when it says \u201cTop differentiator: faster onboarding in under 2 weeks,\u201d it shows the signals that support it\u2014like onboarding survey answers, implementation ticket volume, time-to-first-value events. And the messaging comes out as editable blocks\u2014website hero copy, sales deck bullets, email openers\u2014so you\u2019re not locked into it, but you\u2019re starting from something grounded. Would it help if the output was structured to force alignment? Like a \u201cone-page segment narrative\u201d that everyone signs off on?",
+      "link": "https://www.onyx.app/7576371-5"
+    },
+    {
+      "text": "Hailey Lane: Maybe. But that\u2019s also the problem\u2014getting people to sign off. Marketing wants aspirational language, sales wants what closes deals, product wants what the roadmap can actually do, and support wants fewer tickets. I\u2019m not convinced a generated recommendation solves the politics.",
+      "link": "https://www.onyx.app/7576371-6"
+    },
+    {
+      "text": "Sneha Reddy: Understood. Let me tie it to your specific use case: prioritizing industries next quarter using retention and support burden signals. Customer_Analyzer can score segments based on fit\u2014so if \u201cfood packaging\u201d has high retention but also high support burden, we can call that out and recommend either a positioning angle that sets expectations, or flag it as \u201cnot a priority until X is addressed.\u201d Then the positioning recommendation makes it easy to communicate the \u201cwhy\u201d to each team. If we could show, for your top 5 industries, a ranked list with the fit drivers and then draft messaging for the top 2, would that be useful for your planning cycle?",
+      "link": "https://www.onyx.app/7576371-7"
+    },
+    {
+      "text": "Hailey Lane: In theory, yes. In practice, we already have dashboards. We can rank industries ourselves. The problem is getting everyone to trust the ranking and agree on what it means.",
+      "link": "https://www.onyx.app/7576371-8"
+    },
+    {
+      "text": "Sneha Reddy: That makes sense. A lot of teams can create a ranking; fewer can create a shared narrative around it. The second part\u2014positioning recommendations\u2014helps translate \u201cthis segment is higher fit\u201d into \u201chere\u2019s how we talk to them, here are the proof points we need, and here\u2019s how we handle predictable objections.\u201d For example, if support burden is high, the objection playbook might include a proactive line like, \u201cWe\u2019re a great fit if you have X process in place,\u201d plus a proof point request like \u201ccollect implementation timeline examples from 3 customers.\u201d Does that kind of prescriptive output help, or does it feel like it\u2019s stepping on your teams\u2019 toes?",
+      "link": "https://www.onyx.app/7576371-9"
+    },
+    {
+      "text": "Hailey Lane: Honestly, it feels like it could step on toes. And I\u2019m also skeptical about the inputs. Our support tickets are a mess\u2014tags aren\u2019t consistent. CRM fields aren\u2019t clean. And onboarding surveys are only filled out by some customers. If the inputs are noisy, the outputs could be confidently wrong, and then we\u2019re in even worse alignment fights.",
+      "link": "https://www.onyx.app/7576371-10"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s a very real risk. We don\u2019t pretend the data is perfect. What we do is weight signals and show confidence. If support tags are inconsistent, we can still extract themes from the text, but we\u2019ll label it as lower confidence and recommend specific proof points to validate. The recommendations are meant to accelerate the first draft and make the assumptions explicit. Would you be open to a quick pilot where we ingest a limited set\u2014say CRM + retention + a sample of support tickets\u2014and you judge whether the positioning output matches reality?",
+      "link": "https://www.onyx.app/7576371-11"
+    },
+    {
+      "text": "Hailey Lane: We\u2019re pretty tight right now on adding new tools. And a pilot still takes time\u2014data access, security review, someone has to own it. I\u2019m also thinking: we don\u2019t just need messaging. We need to decide which industries to walk away from, and that\u2019s a leadership call. I\u2019m not sure we can rely on a \u201cfit score\u201d to justify that internally.",
+      "link": "https://www.onyx.app/7576371-12"
+    },
+    {
+      "text": "Sneha Reddy: Totally. To be clear, we\u2019re not trying to replace leadership judgment. The goal is to give leadership an evidence-backed basis\u2014especially when internal opinions conflict. But I hear you: if your leaders don\u2019t buy the methodology, it won\u2019t land. How does leadership currently make the \u201cwalk away\u201d decision\u2014do they look at churn, support cost, expansion, sales cycle length?",
+      "link": "https://www.onyx.app/7576371-13"
+    },
+    {
+      "text": "Hailey Lane: All of that, plus gut feel. And the gut feel part is exactly what causes arguments. But I don\u2019t see them accepting an algorithm either. They\u2019ll ask \u201cwhy does this score say X,\u201d and if we can\u2019t explain it simply, it won\u2019t pass.",
+      "link": "https://www.onyx.app/7576371-14"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s why we expose the drivers in plain language\u2014like \u201cRetention is high,\u201d \u201cTime-to-value is low,\u201d \u201cSupport burden per customer is moderate,\u201d \u201cCommon use case is Y.\u201d The fit score is really a roll-up. But if the score itself is a sticking point, we can focus the demo around the positioning recommendations and the underlying evidence, and treat the score as secondary. Would that make it easier to socialize?",
+      "link": "https://www.onyx.app/7576371-15"
+    },
+    {
+      "text": "Hailey Lane: Maybe, but I\u2019m still stuck on adoption. If marketing uses the messaging blocks, sales ignores them, and product says it\u2019s off, we\u2019re back where we started. The tool can\u2019t force people to cooperate.",
+      "link": "https://www.onyx.app/7576371-16"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s true. Tools can\u2019t force behavior. What we\u2019ve seen work is setting up a lightweight workflow: one owner, one review loop, and the recommendations become the starting template everyone edits\u2014rather than everyone creating their own version. But if you don\u2019t have a clear owner, it\u2019s hard. Who would own this on your side\u2014marketing ops, product marketing, revenue ops?",
+      "link": "https://www.onyx.app/7576371-17"
+    },
+    {
+      "text": "Hailey Lane: That\u2019s the issue\u2014no one wants to own it. Product marketing is overloaded. Rev ops is focused on Salesforce hygiene. Marketing ops is basically demand gen ops. I\u2019m the one herding cats right now, and I don\u2019t have bandwidth to be the system admin for another platform.",
+      "link": "https://www.onyx.app/7576371-18"
+    },
+    {
+      "text": "Sneha Reddy: Understood. If there isn\u2019t a clear internal owner, implementation will be painful, and I don\u2019t want to push something that adds overhead. We do offer onboarding support, but you still need someone accountable for decisions. If we kept it extremely scoped\u2014two segments, one quarter planning cycle, and deliverables are a one-page positioning doc per segment plus an objection playbook\u2014does that feel manageable, or still too much?",
+      "link": "https://www.onyx.app/7576371-19"
+    },
+    {
+      "text": "Hailey Lane: Still feels like too much for us this quarter. Also, procurement is going to ask what this replaces. If it\u2019s \u201canother analytics tool plus messaging,\u201d they\u2019ll say we already have BI and we already have copywriters.",
+      "link": "https://www.onyx.app/7576371-20"
+    },
+    {
+      "text": "Sneha Reddy: Fair. Let me ask one direct question then: what would have to be true for you to move forward\u2014cleaner data, clearer ownership, or a stronger internal mandate?",
+      "link": "https://www.onyx.app/7576371-21"
+    },
+    {
+      "text": "Hailey Lane: Ownership and mandate. Data we can work on. But without leadership saying \u201cthis is the source of truth,\u201d it becomes optional, and optional tools die here.",
+      "link": "https://www.onyx.app/7576371-22"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s very clear. In that case, it might not be the right timing to push for purchase right now. Would it be helpful if I sent a short outline you can forward to leadership\u2014focused on your specific use case: prioritizing industries using retention + support burden, and then turning that into consistent segment positioning with editable messaging blocks and an objection playbook? Not a big deck\u2014just a one-pager with what you\u2019d get and what you\u2019d need internally.",
+      "link": "https://www.onyx.app/7576371-23"
+    },
+    {
+      "text": "Hailey Lane: You can send it, sure. But I don\u2019t want to promise it\u2019ll go anywhere. We have planning in motion and I don\u2019t think we\u2019re changing tools midstream.",
+      "link": "https://www.onyx.app/7576371-24"
+    },
+    {
+      "text": "Sneha Reddy: Understood. I\u2019ll send a one-pager and a sample output so it\u2019s concrete. If leadership shows interest, we can revisit a narrowly scoped pilot next quarter when you have a bit more bandwidth and can name an owner. Does that work?",
+      "link": "https://www.onyx.app/7576371-25"
+    },
+    {
+      "text": "Hailey Lane: Yeah, that\u2019s fine. Send it over and we\u2019ll see. But I\u2019m not expecting a decision soon.",
+      "link": "https://www.onyx.app/7576371-26"
+    },
+    {
+      "text": "Sneha Reddy: Got it. I\u2019ll follow up by end of day with the one-pager and a sample positioning recommendation for a hypothetical segment, just so you can see the format\u2014value prop, differentiators, proof points, and objection handling. Thanks again, Hailey.",
+      "link": "https://www.onyx.app/7576371-27"
+    },
+    {
+      "text": "Hailey Lane: Thanks, Sneha. Talk soon.",
+      "link": "https://www.onyx.app/7576371-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "hailey_lane@wildstone_paper_co.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_6693827",
+  "semantic_identifier": "6693827 - Oceanmint Beverages - sales_call - Discussion with Eugene Ray",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-10-07 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-10-07 00:00:00",
+    "duration_min": "38"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-10"
+      ],
+      "year_month": "2025-10",
+      "meeting_title": "6693827 - Oceanmint Beverages - sales_call - Discussion with Eugene Ray",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Eugene\u2014good to see you again. Last time you mentioned you\u2019re feeling the pain of the same customer issue showing up across Zendesk, Intercom, and even CSM notes, and it\u2019s hard to tell what\u2019s truly widespread versus just loud. Does that still feel like the right problem to solve first?",
+      "link": "https://www.onyx.app/6394036-1"
+    },
+    {
+      "text": "Eugene Ray: Yeah, that\u2019s still true. We keep re-triaging the same things. But we\u2019ve also been burned by tools that promise \u201cintelligence\u201d and then create more cleanup work.",
+      "link": "https://www.onyx.app/6394036-2"
+    },
+    {
+      "text": "Mina Park: Totally fair. The reason I wanted this second call is to focus on one specific workflow: Issue_Tracker\u2019s issue clustering. It ingests the raw inputs\u2014tickets, chats, emails, even call-note summaries\u2014then dedupes and groups them into issue clusters, with suggested names, top phrases, and representative examples. The goal is less manual sorting and more clarity on trends. How are you doing that clustering today?",
+      "link": "https://www.onyx.app/6394036-3"
+    },
+    {
+      "text": "Eugene Ray: Mostly manual tags and macros, plus our ops team pulls weekly reports. But the language varies a lot\u2014enterprise customers describe problems differently than SMB. So clustering is where things often go wrong.",
+      "link": "https://www.onyx.app/6394036-4"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly the scenario it\u2019s built for. We use semantic similarity plus configurable rules\u2014product area, platform, severity, keywords\u2014so you\u2019re not relying on one fuzzy model. And we have merge/split controls with guardrails, so your team can correct clusters and keep them stable over time. If I asked your team, what would \u201csuccess\u201d look like\u2014fewer duplicates, faster routing, better visibility for product?",
+      "link": "https://www.onyx.app/6394036-5"
+    },
+    {
+      "text": "Eugene Ray: All of that, but the biggest is trust. If it merges the wrong stuff, we\u2019ll stop using it. We can\u2019t tell CSMs \u201cthis is the issue theme\u201d if it\u2019s actually two different bugs.",
+      "link": "https://www.onyx.app/6394036-6"
+    },
+    {
+      "text": "Mina Park: Makes sense. Let me ground it in your use case: CSM follow-up. With Issue_Tracker, CSMs can subscribe Oceanmint accounts to relevant clusters. When the linked Jira ticket ships, Issue_Tracker records the release milestone and keeps a history of which customers were notified and when. So it\u2019s not just \u201cwe think this is trending,\u201d it\u2019s an auditable chain from customer evidence \u2192 cluster \u2192 engineering work \u2192 customer updates. How are you handling the \u201cwho did we notify\u201d tracking today?",
+      "link": "https://www.onyx.app/6394036-7"
+    },
+    {
+      "text": "Eugene Ray: Spreadsheets and a bit of Salesforce tasks. It\u2019s messy. But again\u2014if the underlying cluster is wrong, the rest of the workflow is wrong too.",
+      "link": "https://www.onyx.app/6394036-8"
+    },
+    {
+      "text": "Mina Park: Agreed. So we usually start with a controlled rollout. Pick one product area\u2014say, your ordering portal or mobile app\u2014pipe in a subset of Zendesk/Intercom data, and have one ops owner review merge/split suggestions weekly for the first month. The system learns from the corrections, and you end up with stable clusters your team trusts. Would you have someone who could own that review step?",
+      "link": "https://www.onyx.app/6394036-9"
+    },
+    {
+      "text": "Eugene Ray: Maybe. But I\u2019m skeptical about \u201clearns from corrections.\u201d We\u2019ve tested similar tools and the model still drifted. Also, our tickets have a lot of short, low-context messages. \u201cIt\u2019s broken\u201d type stuff.",
+      "link": "https://www.onyx.app/6394036-10"
+    },
+    {
+      "text": "Mina Park: That\u2019s a real constraint. In those cases, Issue_Tracker leans on the configurable rules and metadata\u2014platform, product area, severity, keywords\u2014so it doesn\u2019t over-index on vague text. It also surfaces representative examples so the human can quickly validate whether the cluster is coherent. If the data is too thin, it\u2019ll tend to fragment rather than over-merge, and you can decide what to merge intentionally. Does your team prefer fewer, broader buckets\u2014or more granular clusters?",
+      "link": "https://www.onyx.app/6394036-11"
+    },
+    {
+      "text": "Eugene Ray: We prefer accuracy over neatness. But fragmentation is also a problem\u2014if you end up with 40 clusters for the same root issue, we\u2019re back to manual triage.",
+      "link": "https://www.onyx.app/6394036-12"
+    },
+    {
+      "text": "Mina Park: Right, and that\u2019s why the merge/split workflow matters. You can merge those related fragments into a single theme and keep sub-issues as linked variants if needed. The system keeps links back to every source ticket, so you don\u2019t lose evidence when you consolidate. If we could show you that for one noisy area\u2014like \u201ccheckout failures\u201d or \u201cinventory sync\u201d\u2014would that address the trust concern?",
+      "link": "https://www.onyx.app/6394036-13"
+    },
+    {
+      "text": "Eugene Ray: It would help, but I\u2019d need to see it on our data. And I\u2019m worried about the time cost. We\u2019re not staffed to babysit an AI clustering system.",
+      "link": "https://www.onyx.app/6394036-14"
+    },
+    {
+      "text": "Mina Park: Understood. The aim isn\u2019t to create a new operational burden. Most customers start with a light-touch cadence\u2014like 30 minutes a week for the first couple of weeks, then it tapers once clusters stabilize. But let\u2019s pressure-test: what would be an unacceptable time burden for your team?",
+      "link": "https://www.onyx.app/6394036-15"
+    },
+    {
+      "text": "Eugene Ray: Anything beyond an hour a week ongoing is a non-starter. And even then, I\u2019d have to justify it against just improving our tagging and reporting.",
+      "link": "https://www.onyx.app/6394036-16"
+    },
+    {
+      "text": "Mina Park: That\u2019s fair. If we can reduce duplicate triage work enough, that hour should pay for itself. The other piece is visibility: clusters make the volume and trend obvious, so teams don\u2019t underestimate widespread problems hidden across many tickets. Do you have a recent example where something looked small but turned out bigger?",
+      "link": "https://www.onyx.app/6394036-17"
+    },
+    {
+      "text": "Eugene Ray: Yeah\u2014our loyalty points redemption errors. It trickled in as random complaints, then suddenly it was everywhere. But we still had to manually connect the dots.",
+      "link": "https://www.onyx.app/6394036-18"
+    },
+    {
+      "text": "Mina Park: That\u2019s a great candidate cluster. We could stand up a pilot focused on loyalty redemption: ingest the last 90 days of Zendesk and Intercom, cluster by product area + keywords, then validate whether the tool correctly groups the variants. And then connect the cluster to the Jira ticket so once it ships, you have the customer notification history. If that pilot worked, would you be ready to move toward purchase?",
+      "link": "https://www.onyx.app/6394036-19"
+    },
+    {
+      "text": "Eugene Ray: Maybe, but I\u2019m not there yet. We\u2019re also in the middle of a Jira workflow migration, and introducing another layer between support and delivery feels risky.",
+      "link": "https://www.onyx.app/6394036-20"
+    },
+    {
+      "text": "Mina Park: Totally\u2014timing matters. Issue_Tracker is meant to sit between, but it doesn\u2019t replace Jira or your support tools; it links to them. Still, if your workflows are in flux, the integration work could feel like more change. When does that migration settle down?",
+      "link": "https://www.onyx.app/6394036-21"
+    },
+    {
+      "text": "Eugene Ray: Two months, realistically. And procurement is tight this quarter. So even if we liked it, I don\u2019t know we can buy now.",
+      "link": "https://www.onyx.app/6394036-22"
+    },
+    {
+      "text": "Mina Park: Got it. If purchase timing is the blocker, one option is a no-cost data sample evaluation\u2014limited scope, no production integrations\u2014just to prove the clustering quality on your historical data. But I want to be respectful: if the biggest concern is accuracy plus bandwidth, is it worth doing that evaluation now, or would it just distract?",
+      "link": "https://www.onyx.app/6394036-23"
+    },
+    {
+      "text": "Eugene Ray: It would probably distract. And honestly, the risk of false merges is my main worry. If the clustering is even slightly off, the teams will stop trusting it, and then we\u2019ve paid for something we can\u2019t operationalize.",
+      "link": "https://www.onyx.app/6394036-24"
+    },
+    {
+      "text": "Mina Park: I hear you. If you\u2019re not confident the team will adopt it, it\u2019s not the right time to force it. What I can do is send a short plan for a post-migration pilot\u2014specific success criteria like \u201c<1 hour/week maintenance,\u201d \u201cno critical false merges in top 10 clusters,\u201d and \u201cCSM notification history captured for one theme.\u201d Then we can revisit once the Jira changes are done. Would that be helpful?",
+      "link": "https://www.onyx.app/6394036-25"
+    },
+    {
+      "text": "Eugene Ray: Yes, send that. But I want to be clear\u2014I\u2019m not committing to a pilot or a purchase. We need to stabilize our current process first.",
+      "link": "https://www.onyx.app/6394036-26"
+    },
+    {
+      "text": "Mina Park: Completely fair. I\u2019ll send a one-pager with scope, what data we\u2019d need, and how we\u2019d measure cluster quality and effort. And I\u2019ll include what we\u2019d do if fragmentation or false merges show up\u2014like rule tuning and a review cadence. Is there anyone else you want copied, or should it just be you for now?",
+      "link": "https://www.onyx.app/6394036-27"
+    },
+    {
+      "text": "Eugene Ray: Just me for now. If it looks promising, I\u2019ll bring in support ops later.",
+      "link": "https://www.onyx.app/6394036-28"
+    },
+    {
+      "text": "Mina Park: Perfect. I\u2019ll get that over today. Thanks for being candid, Eugene\u2014this helps us not oversell. I\u2019ll follow up in a few weeks to see where you are on the Jira migration.",
+      "link": "https://www.onyx.app/6394036-29"
+    },
+    {
+      "text": "Eugene Ray: Sounds good. Thanks, Mina.",
+      "link": "https://www.onyx.app/6394036-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "eugene_ray@oceanmint_beverages.onyx.app"
+    }
+  ]
+}

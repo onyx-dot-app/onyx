@@ -1,0 +1,30 @@
+{
+  "id": "52ac66ed52cc407fb56e412bfa6e0fa4",
+  "semantic_identifier": "Design--Messaging Library Export API: enforce approval-state + versioning rules in export payload.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-28",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Messaging Library Export API: enforce approval-state + versioning rules in export payload.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature hardens the Messaging Library Export API by enforcing approval-state rules and adding versioning/idempotency metadata to the export payload. On the server, export eligibility will be validated such that only assets with `approval_state=APPROVED` are returned; assets in `DRAFT`, `REJECTED` (and any other non-approved states) will be excluded from all export responses, including bulk/list endpoints and any \u201cexport by ids\u201d style requests. This prevents downstream clients from inadvertently consuming unreviewed content and aligns export behavior with product governance expectations.\n\nAPI behavior changes: any endpoint that returns exportable assets will filter strictly to approved items, and any request that explicitly names assets (e.g., by internal id) will fail per-asset with a clear error if an asset is missing or non-approved. We will standardize error responses with appropriate HTTP status codes (e.g., `404` for missing, `409` or `422` for non-exportable state) and a machine-readable body that includes `code`, `message`, and `asset_id`/`external_id` where available; for bulk requests, errors will be returned in a structured array while still returning any eligible assets, unless the endpoint contract requires all-or-nothing (to be confirmed per endpoint).\n\nExport payload will be extended with versioning metadata to enable clients to detect changes and manage updates deterministically. Each exported asset will include `asset_version` (monotonically increasing on content changes that would affect export), `approved_at` (timestamp of last approval), and `updated_at` (last modification timestamp). Additionally, we will persist a stable `external_id` on the asset record (generated on first export or on asset creation, per migration strategy) and return it in the payload; clients can then use `external_id` as the stable identifier to perform idempotent upserts and distinguish \u201cupdate existing\u201d vs. \u201cnew asset\u201d without relying on internal ids.\n\nImplementation details: add server-side state checks in the export query layer (centralized so all endpoints inherit consistent behavior), introduce/verify database fields for `external_id`, `asset_version`, and `approved_at` (with backfill/migration for existing assets), and ensure `asset_version` increments on relevant updates and on re-approval flows. We\u2019ll add unit/integration tests covering: excluded states never appear in export lists, direct export requests return correct errors, `external_id` stability across exports, and metadata correctness across approve/update cycles. Rollout can be gated behind a feature flag for clients if needed, but default should be strict enforcement once downstream consumers confirm readiness.",
+      "link": "https://www.onyx.app/31407"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

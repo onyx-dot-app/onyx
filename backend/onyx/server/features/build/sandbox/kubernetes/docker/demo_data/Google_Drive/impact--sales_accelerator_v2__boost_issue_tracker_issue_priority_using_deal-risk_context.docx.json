@@ -1,0 +1,30 @@
+{
+  "id": "bbc146a7e084474282b9d5c7525f0359",
+  "semantic_identifier": "Impact--Sales_Accelerator v2: Boost Issue_Tracker issue priority using deal-risk context.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Sales_Accelerator v2: Boost Issue_Tracker issue priority using deal-risk context.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds deterministic, explainable priority boosting in Issue_Tracker based on Sales_Accelerator v2 deal-risk context already persisted on each issue (risk score, deal stage, ARR, impacted deal count). The goal is to ensure issues tied to higher commercial risk surface faster in engineering queues without relying on manual triage or tribal knowledge about which customers/deals are at stake.\n\nFor Sales and Customer teams, this tightens the loop between deal health and execution: issues threatening late-stage or high-ARR deals will be more likely to receive timely attention, improving win rates and reducing churn risk. For Engineering, it improves signal quality in backlogs by factoring business impact directly into ordering, while keeping the prioritization model predictable through clear weighting, thresholds, and explicit caps.\n\nA key design requirement is guardrails: boosts must not override critical manual priority decisions, and the system should remain understandable. Each boost will write an on-issue audit trail (e.g., \u201cpriority boosted due to deal risk\u201d) so teams can quickly see why an issue moved up, reducing confusion and avoiding \u201cblack box\u201d prioritization debates.\n\nFinally, we\u2019ll add metrics and logging to measure effectiveness and reliability\u2014tracking boosts applied versus skipped due to missing/invalid context. This instrumentation enables monitoring coverage of deal-risk data, diagnosing ingestion gaps, and iterating on weights/thresholds based on observed outcomes (e.g., whether boosted issues are actually resolved faster for at-risk deals).",
+      "link": "https://www.onyx.app/71488"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

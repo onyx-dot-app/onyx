@@ -1,0 +1,30 @@
+{
+  "id": "4170b0fae5ba4987b29a34a49e31aebf",
+  "semantic_identifier": "Impact--Fix stalled-deal rule: avoid false positives for \u201cno next meeting scheduled\u201d in sales_followup_recommendations.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-10",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Fix stalled-deal rule: avoid false positives for \u201cno next meeting scheduled\u201d in sales_followup_recommendations.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change improves the accuracy of our stalled-deal alerting by fixing a specific false positive: \u201cno next meeting scheduled\u201d triggering even when a future meeting exists. Today, reps can receive an incorrect follow-up recommendation despite having already booked a next step, which reduces trust in the product and adds avoidable noise to their workflow.\n\nWe will update the rule evaluation in `sales_followup_recommendations` to look for upcoming meetings across all synced sources, including both CRM events and calendar-linked meetings, rather than relying on a single source or incomplete linkage. The logic will also explicitly ignore canceled and no-show events so we don\u2019t treat non-actionable meetings as valid \u201cnext meetings,\u201d while still recognizing legitimately scheduled future conversations.\n\nUser impact is primarily a reduction in erroneous stalled-deal notifications and fewer unnecessary tasks created off the back of those alerts. Reps and managers should see recommendations that better match reality, improving confidence in follow-up guidance and reducing time spent reconciling alerts with their calendars/CRM.\n\nTo prevent regressions, we\u2019ll add a focused set of unit/integration tests covering the most common failure modes we\u2019ve observed: rescheduled meetings (old event canceled, new event created), timezone boundary issues (meeting \u201ctomorrow\u201d vs \u201ctoday\u201d), and missing event IDs/linkage between CRM and calendar records. Success will be measured by a drop in false-positive \u201cno next meeting scheduled\u201d alerts and stable/unchanged detection of truly meeting-less opportunities.",
+      "link": "https://www.onyx.app/98114"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

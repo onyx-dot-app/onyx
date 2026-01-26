@@ -1,0 +1,30 @@
+{
+  "id": "194b038bbcc94fd591c9a75f26968699",
+  "semantic_identifier": "Design--Setup Data Quality: Add one-click auto-fixes for common Fit Driver input issues.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-17",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Setup Data Quality: Add one-click auto-fixes for common Fit Driver input issues.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Goals\nWe will extend the Setup \u2192 Data Quality panel to include one-click \u201cFix\u201d actions for the most common Fit Driver input issues that prevent clean normalization: (1) trim leading/trailing whitespace, (2) normalize casing (e.g., title-case or canonical case per field type), (3) collapse empty strings to `null`, and (4) map common enum synonyms (e.g., \u201cmid market\u201d, \u201cMid Market\u201d, \u201cMid-Market\u201d \u2192 \u201cMid-Market\u201d). The goal is to let admins resolve high-frequency quality problems without exporting/re-importing data, while ensuring downstream fit scoring runs against consistent canonical values.\n\n### UX / Flow\nFor each detected issue (by field), the panel will present an inline \u201cFix\u201d control. Clicking \u201cFix\u201d will not immediately mutate source data; it will stage a workspace-level normalization rule update and show a before/after preview computed over a small sample (e.g., first N rows or a random stratified sample). The user can apply multiple fixes, review the combined before/after diff, and either \u201cFinalize\u201d to persist the rule changes or \u201cRevert\u201d to discard staged changes (returning the panel to the current persisted normalization rules).\n\n### Data Model / Rule Persistence\nFixes will be implemented as updates to the workspace\u2019s normalization rules so they apply to future ingests and any downstream Fit Driver feature extraction/scoring. Each fix corresponds to a deterministic transform: `trim`, `empty_to_null`, `case_normalize(mode)`, and `enum_synonym_map({alias \u2192 canonical})` scoped to a specific field. When finalized, we persist the updated rule set (versioned) and trigger a lightweight re-normalization/recompute path for Fit Driver values used in scoring (or mark the workspace for recompute on next scoring run), ensuring consistent behavior across historical and new data without requiring manual edits.\n\n### Implementation Notes / Guardrails\nIssue detection runs in the Data Quality panel using the same parsing/normalization logic as ingestion, producing counts and example values per issue type. Previews are computed by applying the staged rule set to the sample only (no full backfill) and presenting representative before/after pairs plus impact counts. Revert is implemented by keeping a staged copy of the rule set client-side (and/or server-side draft) and only writing the new version on finalize. We should include safety constraints: case normalization only for string fields, enum synonym mapping only for configured enums, and explicit conflict handling if two aliases map to different canonicals (require user selection or skip that mapping).",
+      "link": "https://www.onyx.app/85116"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

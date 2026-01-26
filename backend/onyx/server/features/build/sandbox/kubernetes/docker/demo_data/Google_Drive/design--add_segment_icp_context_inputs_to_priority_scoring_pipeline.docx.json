@@ -1,0 +1,30 @@
+{
+  "id": "cb0edcc6dce14d8985e7fb32b49441c4",
+  "semantic_identifier": "Design--Add segment/ICP context inputs to priority scoring pipeline.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-05",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add segment/ICP context inputs to priority scoring pipeline.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will extend the priority scoring data model and ingestion pipeline to enrich each Issue (and aggregated Theme) with customer Segment and ICP-fit context. The goal is to make segment/ICP attributes first-class, persisted fields that downstream scoring logic and UI can reference deterministically, without re-fetching from upstream systems during score calculation.\n\n### Data model changes\nAdd the following fields to the persisted Issue record: `segment` (enum/string), `icp_fit` (enum/score), plus minimal provenance metadata such as `segment_source`, `icp_source`, and `last_enriched_at` to support debugging and future audits. Themes will store aggregated context derived from their member Issues (e.g., distribution of segments, dominant segment, and aggregated ICP-fit such as weighted average or max), enabling theme-level scoring and filtering in UI.\n\n### Ingestion + enrichment pipeline\nDuring ingestion (or as a post-ingest enrichment step), we will fetch segment/ICP attributes from two sources: CRM and Customer_Analyzer. We will implement a deterministic merge policy with clear precedence and fallbacks: prefer CRM when present and not stale; otherwise fall back to Customer_Analyzer; if both exist but conflict, apply a defined priority rule and record the chosen source (optionally retaining the \u201cother\u201d in debug metadata). If neither source has data, persist explicit `UNKNOWN/UNSET` values rather than null to keep scoring behavior consistent and reduce downstream branching.\n\n### Persistence and downstream usage\nEnriched segment/ICP fields will be written to our scoring store as part of the Issue upsert and recomputed for Themes whenever constituent Issues change. Scoring functions and UI will read only these persisted fields (no synchronous upstream calls), ensuring stable, repeatable prioritization results and lower latency. We\u2019ll add basic monitoring/metrics (coverage rate, conflict rate, enrichment latency) and a backfill job to populate segment/ICP for existing Issues/Themes.",
+      "link": "https://www.onyx.app/70646"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

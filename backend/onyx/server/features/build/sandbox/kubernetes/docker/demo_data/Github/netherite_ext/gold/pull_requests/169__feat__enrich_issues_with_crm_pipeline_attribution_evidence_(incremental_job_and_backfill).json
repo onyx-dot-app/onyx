@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#169",
+  "semantic_identifier": "169: feat: Enrich Issues with CRM/pipeline Attribution Evidence (incremental job + backfill)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-04",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "169",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "90",
+    "labels": [],
+    "created_at": "2026-01-04",
+    "updated_at": "2026-01-04",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds an automated enrichment pipeline that populates the new `AttributionEvidence` fields on `Issue` records using linked CRM Accounts, open Opportunities, and support conversation metadata. The job is incremental (updates only when upstream data changes) and writes source references (IDs + timestamps) alongside each populated value to support auditability and reduce disputes.\n\n## What\u2019s included\n- **Data enrichment job**\n  - New scheduled worker to compute and persist `Issue.attributionEvidence` from:\n    - CRM Account linked to the Issue (direct link or via conversation/contact mapping where available)\n    - Open Opportunities for that Account (pipeline context)\n    - Support conversation metadata (e.g., channel, conversation id, created/lastUpdated timestamps)\n  - Evidence written as structured fields including:\n    - `sourceType` (account | opportunity | conversation)\n    - `sourceId` (e.g., accountId/opportunityId/conversationId)\n    - `sourceUpdatedAt` (timestamp from upstream)\n    - `computedAt` (timestamp of enrichment)\n\n- **Incremental update strategy**\n  - Computes a deterministic `sourceFingerprint` per Issue (hash of relevant upstream IDs + `updatedAt` values).\n  - Skips writes when the fingerprint matches the stored fingerprint to avoid churn.\n  - Uses upsert semantics to ensure idempotency and safe retries.\n\n- **One-time backfill**\n  - Adds a backfill script/command that processes existing Issues with known account/opportunity links.\n  - Runs in batches with checkpoints to avoid timeouts and allow resuming.\n\n## Implementation notes\n- Introduces a small attribution resolver module that:\n  - Fetches linked CRM entities for an Issue\n  - Selects pipeline context (open opportunities scoped to the linked account)\n  - Normalizes into `AttributionEvidence` records with consistent source references\n- Adds indexes/queries optimized for high-priority throughput (batch reads by Issue id, and lookups by account/opportunity id where applicable).\n- Adds logs/metrics for processed/skipped/updated counts and upstream fetch failures.\n\n## Operational / user impact\n- Issues will automatically gain populated Attribution Evidence shortly after relevant CRM or conversation updates.\n- Running the backfill once is required to populate historical Issues; it is safe to re-run (idempotent).\n\n## Testing\n- Unit tests for fingerprinting/idempotency and resolver selection logic.\n- Integration tests validating enrichment from mocked CRM/opportunity/conversation sources and verifying source references are persisted.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#169"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "27585736dd134088afdae2a44db750d5",
+  "semantic_identifier": "Impact--Fix segment-to-template mapping in sales initiation recommendations (positioning block insertion).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-03-31",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Fix segment-to-template mapping in sales initiation recommendations (positioning block insertion).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change fixes a reliability issue in Sales Initiation Recommendations where accounts sometimes receive the wrong outreach template and/or the wrong Customer_Analyzer positioning block. The root cause is that template/positioning selection can be driven by a missing, stale, or recently changed account segment, causing incorrect segment-to-template mapping at the moment recommendations are generated.\n\nWith this update, recommendation generation will deterministically resolve the account\u2019s current segment and consistently apply the correct outreach template and corresponding positioning block for that segment. When no valid segment or segment-specific positioning block exists, the system will fall back to a safe default template to avoid inserting incorrect content.\n\nCustomer impact is improved message relevance and reduced risk of sending mismatched positioning, which can degrade response rates and trust in recommendations. Internally, this reduces manual QA and \u201cwhy did it choose this template?\u201d investigations, and increases confidence that segment-based personalization behaves predictably as segments evolve.\n\nTo prevent recurrence, we will add regression coverage for the two key failure modes: (1) an account\u2019s segment changing between runs and (2) missing segment and/or missing block configurations. This ensures correct behavior across segment transitions and enforces safe fallback behavior when segment data is unavailable.",
+      "link": "https://www.onyx.app/47285"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

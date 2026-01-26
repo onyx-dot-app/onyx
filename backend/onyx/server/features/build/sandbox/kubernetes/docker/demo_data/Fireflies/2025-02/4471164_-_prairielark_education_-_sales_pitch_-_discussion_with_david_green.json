@@ -1,0 +1,129 @@
+{
+  "id": "FIREFLIES_4471164",
+  "semantic_identifier": "4471164 - Prairielark Education - sales_pitch - Discussion with David Green",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-02-28 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-02-28 00:00:00",
+    "duration_min": "30"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-02"
+      ],
+      "year_month": "2025-02",
+      "meeting_title": "4471164 - Prairielark Education - sales_pitch - Discussion with David Green",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi David\u2014thanks for taking a few minutes. I\u2019m Megan Foster. I work with teams that are getting swamped by customer issues coming in from Zendesk/Intercom, then getting re-triaged in Jira or Linear, and somehow the same \u201cproblem\u201d shows up in ten different places with no single source of truth. I wanted to share how Issue_Tracker helps centralize that and\u2014specifically\u2014how it helps Sales avoid late-stage deal slippage when a known issue is blocking a prospect.",
+      "link": "https://www.onyx.app/3770080-1"
+    },
+    {
+      "text": "David Green: Hi Megan, yeah, that\u2019s a familiar pain. We definitely have repeats of the same issue across tickets, and it\u2019s hard to know what\u2019s actually widespread versus just noisy. What exactly does Issue_Tracker do\u2014does it replace Zendesk or Jira?",
+      "link": "https://www.onyx.app/3770080-2"
+    },
+    {
+      "text": "Megan Foster: Great question\u2014it doesn\u2019t replace either. Think of Issue_Tracker as an intelligence and triage layer between support channels like Zendesk/Intercom and delivery tools like Jira/Linear. It continuously ingests customer-reported problems\u2014tickets, chats, email threads, even call-note summaries\u2014then it deduplicates and clusters them into \u201cissue objects\u201d that represent the underlying theme/root cause. Those issue objects stay linked back to the original conversations and forward to the engineering work, so you\u2019re not losing context or double-counting.",
+      "link": "https://www.onyx.app/3770080-3"
+    },
+    {
+      "text": "David Green: Okay, so it\u2019s like a middle layer. We\u2019ve tried tagging and macros in Zendesk, and it kind of works until it doesn\u2019t. How does the clustering actually help day to day?",
+      "link": "https://www.onyx.app/3770080-4"
+    },
+    {
+      "text": "Megan Foster: The feature most teams feel immediately is **issue_clustering**. Instead of relying on humans to apply consistent tags, Issue_Tracker automatically groups raw inputs into deduped clusters using semantic similarity plus rules you can configure\u2014like product area, platform, severity, or certain keywords you care about. Each cluster gets naming suggestions, representative examples, top phrases, and there\u2019s a simple merge/split workflow with guardrails so your team can correct it without creating chaos.",
+      "link": "https://www.onyx.app/3770080-5"
+    },
+    {
+      "text": "David Green: Interesting. We\u2019d need it to be accurate. Our support volume isn\u2019t massive, but it\u2019s steady, and the same integration issues pop up across districts. Does it keep track of what customers are affected?",
+      "link": "https://www.onyx.app/3770080-6"
+    },
+    {
+      "text": "Megan Foster: Exactly. Each cluster maintains impacted products/areas and a suspected root-cause category\u2014bug vs UX vs missing feature vs integration, that kind of thing\u2014and it keeps links back to every source record in Zendesk or Intercom. So when someone asks, \u201cIs this just one district or a pattern?\u201d you can open the cluster and immediately see the evidence: which customers, how many tickets, what the common language is, and how it\u2019s trending over time.",
+      "link": "https://www.onyx.app/3770080-7"
+    },
+    {
+      "text": "David Green: That would help our product team. But you mentioned Sales preventing deal slippage\u2014how does that work in practice?",
+      "link": "https://www.onyx.app/3770080-8"
+    },
+    {
+      "text": "Megan Foster: This is where it gets really practical for revenue teams. If you have an active late-stage opportunity\u2014say a district evaluating you\u2014and they mention a concern that maps to a known issue, Issue_Tracker can tie that conversation to the relevant cluster. If you\u2019re using Sales_Accelerator as well, it can flag the opportunity as at risk based on the cluster\u2019s severity and status. Then, instead of Sales pinging Support, Support pinging Product, and everyone scrambling, the rep can see: current status, any ETA notes, and\u2014importantly\u2014approved language for what\u2019s safe to communicate.",
+      "link": "https://www.onyx.app/3770080-9"
+    },
+    {
+      "text": "David Green: Approved language would actually be huge. We\u2019ve had situations where someone on the team over-promises a fix timeline and then we\u2019re stuck doing damage control.",
+      "link": "https://www.onyx.app/3770080-10"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly the scenario we see. The point is to make the \u201cissue object\u201d defensible\u2014so you have a searchable history of what was decided, when, by whom, and what you\u2019ve told customers. It reduces the random Slack archaeology and the \u201cwait, are we fixing this or not?\u201d loop. And because it\u2019s tied to the original tickets and to downstream Jira work, you can confidently say, \u201cThis is in progress,\u201d or \u201cThis is scheduled,\u201d without guessing.",
+      "link": "https://www.onyx.app/3770080-11"
+    },
+    {
+      "text": "David Green: How heavy is the setup? We\u2019re lean. I don\u2019t want something that takes weeks of taxonomy work before it\u2019s useful.",
+      "link": "https://www.onyx.app/3770080-12"
+    },
+    {
+      "text": "Megan Foster: Totally. Most teams start light. We typically connect the support channel, pull in a few months of historical tickets, and let clustering surface the obvious themes. Then you add just a handful of rules\u2014like \u201cthese keywords map to this product area\u201d or \u201cflag anything mentioning rostering as integration\u201d\u2014and you\u2019re off. The goal isn\u2019t perfect classification; it\u2019s cutting duplicate triage and making trends visible so you stop underestimating widespread issues hidden across lots of small tickets.",
+      "link": "https://www.onyx.app/3770080-13"
+    },
+    {
+      "text": "David Green: And does it integrate with Jira? Our engineers live there, and if it\u2019s not connected, adoption will be tough.",
+      "link": "https://www.onyx.app/3770080-14"
+    },
+    {
+      "text": "Megan Foster: Yes\u2014Issue_Tracker sits between those tools. The cluster stays linked to the downstream Jira work, so anyone can see which engineering ticket is driving resolution, and engineering doesn\u2019t have to change how they operate. The difference is that Product, Support, and Sales all see the same consolidated \u201cissue cluster\u201d view instead of ten separate tickets that don\u2019t look related.",
+      "link": "https://www.onyx.app/3770080-15"
+    },
+    {
+      "text": "David Green: I can see the value. For Prairielark Education, a lot of our churn risk comes from a couple recurring workflows\u2014district sync, integrations, and reporting. If we could quantify impact and have consistent comms, that\u2019d help.",
+      "link": "https://www.onyx.app/3770080-16"
+    },
+    {
+      "text": "Megan Foster: That\u2019s a great fit for what Issue_Tracker is designed to do\u2014especially in education where one integration issue can ripple across multiple schools and districts. If you\u2019re open to it, the next step I\u2019d suggest is a 30-minute working session where we look at a sample of your recent support tickets\u2014just a small export or read-only connection\u2014and we\u2019ll show you what clusters it creates, how the merge/split workflow works, and how a late-stage \u201cat-risk\u201d deal would get linked to an issue with safe-to-say messaging.",
+      "link": "https://www.onyx.app/3770080-17"
+    },
+    {
+      "text": "David Green: That sounds reasonable. I\u2019d want our head of Support looped in for that, since she\u2019d be the daily user.",
+      "link": "https://www.onyx.app/3770080-18"
+    },
+    {
+      "text": "Megan Foster: Perfect. If you invite her, we\u2019ll tailor it to both perspectives: Support triage efficiency and Sales/CS risk reduction. Do you have availability early next week\u2014maybe Tuesday or Wednesday afternoon?",
+      "link": "https://www.onyx.app/3770080-19"
+    },
+    {
+      "text": "David Green: Wednesday afternoon could work. Send a couple time options and I\u2019ll pull her in.",
+      "link": "https://www.onyx.app/3770080-20"
+    },
+    {
+      "text": "Megan Foster: Will do. I\u2019ll email two slots for Wednesday, plus a short outline of what we\u2019ll cover and what access we\u2019d need (we can start with minimal, even just a ticket export). Thanks, David\u2014looking forward to showing you how quickly the clustering surfaces the real themes and how it can keep deals from getting stuck on known issues.",
+      "link": "https://www.onyx.app/3770080-21"
+    },
+    {
+      "text": "David Green: Sounds good, Megan. I\u2019ll watch for the email and we\u2019ll set it up.",
+      "link": "https://www.onyx.app/3770080-22"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "david_green@prairielark_education.onyx.app"
+    }
+  ]
+}

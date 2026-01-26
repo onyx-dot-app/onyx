@@ -1,0 +1,30 @@
+{
+  "id": "8864678",
+  "semantic_identifier": "[GOLD-122]: Add in-product bypass tracking for key Sales_Accelerator workflows",
+  "title": "Add in-product bypass tracking for key Sales_Accelerator workflows",
+  "source": "linear",
+  "doc_updated_at": "2025-09-26",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "ryan_murphy",
+      "email": "ryan_murphy@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-09-26"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Instrument core user flows (best-next-action, forecasting updates, risk alerts) to detect and log when users bypass Sales_Accelerator and complete the action directly in the CRM or outside the product. Capture event metadata (user/team, account/opportunity, workflow type, timestamp, UI entry point, and stated/implicit reason where available) to quantify organizational drift. Ensure events are emitted consistently from web and extension surfaces and are available for downstream reporting and future interventions.",
+      "link": "https://www.onyx.app/98015"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "8344304",
+  "semantic_identifier": "[GOLD-153]: Add segment/ICP score breakdown to priority explanation (API + UI)",
+  "title": "Add segment/ICP score breakdown to priority explanation (API + UI)",
+  "source": "linear",
+  "doc_updated_at": "2025-05-25",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "kevin_sullivan",
+      "email": "kevin_sullivan@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-05-25"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Extend the priority scoring output to include an explicit breakdown of segment/ICP inputs used, the applied weight, and the resulting delta on the final score (including neutral fallback cases). Expose this breakdown via the scoring API and render it in the Issue/Theme priority explanation panel so Product and Support can verify how segment/ICP context impacted ranking. Ensure the breakdown is persisted in the score audit trail for historical defensibility and debugging.",
+      "link": "https://www.onyx.app/80994"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

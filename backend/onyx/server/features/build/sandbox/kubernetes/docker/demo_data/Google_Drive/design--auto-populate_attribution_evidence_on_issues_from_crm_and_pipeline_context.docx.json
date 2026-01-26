@@ -1,0 +1,30 @@
+{
+  "id": "d006d63ea0364c6eab208324688f88ea",
+  "semantic_identifier": "Design--Auto-populate Attribution Evidence on Issues from CRM + pipeline context.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-10",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Auto-populate Attribution Evidence on Issues from CRM + pipeline context.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add an asynchronous \u201cAttribution Evidence Enrichment\u201d job that writes the new Attribution Evidence fields onto Issue objects by joining each Issue to its linked CRM Account, any open Opportunities in the pipeline, and relevant support conversation metadata. The job will run on a schedule and/or be triggered by upstream change signals (CRM sync updates, opportunity stage changes, support conversation updates), and will compute a deterministic set of evidence values (e.g., account identifiers, opportunity identifiers/stage, last-touch/support thread identifiers) that can be displayed and audited. The intent is to auto-populate these fields to reduce manual entry and ensure consistent attribution context across Issues.\n\nTo keep updates incremental, we\u2019ll maintain a lightweight \u201csource fingerprint\u201d per Issue capturing the last-seen versions/timestamps of each contributing source (CRM account updatedAt, opportunity updatedAt, support conversation updatedAt). On each run, the job will only recompute and write evidence for Issues whose fingerprints differ from the latest source states. Writes will be idempotent and performed via an upsert that updates only the Attribution Evidence fields, minimizing contention with other Issue edits. We\u2019ll also support partial enrichment: if an Issue has an account link but no open opportunities, we still populate the account evidence and record \u201cno-opportunity-found\u201d as an explicit state.\n\nEvery populated evidence value will include a source reference to reduce disputes: for each field we store (a) the originating system/object type (CRM account, opportunity, support conversation), (b) the source object ID(s), and (c) the source timestamp(s) used for the computation, alongside the computed value. If multiple sources contribute (e.g., multiple open opportunities), we\u2019ll store a bounded list with stable ordering (e.g., highest ARR / latest stage change) and the selection rule in metadata to make the result explainable. Evidence payloads will be schema-versioned so we can evolve rules without ambiguity.\n\nFinally, we\u2019ll run a one-time backfill for existing Issues that already have known account/opportunity links. The backfill will scan Issues in batches, compute evidence using the same enrichment logic, and write results with appropriate source references, respecting rate limits of CRM/support APIs by relying on our synced data store where possible. We\u2019ll monitor progress and failures (per-Issue error capture and retry with exponential backoff), and once complete, the ongoing incremental job becomes the steady-state mechanism.",
+      "link": "https://www.onyx.app/53229"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

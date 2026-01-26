@@ -1,0 +1,30 @@
+{
+  "id": "b4682ecc3cd8460b883f880268ca18de",
+  "semantic_identifier": "Impact--Implement segment/ICP weighting in priority scoring with configurable defaults.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Implement segment/ICP weighting in priority scoring with configurable defaults.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change updates our priority scoring algorithm to account for two newly persisted customer attributes\u2014segment and ICP-fit\u2014when computing issue/theme priority. Today, priority is primarily driven by volume and severity signals; adding these dimensions ensures the score better reflects strategic customer value and go-to-market focus.\n\nWe\u2019ll introduce a small, configuration-driven weighting layer with sensible defaults that adjusts priority up or down based on segment and ICP-fit. This makes the model tunable by Product/Support without engineering changes, enabling quick iteration as our segment definitions, ICP criteria, or business priorities evolve.\n\nOperationally, the feature should improve prioritization accuracy and decision quality by elevating work that disproportionately impacts higher-value segments and stronger ICP-fit customers, while keeping the scoring system transparent and stable. The main user-facing impact is more relevant ordering of issues/themes in priority views and downstream planning workflows that rely on these scores.\n\nTo preserve reliability, the algorithm will treat missing, unknown, or conflicting segment/ICP values as neutral (no weighting) so score generation remains consistent and never fails or degrades. This also ensures backward compatibility for older records and reduces the risk of noisy inputs skewing prioritization until data completeness improves.",
+      "link": "https://www.onyx.app/99107"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

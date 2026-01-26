@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#45",
+  "semantic_identifier": "45: feat: Add standardized customerEvidence schema to signal ingestion + safe backfill for existing records",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-16",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "45",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "41",
+    "labels": [],
+    "created_at": "2025-04-16",
+    "updated_at": "2025-04-16",
+    "closed_at": "2025-04-21"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR standardizes how we capture and persist customer language/supporting evidence across all ingested signal types (CRM notes, surveys, support tickets, interviews, usage annotations).\n\nChanges:\n- Introduces a shared `customerEvidence` object on ingested signal records:\n  - `sourceType` (enum of supported sources)\n  - `capturedAt` (timestamp of the evidence; defaults to signal timestamp)\n  - `verbatim` (quote/snippet; plaintext)\n  - `artifactRef` (opaque reference/link back to the original system artifact; e.g., URL, external id + system)\n- Updates all ingestion adapters to populate `customerEvidence` consistently (mapping source-specific fields into the shared schema).\n- Adds DB migration to add the new column/fields (backwards-compatible; nullable).\n- Implements a low-risk backfill for existing records:\n  - Sets `sourceType` based on existing signal metadata\n  - Uses existing `createdAt/occurredAt` for `capturedAt` when available\n  - Copies any existing snippet/text field into `verbatim` where present\n  - Best-effort `artifactRef` from stored external IDs/URLs; otherwise leaves null\n- Updates positioning generation/read-path logic to tolerate missing evidence fields and to prefer `customerEvidence.verbatim` when present, preventing downstream breakage.\n\nNotes for reviewers:\n- No behavioral changes intended beyond consistent storage; output should remain stable except that newly ingested/updated records will carry richer, uniform evidence metadata.\n- Backfill is intentionally conservative to avoid incorrect links/quotes; missing fields remain null rather than guessing.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#45"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

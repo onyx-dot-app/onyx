@@ -1,0 +1,30 @@
+{
+  "id": "994b570b05624cb28b31d899140d2555",
+  "semantic_identifier": "Impact--Add domain-vocabulary signals to clustering to reduce false merges.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add domain-vocabulary signals to clustering to reduce false merges.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature improves clustering accuracy by making similarity scoring sensitive to domain-specific vocabulary instead of over-indexing on generic terms. Today, clustering quality varies by domain because common words (e.g., \u201cissue,\u201d \u201cproblem,\u201d \u201corder\u201d) can dominate similarity, while meaningful identifiers and domain jargon (e.g., SKU/ID formats, product codes, internal abbreviations) are underweighted\u2014causing unrelated items to be incorrectly merged.\n\nBy introducing domain-aware text signals\u2014such as curated domain keyword lists, explicit detection of IDs/SKUs/codes, and stopword overrides\u2014we\u2019ll require stronger alignment on domain-specific concepts before clusters can merge. This should materially reduce \u201cfalse merges,\u201d leading to cleaner clusters, more trustworthy analytics, and better downstream workflows that rely on cluster integrity (e.g., routing, deduplication, and insight extraction).\n\nWe\u2019ll also add per-integration/source configuration (e.g., Zendesk vs. Intercom) to enable or disable these signals, which limits regression risk and supports incremental rollout. Different sources have different vocabulary distributions and formatting conventions, so the ability to tune or opt out per source helps ensure improvements in one domain don\u2019t degrade performance in another.\n\nOverall impact is higher precision in clustering with minimal disruption: fewer incorrect merges, improved operator confidence when reviewing clusters, and more stable results across customer domains. Success can be measured via reduced false-merge rates in evaluation sets, fewer manual corrections/overrides, and improved cluster purity/precision in source-specific benchmarks.",
+      "link": "https://www.onyx.app/14987"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

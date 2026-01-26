@@ -1,0 +1,185 @@
+{
+  "id": "FIREFLIES_1147756",
+  "semantic_identifier": "1147756 - Zenith Lark Ventures - sales_call - Discussion with Kinsley Daniels",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-09 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-09 00:00:00",
+    "duration_min": "18"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "1147756 - Zenith Lark Ventures - sales_call - Discussion with Kinsley Daniels",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hey Kinsley, good to see you again. Thanks for making the time\u2014last time you mentioned you were trying to tighten your ICP and get cleaner messaging between SMB and mid-market. I wanted to use today to show how Customer_Analyzer would actually score your segments and then turn that into practical positioning you can use on landing pages and outbound. Sound good?",
+      "link": "https://www.onyx.app/8274160-1"
+    },
+    {
+      "text": "Kinsley Daniels: Hi Arjun. Yep, that\u2019s the goal. We\u2019ve got interest, but we\u2019re still trying to figure out whether this would be actionable for us or just another dashboard.",
+      "link": "https://www.onyx.app/8274160-2"
+    },
+    {
+      "text": "Arjun Mehta: Totally fair. Let me start with the piece you reacted to last time\u2014our fit estimation. Customer_Analyzer ingests signals you already have\u2014CRM fields, onboarding surveys, product usage events, support tickets\u2014and computes a fit score from 0 to 100 at both the account and segment level. Then it breaks down the score so you can see which drivers are pushing it up or down\u2014industry, size, problem severity, time-to-value, adoption patterns, support burden, churn risk signals.",
+      "link": "https://www.onyx.app/8274160-3"
+    },
+    {
+      "text": "Kinsley Daniels: The fit score is what caught my attention, but it\u2019s also what worries me. A lot of these tools feel like a black box. We get a number, but no one trusts it, and then nothing changes.",
+      "link": "https://www.onyx.app/8274160-4"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s the most common concern, and it\u2019s valid. The way we address that is the driver breakdown and evidence trail. So instead of \u201cMid-market is 82, SMB is 61,\u201d you\u2019ll see: mid-market scores higher because time-to-value is shorter, activation is faster by week two, support tickets per account are lower, and retention is higher. And you can click into the underlying signals that created that\u2014fields, usage events, support tags\u2014so it\u2019s not just magic.",
+      "link": "https://www.onyx.app/8274160-5"
+    },
+    {
+      "text": "Kinsley Daniels: Okay, but \u201cclick into underlying signals\u201d can still be fuzzy. Like, who decides what weights matter? And are we basically training it on our own historical bias? If we\u2019ve historically sold more to mid-market, it\u2019ll tell us mid-market is better, right?",
+      "link": "https://www.onyx.app/8274160-6"
+    },
+    {
+      "text": "Arjun Mehta: Good question. You can choose fit drivers and adjust them\u2014so you\u2019re not stuck with one rigid model. And we compare segments based on outcomes you care about\u2014conversion, retention, expansion. The recommended ICP profile is based on observed performance, not just volume. If you want to test a growth hypothesis\u2014say \u201cSMB could be great if we change onboarding\u201d\u2014you can configure the drivers to reflect that and see how the score changes as new data comes in.",
+      "link": "https://www.onyx.app/8274160-7"
+    },
+    {
+      "text": "Kinsley Daniels: That sounds like more work than we have bandwidth for. We\u2019re a lean team. Also, our data isn\u2019t clean. CRM fields are inconsistent, product events are decent, support data is messy. I\u2019m not sure the output would be reliable.",
+      "link": "https://www.onyx.app/8274160-8"
+    },
+    {
+      "text": "Arjun Mehta: Understood. We typically start lightweight. For your use case\u2014segment-specific messaging for SMB vs mid-market\u2014you don\u2019t need perfect data. We can start with the highest-signal inputs: a handful of CRM fields, a few activation and adoption events, and a couple support categories. Then you get a segment comparison and a fit score with a breakdown that\u2019s \u201cgood enough\u201d to guide messaging.",
+      "link": "https://www.onyx.app/8274160-9"
+    },
+    {
+      "text": "Kinsley Daniels: But then we\u2019re back to trust. If it\u2019s \u201cgood enough,\u201d how do I convince my head of sales to change outbound messaging based on it? They\u2019re going to ask, \u201cWhy should we believe this score?\u201d",
+      "link": "https://www.onyx.app/8274160-10"
+    },
+    {
+      "text": "Arjun Mehta: What I\u2019d propose is we treat it as a pilot with a clear validation loop. We take your last 6\u201312 months of customers, score them, and check whether high-fit accounts correlate with retention or expansion. If it lines up, it earns credibility. If it doesn\u2019t, we revisit the drivers. That way you\u2019re not asking the team to take it on faith.",
+      "link": "https://www.onyx.app/8274160-11"
+    },
+    {
+      "text": "Kinsley Daniels: A pilot is fine in theory, but we\u2019ve done \u201cpilots\u201d before. They turn into integration projects. What does setup actually look like?",
+      "link": "https://www.onyx.app/8274160-12"
+    },
+    {
+      "text": "Arjun Mehta: Setup can be as simple as connecting your CRM and importing a CSV for anything else to start. Then we map key fields\u2014industry, employee count, segment, stage\u2014and choose a small set of drivers. For product usage, we can take a few events around activation and adoption. You\u2019d have an initial segment fit comparison in a couple weeks.",
+      "link": "https://www.onyx.app/8274160-13"
+    },
+    {
+      "text": "Kinsley Daniels: \u201cA couple weeks\u201d is already a lot for us right now. We\u2019re trying to launch a new landing page in three weeks. I don\u2019t think we can afford a tooling project that might or might not change the copy.",
+      "link": "https://www.onyx.app/8274160-14"
+    },
+    {
+      "text": "Arjun Mehta: If the landing page timeline is tight, we can narrow the scope further. The immediate win could be: get a driver-based comparison between SMB and mid-market and generate positioning recommendations\u2014value props, differentiators, proof points, objection handling\u2014for each. Even if you only use it as a hypothesis generator, it can speed up your messaging work.",
+      "link": "https://www.onyx.app/8274160-15"
+    },
+    {
+      "text": "Kinsley Daniels: The positioning recommendations part is the other thing I\u2019m skeptical about. We already have messaging docs. A tool telling us \u201chere are differentiators\u201d tends to produce generic stuff. And if it\u2019s derived from messy inputs, it might be confidently wrong.",
+      "link": "https://www.onyx.app/8274160-16"
+    },
+    {
+      "text": "Arjun Mehta: I hear you. The recommendations are only as good as the signals. What makes ours different is it\u2019s grounded in what your best customers actually do\u2014what features they adopt, what problems show up in onboarding surveys, what objections appear in support tickets. So instead of generic messaging, you\u2019ll get things like: \u201cMid-market responds to faster time-to-value and lower support overhead,\u201d with suggested proof points pulled from your outcomes.",
+      "link": "https://www.onyx.app/8274160-17"
+    },
+    {
+      "text": "Kinsley Daniels: But do you actually pull proof points? Because we don\u2019t have neatly labeled \u201cproof points.\u201d And we can\u2019t share sensitive customer details in a SaaS tool without legal review.",
+      "link": "https://www.onyx.app/8274160-18"
+    },
+    {
+      "text": "Arjun Mehta: We can keep it aggregated and anonymized\u2014no need to expose individual customer names. Proof points can be phrased as patterns: \u201caccounts in this segment reach activation in X days,\u201d \u201csupport tickets drop after week Y,\u201d things like that. And we\u2019re used to working with security and legal to define what\u2019s acceptable.",
+      "link": "https://www.onyx.app/8274160-19"
+    },
+    {
+      "text": "Kinsley Daniels: That\u2019s another blocker. Security and legal here take forever. If the value is \u201cmaybe we get better messaging,\u201d it\u2019s hard to justify kicking off that process right now.",
+      "link": "https://www.onyx.app/8274160-20"
+    },
+    {
+      "text": "Arjun Mehta: Understood. Let me ask\u2014what would make this a \u201cyes\u201d for you? Is it faster time to insight, stronger validation, or a smaller footprint to start?",
+      "link": "https://www.onyx.app/8274160-21"
+    },
+    {
+      "text": "Kinsley Daniels: Honestly, it\u2019s the trust and effort tradeoff. If we put time into integrating and then the output is a score people argue about, we\u2019ll have wasted a quarter. And our leadership is already wary of \u201cAI scoring\u201d anything.",
+      "link": "https://www.onyx.app/8274160-22"
+    },
+    {
+      "text": "Arjun Mehta: That makes sense. What if we do an offline evaluation first\u2014no integrations\u2014where you share a sanitized export: segment, basic firmographics, a couple usage metrics, and outcomes like retention or expansion. We run a fit estimation analysis and come back with a segment comparison and driver breakdown. If it passes your smell test, then we talk about connecting systems.",
+      "link": "https://www.onyx.app/8274160-23"
+    },
+    {
+      "text": "Kinsley Daniels: That\u2019s closer, but even exports take time and approvals. And we\u2019re not convinced the output will be stable enough to bet messaging on. Plus, our segments aren\u2019t just SMB vs mid-market; they\u2019re messy\u2014by use case, by maturity, by region. I don\u2019t want a simplistic model.",
+      "link": "https://www.onyx.app/8274160-24"
+    },
+    {
+      "text": "Arjun Mehta: We can definitely go beyond SMB vs mid-market and incorporate use case or maturity as drivers. The reason I started with those two is because you called them out as your immediate landing page split, but we can segment however you need.",
+      "link": "https://www.onyx.app/8274160-25"
+    },
+    {
+      "text": "Kinsley Daniels: I get that. But what I\u2019m hearing is: we\u2019d need to define drivers, debate weights, clean data, and then socialize a score internally. That\u2019s a lot. Right now I need something that helps us ship the page and improve outbound next month, not an analytics initiative.",
+      "link": "https://www.onyx.app/8274160-26"
+    },
+    {
+      "text": "Arjun Mehta: If speed is the priority, one alternative is we focus purely on the messaging outputs\u2014positioning recommendations\u2014based on a minimal input set. But I don\u2019t want to oversell that if you\u2019re concerned about the foundations.",
+      "link": "https://www.onyx.app/8274160-27"
+    },
+    {
+      "text": "Kinsley Daniels: Yeah. Without confidence in the fit logic, I can\u2019t sell the messaging recommendations internally. It becomes \u201cthe tool said so,\u201d and that won\u2019t fly here.",
+      "link": "https://www.onyx.app/8274160-28"
+    },
+    {
+      "text": "Arjun Mehta: Fair. Would it help if we scoped a very tight success criterion? For example: \u201cCan Customer_Analyzer predict churn risk difference between two segments,\u201d or \u201cCan it explain why mid-market converts better,\u201d with a simple driver breakdown. If it can\u2019t, you walk away.",
+      "link": "https://www.onyx.app/8274160-29"
+    },
+    {
+      "text": "Kinsley Daniels: Maybe, but I\u2019m not sure we\u2019re prioritizing this enough to even do that. We\u2019ve got a couple other initiatives ahead of it, and my team is already stretched. I don\u2019t want to commit to something and then go dark.",
+      "link": "https://www.onyx.app/8274160-30"
+    },
+    {
+      "text": "Arjun Mehta: I appreciate the candor. Last question\u2014do you want me to follow up later in the quarter, or should we close the loop for now?",
+      "link": "https://www.onyx.app/8274160-31"
+    },
+    {
+      "text": "Kinsley Daniels: Let\u2019s pause for now. If we get through the launch and still feel like we need a more rigorous ICP and messaging engine, I\u2019ll reach out. But I can\u2019t take on integration or internal persuasion work right now.",
+      "link": "https://www.onyx.app/8274160-32"
+    },
+    {
+      "text": "Arjun Mehta: Got it. I\u2019ll send a short recap of what we discussed\u2014fit estimation, driver breakdown, and how we\u2019d validate it\u2014so you have it handy if priorities shift. And if you want, I can also share a one-page example of the segment comparison output so you can show leadership without committing to anything.",
+      "link": "https://www.onyx.app/8274160-33"
+    },
+    {
+      "text": "Kinsley Daniels: That\u2019s fine. Send the example. But yeah\u2014no next steps yet.",
+      "link": "https://www.onyx.app/8274160-34"
+    },
+    {
+      "text": "Arjun Mehta: Understood. Thanks, Kinsley. I\u2019ll get that over to you today, and we\u2019ll stay in touch when timing is better.",
+      "link": "https://www.onyx.app/8274160-35"
+    },
+    {
+      "text": "Kinsley Daniels: Thanks, Arjun. Talk later.",
+      "link": "https://www.onyx.app/8274160-36"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "kinsley_daniels@zenith_lark_ventures.onyx.app"
+    }
+  ]
+}

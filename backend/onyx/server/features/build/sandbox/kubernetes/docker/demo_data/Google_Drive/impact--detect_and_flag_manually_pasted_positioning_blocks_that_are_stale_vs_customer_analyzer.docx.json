@@ -1,0 +1,30 @@
+{
+  "id": "b7884b58f2764fa8b4b3e731df896a25",
+  "semantic_identifier": "Impact--Detect and flag manually pasted positioning blocks that are stale vs Customer_Analyzer.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-11",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Detect and flag manually pasted positioning blocks that are stale vs Customer_Analyzer.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature reduces the risk of users unknowingly working from stale positioning blocks when they manually paste or edit content. Today, pasted blocks can drift from what Customer_Analyzer most recently generated for the same account/opportunity, which creates inconsistencies across artifacts, lowers trust in the workflow, and can lead to outdated or incorrect messaging being shipped externally.\n\nOn paste/edit, we\u2019ll add an automatic comparison against the latest Customer_Analyzer block for that account/opportunity. If we detect a mismatch, we\u2019ll show a non-blocking warning that the content appears stale, along with a clear one-click action to \u201cReplace with latest from Customer_Analyzer.\u201d Users can either keep their pasted content (e.g., if they intentionally customized it) or replace it, preserving momentum while still nudging toward accuracy.\n\nThe primary impact is improved content freshness and alignment with the system of record without adding friction or hard gates. We expect fewer instances of outdated positioning making it into downstream docs and customer-facing deliverables, improved confidence in pasted content, and faster remediation when users do want the canonical version\u2014especially in high-velocity workflows where copy/paste is common.\n\nTo enable measurement and follow-on improvements, we\u2019ll log an event including account/opportunity ID, detected version/timestamp, and the user\u2019s decision (kept vs replaced). This will let us quantify how often staleness occurs, identify where mismatches are most common, and validate whether the warning + replace action meaningfully reduces drift over time.",
+      "link": "https://www.onyx.app/58502"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#40",
+  "semantic_identifier": "40: feat: Add recommendation versioning and per-channel pinning for messaging baseline audits",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-07",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "40",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "7",
+    "num_files_changed": "18",
+    "labels": [],
+    "created_at": "2026-01-07",
+    "updated_at": "2026-01-07",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds lightweight versioning for positioning recommendations and enables messaging channel assets to pin to an approved recommendation version. The pinned version ID is exposed via the internal API so the messaging consistency audit can compare assets against the correct baseline and avoid drift from outdated recommendations.\n\n## What changed\n- **Data model**\n  - Introduced `PositioningRecommendationVersion` (or equivalent) entity keyed by:\n    - `segment`\n    - `effectiveDate`\n    - `createdBy` and `approvedBy` (author/approver metadata)\n  - Added `pinnedRecommendationVersionId` (FK/nullable) on channel asset records to represent the approved baseline for that asset.\n- **API**\n  - Updated internal API serializers/DTOs to include `pinnedRecommendationVersionId` on messaging channel asset responses.\n  - Added/updated endpoints to support pinning/unpinning an asset to a specific recommendation version (minimal surface area; no public API changes).\n- **Audit integration**\n  - Adjusted the messaging consistency audit input to use an asset\u2019s `pinnedRecommendationVersionId` when present; otherwise falls back to the current recommendation for the segment.\n\n## Behavioral notes\n- Existing assets default to **unpinned** (null) after migration; audits continue to work using the prior \u201clatest recommendation\u201d behavior until assets are pinned.\n- Pinning is intended to target **approved** recommendation versions; validation prevents pinning to non-existent versions (and can optionally enforce approved-only if that state exists).\n\n## Migrations / rollout\n- Includes a DB migration to add the new version table and the `pinnedRecommendationVersionId` column + index.\n- Safe to deploy incrementally: deploy schema + API, then begin pinning assets as needed.\n\n## Testing\n- Added unit/integration coverage for:\n  - Creating and fetching recommendation versions\n  - Pin/unpin flows\n  - Audit baseline selection logic (pinned vs latest fallback)\n\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#40"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

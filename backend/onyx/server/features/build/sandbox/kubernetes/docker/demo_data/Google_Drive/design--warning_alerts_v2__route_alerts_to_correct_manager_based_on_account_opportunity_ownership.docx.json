@@ -1,0 +1,30 @@
+{
+  "id": "739c415d0d1a4a6581db2150ac96e685",
+  "semantic_identifier": "Design--Warning alerts v2: Route alerts to correct manager based on account/opportunity ownership.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Warning alerts v2: Route alerts to correct manager based on account/opportunity ownership.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature updates Warning Alerts v2 routing so each alert is delivered to the correct manager based on the account/opportunity management hierarchy, rather than defaulting to the deal owner or a static channel. We will source ownership and management relationships from the CRM (e.g., opportunity owner, account owner, each owner\u2019s manager chain) and resolve a single \u201calert recipient\u201d per notification using a deterministic rule set. Alert content and formatting will remain unchanged; only recipient selection changes.\n\nRouting will follow a strict precedence order to ensure determinism: (1) opportunity owner\u2019s direct manager if present and active, else (2) account owner\u2019s direct manager, else (3) opportunity owner, else (4) account owner, else (5) the existing default fallback channel/user. \u201cActive\u201d will be defined via CRM fields (e.g., not null, not terminated/disabled, and updated within an acceptable staleness window); if multiple manager levels exist, we will only use the direct manager for v2 unless explicitly configured otherwise. This keeps behavior predictable and minimizes blast radius.\n\nTo handle missing or stale CRM data, we will implement explicit fallback reasons and guardrails. If manager fields are null, stale beyond the staleness threshold, or reference an unmapped identity in our notification system, we will skip to the next candidate in the precedence list. We will also cache/resuse the resolved mapping per alert event to avoid inconsistent routing across retries, and we will ensure the same input event always produces the same recipient and fallback reason.\n\nFor troubleshooting, we will add lightweight structured logging at send time capturing: alert id/type, account/opportunity identifiers, chosen recipient identifier, and the fallback reason code (e.g., `manager_missing`, `manager_stale`, `identity_unmapped`, `default_fallback_used`). Logs will be emitted without including alert payload/body to avoid changing content or increasing sensitivity, and can be used to build simple dashboards/queries to validate routing changes and quickly diagnose misroutes.",
+      "link": "https://www.onyx.app/96436"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

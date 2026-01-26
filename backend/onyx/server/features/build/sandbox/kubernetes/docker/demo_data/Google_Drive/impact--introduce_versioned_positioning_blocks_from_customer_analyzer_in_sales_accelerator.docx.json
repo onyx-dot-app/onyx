@@ -1,0 +1,30 @@
+{
+  "id": "352bb83c290b4e97b3d57f2a39e0827b",
+  "semantic_identifier": "Impact--Introduce versioned positioning blocks from Customer_Analyzer in Sales_Accelerator.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-11",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Introduce versioned positioning blocks from Customer_Analyzer in Sales_Accelerator.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds first-class support in Sales_Accelerator for versioned \u201cpositioning blocks\u201d coming from Customer_Analyzer. Instead of ingesting a single mutable \u201clatest\u201d payload, we will store each published positioning block with explicit version metadata (version ID, published timestamp, and author/source) and retain those versions over time.\n\nThe key product impact is determinism: when Sales_Accelerator generates recommendations and messaging, it will reference a specific published positioning block version, ensuring outputs are stable and reproducible. This reduces unintended changes in customer-facing content caused by upstream edits, and enables safer iteration on positioning as Customer_Analyzer evolves.\n\nThis also improves auditability and debugging. By exposing the version fields in internal logs and telemetry, teams can trace exactly which positioning content powered a given recommendation, support investigations into regressions, and quantify the impact of positioning updates across cohorts or time periods.\n\nOperationally, this reduces \u201cdrift risk\u201d between what was intended (a published positioning snapshot) and what was delivered (whatever happened to be latest). It creates a foundation for future controls like pinning to a version for experiments, phased rollouts of new positioning, and clearer governance over who published what and when.",
+      "link": "https://www.onyx.app/64709"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

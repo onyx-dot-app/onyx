@@ -1,0 +1,30 @@
+{
+  "id": "65d9767e0ec2480ebbe2fbc874aed6c1",
+  "semantic_identifier": "Design--Define outcome events + schema for closed-loop learning telemetry.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Define outcome events + schema for closed-loop learning telemetry.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We need a canonical, versioned \u201coutcome events\u201d telemetry layer to support closed-loop learning and attribution from recommendations to downstream outcomes. This feature will define a small, stable set of events that represent the lifecycle from exposure to conversion, covering: `recommendation_shown`, `recommendation_accepted` (or `recommendation_applied`), `sequence_executed`, `reply_received`, `meeting_booked`, `stage_changed`, and `deal_closed` (with `won|lost`). Each event will be emitted by the relevant product surface or integration point at the moment the outcome occurs, using consistent naming, semantics, and required context to make the dataset analysable without per-team interpretation.\n\nWe will define a versioned event schema (e.g., `schema_version: 1`) with a shared envelope and event-specific payload. The required envelope fields include: `event_name`, `schema_version`, `timestamp` (UTC), `segment`, `rep_id` (and/or `user_id`), `motion`, and entity references for `account_id`, `opportunity_id` (when applicable), and `crm` identifiers (`crm_type`, `crm_account_id`, `crm_opportunity_id`, `crm_activity_id` where relevant). Each event will also include the \u201crecommendation join keys\u201d: a globally unique `recommendation_id` (stable across surfaces) plus a `recommendation_instance_id` representing a single rendering/decision (e.g., model version + context + time). This ensures we can attribute outcomes back to a specific recommendation instance even if the underlying recommendation is re-shown or re-ranked later.\n\nAttribution and joinability are first-class requirements: every downstream event that can plausibly result from a recommendation must carry `recommendation_instance_id` when the user journey originated from that recommendation (e.g., acceptance triggers execution; execution triggers reply/meeting; stage/deal outcomes later). When an outcome is not clearly attributable (e.g., stage change not linked to any recommendation), the event can omit the recommendation fields but must still include CRM/entity IDs so it can be analyzed in aggregate. We will document canonical rules for propagating the join keys across systems (UI \u2192 execution service \u2192 CRM sync), and define how to represent multi-touch cases (e.g., an array of contributing `recommendation_instance_id`s or a single \u201cprimary\u201d with optional \u201cassist\u201d list).\n\nWe will publish the schema in a single internal doc/repo (JSONSchema or equivalent) with examples per event and a change policy (additive changes allowed within a version; breaking changes require new major version). Lightweight validation will be added at emit-time (and/or ingestion) to reject or quarantine events missing required fields, with metrics/alerts for drop rates and field-level failures. This validation will enforce required context, allowed enum values (event names, motions, CRM types, deal outcome), timestamp format, and basic referential presence (at least one of internal ID or CRM ID for account/opportunity). The result is a reliable, analyzable telemetry stream that supports training data generation, ROI measurement, and debugging of recommendation effectiveness end-to-end.",
+      "link": "https://www.onyx.app/60013"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "d4590d4831b54f359f9a85b1db370f4f",
+  "semantic_identifier": "Design--Expose issue_prioritization score breakdown in Issue Theme API + UI.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Expose issue_prioritization score breakdown in Issue Theme API + UI.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will make Issue Theme prioritization explainable by exposing the computed `issue_prioritization` score breakdown end-to-end (API \u2192 UI). Today we compute a single rank-driving score, but the MVP needs defensible, user-readable factors. This change will add a structured breakdown that includes the total score, per-factor contributions, and the scoring configuration version used for the computation, so users can understand and audit why one theme ranks above another.\n\n**API (Issue Theme response):** extend the Issue Theme schema to return an `issue_prioritization` object containing: `total_score`, `scoring_config_version` (or id/hash), and a `factors` map/object with numeric contributions for `frequency`, `severity`, and `arr_tier`. Each factor will also include metadata needed for explainability (e.g., the resolved input bucket/label used, and whether it was a fallback). Example shape: `factors.frequency: { contribution, value, label, is_fallback }`, similarly for severity and ARR tier. This ensures both list and detail views can render consistently without recomputing or duplicating logic client-side.\n\n**Scoring + fallbacks:** the service that computes prioritization will annotate when defaults were applied (e.g., \u201cunknown ARR tier \u2192 default tier\u201d, \u201cno explicit severity \u2192 default severity\u201d) and surface that in the factor metadata. The total score must equal the sum of factor contributions (or be accompanied by an explicit \u201cother/normalization\u201d field if the model includes weights/normalization not captured by the three factors). The `scoring_config_version` will reflect the active config at calculation time to support future tuning, backfills, and debugging when scores change.\n\n**UI (Issue Theme list + detail):** update both views to display the total score and a consistent \u201cScore breakdown\u201d component showing the three factor contributions with clear labels and fallback indicators. The list view should show a compact inline breakdown (e.g., Total + top-line factor pills or a popover), while the detail view shows the full table: factor name, contribution, resolved input (bucket/tier), and fallback messaging. This will make rankings defensible in reviews and enable users to quickly spot when defaults (unknown ARR tier/default severity) are influencing the ordering.",
+      "link": "https://www.onyx.app/42766"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

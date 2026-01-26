@@ -1,0 +1,213 @@
+{
+  "id": "FIREFLIES_1768851",
+  "semantic_identifier": "1768851 - Aurorakite Software - sales_call - Discussion with Marco Aguilar",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-28 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-28 00:00:00",
+    "duration_min": "28"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "1768851 - Aurorakite Software - sales_call - Discussion with Marco Aguilar",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Hi Marco\u2014good to see you again. Last time you mentioned you\u2019re trying to decide which industries to lean into next quarter, and it\u2019s been hard to balance retention signals with support burden. Is that still the priority for you?",
+      "link": "https://www.onyx.app/3429461-1"
+    },
+    {
+      "text": "Marco Aguilar: Yep, still the priority. We\u2019ve got pressure from leadership to pick two verticals and go hard, but we\u2019re not confident we\u2019re reading the signals right.",
+      "link": "https://www.onyx.app/3429461-2"
+    },
+    {
+      "text": "Sneha Reddy: Makes sense. For today, I want to focus on Customer_Analyzer\u2019s positioning recommendations\u2014specifically how it takes your retention and support-ticket patterns and turns them into segment-specific messaging and an objection playbook. The goal would be: by the end of this call, we agree on a pilot scope and what \u201cgood\u201d looks like. Sound fair?",
+      "link": "https://www.onyx.app/3429461-3"
+    },
+    {
+      "text": "Marco Aguilar: Sure. I\u2019m open to a pilot, but I\u2019m still skeptical about the inputs. Our data is messy.",
+      "link": "https://www.onyx.app/3429461-4"
+    },
+    {
+      "text": "Sneha Reddy: Totally fair, and we should address that head-on. Quick recap: Customer_Analyzer ingests signals from your CRM fields, onboarding surveys, product usage, and support tickets. Then it produces (1) a fit score by segment, and (2) positioning recommendations tied back to the actual drivers and evidence. The piece you were most interested in last time was turning all that into usable messaging without weeks of workshops. Is that the part you want to test first?",
+      "link": "https://www.onyx.app/3429461-5"
+    },
+    {
+      "text": "Marco Aguilar: Yes\u2014messaging and segment guidance. But the scoring is only as good as the CRM, and our CRM is\u2026 not great. Industry tags are inconsistent, and a lot of accounts are missing key fields. Usage data exists but it\u2019s not cleanly tied to accounts.",
+      "link": "https://www.onyx.app/3429461-6"
+    },
+    {
+      "text": "Sneha Reddy: Got it. Let me propose a pragmatic approach: we don\u2019t start by boiling the ocean. For the pilot, we pick two candidate industries you\u2019re already debating\u2014say, FinTech vs. Logistics, or whatever is real for you\u2014and we use only the strongest signals you trust. For example: renewal/retention by account, ticket volume and category, and whatever usage events you feel are reliable. Then Customer_Analyzer generates positioning blocks for each segment: a value proposition, top use cases, differentiators, and a short objection-handling playbook\u2014plus editable copy you can use in an email opener or deck.",
+      "link": "https://www.onyx.app/3429461-7"
+    },
+    {
+      "text": "Marco Aguilar: The outputs sound great. My concern is we\u2019ll spend the entire pilot cleaning data and still not trust the recommendation.",
+      "link": "https://www.onyx.app/3429461-8"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s the common fear. Two things we do to avoid that. First, we show you what evidence each recommendation is based on\u2014like \u201chigh retention correlates with X workflow usage and low support burden in these accounts.\u201d Second, we can start with a \u201cminimum viable\u201d dataset. If industry is messy, we can segment by something you do have\u2014like product tier, primary use case from onboarding surveys, or even support-ticket taxonomy\u2014then map that back to industries once you\u2019re confident.",
+      "link": "https://www.onyx.app/3429461-9"
+    },
+    {
+      "text": "Marco Aguilar: But we don\u2019t have onboarding surveys consistently either. Some teams used them, some didn\u2019t. And our support taxonomy changed mid-year, so categories aren\u2019t apples-to-apples.",
+      "link": "https://www.onyx.app/3429461-10"
+    },
+    {
+      "text": "Sneha Reddy: Okay\u2014so we have two data-quality risks: missing fields and inconsistent tagging. If we can\u2019t rely on those, we shift weight to what\u2019s stable. Do you have consistent retention data by account and ARR? And do tickets at least have raw text even if the categories changed?",
+      "link": "https://www.onyx.app/3429461-11"
+    },
+    {
+      "text": "Marco Aguilar: Retention and ARR, yes. Ticket text, yes. Usage events\u2026 partial. Account mapping is spotty.",
+      "link": "https://www.onyx.app/3429461-12"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s workable. In that case, positioning recommendations can lean more on ticket themes and language\u2014what customers actually complain about or praise\u2014and correlate that with retention outcomes. The platform will extract recurring \u201cfit drivers\u201d from the text and then produce messaging that mirrors customer language. It\u2019ll also suggest proof points to collect, like \u201ctime-to-resolution improved by X\u201d or \u201creduced manual reconciliation,\u201d so your team knows what to validate.",
+      "link": "https://www.onyx.app/3429461-13"
+    },
+    {
+      "text": "Marco Aguilar: But then aren\u2019t we just doing qualitative analysis with extra steps? We already read tickets and do some win-loss interviews.",
+      "link": "https://www.onyx.app/3429461-14"
+    },
+    {
+      "text": "Sneha Reddy: You are\u2014and the difference is consistency and speed across segments. Instead of a few anecdotes, you get a structured set of messaging blocks for each prioritized segment, tied to measurable outcomes like retention and support burden. So when you pick industries next quarter, marketing and sales have a coherent narrative, not five versions of the same pitch.",
+      "link": "https://www.onyx.app/3429461-15"
+    },
+    {
+      "text": "Marco Aguilar: I hear you. Another issue: who on my team is actually going to maintain this? We\u2019re lean. If it requires ongoing field hygiene or constant re-tagging, it\u2019s a non-starter.",
+      "link": "https://www.onyx.app/3429461-16"
+    },
+    {
+      "text": "Sneha Reddy: Fair. The goal isn\u2019t to create a new admin burden. Typically, for a pilot, we set up a lightweight cadence: one owner on your side for 30 minutes a week to review outputs and confirm assumptions. On the data side, we can start with exports rather than full integrations, just to prove value.",
+      "link": "https://www.onyx.app/3429461-17"
+    },
+    {
+      "text": "Marco Aguilar: Exports are okay, but our leadership wants \u201creal\u201d analytics. If it\u2019s a bunch of spreadsheets pushed into a tool, I\u2019m not sure they\u2019ll buy it.",
+      "link": "https://www.onyx.app/3429461-18"
+    },
+    {
+      "text": "Sneha Reddy: Understood. But for the buying decision, you\u2019ll want evidence that it changes outcomes\u2014like improving conversion in one target segment. What if we scope the pilot around one concrete motion: pick one segment you\u2019re considering for next quarter, generate the positioning blocks and objection playbook, and then use that in a small outbound or pipeline experiment for two weeks?",
+      "link": "https://www.onyx.app/3429461-19"
+    },
+    {
+      "text": "Marco Aguilar: Two weeks is tight. Also, our sales cycle is long\u2014hard to attribute.",
+      "link": "https://www.onyx.app/3429461-20"
+    },
+    {
+      "text": "Sneha Reddy: Then we can measure leading indicators: reply rates, meeting conversion, or reduced time-to-first-deck readiness. And internally, alignment: do sales and marketing agree on the segment\u2019s value proposition and differentiators?",
+      "link": "https://www.onyx.app/3429461-21"
+    },
+    {
+      "text": "Marco Aguilar: Maybe. But I\u2019m still stuck on trusting the segmentation. If industry is unreliable and usage-account mapping is unreliable, we might just end up with generic messaging. We\u2019ve tried \u201cAI-generated positioning\u201d before\u2014looked slick, but it was fluffy.",
+      "link": "https://www.onyx.app/3429461-22"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s a good callout. The guardrail here is that our recommendations are linked back to evidence\u2014so if the tool can\u2019t find strong drivers, it will show low confidence. We\u2019re not trying to hallucinate a pitch; we\u2019re trying to synthesize what your best customers are already signaling.",
+      "link": "https://www.onyx.app/3429461-23"
+    },
+    {
+      "text": "Marco Aguilar: Okay, but if confidence is low because our data is missing, then we\u2019re paying to be told our data is bad.",
+      "link": "https://www.onyx.app/3429461-24"
+    },
+    {
+      "text": "Sneha Reddy: If the result is \u201cyou need better tagging,\u201d that\u2019s not the outcome we want. So let\u2019s be concrete: can you tell me the two industries you\u2019re debating for next quarter? And which signal you trust most to judge \u201cbest customers\u201d\u2014retention, expansion, or support load?",
+      "link": "https://www.onyx.app/3429461-25"
+    },
+    {
+      "text": "Marco Aguilar: We\u2019re debating HealthTech and Manufacturing. We trust retention and gross margin. Support load is tricky because some big accounts have lots of tickets but they\u2019re high value.",
+      "link": "https://www.onyx.app/3429461-26"
+    },
+    {
+      "text": "Sneha Reddy: Great. Then the pilot could prioritize a \u201chealthy revenue\u201d segment\u2014high retention, strong margin\u2014then compare support themes between HealthTech and Manufacturing. Customer_Analyzer would produce two sets of positioning blocks and objection playbooks, each backed by the ticket language and retention outcomes. You\u2019d use that to decide which vertical to prioritize.",
+      "link": "https://www.onyx.app/3429461-27"
+    },
+    {
+      "text": "Marco Aguilar: That\u2019s the theory. In practice, I\u2019m not sure we can even reliably label accounts as HealthTech vs. Manufacturing in the CRM. Some are multi-industry, and the field is optional.",
+      "link": "https://www.onyx.app/3429461-28"
+    },
+    {
+      "text": "Sneha Reddy: If industry is that unreliable, we can infer segments from other fields\u2014like product configuration, key workflows used, or common ticket themes\u2014then later overlay industry where available.",
+      "link": "https://www.onyx.app/3429461-29"
+    },
+    {
+      "text": "Marco Aguilar: But you just said usage mapping is spotty. And configs are in a separate system. This is what I mean\u2014every path leads to integration work.",
+      "link": "https://www.onyx.app/3429461-30"
+    },
+    {
+      "text": "Sneha Reddy: I don\u2019t want to minimize that. For Customer_Analyzer to be most effective, we need at least one clean join key between sources\u2014account ID, domain, something consistent. Do you have a consistent account domain in CRM and in support?",
+      "link": "https://www.onyx.app/3429461-31"
+    },
+    {
+      "text": "Marco Aguilar: Sometimes. But lots of tickets come from personal emails, and domains aren\u2019t normalized. Also, we have strict policies about exporting support data because it can contain sensitive information.",
+      "link": "https://www.onyx.app/3429461-32"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s important. If support exports are restricted, that removes one of the strongest signal sources we were counting on for positioning. Without support text, we\u2019re left with retention and partial CRM fields, which will reduce the specificity of recommendations.",
+      "link": "https://www.onyx.app/3429461-33"
+    },
+    {
+      "text": "Marco Aguilar: Exactly. And security won\u2019t approve piping raw ticket text into a new SaaS without a long review. We\u2019re mid-audit right now.",
+      "link": "https://www.onyx.app/3429461-34"
+    },
+    {
+      "text": "Sneha Reddy: Okay. Given the audit timeline, it sounds like we might not be able to get the data access needed for a meaningful pilot in the next few weeks. If we can\u2019t use support text and industry tagging is inconsistent, I worry we\u2019d deliver generic outputs and you\u2019d be disappointed.",
+      "link": "https://www.onyx.app/3429461-35"
+    },
+    {
+      "text": "Marco Aguilar: I appreciate you saying that. I\u2019m not against the product, but timing and data constraints are real. Also, budget is tight this quarter; we\u2019re prioritizing tools that plug in cleanly with minimal data wrangling.",
+      "link": "https://www.onyx.app/3429461-36"
+    },
+    {
+      "text": "Sneha Reddy: Understood. Two options: we pause and revisit after the audit when support data access is clearer, or we do a very lightweight \u201cpositioning workshop\u201d style engagement using only what you can safely share\u2014maybe anonymized summaries or existing interview notes\u2014to show the editable messaging blocks concept without integrations. But it won\u2019t be the full Customer_Analyzer value.",
+      "link": "https://www.onyx.app/3429461-37"
+    },
+    {
+      "text": "Marco Aguilar: I think we should pause. I don\u2019t want to start something we can\u2019t finish, and I don\u2019t have the bandwidth to run a workaround.",
+      "link": "https://www.onyx.app/3429461-38"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s fair. If we schedule a check-in for, say, six weeks from now\u2014after the audit\u2014could you also tell me who owns support data approvals so we can align early on what\u2019s allowed? Then we can come back with a pilot plan that\u2019s realistic.",
+      "link": "https://www.onyx.app/3429461-39"
+    },
+    {
+      "text": "Marco Aguilar: Sure. I can connect you with our security lead, but I can\u2019t promise they\u2019ll move fast.",
+      "link": "https://www.onyx.app/3429461-40"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s okay. I\u2019ll send a short follow-up: what data we\u2019d ideally use, what minimum we can work with, and the security questions we typically answer. Then we\u2019ll put a hold on a pilot until you\u2019re unblocked.",
+      "link": "https://www.onyx.app/3429461-41"
+    },
+    {
+      "text": "Marco Aguilar: Sounds good. Thanks, Sneha.",
+      "link": "https://www.onyx.app/3429461-42"
+    },
+    {
+      "text": "Sneha Reddy: Thanks, Marco. Talk soon.",
+      "link": "https://www.onyx.app/3429461-43"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "marco_aguilar@aurorakite_software.onyx.app"
+    }
+  ]
+}

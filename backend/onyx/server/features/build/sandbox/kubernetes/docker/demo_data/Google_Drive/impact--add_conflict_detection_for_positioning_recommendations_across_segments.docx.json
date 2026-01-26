@@ -1,0 +1,30 @@
+{
+  "id": "02809d82b4954a0bab6490a9a0fa77bc",
+  "semantic_identifier": "Impact--Add conflict detection for positioning recommendations across segments.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add conflict detection for positioning recommendations across segments.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds automatic conflict detection to our positioning recommendation pipeline so we can catch contradictions across customer segments at the moment recommendations are generated. Today, segment-specific outputs can unintentionally oppose each other (e.g., \u201cpremium quality\u201d vs. \u201clowest cost,\u201d or conflicting objection responses), which creates confusion for teams trying to build a coherent narrative and increases downstream rework.\n\nOn the backend, we\u2019ll define a canonical set of recommendation categories (e.g., value props, differentiators, objection responses) and apply a lightweight, rule-based contradiction model to compare generated statements across segments within the same category. When the system detects direct oppositions or mutually exclusive claims, it will flag the generation result as having conflicts rather than silently publishing inconsistent guidance.\n\nWe will persist conflict metadata alongside the recommendations so it\u2019s traceable and actionable: which segments are in conflict, which fields/categories triggered it, and the specific conflicting statements. This makes conflicts durable across sessions and enables consistent handling in future workflows, audits, and follow-on automation.\n\nThe impact is higher trust and usability of multi-segment positioning outputs. Product marketing and sales teams can quickly see where segmentation is creating narrative risk, resolve conflicts intentionally, and maintain a consistent positioning strategy\u2014reducing time spent reconciling recommendations, preventing contradictory messaging from reaching go-to-market assets, and improving overall quality of generated guidance.",
+      "link": "https://www.onyx.app/48328"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

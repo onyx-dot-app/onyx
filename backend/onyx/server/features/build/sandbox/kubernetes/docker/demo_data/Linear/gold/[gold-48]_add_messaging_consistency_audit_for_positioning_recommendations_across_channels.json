@@ -1,0 +1,30 @@
+{
+  "id": "6883756",
+  "semantic_identifier": "[GOLD-48]: Add messaging consistency audit for positioning recommendations across channels",
+  "title": "Add messaging consistency audit for positioning recommendations across channels",
+  "source": "linear",
+  "doc_updated_at": "2025-12-30",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "in_progress",
+    "priority": "medium",
+    "created_at": "2025-12-30"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a backend job that compares current messaging assets (website copy, sales deck snippets, email templates) against the latest approved positioning recommendations for the same segment. Compute a simple divergence score (e.g., missing/altered value props, differentiators, proof points) and store results per channel/segment over time. Expose flagged inconsistencies via an internal endpoint and log entries to support follow-on UI/alerting tickets.",
+      "link": "https://www.onyx.app/98737"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

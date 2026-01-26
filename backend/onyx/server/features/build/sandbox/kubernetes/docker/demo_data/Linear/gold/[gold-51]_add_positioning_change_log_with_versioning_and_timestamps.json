@@ -1,0 +1,30 @@
+{
+  "id": "2531285",
+  "semantic_identifier": "[GOLD-51]: Add positioning change log with versioning and timestamps",
+  "title": "Add positioning change log with versioning and timestamps",
+  "source": "linear",
+  "doc_updated_at": "2025-12-06",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2025-12-06"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement an immutable audit log for positioning recommendations (value props, differentiators, proof points, objections) that records who changed what, when, and which segment/ICP the change applies to. Store each edit as a new version with a stable version ID and effective timestamp, and expose a read-only history endpoint for later attribution work. This provides the foundational data needed to correlate downstream outcomes to specific positioning changes.",
+      "link": "https://www.onyx.app/63274"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

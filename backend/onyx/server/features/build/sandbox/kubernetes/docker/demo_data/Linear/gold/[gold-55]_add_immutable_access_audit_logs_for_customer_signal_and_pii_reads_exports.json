@@ -1,0 +1,30 @@
+{
+  "id": "4509379",
+  "semantic_identifier": "[GOLD-55]: Add immutable access audit logs for customer signal and PII reads/exports",
+  "title": "Add immutable access audit logs for customer signal and PII reads/exports",
+  "source": "linear",
+  "doc_updated_at": "2026-01-12",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jason_morris",
+      "email": "jason_morris@netherite-extraction.onyx.app"
+    },
+    "state": "open",
+    "priority": "medium",
+    "created_at": "2026-01-12"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement server-side audit logging for read access to customer signals that may contain PII, including API reads, UI views of raw records, and any export/download actions. Each log entry must capture workspace, actor (user/service), timestamp, action type, resource identifiers, and request context (IP/user agent). Store logs in an append-only/immutable datastore with admin-only retrieval endpoints and basic filters (time range, actor, resource).",
+      "link": "https://www.onyx.app/88794"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

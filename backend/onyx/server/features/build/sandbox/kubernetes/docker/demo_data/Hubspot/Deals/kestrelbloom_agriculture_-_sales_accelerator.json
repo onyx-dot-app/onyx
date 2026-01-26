@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_9907146",
+  "semantic_identifier": "Kestrelbloom Agriculture - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-03-30 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "115329",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "9907146"
+  },
+  "sections": [
+    {
+      "text": "Deal: Kestrelbloom Agriculture\nAmount: $115329\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-07-11 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/67978"
+    },
+    {
+      "text": "Contact: Sami Hamdan\nEmail: sami_hamdan@kestrelbloom_agriculture.onyx.app",
+      "link": "https://www.onyx.app/34624"
+    },
+    {
+      "text": "Company: Kestrelbloom Agriculture\nDomain: kestrelbloom_agriculture.onyx.app",
+      "link": "https://www.onyx.app/84541"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/76681"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

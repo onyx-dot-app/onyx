@@ -1,0 +1,30 @@
+{
+  "id": "8628566",
+  "semantic_identifier": "[GOLD-147]: Normalize and canonicalize identity fields for ticket\u2192account matching",
+  "title": "Normalize and canonicalize identity fields for ticket\u2192account matching",
+  "source": "linear",
+  "doc_updated_at": "2025-04-14",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "backlog",
+    "priority": "high",
+    "created_at": "2025-04-14"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a canonicalization layer for inbound ticket identity signals (email/domain, company name, CRM account ID) to reduce mismatches during account linking. Apply consistent normalization (case/whitespace, punctuation, common legal suffixes, alias domains) and store both raw and canonical values for auditability. This should run at ingestion time and be used by the existing matching logic without changing matching thresholds yet.",
+      "link": "https://www.onyx.app/73488"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

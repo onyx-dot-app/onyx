@@ -1,0 +1,30 @@
+{
+  "id": "86ed337d79644bdba8d2bd1c6d624ae3",
+  "semantic_identifier": "Design--Add drift-triggered evaluation + calibration pipeline for Sales_Accelerator models.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-30",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add drift-triggered evaluation + calibration pipeline for Sales_Accelerator models.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add an offline, drift-triggered evaluation + calibration pipeline for Sales_Accelerator models that runs automatically when existing drift signals flag a segment. The goal is to convert \u201cdrift detected\u201d into a standardized, reproducible set of performance and calibration evidence across forecasting, best-next-action, and risk alert model families, so we can confirm true degradation (vs benign distribution shift) and kick off retraining/recalibration with a consistent baseline.\n\n### Trigger, snapshotting, and segmentation\nThe job will subscribe to the drift signal output (e.g., a table/event emitted by the existing drift pipeline) and enqueue an evaluation run keyed by `{model_family, deployed_model_version, segment_id, drift_signal_id}`. On trigger, it will snapshot a recent evaluation window (configurable per model family, e.g., last N days/weeks) for the impacted segment(s), including features, predictions, ground truth labels (when available), and key business outcome fields needed for KPI computation. Snapshots will be immutable and stored as partitioned datasets by timeframe and segment to guarantee repeatability and enable future comparisons.\n\n### Evaluation and calibration metrics\nFor each model family, we will run a standardized evaluation suite with common metrics plus model-specific metrics. Core outputs include predictive performance (e.g., MAE/MAPE for forecasting; precision/recall/AUC or uplift metrics for best-next-action; alert precision/recall and time-to-detection metrics for risk), and calibration diagnostics (reliability curve bins, expected calibration error where applicable, and Brier score for probabilistic outputs). In parallel, we compute business KPI deltas versus the currently deployed model baseline over the same snapshot window (e.g., conversion lift proxies, revenue/ACV impact proxies, alert workload rate), using identical segment definitions and filtering to isolate model impact.\n\n### Storage, metadata, and downstream consumption\nAll results will be written to a unified \u201cmodel_eval_runs\u201d store (tables + artifacts) with strong metadata: `{run_id, model_family, candidate_model_version (optional), deployed_model_version, drift_signal_id, segment_id, snapshot_timeframe, data_cut_timestamp, code_version, metric_def_version}` plus links to generated plots (reliability curves) and aggregated KPI breakdowns. This store becomes the single baseline for subsequent automation: retraining/recalibration tickets can reference the run_id to ensure consistent data and metrics, and we can gate escalation (e.g., auto-create retrain task only if performance and/or calibration degradation crosses configured thresholds).",
+      "link": "https://www.onyx.app/65587"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

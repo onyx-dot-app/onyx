@@ -1,0 +1,30 @@
+{
+  "id": "a16b7ce8b724425684813188637d4933",
+  "semantic_identifier": "Design--Incorporate Customer_Analyzer fit score/segment/positioning blocks into initiation guidance generation.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Incorporate Customer_Analyzer fit score/segment/positioning blocks into initiation guidance generation.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "Update the initiation guidance generator to ingest the newly exposed `Customer_Analyzer` context and reflect it in recommended outreach messaging. The generator will accept (or fetch) three inputs per account/opportunity: `fit_score`, `segment`, and `approved_positioning_blocks` (plus freshness metadata, e.g., `generated_at` or `version`). The output schema of initiation guidance remains unchanged, but the content will be augmented to mention fit/segment and to incorporate relevant positioning language when available.\n\nFor deterministic block selection, we will define a stable ordering for `approved_positioning_blocks` and always choose the top **N** (configurable, default 2\u20133). Ordering will be: explicit `rank`/`priority` if provided by `Customer_Analyzer`, otherwise descending `confidence`, then ascending `block_id` as a final tie-breaker to guarantee determinism. The selected blocks will be injected into the prompt/template in a dedicated section (e.g., \u201cApproved positioning to reuse verbatim or lightly adapt\u201d), and the generator will be instructed to reference only those blocks (not to invent new positioning claims).\n\nWe will add a freshness/availability gate so the flow degrades gracefully: if any required `Customer_Analyzer` fields are missing, empty, or stale beyond a configured TTL, the generator will fall back to the existing initiation guidance path (current inputs only). Partial availability should be tolerated (e.g., fit score present but no blocks): include what\u2019s present and omit the rest, provided the data is fresh; otherwise full fallback. Logging/metrics will record which path was taken (augmented vs fallback) and why (missing vs stale vs empty blocks) to support monitoring.\n\nTesting will include a small suite of unit/fixture tests around the generator input-to-output behavior: (1) when fit/segment/blocks are present and fresh, generated guidance includes fit score/segment references and quotes/uses the selected top N blocks; (2) ordering is deterministic across runs given the same inputs, including tie-breakers; (3) stale data triggers fallback and produces identical output to the existing baseline fixture; (4) missing/empty blocks triggers partial augmentation or fallback per the gating rules. Fixtures will pin `Customer_Analyzer` payloads and expected guidance snippets to make regressions obvious.",
+      "link": "https://www.onyx.app/26945"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

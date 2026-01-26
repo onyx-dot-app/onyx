@@ -1,0 +1,193 @@
+{
+  "id": "FIREFLIES_7600166",
+  "semantic_identifier": "7600166 - Pacific Ember Foods - sales_call - Discussion with Kent Delgado",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-19 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-19 00:00:00",
+    "duration_min": "31"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "7600166 - Pacific Ember Foods - sales_call - Discussion with Kent Delgado",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Kent, good to see you again. Last time you mentioned your growth team is trying to tighten up inbound speed-to-lead and make sure reps aren\u2019t missing follow-ups once a discovery call happens. I wanted to focus today on Sales_Accelerator\u2014specifically the sales follow-up recommendations\u2014so we can decide if it\u2019s worth piloting at Pacific Ember Foods.",
+      "link": "https://www.onyx.app/8316931-1"
+    },
+    {
+      "text": "Kent Delgado: Hi Irene. Yep, that\u2019s still the pain. We\u2019ve got leads coming in from a couple channels, and response time is inconsistent. But I also want to be upfront: anything that reads emails or call notes tends to get blocked pretty quickly here.",
+      "link": "https://www.onyx.app/8316931-2"
+    },
+    {
+      "text": "Irene Shen: That makes sense. Let me anchor on the workflow, then we can dig into compliance. Sales_Accelerator sits on top of Salesforce\u2014so no rip-and-replace\u2014and it consumes the fit scores and positioning blocks you already built in Customer_Analyzer. The idea is: when an inbound lead comes in, it prioritizes the high-fit ones for first-touch, recommends a first response message tailored to the lead, and then\u2014once meetings happen\u2014keeps opportunities from stalling by recommending the next best action per deal.",
+      "link": "https://www.onyx.app/8316931-3"
+    },
+    {
+      "text": "Kent Delgado: When you say \u201crecommends a first response message,\u201d is it generating content automatically? Because we\u2019ve had issues with tools that draft emails using customer data.",
+      "link": "https://www.onyx.app/8316931-4"
+    },
+    {
+      "text": "Irene Shen: It can, but it doesn\u2019t have to. You can configure it to: (1) suggest a template and key talking points, or (2) draft a full email that the rep edits before sending. For your inbound speed-to-lead use case, most teams start with template-plus-bullets so reps move fast without feeling like AI is \u201csending for them.\u201d",
+      "link": "https://www.onyx.app/8316931-5"
+    },
+    {
+      "text": "Kent Delgado: Okay. And what\u2019s the actual feature you\u2019re proposing we start with?",
+      "link": "https://www.onyx.app/8316931-6"
+    },
+    {
+      "text": "Irene Shen: The sales_followup_recommendations. Think of it as deal-progression guidance and a lightweight task queue right inside Salesforce. It looks at stage, who\u2019s engaged, whether there\u2019s a mutual action plan, and recent activity. Then it nudges reps with very specific next steps\u2014like \u201csend recap + confirm next meeting date,\u201d \u201cmulti-thread because only one stakeholder is active,\u201d or \u201cfill the mutual plan checklist and set reminders.\u201d It also suggests cadence and channel mix, so your team\u2019s follow-through is consistent.",
+      "link": "https://www.onyx.app/8316931-7"
+    },
+    {
+      "text": "Kent Delgado: We do have stalls. But we already have Salesloft sequences and some Salesforce tasks. How is this not just another layer of noise?",
+      "link": "https://www.onyx.app/8316931-8"
+    },
+    {
+      "text": "Irene Shen: Great question. It\u2019s less about adding tasks and more about prioritizing and standardizing what good looks like. For example, instead of ten generic tasks, it creates a small queue of \u201chighest-impact next steps\u201d based on what actually happened. If a meeting occurred and there\u2019s no follow-up logged in 24 hours, it recommends the recap email. If only one contact has been emailed in a week, it suggests multi-threading and even proposes who to add\u2014based on the persona blocks from Customer_Analyzer. It\u2019s \u201cwhat to do next\u201d rather than \u201cdo more activity.\u201d",
+      "link": "https://www.onyx.app/8316931-9"
+    },
+    {
+      "text": "Kent Delgado: The \u201cbased on what happened\u201d part is where we get stuck. How does it know what happened\u2014are you parsing call transcripts and emails?",
+      "link": "https://www.onyx.app/8316931-10"
+    },
+    {
+      "text": "Irene Shen: There are a few data sources. At minimum, it can work off CRM activity: meetings logged, stage changes, contact roles, emails logged via Salesforce. For deeper risk signals\u2014like detecting that next steps weren\u2019t agreed\u2014it can optionally analyze call notes or transcripts if you connect your call recording system. But that\u2019s optional, and we can start with CRM-only signals.",
+      "link": "https://www.onyx.app/8316931-11"
+    },
+    {
+      "text": "Kent Delgado: Optional is good, but our legal team is strict. Even call notes sometimes have PII. What\u2019s your stance on retention and consent? Because \u201canalyze\u201d usually means storing something somewhere.",
+      "link": "https://www.onyx.app/8316931-12"
+    },
+    {
+      "text": "Irene Shen: Totally fair. We support configurations where raw content doesn\u2019t get stored long-term. For many customers, we process and only retain derived signals\u2014like \u201cfollow-up missing\u201d or \u201cstakeholder coverage low\u201d\u2014and we can set retention windows. We also support excluding fields, redaction patterns, and limiting to specific objects. But I don\u2019t want to hand-wave it\u2014your compliance requirements would drive the final setup.",
+      "link": "https://www.onyx.app/8316931-13"
+    },
+    {
+      "text": "Kent Delgado: I\u2019m hearing \u201csupport configurations,\u201d but I need specifics. Our policy is: no vendor can store or train on customer communications, and anything that touches emails needs documented consent and a defined retention period. Also, we operate in multiple regions.",
+      "link": "https://www.onyx.app/8316931-14"
+    },
+    {
+      "text": "Irene Shen: Understood. On training: we don\u2019t train models on your customer communications by default. Retention: we can set it, and we can keep processing scoped. Regions: we can align with your data residency needs depending on your plan. If we keep phase one to CRM metadata plus Customer_Analyzer outputs, we sidestep most of the email/call content concerns while still improving speed-to-lead and follow-up consistency.",
+      "link": "https://www.onyx.app/8316931-15"
+    },
+    {
+      "text": "Kent Delgado: But then you lose the \u201ctailored\u201d part, right? If it\u2019s not reading the email thread or call notes, how can it generate an objection response or a recap email?",
+      "link": "https://www.onyx.app/8316931-16"
+    },
+    {
+      "text": "Irene Shen: It can still tailor based on Customer_Analyzer positioning blocks\u2014so your messaging aligns to ICP and value props without reading private communications. The objection response feature is strongest when it can see the objection, yes\u2014but we can keep that out of scope initially. For the pilot, I\u2019d focus on two outcomes: faster first-touch on high-fit inbound, and fewer deals stalled because no next step is locked.",
+      "link": "https://www.onyx.app/8316931-17"
+    },
+    {
+      "text": "Kent Delgado: Let\u2019s talk pilot then. What exactly would you need from us, and what would success look like?",
+      "link": "https://www.onyx.app/8316931-18"
+    },
+    {
+      "text": "Irene Shen: For a 30-day pilot: connect Salesforce, connect Customer_Analyzer so we can consume fit scores and positioning blocks, configure your inbound lead routing rules, and define two or three \u201cstall patterns\u201d to alert on\u2014like \u201cmeeting occurred with no follow-up,\u201d \u201cno activity in 7 days at stage 2,\u201d and \u201csingle-threaded past discovery.\u201d Success would be improving median first-response time for high-fit inbound, and reducing the percentage of opps that sit with no next step or no activity beyond a defined threshold.",
+      "link": "https://www.onyx.app/8316931-19"
+    },
+    {
+      "text": "Kent Delgado: That sounds reasonable operationally. But I can\u2019t even get to \u201cconnect Customer_Analyzer\u201d without procurement and security review. And those reviews are triggered the moment a tool claims it recommends messages or inspects communications.",
+      "link": "https://www.onyx.app/8316931-20"
+    },
+    {
+      "text": "Irene Shen: If it helps, we can scope the pilot to avoid communications entirely: no inbox connection, no call transcript parsing, no drafting emails. We\u2019d do prioritization plus task recommendations only\u2014based on CRM fields and Customer_Analyzer fit/positioning.",
+      "link": "https://www.onyx.app/8316931-21"
+    },
+    {
+      "text": "Kent Delgado: Even Customer_Analyzer positioning blocks\u2014those might include customer segments and internal assumptions. Not PII, but still sensitive. And our security team will ask where it\u2019s stored, who can access it, audit logs, that sort of thing.",
+      "link": "https://www.onyx.app/8316931-22"
+    },
+    {
+      "text": "Irene Shen: Yes, and we can provide documentation on access controls and audit logging. We can also restrict which fields we ingest. For example, we can ingest only the fit score and a small set of approved positioning snippets, rather than everything.",
+      "link": "https://www.onyx.app/8316931-23"
+    },
+    {
+      "text": "Kent Delgado: Irene, I appreciate the flexibility, but I\u2019m trying to be realistic. Our sales org is 40-ish users, and my ops bandwidth is thin. If we do a pilot that\u2019s \u201cCRM-only task recommendations,\u201d I worry reps ignore it because it\u2019s not actually saving them time. And if we do the richer version, legal is going to slow-walk it for months.",
+      "link": "https://www.onyx.app/8316931-24"
+    },
+    {
+      "text": "Irene Shen: That\u2019s a fair concern. Where do you feel the biggest pain is right now\u2014speed-to-lead, or deal follow-up after meetings?",
+      "link": "https://www.onyx.app/8316931-25"
+    },
+    {
+      "text": "Kent Delgado: Speed-to-lead. But our SDR manager already built a dashboard and SLA alerts. The bigger issue is adoption\u2014reps don\u2019t always follow the process, and leadership doesn\u2019t want another tool they have to enforce.",
+      "link": "https://www.onyx.app/8316931-26"
+    },
+    {
+      "text": "Irene Shen: That\u2019s exactly where the recommendations and the in-CRM queue help\u2014less policing, more guided actions. But I hear you: if it\u2019s yet another widget, it dies. Typically, what drives adoption is when the rep sees, \u201cOh, it already knows this is high-fit and gives me the exact first reply to send.\u201d",
+      "link": "https://www.onyx.app/8316931-27"
+    },
+    {
+      "text": "Kent Delgado: Which circles back to the thing we can\u2019t do\u2014auto-drafting based on lead details and communications. And frankly, our CIO is skeptical of any system that \u201crecommends what to do next\u201d without us understanding the logic. We\u2019ve been burned by black-box scoring before.",
+      "link": "https://www.onyx.app/8316931-28"
+    },
+    {
+      "text": "Irene Shen: On explainability: the recommendation shows why it\u2019s suggesting an action\u2014like \u201cno follow-up logged 24 hours after meeting,\u201d \u201conly one stakeholder engaged,\u201d \u201cmutual plan incomplete.\u201d It\u2019s not just a score. But if the organization is not ready for the richer workflow, we may be forcing it.",
+      "link": "https://www.onyx.app/8316931-29"
+    },
+    {
+      "text": "Kent Delgado: That\u2019s my fear. Also: we\u2019re in the middle of a Salesforce re-org. New stages, new fields. I can\u2019t commit to a pilot that depends on stable opportunity stages and activity logging.",
+      "link": "https://www.onyx.app/8316931-30"
+    },
+    {
+      "text": "Irene Shen: That\u2019s important context. The recommendations do rely on consistent stage definitions and activity capture. If those are changing right now, results might be noisy.",
+      "link": "https://www.onyx.app/8316931-31"
+    },
+    {
+      "text": "Kent Delgado: Exactly. So I\u2019m not saying \u201cnever,\u201d but I don\u2019t think we\u2019re in a place to move to buying or even a pilot in the next quarter. I\u2019d rather revisit once our Salesforce changes settle and we\u2019ve gotten legal aligned on comms data.",
+      "link": "https://www.onyx.app/8316931-32"
+    },
+    {
+      "text": "Irene Shen: I appreciate the clarity. Would it be helpful if I sent over a one-pager that outlines a \u201cCRM-only\u201d deployment vs a \u201ccomms-enriched\u201d deployment, with explicit data sources and retention options\u2014so you can pre-wire security and legal for later?",
+      "link": "https://www.onyx.app/8316931-33"
+    },
+    {
+      "text": "Kent Delgado: Yes, that would be useful. If you can also include what fields you\u2019d need from Customer_Analyzer and whether we can keep it to just fit scores, that would make the conversation easier internally.",
+      "link": "https://www.onyx.app/8316931-34"
+    },
+    {
+      "text": "Irene Shen: Absolutely. I\u2019ll send that along, and I\u2019ll also include a sample of the explainability panel so your CIO can see it\u2019s rule-and-signal driven, not a mystery score. Should we tentatively plan to reconnect in, say, six to eight weeks after your Salesforce changes land?",
+      "link": "https://www.onyx.app/8316931-35"
+    },
+    {
+      "text": "Kent Delgado: Let\u2019s do eight weeks. If things slip on our side, I\u2019ll let you know. But for now, we\u2019re not moving forward to procurement.",
+      "link": "https://www.onyx.app/8316931-36"
+    },
+    {
+      "text": "Irene Shen: Understood. I\u2019ll follow up with the documentation and a proposed agenda for the next touchpoint focused on security/compliance and a narrower pilot scope. Thanks, Kent.",
+      "link": "https://www.onyx.app/8316931-37"
+    },
+    {
+      "text": "Kent Delgado: Thanks, Irene. Talk soon.",
+      "link": "https://www.onyx.app/8316931-38"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "kent_delgado@pacific_ember_foods.onyx.app"
+    }
+  ]
+}

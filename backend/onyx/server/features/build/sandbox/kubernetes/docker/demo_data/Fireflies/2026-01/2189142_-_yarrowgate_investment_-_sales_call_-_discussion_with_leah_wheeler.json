@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_2189142",
+  "semantic_identifier": "2189142 - Yarrowgate Investment - sales_call - Discussion with Leah Wheeler",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-01-21 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-01-21 00:00:00",
+    "duration_min": "40"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-01"
+      ],
+      "year_month": "2026-01",
+      "meeting_title": "2189142 - Yarrowgate Investment - sales_call - Discussion with Leah Wheeler",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Leah\u2014good to see you again. Thanks for making time. Last time you mentioned the \u201cwhat do we fix next\u201d debate between Support and Product, and you had interest in Issue_Tracker as a way to standardize that. Today I was hoping we could pressure-test the prioritization feature and what it would look like to roll it out at Yarrowgate Investment. Does that work?",
+      "link": "https://www.onyx.app/9747792-1"
+    },
+    {
+      "text": "Leah Wheeler: Yeah, that\u2019s fine. We\u2019re still interested, but we\u2019re also wary. We\u2019ve been burned by tooling that promises alignment and then just creates another dashboard no one trusts.",
+      "link": "https://www.onyx.app/9747792-2"
+    },
+    {
+      "text": "Irene Shen: Totally fair. Let me anchor on one thing so this doesn\u2019t become \u201canother dashboard.\u201d Issue_Tracker isn\u2019t trying to replace Zendesk or Jira. It sits between them and creates a consistent \u201cissue object\u201d\u2014a clustered theme with evidence, impacted accounts, and links back to the original tickets and forward to Jira work. The feature you asked most about was issue prioritization\u2014an explainable score based on things you already care about: frequency/velocity, severity tags, customer tier/ARR, churn risk flags, and segment importance. You can view that score differently depending on the team\u2014Support, Product, Sales, Exec.",
+      "link": "https://www.onyx.app/9747792-3"
+    },
+    {
+      "text": "Leah Wheeler: The \u201cexplainable\u201d part is where I\u2019m skeptical. Everyone says explainable. In practice, it becomes a black box. And then Product says Support is gaming severity tags, Support says Product is ignoring customers, and we\u2019re back in spreadsheets.",
+      "link": "https://www.onyx.app/9747792-4"
+    },
+    {
+      "text": "Irene Shen: That\u2019s exactly the failure mode we designed around. The score breaks down into components you can show in the UI\u2014like 35% frequency, 25% ARR exposure, 20% severity, 20% segment importance\u2014whatever you choose. And you can click into the cluster to see the underlying evidence: which tickets, which customers, which segments. The point is not \u201ctrust us,\u201d it\u2019s \u201chere\u2019s why this cluster is high priority.\u201d",
+      "link": "https://www.onyx.app/9747792-5"
+    },
+    {
+      "text": "Leah Wheeler: But who sets those weights? Because if I set ARR exposure high, my team gets accused of only caring about big clients. If I set frequency high, we end up chasing noisy small accounts. There isn\u2019t a \u201cright\u201d answer, and it becomes political.",
+      "link": "https://www.onyx.app/9747792-6"
+    },
+    {
+      "text": "Irene Shen: That\u2019s real. What we usually do is start with a default model and then run a calibration period\u2014two weeks of comparing the score to your current triage decisions. When there\u2019s a dispute, you can see exactly what drove the ranking and adjust the weights with agreement from the stakeholders. It\u2019s more explicit than the current situation where the weighting is happening informally in meetings.",
+      "link": "https://www.onyx.app/9747792-7"
+    },
+    {
+      "text": "Leah Wheeler: I get the theory. But the politics still exist. Explicit weights can actually make it worse\u2014because now people can argue about the math instead of the outcome. Also, we don\u2019t have clean severity tagging today. Our Zendesk tags are inconsistent.",
+      "link": "https://www.onyx.app/9747792-8"
+    },
+    {
+      "text": "Irene Shen: If severity is inconsistent, we can down-weight it initially and lean more on frequency and customer tier/ARR from your CRM. Over time, Issue_Tracker can nudge tagging hygiene because people see the downstream impact. But you don\u2019t have to boil the ocean. For Yarrowgate, we could start with just: frequency/velocity + ARR tier + segment importance, and keep severity as informational.",
+      "link": "https://www.onyx.app/9747792-9"
+    },
+    {
+      "text": "Leah Wheeler: Okay, but \u201csegment importance\u201d is another loaded term. We don\u2019t even agree internally on what the ICP is. Sales has one view, Product has another, and my CSM team sits in the middle trying to keep everyone calm.",
+      "link": "https://www.onyx.app/9747792-10"
+    },
+    {
+      "text": "Irene Shen: Understood. Segment importance can come from Customer_Analyzer if you\u2019re using it, or from a simple mapping you define\u2014like \u201cwealth management firms over X AUM\u201d or \u201centerprise procurement-led accounts.\u201d If you don\u2019t have that locked, we can treat segment as neutral and still get value from clustering and deduping, then revisit segment weighting later.",
+      "link": "https://www.onyx.app/9747792-11"
+    },
+    {
+      "text": "Leah Wheeler: Let\u2019s talk about the use case we discussed last time\u2014CSMs subscribing accounts to clusters and then doing consistent follow-up. That\u2019s interesting to me. But again, it depends on trust in the cluster status. If Jira doesn\u2019t match reality, my team will be the one sending awkward updates.",
+      "link": "https://www.onyx.app/9747792-12"
+    },
+    {
+      "text": "Irene Shen: That\u2019s a great point. The way it works is: a cluster is linked to one or more Jira tickets. When a Jira ticket ships, Issue_Tracker records the release milestone and updates the cluster status. Then CSMs who have subscribed accounts to that cluster get a prompt to notify impacted customers, and the system keeps a history trail of who was notified and when. It reduces the manual \u201cwho do we owe an update to?\u201d scramble.",
+      "link": "https://www.onyx.app/9747792-13"
+    },
+    {
+      "text": "Leah Wheeler: We already try to do that, but it\u2019s messy. The issue is that engineering doesn\u2019t always use Jira consistently either. Tickets get closed, reopened, or the fix is partial. If Issue_Tracker is pulling status from Jira, it\u2019ll inherit that mess.",
+      "link": "https://www.onyx.app/9747792-14"
+    },
+    {
+      "text": "Irene Shen: It will reflect what Jira says, yes\u2014but it also keeps the evidence chain so you can see what was promised and what shipped. Some teams set rules like \u201conly mark cluster as \u2018Resolved\u2019 when the linked Jira is \u2018Done\u2019 and a Support verification checkbox is true,\u201d or they add a lightweight verification step. The goal is to reduce false \u201cfixed\u201d messages.",
+      "link": "https://www.onyx.app/9747792-15"
+    },
+    {
+      "text": "Leah Wheeler: That\u2019s adding process though. My org is already overwhelmed. If adopting this means we need new governance meetings, it\u2019s not going to fly.",
+      "link": "https://www.onyx.app/9747792-16"
+    },
+    {
+      "text": "Irene Shen: We can keep it light. In most deployments, we recommend one owner for the prioritization model\u2014often Support Ops or Product Ops\u2014who meets with stakeholders monthly, not weekly. And for the notification workflow, it can be optional: CSMs can still manually choose when to notify, but Issue_Tracker gives them the list and the trail.",
+      "link": "https://www.onyx.app/9747792-17"
+    },
+    {
+      "text": "Leah Wheeler: Irene, candidly, it sounds like we\u2019re buying a system that formalizes our disagreements. I\u2019m not sure we\u2019re mature enough operationally. And I don\u2019t want to roll out something that becomes another \u201csource of truth\u201d argument.",
+      "link": "https://www.onyx.app/9747792-18"
+    },
+    {
+      "text": "Irene Shen: I appreciate the candor. Let me ask: what would you need to see to feel confident this wouldn\u2019t become another argument generator? Is it a pilot with a single team, or a proof that the scoring isn\u2019t a black box?",
+      "link": "https://www.onyx.app/9747792-19"
+    },
+    {
+      "text": "Leah Wheeler: Both. But we also have tool fatigue right now. We\u2019re mid-migration on our CRM fields and Sales is changing stages. Integrations are fragile. If your prioritization depends on CRM hygiene, we\u2019re not in a great place.",
+      "link": "https://www.onyx.app/9747792-20"
+    },
+    {
+      "text": "Irene Shen: That makes sense. Issue_Tracker can run with partial CRM data, but the \u201cbusiness impact\u201d weighting is strongest when the CRM is clean. If the CRM is in flux, we could frame an initial pilot around support efficiency\u2014dedupe, clustering, and a simple frequency-based ranking\u2014without the heavy CRM weighting. Would that be more realistic?",
+      "link": "https://www.onyx.app/9747792-21"
+    },
+    {
+      "text": "Leah Wheeler: Maybe, but then we\u2019re not really testing the thing you\u2019re pitching. We already have a rough sense of frequency. Our bigger pain is cross-team decision making, and I\u2019m not convinced a score solves that.",
+      "link": "https://www.onyx.app/9747792-22"
+    },
+    {
+      "text": "Irene Shen: The score doesn\u2019t replace decision making\u2014it makes the inputs explicit and ties them to evidence. But if the organization isn\u2019t ready to agree on the inputs, it can feel like friction. We\u2019ve seen success when there\u2019s an executive sponsor who wants a consistent prioritization method. Do you have that kind of sponsorship right now?",
+      "link": "https://www.onyx.app/9747792-23"
+    },
+    {
+      "text": "Leah Wheeler: Not really. Leadership wants \u201cbetter visibility,\u201d but they don\u2019t want to arbitrate weighting debates. And I can\u2019t be the referee for Product versus Support versus Sales.",
+      "link": "https://www.onyx.app/9747792-24"
+    },
+    {
+      "text": "Irene Shen: Understood. Given that, it may be premature to push for a buying decision today. If it helps, I can send a lightweight pilot plan that doesn\u2019t require executive sponsorship\u2014something like: pick 20 high-volume issue themes, cluster from Zendesk, link to Jira, and run the CSM subscription + notification history for just your top 10 accounts. But I don\u2019t want to force it if the org context isn\u2019t right.",
+      "link": "https://www.onyx.app/9747792-25"
+    },
+    {
+      "text": "Leah Wheeler: I appreciate that. I think we\u2019re going to pause for now. The prioritization disputes you described\u2014that\u2019s basically our daily reality, and I don\u2019t see us agreeing on a model in the next quarter. If you can send the pilot plan, I\u2019ll keep it on file, but I can\u2019t commit to moving forward.",
+      "link": "https://www.onyx.app/9747792-26"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fair, Leah. I\u2019ll send a concise pilot outline and a sample of what \u201cexplainable\u201d scoring looks like, so you can evaluate it when timing is better. Before we wrap, is there any specific blocker\u2014security, integration workload, pricing\u2014that would change the equation, or is it mainly the internal readiness?",
+      "link": "https://www.onyx.app/9747792-27"
+    },
+    {
+      "text": "Leah Wheeler: Mainly readiness and bandwidth. Integration workload is a concern too, but even if it were turnkey, we\u2019re still not aligned enough to benefit.",
+      "link": "https://www.onyx.app/9747792-28"
+    },
+    {
+      "text": "Irene Shen: Got it. I\u2019ll follow up with the plan and we can revisit in a couple months if things stabilize. Thanks again for being direct\u2014this was helpful.",
+      "link": "https://www.onyx.app/9747792-29"
+    },
+    {
+      "text": "Leah Wheeler: Thanks, Irene. Talk soon.",
+      "link": "https://www.onyx.app/9747792-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "leah_wheeler@yarrowgate_investment.onyx.app"
+    }
+  ]
+}

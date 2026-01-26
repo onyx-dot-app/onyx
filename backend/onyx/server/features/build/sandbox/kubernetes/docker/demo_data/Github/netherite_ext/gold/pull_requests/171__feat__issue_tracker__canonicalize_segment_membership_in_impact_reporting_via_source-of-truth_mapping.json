@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#171",
+  "semantic_identifier": "171: feat: Issue_Tracker: Canonicalize segment membership in impact reporting via source-of-truth mapping",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-31",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "171",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "14",
+    "labels": [],
+    "created_at": "2025-08-31",
+    "updated_at": "2025-08-31",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nAdds a segment canonicalization layer to Issue_Tracker\u2019s impact-reporting pipeline so segment membership is computed from a single selected \u201csource of truth\u201d (CRM or Customer_Analyzer), rather than mixing identifiers/definitions at aggregation time.\n\n### What changed\n- Introduced a `SegmentCanonicalizer` used by the impact-reporting pipeline prior to customer/revenue aggregation.\n- Normalizes incoming segment identifiers/names to a canonical key (case/whitespace/alias handling) and resolves them through an explicit mapping derived from the GOLD-179 source-of-truth decisions.\n- Computes segment membership by querying only the configured source system (CRM or Customer_Analyzer) for each canonical segment.\n- Added explicit handling for unmapped/ambiguous segments:\n  - Marks them as `unknown/mismatched` in the impact report output.\n  - Excludes them from canonical aggregation to avoid silently combining different segment definitions.\n\n### Implementation notes\n- Added a mapping/config layer that ties canonical segment keys to:\n  - the chosen source system (per segment, or global default if configured)\n  - the source-specific segment identifier\n- Updated the impact aggregation step to consume canonicalized memberships instead of raw segment fields.\n- Added logging/telemetry for unknown/mismatched segments to aid follow-up mapping cleanup.\n\n### User-visible behavior\n- Impact reports now use consistent segment membership based on the selected source of truth.\n- If a segment is not mapped, the report will surface it as `unknown/mismatched` rather than producing blended results.\n\n### Testing\n- Added unit tests for canonicalization (alias normalization, source selection, membership computation).\n- Added coverage for unmapped segments to ensure they are flagged and not aggregated.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#171"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

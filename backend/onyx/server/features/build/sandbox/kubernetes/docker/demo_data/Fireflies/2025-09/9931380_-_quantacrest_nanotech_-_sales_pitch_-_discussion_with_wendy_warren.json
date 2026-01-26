@@ -1,0 +1,145 @@
+{
+  "id": "FIREFLIES_9931380",
+  "semantic_identifier": "9931380 - Quantacrest Nanotech - sales_pitch - Discussion with Wendy Warren",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-04 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-04 00:00:00",
+    "duration_min": "20"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "9931380 - Quantacrest Nanotech - sales_pitch - Discussion with Wendy Warren",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Wendy\u2014Camila Vega here. Thanks for taking a few minutes. I work with revenue teams that are trying to get more predictable forecasts and cleaner pipeline execution without ripping out Salesforce or changing how reps work day to day. Is now still okay for a quick overview?",
+      "link": "https://www.onyx.app/9227067-1"
+    },
+    {
+      "text": "Wendy Warren: Yes, I\u2019ve got about five minutes. What are you calling about?",
+      "link": "https://www.onyx.app/9227067-2"
+    },
+    {
+      "text": "Camila Vega: Perfect. The product is called Sales_Accelerator. It\u2019s a lightweight execution layer that sits on top of your existing CRM and turns what you already track\u2014stages, activities, meeting cadence\u2014into two things: more accurate, explainable forecasting, and automated \u201cwhat to fix next\u201d guidance so the pipeline stays healthy week to week.",
+      "link": "https://www.onyx.app/9227067-3"
+    },
+    {
+      "text": "Wendy Warren: We already have Salesforce dashboards and forecast categories. What\u2019s different?",
+      "link": "https://www.onyx.app/9227067-4"
+    },
+    {
+      "text": "Camila Vega: Totally fair. Dashboards tell you what happened; Sales_Accelerator focuses on what\u2019s likely to happen and why\u2014then it nudges the team toward the specific actions that change the outcome.  \nOn forecasting, we combine your CRM stage data with activity signals like: when was the last touch, is a next meeting actually scheduled, how long deals typically sit in each stage, and whether the opp is aging beyond your benchmarks. Then we generate commit/best-case/pipeline views and call out the drivers\u2014so it\u2019s explainable, not a black box.",
+      "link": "https://www.onyx.app/9227067-5"
+    },
+    {
+      "text": "Wendy Warren: Explainable sounds nice, but my issue is reps don\u2019t maintain hygiene. Forecasts drift because stages aren\u2019t updated and next steps aren\u2019t logged.",
+      "link": "https://www.onyx.app/9227067-6"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly the use case where we see quick wins. One of the most common workflows is a manager running weekly pipeline hygiene automatically. Instead of you or your ops team chasing people, the system flags the common forecast killers: missing next steps, stale opps, and single-threaded deals\u2014where it\u2019s clear only one contact is engaged and risk is rising.  \nThen for reps, it generates an ordered task queue\u2014like \u201cyour top 10 fixes that will most improve forecast health.\u201d So the team isn\u2019t just told \u201cclean up CRM,\u201d they\u2019re told \u201cthese specific opportunities need a next meeting scheduled\u201d or \u201cthis deal is stage-aged; either advance it or requalify.\u201d",
+      "link": "https://www.onyx.app/9227067-7"
+    },
+    {
+      "text": "Wendy Warren: Okay. How does it know what\u2019s \u201cstale\u201d for us? Our cycles vary by segment.",
+      "link": "https://www.onyx.app/9227067-8"
+    },
+    {
+      "text": "Camila Vega: Great question. We benchmark against your historical cycle times by segment, rep, and source\u2014so \u201cstale\u201d for enterprise isn\u2019t \u201cstale\u201d for mid-market. You get stage conversion and slippage diagnostics too, so you can see patterns like \u201ctechnical evaluation is where deals sit 30% longer than expected\u201d or \u201cthis rep\u2019s stage 2-to-3 conversion is below baseline.\u201d  \nAnd then the forecast view lets you drill into \u201cwhat\u2019s driving the number\u201d: stage age, last touch, next meeting scheduled, and historical win rate for similar deals.",
+      "link": "https://www.onyx.app/9227067-9"
+    },
+    {
+      "text": "Wendy Warren: We\u2019ve tried tools that claim forecast accuracy, but leadership loses trust if it doesn\u2019t match what reps commit.",
+      "link": "https://www.onyx.app/9227067-10"
+    },
+    {
+      "text": "Camila Vega: Completely. We don\u2019t replace rep judgment; we augment it with a second, consistent system of record that\u2019s grounded in observable signals. You still keep your forecast categories, but Sales_Accelerator shows where the risk is hiding and what assumptions are inflating the commit.  \nFor example, if an opp is marked commit but hasn\u2019t had a customer meeting in 21 days and there\u2019s no next step scheduled, the system surfaces that as a driver. It\u2019s not saying \u201cyou\u2019re wrong,\u201d it\u2019s giving you the evidence to ask the right questions in forecast review.",
+      "link": "https://www.onyx.app/9227067-11"
+    },
+    {
+      "text": "Wendy Warren: How heavy is the implementation? We don\u2019t have bandwidth for a long revops project.",
+      "link": "https://www.onyx.app/9227067-12"
+    },
+    {
+      "text": "Camila Vega: It\u2019s designed to be light. Because it sits on top of Salesforce/HubSpot rather than replacing it, we start with your existing fields and activity data. Most teams begin with two things: forecasting plus the weekly hygiene alerts and rep task queue.  \nIf you already use something like Customer_Analyzer for fit scoring, Sales_Accelerator can optionally weight forecasts using fit tier\u2014so you can run scenarios like, \u201cIf we add 20 SQLs in ICP Tier 1, what\u2019s the expected impact?\u201d But that\u2019s optional; you can start without it.",
+      "link": "https://www.onyx.app/9227067-13"
+    },
+    {
+      "text": "Wendy Warren: We do have an ICP model, but we don\u2019t currently use it in forecasting. Scenario planning sounds interesting, though.",
+      "link": "https://www.onyx.app/9227067-14"
+    },
+    {
+      "text": "Camila Vega: Exactly\u2014scenario planning is a clean way to connect \u201cwhat we\u2019re going to do\u201d with \u201cwhat we should expect.\u201d It helps with planning conversations like, \u201cAre we short because volume is low, because we\u2019re pursuing lower-fit deals, or because deals are slipping in one stage?\u201d  \nAnd the nice part is you can see it by segment/rep/source\u2014so you can pinpoint whether the gap is pipeline coverage, quality, or execution.",
+      "link": "https://www.onyx.app/9227067-15"
+    },
+    {
+      "text": "Wendy Warren: If we did this, who typically uses it day to day? I don\u2019t want another dashboard nobody opens.",
+      "link": "https://www.onyx.app/9227067-16"
+    },
+    {
+      "text": "Camila Vega: Day to day, reps live in the ordered task queue and the deal risk alerts\u2014because it tells them what to do next, not just what\u2019s wrong. Managers use the weekly hygiene view and the forecast drivers in 1:1s and pipeline calls. Sales ops usually configures the benchmarks and keeps an eye on slippage patterns, but it\u2019s not a tool that requires ops to babysit it.",
+      "link": "https://www.onyx.app/9227067-17"
+    },
+    {
+      "text": "Wendy Warren: What would you need from us to show whether it\u2019s a fit?",
+      "link": "https://www.onyx.app/9227067-18"
+    },
+    {
+      "text": "Camila Vega: For a fuller call, I\u2019d want to understand three things at Quantacrest Nanotech:  \n1) How you run forecasting today\u2014cadence, categories, and where it breaks down.  \n2) What your \u201cdefinition of stale\u201d is by segment, and whether activity data is reliably logged.  \n3) Your top pipeline hygiene issues\u2014missing next steps, stage aging, single-threading, or something else.  \nThen I can show a demo tailored to those workflows\u2014forecast drivers, the hygiene alerts, and the rep top-10 task queue.",
+      "link": "https://www.onyx.app/9227067-19"
+    },
+    {
+      "text": "Wendy Warren: That sounds reasonable. I\u2019m especially interested in the rep queue if it actually reduces the nagging.",
+      "link": "https://www.onyx.app/9227067-20"
+    },
+    {
+      "text": "Camila Vega: That\u2019s the goal\u2014less nagging, more targeted action. If you\u2019re open to it, let\u2019s schedule a 30-minute working session next week. I can walk you through how the hygiene alerts get generated, what the top-10 queue looks like for a rep, and how the forecast view explains \u201cwhy\u201d behind commit vs best-case.",
+      "link": "https://www.onyx.app/9227067-21"
+    },
+    {
+      "text": "Wendy Warren: Sure. Next week is good. Tuesday morning or Thursday afternoon?",
+      "link": "https://www.onyx.app/9227067-22"
+    },
+    {
+      "text": "Camila Vega: Thursday afternoon works on my end. How about 2:30 PM your time?",
+      "link": "https://www.onyx.app/9227067-23"
+    },
+    {
+      "text": "Wendy Warren: 2:30 works. Send the invite and include a brief agenda.",
+      "link": "https://www.onyx.app/9227067-24"
+    },
+    {
+      "text": "Camila Vega: Will do. I\u2019ll send a calendar invite for Thursday at 2:30 with a short agenda\u2014forecast drivers, weekly pipeline hygiene automation, and the rep top-10 fixes queue. Thanks, Wendy\u2014looking forward to it.",
+      "link": "https://www.onyx.app/9227067-25"
+    },
+    {
+      "text": "Wendy Warren: Thanks, Camila. Talk then.",
+      "link": "https://www.onyx.app/9227067-26"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "wendy_warren@quantacrest_nanotech.onyx.app"
+    }
+  ]
+}

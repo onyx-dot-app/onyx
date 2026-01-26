@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_4286484",
+  "semantic_identifier": "Birch & Beam Architects",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-05-20 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "4286484",
+    "domain": "birch_&_beam_architects.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Birch & Beam Architects\nDomain: birch_&_beam_architects.onyx.app",
+      "link": "https://www.onyx.app/71439"
+    },
+    {
+      "text": "Contact: Diego Arnold\nEmail: diego_arnold@birch_&_beam_architects.onyx.app",
+      "link": "https://www.onyx.app/79118"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

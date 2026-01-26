@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#5",
+  "semantic_identifier": "5: feat: Filter lifecycle mapping errors from forecasting & lifecycle analytics",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-28",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "5",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "10",
+    "labels": [],
+    "created_at": "2025-06-28",
+    "updated_at": "2025-06-28",
+    "closed_at": "2025-07-20"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR updates forecasting and lifecycle-based analytics aggregations to use only canonical lifecycle values and to exclude any records flagged with lifecycle mapping errors.\n\nChanges:\n- Aggregation queries/pipelines now explicitly require a valid canonical lifecycle stage before including a record in:\n  - stage-based rollups\n  - lifecycle conversion rates\n  - slippage/signals derived from lifecycle movement\n- Records with mapping error flags (e.g., unmapped CRM stage, missing required mapping fields) are dropped from lifecycle/forecasting inputs rather than falling back to raw CRM stage names.\n- Removed/disabled any fallback logic that previously coerced unknown stages into analytics dimensions.\n\nTests:\n- Added regression tests covering mixed inputs (mapped + unmapped/mis-mapped stages) to assert:\n  - unmapped/error records are excluded from rollups and rate calculations\n  - canonical-only grouping (no raw CRM stage leakage)\n  - metrics remain stable when noisy records are present\n\nUser impact:\n- Lifecycle and forecasting metrics may decrease slightly in environments with unmapped/mis-mapped stages, reflecting removal of previously included noisy records. Fixing stage mappings will restore expected coverage.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#5"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

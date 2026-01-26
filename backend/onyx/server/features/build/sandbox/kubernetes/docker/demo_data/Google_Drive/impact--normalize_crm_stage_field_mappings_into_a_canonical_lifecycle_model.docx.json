@@ -1,0 +1,30 @@
+{
+  "id": "249b5446b8e4488596962eb96533410e",
+  "semantic_identifier": "Impact--Normalize CRM stage/field mappings into a canonical lifecycle model.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-25",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Normalize CRM stage/field mappings into a canonical lifecycle model.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature introduces a canonical **Sales_Accelerator lifecycle model**\u2014a standard set of stages and required fields that becomes the single source of truth for how we represent pipeline progression across all customers. On top of that, we\u2019ll add a normalization layer that translates each connected CRM\u2019s custom stage names and field labels into the canonical schema, ensuring that \u201cthe same meaning\u201d is represented consistently even when CRMs are heavily customized.\n\nThe primary impact is materially improved **data consistency and comparability** across instances. Downstream analytics (reports, dashboards, cohort views, forecasting inputs, and any lifecycle-based KPIs) will consume only canonical values, eliminating fragmented metrics caused by synonymous or mismatched stages (e.g., \u201cQualified\u201d vs \u201cSQL\u201d vs \u201cDiscovery\u201d) and reducing the need for one-off query logic per CRM or customer.\n\nOperationally, supporting **per-instance overrides** and persisting mappings enables scalable onboarding and ongoing maintenance: customers can map once, update when their CRM changes, and everything downstream stays stable. Persisted mappings also provide traceability for audits/debugging (\u201cwhy did this deal show as Stage X?\u201d) and reduce time spent by engineering and data teams diagnosing lifecycle discrepancies.\n\nFinally, adding **validation and enforcement** (flagging unmapped stages/fields and blocking analytics jobs when lifecycles are partially mapped) shifts failures earlier and makes data quality explicit. This will reduce silent metric corruption and increase trust in analytics outputs, at the cost of occasionally pausing analytics for newly connected or modified CRM instances until mappings are completed\u2014an intentional tradeoff in favor of correctness and reliability.",
+      "link": "https://www.onyx.app/66651"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

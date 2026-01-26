@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#139",
+  "semantic_identifier": "139: feat: Add scheduled evaluator to compute and persist normalized alert trigger events",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-19",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "139",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "76",
+    "labels": [],
+    "created_at": "2026-01-19",
+    "updated_at": "2026-01-19",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR implements the backend evaluator that periodically checks customer/segment signals against the trigger conditions defined in GOLD-40 and writes normalized alert events for downstream delivery/UI.\n\nChanges:\n- Introduces an `AlertEvaluator` job/service that runs on a schedule and evaluates:\n  - fit drift triggers\n  - segment composition/change triggers\n  - emerging high-fit cohort triggers\n- Adds a normalized alert event model/schema with: `type`, `entity_type`, `entity_id`, `evaluated_at`/`event_ts`, computed metrics payload, threshold values, and evaluation window metadata.\n- Persists generated alert events to the alerts store for consumption by downstream notifiers/UI.\n- Implements idempotency/deduping:\n  - deterministic dedupe key derived from (trigger type, entity, window start/end, threshold version)\n  - UPSERT/unique constraint-based write path to prevent repeated alerts for the same condition within the configured window\n- Handles missing/low-volume data per spec:\n  - enforces minimum sample size / data availability checks\n  - records a skipped/no-op evaluation outcome without emitting an alert event when inputs are insufficient\n\nOperational notes:\n- The evaluator is safe to run multiple times (idempotent) and can be backfilled by re-running historical windows without creating duplicates.\n- Alert events are normalized and stored only; delivery/notification remains the responsibility of downstream services.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#139"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "9e4c5b16c9814a3e8b6f166c30fb96dc",
+  "semantic_identifier": "Design--Implement upstream sync: create/update Jira/Linear issues from Issue_Tracker issue object.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Implement upstream sync: create/update Jira/Linear issues from Issue_Tracker issue object.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will implement first-class \u201cupstream sync\u201d from an internal `Issue_Tracker` issue/theme to an external tracker issue (Jira or Linear). When a user enables sync for an `Issue_Tracker` issue, the system will create a corresponding external issue in a selected project/team and store a stable mapping that includes provider (Jira/Linear), external issue key/id, external URL, and the `Issue_Tracker` issue id. Subsequent changes to the internal issue will be pushed upstream, and the UI will display the external key/URL and current sync status (healthy, needs attention, disabled).\n\nSync scope includes: title, description, priority, labels, customer impact summary, and backlinks (a link to the `Issue_Tracker` issue, and optionally references to related objects as agreed). We will normalize internal fields into provider-specific payloads via an adapter layer (`JiraAdapter`, `LinearAdapter`) to avoid leaking provider differences into core logic (e.g., Jira priority ids vs. Linear priority enums, label constraints, rich-text/markdown differences). Backlinks will be appended in a consistent, easily-detectable section to support idempotent updates.\n\nIdempotency will be achieved by persisting the external id and using \u201cupsert\u201d semantics: if mapping exists, perform update; otherwise create and then persist mapping. For update operations, we will include a deterministic \u201csource fingerprint\u201d (e.g., hash of the rendered outbound payload) to avoid unnecessary writes and reduce churn; additionally, when writing backlinks/impact sections we will replace only the bounded, marked section rather than rewriting the entire description. A background job/queue will handle outbound sync with retries and backoff; manual \u201cSync now\u201d will enqueue an immediate job and surface the last attempt result.\n\nError handling will be explicit and user-facing: missing permissions, invalid project/team, field configuration mismatches, and rate limits will be mapped to actionable messages (e.g., \u201cJira project ABC not found or you don\u2019t have Create Issue permission\u201d). Failures will not break the internal edit flow; they will set the mapping status to \u201cerror\u201d with details and next steps, and allow users to re-authenticate, pick a different project, or disable sync. All provider calls will be wrapped with structured logging and metrics (create/update success rate, error categories, latency) to support operational visibility.",
+      "link": "https://www.onyx.app/74081"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

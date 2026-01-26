@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_4273279",
+  "semantic_identifier": "Deepwell Aurora Drilling",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-12-08 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "4273279",
+    "domain": "deepwell_aurora_drilling.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Deepwell Aurora Drilling\nDomain: deepwell_aurora_drilling.onyx.app",
+      "link": "https://www.onyx.app/52695"
+    },
+    {
+      "text": "Contact: Adam Medina\nEmail: adam_medina@deepwell_aurora_drilling.onyx.app",
+      "link": "https://www.onyx.app/31840"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

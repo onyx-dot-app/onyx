@@ -1,0 +1,30 @@
+{
+  "id": "a60a53df02fd4ffeb7db99a287bb541a",
+  "semantic_identifier": "Impact--Fix issue_prioritization input metrics: ensure frequency/severity are derived consistently per issue theme.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-01",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Fix issue_prioritization input metrics: ensure frequency/severity are derived consistently per issue theme.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change stabilizes issue prioritization by standardizing how `frequency` and `severity` inputs are derived for each issue theme before they reach the scoring service. Today, upstream pipelines provide inconsistent values (e.g., frequency sometimes counts conversations and other times unique customers; severity may be normalized differently or defaulted inconsistently), which causes the same underlying issue theme to receive different priority scores over time.\n\nThe feature impact is improved determinism and trust in priority rankings: a given issue theme should produce the same `frequency` and `severity` for a given dataset, regardless of ingestion path or minor upstream changes. As a result, PMs, support, and engineering can rely on the prioritization list as a stable decision tool, reducing churn in roadmaps and minimizing time spent investigating \u201cwhy did this jump?\u201d score changes.\n\nOperationally, this introduces a single, explicit counting rule for `frequency` (e.g., choosing one canonical unit such as unique customers) and a single normalization + defaulting policy for `severity`. It also clarifies ownership boundaries: upstream metric derivation becomes the source of truth, while the scoring service can assume consistent inputs and focus solely on score calculation.\n\nTo protect this behavior long-term, we will add unit and integration test coverage that asserts deterministic metric outputs per issue theme and catches regressions when ingestion, deduping, or source mappings evolve. Success is measured by reduced score volatility for unchanged data, fewer manual investigations into prioritization changes, and consistent ranking outcomes across identical time windows and sources.",
+      "link": "https://www.onyx.app/84765"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

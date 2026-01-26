@@ -1,0 +1,30 @@
+{
+  "id": "fe179a5897f64010bb03bfec1c7f5077",
+  "semantic_identifier": "Design--Add immutable access audit logs for customer signal and PII reads/exports.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-12",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add immutable access audit logs for customer signal and PII reads/exports.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add server-side, immutable audit logging for any read access to customer signals that may contain PII. This includes API read endpoints, UI views that display raw underlying records, and any export/download actions (CSV/JSON, bulk export, report download). The goal is to provide a complete, tamper-resistant trail suitable for compliance investigations while keeping runtime overhead low and avoiding logging sensitive payloads themselves.\n\n### Events & schema\nWe will emit an `AuditLogEvent` on the server for each qualifying access. Each event includes: `workspace_id`, `actor_type` (user/service), `actor_id`, `timestamp`, `action_type` (e.g., `SIGNAL_READ_API`, `SIGNAL_VIEW_UI`, `SIGNAL_EXPORT`), `resource_type`/`resource_id` (signal/record/export job), and `request_context` (`ip`, `user_agent`, `request_id`, optional `api_key_id`/`session_id`). We will explicitly not store PII values or record contents; only identifiers and metadata. Instrumentation points will be added to: (1) API handlers after authorization and before response, (2) backend endpoints that power \u201craw record\u201d UI views, and (3) export job creation and download endpoints, ensuring both \u201crequested export\u201d and \u201cdownloaded export\u201d can be captured if needed.\n\n### Storage (immutable / append-only)\nAudit events will be written to an append-only datastore (e.g., a dedicated `audit_logs` table or external log store) with immutability enforced by design: insert-only permissions for the application writer, no update/delete paths in application code, and restricted DB roles that prevent modification. Where supported, we will add database-level constraints/policies (separate schema, restricted role, and optional retention/partitioning by time) to reduce operational risk. Events will be written asynchronously via a small internal queue/buffer to minimize request latency, with best-effort guarantees and fallback to synchronous write for exports if required by compliance.\n\n### Retrieval endpoints & access control\nWe will expose admin-only APIs to retrieve audit logs scoped to a workspace, with basic filters: time range, actor, action type, and resource identifiers. Access will be limited to workspace admins (and optionally a higher \u201csecurity admin\u201d role), with pagination and stable sorting by timestamp. Retrieval endpoints will return only the audit metadata fields and will themselves be audited (admin viewing audit logs) to provide traceability of who accessed the audit trail.",
+      "link": "https://www.onyx.app/46182"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

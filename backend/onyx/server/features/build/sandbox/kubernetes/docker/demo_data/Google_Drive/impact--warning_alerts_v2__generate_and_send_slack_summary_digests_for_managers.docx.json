@@ -1,0 +1,30 @@
+{
+  "id": "d4c30961ecac4fab8f16bc655dd46855",
+  "semantic_identifier": "Impact--Warning alerts v2: Generate and send Slack summary digests for managers.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Warning alerts v2: Generate and send Slack summary digests for managers.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds Slack \u201csummary digest\u201d messages for Warning alerts v2 so routed managers receive a single, consolidated view of recent risk activity instead of a stream of individual notifications. Each digest will group alerts by account and opportunity, making it easier to scan what\u2019s changing across a manager\u2019s book of business and quickly identify where attention is needed.\n\nWithin a configurable digest window, repeated triggers for the same underlying issue will be de-duped to reduce noise while preserving signal. For each grouped item, the digest will include the most important decision-making context: alert type, the associated risk signal, and the last updated timestamp so managers can tell what\u2019s new versus already in-flight.\n\nTo drive action, each digest entry will include deep links back to the relevant account/opportunity in Sales_Accelerator/CRM, enabling managers to jump directly from Slack to the source record for follow-up. The Slack formatting should prioritize readability (clear sections, consistent structure, and compact summaries) so the message remains useful even when many alerts are present.\n\nThis ticket specifically covers digest generation and Slack message formatting; it assumes recipient routing and manager targeting are handled by GOLD-92. Impact will be measured by reduced alert fatigue (fewer individual pings), improved engagement with Warning alerts (higher click-through to CRM), and faster manager response times to emerging risk.",
+      "link": "https://www.onyx.app/68895"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

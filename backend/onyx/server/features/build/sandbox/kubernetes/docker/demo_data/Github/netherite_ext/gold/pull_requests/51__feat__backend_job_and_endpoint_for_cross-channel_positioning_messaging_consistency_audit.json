@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#51",
+  "semantic_identifier": "51: feat: Backend job + endpoint for cross-channel positioning messaging consistency audit",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-21",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "51",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "4",
+    "num_files_changed": "67",
+    "labels": [],
+    "created_at": "2026-01-21",
+    "updated_at": "2026-01-21",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements a scheduled backend audit that evaluates messaging consistency across channels (website copy, sales deck snippets, email templates) against the latest approved positioning recommendations for the same segment.\n\nKey changes:\n- Adds a new audit job that:\n  - Fetches the latest approved positioning recommendations per segment.\n  - Pulls current messaging assets per channel/segment.\n  - Normalizes content and compares against recommended value props, differentiators, and proof points.\n  - Computes a per-channel divergence score (missing items + altered items) and includes a lightweight breakdown by category.\n- Persists time-series audit results (segment, channel, score, missing/altered lists, timestamps) to support trend tracking.\n- Exposes an internal read-only endpoint to query recent/flagged inconsistencies by segment/channel and threshold (intended for follow-on UI/alerting work).\n- Adds structured logging for each audit run (run id, counts, highest divergence) to aid debugging/monitoring.\n\nOperational notes:\n- Job can be run on-demand (manual trigger) and via scheduler; safe to re-run (writes a new point-in-time record per run).\n- Endpoint is internal-only; no user-facing UI changes included in this PR.\n- Default divergence threshold is configurable via env/config to tune sensitivity without code changes.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#51"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

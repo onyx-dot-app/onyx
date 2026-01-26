@@ -1,0 +1,30 @@
+{
+  "id": "47efa9f7ce01477798299c3ce7bc7f35",
+  "semantic_identifier": "Design--[GOLD-XX]: Add in-CRM copy/insert actions for Guidance outputs (no copy/paste workflow).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-10",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--[GOLD-XX]: Add in-CRM copy/insert actions for Guidance outputs (no copy/paste workflow).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nToday, reps view Guidance outputs inside the CRM-embedded panel but must manually copy/paste into CRM fields, creating friction and reducing adoption. This feature adds in-panel \u201cCopy\u201d and \u201cInsert into CRM\u201d actions on each guidance block (e.g., next action, risk alert, positioning snippet) so reps can apply generated text without leaving Salesforce/HubSpot. The goal is to make using Guidance a one-click workflow that\u2019s fast, contextual to the current record, and reliably communicative about success/failure.\n\n### UX / Interaction Design\nEach guidance block will render a compact action bar with: **Copy** (copies the block text to clipboard) and **Insert into CRM** (writes the block text into a CRM-native artifact). On \u201cCopy,\u201d the user sees an inline confirmation state (e.g., \u201cCopied\u201d) that clears after a short delay. On \u201cInsert,\u201d we open a small target picker if multiple destinations are supported for that CRM (e.g., Salesforce: Task vs Note; HubSpot: Note vs Activity) and then show deterministic feedback: success toast with a link to the created record when available, or an error toast with a human-readable message and retry option.\n\n### Technical Approach / Integration\nThe Guidance panel already knows the current CRM record context (Account/Opportunity IDs). We will extend the embedded app to call a backend \u201cCRM Write\u201d API with `{crmType, recordContext, guidanceBlockType, text, targetType}`. The backend will encapsulate provider-specific logic (Salesforce/HubSpot adapters), handle auth (existing OAuth tokens), and create the appropriate CRM object (e.g., Salesforce Task/Note related to the current Account/Opportunity; HubSpot Note/Engagement associated to the current object). We will implement idempotency keys per insert attempt to avoid duplicates on retries, and return structured errors for common cases (missing permissions, missing record association, token expired).\n\n### Scope, Guardrails, and Success Criteria\nIn scope: per-block copy-to-clipboard, per-block insert into supported CRM targets, context validation (only enable insert when record context is present), and clear success/error feedback. Out of scope for v1: inserting into arbitrary CRM fields, templating/variable prompts, or bulk-inserting multiple blocks. We\u2019ll track usage metrics (copy clicks, insert attempts, insert success rate, time-to-success) and aim for a high success rate and reduced \u201cmanual paste\u201d behavior. Rollout will be behind a feature flag per CRM type, starting with Salesforce, then HubSpot once target mappings are validated.",
+      "link": "https://www.onyx.app/36020"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

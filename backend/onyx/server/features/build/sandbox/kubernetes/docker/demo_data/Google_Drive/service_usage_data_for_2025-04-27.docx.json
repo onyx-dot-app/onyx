@@ -1,0 +1,28 @@
+{
+  "id": "52ce41e089fc409f8ba919821b3738d5",
+  "semantic_identifier": "Service Usage Data for 2025-04-27.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Service Usage Data for 2025-04-27.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "[{'account': 'Vividcedar Marketing', 'value': 0.2810098879402853, 'day': 12}, {'account': 'Jadecircuit Electronics', 'value': 1.8848201288538975, 'day': 23}]",
+      "link": "https://www.onyx.app/14064"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

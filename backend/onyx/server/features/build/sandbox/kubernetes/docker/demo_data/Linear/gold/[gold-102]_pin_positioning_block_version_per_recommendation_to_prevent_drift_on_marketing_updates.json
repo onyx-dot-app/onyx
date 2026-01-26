@@ -1,0 +1,30 @@
+{
+  "id": "2610151",
+  "semantic_identifier": "[GOLD-102]: Pin positioning block version per recommendation to prevent drift on Marketing updates",
+  "title": "Pin positioning block version per recommendation to prevent drift on Marketing updates",
+  "source": "linear",
+  "doc_updated_at": "2025-08-01",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jason_morris",
+      "email": "jason_morris@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2025-08-01"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Update messaging/recommendation generation to always use an explicit positioningBlockVersionId (from stored Customer_Analyzer versions) rather than resolving to \u201clatest\u201d at runtime. Persist the chosen version id on the generated recommendation/message record so re-renders, edits, and follow-up sequences remain consistent even after Marketing publishes a new version. If a requested version is missing/unavailable, fail with a clear error and fallback to the last known pinned version (no silent auto-upgrade).",
+      "link": "https://www.onyx.app/28723"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

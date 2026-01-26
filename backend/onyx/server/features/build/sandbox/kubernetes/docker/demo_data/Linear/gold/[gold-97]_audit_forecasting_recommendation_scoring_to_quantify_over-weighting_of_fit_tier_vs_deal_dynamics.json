@@ -1,0 +1,30 @@
+{
+  "id": "4295210",
+  "semantic_identifier": "[GOLD-97]: Audit forecasting/recommendation scoring to quantify over-weighting of fit tier vs deal dynamics",
+  "title": "Audit forecasting/recommendation scoring to quantify over-weighting of fit tier vs deal dynamics",
+  "source": "linear",
+  "doc_updated_at": "2025-06-02",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-06-02"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add instrumentation and a lightweight analysis script to log score contributions for fit tier and each deal-dynamics signal (procurement stage, competition, internal alignment) in forecasting and best-next-action outputs. Produce a report over recent accounts/opportunities showing correlation to outcomes and identifying cases where high-fit still yields high scores despite negative deal dynamics. This data will define target reweighting thresholds and regression test cases for subsequent tickets.",
+      "link": "https://www.onyx.app/60711"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_6178106",
+  "semantic_identifier": "6178106 - Oceanmint Beverages - sales_pitch - Discussion with Eugene Ray",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-01 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-01 00:00:00",
+    "duration_min": "28"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "6178106 - Oceanmint Beverages - sales_pitch - Discussion with Eugene Ray",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Eugene\u2014Mina Park here. Thanks for taking a few minutes. Did I catch you at an okay time?",
+      "link": "https://www.onyx.app/9907249-1"
+    },
+    {
+      "text": "Eugene Ray: Hey Mina, yeah, I\u2019ve got about five minutes before my next meeting. What\u2019s up?",
+      "link": "https://www.onyx.app/9907249-2"
+    },
+    {
+      "text": "Mina Park: Perfect. I\u2019ll keep it tight. I\u2019m calling because a lot of beverage brands end up with the same problem: customer issues are coming in from Zendesk, chats, and even account notes\u2014then the team tries to translate that into Jira, and it turns into a lot of duplicate triage and \u201cis this the same thing?\u201d debates. We built Issue_Tracker to sit between support and engineering and basically standardize the \u201cissue object\u201d so you can see the real themes, impacted customers, and status in one place. Curious\u2014how are you handling that today at Oceanmint?",
+      "link": "https://www.onyx.app/9907249-3"
+    },
+    {
+      "text": "Eugene Ray: It\u2019s\u2026 messy. Zendesk is the source, but a lot of context lives in Salesforce and in CSM notes. Then product gets a Jira ticket, but it\u2019s hard to tell how widespread something really is. We end up chasing squeaky wheels.",
+      "link": "https://www.onyx.app/9907249-4"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly the gap Issue_Tracker is designed for. The first thing it does is ingest the raw inputs\u2014tickets, chats, emails, even summarized call notes\u2014then it automatically deduplicates and clusters them using semantic similarity plus rules you can set, like product area, platform, severity, or keywords. So instead of 80 separate tickets about \u201cpromo code not applying,\u201d you see one cluster with volume, top phrases, representative examples, and links back to each source record in Zendesk.",
+      "link": "https://www.onyx.app/9907249-5"
+    },
+    {
+      "text": "Eugene Ray: Okay, so it groups them. We\u2019ve tried tagging, but it\u2019s inconsistent.",
+      "link": "https://www.onyx.app/9907249-6"
+    },
+    {
+      "text": "Mina Park: Totally\u2014tags rely on humans being perfect. The clustering is automated, but also controllable: you get naming suggestions for clusters, you can merge or split clusters with guardrails, and each cluster keeps structured fields like affected product area and suspected root cause category\u2014bug vs UX vs missing feature vs integration. The impact is you stop underestimating issues that look small individually but are actually huge across many tickets.",
+      "link": "https://www.onyx.app/9907249-7"
+    },
+    {
+      "text": "Eugene Ray: That would help. One challenge is product doesn\u2019t trust support labels, and support doesn\u2019t know what engineering is doing.",
+      "link": "https://www.onyx.app/9907249-8"
+    },
+    {
+      "text": "Mina Park: Exactly. The second piece is the linkage downstream. Issue_Tracker doesn\u2019t replace Jira\u2014when you connect a cluster to a Jira ticket, it maintains that relationship and keeps status consistent across teams. So CSMs and support can see \u201cthis cluster is tied to JIRA-312, in progress,\u201d and product can see the evidence and customer examples without digging through Zendesk.",
+      "link": "https://www.onyx.app/9907249-9"
+    },
+    {
+      "text": "Eugene Ray: What about follow-up? We\u2019ve had cases where we fix something and only a few customers get notified.",
+      "link": "https://www.onyx.app/9907249-10"
+    },
+    {
+      "text": "Mina Park: Great point\u2014that\u2019s actually one of the most common use cases. CSMs can subscribe specific accounts\u2014like a strategic account or a whole segment\u2014to a relevant cluster. Then when the linked Jira ticket ships, Issue_Tracker records the release milestone and creates a history trail: which customers were impacted, which ones were notified, when, and with what message. So you can run consistent follow-up instead of relying on someone remembering to circle back.",
+      "link": "https://www.onyx.app/9907249-11"
+    },
+    {
+      "text": "Eugene Ray: That\u2019s interesting. We\u2019ve had painful moments where sales is mid-renewal and we\u2019re scrambling for a status update.",
+      "link": "https://www.onyx.app/9907249-12"
+    },
+    {
+      "text": "Mina Park: Yep\u2014and even if you\u2019re not doing anything fancy, just having a defensible, searchable history of \u201cwhy we prioritized this,\u201d \u201cwho it affected,\u201d and \u201cwhat the current status is\u201d reduces that scramble. Out of curiosity, how many tickets are you handling per week, roughly?",
+      "link": "https://www.onyx.app/9907249-13"
+    },
+    {
+      "text": "Eugene Ray: Support is probably 600\u2013800 a week. A bunch are repeats, especially around integrations and promotions.",
+      "link": "https://www.onyx.app/9907249-14"
+    },
+    {
+      "text": "Mina Park: That\u2019s a perfect volume for clustering to pay off quickly. Usually the first win is visibility: within a week or two, teams realize, \u201cOh, this is actually three big themes, not 200 random tickets,\u201d and they stop duplicating triage. Second win is customer comms: CSMs know exactly who to update when a fix ships.",
+      "link": "https://www.onyx.app/9907249-15"
+    },
+    {
+      "text": "Eugene Ray: How heavy is the setup? I don\u2019t want another six-month implementation.",
+      "link": "https://www.onyx.app/9907249-16"
+    },
+    {
+      "text": "Mina Park: Understood. For a first pass, it\u2019s typically lightweight: connect Zendesk, connect Jira, map a few rules like product areas or severity terms, and decide who owns merge/split decisions for clusters. You can start with one queue or one product line, prove it out, then expand. The goal is to get value without boiling the ocean.",
+      "link": "https://www.onyx.app/9907249-17"
+    },
+    {
+      "text": "Eugene Ray: Who usually owns it\u2014support ops, product ops?",
+      "link": "https://www.onyx.app/9907249-18"
+    },
+    {
+      "text": "Mina Park: It varies, but the sweet spot is a partnership: Support Ops or CX owns the inbound sources and workflows; Product Ops or an engineering triage lead owns the downstream mapping to Jira. The point is that the system keeps everyone aligned without requiring everyone to live in the same tool.",
+      "link": "https://www.onyx.app/9907249-19"
+    },
+    {
+      "text": "Eugene Ray: Sounds reasonable. Can it handle cases where one customer issue actually includes multiple problems?",
+      "link": "https://www.onyx.app/9907249-20"
+    },
+    {
+      "text": "Mina Park: Yes\u2014that\u2019s where the merge/split workflow helps. The model will suggest clusters, but if something is too broad, you split it into sub-issues with guardrails so you don\u2019t create chaos. And because everything stays linked to source records, you can always click back to see the exact customer language and context.",
+      "link": "https://www.onyx.app/9907249-21"
+    },
+    {
+      "text": "Eugene Ray: Got it. What would you need from me to see if this fits?",
+      "link": "https://www.onyx.app/9907249-22"
+    },
+    {
+      "text": "Mina Park: The best next step is a quick 30-minute working session where we look at: your Zendesk structure, how Jira tickets are created today, and one or two recent \u201cfire drill\u201d issues\u2014like an integration outage or promo problem. Then I can show you what clustering would have produced and how the subscription-and-notify workflow would look for your CSM team.",
+      "link": "https://www.onyx.app/9907249-23"
+    },
+    {
+      "text": "Eugene Ray: I\u2019m open to that. I\u2019d want our Support Ops manager involved, and maybe someone from product.",
+      "link": "https://www.onyx.app/9907249-24"
+    },
+    {
+      "text": "Mina Park: Perfect. If you tell me who those two people are, I\u2019ll send a calendar invite with a simple agenda and a couple questions ahead of time\u2014nothing heavy. Do you have time next week\u2014Tuesday or Thursday?",
+      "link": "https://www.onyx.app/9907249-25"
+    },
+    {
+      "text": "Eugene Ray: Thursday morning is usually better. Maybe 10:00?",
+      "link": "https://www.onyx.app/9907249-26"
+    },
+    {
+      "text": "Mina Park: Thursday at 10:00 works. I\u2019ll send an invite for 30 minutes. Before I do\u2014one last quick check: if you could solve just one thing in this process, would it be reducing duplicate triage, or getting consistent customer follow-up when engineering ships?",
+      "link": "https://www.onyx.app/9907249-27"
+    },
+    {
+      "text": "Eugene Ray: Honestly, consistent follow-up. It hits retention and makes us look more coordinated.",
+      "link": "https://www.onyx.app/9907249-28"
+    },
+    {
+      "text": "Mina Park: Great\u2014then I\u2019ll tailor the session around the \u201csubscribe accounts to clusters\u201d workflow and the release milestone notifications, and we\u2019ll also show how clustering reduces the noise feeding into that. I\u2019ll email you shortly\u2014who should I include besides you?",
+      "link": "https://www.onyx.app/9907249-29"
+    },
+    {
+      "text": "Eugene Ray: Add Priya in Support Ops and Dan from Product Ops. I\u2019ll forward you their emails.",
+      "link": "https://www.onyx.app/9907249-30"
+    },
+    {
+      "text": "Mina Park: Perfect. Thanks Eugene\u2014appreciate the time. I\u2019ll get that on the calendar for Thursday at 10:00 and include a short pre-read.",
+      "link": "https://www.onyx.app/9907249-31"
+    },
+    {
+      "text": "Eugene Ray: Sounds good, Mina. Talk Thursday.",
+      "link": "https://www.onyx.app/9907249-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "eugene_ray@oceanmint_beverages.onyx.app"
+    }
+  ]
+}

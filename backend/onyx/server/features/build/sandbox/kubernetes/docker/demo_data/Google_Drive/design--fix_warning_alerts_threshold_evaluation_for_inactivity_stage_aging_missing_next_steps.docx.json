@@ -1,0 +1,30 @@
+{
+  "id": "433119d5d4b045f59f0d3eb090a5474d",
+  "semantic_identifier": "Design--Fix warning_alerts threshold evaluation for inactivity/stage aging/missing next steps.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-26",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix warning_alerts threshold evaluation for inactivity/stage aging/missing next steps.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe currently trigger threshold-based `warning_alerts` off three CRM-derived signals: inactivity (days since last activity), stage aging (days since stage entered), and missing next steps (days since next-step was cleared or became empty). These alerts are firing inconsistently due to divergent computation paths, mixed time bases (server now vs client now vs CRM timestamps), and unsafe handling of null/partial data during sync. This change standardizes the computation so all alerts evaluate deterministically from the same normalized CRM snapshot and a single \u201cnow\u201d reference.\n\n### Proposed approach\nIntroduce a shared \u201cwarning evaluation\u201d module (or service function) that computes canonical derived fields per opportunity/contact: `inactivity_days`, `stage_age_days`, and `missing_next_step_days`. All three are computed using the same `evaluation_time` (UTC \u201cnow\u201d supplied by the evaluator) and the same timezone-normalized timestamp parsing rules (treat all CRM timestamps as UTC or explicitly convert from the stored timezone; no implicit local-time usage). Each derived field will have strict null semantics: if prerequisite timestamps are missing (e.g., no activity history), return `null` (or a sentinel) and define alert behavior explicitly (e.g., treat `null` as \u201cunknown\u201d and do not fire, or fall back to `created_at` if that\u2019s desired\u2014choose one and document). Missing-next-step uses an explicit \u201cbecame empty at\u201d timestamp if available; otherwise it derives from last known transition to empty in our change log, avoiding assumptions from the current field value alone.\n\n### Sync delay / partial update handling\nTo prevent double-counting or flapping during CRM sync, evaluate alerts from a single consistent record version: run evaluation only after ingest applies a complete snapshot for the entity (or gate on `last_synced_at` freshness and required fields presence). Derived metrics should be computed from immutable event timestamps (activity created time, stage-enter time, next-step-cleared time) rather than \u201clast updated\u201d times that can change due to unrelated edits. If we receive partial updates, we keep prior canonical timestamps unless the update includes a newer authoritative event; this makes metrics monotonic and avoids alert resets caused by non-authoritative payloads.\n\n### Testing and rollout\nAdd unit tests around the evaluator to cover: (1) no activity history (null handling and expected alert outcome), (2) stage changed today (stage age = 0 and does not trip thresholds), (3) next-step cleared (missing-next-step starts counting from the clear time and stops when repopulated), plus DST/timezone boundaries and \u201cnow\u201d determinism via injected `evaluation_time`. Include regression tests for sync edge cases (partial update missing stage-enter timestamp should not overwrite prior value). Roll out behind a feature flag with shadow evaluation logging (old vs new computed days/trigger decisions) for a small cohort, then fully switch once mismatches are understood and resolved.",
+      "link": "https://www.onyx.app/72668"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

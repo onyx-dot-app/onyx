@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#13",
+  "semantic_identifier": "13: feat: Add regression coverage + monitoring to cap fit-tier impact under negative deal dynamics",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-24",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "13",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "10",
+    "num_files_changed": "84",
+    "labels": [],
+    "created_at": "2025-08-24",
+    "updated_at": "2025-08-24",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements GOLD-97 guardrails to prevent fit-tier from overpowering procurement/competition/internal-alignment risk signals.\n\nChanges:\n- Regression test suite\n  - Adds scenario-based fixtures derived from the GOLD-97 audit report to represent high-fit accounts with negative deal dynamics (procurement friction, strong competition, poor internal alignment).\n  - Adds assertions that:\n    - forecasting score is penalized/capped when any negative deal-dynamics signal is present, regardless of fit-tier.\n    - best-next-action rankings demote \u201caggressive\u201d actions and prefer risk-mitigation actions when negative signals are active.\n    - component-level contributions respect configured caps (fit-tier cannot exceed threshold share of total when negative signals are on).\n  - Tests are deterministic and run in CI; failures surface which component exceeded thresholds.\n\n- Scoring instrumentation + monitoring\n  - Emits score breakdown metrics (total score + per-component contributions, including fit-tier and each deal-dynamics risk component) with tags for workspace/model-version.\n  - Adds dashboards showing contribution distributions and a focused view for \u201cnegative deal dynamics present\u201d cohorts.\n  - Adds alerts that trigger when fit-tier contribution exceeds configured thresholds under negative deal dynamics for a workspace over a rolling window.\n\n- Configuration\n  - Introduces/updates centralized thresholds (caps/penalties) used by both tests and monitoring so audits can adjust limits without code changes.\n\nOperational notes:\n- No scoring logic changes beyond adding observability hooks; this PR enforces expected behavior via tests and alerts to catch regressions early.\n- Alert thresholds default to the GOLD-97-derived values and can be overridden per environment/workspace.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#13"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_1202513",
+  "semantic_identifier": "Glimmersage Health",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-17 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "1202513",
+    "domain": "glimmersage_health.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Glimmersage Health\nDomain: glimmersage_health.onyx.app",
+      "link": "https://www.onyx.app/82413"
+    },
+    {
+      "text": "Contact: Christopher Burke\nEmail: christopher_burke@glimmersage_health.onyx.app",
+      "link": "https://www.onyx.app/53081"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

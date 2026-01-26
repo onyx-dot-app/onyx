@@ -1,0 +1,30 @@
+{
+  "id": "1020906",
+  "semantic_identifier": "[GOLD-146]: Issue History: Add read API for issue_history timeline (ordered, paginated, permissioned)",
+  "title": "Issue History: Add read API for issue_history timeline (ordered, paginated, permissioned)",
+  "source": "linear",
+  "doc_updated_at": "2025-04-28",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-04-28"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement backend endpoints/service methods to fetch an Issue\u2019s `issue_history` events in a stable chronological order with pagination/cursor support for UI timeline rendering. Ensure events are returned with normalized actor metadata and minimal, consistent payload shapes per event type (status, priority, merge/split, note, external link). Apply access control consistent with Issue visibility and add basic tests for ordering, pagination, and redaction where applicable.",
+      "link": "https://www.onyx.app/63487"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

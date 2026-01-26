@@ -1,0 +1,30 @@
+{
+  "id": "4f4c09b38fcd498cb448129fbf404cb9",
+  "semantic_identifier": "Impact--Add setup validation for required CRM fields with guided remediation.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-09",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add setup validation for required CRM fields with guided remediation.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a guided setup validation step to ensure customers have the minimum viable CRM data foundation before we turn on high-trust experiences like forecasting, next-best-action, and risk alerts. During onboarding (and on demand later), we will validate that required canonical fields\u2014such as stage, close date, amount, owner, and last activity/updated date\u2014are both correctly mapped and sufficiently populated across relevant records.\n\nThe validation will not just detect issues; it will provide clear, actionable remediation. If a required field isn\u2019t mapped or is poorly populated, the UI will suggest viable alternate fields discovered in prior field-discovery work (e.g., GOLD-67), recommend enabling CRM field history tracking when needed for time-based signals, and allow admins to mark certain fields as optional with explicit warnings about which product capabilities will degrade.\n\nFrom a product impact perspective, this directly improves outcome quality and customer trust by preventing \u201cgarbage in, garbage out\u201d scenarios that lead to inaccurate forecasts, noisy alerts, and low adoption. It also reduces support burden by catching common setup errors early, standardizing troubleshooting steps, and making it easier for admins to self-serve fixes rather than escalating to engineering or solutions teams.\n\nTo balance user progress with data integrity, the flow will only block completion when truly critical fields are missing (i.e., those required to compute core metrics or power critical workflows). All validation checks and outcomes will be persisted for auditability and debugging, enabling faster issue resolution, clearer customer communication, and better internal visibility into where onboarding friction occurs.",
+      "link": "https://www.onyx.app/59718"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

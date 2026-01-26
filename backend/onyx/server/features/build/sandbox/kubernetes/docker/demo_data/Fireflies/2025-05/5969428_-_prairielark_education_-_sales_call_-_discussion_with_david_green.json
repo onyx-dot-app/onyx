@@ -1,0 +1,193 @@
+{
+  "id": "FIREFLIES_5969428",
+  "semantic_identifier": "5969428 - Prairielark Education - sales_call - Discussion with David Green",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-05-16 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-05-16 00:00:00",
+    "duration_min": "34"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-05"
+      ],
+      "year_month": "2025-05",
+      "meeting_title": "5969428 - Prairielark Education - sales_call - Discussion with David Green",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi David, good to see you again. Last time you mentioned you\u2019re getting hit with repeat \u201csame problem\u201d tickets from different districts and it\u2019s hard to tell what\u2019s actually widespread versus just noisy. I wanted to focus today on Issue_Tracker\u2014specifically the issue clustering piece\u2014and how it ties back to protecting late-stage deals.",
+      "link": "https://www.onyx.app/3310916-1"
+    },
+    {
+      "text": "David Green: Hey Megan. Yeah, that\u2019s still the pain. Support says it\u2019s everywhere, product says it\u2019s isolated, and sales is stuck in the middle trying to explain what\u2019s going on to prospects.",
+      "link": "https://www.onyx.app/3310916-2"
+    },
+    {
+      "text": "Megan Foster: Exactly. So Issue_Tracker sits between Zendesk or Intercom and your internal tools like Jira, and it standardizes an \u201cissue object\u201d\u2014a theme with evidence, impacted customers, and linked source conversations. The most immediate win is issue_clustering: it automatically groups related tickets, chats, and call-note summaries into deduped clusters, so you stop triaging the same thing ten times under ten different labels.",
+      "link": "https://www.onyx.app/3310916-3"
+    },
+    {
+      "text": "David Green: Okay. We already tag tickets and we have macros. The problem is we don\u2019t trust the tags, and we still end up with spreadsheets when leadership asks \u201chow big is this?\u201d",
+      "link": "https://www.onyx.app/3310916-4"
+    },
+    {
+      "text": "Megan Foster: That\u2019s a common pattern. Clustering gives you a defensible view: the cluster shows top phrases, representative examples, suggested naming, and it keeps the links back to each Zendesk ticket or Intercom thread. If someone questions \u201cis this real,\u201d you can open the cluster and see the underlying evidence\u2014who said it, when, and from which channel.",
+      "link": "https://www.onyx.app/3310916-5"
+    },
+    {
+      "text": "David Green: How much manual effort are we talking? Because if this becomes another tool that needs constant grooming, it\u2019ll die.",
+      "link": "https://www.onyx.app/3310916-6"
+    },
+    {
+      "text": "Megan Foster: Fair. The default workflow is mostly automated, but with guardrails: it proposes merges and splits, and you can set rules by product area, platform, severity keywords\u2014so you\u2019re not mixing \u201cmobile login\u201d with \u201cSIS integration,\u201d for example. Usually a support lead or ops person spends a short weekly pass reviewing the clusters that are ambiguous; the rest runs on autopilot.",
+      "link": "https://www.onyx.app/3310916-7"
+    },
+    {
+      "text": "David Green: The weekly pass sounds like \u201csomeone\u2019s job now.\u201d Also, our org is sensitive to anything that looks like an algorithm telling them what\u2019s important. That came up with a previous vendor.",
+      "link": "https://www.onyx.app/3310916-8"
+    },
+    {
+      "text": "Megan Foster: I want to separate two things. Clustering is about deduping and making volume visible\u2014less about telling you what to do. The prioritization layer can be configured, but we don\u2019t need to lead with that today. For Prairielark, the use case you flagged was deal risk: sales wants a clean answer when a late-stage prospect hits a known issue. That\u2019s where linking an opportunity to an issue cluster helps\u2014sales sees current status, internal notes, and safe-to-say language, instead of chasing product in Slack.",
+      "link": "https://www.onyx.app/3310916-9"
+    },
+    {
+      "text": "David Green: Linking opportunities sounds great in theory. In practice, we\u2019ve been burned. People argue about severity versus frequency. And if the score is a black box, product will ignore it and create their own list.",
+      "link": "https://www.onyx.app/3310916-10"
+    },
+    {
+      "text": "Megan Foster: Totally. When teams feel it\u2019s a black box, they revert to parallel spreadsheets. What we do is make the weighting explicit: you can show the components\u2014frequency, affected segment, revenue exposure\u2014so if leadership wants to adjust ARR weighting for enterprise districts, you do it transparently.",
+      "link": "https://www.onyx.app/3310916-11"
+    },
+    {
+      "text": "David Green: But even if it\u2019s \u201ctransparent,\u201d it still becomes a political debate every quarter. And right now we\u2019re trying to reduce process overhead, not add another forum where support and product argue.",
+      "link": "https://www.onyx.app/3310916-12"
+    },
+    {
+      "text": "Megan Foster: Understood. If the goal is fewer debates, one approach is to treat Issue_Tracker as the single source of evidence, not the single source of priority. So: clustering produces the facts\u2014what\u2019s being reported, by whom, how often, what it\u2019s tied to\u2014and your existing process decides priority. Then later, if you want, you can layer in impact scoring.",
+      "link": "https://www.onyx.app/3310916-13"
+    },
+    {
+      "text": "David Green: That might be more acceptable. But I\u2019m still worried about accuracy. Education customers describe the same issue in wildly different terms. If the clustering is off, it\u2019ll either undercount or lump unrelated stuff together.",
+      "link": "https://www.onyx.app/3310916-14"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly why we use semantic similarity instead of pure keyword matching, and why there\u2019s a merge/split workflow. If two clusters are actually the same root cause\u2014say \u201cgrade passback failing\u201d and \u201cSIS sync error\u201d\u2014the system will suggest a merge based on overlapping phrases and linked components, but your team approves it. And if it lumps unrelated issues, you split it and the model learns from those decisions.",
+      "link": "https://www.onyx.app/3310916-15"
+    },
+    {
+      "text": "David Green: You\u2019re saying \u201cthe model learns,\u201d but we\u2019ve heard that before. What happens when it\u2019s wrong for months and we make decisions on bad groupings?",
+      "link": "https://www.onyx.app/3310916-16"
+    },
+    {
+      "text": "Megan Foster: Practically, we recommend starting with a narrow scope. For example: pick one product area\u2014maybe SIS integrations since that\u2019s where districts get loud\u2014and run clustering only there for 30 days. You validate: do the clusters match what your support lead already knows? Are you seeing duplicates collapse? If it\u2019s not accurate enough, you don\u2019t roll it out broadly.",
+      "link": "https://www.onyx.app/3310916-17"
+    },
+    {
+      "text": "David Green: That pilot sounds fine. But procurement is asking us to consolidate tooling, not add. We already have Zendesk, Jira, Salesforce, and a couple analytics tools. Another layer is a hard sell internally.",
+      "link": "https://www.onyx.app/3310916-18"
+    },
+    {
+      "text": "Megan Foster: I hear you. The argument isn\u2019t \u201canother tool,\u201d it\u2019s reducing the hidden tool\u2014spreadsheets, Slack threads, and ad hoc triage meetings. Issue_Tracker becomes the connective tissue: Zendesk stays Zendesk, Jira stays Jira, but the \u201cissue object\u201d and its history stop being scattered.",
+      "link": "https://www.onyx.app/3310916-19"
+    },
+    {
+      "text": "David Green: Our leadership will ask: why can\u2019t Zendesk do this? Or why can\u2019t we just standardize Jira tickets better?",
+      "link": "https://www.onyx.app/3310916-20"
+    },
+    {
+      "text": "Megan Foster: Zendesk is great for individual tickets, but it doesn\u2019t create a persistent cluster with business context and links to downstream engineering work in a standardized way. Jira is great for delivery tasks, but it\u2019s not where you want to store customer evidence and the \u201cwhat are customers saying across channels\u201d picture. Issue_Tracker is the layer in between.",
+      "link": "https://www.onyx.app/3310916-21"
+    },
+    {
+      "text": "David Green: Okay, but bringing this back to sales\u2014our sales team wants something simple. \u201cIs this fixed? What do I tell the district?\u201d If they have to learn a new system or interpret clusters, they won\u2019t use it.",
+      "link": "https://www.onyx.app/3310916-22"
+    },
+    {
+      "text": "Megan Foster: That\u2019s why the workflow is: sales doesn\u2019t manage clusters. They search the issue by phrase, or it gets linked automatically when an opportunity mentions a known theme. Then they see: status, ETA notes if available, and approved language that product/support agreed is safe to communicate. It\u2019s less interpretation, more \u201chere\u2019s the current truth.\u201d",
+      "link": "https://www.onyx.app/3310916-23"
+    },
+    {
+      "text": "David Green: And who writes the \u201capproved language\u201d? Because that becomes another bottleneck and another debate.",
+      "link": "https://www.onyx.app/3310916-24"
+    },
+    {
+      "text": "Megan Foster: Typically product or support ops drafts it once per cluster, and it\u2019s versioned. But you can keep it lightweight\u2014two sentences: what\u2019s happening and what the workaround is. The point is preventing each AE from inventing their own narrative.",
+      "link": "https://www.onyx.app/3310916-25"
+    },
+    {
+      "text": "David Green: This is all reasonable, but I\u2019m not convinced it won\u2019t turn into a governance project. We\u2019re stretched. Also, our data is messy\u2014ticket fields aren\u2019t consistent, and sometimes issues come in through email that never makes it into Zendesk.",
+      "link": "https://www.onyx.app/3310916-26"
+    },
+    {
+      "text": "Megan Foster: If inputs aren\u2019t centralized, clustering can\u2019t see them. We can ingest emails and call-note summaries too, but yes\u2014garbage in, garbage out. We\u2019d need to confirm your channel coverage. If a lot of high-severity issues bypass Zendesk, the clusters will be incomplete.",
+      "link": "https://www.onyx.app/3310916-27"
+    },
+    {
+      "text": "David Green: That\u2019s the reality. And honestly, we\u2019re mid-migration on support workflows. I\u2019m hesitant to layer something on top until that stabilizes.",
+      "link": "https://www.onyx.app/3310916-28"
+    },
+    {
+      "text": "Megan Foster: That makes sense. Given that, would it be helpful if we scoped a very small proof\u2014one channel, one area, minimal governance\u2014just to validate clustering accuracy? Or is timing the bigger blocker?",
+      "link": "https://www.onyx.app/3310916-29"
+    },
+    {
+      "text": "David Green: Timing is big. And I\u2019m also getting pressure to show immediate ROI, not \u201cmaybe fewer spreadsheets.\u201d If it takes a quarter to prove out, I\u2019ll lose sponsorship.",
+      "link": "https://www.onyx.app/3310916-30"
+    },
+    {
+      "text": "Megan Foster: Understood. The fastest measurable outcome is reduction in duplicate triage effort and faster response for sales on known issues. But if you can\u2019t run even a 30-day focused pilot because of the migration, it may be better to revisit once your support workflows settle.",
+      "link": "https://www.onyx.app/3310916-31"
+    },
+    {
+      "text": "David Green: Yeah, I think that\u2019s where we are. I don\u2019t want to start something new, then have to rewire it in two months. The concept is good, but I can\u2019t commit to a buying process right now.",
+      "link": "https://www.onyx.app/3310916-32"
+    },
+    {
+      "text": "Megan Foster: That\u2019s fair. Why don\u2019t we do this: you tell me when your migration milestone hits\u2014maybe end of quarter\u2014and I\u2019ll send a short plan for a constrained pilot: SIS integrations only, Zendesk only, with success criteria around dedupe rate and time-to-answer for sales. If it\u2019s not compelling quickly, we stop.",
+      "link": "https://www.onyx.app/3310916-33"
+    },
+    {
+      "text": "David Green: That would be okay. Send me the pilot outline and what you\u2019d need from our side\u2014time, data access, who owns what.",
+      "link": "https://www.onyx.app/3310916-34"
+    },
+    {
+      "text": "Megan Foster: Will do. And David, before we wrap\u2014are there any internal objections you already anticipate so I can address them in the outline? Sounds like governance overhead and data completeness are the big ones.",
+      "link": "https://www.onyx.app/3310916-35"
+    },
+    {
+      "text": "David Green: Yes. And skepticism about any scoring becoming a political football. If you keep it focused on evidence and clustering, it\u2019ll land better.",
+      "link": "https://www.onyx.app/3310916-36"
+    },
+    {
+      "text": "Megan Foster: Got it. I\u2019ll keep the plan strictly on clustering and the evidence trail, with optional scoring later. I\u2019ll send that over this afternoon.",
+      "link": "https://www.onyx.app/3310916-37"
+    },
+    {
+      "text": "David Green: Thanks, Megan. Let\u2019s regroup later\u2014probably after we get through the migration.",
+      "link": "https://www.onyx.app/3310916-38"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "david_green@prairielark_education.onyx.app"
+    }
+  ]
+}

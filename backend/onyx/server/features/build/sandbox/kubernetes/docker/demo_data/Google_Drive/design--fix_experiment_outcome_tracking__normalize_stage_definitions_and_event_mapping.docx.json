@@ -1,0 +1,30 @@
+{
+  "id": "fcc57041865e4177a58963aaf189ca59",
+  "semantic_identifier": "Design--Fix experiment outcome tracking: normalize stage definitions and event mapping.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix experiment outcome tracking: normalize stage definitions and event mapping.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We\u2019re seeing inconsistent experiment outcome metrics (win rate, pipeline velocity, conversion) because \u201cstage\u201d concepts are encoded differently across sources: CRM stages use one set of names and semantics, while product instrumentation emits different event names and sometimes different boundaries for the same funnel step. The experiment analytics layer currently relies on source-specific labels in multiple places, so the same underlying user/journey can be counted differently depending on which pipeline produced the record or which query path is used.\n\nWe will introduce a single normalization layer that maps all source-specific stages/events into a small set of canonical funnel stages (e.g., `LEAD_CREATED`, `CONTACTED`, `QUALIFIED`, `OPPORTUNITY`, `WON`, `LOST`, plus any product-specific steps we already report). This layer will be defined as versioned, centrally owned mappings keyed by source type (CRM vs product), source identifier (stage name, pipeline id, event name), and optional qualifiers (e.g., product surface, account type), returning a canonical stage and timestamp attribution rules. The mapping will be applied at ingestion time to produce a normalized fact table (or normalized columns on existing facts), and the analytics queries will be updated to use only canonical stages for all experiment outcome calculations.\n\nTo ensure stable results, we will enforce that both ingestion and query paths use the same canonical definitions: (1) ingest raw events/stages unchanged into a raw table for debugging, (2) materialize normalized records with canonical stage, canonical ordering, and deduping rules (first occurrence vs latest, stage regressions, terminal state precedence), and (3) have experiment metrics compute funnels and durations exclusively from normalized data. We will add automated validation that compares counts between raw and normalized (by source) and alerts on unmapped stages/events, plus a backfill job to normalize historical data so existing experiments become consistent.\n\nSuccess is measured by: identical metrics for a given experiment when computed from CRM-only, product-only, or combined inputs (within expected sampling/attribution differences), no \u201cunknown stage\u201d leakage above a small threshold, and reduced variance in win rate/pipeline velocity on reruns. Rollout will be guarded by a feature flag that lets us dual-run old vs normalized metrics for a subset of experiments, verify deltas, then switch the canonical path and deprecate source-specific logic once mappings are complete.",
+      "link": "https://www.onyx.app/97475"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

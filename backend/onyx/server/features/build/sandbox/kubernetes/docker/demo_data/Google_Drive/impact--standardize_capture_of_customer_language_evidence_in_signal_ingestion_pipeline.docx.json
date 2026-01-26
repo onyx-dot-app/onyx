@@ -1,0 +1,30 @@
+{
+  "id": "1989ad12386843f1a92a6b7a77a638b8",
+  "semantic_identifier": "Impact--Standardize capture of customer language/evidence in signal ingestion pipeline.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Standardize capture of customer language/evidence in signal ingestion pipeline.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change standardizes how we capture and store customer language and supporting evidence across every signal we ingest (CRM notes, surveys, support tickets, interviews, and usage annotations). Today, verbatims and \u201cproof\u201d are inconsistently represented by source, which makes it harder to reliably use customer language downstream. By introducing a consistent schema\u2014source type, timestamp, verbatim quote/snippet, and a durable link/reference to the original artifact\u2014we ensure every signal can be interpreted and rendered the same way.\n\nThe primary product impact is higher quality and traceability of the customer evidence that powers positioning generation and related insights. Consistent structure improves our ability to deduplicate, filter (e.g., by source or recency), and attribute language correctly, while the reference link makes it easy for users and internal teams to verify context and trust the output. This also sets us up to better surface \u201cwhy we believe this\u201d in the UI without building per-source logic.\n\nOperationally, this reduces brittleness in the ingestion pipeline and downstream consumers by removing one-off mappings and assumptions. It should lower maintenance cost as we add new signal sources, because new connectors will map into a known contract instead of inventing bespoke fields. It also improves data governance by making provenance a first-class field rather than an optional attribute.\n\nTo avoid regressions, we will backfill defaults for existing records where possible and ensure downstream positioning generation continues to work during rollout. Where full provenance or timestamps can\u2019t be recovered, we\u2019ll populate safe placeholders and mark records accordingly so consumers can handle them gracefully. Success looks like no breaking changes for existing users, improved consistency of verbatim/evidence display, and a measurable reduction in ingestion/consumer edge cases tied to missing or malformed evidence.",
+      "link": "https://www.onyx.app/56439"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#39",
+  "semantic_identifier": "39: fix: Fix stalled-deal follow-up rule to correctly detect upcoming meetings across CRM + calendar sources",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-14",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "39",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "68",
+    "labels": [],
+    "created_at": "2025-04-14",
+    "updated_at": "2025-04-14",
+    "closed_at": "2025-05-04"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR fixes false positives in `sales_followup_recommendations` where the stalled-deal rule was emitting \u201cno next meeting scheduled\u201d despite an upcoming meeting existing.\n\n### What changed\n- Updated the \u201cnext meeting scheduled\u201d evaluation to aggregate upcoming meetings from all synced sources:\n  - CRM events (e.g., meeting/event objects)\n  - Calendar-linked meetings (synced calendar events associated to the deal/contact)\n- Normalized event status handling so canceled and no-show events do not satisfy the \u201cnext meeting exists\u201d condition.\n- Improved robustness for partial/dirty data:\n  - Handles rescheduled meetings by selecting the earliest *valid* upcoming occurrence.\n  - Correctly compares timestamps in a consistent timezone (UTC normalization) to avoid off-by-one-day / boundary issues.\n  - Handles missing/unstable event IDs by falling back to stable matching fields (start time + external source key) when needed.\n\n### Tests added\n- Unit/integration coverage for:\n  - Rescheduled meeting (old canceled event + new future event) should not trigger alert.\n  - Timezone edge cases where local future events were previously treated as past.\n  - Missing event IDs across sources still correctly detects an upcoming meeting.\n  - Canceled/no-show-only events still trigger \u201cno next meeting scheduled.\u201d\n\n### User impact\n- Stalled-deal recommendations will stop flagging deals as missing a next meeting when a legitimate future meeting is present in synced CRM/calendar data.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#39"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

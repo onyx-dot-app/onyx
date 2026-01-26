@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_8049973",
+  "semantic_identifier": "Jetstream Vale Aviation",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-27 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "8049973",
+    "domain": "jetstream_vale_aviation.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Jetstream Vale Aviation\nDomain: jetstream_vale_aviation.onyx.app",
+      "link": "https://www.onyx.app/34526"
+    },
+    {
+      "text": "Contact: Teresa Flores\nEmail: teresa_flores@jetstream_vale_aviation.onyx.app",
+      "link": "https://www.onyx.app/13849"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

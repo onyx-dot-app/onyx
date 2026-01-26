@@ -1,0 +1,30 @@
+{
+  "id": "7420162",
+  "semantic_identifier": "[GOLD-191]: Add immutable access logs for issue objects and linked evidence",
+  "title": "Add immutable access logs for issue objects and linked evidence",
+  "source": "linear",
+  "doc_updated_at": "2026-01-16",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "kevin_sullivan",
+      "email": "kevin_sullivan@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2026-01-16"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement workspace-scoped access logging for reads/writes to issue objects, evidence snippets, and decision/status fields (including who/when/what and source IP/user agent where available). Store logs in an append-only table with retention aligned to workspace retention settings (referencing, not duplicating, GOLD-189). Expose an admin API/UI endpoint to search/filter logs by actor, issue, time range, and action for compliance review.",
+      "link": "https://www.onyx.app/29090"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

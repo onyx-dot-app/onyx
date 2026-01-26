@@ -1,0 +1,161 @@
+{
+  "id": "FIREFLIES_9790767",
+  "semantic_identifier": "9790767 - \u0915\u094d\u0935\u093e\u0902\u091f\u092e\u092e\u093f\u0924\u094d\u0930 \u091f\u0947\u0915\u094d\u0928\u094b\u0932\u0949\u091c\u0940\u091c - sales_pitch - Discussion with Maya Wheeler",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-12 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-12 00:00:00",
+    "duration_min": "21"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "9790767 - \u0915\u094d\u0935\u093e\u0902\u091f\u092e\u092e\u093f\u0924\u094d\u0930 \u091f\u0947\u0915\u094d\u0928\u094b\u0932\u0949\u091c\u0940\u091c - sales_pitch - Discussion with Maya Wheeler",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Maya, thanks for taking a few minutes. I\u2019ll keep it tight\u2014wanted to share something we\u2019re seeing work for product and support teams that are drowning in duplicate customer issues across Zendesk/Intercom and then trying to translate that into Jira.",
+      "link": "https://www.onyx.app/5247698-1"
+    },
+    {
+      "text": "Maya Wheeler: Hi James. Okay\u2014quick is good. What are you calling me about?",
+      "link": "https://www.onyx.app/5247698-2"
+    },
+    {
+      "text": "James Choi: It\u2019s a product called Issue_Tracker. It sits between your support channels and your delivery tools, and it basically turns messy inbound tickets into a standardized \u201cissue object\u201d\u2014a deduped cluster with evidence, impacted customers, and links back to the original conversations and forward into Jira or Linear. The point is: less churn triaging, and clearer prioritization tied to business impact.",
+      "link": "https://www.onyx.app/5247698-3"
+    },
+    {
+      "text": "Maya Wheeler: We already have Zendesk views and Jira tickets. We also do some tagging. What\u2019s different?",
+      "link": "https://www.onyx.app/5247698-4"
+    },
+    {
+      "text": "James Choi: Totally fair. Most teams have views, tags, and spreadsheets. Where Issue_Tracker is different is it maintains a true cluster-level history and decision trail. For example, if ten tickets are the same root problem, you don\u2019t end up with ten competing Jira tickets and five different status updates to customers. You get one evolving issue cluster that tracks merges and splits, priority changes with rationale, and the engineering work items linked to it.",
+      "link": "https://www.onyx.app/5247698-5"
+    },
+    {
+      "text": "Maya Wheeler: We\u2019re pretty disciplined about Jira. I\u2019m not sure we need another layer.",
+      "link": "https://www.onyx.app/5247698-6"
+    },
+    {
+      "text": "James Choi: That\u2019s the common reaction. The value tends to show up in the gaps between systems. Zendesk is great for conversations; Jira is great for work execution. The gap is: \u201cWhat exactly is the customer issue, how widespread is it, who does it impact, what did we promise, and how did we decide priority?\u201d Issue_Tracker\u2019s issue_history feature keeps a timeline per cluster\u2014identified, investigating, in progress, released\u2014plus who was notified and what was promised. It\u2019s audit-friendly, searchable, and prevents the usual context loss when people change roles or when issues resurface months later.",
+      "link": "https://www.onyx.app/5247698-7"
+    },
+    {
+      "text": "Maya Wheeler: We\u2019re not in a regulated space, so \u201caudit-friendly\u201d isn\u2019t a big driver. And we already send release notes and macros.",
+      "link": "https://www.onyx.app/5247698-8"
+    },
+    {
+      "text": "James Choi: Makes sense. When I say audit-friendly, I mostly mean: you can answer \u201cWhy did we deprioritize this?\u201d without digging through Slack threads and old Jira comments. The decision notes and versioned changes help product leadership avoid re-litigating the same arguments every quarter.",
+      "link": "https://www.onyx.app/5247698-9"
+    },
+    {
+      "text": "Maya Wheeler: Who\u2019s typically the owner? Support? Product? Engineering?",
+      "link": "https://www.onyx.app/5247698-10"
+    },
+    {
+      "text": "James Choi: Usually product ops or support ops owns the workflow, and product leadership uses it to prioritize. One specific use case: roadmap prioritization by weighting clusters with Customer_Analyzer fit tiers\u2014so issues impacting ICP Tier-1 customers outrank similar-volume issues coming from low-fit segments. It\u2019s a way to avoid the \u201cloudest segment wins\u201d problem.",
+      "link": "https://www.onyx.app/5247698-11"
+    },
+    {
+      "text": "Maya Wheeler: We do something like that manually\u2014our CSM team flags top accounts, and PMs take it from there. It\u2019s not perfect, but it works.",
+      "link": "https://www.onyx.app/5247698-12"
+    },
+    {
+      "text": "James Choi: If it\u2019s working, I don\u2019t want to oversell disruption. The teams that switch tend to be feeling pain from three things: duplicate issues creating noise, inconsistent customer comms because multiple people respond to the \u201csame\u201d problem, and unclear accountability for status when engineering work is spread across projects. Issue_Tracker helps by keeping the cluster linked to every source conversation and to the downstream Jira epics/tasks, so there\u2019s one canonical status.",
+      "link": "https://www.onyx.app/5247698-13"
+    },
+    {
+      "text": "Maya Wheeler: Our bigger problem is honestly capacity. Even if you tell us what matters, it doesn\u2019t give engineering more hours.",
+      "link": "https://www.onyx.app/5247698-14"
+    },
+    {
+      "text": "James Choi: Completely. We\u2019re not claiming it creates capacity. It reduces wasted motion\u2014less time merging duplicates, fewer internal escalations, fewer back-and-forths about \u201cis this new?\u201d and fewer cases where sales or CSM promises something that\u2019s not aligned with engineering status. That can protect time you already have.",
+      "link": "https://www.onyx.app/5247698-15"
+    },
+    {
+      "text": "Maya Wheeler: I get the concept, but I\u2019m cautious. We\u2019ve been burned by tools that promise \u201csingle source of truth\u201d and then become one more place to keep updated.",
+      "link": "https://www.onyx.app/5247698-16"
+    },
+    {
+      "text": "James Choi: That\u2019s a healthy caution. The way we avoid that is we don\u2019t replace Zendesk or Jira\u2014we sync and link. The issue object is derived from the inbound issues, and then it tracks the links to Jira items rather than forcing your team to re-enter everything. The issue_history timeline is built from those changes, so you can see what happened without maintaining a separate spreadsheet.",
+      "link": "https://www.onyx.app/5247698-17"
+    },
+    {
+      "text": "Maya Wheeler: Integrations always sound easy. Then there\u2019s mapping, permissions, and edge cases.",
+      "link": "https://www.onyx.app/5247698-18"
+    },
+    {
+      "text": "James Choi: True. The reason I\u2019m reaching out is to see if it\u2019s worth a deeper technical fit call\u2014not to push you into a trial today. If you\u2019re open, in a longer session we\u2019d walk through one real example: take a common cluster from your Zendesk tags, see how it would dedupe, attach impacted customers, and then show how the timeline stays consistent as Jira items move. If it doesn\u2019t fit cleanly, we\u2019ll know fast.",
+      "link": "https://www.onyx.app/5247698-19"
+    },
+    {
+      "text": "Maya Wheeler: I\u2019m not sure we have cycles for that right now. We\u2019re mid-release and also evaluating some internal changes to our support workflow.",
+      "link": "https://www.onyx.app/5247698-20"
+    },
+    {
+      "text": "James Choi: Understood. Would it help if I just sent a short one-pager on the issue_history piece and the ICP-weighted prioritization use case, and you can tell me if it\u2019s even relevant for Q1?",
+      "link": "https://www.onyx.app/5247698-21"
+    },
+    {
+      "text": "Maya Wheeler: You can send it, but I can\u2019t promise I\u2019ll get to it soon.",
+      "link": "https://www.onyx.app/5247698-22"
+    },
+    {
+      "text": "James Choi: That\u2019s fair. Before I do\u2014quick question so I don\u2019t spam you with generic info: do PMs at \u0915\u094d\u0935\u093e\u0902\u091f\u092e\u092e\u093f\u0924\u094d\u0930 \u091f\u0947\u0915\u094d\u0928\u094b\u0932\u0949\u091c\u0940\u091c currently have a clean way to see \u201ctop issues impacting Tier-1 customers\u201d without manual aggregation?",
+      "link": "https://www.onyx.app/5247698-23"
+    },
+    {
+      "text": "Maya Wheeler: It\u2019s mostly manual. But it\u2019s not our top pain point this quarter.",
+      "link": "https://www.onyx.app/5247698-24"
+    },
+    {
+      "text": "James Choi: Got it. Then I\u2019ll keep the email brief and specific\u2014one example flow and what the timeline/history gives you. If it\u2019s not a priority, no worries. Is there someone else on your side\u2014maybe support ops or product ops\u2014who would be better to evaluate tooling like this when you\u2019re ready?",
+      "link": "https://www.onyx.app/5247698-25"
+    },
+    {
+      "text": "Maya Wheeler: We don\u2019t really have a dedicated ops owner. It usually lands with me or one of the PMs, and we\u2019re stretched.",
+      "link": "https://www.onyx.app/5247698-26"
+    },
+    {
+      "text": "James Choi: That makes sense. Last thing\u2014I\u2019m not trying to force a meeting. If I send the overview, would it be okay if I check back in, say, six weeks to see if priorities shifted after the release?",
+      "link": "https://www.onyx.app/5247698-27"
+    },
+    {
+      "text": "Maya Wheeler: Sure, you can follow up. But again, we\u2019re not looking to add new tools in the near term.",
+      "link": "https://www.onyx.app/5247698-28"
+    },
+    {
+      "text": "James Choi: Understood. I appreciate the clarity. I\u2019ll send a short note with the two pieces we discussed\u2014cluster history/timeline and ICP-tier weighting for prioritization\u2014so you can skim if and when it\u2019s relevant. Thanks again, Maya.",
+      "link": "https://www.onyx.app/5247698-29"
+    },
+    {
+      "text": "Maya Wheeler: Thanks, James. Bye.",
+      "link": "https://www.onyx.app/5247698-30"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "maya_wheeler@\u0915\u094d\u0935\u093e\u0902\u091f\u092e\u092e\u093f\u0924\u094d\u0930_\u091f\u0947\u0915\u094d\u0928\u094b\u0932\u0949\u091c\u0940\u091c.onyx.app"
+    }
+  ]
+}

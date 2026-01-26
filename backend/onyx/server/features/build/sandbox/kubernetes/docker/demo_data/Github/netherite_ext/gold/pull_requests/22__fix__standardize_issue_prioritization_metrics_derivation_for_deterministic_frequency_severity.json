@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#22",
+  "semantic_identifier": "22: fix: Standardize issue_prioritization metrics derivation for deterministic frequency/severity",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-02",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "22",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "23",
+    "labels": [],
+    "created_at": "2025-05-02",
+    "updated_at": "2025-05-02",
+    "closed_at": "2025-05-05"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR fixes unstable priority scores caused by inconsistent upstream derivation of `frequency` and `severity` for issue themes.\n\nChanges:\n- Introduces a single, shared metrics derivation path used by all issue-theme ingestion sources before calling the scoring service.\n- `frequency`: standardized to count **unique customers per issue theme** within the scoring window (deduped by canonical customer identifier), eliminating source-specific counting of conversations/tickets.\n- `severity`: standardized via a single normalization function that maps all known severity inputs to a canonical scale and applies one default when missing/invalid.\n- Updates the issue_prioritization input payload builder to always supply the derived `frequency`/`severity` from the shared logic (no per-source overrides).\n\nTesting:\n- Adds unit tests for frequency dedupe rules and severity normalization/default behavior.\n- Adds an integration test covering multi-source ingestion where the same customer appears in multiple conversations, ensuring deterministic metrics and stable score inputs.\n\nNotes:\n- This is an upstream metrics-only change; scoring logic is unchanged. Existing themes may see score changes where previous inputs were inflated (conversation-counting) or had inconsistent severity defaults.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#22"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

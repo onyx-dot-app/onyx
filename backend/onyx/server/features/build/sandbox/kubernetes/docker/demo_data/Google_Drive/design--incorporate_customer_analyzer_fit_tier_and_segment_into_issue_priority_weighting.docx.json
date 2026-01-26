@@ -1,0 +1,30 @@
+{
+  "id": "6692c66fb2054a92adecea3572cff299",
+  "semantic_identifier": "Design--Incorporate Customer_Analyzer fit tier + segment into issue priority weighting.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-21",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Incorporate Customer_Analyzer fit tier + segment into issue priority weighting.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will extend the Issue_Tracker prioritization pipeline to incorporate Customer_Analyzer-provided `fit_tier` and `segment_id` as additional weighting signals when computing issue and theme priority. This change will not introduce new ICP or segmentation logic; it will only consume existing metadata already produced by Customer_Analyzer for accounts impacted by an issue. The intent is to better align prioritization with customer fit and strategic segments while preserving the current scoring model as the baseline.\n\nImplementation will add a deterministic, config-driven mapping from (`fit_tier`, `segment_id`) to one or more multipliers that apply to the existing score components (e.g., overall issue score or a designated \u201ccustomer impact\u201d component). The mapping will live in a versioned configuration file/service and be loaded at scoring time to avoid code changes for tuning. The weighting computation will aggregate impacted accounts per issue; when an issue spans multiple accounts, we will compute an effective multiplier via a deterministic policy (e.g., max, weighted average by account impact, or capped average), chosen explicitly to avoid score volatility and to remain stable across re-runs.\n\nThe pipeline must degrade gracefully: if `fit_tier` and/or `segment_id` is missing for some or all impacted accounts, or if a pair is unmapped in config, the system should fall back to the current scoring behavior (multiplier = 1.0) without failing the run. For mixed metadata (some accounts present, some missing), the aggregation policy should incorporate available values and treat missing as neutral (1.0), ensuring issues do not get artificially penalized for incomplete enrichment. All decisions should be deterministic given the same inputs and config version.\n\nFor auditability and debugging, we will persist the computed fit/segment-weighted components into the existing issue/theme score breakdown. This includes: the config version/hash used, per-issue effective multiplier, optional per-account multipliers (or summarized distribution), and the pre/post-weight scores for the affected components. This will allow downstream consumers and on-call engineers to understand why a score changed, validate configuration changes, and compare weighted vs. baseline prioritization during rollout.",
+      "link": "https://www.onyx.app/21992"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

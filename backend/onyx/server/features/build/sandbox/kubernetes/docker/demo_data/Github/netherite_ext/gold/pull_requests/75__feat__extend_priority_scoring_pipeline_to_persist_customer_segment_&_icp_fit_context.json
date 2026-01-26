@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#75",
+  "semantic_identifier": "75: feat: Extend priority scoring pipeline to persist customer segment & ICP fit context",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-13",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "75",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "4",
+    "num_files_changed": "42",
+    "labels": [],
+    "created_at": "2025-05-13",
+    "updated_at": "2025-05-13",
+    "closed_at": "2025-06-11"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR expands the priority-scoring domain model and ingestion pipeline to attach and persist customer segment and ICP-fit context on every Issue record and its aggregated Theme.\n\nImplementation details:\n- Data model: adds `customer_segment` and `icp_fit` (plus optional provenance/last_updated metadata) to the persisted Issue and Theme representations used by the scoring pipeline.\n- Ingestion/enrichment: updates the ingestion job to resolve segment/ICP using a deterministic source order:\n  1) CRM (authoritative when present)\n  2) Customer_Analyzer (fallback when CRM is missing)\n  3) `unknown` defaults when neither source yields a value\n- Conflict handling: when CRM and Customer_Analyzer disagree, CRM wins and the non-selected value is recorded in provenance for audit/debugging.\n- Theme aggregation: computes Theme-level segment/ICP using a stable aggregation strategy across member issues (e.g., majority/weighted by issue count; falls back to `unknown` when insufficient signal).\n- Persistence: writes the resolved fields into the scoring store so score calculations and UI consumers do not need to re-fetch segment/ICP on every run.\n\nOperational/user notes:\n- Existing records will receive segment/ICP during the next ingestion/backfill run; scoring will begin incorporating the persisted context once populated.\n- No API/UI behavior changes beyond the availability of the new persisted fields for downstream consumers.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#75"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#142",
+  "semantic_identifier": "142: feat: Respect Simple Mode on Alerts/Templates/Models settings with progressive disclosure of advanced options",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-20",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "142",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "21",
+    "labels": [],
+    "created_at": "2026-01-20",
+    "updated_at": "2026-01-20",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements post-onboarding Simple Mode progressive disclosure across the Alerts, Templates, and Models settings pages.\n\nKey changes:\n- Adds a workspace-mode gate to each settings page so Simple Mode renders only the recommended/core controls by default.\n- Moves non-core/advanced knobs into a dedicated, collapsed-by-default \u201cAdvanced settings\u201d section.\n- Ensures consistency on navigation and hard refresh by sourcing the current workspace mode from persisted workspace settings during page load (no reliance on in-memory UI state).\n- Preserves existing configuration when toggling modes: switching from Simple \u2192 Advanced reveals previously configured advanced fields without resetting values; switching back to Simple hides advanced fields but keeps their saved values intact.\n\nImplementation notes (high-level):\n- Introduces a shared helper/component for \u201cAdvanced settings\u201d disclosure to keep behavior consistent across the three pages.\n- Updates form rendering logic to conditionally include advanced fields while keeping them registered with the underlying model/state so values remain stable.\n- Adds/updates tests to cover: Simple Mode default view, disclosure expand/collapse, mode changes, and refresh/navigation persistence.\n\nUser impact:\n- Simple Mode users see a simplified configuration experience on Alerts/Templates/Models, with advanced options available only after explicitly expanding \u201cAdvanced settings.\u201d\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#142"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

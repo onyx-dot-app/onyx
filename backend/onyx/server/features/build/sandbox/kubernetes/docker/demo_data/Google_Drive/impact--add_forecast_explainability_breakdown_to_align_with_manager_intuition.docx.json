@@ -1,0 +1,30 @@
+{
+  "id": "7aa8aee63628497c94a287379bbccee0",
+  "semantic_identifier": "Impact--Add forecast explainability breakdown to align with manager intuition.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-15",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add forecast explainability breakdown to align with manager intuition.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "Forecast numbers that don\u2019t match manager intuition are currently a trust barrier: even when the model is right, managers can\u2019t tell what changed or why. This leads to slower adoption, more time spent reconciling forecasts manually, and less willingness to use the forecast early in the cycle when it\u2019s most valuable.\n\nAdding an explainability panel that breaks the forecast into its key contributing signals (e.g., stage, recent activity, fit score, slippage risk) makes the output legible and defensible. Showing per-signal impact alongside \u201clast updated\u201d timestamps helps managers quickly validate whether a movement is driven by real pipeline changes or stale/missing inputs, reducing the need for ad-hoc investigation.\n\nConsistency across account and opportunity views ensures the same narrative holds wherever managers work, avoiding confusion and \u201ctwo truths\u201d depending on the page. Using the exact same inputs as the forecasting model is critical to credibility\u2014managers can trace the forecast back to the model\u2019s drivers and confidently explain changes to leadership and reps.\n\nOverall impact is increased early trust and faster decision-making: managers can spot what\u2019s driving risk, coach reps on the highest-leverage actions, and intervene sooner on slipping deals. This should reduce forecast churn and escalation cycles, improving forecast adoption and the quality of pipeline conversations without requiring users to become model experts.",
+      "link": "https://www.onyx.app/78448"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

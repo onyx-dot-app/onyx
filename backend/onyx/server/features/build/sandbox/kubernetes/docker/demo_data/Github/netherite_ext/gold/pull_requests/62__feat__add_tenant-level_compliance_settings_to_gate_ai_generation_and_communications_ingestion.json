@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#62",
+  "semantic_identifier": "62: feat: Add tenant-level compliance settings to gate AI generation and communications ingestion",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-12-12",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "62",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "73",
+    "labels": [],
+    "created_at": "2025-12-12",
+    "updated_at": "2025-12-12",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements a persisted, tenant-scoped compliance configuration that centrally controls (1) whether AI content generation is permitted and (2) which communications data sources/fields are allowed for ingestion, with safe defaults for regulated environments.\n\nKey changes:\n- Data model/storage: adds a `tenant_compliance_settings` (or equivalent) persisted object keyed by `tenant_id`, including:\n  - `content_generation_enabled` boolean\n  - `allowed_comm_sources` allowlist (e.g., email/chat/call providers)\n  - `allowed_comm_fields` allowlist for ingestable fields (e.g., subject/body/attachments/metadata)\n  - `regulated_defaults` applied on create/migration (defaults to most restrictive)\n- API: introduces internal admin endpoints to read/update the settings per tenant (GET/PUT/PATCH), with validation to prevent invalid sources/fields and to ensure updates are atomic.\n- Runtime enforcement:\n  - AI generation entrypoints now check `content_generation_enabled` for the current tenant and hard-block disallowed requests with a clear error.\n  - Communications ingestion pipelines now enforce `allowed_comm_sources` and `allowed_comm_fields` at ingest time, rejecting/stripping disallowed inputs before persistence.\n- Caching/lookup: adds a lightweight settings lookup (with cache + invalidation on update) to avoid per-request DB overhead.\n\nOperational notes:\n- Existing tenants are migrated/initialized with restrictive defaults; admins can explicitly enable generation or broaden ingestion allowlists via the internal endpoint.\n- No UI changes included; the configuration is intended to be managed by internal tooling/admin API.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#62"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

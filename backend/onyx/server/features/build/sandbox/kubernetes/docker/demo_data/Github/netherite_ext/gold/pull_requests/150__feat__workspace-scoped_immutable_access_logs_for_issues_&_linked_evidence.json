@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#150",
+  "semantic_identifier": "150: feat: Workspace-scoped immutable access logs for issues & linked evidence",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2026-01-17",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "150",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "46",
+    "labels": [],
+    "created_at": "2026-01-17",
+    "updated_at": "2026-01-17",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds workspace-scoped, append-only access logging for reads and writes to Issue objects, linked Evidence snippets, and decision/status field changes.\n\n## What\u2019s included\n- **Append-only audit table** to store access events (immutable by design; no update/delete paths).\n- **Event capture** for:\n  - Issue read/write\n  - Evidence snippet read/write\n  - Decision/status field updates\n- **Recorded metadata** (where available): workspace_id, actor_id (or system), action, entity_type, entity_id, timestamp, source IP, user agent, and request/correlation id.\n- **Retention integration**: log retention is aligned to workspace retention settings by **referencing** the existing retention configuration (no duplication; relies on the retention mechanism from GOLD-189).\n- **Admin search API + UI endpoint** to query logs by:\n  - actor\n  - issue\n  - action\n  - time range\n  - (optionally) entity type/id\n\n## Implementation notes\n- Logging is implemented at the service layer used by both API and UI flows to ensure consistent coverage.\n- Writes (including decision/status updates) emit structured events after successful persistence.\n- Reads emit events on successful authorization and data fetch.\n- Indexes added to support common compliance queries (workspace_id + time, actor_id, issue_id/entity_id, action).\n\n## User-facing impact\n- Workspace admins can review access activity for compliance via the new admin endpoint/UI.\n- No behavior changes to issue/evidence operations beyond additional logging.\n\n## Migration\n- Adds a new audit log table and supporting indexes.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#150"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

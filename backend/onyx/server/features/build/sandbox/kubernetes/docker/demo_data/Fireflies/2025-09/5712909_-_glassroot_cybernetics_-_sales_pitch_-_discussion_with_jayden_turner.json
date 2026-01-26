@@ -1,0 +1,165 @@
+{
+  "id": "FIREFLIES_5712909",
+  "semantic_identifier": "5712909 - Glassroot Cybernetics - sales_pitch - Discussion with Jayden Turner",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-17 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-17 00:00:00",
+    "duration_min": "31"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "5712909 - Glassroot Cybernetics - sales_pitch - Discussion with Jayden Turner",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Jayden\u2014James Choi here. Thanks for taking a few minutes. Did I catch you at an okay time?",
+      "link": "https://www.onyx.app/3401959-1"
+    },
+    {
+      "text": "Jayden Turner: Yeah, I\u2019ve got a few minutes. What\u2019s up?",
+      "link": "https://www.onyx.app/3401959-2"
+    },
+    {
+      "text": "James Choi: Appreciate it. I\u2019m calling because we work with B2B SaaS teams that are trying to tighten up their ICP before they scale acquisition\u2014especially when there\u2019s a lot of mixed signals across CRM, onboarding, product usage, and support. At Glassroot Cybernetics, are you actively revisiting who your best-fit customers are this quarter?",
+      "link": "https://www.onyx.app/3401959-3"
+    },
+    {
+      "text": "Jayden Turner: Sort of. We\u2019ve talked about it. But we\u2019re not doing anything super formal right now.",
+      "link": "https://www.onyx.app/3401959-4"
+    },
+    {
+      "text": "James Choi: That\u2019s helpful. The product is Customer_Analyzer. The simplest way to think about it: we ingest the customer signals you already have\u2014CRM fields, onboarding surveys, usage events, support tickets, even interview notes\u2014and turn that into two outputs your team can actually act on. First, a fit score by segment so you can see who\u2019s truly aligned with your current strengths. Second, positioning recommendations that convert that into messaging\u2014value props, differentiators, proof points, and objection handling\u2014so sales and marketing are consistent.",
+      "link": "https://www.onyx.app/3401959-5"
+    },
+    {
+      "text": "Jayden Turner: Okay. We\u2019ve got some of that in documents already. What\u2019s different about this from, like, a dashboard plus some enablement docs?",
+      "link": "https://www.onyx.app/3401959-6"
+    },
+    {
+      "text": "James Choi: Fair question. Two things that tend to click for teams. One is the fit drivers: it doesn\u2019t just say \u201cSegment A is better.\u201d It shows why\u2014like \u201chigh usage of X feature,\u201d \u201cshorter time-to-value,\u201d \u201cfewer support escalations,\u201d \u201cspecific pains mentioned in onboarding,\u201d that kind of thing\u2014linked back to the underlying evidence. The second is the positioning output is structured as editable messaging blocks: website hero copy options, sales deck bullets, email openers, plus an objection-handling playbook tailored to that segment. So instead of a static doc that goes stale, you\u2019ve got segment-specific messaging that\u2019s traceable to real customer language and signals.",
+      "link": "https://www.onyx.app/3401959-7"
+    },
+    {
+      "text": "Jayden Turner: Got it. We\u2019re early-ish though, and our data is\u2026 not perfect. I\u2019m not sure we have enough volume for something like that.",
+      "link": "https://www.onyx.app/3401959-8"
+    },
+    {
+      "text": "James Choi: Totally normal at your stage. We don\u2019t need perfect data. Even a few inputs across sources can be useful\u2014like a couple dozen onboarding surveys, some CRM fields, and support tags. For the \u201cDefine and validate ICP before scaling paid acquisition\u201d use case, what we usually see is teams guessing at ICP based on a few loud wins, then paid spend amplifies the wrong segment. Customer_Analyzer helps you prioritize the segments where you have strongest evidence of fast time-to-value and best retention indicators, and then arms you with positioning that matches that segment\u2019s language.",
+      "link": "https://www.onyx.app/3401959-9"
+    },
+    {
+      "text": "Jayden Turner: We\u2019re not really scaling paid yet. And honestly, ICP is kind of obvious for us\u2014security teams in mid-market, regulated industries. We already know who we want.",
+      "link": "https://www.onyx.app/3401959-10"
+    },
+    {
+      "text": "James Choi: Makes sense. When you say it\u2019s obvious, is that based on who converts the fastest today, or more on who you want to win long-term?",
+      "link": "https://www.onyx.app/3401959-11"
+    },
+    {
+      "text": "Jayden Turner: More the latter. We\u2019ve got a point of view. Conversions are decent, but it\u2019s early. We also don\u2019t want another tool to manage.",
+      "link": "https://www.onyx.app/3401959-12"
+    },
+    {
+      "text": "James Choi: I hear you on tool fatigue. The reason teams adopt us is usually because alignment is drifting\u2014marketing is telling one story, sales is telling another, and the product story is evolving. The positioning recommendation feature is meant to reduce that churn: one place where you see \u201chere are the top use cases for Segment X, here are the differentiators that matter, here are the proof points we should collect,\u201d and then it generates practical blocks you can drop into outreach or a deck. If I asked your reps today, would they all pitch Glassroot the same way?",
+      "link": "https://www.onyx.app/3401959-13"
+    },
+    {
+      "text": "Jayden Turner: Probably not exactly. But we\u2019re small. That\u2019s kind of expected.",
+      "link": "https://www.onyx.app/3401959-14"
+    },
+    {
+      "text": "James Choi: For sure. The small-team version of that problem is it\u2019s in people\u2019s heads, and it changes week to week. One quick example: we might find your best-fit segment isn\u2019t \u201cregulated mid-market\u201d broadly, but \u201cteams with high incident volume and a specific integration stack,\u201d and then your objection handling shifts from \u201cwe\u2019re secure\u201d to \u201cwe reduce mean time to respond without ripping out your workflow.\u201d But I don\u2019t want to over-assume\u2014what\u2019s the most common objection you\u2019re getting right now?",
+      "link": "https://www.onyx.app/3401959-15"
+    },
+    {
+      "text": "Jayden Turner: Price and procurement friction. Plus \u201cwe already have something for this\u201d from legacy vendors.",
+      "link": "https://www.onyx.app/3401959-16"
+    },
+    {
+      "text": "James Choi: That\u2019s exactly where the segment-specific objection playbook helps. The tool outputs recommended responses tied to what your successful customers actually cite as value\u2014plus what proof points to collect, like specific time savings or deployment timelines. But stepping back\u2014are you personally the right owner for ICP and messaging, or is that more on your marketing lead or founder?",
+      "link": "https://www.onyx.app/3401959-17"
+    },
+    {
+      "text": "Jayden Turner: I\u2019m involved, but our founder drives most of the messaging stuff right now. I\u2019m covering a bunch of things.",
+      "link": "https://www.onyx.app/3401959-18"
+    },
+    {
+      "text": "James Choi: Got it. The way we usually do this is a 30-minute working session where we map what signals you already have, identify 2\u20133 hypothesized segments, and show what the positioning recommendations would look like\u2014hero copy, sales bullets, and objection handling\u2014so you can judge if it\u2019s useful. Would it make sense to pull your founder into that?",
+      "link": "https://www.onyx.app/3401959-19"
+    },
+    {
+      "text": "Jayden Turner: Maybe, but we\u2019re slammed. And I\u2019m not convinced we need software for this. We can just iterate in Notion and talk to customers.",
+      "link": "https://www.onyx.app/3401959-20"
+    },
+    {
+      "text": "James Choi: Totally fair\u2014customer calls and iteration are the backbone. Where teams get stuck is translating interviews and scattered notes into consistent, scalable messaging, especially right before they turn on outbound or paid. If you\u2019re not scaling those motions soon, the urgency might not be there.",
+      "link": "https://www.onyx.app/3401959-21"
+    },
+    {
+      "text": "Jayden Turner: Yeah, exactly. We\u2019ll probably revisit this in a few months. Right now we\u2019re more focused on shipping and closing a couple deals in the pipeline.",
+      "link": "https://www.onyx.app/3401959-22"
+    },
+    {
+      "text": "James Choi: Understood. Last quick question so I\u2019m not wasting your time\u2014do you have a target date for when you expect to ramp outbound or paid acquisition?",
+      "link": "https://www.onyx.app/3401959-23"
+    },
+    {
+      "text": "Jayden Turner: Not committed. Maybe Q2, maybe later. Depends how this quarter goes.",
+      "link": "https://www.onyx.app/3401959-24"
+    },
+    {
+      "text": "James Choi: That makes sense. In that case, it may be better timing to circle back closer to that ramp. If it helps, I can send a one-pager that shows what the positioning recommendation output looks like\u2014like the editable website hero copy and objection playbook\u2014so you can skim it when you\u2019re thinking about messaging.",
+      "link": "https://www.onyx.app/3401959-25"
+    },
+    {
+      "text": "Jayden Turner: Sure, you can send it. No promises I\u2019ll read it soon, though.",
+      "link": "https://www.onyx.app/3401959-26"
+    },
+    {
+      "text": "James Choi: Fair enough. What\u2019s the best email for you, Jayden?",
+      "link": "https://www.onyx.app/3401959-27"
+    },
+    {
+      "text": "Jayden Turner: Just send it to jayden@glassrootcybernetics.com.",
+      "link": "https://www.onyx.app/3401959-28"
+    },
+    {
+      "text": "James Choi: Perfect\u2014I\u2019ll send that over today. And if Q2 planning firms up, feel free to reply and we can set a quick working session with your founder. Sound good?",
+      "link": "https://www.onyx.app/3401959-29"
+    },
+    {
+      "text": "Jayden Turner: Yep. Thanks.",
+      "link": "https://www.onyx.app/3401959-30"
+    },
+    {
+      "text": "James Choi: Thanks for the time, Jayden. Talk soon.",
+      "link": "https://www.onyx.app/3401959-31"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "jayden_turner@glassroot_cybernetics.onyx.app"
+    }
+  ]
+}

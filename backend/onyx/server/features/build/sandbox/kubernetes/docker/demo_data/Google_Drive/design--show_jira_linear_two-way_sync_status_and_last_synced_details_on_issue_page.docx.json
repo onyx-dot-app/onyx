@@ -1,0 +1,30 @@
+{
+  "id": "e9705ff83ada4a15a0ae000f6caadff2",
+  "semantic_identifier": "Design--Show Jira/Linear two-way sync status + last synced details on Issue page.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Show Jira/Linear two-way sync status + last synced details on Issue page.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Goals\nWe will add a \u201cSync status\u201d panel to the Issue page for any Issue_Tracker issue that is linked to an external Jira or Linear issue. The panel will make the two-way sync behavior explicit by showing (1) the external issue key and deep link, (2) current sync state (Healthy/Error/Syncing), and (3) timestamps for `last_synced_at` (our last successful sync) and `last_external_updated_at` (last known update time on the external system). The primary goal is to reduce uncertainty (\u201cis this actually syncing?\u201d) and to allow users to resolve or self-serve common sync problems without involving engineering/support.\n\n### UX / UI\nOn the Issue page, add a right-rail (or details section) card labeled \u201cJira Sync\u201d or \u201cLinear Sync\u201d depending on the linked provider. The card contains: provider badge, external key (e.g., `PROJ-123`) as a link, status pill (Healthy/Error/Syncing), and two rows of timestamps (\u201cLast synced\u201d and \u201cLast updated in Jira/Linear\u201d). When in Error, show an actionable message and suggested next step (e.g., \u201cMissing permissions\u2014reconnect integration\u201d or \u201cIssue not found\u2014verify key/link\u201d), plus a \u201cView details\u201d affordance to expand raw error text/code for debugging.\n\n### Backend / Data / API\nWe will extend the Issue_Tracker issue object returned by the Issue page API to include a `sync_status` object when an external link exists: `{ provider, external_key, external_url, state, last_synced_at, last_external_updated_at, last_error_code, last_error_message }`. On each successful sync run (existing jobs/endpoints), we will update `last_synced_at` and store `last_external_updated_at` from the provider payload (if available). On failures, we will persist a normalized error code (e.g., `PERMISSION_DENIED`, `NOT_FOUND`, `RATE_LIMITED`, `UNKNOWN`) and a user-safe message; the UI maps codes to recommended actions.\n\n### Manual actions / Reliability\nAdd two buttons in the panel: \u201cRefresh from Jira/Linear\u201d (pull) and \u201cPush update\u201d (push). These will call the existing sync endpoints with the linked issue identifiers, return an immediate \u201cSyncing\u201d state, and then update the panel upon completion via page refresh/polling (or existing real-time mechanism if present). To prevent abuse, actions will be rate-limited per issue/user and will require appropriate permissions (same as editing/linking). Success and failure outcomes should be logged and surfaced in the panel to make retries and support triage straightforward.",
+      "link": "https://www.onyx.app/57035"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

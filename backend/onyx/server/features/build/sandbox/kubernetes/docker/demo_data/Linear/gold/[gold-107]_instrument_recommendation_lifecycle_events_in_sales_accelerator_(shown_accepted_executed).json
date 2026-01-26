@@ -1,0 +1,30 @@
+{
+  "id": "5689111",
+  "semantic_identifier": "[GOLD-107]: Instrument recommendation lifecycle events in Sales_Accelerator (shown/accepted/executed)",
+  "title": "Instrument recommendation lifecycle events in Sales_Accelerator (shown/accepted/executed)",
+  "source": "linear",
+  "doc_updated_at": "2025-11-18",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "low",
+    "created_at": "2025-11-18"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement client/server instrumentation to emit the closed-loop telemetry events when a recommendation is displayed, when a rep accepts/applies it, and when an associated action/sequence is executed. Use the canonical event schema from GOLD-106 and ensure each event includes a stable recommendation_instance_id plus required context (segment, rep, motion, account/opportunity, CRM IDs, timestamp). Add basic retry/batching and logging so dropped/invalid events can be detected without blocking core workflows.",
+      "link": "https://www.onyx.app/97018"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

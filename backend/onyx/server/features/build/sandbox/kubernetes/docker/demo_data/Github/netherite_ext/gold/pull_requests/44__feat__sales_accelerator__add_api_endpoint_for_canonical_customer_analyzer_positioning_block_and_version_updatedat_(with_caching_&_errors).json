@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#44",
+  "semantic_identifier": "44: feat: Sales_Accelerator: Add API endpoint for canonical Customer_Analyzer positioning block + version/updatedAt (with caching & errors)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-01",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "44",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "23",
+    "labels": [],
+    "created_at": "2025-06-01",
+    "updated_at": "2025-06-01",
+    "closed_at": "2025-06-14"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds a new Sales_Accelerator backend endpoint that returns the canonical Customer_Analyzer (CA) positioning block for a given account/opportunity along with versioning metadata needed for staleness checks and the \u201cReplace with latest from Customer_Analyzer\u201d action.\n\n## What\u2019s included\n- **New endpoint**: `GET /api/sales-accelerator/positioning-block`\n  - **Query params**: `accountId` or `opportunityId` (exactly one required)\n  - **Response**:\n    - `content`: latest canonical CA positioning block text/structured content\n    - `canonicalId`: stable identifier for the block (used to correlate across fetches)\n    - `version`: monotonically increasing or CA-provided version/hash for staleness comparison\n    - `lastUpdatedAt`: CA-provided last modified timestamp (ISO8601)\n    - `source`: `\"Customer_Analyzer\"`\n- **CA integration layer**\n  - Adds/extends a service client to call CA\u2019s positioning-block endpoint and map CA payload \u2192 internal response DTO.\n  - Supports lookup by `opportunityId` (preferred) and falls back to `accountId` when applicable.\n- **Brief caching to protect edit flows**\n  - Adds a short TTL cache (configurable) keyed by `{accountId|opportunityId}` to avoid repeated CA calls during rapid refresh/save/edit interactions.\n  - Cache bypass on explicit `Cache-Control: no-cache` (if present) for debugging/support.\n- **Robust error handling**\n  - `400` if neither/both identifiers are provided.\n  - `401/403` when CA indicates missing auth/insufficient permissions (pass-through with sanitized message).\n  - `404` when no CA positioning block exists for the identifier.\n  - `502/504` for CA upstream failures/timeouts with clear error codes for UI handling.\n\n## Implementation notes\n- Introduces a dedicated controller + handler/service (`CustomerAnalyzerPositioningBlockService`) to keep CA concerns isolated.\n- Normalizes staleness fields by ensuring `version` and `lastUpdatedAt` are always present when `content` is returned.\n- Adds request-scoped logging (identifier, cache hit/miss, CA status) without logging block content.\n\n## Tests\n- Unit tests for:\n  - parameter validation\n  - cache hit/miss behavior\n  - CA success mapping (content/id/version/timestamp)\n  - CA error mapping (401/403/404/5xx)\n- Integration test stubs updated to mock CA responses.\n\n## Ops/Config\n- Adds env/config knobs:\n  - `CA_BASE_URL`, `CA_TIMEOUT_MS`\n  - `POSITIONING_BLOCK_CACHE_TTL_SECONDS`\n\n## User impact\n- Enables the UI to reliably compare \u201ccurrent text\u201d vs \u201clatest from CA\u201d using `canonicalId + version/lastUpdatedAt`, and supports a safe \u201cReplace with latest\u201d action without manual copy/paste being treated as source of truth.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#44"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

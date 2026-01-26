@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#61",
+  "semantic_identifier": "61: feat: Docs: Add MVP spec for CRM-embedded Guidance surface (Salesforce/HubSpot entry points, wireframes, AC)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-13",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "61",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "42",
+    "labels": [],
+    "created_at": "2025-05-13",
+    "updated_at": "2025-05-13",
+    "closed_at": "2025-05-29"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds a product/UX specification for the minimum viable in-CRM \u201cGuidance\u201d surface to view Sales_Accelerator guidance directly inside Salesforce/HubSpot, including entry points, content scope, wireframe-level layouts, copy actions, and acceptance criteria to unblock follow-on implementation work.\n\n## What\u2019s included\n- **Surface options (MVP recommendation + alternates):**\n  - Primary: CRM **sidebar panel** (embedded app/extension) that can be opened from supported record contexts.\n  - Alternates: **record page card** / **embedded widget** where supported.\n- **Entry points & context mapping:**\n  - **Account context:** where the panel/card appears, what record identifiers are passed (e.g., accountId / externalId), and expected behavior when missing.\n  - **Opportunity context:** same as above for opportunityId.\n  - **Fallback behavior:** empty/unknown states, loading states, auth/session unavailable.\n- **In-scope content blocks (MVP):**\n  - **Best Next Action** (single primary recommendation + rationale)\n  - **Risk Alerts** (ranked list with severity)\n  - **Fit/Positioning Snippets** (short talk tracks / value props)\n- **Copy actions (explicitly defined):**\n  - Copy-to-clipboard for snippets and next-action text\n  - \u201cCopy all\u201d option (if applicable)\n  - Action telemetry hooks noted (event names/properties for implementation tickets)\n- **Wireframe-level requirements:**\n  - Layout for sidebar/panel and card variants (header, sections, empty/loading/error)\n  - Content density limits (max items, truncation, expand/collapse)\n  - UX constraints for embedded environments (min widths/heights)\n- **Acceptance criteria:**\n  - Record-context resolution rules\n  - Required states (loading/empty/error/success)\n  - Copy actions work across embedded contexts\n  - Non-blocking behavior: panel does not prevent normal CRM navigation\n\n## Implementation notes (for follow-up engineering tickets)\n- Calls out required **record context inputs**, **API contract assumptions** (guidance fetch by account/opportunity id), and **telemetry** requirements.\n- Separates CRM-specific integration concerns (Salesforce vs HubSpot) as checklists to be implemented later; this PR is intentionally spec-only due to low priority.\n\n## Files/Docs added\n- Adds a dedicated spec doc under the repo\u2019s product/docs area describing:\n  - surfaces, entry points, wireframes, content blocks, and acceptance criteria.\n\n## User impact\nNo runtime changes. This PR provides the agreed-upon UI/UX + behavioral contract for CRM-embedded Guidance to enable subsequent implementation work.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#61"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

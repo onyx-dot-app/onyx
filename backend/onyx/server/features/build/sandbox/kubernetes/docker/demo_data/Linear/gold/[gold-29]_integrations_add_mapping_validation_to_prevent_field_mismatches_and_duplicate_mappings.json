@@ -1,0 +1,30 @@
+{
+  "id": "5934008",
+  "semantic_identifier": "[GOLD-29]: Integrations: Add mapping validation to prevent field mismatches and duplicate mappings",
+  "title": "Integrations: Add mapping validation to prevent field mismatches and duplicate mappings",
+  "source": "linear",
+  "doc_updated_at": "2025-06-27",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jason_morris",
+      "email": "jason_morris@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-06-27"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement pre-save validation in the integration field-mapping UI/API to detect mismatched data types, missing required source fields, and multiple source fields mapped to the same destination (or vice versa). Block saving invalid mappings and surface clear, actionable error messages that identify the conflicting fields. This reduces downstream duplicate signals and fixes a major cause of integration-related mapping failures.",
+      "link": "https://www.onyx.app/36746"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

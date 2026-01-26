@@ -16,6 +16,7 @@ from uuid import UUID
 
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import DEMO_DATA_PATH
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
@@ -246,6 +247,7 @@ class LocalSandboxManager(SandboxManager):
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
+        use_demo_data: bool = False,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -255,21 +257,23 @@ class LocalSandboxManager(SandboxManager):
         3. .venv/ (from template)
         4. AGENTS.md
         5. .agent/skills/
-        6. files/ (symlink to file_system_path)
+        6. files/ (symlink to demo data OR user's file_system_path)
         7. opencode.json
-        8. attachments/
-        9. Start Next.js dev server for this session
+        8. org_info/ (if demo_data is enabled, the org structure and user identity for the user's demo persona)
+        9. attachments/
+        10. Start Next.js dev server for this session
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            file_system_path: Path to knowledge/source files (for files/ symlink)
+            file_system_path: Path to user's knowledge/source files
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
+            use_demo_data: If True, symlink files/ to demo data; else to user files
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -293,13 +297,26 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Session directory created at {session_path}")
 
         try:
-            # Setup files symlink directly to file_system_path
-            if file_system_path:
-                logger.debug(f"Setting up files symlink to {file_system_path}")
-                self._directory_manager.setup_files_symlink(
-                    session_path, Path(file_system_path)
+            # Setup files symlink - choose between demo data or user files
+            if use_demo_data:
+                # Demo mode: symlink to demo data directory
+                symlink_target = Path(DEMO_DATA_PATH)
+                if not symlink_target.exists():
+                    logger.warning(
+                        f"Demo data directory does not exist: {symlink_target}"
+                    )
+                logger.info(f"Setting up files symlink to demo data: {symlink_target}")
+            elif file_system_path:
+                # Normal mode: symlink to user's knowledge files
+                symlink_target = Path(file_system_path)
+                logger.debug(
+                    f"Setting up files symlink to user files: {symlink_target}"
                 )
-                logger.debug("Files symlink ready")
+            else:
+                raise ValueError("No files symlink target provided")
+
+            self._directory_manager.setup_files_symlink(session_path, symlink_target)
+            logger.debug("Files symlink ready")
 
             # Setup org_info directory with user identity (at session root)
             if user_work_area:

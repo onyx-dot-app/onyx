@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_1507753",
+  "semantic_identifier": "1507753 - Orchardline Supply - sales_call - Discussion with Madeline Cho",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-11-05 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-11-05 00:00:00",
+    "duration_min": "21"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-11"
+      ],
+      "year_month": "2025-11",
+      "meeting_title": "1507753 - Orchardline Supply - sales_call - Discussion with Madeline Cho",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Madeline\u2014good to see you again. Last time you mentioned you\u2019re getting pressure from Product and Support to stop \u201carguing in spreadsheets\u201d about what to fix next. I wanted to focus today on the one thing you seemed most interested in: Issue_Tracker\u2019s prioritization layer and how it ties issue clusters back to customer value and active deals. Does that still feel like the right place to zoom in?",
+      "link": "https://www.onyx.app/9418783-1"
+    },
+    {
+      "text": "Madeline Cho: Hi Mina. Yes, that\u2019s still the pain. We have Zendesk themes, Jira tickets, and then a separate doc where we try to guess impact. It\u2019s messy. But I\u2019m also cautious\u2014these scoring systems can create more debate, not less.",
+      "link": "https://www.onyx.app/9418783-2"
+    },
+    {
+      "text": "Mina Park: Totally fair. Let me keep it concrete. Issue_Tracker ingests the reported issues from your support channels, dedupes and clusters them into \u201cissue objects,\u201d and then the key feature is issue_prioritization\u2014an explainable score based on inputs you control: frequency and velocity, severity, customer tier/ARR, churn-risk flags, and segment importance. For Orchardline, the use case we talked about was: Product leadership wants ICP Tier-1 issues to outrank similar-volume noise from low-fit segments. That weighting is exactly what the scoring is designed to do.",
+      "link": "https://www.onyx.app/9418783-3"
+    },
+    {
+      "text": "Madeline Cho: The \u201cinputs you control\u201d part is where it usually breaks down. Support will argue frequency should win because they\u2019re drowning. Sales will argue a single big logo should win. Product will argue severity or effort. Who decides, and how is it not a black box?",
+      "link": "https://www.onyx.app/9418783-4"
+    },
+    {
+      "text": "Mina Park: Great question\u2014so two parts. First, the score is decomposed: you can see, per cluster, \u201chere\u2019s the frequency component, here\u2019s severity, here\u2019s ARR exposure, here\u2019s ICP weighting, here\u2019s any boost because it\u2019s tied to a late-stage deal.\u201d Second, Issue_Tracker supports different views so each team isn\u2019t forced into one lens: Support gets an SLA-risk view, Product gets impact-versus-effort, Sales gets deal blockers, Exec gets revenue exposure. Under the hood it\u2019s the same issue object, but the presentation is tailored to the job.",
+      "link": "https://www.onyx.app/9418783-5"
+    },
+    {
+      "text": "Madeline Cho: Different views sounds nice, but we still have to agree on the underlying ranking. Otherwise we\u2019re back to \u201cSupport view says this, Sales view says that.\u201d And honestly, we already have a prioritization meeting that\u2019s basically negotiation.",
+      "link": "https://www.onyx.app/9418783-6"
+    },
+    {
+      "text": "Mina Park: Right\u2014and I\u2019m not claiming the tool removes organizational politics. What it does is standardize the evidence and make the debate faster. Instead of arguing over \u201cis this common?\u201d you see velocity and unique customer counts. Instead of \u201cdoes this matter?\u201d you see impacted ARR and which segment it hits, based on your CRM plus your fit tiers from Customer_Analyzer. The discussion becomes, \u201cDo we want to weight ARR exposure more than frequency this quarter?\u201d which is at least an explicit decision.",
+      "link": "https://www.onyx.app/9418783-7"
+    },
+    {
+      "text": "Madeline Cho: That\u2019s exactly my worry, Mina. We don\u2019t have stable definitions quarter to quarter. Our ICP tiers change, and Sales will push to \u201cboost\u201d whatever is blocking a deal. If the system keeps shifting, teams won\u2019t trust it. They\u2019ll keep their own lists.",
+      "link": "https://www.onyx.app/9418783-8"
+    },
+    {
+      "text": "Mina Park: If trust is the core risk, we\u2019d handle it with governance. Usually we start with a baseline model\u2014lightweight, not overly fancy\u2014and a change log. Every time weighting changes, it\u2019s captured and you can see what moved and why. The historical trail is one of the reasons customers use Issue_Tracker: it creates a defensible record of \u201cthis is why we prioritized X.\u201d",
+      "link": "https://www.onyx.app/9418783-9"
+    },
+    {
+      "text": "Madeline Cho: But implementing governance is work. We\u2019re a lean team. Also, we\u2019re not currently using Customer_Analyzer\u2014at least not in a way I\u2019d call reliable. Our CRM data is messy. If the inputs are bad, the priority score is just\u2026 confidently wrong.",
+      "link": "https://www.onyx.app/9418783-10"
+    },
+    {
+      "text": "Mina Park: That\u2019s fair. If the CRM tiers are unreliable, the score will reflect that. In those cases, some teams start with fewer inputs: frequency/velocity plus severity and a very simple tiering\u2014like \u201cStrategic accounts\u201d vs \u201ceveryone else\u201d\u2014and then evolve. The goal isn\u2019t perfection on day one; it\u2019s to stop losing track of what\u2019s real and what\u2019s anecdotal.",
+      "link": "https://www.onyx.app/9418783-11"
+    },
+    {
+      "text": "Madeline Cho: We can already see frequency and severity in Zendesk. And for strategic accounts, Sales just pings Product directly anyway. I\u2019m trying to understand what new thing we\u2019d be paying for in month one.",
+      "link": "https://www.onyx.app/9418783-12"
+    },
+    {
+      "text": "Mina Park: The new thing is the standardized issue object that stays linked end-to-end\u2014source conversations in Zendesk, the cluster, impacted customers, and the downstream Jira/Linear work. And then the prioritization score is consistent across those objects. For month one, the value is: you can open an issue cluster and immediately answer, \u201cHow many unique customers? Which tiers? Is this tied to churn flags? Is it tied to any late-stage opportunity?\u201d without manual stitching.",
+      "link": "https://www.onyx.app/9418783-13"
+    },
+    {
+      "text": "Madeline Cho: The stitching is annoying, yes. But we\u2019ve built some internal dashboards that do parts of that. They\u2019re not perfect, but they\u2019re \u201cgood enough.\u201d My bigger concern is adoption. If Support doesn\u2019t change behavior and still files tickets however they want, the clustering and dedupe won\u2019t be clean.",
+      "link": "https://www.onyx.app/9418783-14"
+    },
+    {
+      "text": "Mina Park: Adoption is real. Typically we don\u2019t ask Support to change their workflow. Issue_Tracker sits between systems, so Support keeps doing Zendesk, Engineering keeps doing Jira. We configure the ingestion and then tune clustering rules\u2014like \u201ctreat these phrases as the same,\u201d or \u201cdon\u2019t merge these categories.\u201d It\u2019s mostly configuration and iteration rather than retraining everyone.",
+      "link": "https://www.onyx.app/9418783-15"
+    },
+    {
+      "text": "Madeline Cho: Configuration and iteration still means someone on my side owns it. And we don\u2019t have a dedicated ops person. Also, if the clustering is off, it creates a lot of noise. I\u2019ve seen dedupe tools that over-merge and then you lose nuance.",
+      "link": "https://www.onyx.app/9418783-16"
+    },
+    {
+      "text": "Mina Park: That\u2019s why we keep the links to the source conversations. Even if a cluster is too broad, you can drill into the evidence. But you\u2019re right that there\u2019s an ownership requirement\u2014someone needs to review clustering quality in the early weeks.",
+      "link": "https://www.onyx.app/9418783-17"
+    },
+    {
+      "text": "Madeline Cho: Another thing: the \u201cboost issues blocking late-stage opportunities\u201d piece. That\u2019s where I expect the biggest fights. Our Sales team will want everything flagged as a deal blocker. Product will say we\u2019re just chasing revenue and ignoring the roadmap.",
+      "link": "https://www.onyx.app/9418783-18"
+    },
+    {
+      "text": "Mina Park: That\u2019s a common tension. What we suggest is limiting the boost to specific conditions: only Stage 4+ opportunities, only deals above a certain ARR, and only if there\u2019s a clear link\u2014like a named requirement in the opportunity notes or emails. The system can show the rationale. But if culturally your Product team doesn\u2019t want Sales influence on prioritization, that\u2019s a broader alignment issue.",
+      "link": "https://www.onyx.app/9418783-19"
+    },
+    {
+      "text": "Madeline Cho: Exactly. We\u2019re not aligned there. We\u2019re trying to get aligned, but I\u2019m not sure buying a tool helps. It might actually formalize the conflict.",
+      "link": "https://www.onyx.app/9418783-20"
+    },
+    {
+      "text": "Mina Park: If alignment is the blocker, we can step back. The minimal pilot we discussed could be Product-only: prioritize issue clusters based on ICP tiers and severity\u2014no Sales boosts at all. Would that be a safer starting point?",
+      "link": "https://www.onyx.app/9418783-21"
+    },
+    {
+      "text": "Madeline Cho: Maybe, but then I\u2019m not sure it\u2019s worth the budget. Leadership is asking me to reduce tool sprawl. If we buy this, we\u2019ll need to justify why it\u2019s better than improving our Zendesk tags and our Jira intake process.",
+      "link": "https://www.onyx.app/9418783-22"
+    },
+    {
+      "text": "Mina Park: Understood. Let me ask: what would have to be true for you to feel confident moving to a buying decision? Is it proof of reduced time in prioritization meetings, or fewer escalations, or something else?",
+      "link": "https://www.onyx.app/9418783-23"
+    },
+    {
+      "text": "Madeline Cho: Honestly? I\u2019d need to see it working with our data without a lot of customization, and I\u2019d need Product and Support to agree they\u2019ll use it. I don\u2019t have that buy-in today. And I\u2019m not going to champion another system that becomes shelfware.",
+      "link": "https://www.onyx.app/9418783-24"
+    },
+    {
+      "text": "Mina Park: That\u2019s fair. We could do a short data-backed evaluation\u2014ingest a slice of Zendesk and map to your existing Jira projects, then show you what the clusters and prioritization would look like. But if the internal buy-in isn\u2019t there, even a good demo won\u2019t solve that.",
+      "link": "https://www.onyx.app/9418783-25"
+    },
+    {
+      "text": "Madeline Cho: Right. And I\u2019m also heading into planning season. I don\u2019t have capacity to run a pilot and manage the politics around it.",
+      "link": "https://www.onyx.app/9418783-26"
+    },
+    {
+      "text": "Mina Park: Got it. It sounds like timing and internal alignment are the biggest constraints, more than the feature set itself.",
+      "link": "https://www.onyx.app/9418783-27"
+    },
+    {
+      "text": "Madeline Cho: Yes. The capability is interesting, but I don\u2019t think we can move forward right now. If we revisit after planning\u2014maybe next quarter\u2014when we\u2019ve clarified how we want to prioritize, then a tool like this could make sense.",
+      "link": "https://www.onyx.app/9418783-28"
+    },
+    {
+      "text": "Mina Park: That makes sense. I\u2019ll send a short recap with what a Product-only starting model could look like, plus what light governance typically entails, so you have something concrete for later discussions. And then we can pencil a check-in for next quarter if that works.",
+      "link": "https://www.onyx.app/9418783-29"
+    },
+    {
+      "text": "Madeline Cho: Sure. Send the recap. Let\u2019s plan to revisit, but I can\u2019t commit to anything beyond that.",
+      "link": "https://www.onyx.app/9418783-30"
+    },
+    {
+      "text": "Mina Park: Understood. Thanks for being direct, Madeline. I\u2019ll follow up with that summary and a couple of example scoring breakdown screenshots so you can show stakeholders what \u201cexplainable\u201d looks like.",
+      "link": "https://www.onyx.app/9418783-31"
+    },
+    {
+      "text": "Madeline Cho: Sounds good. Talk later.",
+      "link": "https://www.onyx.app/9418783-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "madeline_cho@orchardline_supply.onyx.app"
+    }
+  ]
+}

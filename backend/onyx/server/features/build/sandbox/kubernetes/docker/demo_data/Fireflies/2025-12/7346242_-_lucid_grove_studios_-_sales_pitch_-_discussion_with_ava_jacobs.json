@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_7346242",
+  "semantic_identifier": "7346242 - Lucid Grove Studios - sales_pitch - Discussion with Ava Jacobs",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-08 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-08 00:00:00",
+    "duration_min": "37"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "7346242 - Lucid Grove Studios - sales_pitch - Discussion with Ava Jacobs",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Ava\u2014Mina Park here. Thanks for taking a few minutes. I\u2019ll be brief. I work with teams who are trying to get sharper on which customer segments are actually the best fit, and then turning that into messaging that helps win more deals. Does that match anything you\u2019re focused on at Lucid Grove Studios right now?",
+      "link": "https://www.onyx.app/9430168-1"
+    },
+    {
+      "text": "Ava Jacobs: Hi Mina. Sort of, but I\u2019m about to jump to another meeting. What is this in one sentence?",
+      "link": "https://www.onyx.app/9430168-2"
+    },
+    {
+      "text": "Mina Park: Totally\u2014Customer_Analyzer is a SaaS tool that pulls signals you already have\u2014CRM fields, product usage, support tickets, onboarding surveys\u2014and gives you a fit score by segment, plus a plain-English breakdown of why a segment is a good or bad fit, so you can prioritize who to target next quarter.",
+      "link": "https://www.onyx.app/9430168-3"
+    },
+    {
+      "text": "Ava Jacobs: Okay. We already have dashboards for a lot of that. What\u2019s different?",
+      "link": "https://www.onyx.app/9430168-4"
+    },
+    {
+      "text": "Mina Park: Great question. Dashboards show activity; they don\u2019t usually answer \u201cwho is most likely to buy, succeed, renew, and expand\u201d in a consistent, comparable way. The key feature is fit_estimation: you define fit drivers\u2014industry, size, problem severity, time-to-value, adoption patterns, support burden, churn-risk signals\u2014and we compute a 0\u2013100 fit score at the account and segment level, with a driver breakdown. So instead of debating \u201chealthcare feels good,\u201d you can see \u201chealthcare is 82 because retention is high and support burden is low; agencies are 55 because time-to-value is slower and churn risk is higher.\u201d",
+      "link": "https://www.onyx.app/9430168-5"
+    },
+    {
+      "text": "Ava Jacobs: We\u2019re not really struggling with that level of detail. We\u2019re a studio\u2014our segments are a bit all over the place.",
+      "link": "https://www.onyx.app/9430168-6"
+    },
+    {
+      "text": "Mina Park: That\u2019s actually when this helps most\u2014when the segments are messy and the team is operating on anecdotes. One common use case is prioritizing which industries to target next quarter using retention and support burden signals. For example, if one industry keeps renewing but generates heavy support load, it might not be the best segment to scale. Or the opposite: a smaller segment might look quiet in volume but has great retention, fast adoption, and low support burden\u2014meaning you can grow it profitably.",
+      "link": "https://www.onyx.app/9430168-7"
+    },
+    {
+      "text": "Ava Jacobs: I hear you. But we don\u2019t have clean data. Support tickets are in one system, CRM is half-filled, product usage is\u2026 inconsistent.",
+      "link": "https://www.onyx.app/9430168-8"
+    },
+    {
+      "text": "Mina Park: That\u2019s very normal. We don\u2019t require perfection to start. The model can begin with whatever you trust\u2014say CRM firmographics and basic retention\u2014and then layer in other signals as you connect them. Even with partial data, the output is still useful because it forces a consistent definition of fit drivers and shows the \u201cwhy\u201d behind the score. And if a driver is missing or low confidence, it\u2019s flagged rather than silently skewing results.",
+      "link": "https://www.onyx.app/9430168-9"
+    },
+    {
+      "text": "Ava Jacobs: We\u2019re also in the middle of a bunch of launches. I\u2019m not sure we can take on another tool right now.",
+      "link": "https://www.onyx.app/9430168-10"
+    },
+    {
+      "text": "Mina Park: Understood. My goal today isn\u2019t to sell you on a big rollout\u2014just to see if it\u2019s worth a deeper look. Typically the first step is a short working session where we map 5\u20137 fit drivers you already agree on, then we run a quick segment comparison\u2014like SMB vs mid-market, or industry A vs industry B\u2014based on retention and support burden. That usually takes a couple weeks end-to-end, and the output is a recommended ICP profile and a segment ranking you can actually use in planning.",
+      "link": "https://www.onyx.app/9430168-11"
+    },
+    {
+      "text": "Ava Jacobs: We already decided our next quarter targets. So it\u2019s probably too late.",
+      "link": "https://www.onyx.app/9430168-12"
+    },
+    {
+      "text": "Mina Park: If targets are locked, one alternative is using it to sanity-check the plan and reduce churn risk\u2014spot segments that look good on pipeline but historically have low adoption or high support burden. Even if you don\u2019t change the target, it can influence positioning\u2014what proof points to lead with, which objections to preempt, and what \u201cgood fit\u201d looks like for qualification.",
+      "link": "https://www.onyx.app/9430168-13"
+    },
+    {
+      "text": "Ava Jacobs: Positioning is mostly handled by our marketing lead. I\u2019m not the right owner.",
+      "link": "https://www.onyx.app/9430168-14"
+    },
+    {
+      "text": "Mina Park: That makes sense. Who typically owns decisions around ICP and segment focus\u2014marketing lead, sales ops, product marketing?",
+      "link": "https://www.onyx.app/9430168-15"
+    },
+    {
+      "text": "Ava Jacobs: It\u2019s kind of shared. But honestly, we\u2019re not shopping for new software. Budget is tight.",
+      "link": "https://www.onyx.app/9430168-16"
+    },
+    {
+      "text": "Mina Park: I hear you. If budget and timing are constraints, the only reason to keep talking would be if you felt there\u2019s a clear cost today\u2014like wasted spend targeting segments that churn, or high-support customers dragging margin\u2014that\u2019s worth addressing. Are you seeing any pain around support burden in particular? Like certain types of customers taking disproportionate effort?",
+      "link": "https://www.onyx.app/9430168-17"
+    },
+    {
+      "text": "Ava Jacobs: Support is annoying, yes, but we\u2019re a services-heavy business. It\u2019s just part of it. And our churn isn\u2019t terrible.",
+      "link": "https://www.onyx.app/9430168-18"
+    },
+    {
+      "text": "Mina Park: Got it. Then let me keep it very concrete: if you could press a button and see a ranked list of your customer segments with (1) a fit score, and (2) the top three drivers\u2014retention, support burden, time-to-value\u2014would that be useful for planning? Or would it just be \u201cinteresting\u201d?",
+      "link": "https://www.onyx.app/9430168-19"
+    },
+    {
+      "text": "Ava Jacobs: Probably interesting, but not something I can prioritize. And I\u2019m wary of \u201cAI scoring\u201d without a lot of time to validate it.",
+      "link": "https://www.onyx.app/9430168-20"
+    },
+    {
+      "text": "Mina Park: Fair concern. The scoring isn\u2019t a black box\u2014it\u2019s driver-based and transparent. You choose the drivers and weights, and we show the breakdown. Still, validation takes attention, and if you don\u2019t have that bandwidth, it may not be the right moment.",
+      "link": "https://www.onyx.app/9430168-21"
+    },
+    {
+      "text": "Ava Jacobs: Yeah, I think that\u2019s where we are. We\u2019re heads-down.",
+      "link": "https://www.onyx.app/9430168-22"
+    },
+    {
+      "text": "Mina Park: Totally respect that. Would it be helpful if I sent a one-pager with the fit_estimation concept and the specific \u201cprioritize industries using retention + support burden\u201d workflow, so if planning comes up later you can forward it internally?",
+      "link": "https://www.onyx.app/9430168-23"
+    },
+    {
+      "text": "Ava Jacobs: Sure, you can send it. No promises.",
+      "link": "https://www.onyx.app/9430168-24"
+    },
+    {
+      "text": "Mina Park: That\u2019s perfect. What\u2019s the best email for you, and should I copy your marketing lead or whoever owns ICP discussions?",
+      "link": "https://www.onyx.app/9430168-25"
+    },
+    {
+      "text": "Ava Jacobs: Send it to ava@lucidgrove.com. Don\u2019t CC anyone\u2014I\u2019ll decide.",
+      "link": "https://www.onyx.app/9430168-26"
+    },
+    {
+      "text": "Mina Park: Will do. Last quick question so I tailor it: when you think about next quarter, are you more concerned about improving conversion on new deals, or reducing churn/support load on existing customers?",
+      "link": "https://www.onyx.app/9430168-27"
+    },
+    {
+      "text": "Ava Jacobs: Conversion, mostly. But again, we\u2019re not evaluating tools right now.",
+      "link": "https://www.onyx.app/9430168-28"
+    },
+    {
+      "text": "Mina Park: Understood. I\u2019ll send a brief note focused on segment fit scoring for conversion\u2014who to target and why\u2014without asking you for a meeting. If in a month or two you want to pressure-test your target segments, we can set up a 20-minute working session then. Sound okay?",
+      "link": "https://www.onyx.app/9430168-29"
+    },
+    {
+      "text": "Ava Jacobs: That\u2019s fine. I need to run.",
+      "link": "https://www.onyx.app/9430168-30"
+    },
+    {
+      "text": "Mina Park: Thanks, Ava. Appreciate the time\u2014I\u2019ll email that over today. Have a good one.",
+      "link": "https://www.onyx.app/9430168-31"
+    },
+    {
+      "text": "Ava Jacobs: You too. Bye.",
+      "link": "https://www.onyx.app/9430168-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "ava_jacobs@lucid_grove_studios.onyx.app"
+    }
+  ]
+}

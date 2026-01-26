@@ -1,0 +1,30 @@
+{
+  "id": "6612845",
+  "semantic_identifier": "[GOLD-170]: issue_history v2: Add templated internal decision notes (why/next steps) as timeline events",
+  "title": "issue_history v2: Add templated internal decision notes (why/next steps) as timeline events",
+  "source": "linear",
+  "doc_updated_at": "2025-08-14",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jason_morris",
+      "email": "jason_morris@netherite-extraction.onyx.app"
+    },
+    "state": "backlog",
+    "priority": "high",
+    "created_at": "2025-08-14"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement support in issue_history v2 for standardized internal triage decision notes captured as structured timeline events (template id + fields like decision, why, next_steps, owner/team, timestamp). Persist notes immutably and expose them via the issue history API with basic validation/sanitization so they can be searched and displayed consistently. Ensure notes can be linked to relevant lifecycle transitions (e.g., triaged, deprioritized, blocked) without duplicating ownership/SLA logic from existing tickets.",
+      "link": "https://www.onyx.app/55511"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

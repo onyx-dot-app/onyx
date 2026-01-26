@@ -1,0 +1,30 @@
+{
+  "id": "9b871f73b1e14fdab42a62ffc7065597",
+  "semantic_identifier": "Design--Issue prioritization v2: Add scoring dimensions + base schema for multi-view scoring.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-01",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Issue prioritization v2: Add scoring dimensions + base schema for multi-view scoring.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature introduces a normalized \u201cissue prioritization v2\u201d scoring model that supports multiple scoring dimensions per issue (initially: Support SLA risk, Product impact, Sales deal blockers), while preserving the existing single-score behavior for backward compatibility. The goal of this ticket is to lay down the base schema and API contract such that multiple \u201cviews\u201d (e.g., Support vs Product vs Sales) can compute and persist their own dimension scores and weights, and also expose a stable aggregated score for sorting and automation. UI, saved profiles, and tuning controls are explicitly out of scope and will be layered on later.\n\nOn the data model side, we will add a new v2 structure that is normalized around (issue_id, view_key, dimension_key). Concretely: (1) an `issue_priority_score_v2` parent record keyed by `issue_id + view_key` containing `aggregated_score`, `score_version`, and timestamps; and (2) child `issue_priority_dimension_score_v2` records containing `dimension_key`, `raw_score`, `weight`, `weighted_score`, optional `explanations/inputs` blob, and timestamps. This separation allows partial recomputation (update one dimension without rewriting the whole record), supports multiple views for the same issue, and provides an extensible surface for adding future dimensions without schema churn. We will also include a mapping strategy to the legacy single-score column/field: legacy remains the source of truth unless v2 is present, and we can optionally backfill legacy from v2 aggregated score for compatibility depending on consumer needs.\n\nOn the API contract, we will add read/write support for v2 scores without breaking existing clients. Reads will continue to return the legacy `priorityScore` (or equivalent) unchanged, and will additionally return a new `priorityScoringV2` object (nullable) containing `viewKey`, `aggregatedScore`, and a list/map of `dimensionScores` (each with `dimensionKey`, `rawScore`, `weight`, `weightedScore`, and optional metadata). Writes will introduce a new endpoint or versioned payload to upsert v2 scoring for an issue, scoped to a `viewKey`, and will be idempotent (upsert by `issue_id + view_key + dimension_key`). Authorization and validation will ensure only known `dimension_key`s and reasonable score/weight ranges are accepted; unknown dimensions can be rejected or stored as \u201cexperimental\u201d behind a feature flag.\n\nOperationally, the scoring pipeline/producer can start emitting per-dimension results as soon as schema and endpoints land, with minimal coupling to future UI work. We will keep compatibility by not altering existing sorting/automation behavior until downstream services explicitly opt into v2 aggregated score. Migration plan is additive: deploy tables/fields, deploy API reads returning both legacy + v2, then enable producer writes behind a flag; no destructive changes. Success criteria for this ticket are: schema supports multi-view + multi-dimension scoring, API returns v2 consistently, and legacy clients remain unaffected.",
+      "link": "https://www.onyx.app/45478"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "3389183",
+  "semantic_identifier": "[GOLD-200]: Auto-populate compliance checklist requirements from customer/segment context",
+  "title": "Auto-populate compliance checklist requirements from customer/segment context",
+  "source": "linear",
+  "doc_updated_at": "2025-11-04",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jason_morris",
+      "email": "jason_morris@netherite-extraction.onyx.app"
+    },
+    "state": "in_progress",
+    "priority": "low",
+    "created_at": "2025-11-04"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Extend the deployment readiness compliance checklist to auto-select required items (e.g., security review, DPA, retention constraints) based on linked customer/account attributes from CRM + Customer_Analyzer (segment/ICP, region, regulated flags). When an issue/theme is linked to impacted customers, compute and display the derived \u201crequired for deployment\u201d set and highlight gaps. This reduces manual triage and late discovery of compliance blockers without changing the existing checklist UI/workflow.",
+      "link": "https://www.onyx.app/32807"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

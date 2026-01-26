@@ -1,0 +1,30 @@
+{
+  "id": "044a044e837b40ad9c56402903a2e3db",
+  "semantic_identifier": "Design--Update stage aging calculation to use canonical stage_entered_at (with deterministic fallback).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-09",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Update stage aging calculation to use canonical stage_entered_at (with deterministic fallback).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nStage aging in `sales_forecast` should represent \u201ctime in current stage\u201d based on the imported, canonical `stage_entered_at` timestamps coming from the source system, rather than inferring from `opportunity.created_at` / `opportunity.updated_at`. This change updates the stage aging service and any dependent queries so that we consistently select the correct transition timestamp for the opportunity\u2019s *current* stage and produce deterministic results across rollups and historical benchmarks.\n\n### Data selection + deterministic fallback\nFor each opportunity, stage aging will be computed as `now - effective_stage_entered_at` (or `as_of - effective_stage_entered_at` for historical/as-of queries). The `effective_stage_entered_at` is derived by selecting the **latest** transition event whose `to_stage` (or equivalent) matches the opportunity\u2019s current stage, using the canonical imported `stage_entered_at`/transition timestamp fields. If no canonical timestamp exists for the current stage (missing data, partial backfill), we apply a single, explicit fallback in this order: (1) latest known stage transition timestamp (regardless of stage) if it deterministically implies current stage entry, else (2) `opportunity.created_at` as a final default. We will document this fallback and ensure the same logic is shared by the service and any SQL rollups to avoid divergence.\n\n### Implementation changes\nWe will centralize the \u201ccurrent stage entered at\u201d selection logic in the stage aging service (and, where needed, a shared SQL CTE/view) so consumers (forecast rollups, benchmark pipelines) all read the same computed field. Any existing references that calculate aging from `updated_at` will be removed or rewritten to depend on the computed `effective_stage_entered_at`. We will also ensure tie-breaking is deterministic (e.g., if multiple transitions share the same timestamp, prefer the max transition ID) so repeated runs yield identical results.\n\n### Testing + regression coverage\nAdd lightweight regression tests covering: (1) canonical `stage_entered_at` present \u2192 aging uses it; (2) canonical missing \u2192 fallback path is used and stable; (3) multiple transitions into the same stage \u2192 latest transition is selected; and (4) downstream consumers (forecast rollups and historical conversion benchmarks) read the corrected stage aging output (e.g., snapshot test of key aggregates or a focused integration test over a small fixture dataset). This ensures we don\u2019t reintroduce `created_at/updated_at` inference and that historical metrics remain consistent after the change.",
+      "link": "https://www.onyx.app/36509"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

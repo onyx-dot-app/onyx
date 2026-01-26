@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#163",
+  "semantic_identifier": "163: feat: Add regression test suite enforcing cited, evidence-backed positioning outputs",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-18",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "163",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "22",
+    "labels": [],
+    "created_at": "2025-05-18",
+    "updated_at": "2025-05-18",
+    "closed_at": "2025-06-11"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds automated regression tests around the positioning generator to prevent uncited, generic claims when customer evidence is available for the requested segment.\n\nKey changes:\n- Introduces a dedicated test module for the positioning generator (unit/integration level depending on existing harness) that asserts:\n  - Evidence-rich segments produce outputs that include at least one verbatim customer snippet and an associated citation for each evidence-backed claim.\n  - Sparse-evidence segments are explicitly labeled/flagged as low-evidence (and do not fabricate citations).\n  - Mixed-source evidence scenarios preserve correct source attribution (citations reference the originating source/doc IDs).\n- Adds stable fixtures:\n  - Evidence-rich segment fixture with multiple customer quotes/snippets and expected citation targets.\n  - Sparse-evidence fixture with insufficient quotes/snippets to validate the low-evidence behavior.\n  - Mixed-source fixture combining multiple repositories/sources to validate attribution integrity.\n- Adds assertions that fail the suite if the generator returns generic, uncited positioning in evidence-rich scenarios (e.g., claims without citations or without any snippet usage).\n\nNotes for reviewers:\n- Tests are designed to be deterministic (fixed fixtures + pinned generator inputs) and to guard against regressions in prompt/template changes or evidence-selection logic.\n- No runtime behavior changes; this PR only adds coverage and failure conditions to CI to prevent future regressions.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#163"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

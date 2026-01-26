@@ -1,0 +1,30 @@
+{
+  "id": "d18fcdee4dea4745b0c46b846bc20c16",
+  "semantic_identifier": "Impact--Add observability for scheduled sync jobs across CRM, Support, and Product Analytics integrations.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add observability for scheduled sync jobs across CRM, Support, and Product Analytics integrations.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds consistent observability for scheduled sync jobs across our CRM, Support, and Product Analytics integrations so we can quickly understand what ran, what failed, and why. For each scheduled sync run, we will capture standardized logs and metrics including start/end timestamps, duration, records processed, API errors, and retries, creating a unified view of sync health across integration types.\n\nThe immediate impact is improved operational reliability and faster incident response. Today, diagnosing sync issues often requires piecing together partial logs or manually reproducing problems; with consistent metrics and error reporting, engineering and support can identify failure patterns (e.g., authentication errors, rate limits, bad payloads) and pinpoint where in the pipeline a job is breaking, reducing time-to-diagnosis and time-to-recovery.\n\nWe will also surface a per-connection sync status\u2014last successful run and last failure reason\u2014so internal teams (and potentially customers, depending on where it\u2019s exposed) can see when data is stale and what action is needed. This increases transparency, reduces confusion when downstream dashboards or workflows appear out of date, and helps prioritize fixes by highlighting the most impacted connections.\n\nFinally, this work is foundational for upcoming functional improvements to syncing. By establishing reliable instrumentation first, subsequent tickets can be validated with clear before/after measurements, and regressions can be detected early, enabling safer iteration and more predictable outcomes as we evolve our integrations.",
+      "link": "https://www.onyx.app/12434"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#38",
+  "semantic_identifier": "38: feat: Issue_Tracker: weight priority scoring by Customer_Analyzer fit_tier + segment (config-driven, auditable)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-02",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "38",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "99",
+    "labels": [],
+    "created_at": "2025-07-02",
+    "updated_at": "2025-07-02",
+    "closed_at": "2025-07-26"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR updates the Issue_Tracker prioritization pipeline to incorporate Customer_Analyzer-provided `fit_tier` and `segment_id` into issue/theme priority scoring for impacted accounts.\n\nImplementation details:\n- Adds a deterministic, config-driven mapping from `(fit_tier, segment_id)` -> multiplier(s) used to weight the existing priority score (no new ICP/segment inference; only consumes Customer_Analyzer metadata).\n- Computes an account-level weight for each impacted account and aggregates to an issue-level weight using a stable strategy (e.g., max/weighted max across impacted accounts) so results are deterministic across runs.\n- Gracefully degrades to current scoring when metadata is missing or mixed:\n  - If an account is missing `fit_tier` or `segment_id`, it falls back to multiplier `1.0`.\n  - If an issue references accounts with different tiers/segments, the aggregation strategy ensures a consistent outcome and avoids exceptions.\n  - If Customer_Analyzer data cannot be resolved for an account, the pipeline continues with multiplier `1.0`.\n- Persists the new components in the score breakdown for auditability/debugging:\n  - Stores the resolved `fit_tier`, `segment_id`, per-account multiplier, aggregated issue multiplier, and the resulting weighted score contribution on the issue/theme score breakdown.\n\nOperational notes:\n- Mapping is fully configurable (no code changes required to adjust multipliers).\n- Existing scores remain unchanged when the config is empty or when metadata is unavailable.\n- Includes tests/fixtures covering: complete metadata, partial metadata, mixed-account issues, unknown tier/segment values, and deterministic behavior.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#38"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

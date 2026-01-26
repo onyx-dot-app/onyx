@@ -1,0 +1,30 @@
+{
+  "id": "1416da83a550459782a5bffd89b97a0d",
+  "semantic_identifier": "Design--Apply Simple Mode progressive disclosure across Alerts/Templates/Models settings (post-onboarding).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-11",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Apply Simple Mode progressive disclosure across Alerts/Templates/Models settings (post-onboarding).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nAfter a workspace opts into **Simple Mode**, the configuration pages for **Alerts, Templates, and Models** still render the full set of advanced controls. This creates cognitive overload for small teams and undermines the intent of Simple Mode (quick, guided setup with safe defaults). We need to apply **progressive disclosure** on these settings pages so that Simple Mode users see only the core, recommended controls by default, with advanced knobs available but intentionally hidden.\n\n### Goals / User experience\nWhen the workspace is in **Simple Mode**, each of the three settings surfaces will (1) show a simplified \u201cCore settings\u201d view, and (2) place all non-essential/advanced controls behind a clearly labeled, collapsible **\u201cAdvanced settings\u201d** section. The state should be **consistently enforced on navigation and refresh** (i.e., derived from workspace mode, not from local UI state). If the workspace later switches to **Advanced Mode**, the full settings UI becomes visible again and any previously-set values remain intact\u2014**no resets, no migration that discards config**.\n\n### Design / Implementation approach\nIntroduce (or reuse) a single source of truth for workspace mode (e.g., `workspace.settings.mode: simple|advanced`) loaded early with other workspace context. Each settings page will map fields into two buckets: **recommended/core** vs **advanced**, implemented as a presentational split only\u2014advanced fields remain part of the form model and are still read/written as today. In Simple Mode, the page renders the core fields and an \u201cAdvanced settings\u201d accordion containing the advanced fields; in Advanced Mode, all fields render inline as they do now (optionally still grouped). We will ensure form initialization always loads existing configuration values for both core and advanced fields so toggling visibility never drops or overwrites data.\n\n### Edge cases / Acceptance criteria\n1) In Simple Mode, navigating directly to Alerts/Templates/Models settings (including deep links) shows simplified defaults with an \u201cAdvanced settings\u201d section. 2) Refreshing the page preserves the Simple/Advanced layout strictly based on workspace mode. 3) Opening \u201cAdvanced settings\u201d in Simple Mode reveals current advanced values (if any) and saving updates persists normally. 4) Switching workspace to Advanced Mode reveals the full UI without changing stored configuration. 5) Tests: add UI assertions for mode-based rendering and regression coverage that config payloads include advanced fields even when the advanced section is collapsed.",
+      "link": "https://www.onyx.app/87218"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

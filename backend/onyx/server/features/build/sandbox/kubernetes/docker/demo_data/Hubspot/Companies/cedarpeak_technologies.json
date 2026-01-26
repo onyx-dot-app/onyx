@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_7973198",
+  "semantic_identifier": "Cedarpeak Technologies",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-01 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "7973198",
+    "domain": "cedarpeak_technologies.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Cedarpeak Technologies\nDomain: cedarpeak_technologies.onyx.app",
+      "link": "https://www.onyx.app/81209"
+    },
+    {
+      "text": "Contact: Maria Chavez\nEmail: maria_chavez@cedarpeak_technologies.onyx.app",
+      "link": "https://www.onyx.app/16727"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

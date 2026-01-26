@@ -1,0 +1,30 @@
+{
+  "id": "86c1e9c42b984e61a72f612095b8f3f6",
+  "semantic_identifier": "Impact--Implement role-based access control for generated content and governance settings.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-13",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Implement role-based access control for generated content and governance settings.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds role-based access control (RBAC) across Sales_Accelerator for both AI-generated content (emails, call notes, next-best-action recommendations) and governance settings. By gating viewing, generating, editing, and exporting actions, we ensure that sensitive content and high-impact configuration options are only available to the right users, reducing risk of data leakage and misuse.\n\nWe will ship an initial, opinionated permission model aligned to common sales org structures: SDR/AE, Manager, and Sales Ops/Admin. Governance settings will be reserved for Sales Ops/Admin by default, while frontline and manager roles will have scoped permissions appropriate to their workflows. New endpoints will follow a default-deny posture, requiring explicit role grants before access is enabled.\n\nOn the backend, we\u2019ll update authorization checks to enforce RBAC consistently across existing and new APIs, with clear, actionable error responses when access is blocked. This ensures security is not dependent on UI behavior and provides a reliable enforcement layer for integrations and future features.\n\nOn the frontend, we\u2019ll adjust UI affordances so restricted actions and settings are either hidden or visibly disabled, and blocked actions return clear messaging explaining lack of permission and next steps (e.g., contact an admin). This reduces user confusion, minimizes support burden, and makes permissions feel predictable while maintaining strong governance controls.",
+      "link": "https://www.onyx.app/19712"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

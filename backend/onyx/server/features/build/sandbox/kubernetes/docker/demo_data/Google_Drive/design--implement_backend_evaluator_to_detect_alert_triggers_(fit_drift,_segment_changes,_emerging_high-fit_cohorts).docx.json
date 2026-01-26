@@ -1,0 +1,30 @@
+{
+  "id": "c5f540e586bc46a18c0b5a493ce826a2",
+  "semantic_identifier": "Design--Implement backend evaluator to detect alert triggers (fit drift, segment changes, emerging high-fit cohorts).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-24",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Implement backend evaluator to detect alert triggers (fit drift, segment changes, emerging high-fit cohorts).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will implement a backend \u201cevaluator\u201d service that runs on a fixed schedule (e.g., hourly/daily per [GOLD-40]) to compute customer- and segment-level signals and determine whether any alert trigger conditions fire: fit drift, segment composition changes, and emerging high-fit cohorts. The evaluator ingests the required aggregates/features from our analytics store (or precomputed feature tables if available) for each target entity (customer, segment, cohort definition) and evaluates them against the trigger definitions and thresholds specified in [GOLD-40], producing a deterministic decision plus the supporting metrics.\n\nWhen a trigger fires, the evaluator will emit a normalized `alert_event` record with a consistent schema for downstream delivery and UI. At minimum this includes: `alert_type` (enum), `entity_type`/`entity_id`, `event_timestamp` (evaluation time), `window_start`/`window_end` (data window), `computed_metrics` (e.g., drift score, segment % deltas, cohort fit distribution), `thresholds` (values used for comparison), and `trigger_metadata` (versioned trigger definition id, cohort/segment parameters). Events are persisted to an alerts table (append-only) and optionally mirrored to a queue/topic for near-real-time downstream consumers; the persisted record is the source of truth for UI rendering and delivery retries.\n\nTo prevent repeated alerts for the same condition, we will add idempotency/deduping keyed by `(alert_type, entity_type, entity_id, trigger_definition_id, window_bucket)` where `window_bucket` is derived from the evaluation cadence/window in [GOLD-40]. The evaluator will compute a stable `dedupe_key` (hash) and perform an upsert/insert-if-not-exists; additionally, we will apply a \u201ccooldown\u201d policy from the spec to suppress re-firing within a configured time window unless the condition clears and re-triggers. This keeps the system resilient to retries and supports at-least-once execution semantics.\n\nMissing or low-volume data will be handled explicitly per [GOLD-40]: the evaluator will enforce minimum sample sizes and data freshness checks before evaluating a trigger, and will either (a) skip evaluation with a recorded `evaluation_status`/reason (for observability) or (b) emit a non-alert \u201cinsufficient_data\u201d outcome depending on downstream needs. We will add metrics/logging for evaluation counts, trigger rates, skips due to insufficient data, and dedupe suppressions, plus a backfill mode (bounded by date range) to recompute past windows without duplicating events via the same dedupe key.",
+      "link": "https://www.onyx.app/52324"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

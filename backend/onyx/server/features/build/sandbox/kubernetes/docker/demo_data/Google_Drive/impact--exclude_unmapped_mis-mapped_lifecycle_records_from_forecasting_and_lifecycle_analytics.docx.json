@@ -1,0 +1,30 @@
+{
+  "id": "b1bd13eb7c344d1aad65ff8c855b2be0",
+  "semantic_identifier": "Impact--Exclude unmapped/mis-mapped lifecycle records from forecasting + lifecycle analytics.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-21",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Exclude unmapped/mis-mapped lifecycle records from forecasting + lifecycle analytics.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change improves the accuracy and trustworthiness of forecasting and lifecycle analytics by ensuring we only aggregate on canonical lifecycle values. Today, when lifecycle mappings are missing or incorrect, our rollups can unintentionally fall back to raw CRM stage names, which introduces inconsistent categorization and silently contaminates key outputs.\n\nBy excluding records flagged with lifecycle mapping errors (e.g., unmapped stages or missing required fields), stage-based rollups and derived metrics\u2014like conversion rates and slippage signals\u2014will reflect only properly defined lifecycle progressions. This reduces metric drift caused by CRM configuration changes, one-off custom stages, or incomplete data, and makes results more comparable across teams and time periods.\n\nThe user impact is that some dashboards and forecasts may show slight shifts (often downward in volume) because previously \u201cnoisy\u201d records were being counted in stages they shouldn\u2019t have been. The tradeoff is intentional: we\u2019re prioritizing correctness over completeness, and making data quality issues visible rather than masking them via fallback behavior.\n\nTo protect against regressions, we\u2019ll add targeted tests with mixed mapped/unmapped stage inputs to confirm that unmapped/mis-mapped records are excluded and cannot skew aggregations. This also creates a stable contract for future lifecycle changes: if canonical mappings aren\u2019t present, analytics won\u2019t guess\u2014ensuring predictable, explainable metrics.",
+      "link": "https://www.onyx.app/17611"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

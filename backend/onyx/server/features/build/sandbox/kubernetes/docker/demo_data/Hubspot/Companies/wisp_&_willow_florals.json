@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_5273177",
+  "semantic_identifier": "Wisp & Willow Florals",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-11-23 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "5273177",
+    "domain": "wisp_&_willow_florals.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Wisp & Willow Florals\nDomain: wisp_&_willow_florals.onyx.app",
+      "link": "https://www.onyx.app/21917"
+    },
+    {
+      "text": "Contact: Oscar Fuentes\nEmail: oscar_fuentes@wisp_&_willow_florals.onyx.app",
+      "link": "https://www.onyx.app/60034"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

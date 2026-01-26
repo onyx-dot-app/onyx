@@ -1,0 +1,30 @@
+{
+  "id": "7323273",
+  "semantic_identifier": "[GOLD-123]: Define and persist bypass-tracking events in backend analytics pipeline",
+  "title": "Define and persist bypass-tracking events in backend analytics pipeline",
+  "source": "linear",
+  "doc_updated_at": "2025-10-31",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-10-31"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a dedicated event schema and ingestion endpoint for Sales_Accelerator \u201cbypass\u201d events (capturing user/team, account/opportunity, workflow type, timestamp, surface, and optional reason). Store events in the analytics warehouse with stable identifiers so reporting can reliably segment by workflow and team. Ensure events are idempotent (dedupe on event_id/session) and available for downstream dashboards/alerting without requiring UI changes.",
+      "link": "https://www.onyx.app/56517"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

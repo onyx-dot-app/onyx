@@ -1,0 +1,30 @@
+{
+  "id": "86c1e9c42b984e61a72f612095b8f3f6",
+  "semantic_identifier": "Design--Implement role-based access control for generated content and governance settings.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-13",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Implement role-based access control for generated content and governance settings.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Feature: RBAC for generated content + governance settings (Sales_Accelerator)\n\nWe will introduce role-based access control (RBAC) across AI-generated content workflows (view, generate, edit, export for emails, call notes, and next-best-action recommendations) and governance settings within Sales_Accelerator. The goal is to ensure only authorized users can access sensitive outputs and configuration controls, reduce accidental exposure, and provide a consistent authorization model across backend APIs and the UI.\n\nWe will define an initial role/permission matrix aligned to common sales org archetypes: **SDR/AE**, **Manager**, and **Sales Ops/Admin**. Permissions will be expressed as explicit capabilities (e.g., `generated_content:view`, `generated_content:generate`, `generated_content:edit`, `generated_content:export`, `governance:read`, `governance:write`) mapped to those roles. New endpoints will follow a **default-deny** posture: any API route not explicitly annotated with required capabilities will be denied until added to the allowlist, preventing accidental privilege expansion as we ship new functionality.\n\nOn the backend, we will enforce RBAC via a centralized authorization layer (middleware/policy checks) applied consistently to all relevant endpoints, including read APIs that return generated content and write/export actions. Authorization decisions will be audited (role, capability, resource, allow/deny) to support governance and debugging. When a user lacks permission, the API will return a standardized error (e.g., 403 with a machine-readable code) so the UI can render a clear message and avoid ambiguous failures.\n\nOn the frontend, we will add UI affordances driven by the same capability model: restricted controls (generate/edit/export buttons, governance panels) should be hidden when the user cannot perform the action, and blocked with a clear error if accessed via deep-link or stale state. Governance settings pages will be read-only or fully inaccessible depending on capability, and content pages will degrade gracefully (e.g., show \u201cYou don\u2019t have access to view generated content\u201d rather than empty sections). This keeps UX clean while ensuring the backend remains the source of truth for enforcement.",
+      "link": "https://www.onyx.app/75652"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "a3d3b3688b254aef9b501935e5d54094",
+  "semantic_identifier": "Impact--Positioning workspace: Fix segment comparison selection & data loading.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Positioning workspace: Fix segment comparison selection & data loading.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature improves reliability of Segment Comparisons in the Positioning workspace by ensuring the comparison UI always reflects the user\u2019s current primary and comparison segment selections. Today, users can see incorrect or stale data when switching segments quickly or navigating back, which undermines trust in the analysis and can lead to wrong conclusions or rework.\n\nWe will implement a single source of truth for selection state so the UI, URL/history, and data layer stay synchronized. This eliminates ambiguous or duplicated state that can drift across components and ensures the displayed segment names, filters, and metrics consistently match what the user has selected.\n\nOn the data side, we will make the fetch lifecycle deterministic: in-flight requests will be canceled or ignored when selections change, and we will guard against race conditions where slower responses overwrite newer selections. The expected outcome is that rapid switching and back/forward navigation always results in the correct data being displayed, with no flicker or \u201creverting\u201d to a previous segment.\n\nFinally, we will add lightweight logging for selection changes and fetch completion (including identifiers for primary/comparison segments and request timing) to support verification during rollout and speed up future debugging. This will reduce support burden and improve our ability to detect and resolve any remaining edge cases in production.",
+      "link": "https://www.onyx.app/57875"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

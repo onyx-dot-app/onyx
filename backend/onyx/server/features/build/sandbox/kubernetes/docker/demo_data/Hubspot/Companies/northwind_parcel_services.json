@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_6208576",
+  "semantic_identifier": "Northwind Parcel Services",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-02-05 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "6208576",
+    "domain": "northwind_parcel_services.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Northwind Parcel Services\nDomain: northwind_parcel_services.onyx.app",
+      "link": "https://www.onyx.app/54850"
+    },
+    {
+      "text": "Contact: Charles Arnold\nEmail: charles_arnold@northwind_parcel_services.onyx.app",
+      "link": "https://www.onyx.app/31541"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

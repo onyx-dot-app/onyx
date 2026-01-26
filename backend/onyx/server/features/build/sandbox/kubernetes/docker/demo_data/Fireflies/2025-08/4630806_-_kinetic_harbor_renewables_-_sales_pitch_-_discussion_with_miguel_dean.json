@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_4630806",
+  "semantic_identifier": "4630806 - Kinetic Harbor Renewables - sales_pitch - Discussion with Miguel Dean",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-31 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-31 00:00:00",
+    "duration_min": "45"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "4630806 - Kinetic Harbor Renewables - sales_pitch - Discussion with Miguel Dean",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Miguel, Megan Foster here. I know you\u2019ve only got a few minutes\u2014does now still work?",
+      "link": "https://www.onyx.app/5972606-1"
+    },
+    {
+      "text": "Miguel Dean: Yeah, I\u2019ve got about five minutes. What\u2019s up?",
+      "link": "https://www.onyx.app/5972606-2"
+    },
+    {
+      "text": "Megan Foster: Perfect. I\u2019m calling because we work with revenue teams that already live in Salesforce or HubSpot but still struggle with two things: forecasting that nobody trusts, and SDRs spending time on the wrong accounts. Our product, Sales_Accelerator, sits on top of your CRM and turns your existing signals\u2014stages, activity, meetings\u2014into an explainable forecast and a \u201cwhat to do next\u201d list.",
+      "link": "https://www.onyx.app/5972606-3"
+    },
+    {
+      "text": "Miguel Dean: We already have Salesforce dashboards for forecasting. And our SDRs have sequences. So what\u2019s different?",
+      "link": "https://www.onyx.app/5972606-4"
+    },
+    {
+      "text": "Megan Foster: Totally fair. The difference is we don\u2019t just summarize pipeline\u2014Sales_Accelerator combines your CRM stage data with real activity signals like last touch, meeting scheduled, stage age, and cycle-time benchmarks to predict commit/best-case/pipeline in a way you can actually defend. Then it shows the drivers behind the number\u2014like \u201cthis deal slipped because stage age is 2x benchmark and no next meeting is booked.\u201d It\u2019s meant to cut the end-of-quarter surprises.",
+      "link": "https://www.onyx.app/5972606-5"
+    },
+    {
+      "text": "Miguel Dean: Okay, but forecasting has never been a software issue for us. It\u2019s more process and people.",
+      "link": "https://www.onyx.app/5972606-6"
+    },
+    {
+      "text": "Megan Foster: I hear that a lot. The reason I\u2019m calling Kinetic Harbor Renewables specifically is because when teams have process but still see variance, it\u2019s usually because the forecast is being built off stage alone. This adds the behavioral signals automatically, and it gives managers and reps the same set of explainable rules. It\u2019s less \u201cgut feel\u201d and more \u201chere\u2019s what\u2019s missing to make this deal real.\u201d",
+      "link": "https://www.onyx.app/5972606-7"
+    },
+    {
+      "text": "Miguel Dean: We\u2019re a renewables company. Our cycles are long and weird. Benchmarks aren\u2019t always meaningful.",
+      "link": "https://www.onyx.app/5972606-8"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly why we show the drivers and let you tune the benchmarks by segment\u2014like project type, deal size, source, or territory. It\u2019s not a black box. You can see forecast by segment, rep, and source, and it\u2019ll highlight conversion and slippage patterns unique to your motion.",
+      "link": "https://www.onyx.app/5972606-9"
+    },
+    {
+      "text": "Miguel Dean: Alright. But you mentioned SDR prioritization too. We don\u2019t have a giant SDR org.",
+      "link": "https://www.onyx.app/5972606-10"
+    },
+    {
+      "text": "Megan Foster: Understood. Even with a small team, the opportunity cost is huge. One use case we see is: if you\u2019re already doing any kind of fit scoring\u2014like identifying your best target accounts\u2014Sales_Accelerator can pull that in and recommend the next 50 accounts to contact, with tailored openers and proof points by segment so reps aren\u2019t starting from scratch.",
+      "link": "https://www.onyx.app/5972606-11"
+    },
+    {
+      "text": "Miguel Dean: We don\u2019t have fit scoring. And honestly, we\u2019re not looking to add more tools right now. We\u2019re cutting spend.",
+      "link": "https://www.onyx.app/5972606-12"
+    },
+    {
+      "text": "Megan Foster: That makes sense. Quick clarification: are you currently on Salesforce or HubSpot?",
+      "link": "https://www.onyx.app/5972606-13"
+    },
+    {
+      "text": "Miguel Dean: Salesforce. But again\u2014no appetite for new platforms. We\u2019re consolidating.",
+      "link": "https://www.onyx.app/5972606-14"
+    },
+    {
+      "text": "Megan Foster: Got it. We\u2019re not a replacement CRM\u2014Sales_Accelerator is a layer on top of Salesforce. Typically the pitch is: if you can improve forecast accuracy and reduce slippage, it pays for itself pretty quickly. But if your mandate is \u201cno net-new,\u201d I don\u2019t want to force it.",
+      "link": "https://www.onyx.app/5972606-15"
+    },
+    {
+      "text": "Miguel Dean: Yeah, our CFO is basically allergic to new subscriptions this quarter.",
+      "link": "https://www.onyx.app/5972606-16"
+    },
+    {
+      "text": "Megan Foster: Understood. If I asked you one question\u2014where do you feel the most pain: commit accuracy, deals slipping late, or reps not doing the right next step?",
+      "link": "https://www.onyx.app/5972606-17"
+    },
+    {
+      "text": "Miguel Dean: Honestly, it\u2019s not top three. We\u2019re more focused on delivery and operations right now. Sales is steady.",
+      "link": "https://www.onyx.app/5972606-18"
+    },
+    {
+      "text": "Megan Foster: That\u2019s helpful. A lot of teams reach out to us when they\u2019re trying to tighten quarter-end execution\u2014scenario planning like \u201cif we add X SQLs in our best segment, what\u2019s the impact?\u201d\u2014but it sounds like you\u2019re not in that mode.",
+      "link": "https://www.onyx.app/5972606-19"
+    },
+    {
+      "text": "Miguel Dean: Not right now. Maybe later in the year, but I can\u2019t commit to a longer sales call.",
+      "link": "https://www.onyx.app/5972606-20"
+    },
+    {
+      "text": "Megan Foster: That\u2019s fair. Would it be useful if I sent a one-pager on the forecasting piece\u2014specifically the explainable drivers and slippage diagnostics\u2014so when planning season comes up you have it on hand?",
+      "link": "https://www.onyx.app/5972606-21"
+    },
+    {
+      "text": "Miguel Dean: You can send it, sure. But I can\u2019t promise I\u2019ll look at it soon.",
+      "link": "https://www.onyx.app/5972606-22"
+    },
+    {
+      "text": "Megan Foster: Totally okay. What\u2019s the best email for you?",
+      "link": "https://www.onyx.app/5972606-23"
+    },
+    {
+      "text": "Miguel Dean: miguel.dean@kineticharbor.com",
+      "link": "https://www.onyx.app/5972606-24"
+    },
+    {
+      "text": "Megan Foster: Great\u2014I'll send something brief. Last thing: is there someone on your side who owns forecasting cadence\u2014sales ops or RevOps\u2014so I\u2019m not bothering you if it\u2019s not your lane?",
+      "link": "https://www.onyx.app/5972606-25"
+    },
+    {
+      "text": "Miguel Dean: We don\u2019t really have RevOps. Our sales director handles it with finance.",
+      "link": "https://www.onyx.app/5972606-26"
+    },
+    {
+      "text": "Megan Foster: Got it. If you\u2019re comfortable, could you point me to the sales director\u2019s name, and I\u2019ll keep it light\u2014just share the same overview and see if timing makes sense later?",
+      "link": "https://www.onyx.app/5972606-27"
+    },
+    {
+      "text": "Miguel Dean: I\u2019d rather not loop anyone in right now. We\u2019re heads-down.",
+      "link": "https://www.onyx.app/5972606-28"
+    },
+    {
+      "text": "Megan Foster: No problem. I appreciate the candor. I\u2019ll send the one-pager and then I\u2019ll back off\u2014if you want, I can follow up in, say, late Q2 when budgets loosen a bit?",
+      "link": "https://www.onyx.app/5972606-29"
+    },
+    {
+      "text": "Miguel Dean: Yeah, late Q2 is fine. Just email\u2014don\u2019t call.",
+      "link": "https://www.onyx.app/5972606-30"
+    },
+    {
+      "text": "Megan Foster: You got it. Thanks for the time, Miguel.",
+      "link": "https://www.onyx.app/5972606-31"
+    },
+    {
+      "text": "Miguel Dean: Alright. Bye.",
+      "link": "https://www.onyx.app/5972606-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "miguel_dean@kinetic_harbor_renewables.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#114",
+  "semantic_identifier": "114: feat: Backend: CRUD + apply for saved issue scoring profiles (Issue Prioritization v2)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-11",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "114",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "1",
+    "labels": [],
+    "created_at": "2025-07-11",
+    "updated_at": "2025-07-11",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds backend persistence and APIs for saved scoring profiles (per-dimension weights + aggregation settings) and enables applying a selected profile when computing an issue\u2019s aggregated prioritization score. Maintains backward compatibility via an implicit default profile that matches the current single-score behavior.\n\n## What\u2019s included\n- **Data model & persistence**\n  - New `scoring_profiles` storage keyed by `org_id` with optional `user_id` ownership for user-defaults.\n  - Fields include: `name`, `description` (optional), `weights` (SLA risk / Product impact / Sales deal blockers), `aggregation` settings, `is_org_default` / `is_user_default` flags, timestamps.\n  - Validation at write time (weights are non-negative; aggregation config schema-validated).\n\n- **API endpoints (CRUD + defaults)**\n  - `GET /orgs/:orgId/scoring-profiles` (list org profiles; optionally include user-scoped defaults)\n  - `POST /orgs/:orgId/scoring-profiles` (create)\n  - `GET /orgs/:orgId/scoring-profiles/:profileId` (read)\n  - `PATCH /orgs/:orgId/scoring-profiles/:profileId` (update)\n  - `DELETE /orgs/:orgId/scoring-profiles/:profileId` (delete)\n  - Optional: `PUT /orgs/:orgId/scoring-profiles/:profileId/default` and `PUT /users/me/scoring-profiles/:profileId/default` to set org/user defaults.\n  - Authorization: org admins manage org-scoped profiles; users may manage their own user-scoped profile/default.\n\n- **Apply profile during score computation**\n  - Score computation accepts an optional `profileId` (and/or resolves a default in order: explicit `profileId` \u2192 user default \u2192 org default \u2192 implicit legacy default).\n  - Aggregated score calculation now uses profile weights and aggregation settings.\n  - If no profile is selected or the selected profile is missing/invalid, falls back to the implicit legacy default profile to preserve existing behavior.\n\n## Backward compatibility\n- Existing callers that don\u2019t send a profile continue to receive the same aggregated score as before.\n- No migration required for existing issue records; profile selection is resolved at request time.\n\n## Tests / verification\n- Added unit tests for validation and aggregation behavior.\n- Added API tests for CRUD, permission boundaries, default resolution, and fallback to legacy default.\n\n## Notes for reviewers\n- This PR focuses on backend support only (storage + APIs + scoring integration). UI wiring can use the new list/apply semantics without changing existing consumers.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#114"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

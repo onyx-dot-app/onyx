@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_3280362",
+  "semantic_identifier": "3280362 - Firefly Meridian Labs - sales_pitch - Discussion with Thomas Gray",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-10 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-10 00:00:00",
+    "duration_min": "32"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "3280362 - Firefly Meridian Labs - sales_pitch - Discussion with Thomas Gray",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Thomas\u2014Camila Vega here. Thanks for taking a few minutes. I\u2019ll be brief: I wanted to share how Customer_Analyzer helps teams like Firefly Meridian Labs get really crisp on which customer segments are actually your best fit, and then turn that into practical positioning for sales and marketing.",
+      "link": "https://www.onyx.app/8746154-1"
+    },
+    {
+      "text": "Thomas Gray: Hey Camila, sure. We\u2019re in between meetings, but I can give you a bit. What exactly do you mean by \u201cbest fit\u201d?",
+      "link": "https://www.onyx.app/8746154-2"
+    },
+    {
+      "text": "Camila Vega: Totally. In Customer_Analyzer, we ingest the signals you already have\u2014CRM fields, onboarding surveys, product usage events, support tickets, even interview notes\u2014and we compute a fit score from 0 to 100 at both the account and segment level. Then we show the driver breakdown\u2014why a segment scores high or low\u2014so you can prioritize where to focus next quarter with evidence, not gut feel.",
+      "link": "https://www.onyx.app/8746154-3"
+    },
+    {
+      "text": "Thomas Gray: Interesting. We\u2019ve been debating which industries to lean into next quarter, but it turns into opinions fast. How does your fit score avoid being a black box?",
+      "link": "https://www.onyx.app/8746154-4"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly the problem we built it for. The score is built from fit drivers you define or select\u2014things like industry and size, adoption patterns, time-to-value, support burden, churn risk signals, willingness to pay. You can weight them, and we show the contribution of each driver. So when it says, \u201cMid-market biotech is a 78 and industrial automation is a 52,\u201d you can see it\u2019s because biotech has faster activation, higher feature adoption, lower ticket volume per seat, and better retention\u2014while automation might have longer onboarding and higher support burden.",
+      "link": "https://www.onyx.app/8746154-5"
+    },
+    {
+      "text": "Thomas Gray: Okay, that transparency helps. We do have retention differences by industry, and support load is a big deal for us. We\u2019re trying not to scale chaos.",
+      "link": "https://www.onyx.app/8746154-6"
+    },
+    {
+      "text": "Camila Vega: Exactly. One very common use case is: \u201cPrioritize which industries to target next quarter using retention and support burden signals.\u201d Customer_Analyzer will compare segments side-by-side\u2014SMB vs mid-market, or healthcare vs fintech, whatever matters\u2014and highlight which segments are likely to buy, succeed, renew, and expand, versus which ones are costly to serve.",
+      "link": "https://www.onyx.app/8746154-7"
+    },
+    {
+      "text": "Thomas Gray: How much work is it to get running? Our data is spread out\u2014Salesforce for CRM, Zendesk for support, and product events in our warehouse.",
+      "link": "https://www.onyx.app/8746154-8"
+    },
+    {
+      "text": "Camila Vega: That\u2019s typical. We usually start lightweight: connect CRM and support, then add product usage events if you have them. Even with just CRM + support, you can get a strong first-pass fit model using fields like industry, size, sales cycle, stage progression, ticket volume, ticket topics, and renewal outcomes. Then as you add usage events, the model gets sharper around adoption and time-to-value.",
+      "link": "https://www.onyx.app/8746154-9"
+    },
+    {
+      "text": "Thomas Gray: And you mentioned positioning recommendations too. We\u2019re also struggling with messaging by vertical\u2014sales says one thing, marketing says another.",
+      "link": "https://www.onyx.app/8746154-10"
+    },
+    {
+      "text": "Camila Vega: Right\u2014once we know what\u2019s driving success in your best-fit segments, we translate that into positioning recommendations: value propositions, differentiators, proof points, and objection handling that match what those segments actually care about. For example, if a segment\u2019s retention is strongly tied to faster activation and lower support burden, the messaging becomes less \u201cwe do everything\u201d and more \u201cyou\u2019ll be live in X days with fewer tickets,\u201d with proof points pulled from your own outcomes.",
+      "link": "https://www.onyx.app/8746154-11"
+    },
+    {
+      "text": "Thomas Gray: That would be helpful. We\u2019ve got a few case studies, but we don\u2019t always know when to use them or which claims resonate.",
+      "link": "https://www.onyx.app/8746154-12"
+    },
+    {
+      "text": "Camila Vega: Exactly. The idea is to align product, marketing, and sales around the same ICP story\u2014grounded in your retention, expansion, usage, and support data\u2014so you\u2019re not targeting segments that look good at top-of-funnel but churn or generate outsized support cost later.",
+      "link": "https://www.onyx.app/8746154-13"
+    },
+    {
+      "text": "Thomas Gray: Makes sense. What does a \u201csegment\u201d look like in your system\u2014do we define it by industry and size, or can we do more nuanced cuts?",
+      "link": "https://www.onyx.app/8746154-14"
+    },
+    {
+      "text": "Camila Vega: You can start simple\u2014industry, employee count, ARR band\u2014and then get more nuanced: technographics, problem severity from onboarding surveys, adoption patterns like \u201cuses Feature A within 14 days,\u201d and support burden like ticket volume per active user. And we\u2019ll show segment comparisons so you can see, for example, that mid-market in Industry X has higher conversion but worse retention, while Industry Y has slightly lower conversion but significantly better retention and lower support load.",
+      "link": "https://www.onyx.app/8746154-15"
+    },
+    {
+      "text": "Thomas Gray: That\u2019s basically the conversation we\u2019re having internally. We have a couple industries with strong pipeline, but our support team is underwater with them.",
+      "link": "https://www.onyx.app/8746154-16"
+    },
+    {
+      "text": "Camila Vega: Then you\u2019re a perfect fit for the \u201cretention + support burden\u201d prioritization workflow. In practice, teams use Customer_Analyzer to answer questions like: \u201cWhich industries should we double down on next quarter?\u201d and \u201cWhich segments should we deprioritize or require different packaging/onboarding?\u201d The fit score plus driver breakdown makes those tradeoffs explicit.",
+      "link": "https://www.onyx.app/8746154-17"
+    },
+    {
+      "text": "Thomas Gray: What would you need from us to run an initial analysis? I\u2019m not promising anything yet, but I\u2019m curious.",
+      "link": "https://www.onyx.app/8746154-18"
+    },
+    {
+      "text": "Camila Vega: Totally fair. For an initial pass, we\u2019d want: a CRM export with account attributes and outcomes (like closed-won/lost, sales cycle length, ARR), basic renewal/retention indicators if you have them, and support data\u2014ticket counts, categories, maybe CSAT. If you can add product usage events later, great, but not required for the first conversation. We can also start with a subset\u2014like just the last 12\u201318 months.",
+      "link": "https://www.onyx.app/8746154-19"
+    },
+    {
+      "text": "Thomas Gray: And how fast can we see something useful? We\u2019re planning next quarter\u2019s targets soon.",
+      "link": "https://www.onyx.app/8746154-20"
+    },
+    {
+      "text": "Camila Vega: If you can get connectors or exports lined up, we can usually show an initial segment-level fit score and comparisons within a week or two. For the full value\u2014driver tuning, recommended ICP profile, and positioning outputs\u2014it\u2019s typically a few weeks, but you\u2019ll get actionable direction early.",
+      "link": "https://www.onyx.app/8746154-21"
+    },
+    {
+      "text": "Thomas Gray: Got it. What does \u201crecommended ICP profile\u201d mean in your context?",
+      "link": "https://www.onyx.app/8746154-22"
+    },
+    {
+      "text": "Camila Vega: It\u2019s basically the system summarizing the patterns behind your best outcomes. It looks at observed conversion, retention, expansion, adoption, and support burden, then suggests the combination of drivers that correlate with success. So instead of \u201cWe think mid-market is best,\u201d it might say: \u201cMid-market, 200\u20131,000 employees, Industry A/B, uses Tool X, onboarding completes within 10 days, and has low early ticket volume.\u201d That becomes a shared target for sales and marketing\u2014and a filter for pipeline quality.",
+      "link": "https://www.onyx.app/8746154-23"
+    },
+    {
+      "text": "Thomas Gray: That would help a lot with internal alignment. Right now, we\u2019re a bit scattered.",
+      "link": "https://www.onyx.app/8746154-24"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly what we see: scattered targeting leads to higher CAC and churn. Customer_Analyzer is designed to reduce both by making your ICP and narrative consistent\u2014based on signals you already have.",
+      "link": "https://www.onyx.app/8746154-25"
+    },
+    {
+      "text": "Thomas Gray: Okay. This sounds promising. What\u2019s the next step\u2014do you want to schedule a longer call with my team?",
+      "link": "https://www.onyx.app/8746154-26"
+    },
+    {
+      "text": "Camila Vega: Yes\u2014that would be ideal. I\u2019d suggest a 45-minute working session where we map your current segments, the signals you have in Salesforce/Zendesk/warehouse, and what \u201csuccess\u201d means for you\u2014retention, support burden, expansion. Then we can outline a quick pilot: fit scoring by industry for next-quarter prioritization, plus a first set of positioning recommendations for the top 1\u20132 segments.",
+      "link": "https://www.onyx.app/8746154-27"
+    },
+    {
+      "text": "Thomas Gray: I can bring our Head of Marketing Ops and someone from RevOps. Maybe also a support lead since support burden is key.",
+      "link": "https://www.onyx.app/8746154-28"
+    },
+    {
+      "text": "Camila Vega: Perfect. If you\u2019re open, I\u2019ll send a few time options for early next week, and a short prep checklist\u2014mostly what fields we\u2019d look at. No heavy lift before the call.",
+      "link": "https://www.onyx.app/8746154-29"
+    },
+    {
+      "text": "Thomas Gray: Do that. Early next week works. Send me the invite and I\u2019ll loop them in.",
+      "link": "https://www.onyx.app/8746154-30"
+    },
+    {
+      "text": "Camila Vega: Great\u2014thanks, Thomas. I\u2019ll email a calendar link and a quick agenda: segment prioritization using retention + support signals, fit score driver review, and how we\u2019d translate that into ICP and messaging. Talk soon.",
+      "link": "https://www.onyx.app/8746154-31"
+    },
+    {
+      "text": "Thomas Gray: Sounds good. Thanks, Camila.",
+      "link": "https://www.onyx.app/8746154-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "thomas_gray@firefly_meridian_labs.onyx.app"
+    }
+  ]
+}

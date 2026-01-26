@@ -1,0 +1,30 @@
+{
+  "id": "0202f0f92dc443d4aa02d629b808bfb0",
+  "semantic_identifier": "Design--Add regression tests and monitoring to prevent fit-tier from overpowering deal-dynamics signals.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add regression tests and monitoring to prevent fit-tier from overpowering deal-dynamics signals.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Summary / Problem\nWe\u2019ve seen regressions where **fit-tier** dominates overall forecasting scores and best-next-action (BNA) rankings, even when **negative deal-dynamics** signals (procurement friction, strong competition, poor internal alignment) should materially reduce confidence and de-prioritize actions. This leads to inflated forecasts and mis-ranked recommendations for \u201chigh-fit\u201d accounts that are actually unlikely to close. The GOLD-97 audit identified concrete scenarios and threshold expectations that we should encode to prevent recurrence.\n\n### Proposal\nAdd a small suite of **automated regression tests** that exercise scoring and ranking behavior under combinations of (a) high-fit tiers and (b) negative deal-dynamics signals. Tests will assert that when any configured risk signals are present, the resulting **forecasting score is capped or penalized** and BNA rankings reflect that downgrade (e.g., risk-mitigation actions outrank expansion/upsell actions). Scenarios, caps/penalties, and pass/fail thresholds will be derived directly from the GOLD-97 audit report and stored as versioned fixtures so changes to scoring logic require explicit updates and review.\n\n### Monitoring / Alerting\nAdd **lightweight monitoring** to detect real-world drift: a dashboard that tracks score-component distributions (fit-tier contribution vs. deal-dynamics contributions) and highlights workspaces where fit-tier is disproportionately driving the final score **despite the presence of negative deal-dynamics**. We will compute a per-workspace metric such as \u201c% of opportunities with negative dynamics where fit-tier contributes > X% of final score\u201d and alert when it exceeds configured thresholds (again sourced from GOLD-97). Alerts should link to example opportunities and the component breakdown to speed debugging.\n\n### Scope / Implementation Notes\nImplementation will include: (1) a deterministic test harness that can score synthetic opportunities with explicit signal toggles and validate both absolute score bounds and relative BNA ordering; (2) configuration for thresholds/caps stored in code (or a single config file) with clear provenance to GOLD-97; (3) an internal dashboard (e.g., existing metrics stack) and an alert rule per workspace and globally. Out of scope: changing the underlying scoring model beyond enforcing the tested caps/penalties; any model changes prompted by failures will follow-up separately, with the regression suite serving as the guardrail.",
+      "link": "https://www.onyx.app/24280"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

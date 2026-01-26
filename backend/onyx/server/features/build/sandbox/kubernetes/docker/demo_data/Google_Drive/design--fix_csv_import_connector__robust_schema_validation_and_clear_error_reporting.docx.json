@@ -1,0 +1,30 @@
+{
+  "id": "cde1b25640414c95bb80c73fa6f9863c",
+  "semantic_identifier": "Design--Fix CSV import connector: robust schema validation and clear error reporting.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-05",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Fix CSV import connector: robust schema validation and clear error reporting.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We should harden the CSV import connector by introducing a strict, explicit schema contract and validating all input against it before any ingestion occurs. The connector will define required columns (e.g., `title`, `description`, `theme`, etc.), optional columns, accepted aliases (if we want backward compatibility), and per-field type/format constraints (string/non-empty, enum membership, integer ranges, date parsing, boolean parsing). The import flow becomes: parse CSV \u2192 normalize headers \u2192 validate schema + row values \u2192 only then perform creation. This removes intermittent behavior caused by missing/renamed columns and prevents malformed issue objects from being constructed.\n\nSchema validation will operate in two layers. First, file-level validation checks that all required columns exist (or map from known aliases), rejects unknown/ambiguous headers, and verifies consistent delimiter/quoting parsing; if this fails, we stop immediately with a single actionable error describing exactly which columns are missing and which headers were found. Second, row-level validation checks each row\u2019s values with typed validators (e.g., non-empty title, allowed priority values, valid numeric estimates, valid date formats). Rows that fail validation are excluded from ingestion and reported back; rows that pass proceed to creation. This approach also supports deterministic imports by ensuring the same input always maps to the same normalized/validated payload.\n\nError reporting should be user-actionable and row-addressable: for each failed row we return row number (CSV line index), field name, offending value, and a clear message (\u201cMissing required value for `title`\u201d, \u201cInvalid value `P0` for `priority` (allowed: P1\u2013P4)\u201d, \u201cCould not parse date `13/32/2026` for `due_date` (expected ISO-8601)\u201d). The UI should show a summary (N succeeded, M failed) and provide downloadable error details (CSV or JSON) so users can quickly fix and re-upload. For file-level failures, we should show a single blocking error with the expected schema and the detected headers.\n\nTo ensure no partial creation, the connector should use an \u201call-or-row\u201d atomicity model: each row is independently validated and, if valid, created as a single transactional unit (e.g., create theme if needed, then issue) with idempotency safeguards. We should avoid creating dependent objects for rows that ultimately fail by performing all validations first, then executing creation in a second phase; where cross-row dependencies exist (e.g., shared themes), we can precompute and validate them up front and then create them deterministically before issue creation, or create-once with stable keys and rollback on failure. Successful rows should import deterministically by using normalized field mapping, stable ordering, and idempotency keys derived from row content + import batch id to prevent duplicates on retry.",
+      "link": "https://www.onyx.app/76329"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

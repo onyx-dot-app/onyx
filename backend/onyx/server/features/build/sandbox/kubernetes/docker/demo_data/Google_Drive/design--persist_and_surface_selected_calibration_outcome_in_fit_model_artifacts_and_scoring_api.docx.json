@@ -1,0 +1,30 @@
+{
+  "id": "dc9dacdc12464ad682c5245b518449c1",
+  "semantic_identifier": "Design--Persist and surface selected calibration outcome in fit model artifacts + scoring API.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Persist and surface selected calibration outcome in fit model artifacts + scoring API.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Problem\nOur calibration pipeline can produce multiple calibrated variants of a fit model optimized for different outcomes (activation, retention, expansion). Today, the trained model artifact/version does not reliably persist which outcome the user selected (and the associated label-rule metadata), and scoring may not consistently read from the intended calibrated version. This creates ambiguity for downstream UI/reporting: the same numeric fit score can be interpreted incorrectly if consumers don\u2019t know what the model was calibrated to optimize.\n\n### Goals\n1) Persist the user-selected calibration outcome and label-rule metadata on the trained model artifact/version produced by the calibration pipeline. 2) Ensure both online and offline scoring always resolve and use the correct calibrated model version (not an older/unrelated version). 3) Extend fit scoring APIs (fit score / segment endpoints) to surface the calibrated outcome metadata alongside scores so clients can display/aggregate correctly. 4) Add a regression test proving that, after recalibration, scoring responses return the new calibrated outcome metadata.\n\n### Design / Approach\nWe will extend the model artifact/version schema (or artifact metadata blob) with a `calibration` section containing at minimum: `outcome` (enum: activation|retention|expansion), `label_rule_id` (or fully expanded label-rule spec hash), and a `calibration_run_id`/timestamp for traceability. The calibration pipeline will write these fields when registering the calibrated model version and mark that version as the \u201cactive calibrated\u201d version for the base model (e.g., via an alias/pointer such as `active_calibrated_version_id`). Scoring (online and offline) will be updated to resolve the model version through this pointer (or explicit version passed in) to guarantee the score is produced by the intended calibrated artifact; the scoring response will include `calibrated_outcome` and `label_rule_metadata` (or IDs) sourced directly from the resolved model version\u2019s metadata.\n\n### API + Testing\nUpdate the fit `score` and `segment` endpoints to return a small, stable metadata object (e.g., `model_version_id`, `calibrated_outcome`, `label_rule_id`/`label_rule_hash`) along with existing score fields. This metadata will be treated as authoritative for interpretation and reporting. Add a regression test that (1) calibrates a model for outcome A, scores and asserts response contains outcome A, then (2) recalibrates for outcome B, scores again and asserts response now contains outcome B and references the new calibrated model version; run the test for both online and offline scoring codepaths to prevent future drift.",
+      "link": "https://www.onyx.app/24944"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

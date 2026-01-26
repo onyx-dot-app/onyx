@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#128",
+  "semantic_identifier": "128: fix: Fix threshold evaluation for warning_alerts (inactivity, stage aging, missing next step)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-28",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "128",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "8",
+    "num_files_changed": "76",
+    "labels": [],
+    "created_at": "2025-05-28",
+    "updated_at": "2025-05-28",
+    "closed_at": "2025-06-19"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR fixes high-priority inconsistencies in threshold-based `warning_alerts` by standardizing how inactivity days, stage aging, and missing-next-step conditions are derived from CRM data.\n\nChanges:\n- Introduces a single time basis for all evaluations (one `now` value per run, consistently timezone-normalized to UTC) to prevent drift between checks.\n- Centralizes threshold computation in a shared evaluator that:\n  - Computes `inactivity_days` from the latest available activity timestamp (falls back safely when history is missing).\n  - Computes `stage_age_days` from the stage last-changed timestamp (or created-at fallback when missing).\n  - Computes `missing_next_step` from normalized next-step fields, treating cleared/empty values as absent.\n- Hardens null/missing-field handling across all three checks to avoid false positives when CRM fields are unset or partially synced.\n- Adds idempotency/consistency guards to avoid double-triggering caused by sync delays/partial updates (e.g., stage updated without activity, next-step cleared but stale cached value).\n\nTests:\n- Adds unit tests covering edge cases:\n  - No activity history (ensures inactivity is computed deterministically without exceptions).\n  - Stage change today (ensures stage aging does not trip early due to timezone/rounding).\n  - Next-step cleared (ensures missing-next-step triggers correctly and doesn\u2019t retain prior value).\n\nUser impact:\n- Warning alerts should now trigger consistently and only when thresholds are truly exceeded, with fewer false positives/negatives around recent updates and incomplete CRM payloads.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#128"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "6922982",
+  "semantic_identifier": "[GOLD-45]: Messaging Library Export API: implement bulk export endpoint with pagination + filters",
+  "title": "Messaging Library Export API: implement bulk export endpoint with pagination + filters",
+  "source": "linear",
+  "doc_updated_at": "2026-01-17",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "kevin_sullivan",
+      "email": "kevin_sullivan@netherite-extraction.onyx.app"
+    },
+    "state": "in_progress",
+    "priority": "high",
+    "created_at": "2026-01-17"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement the core bulk export endpoint(s) to return approved Messaging Library assets for a given workspace, with pagination (cursor/limit) and optional filters (asset type, segment/ICP, updated_since). Ensure stable ordering and include enough metadata for clients to sync incrementally (e.g., next_cursor, total_count when available). This ticket should focus on endpoint behavior and query performance; approval-state/versioning validation is handled in GOLD-44.",
+      "link": "https://www.onyx.app/23967"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

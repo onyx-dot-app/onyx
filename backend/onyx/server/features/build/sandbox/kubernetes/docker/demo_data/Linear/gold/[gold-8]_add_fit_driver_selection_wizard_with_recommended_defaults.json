@@ -1,0 +1,30 @@
+{
+  "id": "1917681",
+  "semantic_identifier": "[GOLD-8]: Add Fit Driver Selection Wizard with recommended defaults",
+  "title": "Add Fit Driver Selection Wizard with recommended defaults",
+  "source": "linear",
+  "doc_updated_at": "2025-05-19",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "high",
+    "created_at": "2025-05-19"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a guided fit driver selection step in the setup flow that pre-populates recommended drivers based on connected data sources (CRM fields, surveys, usage events, support tickets). Provide short explanations and an \u201caccept all\u201d option, while allowing users to add/remove drivers before continuing. Persist the selected drivers and defaults to the workspace so downstream fit scoring uses the same configuration.",
+      "link": "https://www.onyx.app/55414"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

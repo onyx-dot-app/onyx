@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#133",
+  "semantic_identifier": "133: feat: Add canonical Sales Accelerator lifecycle schema + per-CRM normalization/validation for stages & fields",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-09",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "133",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "55",
+    "labels": [],
+    "created_at": "2025-08-09",
+    "updated_at": "2025-08-09",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nThis PR introduces a canonical Sales_Accelerator lifecycle model (stages + required fields) and a normalization layer that maps each connected CRM instance\u2019s custom stage/field names into the canonical schema. Mappings are persisted per CRM instance so all downstream analytics operate exclusively on canonical values.\n\n## What\u2019s included\n- **Canonical lifecycle schema**\n  - Defines the authoritative set of lifecycle stages and required fields for each stage.\n  - Exposes a single source of truth for analytics and internal consumers.\n\n- **Normalization layer (per CRM instance)**\n  - Maps CRM-native stage names \u2192 canonical stage identifiers.\n  - Maps CRM-native field names/keys \u2192 canonical field identifiers.\n  - Supports **per-instance overrides** (tenant/connection scoped) to handle custom pipelines and non-standard naming.\n\n- **Persistent mapping storage**\n  - Adds storage for stage/field mappings keyed by CRM connection/instance.\n  - Includes read/write APIs/helpers to resolve canonical values at runtime.\n\n- **Validation + enforcement** (high priority behavior)\n  - Validation detects unmapped stages/fields and missing required canonical fields.\n  - Analytics jobs are **blocked** when lifecycle mappings are partial or invalid (fails fast with actionable errors rather than producing mixed/incorrect dimensions).\n  - Validation output includes the list of unmapped stage names and field keys to aid remediation.\n\n## High-level implementation\n- Introduces a `CanonicalLifecycle` definition module (stages + required fields).\n- Adds a `LifecycleMapper` responsible for:\n  - Loading persisted mappings for a CRM instance.\n  - Applying defaults + overrides.\n  - Producing normalized events/records with canonical stage/field identifiers.\n- Adds a `LifecycleMappingValidator` that runs pre-analytics (and on mapping updates) to ensure completeness.\n- Updates analytics ingestion/transform to consume only canonical stage/field identifiers and to hard-stop when validation fails.\n\n## User/ops impact\n- New/updated CRM connections may require setting stage/field mappings before analytics can run.\n- If a CRM pipeline changes (renamed stage/field), analytics jobs will fail with validation errors until the mapping is updated.\n\n## Notes\n- Backwards compatibility is maintained at the ingestion boundary; normalization occurs before analytics consumption to prevent mixed canonical/non-canonical dimensions.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#133"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

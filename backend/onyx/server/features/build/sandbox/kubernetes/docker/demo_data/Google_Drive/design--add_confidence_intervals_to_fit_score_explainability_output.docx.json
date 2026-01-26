@@ -1,0 +1,30 @@
+{
+  "id": "deb464abfcd54436b0a50e91e45f3d3d",
+  "semantic_identifier": "Design--Add confidence intervals to Fit Score explainability output.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-21",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add confidence intervals to Fit Score explainability output.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add confidence intervals (CIs) to the Fit Score explainability output at both segment and account levels. The goal is to help consumers distinguish high-confidence scores from noisy/low-signal ones without changing the core Fit Score value. This will require extending the scoring service to compute interval bounds, surfacing those bounds through the API/SDK explainability payload, and ensuring the change is backwards-compatible for existing clients.\n\n### Confidence interval computation\nIn the scoring service, we will compute a lower and upper bound for each reported Fit Score (segment-level and the aggregated account-level score). The implementation will reuse existing signal statistics already available in the scorer (e.g., sample size / event counts, variance or residual/error proxy, and any model calibration metadata). For low-signal segments (e.g., sparse data, low counts), the interval should widen and may be capped to valid score limits (e.g., [0, 1] or [0, 100] depending on the score scale). For high-signal segments, the interval should tighten. We will implement a deterministic method (no sampling) to keep latency stable and make results unit-testable.\n\n### API/SDK and payload shape (backwards compatible)\nWe will extend the explainability payload to include optional CI fields without modifying existing required fields. Proposed shape: add `confidenceInterval` (or `ci`) objects alongside each score node, e.g. `{ score, confidenceInterval: { lower, upper, level } }`, where `level` defaults to `0.95` and may be omitted if constant. The API will include these fields when available; older clients will ignore unknown fields. SDK types will be updated to mark CI fields optional, and any JSON serialization/deserialization will pass through fields unchanged.\n\n### Testing and rollout\nWe will add unit tests for interval generation covering: (1) low-signal segments produce wider intervals and remain within score bounds, (2) high-signal segments produce narrower intervals, and (3) account-level interval behaves sensibly relative to segment inputs (e.g., aggregation doesn\u2019t invert bounds). We will gate the feature behind a service flag/config to enable staged rollout, monitor payload sizes/latency, and confirm no breaking changes in downstream consumers before fully enabling by default.",
+      "link": "https://www.onyx.app/22261"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "e9705ff83ada4a15a0ae000f6caadff2",
+  "semantic_identifier": "Impact--Show Jira/Linear two-way sync status + last synced details on Issue page.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Show Jira/Linear two-way sync status + last synced details on Issue page.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a dedicated \u201cSync status\u201d panel on the Issue page whenever a Jira or Linear issue is linked. Instead of treating the integration as a passive link-out, the panel makes the relationship explicit by showing the external issue key with a direct link, plus a clear state indicator (e.g., Healthy vs Error) so users can quickly understand whether updates are flowing.\n\nTo build trust in the two-way sync, the panel will also display \u201cLast synced at\u201d and \u201cLast external update at\u201d timestamps. This gives users concrete proof of freshness and helps them diagnose common questions like \u201cDid my change actually push?\u201d or \u201cIs Jira ahead of what I\u2019m seeing here?\u201d without needing to leave the Issue page or ask an admin.\n\nWhen sync is unhealthy, the panel will surface actionable error messaging (e.g., missing permissions, issue not found, auth expired) rather than generic failures. The goal is to reduce support burden and unblock users faster by making the cause and next step visible at the point of failure.\n\nFinally, we\u2019ll add self-serve controls for manual recovery: \u201cRefresh from Jira/Linear\u201d and \u201cPush update.\u201d These actions will call existing sync endpoints to re-run the sync on demand, reducing escalation and improving confidence that users can resolve transient issues or force an update when timing matters.",
+      "link": "https://www.onyx.app/75754"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

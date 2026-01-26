@@ -1,0 +1,193 @@
+{
+  "id": "FIREFLIES_4288737",
+  "semantic_identifier": "4288737 - Highridge Data Services - buy - Discussion with Tatum Green",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-07-08 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-07-08 00:00:00",
+    "duration_min": "32"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-07"
+      ],
+      "year_month": "2026-07",
+      "meeting_title": "4288737 - Highridge Data Services - buy - Discussion with Tatum Green",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Tatum\u2014good to see you again. Since this is our third call, I\u2019d love to use today to confirm the last couple open items and, if everything checks out, align on next steps to get Highridge live with Customer_Analyzer. Sound good?",
+      "link": "https://www.onyx.app/1010723-1"
+    },
+    {
+      "text": "Tatum Green: Yeah, that works. We\u2019re interested\u2014this is mostly about making sure it\u2019ll be clean with how we segment customers, and then understanding what we\u2019re actually buying and how fast we\u2019ll see value.",
+      "link": "https://www.onyx.app/1010723-2"
+    },
+    {
+      "text": "Irene Shen: Perfect. Let\u2019s anchor on two things: (1) Fit estimation\u2014because that\u2019s the engine that tells you who your best customers really are and why, and (2) the driver breakdown and segment comparisons\u2014because that\u2019s what turns the score into something your product and marketing teams can act on for planning. Then we\u2019ll address the segmentation ambiguity concern head-on.",
+      "link": "https://www.onyx.app/1010723-3"
+    },
+    {
+      "text": "Tatum Green: Great. The fit score is compelling, but I want to avoid a situation where it gives us \u201cmeh\u201d recommendations because our segments overlap. We have healthcare and fintech customers, but also \u201cdata ops\u201d personas across both, and it gets messy.",
+      "link": "https://www.onyx.app/1010723-4"
+    },
+    {
+      "text": "Irene Shen: Totally common\u2014and solvable. Customer_Analyzer doesn\u2019t force you into one rigid segmentation lens. What we recommend is setting up a primary segmentation framework for decision-making, then allowing secondary tags for overlap. For example: primary segment = industry + company size, and secondary = persona or use case like \u201cdata ops / analytics modernization.\u201d The fit estimation can then compare clean segment buckets, while still letting you slice by those cross-cutting tags.",
+      "link": "https://www.onyx.app/1010723-5"
+    },
+    {
+      "text": "Tatum Green: Okay, but how does the product actually handle that? Like, do we have to manually define all of it?",
+      "link": "https://www.onyx.app/1010723-6"
+    },
+    {
+      "text": "Irene Shen: You can start lightweight. You define a small set of fit drivers\u2014firmographics like industry and size, plus a couple of signals you already have, like problem severity from onboarding survey responses, adoption from product usage events, and support burden from ticket volume. Then Customer_Analyzer computes a fit score 0\u2013100 at the account level and aggregates it at the segment level. Where it gets really actionable is the driver breakdown: it tells you, \u201cThis segment scores 82 because time-to-value is fast and adoption is high; this other segment scores 54 because support burden is high and willingness-to-pay signals are weak.\u201d",
+      "link": "https://www.onyx.app/1010723-7"
+    },
+    {
+      "text": "Tatum Green: And those signals come from our systems\u2014CRM, tickets, product analytics?",
+      "link": "https://www.onyx.app/1010723-8"
+    },
+    {
+      "text": "Irene Shen: Exactly. On your side, you\u2019ve already mentioned Salesforce fields, Intercom/Zendesk tickets, and product events in Segment. Those are the big three. We ingest those signals and normalize them so you don\u2019t have to build a custom pipeline. Then for product planning\u2014your use case\u2014we can connect fit outcomes to retention and expansion trends. So it\u2019s not just \u201cthis looks like a good customer,\u201d it\u2019s \u201cthis segment historically renews and expands, and here are the drivers that correlate.\u201d",
+      "link": "https://www.onyx.app/1010723-9"
+    },
+    {
+      "text": "Tatum Green: That\u2019s the part our product team wants. They\u2019re constantly debating roadmap bets based on the loudest customers.",
+      "link": "https://www.onyx.app/1010723-10"
+    },
+    {
+      "text": "Irene Shen: Right\u2014and the tool helps you shift from \u201cloudest\u201d to \u201chighest-fit with unmet needs.\u201d The segment comparisons view is what teams tend to use in roadmap discussions. For example, you can compare SMB healthcare vs mid-market healthcare, or fintech mid-market vs fintech enterprise, and see which segments show higher fit and where the friction is coming from\u2014time-to-value, adoption curve, support load, churn risk signals. Then you can decide: do we invest to improve fit for a segment we want, or do we stop chasing a segment that\u2019s structurally misaligned?",
+      "link": "https://www.onyx.app/1010723-11"
+    },
+    {
+      "text": "Tatum Green: I like that framing. But let\u2019s go back to the ambiguity issue. We\u2019ve had tools in the past that basically produced conflicting outputs because one account could fall into multiple categories.",
+      "link": "https://www.onyx.app/1010723-12"
+    },
+    {
+      "text": "Irene Shen: Yep. The way we prevent \u201cconfusing recommendations\u201d is by being explicit about what \u201csegment\u201d means in a given analysis. Two best practices we\u2019ll implement with you:\n1) Mutually exclusive segment definitions for the main comparisons. We\u2019ll agree on a hierarchy\u2014say, industry first, then size band\u2014so every account lands in exactly one \u201cprimary segment.\u201d\n2) Overlap handled as attributes, not competing segments. Persona, use case, tech stack\u2014those become filters or tags that you can apply after you\u2019ve established the clean baseline.\nWe also show you the composition of each segment\u2014so if a segment is accidentally heterogeneous, it\u2019s visible immediately.",
+      "link": "https://www.onyx.app/1010723-13"
+    },
+    {
+      "text": "Tatum Green: So we won\u2019t end up with a healthcare segment that\u2019s secretly half fintech because of how fields were mapped.",
+      "link": "https://www.onyx.app/1010723-14"
+    },
+    {
+      "text": "Irene Shen: Exactly. And during onboarding we do a \u201csegment sanity check\u201d where we look at your top segments by ARR and by logo count and confirm the definitions match how Highridge talks about the market. If something overlaps, we adjust the hierarchy. That\u2019s usually a 30\u201345 minute working session.",
+      "link": "https://www.onyx.app/1010723-15"
+    },
+    {
+      "text": "Tatum Green: That helps. Now, value timeline\u2014what\u2019s realistic? We don\u2019t want a three-month science project.",
+      "link": "https://www.onyx.app/1010723-16"
+    },
+    {
+      "text": "Irene Shen: Completely aligned. Typical timeline: week one, connect data sources and define the initial fit drivers. Week two, you get your first fit scores and segment comparisons, plus a short readout. The goal by end of week two is: \u201cHere are the top two high-fit segments, here are the bottom two, and here are the driver-level reasons.\u201d Then week three and four is refinement\u2014adding one or two more drivers if needed and calibrating based on feedback.",
+      "link": "https://www.onyx.app/1010723-17"
+    },
+    {
+      "text": "Tatum Green: And do we have to be perfect with drivers up front?",
+      "link": "https://www.onyx.app/1010723-18"
+    },
+    {
+      "text": "Irene Shen: No\u2014start with 6\u20138 drivers max. You\u2019ll get value even with a simple model: industry, size, time-to-value proxy, early adoption, support burden, and churn risk signals. Then you refine once the team sees what\u2019s missing. The key is that the driver breakdown makes it transparent\u2014so you\u2019re not trusting a black box.",
+      "link": "https://www.onyx.app/1010723-19"
+    },
+    {
+      "text": "Tatum Green: Okay. Commercially, we\u2019re close. I just need confidence that this won\u2019t turn into endless debates about \u201cthe model.\u201d",
+      "link": "https://www.onyx.app/1010723-20"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fair. The way we avoid that is we tie the fit estimation back to outcomes you already trust\u2014retention, expansion, conversion. We\u2019ll set a baseline: \u201cWhen fit is above X, what happens to renewal?\u201d If the relationship is weak, we adjust the drivers. If it\u2019s strong, it becomes a shared language across product, marketing, and sales\u2014without philosophical debates.",
+      "link": "https://www.onyx.app/1010723-21"
+    },
+    {
+      "text": "Tatum Green: That\u2019s a good point. If we can show, say, high-fit segments retain better, it\u2019s easier to align.",
+      "link": "https://www.onyx.app/1010723-22"
+    },
+    {
+      "text": "Irene Shen: Exactly. So here\u2019s what I\u2019m proposing to get this over the line: we start with the Customer_Analyzer package scoped for your product planning use case\u2014fit estimation plus segment comparisons and driver breakdown. During onboarding, we\u2019ll include that segment definition working session specifically to address the ambiguity risk. If you\u2019re good with that, we can finalize today and book kickoff for next week.",
+      "link": "https://www.onyx.app/1010723-23"
+    },
+    {
+      "text": "Tatum Green: Before we finalize\u2014what does \u201cfinalize today\u201d mean? Contract signature and then kickoff?",
+      "link": "https://www.onyx.app/1010723-24"
+    },
+    {
+      "text": "Irene Shen: Yes. We\u2019d send the order form right after this call. Once signed, we schedule kickoff, connect data sources, and set your initial segment framework and fit drivers. I can also include a short success plan doc so you can forward it internally: milestones by week and what \u201cvalue delivered\u201d looks like.",
+      "link": "https://www.onyx.app/1010723-25"
+    },
+    {
+      "text": "Tatum Green: That would help. One more question: if we realize our segment hierarchy is wrong after a month, are we stuck?",
+      "link": "https://www.onyx.app/1010723-26"
+    },
+    {
+      "text": "Irene Shen: Not stuck. You can change segment definitions any time. What we\u2019ll do is version it: keep \u201cv1 segments\u201d for continuity, then test \u201cv2 segments\u201d and compare results. That way you don\u2019t lose historical context, but you also aren\u2019t locked into early assumptions.",
+      "link": "https://www.onyx.app/1010723-27"
+    },
+    {
+      "text": "Tatum Green: Good. I think we\u2019re ready. I just need to confirm procurement won\u2019t slow us down\u2014our VP is supportive, and I\u2019m the one driving it.",
+      "link": "https://www.onyx.app/1010723-28"
+    },
+    {
+      "text": "Irene Shen: Great\u2014what\u2019s the cleanest path? If I send the order form today, can you get signature this week?",
+      "link": "https://www.onyx.app/1010723-29"
+    },
+    {
+      "text": "Tatum Green: Yes. If you send it in the next hour, I can route it today. Assuming terms are standard, we should be able to sign by Thursday.",
+      "link": "https://www.onyx.app/1010723-30"
+    },
+    {
+      "text": "Irene Shen: Perfect. I\u2019ll send it right after we hang up. Last check: are we aligned that the main success criteria for Highridge is: identify the top two high-fit segments for focus, identify one \u201chigh-fit but unmet needs\u201d segment to inform roadmap bets, and socialize the driver-based rationale with product and marketing?",
+      "link": "https://www.onyx.app/1010723-31"
+    },
+    {
+      "text": "Tatum Green: Yes, that\u2019s exactly it. And if we can reduce the internal arguing about which customers to prioritize, that\u2019s a win.",
+      "link": "https://www.onyx.app/1010723-32"
+    },
+    {
+      "text": "Irene Shen: Love it. I\u2019ll include those as the success criteria in the kickoff plan. Any red flags I should anticipate from legal or security?",
+      "link": "https://www.onyx.app/1010723-33"
+    },
+    {
+      "text": "Tatum Green: Security will ask about data handling, but we\u2019ve already reviewed your overview. Just include the standard security docs in the email and we\u2019ll attach them to the ticket.",
+      "link": "https://www.onyx.app/1010723-34"
+    },
+    {
+      "text": "Irene Shen: Will do. So next steps: I send order form + security packet + one-page success plan today; you route for signature; we book kickoff for early next week; and in week two you\u2019ll have the first fit score outputs and segment comparisons.",
+      "link": "https://www.onyx.app/1010723-35"
+    },
+    {
+      "text": "Tatum Green: Sounds good. Send it over and I\u2019ll get it moving.",
+      "link": "https://www.onyx.app/1010723-36"
+    },
+    {
+      "text": "Irene Shen: Great. Thanks, Tatum\u2014excited to get Customer_Analyzer live at Highridge. I\u2019ll follow up in a few minutes with everything.",
+      "link": "https://www.onyx.app/1010723-37"
+    },
+    {
+      "text": "Tatum Green: Thanks, Irene. Talk soon.",
+      "link": "https://www.onyx.app/1010723-38"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "tatum_green@highridge_data_services.onyx.app"
+    }
+  ]
+}

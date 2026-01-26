@@ -1,0 +1,209 @@
+{
+  "id": "FIREFLIES_3458171",
+  "semantic_identifier": "3458171 - Velvetcompass Travel - buy - Discussion with Oscar Montgomery",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-04-21 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-04-21 00:00:00",
+    "duration_min": "38"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-04"
+      ],
+      "year_month": "2026-04",
+      "meeting_title": "3458171 - Velvetcompass Travel - buy - Discussion with Oscar Montgomery",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Oscar, good to see you again. Since this is our third call, I\u2019d love to use the time to confirm the last open questions and, if everything lines up, agree on next steps to get Sales_Accelerator live at Velvetcompass.",
+      "link": "https://www.onyx.app/9071304-1"
+    },
+    {
+      "text": "Oscar Montgomery: Yeah, that works. We\u2019re definitely interested\u2014just want to be sure it\u2019ll actually help forecasting and not create more noise for the team.",
+      "link": "https://www.onyx.app/9071304-2"
+    },
+    {
+      "text": "James Choi: Totally fair. Let me anchor on two things we\u2019ve talked about: the forecasting layer and the SDR prioritization workflow. If we can align on those and how we\u2019ll avoid \u201calert fatigue\u201d from messy CRM data, we should be in a good spot to move forward. Sound good?",
+      "link": "https://www.onyx.app/9071304-3"
+    },
+    {
+      "text": "Oscar Montgomery: Yes. Forecasting is the big one. We\u2019re missing commits at the end of the quarter because stages don\u2019t reflect reality.",
+      "link": "https://www.onyx.app/9071304-4"
+    },
+    {
+      "text": "James Choi: That\u2019s exactly where Sales_Accelerator helps, because it doesn\u2019t just mirror stages\u2014it combines stage with activity signals and cycle-time benchmarks, and optionally weights with Customer_Analyzer fit. So instead of \u201cStage 3 means 60%,\u201d it looks at drivers like stage age, last touch, whether a next meeting is scheduled, and historical win rates for similar deals. Then it gives you an explainable commit/best-case/pipeline view.",
+      "link": "https://www.onyx.app/9071304-5"
+    },
+    {
+      "text": "Oscar Montgomery: Explainable is important. Our CRO hates \u201cblack box\u201d forecasts.",
+      "link": "https://www.onyx.app/9071304-6"
+    },
+    {
+      "text": "James Choi: Same. In the forecast view, you can click into a rollup and see the drivers per opportunity: \u201cThis is at risk because it\u2019s 18 days past typical stage time and there\u2019s no next step logged,\u201d or \u201cThis is strong because the fit tier is high, last touch was yesterday, and the next meeting is on the calendar.\u201d Managers can use that to coach, and reps can use it to take action.",
+      "link": "https://www.onyx.app/9071304-7"
+    },
+    {
+      "text": "Oscar Montgomery: Okay. But our data hygiene is\u2026 not perfect. Stages get stale. Close dates drift. Next steps aren\u2019t always logged.",
+      "link": "https://www.onyx.app/9071304-8"
+    },
+    {
+      "text": "James Choi: I\u2019m glad you\u2019re calling that out because it\u2019s the number one thing that undermines forecast accuracy and creates false alarms. The way we handle it in rollout is twofold. First, we start by using what\u2019s reliably captured\u2014activity signals like emails, calls, meetings\u2014because that\u2019s often more consistent than stage notes. Second, we set minimum \u201cdeal hygiene\u201d rules that are realistic: for example, any opp in Forecast has to have a next meeting scheduled or a documented next step, and close dates can\u2019t be more than X days without a reason code.",
+      "link": "https://www.onyx.app/9071304-9"
+    },
+    {
+      "text": "Oscar Montgomery: And if we don\u2019t enforce that, the alerts go crazy?",
+      "link": "https://www.onyx.app/9071304-10"
+    },
+    {
+      "text": "James Choi: They can. You\u2019ll see \u201cdeal at risk\u201d flags that are basically \u201cCRM is incomplete,\u201d which people ignore. So we tune it. In the first two weeks, we keep alerts conservative\u2014only high-confidence risk signals like \u201cno touch in 14 days on late-stage\u201d or \u201cstage age is 2x benchmark.\u201d Then, as hygiene improves, you can expand. The goal is fewer, higher-quality alerts that earn trust.",
+      "link": "https://www.onyx.app/9071304-11"
+    },
+    {
+      "text": "Oscar Montgomery: That\u2019s reassuring. What about scenario planning? You mentioned last time we could model pipeline needs.",
+      "link": "https://www.onyx.app/9071304-12"
+    },
+    {
+      "text": "James Choi: Yes\u2014this is within the sales_forecast feature. You can run scenarios like, \u201cIf we add 20 SQLs in ICP Tier 1, what\u2019s the expected impact?\u201d Because Sales_Accelerator is already consuming Customer_Analyzer fit tiers, it can estimate expected conversion and cycle-time based on historical patterns for those tiers. That helps your leadership team decide whether to push outbound, reallocate SDR capacity, or focus on progressing existing late-stage deals.",
+      "link": "https://www.onyx.app/9071304-13"
+    },
+    {
+      "text": "Oscar Montgomery: We do a lot of that in spreadsheets today. It\u2019s time-consuming and everyone argues about the assumptions.",
+      "link": "https://www.onyx.app/9071304-14"
+    },
+    {
+      "text": "James Choi: Exactly. Here, the assumptions are explicit and grounded in your actual CRM history\u2014plus the fit tier weighting. You can say, \u201cWe assumed Tier 1 has a 1.4x win rate versus Tier 3,\u201d and then adjust if you disagree. It turns the conversation from \u201cwho\u2019s right\u201d to \u201cwhat lever do we pull.\u201d",
+      "link": "https://www.onyx.app/9071304-15"
+    },
+    {
+      "text": "Oscar Montgomery: Okay. Now the other piece\u2014SDR prioritization. We already have Customer_Analyzer fit scores. How does Sales_Accelerator add value without duplicating it?",
+      "link": "https://www.onyx.app/9071304-16"
+    },
+    {
+      "text": "James Choi: Great question. Customer_Analyzer tells you \u201cwho is a fit\u201d and gives you positioning blocks\u2014why they should care. Sales_Accelerator turns that into execution: it recommends the next 50 accounts to contact based on fit tier plus real-time signals, and it generates segment-aligned openers and proof points your SDRs can actually use. So your SDR lead can pull a prioritized list daily instead of everyone picking accounts ad hoc.",
+      "link": "https://www.onyx.app/9071304-17"
+    },
+    {
+      "text": "Oscar Montgomery: The \u201cnext 50 accounts\u201d idea is appealing. Our outbound is inconsistent across reps.",
+      "link": "https://www.onyx.app/9071304-18"
+    },
+    {
+      "text": "James Choi: That\u2019s a classic use case. And for managers, it becomes coachable: you can see whether the SDRs are working the highest-fit accounts and whether they\u2019re following the recommended sequences. It\u2019s not about policing\u2014it\u2019s about consistency and throughput.",
+      "link": "https://www.onyx.app/9071304-19"
+    },
+    {
+      "text": "Oscar Montgomery: We\u2019d need to make sure messaging doesn\u2019t sound robotic.",
+      "link": "https://www.onyx.app/9071304-20"
+    },
+    {
+      "text": "James Choi: Completely. The generated openers are meant to be \u201cfirst draft,\u201d grounded in your positioning blocks\u2014so they\u2019re aligned to your segments. You can lock in approved proof points, and reps can personalize. Most teams use it to reduce blank-page time and standardize what \u201cgood\u201d looks like, not to fully automate outreach.",
+      "link": "https://www.onyx.app/9071304-21"
+    },
+    {
+      "text": "Oscar Montgomery: Makes sense. Let\u2019s talk implementation. If we sign, what\u2019s the timeline to value?",
+      "link": "https://www.onyx.app/9071304-22"
+    },
+    {
+      "text": "James Choi: For a team your size, typical is: Week 1 we connect CRM and activity sources, confirm your pipeline definitions, and map Customer_Analyzer fit tiers. Week 2 we turn on forecasting views and calibrate benchmarks. Week 3 we roll out SDR prioritization for a pilot group, refine messaging templates, and tune alerts to avoid noise. You should see forecast lift and clearer risk visibility by end of week 2, and outbound consistency improvements by week 3\u20134.",
+      "link": "https://www.onyx.app/9071304-23"
+    },
+    {
+      "text": "Oscar Montgomery: And the biggest risk is still data hygiene?",
+      "link": "https://www.onyx.app/9071304-24"
+    },
+    {
+      "text": "James Choi: Yes, but it\u2019s manageable if we treat it as part of rollout, not a prerequisite perfection project. We\u2019ll define \u201cminimum viable hygiene\u201d so the system is trustworthy, and we\u2019ll give you dashboards that show where hygiene is breaking\u2014stale stages, missing next steps\u2014so it\u2019s visible and correctable.",
+      "link": "https://www.onyx.app/9071304-25"
+    },
+    {
+      "text": "Oscar Montgomery: Good. Internally, I need to justify this with outcomes. What do you usually see?",
+      "link": "https://www.onyx.app/9071304-26"
+    },
+    {
+      "text": "James Choi: On forecasting, teams reduce end-of-quarter surprises because \u201ccommit\u201d is grounded in drivers, not optimism. On execution, managers spend less time chasing updates and more time coaching on specific risk drivers. And SDR teams see higher connect rates because they\u2019re prioritizing Tier 1 accounts and using consistent proof points.",
+      "link": "https://www.onyx.app/9071304-27"
+    },
+    {
+      "text": "Oscar Montgomery: Alright. Commercially, I think we\u2019re close. My only remaining concern is adoption\u2014our reps don\u2019t love new tools.",
+      "link": "https://www.onyx.app/9071304-28"
+    },
+    {
+      "text": "James Choi: Understood. The adoption angle is why Sales_Accelerator sits on top of your existing CRM rather than replacing it. Reps still live in Salesforce/HubSpot; we surface guidance and forecast views without asking them to rebuild their workflow. Also, we\u2019ll start with the two workflows that matter: forecast hygiene and the daily SDR \u201cnext 50\u201d list. If those two become habit, everything else follows.",
+      "link": "https://www.onyx.app/9071304-29"
+    },
+    {
+      "text": "Oscar Montgomery: That\u2019s reasonable. So what are you asking for today?",
+      "link": "https://www.onyx.app/9071304-30"
+    },
+    {
+      "text": "James Choi: If you\u2019re comfortable, I\u2019d like to lock in the purchase decision today so we can start the kickoff next week. Practically, that means you confirming you\u2019re ready to move forward with Sales_Accelerator for the revenue team, and we schedule a 30-minute implementation planning session with your ops lead.",
+      "link": "https://www.onyx.app/9071304-31"
+    },
+    {
+      "text": "Oscar Montgomery: I think we can do that. I need final sign-off from finance, but from my side, I\u2019m in.",
+      "link": "https://www.onyx.app/9071304-32"
+    },
+    {
+      "text": "James Choi: Great. What does finance need to see to approve\u2014ROI summary, security, or just the order form?",
+      "link": "https://www.onyx.app/9071304-33"
+    },
+    {
+      "text": "Oscar Montgomery: Mostly order form and a short ROI write-up. Security already reviewed your docs after last call.",
+      "link": "https://www.onyx.app/9071304-34"
+    },
+    {
+      "text": "James Choi: Perfect. I\u2019ll send the order form right after this, plus a one-pager that ties value to forecasting accuracy and SDR productivity\u2014specifically calling out the scenario planning and explainable forecast drivers. If finance turns quickly, can we target signature by Friday?",
+      "link": "https://www.onyx.app/9071304-35"
+    },
+    {
+      "text": "Oscar Montgomery: Yes, Friday is doable.",
+      "link": "https://www.onyx.app/9071304-36"
+    },
+    {
+      "text": "James Choi: Awesome. And to keep momentum, can we pencil the kickoff for next Tuesday pending signature?",
+      "link": "https://www.onyx.app/9071304-37"
+    },
+    {
+      "text": "Oscar Montgomery: Let\u2019s do Tuesday morning.",
+      "link": "https://www.onyx.app/9071304-38"
+    },
+    {
+      "text": "James Choi: Done\u2014I'll send a hold for Tuesday morning, and I\u2019ll include a short checklist for CRM hygiene baselines so we can start clean and avoid alert fatigue from day one. Anything else you want me to cover for finance or your CRO?",
+      "link": "https://www.onyx.app/9071304-39"
+    },
+    {
+      "text": "Oscar Montgomery: No, I think that covers it. Just make the one-pager straightforward\u2014no fluff.",
+      "link": "https://www.onyx.app/9071304-40"
+    },
+    {
+      "text": "James Choi: Will do. I\u2019ll get those over in the next hour. Thanks, Oscar\u2014excited to get Velvetcompass live on Sales_Accelerator.",
+      "link": "https://www.onyx.app/9071304-41"
+    },
+    {
+      "text": "Oscar Montgomery: Thanks, James. Talk soon.",
+      "link": "https://www.onyx.app/9071304-42"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "oscar_montgomery@velvetcompass_travel.onyx.app"
+    }
+  ]
+}

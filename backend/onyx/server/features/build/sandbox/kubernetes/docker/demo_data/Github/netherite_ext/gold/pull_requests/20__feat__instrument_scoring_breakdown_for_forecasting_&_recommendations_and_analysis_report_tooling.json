@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#20",
+  "semantic_identifier": "20: feat: Instrument scoring breakdown for forecasting & recommendations + analysis/report tooling",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-07",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "20",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "8",
+    "num_files_changed": "90",
+    "labels": [],
+    "created_at": "2025-06-07",
+    "updated_at": "2025-06-07",
+    "closed_at": "2025-06-13"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nThis PR adds score-contribution instrumentation to the forecasting and best-next-action (BNA) scoring pipelines and includes a lightweight analysis script to quantify whether fit tier is over-weighted relative to deal-dynamics signals.\n\n### What changed\n- **Scoring breakdown logging**\n  - Introduced a common `ScoreBreakdown` payload that captures:\n    - total score\n    - fit tier contribution\n    - per-signal deal-dynamics contributions (procurement stage, competition, internal alignment)\n    - raw signal values + normalized values used at scoring time\n    - scoring version/hash and weights snapshot\n    - entity identifiers (accountId, opportunityId), model output type (forecast vs BNA), timestamp\n  - Added instrumentation at the final scoring step for:\n    - forecasting outputs\n    - BNA/recommendation ranking outputs\n  - Emitted events to the existing analytics sink (same ingestion path as other scoring telemetry) under a new event name: `scoring.breakdown.v1`.\n\n- **Analysis/report script**\n  - Added `scripts/analyze_scoring_breakdown.py` to query recent `scoring.breakdown.v1` events and produce:\n    - correlation of each contribution (fit vs each deal-dynamics signal) with outcomes (e.g., win/loss, stage progression where available)\n    - distribution plots/stat summaries for contribution ratios (fit contribution / total)\n    - flagged cases where:\n      - fit contribution dominates (configurable threshold)\n      - deal-dynamics aggregate contribution is strongly negative\n      - total score remains above a configurable \u201chigh score\u201d threshold\n    - CSV + Markdown report output for sharing in follow-up weighting tickets.\n\n- **Config / safety**\n  - Instrumentation is gated behind `SCORING_BREAKDOWN_LOGGING_ENABLED` (default off in production).\n  - Sampling supported via `SCORING_BREAKDOWN_SAMPLE_RATE` to limit volume.\n  - No scoring logic/weights are changed in this PR.\n\n### How to use\n- Enable logging locally/staging:\n  - `SCORING_BREAKDOWN_LOGGING_ENABLED=true`\n  - optionally `SCORING_BREAKDOWN_SAMPLE_RATE=0.1`\n- Generate a report:\n  - `python scripts/analyze_scoring_breakdown.py --since 30d --out ./reports/scoring_breakdown_30d`\n  - Optional flags: `--high-score-threshold`, `--fit-dominance-threshold`, `--require-negative-deal-dynamics`\n\n### Notes\n- This PR is intentionally scoped to instrumentation + analysis only (medium priority). The resulting report is intended to define concrete reweighting thresholds and seed regression test cases for subsequent tickets.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#20"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

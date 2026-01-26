@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#89",
+  "semantic_identifier": "89: feat: Workspace-level retention policies + TTL cleanup for Issue_Tracker conversations and artifacts",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-13",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "89",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "3",
+    "num_files_changed": "1",
+    "labels": [],
+    "created_at": "2025-11-13",
+    "updated_at": "2025-11-13",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements configurable data retention (per workspace) for ingested support conversations, extracted issue evidence/artifacts, and derived metadata stored in Issue_Tracker.\n\nKey changes:\n- Data model: Adds `workspace_retention_policies` (or equivalent) storing TTL days for:\n  - `raw_conversations_ttl_days`\n  - `issue_evidence_ttl_days`\n  - `derived_metadata_ttl_days`\n  - includes `updated_at`, `updated_by`, and `policy_version` for auditing.\n- Storage semantics: Introduces `expires_at` on retained entities and enforces that deletions preserve minimal downstream linkage:\n  - retains ticket/work-item identifiers, timestamps, and foreign keys needed to keep linked downstream tickets valid\n  - replaces deleted payloads with tombstones (`redacted=true`, `payload=null`, `deleted_at`) to avoid orphaned references.\n- Enforcement: Adds background cleanup jobs that run on a schedule and apply TTLs:\n  - batches deletes/updates by workspace, uses indexed `expires_at` scans, and rate-limits to avoid DB load spikes\n  - hard-deletes where safe; otherwise tombstones/redacts while keeping required references\n  - emits metrics (records scanned/expired/errors) and structured logs for auditability.\n- API: Exposes retention policy read/update endpoints under the admin API:\n  - validates bounds (no indefinite retention; min/max TTLs; required defaults)\n  - supports partial updates and returns effective policy (workspace override + system defaults).\n- Admin UI: Adds a workspace admin screen to view/edit retention settings with inline validation and \u201ceffective TTL\u201d preview.\n- Defaults & compliance: Sets compliant default TTLs and blocks configuration that would result in indefinite storage or TTLs outside allowed ranges.\n\nOperational notes:\n- Cleanup jobs are safe to run concurrently across workspaces (workspace-scoped locking) and are idempotent.\n- A migration backfills `expires_at` for existing data based on defaults (or existing workspace settings if present).\n\nUser impact:\n- Workspace admins can configure retention durations; data older than the configured TTL will be expired automatically while linked downstream tickets continue to function with minimal preserved references.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#89"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

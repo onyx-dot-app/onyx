@@ -1,0 +1,30 @@
+{
+  "id": "7917901",
+  "semantic_identifier": "[GOLD-80]: Implement scheduled CRM refresh job runner for Salesforce/HubSpot (read-only sync)",
+  "title": "Implement scheduled CRM refresh job runner for Salesforce/HubSpot (read-only sync)",
+  "source": "linear",
+  "doc_updated_at": "2025-08-03",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "ryan_murphy",
+      "email": "ryan_murphy@netherite-extraction.onyx.app"
+    },
+    "state": "backlog",
+    "priority": "low",
+    "created_at": "2025-08-03"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Build the backend scheduled job that executes the configured Salesforce/HubSpot refresh cadence defined in GOLD-79. The job should fetch in-scope objects/fields and persist/update the internal sync tables using a stored cursor/last-sync timestamp per workspace. Exclude dedupe and any write-back behavior in this ticket; the output should be reliable periodic ingestion with basic retries and per-run logging/metrics.",
+      "link": "https://www.onyx.app/16640"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

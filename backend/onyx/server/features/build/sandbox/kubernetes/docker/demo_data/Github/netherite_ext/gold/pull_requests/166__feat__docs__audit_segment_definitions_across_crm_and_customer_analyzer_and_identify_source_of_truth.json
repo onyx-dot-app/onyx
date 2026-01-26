@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#166",
+  "semantic_identifier": "166: feat: Docs: audit segment definitions across CRM and Customer_Analyzer + identify source of truth",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-09-17",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "166",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "59",
+    "labels": [],
+    "created_at": "2025-09-17",
+    "updated_at": "2025-09-17",
+    "closed_at": "2025-10-02"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds a documented audit of how segment membership is computed in CRM vs Customer_Analyzer, with a per-segment mapping of criteria, data sources, and refresh cadence, and highlights where definitions can drift and what Issue_Tracker reporting surfaces are impacted.\n\n## What\u2019s included\n- New documentation page: `docs/segments/segment-definition-audit.md`\n  - Table mapping **segment name \u2192**\n    - CRM definition: fields, filters, inclusion/exclusion logic, ownership\n    - Customer_Analyzer definition: upstream tables/views, transforms, filters, ownership\n    - Refresh cadence / last-mile materialization (e.g., CRM rule evaluation vs analyzer job schedule)\n    - Identified drift risks and confirmed mismatches\n    - Issue_Tracker surfaces that consume the segment (dashboards/reports/exports) and the observed impact (counts/eligibility discrepancies)\n    - Recommended **source of truth** per segment and rationale\n- Adds a lightweight \u201chow to validate\u201d checklist (SQL/query pointers + CRM UI steps) to reproduce membership counts and spot drift.\n\n## Implementation notes\n- Audit compiled by tracing:\n  - CRM segment rule configuration (field-level filters and operators)\n  - Customer_Analyzer segment-building logic (models/queries used to populate segment membership)\n  - Downstream Issue_Tracker usage paths (where segment membership drives reporting/filters)\n- Documentation is intentionally concise (low-priority ticket): no code-path refactors or behavior changes are included.\n\n## Follow-ups (not in this PR)\n- Creates a clear list of gaps requiring subsequent tickets (e.g., align field semantics, unify refresh cadence, migrate a segment\u2019s source of truth, add automated parity checks).\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#166"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

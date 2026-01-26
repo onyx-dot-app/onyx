@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#9",
+  "semantic_identifier": "9: feat: Add deterministic holdout/control bucketing for recommendations + assignment analytics logging",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-20",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "9",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "10",
+    "labels": [],
+    "created_at": "2025-08-20",
+    "updated_at": "2025-08-20",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR introduces stable, deterministic control/treatment assignment for recommendations and logs the assignment for downstream measurement.\n\nKey changes:\n- Implements a deterministic bucketing utility (hash-based) that maps a unit (rep/account/opportunity ID) into a bucket for a given `(recommendation_type, model_version)`.\n- Adds per-surface configuration to control rollout behavior (e.g., enabled/disabled, control percentage, which unit type to bucket on), ensuring assignments remain stable over time (no re-randomization) as long as inputs/config don\u2019t change.\n- Updates recommendation generation to check the computed assignment and suppress recommendation output for units assigned to control when the surface/config indicates holdout should be enforced.\n- Emits an analytics event on assignment with the following fields: `bucket` (control/treatment), `unit_id`, `unit_type`, `recommendation_type`, `model_version`, and `timestamp` (and surface identifier when available), so outcomes can be compared against a true baseline.\n\nNotes for reviewers/operators:\n- Changing `control_percentage` or bucketing inputs will shift cohort membership; keep configs stable during experiments.\n- Model version is part of the bucketing key so rollouts/holdouts are tracked independently per version.\n- Logging is emitted at assignment time (when recommendations are evaluated) to support attribution and analysis.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#9"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

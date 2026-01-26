@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_5908275",
+  "semantic_identifier": "Vividcedar Marketing",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-02-21 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "5908275",
+    "domain": "vividcedar_marketing.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Vividcedar Marketing\nDomain: vividcedar_marketing.onyx.app",
+      "link": "https://www.onyx.app/80958"
+    },
+    {
+      "text": "Contact: Ricardo Alvarez\nEmail: ricardo_alvarez@vividcedar_marketing.onyx.app",
+      "link": "https://www.onyx.app/92550"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

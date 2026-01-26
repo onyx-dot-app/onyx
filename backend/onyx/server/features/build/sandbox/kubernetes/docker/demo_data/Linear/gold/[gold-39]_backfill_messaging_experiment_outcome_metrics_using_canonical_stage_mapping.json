@@ -1,0 +1,30 @@
+{
+  "id": "7334762",
+  "semantic_identifier": "[GOLD-39]: Backfill messaging experiment outcome metrics using canonical stage mapping",
+  "title": "Backfill messaging experiment outcome metrics using canonical stage mapping",
+  "source": "linear",
+  "doc_updated_at": "2025-11-06",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jiwon_kang",
+      "email": "jiwon_kang@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-11-06"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Recompute historical win rate, pipeline velocity, and conversion metrics for existing messaging experiments after the new canonical stage/event normalization is in place. Implement a backfill job (idempotent) to re-aggregate outcomes from normalized funnel stages and overwrite/versions the stored experiment outcome snapshots. Validate that metrics match pre-normalization expectations on a small set of known experiments and do not regress for newly created experiments.",
+      "link": "https://www.onyx.app/14254"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

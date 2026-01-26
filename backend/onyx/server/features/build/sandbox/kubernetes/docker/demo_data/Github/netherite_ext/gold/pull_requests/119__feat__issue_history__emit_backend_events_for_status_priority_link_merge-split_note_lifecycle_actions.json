@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#119",
+  "semantic_identifier": "119: feat: Issue History: Emit backend events for status/priority/link/merge-split/note lifecycle actions",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-10",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "119",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "61",
+    "labels": [],
+    "created_at": "2025-05-10",
+    "updated_at": "2025-05-10",
+    "closed_at": "2025-05-29"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds service-layer helpers to consistently record Issue History events for the MVP event types and wires them into the existing Issue mutation flows so events are emitted automatically.\n\nWhat\u2019s included\n- New issue_history event helpers for:\n  - Status timeline changes (from/to)\n  - Priority changes (from/to)\n  - Merge actions (source/target issue IDs)\n  - Split actions (source/target issue IDs)\n  - Notes added/updated (note ID / summary payload)\n  - External work item link/unlink (external system + URL/identifier)\n- Integration points added to the relevant Issue mutations/services so events are recorded alongside the write operations.\n- Standardized event shape across all types including:\n  - actor (user ID)\n  - timestamp (event created_at)\n  - typed payload containing the minimum fields needed to render a future timeline (e.g., from/to values, related issue IDs, external metadata).\n\nImplementation details (high level)\n- Introduces a small service module (e.g., IssueHistoryService) that exposes typed \u201cemit*\u201d methods.\n- Mutation/service flows call these helpers after successful state changes and within the same transaction boundary where applicable to ensure consistency.\n- Payloads are normalized (e.g., enums/IDs rather than display strings) to keep timeline rendering deterministic.\n\nNotes\n- No UI or timeline rendering is included; this PR is backend-only event emission.\n- No behavioral change to the Issue mutations other than recording history events.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#119"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

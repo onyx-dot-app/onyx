@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_3972155",
+  "semantic_identifier": "Oceanmint Beverages - Issue Tracker",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-01 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "44193",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "3972155"
+  },
+  "sections": [
+    {
+      "text": "Deal: Oceanmint Beverages\nAmount: $44193\nProduct of Interest: Issue_Tracker\nFeatures of Interest: issue_clustering\nClose Date: 2025-11-03 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/84878"
+    },
+    {
+      "text": "Contact: Eugene Ray\nEmail: eugene_ray@oceanmint_beverages.onyx.app",
+      "link": "https://www.onyx.app/41858"
+    },
+    {
+      "text": "Company: Oceanmint Beverages\nDomain: oceanmint_beverages.onyx.app",
+      "link": "https://www.onyx.app/22322"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/72647"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

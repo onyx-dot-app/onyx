@@ -1,0 +1,201 @@
+{
+  "id": "FIREFLIES_7264729",
+  "semantic_identifier": "7264729 - Starfall Terra Analytics - sales_call - Discussion with Audrey Rogers",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-21 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-21 00:00:00",
+    "duration_min": "37"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "7264729 - Starfall Terra Analytics - sales_call - Discussion with Audrey Rogers",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hi Audrey\u2014good to see you again. Last time you mentioned you\u2019re trying to get clearer on which customer segments are actually the best fit for Starfall Terra Analytics, especially for product planning and roadmap bets. I\u2019d love to use today to land on a concrete next step toward getting Customer_Analyzer in your hands\u2014does that still align with what you need?",
+      "link": "https://www.onyx.app/3813233-1"
+    },
+    {
+      "text": "Audrey Rogers: Yes, that\u2019s still the priority. We\u2019ve had internal debate on who our \u201cbest\u201d customers are versus who\u2019s just the loudest. If we can make that more objective, it helps product and go-to-market.",
+      "link": "https://www.onyx.app/3813233-2"
+    },
+    {
+      "text": "Arjun Mehta: Perfect. For this call, I\u2019ll focus on two things only: the fit scoring output and the positioning recommendations feature\u2014because those are what move you from \u201cinteresting insight\u201d to \u201cwe can actually execute.\u201d Before I do, quick check: what decisions are coming up where you need this\u2014roadmap planning for next quarter, packaging, targeting?",
+      "link": "https://www.onyx.app/3813233-3"
+    },
+    {
+      "text": "Audrey Rogers: Roadmap planning for next quarter is the big one. We\u2019re deciding between investing in two feature areas, and each seems to matter to a different segment. I need to know which segment is more viable for us to win consistently.",
+      "link": "https://www.onyx.app/3813233-4"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s exactly the \u201cproduct planning\u201d use case we see a lot. Here\u2019s how Customer_Analyzer supports it: we ingest signals you already have\u2014CRM fields, onboarding surveys, product usage events, support tickets, even interview notes\u2014and we turn it into (1) a fit score by segment, and then (2) positioning recommendations that make it easy for teams to align on \u201cwhy us\u201d for that segment.",
+      "link": "https://www.onyx.app/3813233-5"
+    },
+    {
+      "text": "Audrey Rogers: The fit score part is what caught my attention last time. But I\u2019m still worried about our CRM data. We\u2019re not perfect\u2014missing fields, inconsistent tagging.",
+      "link": "https://www.onyx.app/3813233-6"
+    },
+    {
+      "text": "Arjun Mehta: Totally fair, and it\u2019s one of the most common risks: data quality and missing fields can reduce scoring accuracy. The way we handle that in practice is we don\u2019t rely on a single source. We combine multiple signal types so the fit score isn\u2019t hostage to one messy field in Salesforce. And we\u2019ll show you exactly what drivers contributed to the score\u2014so if \u201cindustry\u201d is missing but \u201csupport ticket patterns\u201d and \u201cusage intensity of feature X\u201d are strong signals, you can still get a solid read.",
+      "link": "https://www.onyx.app/3813233-7"
+    },
+    {
+      "text": "Audrey Rogers: Okay, but if we\u2019re missing usage data in some accounts too\u2014like older accounts where instrumentation wasn\u2019t there\u2014does the score just become unreliable?",
+      "link": "https://www.onyx.app/3813233-8"
+    },
+    {
+      "text": "Arjun Mehta: It becomes less precise for those specific accounts, but two things help. First, we can score at the segment level using whatever coverage you have\u2014so you can still compare \u201cdata teams in mid-market\u201d versus \u201crevops teams in enterprise\u201d even if a subset has sparse events. Second, we flag \u201cconfidence\u201d alongside fit: you\u2019ll see \u201chigh fit, high confidence\u201d versus \u201chigh fit, low confidence,\u201d which guides where you should invest in validation\u2014like targeted interviews or better tagging\u2014before you make a roadmap bet.",
+      "link": "https://www.onyx.app/3813233-9"
+    },
+    {
+      "text": "Audrey Rogers: That confidence indicator would help. Because I don\u2019t want to walk into a planning meeting with a black-box score.",
+      "link": "https://www.onyx.app/3813233-10"
+    },
+    {
+      "text": "Arjun Mehta: Exactly. Now, the other piece\u2014positioning_recommendation\u2014is what gets you to the buying stage in your world, meaning your team can actually act on the insight. Once we prioritize the segments by fit drivers and observed customer language, the system generates editable messaging blocks: segment-specific value prop, top use cases, differentiators, proof points to collect, pricing/value framing notes, and an objection-handling playbook.",
+      "link": "https://www.onyx.app/3813233-11"
+    },
+    {
+      "text": "Audrey Rogers: When you say \u201cobserved customer language,\u201d where is that coming from? We have Gong calls for sales, some support tickets, and a handful of research interviews.",
+      "link": "https://www.onyx.app/3813233-12"
+    },
+    {
+      "text": "Arjun Mehta: Those are perfect. We can ingest snippets from interview notes, tags from support tickets, and sales call summaries\u2014then we tie the language back to the drivers. So it\u2019s not \u201cAI writes marketing copy in a vacuum.\u201d It\u2019s \u201chere are the phrases your best-fit customers used when they described the pain, and here\u2019s how to reflect that in your hero copy or sales deck bullets.\u201d",
+      "link": "https://www.onyx.app/3813233-13"
+    },
+    {
+      "text": "Audrey Rogers: That sounds useful. But I\u2019m also wary\u2014some AI positioning tools generate very generic messaging. We don\u2019t need \u201cincrease efficiency, unlock insights\u201d fluff.",
+      "link": "https://www.onyx.app/3813233-14"
+    },
+    {
+      "text": "Arjun Mehta: Completely agree. Two guardrails prevent that. First, recommendations are linked back to evidence\u2014drivers and source snippets\u2014so you can see why it suggested a differentiator. Second, everything is editable as messaging blocks. A lot of teams use it like a starting draft that\u2019s grounded in their own data, not a final answer. The win is speed and consistency: marketing, product, and sales stop debating from opinions and start iterating from the same evidence.",
+      "link": "https://www.onyx.app/3813233-15"
+    },
+    {
+      "text": "Audrey Rogers: Consistency is definitely a problem for us. Sales is telling one story, marketing is telling another, and product is like, \u201cthat\u2019s not what we do.\u201d",
+      "link": "https://www.onyx.app/3813233-16"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s exactly where the objection-handling playbook helps too. If, for example, a segment consistently pushes back on \u201cimplementation time\u201d or \u201cdata readiness,\u201d we generate an objection response that\u2019s aligned to what your successful customers actually did\u2014plus we\u2019ll list proof points to collect. It becomes a practical enablement asset, not just strategy slides.",
+      "link": "https://www.onyx.app/3813233-17"
+    },
+    {
+      "text": "Audrey Rogers: I can see how that helps sales. But my main stakeholder is product. They\u2019ll ask: how does this change roadmap choices, not just messaging?",
+      "link": "https://www.onyx.app/3813233-18"
+    },
+    {
+      "text": "Arjun Mehta: Great question. Fit drivers often map directly to product bets. For product planning, what you want is: \u201cWhich segment is both winnable and has unmet needs we can address?\u201d If Customer_Analyzer shows Segment A has high fit because they heavily use Feature Set 1 and churn less when onboarding is strong, and Segment B has lower fit plus high support burden, that points to where roadmap investment amplifies your strengths. Also, the unmet needs show up in the language and tickets\u2014so you can quantify themes, not just anecdotal requests.",
+      "link": "https://www.onyx.app/3813233-19"
+    },
+    {
+      "text": "Audrey Rogers: That would be compelling if we can trust the inputs. Our support tickets are tagged inconsistently too.",
+      "link": "https://www.onyx.app/3813233-20"
+    },
+    {
+      "text": "Arjun Mehta: Understood. For a second call like this, what I\u2019d propose is a lightweight pilot that validates inputs and outputs quickly. We pick two segments you already debate internally\u2014say \u201cmid-market analytics teams\u201d and \u201centerprise data platform teams\u201d\u2014and we connect: CRM export, a sample of support tickets, and whatever usage events you have. Even if tags are inconsistent, we can still extract themes from the text itself, but we\u2019ll also give you a simple tagging cleanup checklist to improve signal quality.",
+      "link": "https://www.onyx.app/3813233-21"
+    },
+    {
+      "text": "Audrey Rogers: How long would a pilot take? I don\u2019t have months before planning.",
+      "link": "https://www.onyx.app/3813233-22"
+    },
+    {
+      "text": "Arjun Mehta: You don\u2019t need months. Typical is two weeks to get the first fit scoring and initial positioning blocks, then week three to refine with your feedback. If your roadmap planning is next quarter, we can have something actionable well before you lock decisions.",
+      "link": "https://www.onyx.app/3813233-23"
+    },
+    {
+      "text": "Audrey Rogers: And what would you need from me to get started? Because internal bandwidth is tight.",
+      "link": "https://www.onyx.app/3813233-24"
+    },
+    {
+      "text": "Arjun Mehta: Minimal from you personally. We\u2019d need: (1) a point of contact for CRM export\u2014often ops, (2) access to a support ticket sample export, and (3) a quick 45-minute working session with you to define the two segments and the success criteria. For example: \u201cBy the end of the pilot, we want confidence-ranked fit scores for those segments and a positioning pack we can use in a sales deck and on the website.\u201d",
+      "link": "https://www.onyx.app/3813233-25"
+    },
+    {
+      "text": "Audrey Rogers: That sounds reasonable. I like the idea of tying it to deliverables, not just analytics.",
+      "link": "https://www.onyx.app/3813233-26"
+    },
+    {
+      "text": "Arjun Mehta: Exactly. And because you raised data quality concerns, we\u2019ll include a \u201cdata coverage report\u201d as part of the pilot\u2014what fields were missing, where confidence is lower, and what improvements would raise scoring accuracy. That way, even if you decide not to move forward, you\u2019ve got a clear view of the gaps.",
+      "link": "https://www.onyx.app/3813233-27"
+    },
+    {
+      "text": "Audrey Rogers: Okay. If we do a pilot and it works, what does the rollout look like? Do we have to integrate everything?",
+      "link": "https://www.onyx.app/3813233-28"
+    },
+    {
+      "text": "Arjun Mehta: Not all at once. Most teams start with the core sources: CRM + support + whatever usage events exist. Then later add surveys or call data. The key is: you get fit scoring and positioning recommendations early, and then you enrich over time as instrumentation improves.",
+      "link": "https://www.onyx.app/3813233-29"
+    },
+    {
+      "text": "Audrey Rogers: That staged approach would help. I don\u2019t want an integration project that turns into a quarter-long initiative.",
+      "link": "https://www.onyx.app/3813233-30"
+    },
+    {
+      "text": "Arjun Mehta: Totally. So here\u2019s what I\u2019d suggest as a buying-stage next step: we align on a pilot scope today, I send a short pilot SOW with timeline and success metrics, and we schedule the kickoff for early next week. Does that work if we keep it to two segments and the two outputs\u2014fit score plus positioning recommendations?",
+      "link": "https://www.onyx.app/3813233-31"
+    },
+    {
+      "text": "Audrey Rogers: Yes. If you send something concise, I can get buy-in. I\u2019ll need to loop in our RevOps lead for the CRM export and our support manager for tickets.",
+      "link": "https://www.onyx.app/3813233-32"
+    },
+    {
+      "text": "Arjun Mehta: Great\u2014who are those contacts, and do you want me to be on the intro email or keep it internal?",
+      "link": "https://www.onyx.app/3813233-33"
+    },
+    {
+      "text": "Audrey Rogers: I\u2019ll intro you. RevOps is Maya Chen, and support is Luis Herrera. If you send me the pilot outline today, I\u2019ll forward it and propose times.",
+      "link": "https://www.onyx.app/3813233-34"
+    },
+    {
+      "text": "Arjun Mehta: Perfect. I\u2019ll send a one-pager with scope, the data we need, the \u201cconfidence + coverage\u201d reporting, and the concrete deliverables: segment fit ranking and the editable messaging blocks\u2014hero copy, sales deck bullets, email openers, plus the objection playbook. And I\u2019ll include the timeline: first readout in two weeks.",
+      "link": "https://www.onyx.app/3813233-35"
+    },
+    {
+      "text": "Audrey Rogers: Sounds good. If the first readout is solid, I can see us moving quickly. This is exactly what we\u2019ve been missing\u2014something to align product and go-to-market.",
+      "link": "https://www.onyx.app/3813233-36"
+    },
+    {
+      "text": "Arjun Mehta: Awesome. I\u2019ll get that over within a couple hours, and once you intro me to Maya and Luis, we\u2019ll schedule kickoff and data transfer. Anything else you want me to address in the pilot proposal\u2014security, compliance, or pricing structure?",
+      "link": "https://www.onyx.app/3813233-37"
+    },
+    {
+      "text": "Audrey Rogers: Add a brief note on security and how you handle customer data. That\u2019ll come up.",
+      "link": "https://www.onyx.app/3813233-38"
+    },
+    {
+      "text": "Arjun Mehta: Will do. I\u2019ll keep it tight and include our standard security overview and data handling. Thanks, Audrey\u2014looking forward to getting you a first cut you can use in planning.",
+      "link": "https://www.onyx.app/3813233-39"
+    },
+    {
+      "text": "Audrey Rogers: Thanks, Arjun. Send it over and I\u2019ll get the ball rolling on intros.",
+      "link": "https://www.onyx.app/3813233-40"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "audrey_rogers@starfall_terra_analytics.onyx.app"
+    }
+  ]
+}

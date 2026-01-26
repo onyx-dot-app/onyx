@@ -1,0 +1,30 @@
+{
+  "id": "c0e5612560cf421ea793d8a718ff9476",
+  "semantic_identifier": "Impact--Customer_Analyzer v1: Fetch and store segment IDs + fit tiers for customer accounts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Customer_Analyzer v1: Fetch and store segment IDs + fit tiers for customer accounts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds the first integration layer between Issue_Tracker and Customer_Analyzer, enabling us to fetch Customer_Analyzer\u2019s segment IDs and fit tier for any customer accounts referenced in newly ingested support conversations. By enriching accounts at ingestion time, we ensure downstream systems have access to consistent, standardized customer categorization without requiring ad hoc lookups.\n\nOn the data model side, we will persist the segment ID(s) and fit tier directly on the Issue_Tracker customer/account model, along with basic freshness metadata such as `last_fetched_at`. This establishes a reliable source of truth within Issue_Tracker for customer segmentation attributes and creates clear primitives for later use in prioritization, routing, and reporting.\n\nThe integration will be resilient by design: if Customer_Analyzer returns missing or unknown values (or if an account cannot be resolved), Issue_Tracker will store null/unknown appropriately and continue processing without blocking ingestion. This reduces operational risk and keeps support conversation processing robust even when enrichment data is incomplete.\n\nWhile this work does not introduce UI, weighting logic, or analytics slicing yet, it unlocks them by making the data available and maintainable in our core models. Once in place, future features can confidently build on these stored fields to tailor workflows (e.g., prioritization rules, queues, dashboards) and to measure outcomes by segment and fit tier with minimal additional plumbing.",
+      "link": "https://www.onyx.app/79047"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

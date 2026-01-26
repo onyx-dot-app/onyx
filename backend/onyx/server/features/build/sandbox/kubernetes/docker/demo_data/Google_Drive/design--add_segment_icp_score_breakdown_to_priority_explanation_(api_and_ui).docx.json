@@ -1,0 +1,30 @@
+{
+  "id": "59d05d4e650d4e81a0f9da131d577bfe",
+  "semantic_identifier": "Design--Add segment/ICP score breakdown to priority explanation (API + UI).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-25",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add segment/ICP score breakdown to priority explanation (API + UI).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will extend the priority scoring pipeline to produce a \u201csegment/ICP breakdown\u201d alongside the existing final score and explanation. For each segment/ICP-related input used in scoring, the system will emit: (a) the resolved input value(s) (e.g., segment, ICP tier, match confidence/source), (b) the configured weight(s) applied, (c) the computed contribution/delta to the total score, and (d) whether the value came from a neutral fallback (e.g., missing/unknown segment -> treated as neutral with delta = 0). This breakdown will be computed deterministically from the same config and feature-resolution code path used to compute the final score to avoid drift.\n\nOn the API side, we will add a structured field to the scoring response (and any internal scoring service response) such as `segmentIcpBreakdown: BreakdownItem[]`, where each item includes `key`, `label`, `resolvedValue`, `weight`, `delta`, `fallbackReason` (nullable), and optionally `configVersion`/`ruleId`. The API contract will be additive and backwards compatible; consumers not expecting the field can ignore it. We will also ensure this breakdown is available wherever we return a \u201cpriority explanation,\u201d including Issue and Theme scoring endpoints, and that it reflects the exact score produced for that request.\n\nFor persistence, we will store the breakdown in the score audit trail as part of the immutable scoring record (e.g., a JSON blob column or normalized child table keyed by score event). This allows us to reconstruct historical scoring, support defensibility (\u201cwhy was this ranked higher last month?\u201d), and debug config changes; we\u2019ll also store the scoring config version/hash used. Retention and access controls will follow existing audit trail policies, and we\u2019ll ensure the payload is bounded (e.g., limited number of breakdown items, truncated strings) to avoid unbounded storage growth.\n\nIn the UI, we will update the Issue/Theme priority explanation panel to render a new \u201cSegment/ICP impact\u201d section that lists each breakdown item with the resolved value, weight, and delta, highlighting neutral fallback cases (e.g., \u201cNo segment found \u2192 neutral (0.0)\u201d). The section will be collapsible to keep the panel compact, and values will match the API response verbatim to aid Product/Support verification. We will gate the UI rendering on the presence of the new field to preserve compatibility and add basic QA checks comparing displayed deltas to the sum of deltas contributing to the final score.",
+      "link": "https://www.onyx.app/70131"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

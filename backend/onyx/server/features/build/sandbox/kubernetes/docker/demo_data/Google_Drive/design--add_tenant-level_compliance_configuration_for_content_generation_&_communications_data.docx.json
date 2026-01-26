@@ -1,0 +1,30 @@
+{
+  "id": "9bbf9a24d01e4fa1a2078d6b5fab4fb5",
+  "semantic_identifier": "Design--Add tenant-level compliance configuration for content generation & communications data.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-02",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add tenant-level compliance configuration for content generation & communications data.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will introduce a tenant-scoped `ComplianceSettings` configuration object that is persisted and evaluated at runtime to govern (a) whether AI-assisted content generation is allowed and (b) what communications data sources and fields are permitted for ingestion. This object will live alongside existing tenant configuration and be loaded early in request handling so all relevant services can make consistent allow/deny decisions. The schema will support explicit toggles (e.g., `contentGeneration.enabled`) and allowlists/denylists for ingestion by source (email, chat, voice transcripts, etc.) and by field/category (message body, subject, attachments, metadata), plus \u201cregulated defaults\u201d that can be applied as a baseline for specific environments.\n\nWe will expose the settings through an internal admin API (read/update) intended for our operational tooling and controlled access, eliminating the need for tenant-specific code changes when compliance requirements shift. Updates will be validated (e.g., no unknown sources/fields; required defaults enforced when `regulatedMode=true`) and written to durable storage with versioning/audit metadata (who/when/why) to support traceability. Services will fetch settings via a cached configuration layer with a clear refresh/TTL strategy so changes take effect quickly without causing per-request storage reads.\n\nAt runtime, we will add centralized enforcement points: content generation entrypoints will check `contentGeneration.enabled` and hard-block with a typed error if disabled; ingestion pipelines will consult the allow/deny rules before accepting data, with field-level redaction or rejection depending on policy. \u201cHard-block\u201d means disallowed operations never call downstream models, never persist the payload, and emit structured logs/metrics for compliance monitoring. Where feasible, we will fail closed (deny on missing/invalid settings) for regulated-mode tenants and fail open only where explicitly configured for non-regulated tenants.\n\nRollout will start with a conservative default configuration (generation off and ingestion minimized for regulated-mode; current behavior preserved for existing tenants unless flagged) and guarded by a feature flag to limit blast radius. We will add tests covering schema validation, API authorization, caching behavior, and enforcement in generation and ingestion paths, plus telemetry to confirm blocked actions and configuration uptake. Migration will include backfilling default settings per tenant and a simple admin workflow to flip generation/ingestion permissions without redeploys.",
+      "link": "https://www.onyx.app/58464"
+    }
+  ],
+  "primary_owners": [
+    "andre_robinson"
+  ],
+  "secondary_owners": []
+}

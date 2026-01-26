@@ -1,0 +1,30 @@
+{
+  "id": "5a0370c7b7374eb096ec9ef2b2deba68",
+  "semantic_identifier": "Design--issue_history v2: Add templated internal decision notes (why/next steps) as timeline events.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-08-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--issue_history v2: Add templated internal decision notes (why/next steps) as timeline events.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will extend `issue_history v2` to support **templated internal decision notes** as first-class, structured timeline events. A decision note represents a standardized triage artifact captured at key lifecycle moments (e.g., triaged, blocked, deprioritized) and will be stored as an immutable event with a `template_id` plus a validated field payload (e.g., `decision`, `why`, `next_steps`, `owner` or `team`, and `timestamp`). This makes internal reasoning auditable and consistently renderable, while avoiding ad-hoc freeform comments that are hard to search.\n\nOn the data model side, we\u2019ll introduce a new timeline event type (e.g., `INTERNAL_DECISION_NOTE_V1`) in issue_history v2 with a stable schema: `{ event_id, issue_id, created_at, actor, template_id, fields, linked_transition_id? }`. `fields` will be a constrained map defined by the template, with canonical keys for the initial rollout (decision/why/next_steps/owner/team). Events are append-only: edits are represented as new events referencing the prior event (optional for v1), but we do not mutate or delete existing records. We will store a normalized subset (e.g., `decision`, `owner/team`) alongside the raw fields to support indexing and search without requiring template-specific parsing.\n\nWe\u2019ll update the Issue History API to return these events in chronological order alongside existing history entries, with a predictable payload for clients to render consistently. Write APIs (or internal ingestion endpoints) will enforce basic validation and sanitization: required keys per template, max lengths, allowed enum values for `decision`, trimming whitespace, and stripping unsafe markup. Search will rely on indexed normalized fields plus a sanitized text representation of `why/next_steps` (as allowed by policy) so that decision notes are discoverable without leaking unvetted content.\n\nLinking to lifecycle transitions will be modeled as an optional reference (`linked_transition_id`) to an existing transition event (or a `linked_transition_type`/timestamp if needed), enabling UIs to display the decision note adjacent to the triggering state change. We will not duplicate ownership, SLA, or workflow logic: the note merely records rationale and intent, while canonical ownership and SLA remain sourced from existing ticket fields and transition events. This keeps the feature additive and low-risk while enabling consistent internal triage documentation.",
+      "link": "https://www.onyx.app/11524"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

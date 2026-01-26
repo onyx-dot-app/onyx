@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_8902959",
+  "semantic_identifier": "8902959 - Nimbunest Snacks - sales_pitch - Discussion with Jade Jacobs",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-05-08 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-05-08 00:00:00",
+    "duration_min": "16"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-05"
+      ],
+      "year_month": "2025-05",
+      "meeting_title": "8902959 - Nimbunest Snacks - sales_pitch - Discussion with Jade Jacobs",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hi Jade\u2014Arjun Mehta here. Thanks for taking a few minutes today. I\u2019ll keep it brief. I wanted to share an idea that\u2019s helped teams reduce customer-issue chaos across Support, Engineering, and Sales\u2014especially when a deal is on the line.",
+      "link": "https://www.onyx.app/4475787-1"
+    },
+    {
+      "text": "Jade Jacobs: Hi Arjun. Okay\u2014quick is good. What\u2019s this about?",
+      "link": "https://www.onyx.app/4475787-2"
+    },
+    {
+      "text": "Arjun Mehta: Totally. The product is called Issue_Tracker. It\u2019s a layer that sits between your support channels\u2014like Zendesk or Intercom\u2014your delivery tools like Jira or Linear, and your customer context in Salesforce or HubSpot. It continuously ingests customer-reported issues, deduplicates them into clusters, and ties them back to impacted customers and opportunities\u2014so Sales can see what\u2019s real, what\u2019s duplicative noise, and what\u2019s actually threatening revenue.",
+      "link": "https://www.onyx.app/4475787-3"
+    },
+    {
+      "text": "Jade Jacobs: We already have Zendesk and Jira connected with some workflows. And our CSMs try to keep Salesforce updated. So what\u2019s different here?",
+      "link": "https://www.onyx.app/4475787-4"
+    },
+    {
+      "text": "Arjun Mehta: Great question. Most setups connect systems, but they don\u2019t standardize the \u201cissue object.\u201d Issue_Tracker creates a single, searchable issue cluster\u2014root cause + evidence + impacted accounts\u2014linked to every source ticket and to the downstream Jira work. The big difference is it stays defensible: you can click from the cluster to the original tickets, and from the cluster to the engineering item, without duplicate data entry or someone manually curating spreadsheets.",
+      "link": "https://www.onyx.app/4475787-5"
+    },
+    {
+      "text": "Jade Jacobs: We definitely have spreadsheets. But we also have a support ops person who does some tagging and triage. It\u2019s not perfect, but it works.",
+      "link": "https://www.onyx.app/4475787-6"
+    },
+    {
+      "text": "Arjun Mehta: That makes sense. Where Issue_Tracker tends to help is when \u201cit works\u201d until it doesn\u2019t\u2014like when Sales hears about an issue from a prospect, but Support has 37 tickets that are all slightly different phrasing, and Engineering has three Jira tickets that may or may not be the same root cause. With Issue_Tracker, you can set dedupe rules and field mapping so those become one theme, with consistent metadata, and a single status/ETA narrative that\u2019s safe for customer-facing teams.",
+      "link": "https://www.onyx.app/4475787-7"
+    },
+    {
+      "text": "Jade Jacobs: We\u2019re not trying to boil the ocean though. And we\u2019re pretty careful about what Sales says\u2014sometimes they overpromise.",
+      "link": "https://www.onyx.app/4475787-8"
+    },
+    {
+      "text": "Arjun Mehta: Exactly\u2014and that\u2019s one of the use cases I wanted to highlight. When a late-stage opportunity is tied to a known issue cluster, Issue_Tracker can surface the current status, any ETA notes, and even approved language\u2014what\u2019s safe to communicate\u2014so Sales doesn\u2019t freelanced their own story. It also integrates with Sales_Accelerator so the deal can be flagged \u201cat risk\u201d based on the issue\u2019s status and impact.",
+      "link": "https://www.onyx.app/4475787-9"
+    },
+    {
+      "text": "Jade Jacobs: We don\u2019t use Sales_Accelerator. And candidly, our Sales team doesn\u2019t always log things cleanly in Salesforce either.",
+      "link": "https://www.onyx.app/4475787-10"
+    },
+    {
+      "text": "Arjun Mehta: Understood. Even without Sales_Accelerator, the core value still stands: the connector to Salesforce can link clusters to accounts and opportunities, so you can prioritize issues based on business impact\u2014revenue exposure, ICP segment, or deal risk\u2014rather than whoever yelled loudest in Slack. If data hygiene is uneven, we usually start with light-touch field mapping: account ID, segment, opportunity stage\u2014just enough to be useful.",
+      "link": "https://www.onyx.app/4475787-11"
+    },
+    {
+      "text": "Jade Jacobs: How heavy is the setup? We don\u2019t have bandwidth for a big implementation.",
+      "link": "https://www.onyx.app/4475787-12"
+    },
+    {
+      "text": "Arjun Mehta: Setup is typically connectors plus mapping. For sources: Zendesk/Intercom/Help Scout. For delivery: Jira/Linear/GitHub. And for context: Salesforce/HubSpot plus Customer_Analyzer fit/segment IDs if you have them. You can start with just Zendesk + Jira + Salesforce. Then define dedupe rules\u2014like matching by error signature, keywords, product area, or custom fields. The goal is to keep Zendesk and Jira as systems of record; Issue_Tracker just synchronizes metadata and adds back-links so teams can navigate without re-entering anything.",
+      "link": "https://www.onyx.app/4475787-13"
+    },
+    {
+      "text": "Jade Jacobs: That\u2019s the concern\u2014tools on top of tools. We already have a lot of dashboards no one checks.",
+      "link": "https://www.onyx.app/4475787-14"
+    },
+    {
+      "text": "Arjun Mehta: Totally fair. The reason teams use this is it replaces the manual \u201ctranslation layer\u201d between teams\u2014spreadsheets, internal docs, recurring meetings to align on what\u2019s actually happening. Instead of another dashboard, it\u2019s more like: \u201cHere\u2019s the cluster, here\u2019s the evidence, here\u2019s impacted accounts, here\u2019s the Jira link, here\u2019s what we can safely tell customers.\u201d It becomes the one place to answer \u201cis this a known issue\u201d and \u201cwhat\u2019s the real status.\u201d",
+      "link": "https://www.onyx.app/4475787-15"
+    },
+    {
+      "text": "Jade Jacobs: We can usually answer \u201cknown issue,\u201d but the \u201creal status\u201d part is tricky. Engineering doesn\u2019t like committing to ETAs.",
+      "link": "https://www.onyx.app/4475787-16"
+    },
+    {
+      "text": "Arjun Mehta: Right, and Issue_Tracker doesn\u2019t force hard ETAs. It can capture status notes and decision history in a way that\u2019s searchable and attributable\u2014so if Engineering says \u201cinvestigating root cause; workaround exists,\u201d that\u2019s what gets surfaced, with the supporting tickets linked. It helps Sales and Support avoid guessing. And because clusters are deduped, you don\u2019t have 50 tickets all asking for updates separately\u2014Support can update one cluster and it propagates contextually.",
+      "link": "https://www.onyx.app/4475787-17"
+    },
+    {
+      "text": "Jade Jacobs: Okay. But I\u2019m not sure this is a priority for us this quarter. We\u2019re in the middle of a tooling freeze.",
+      "link": "https://www.onyx.app/4475787-18"
+    },
+    {
+      "text": "Arjun Mehta: I hear you. If this quarter is locked, it may not be the right time. The only reason I reached out is I\u2019ve seen snack/CPG brands with ecommerce + wholesale pipelines get hit with deal slippage when a recurring issue pops up\u2014like order routing bugs, integration failures, or reporting inaccuracies\u2014and Sales doesn\u2019t have a crisp, approved status to share. Even one late-stage deal slipping can be painful.",
+      "link": "https://www.onyx.app/4475787-19"
+    },
+    {
+      "text": "Jade Jacobs: We\u2019re more B2B wholesale, and our issues are usually operational rather than software defects. Also, we don\u2019t run Intercom\u2014just Zendesk.",
+      "link": "https://www.onyx.app/4475787-20"
+    },
+    {
+      "text": "Arjun Mehta: Zendesk alone is fine. And operational issues can still be captured as themes if they\u2019re coming through support channels\u2014like \u201cinvoice mismatch\u201d or \u201cASN delays\u201d\u2014and then tied back to impacted accounts. But if most of that work happens outside ticketing, Issue_Tracker may not be as strong a fit.",
+      "link": "https://www.onyx.app/4475787-21"
+    },
+    {
+      "text": "Jade Jacobs: Yeah, a lot of that is handled by our ops team directly. Support tickets exist, but they\u2019re not the whole picture.",
+      "link": "https://www.onyx.app/4475787-22"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s helpful. In that case, it might be less of an immediate win. One lightweight way some teams start is simply using the Zendesk + Jira sync and dedupe clustering to reduce duplicate engineering asks\u2014without trying to model every operational workflow. But if Engineering volume is low, it\u2019s probably not compelling.",
+      "link": "https://www.onyx.app/4475787-23"
+    },
+    {
+      "text": "Jade Jacobs: Engineering volume is relatively low, and Jira is mostly for internal projects. We don\u2019t open many tickets from Support.",
+      "link": "https://www.onyx.app/4475787-24"
+    },
+    {
+      "text": "Arjun Mehta: Got it. Then I don\u2019t want to force a square peg here. Would it be useful if I sent a one-pager on the \u201clate-stage deal risk\u201d use case\u2014how linking Salesforce opportunities to issue clusters works\u2014just so you have it on file in case priorities shift later?",
+      "link": "https://www.onyx.app/4475787-25"
+    },
+    {
+      "text": "Jade Jacobs: You can send it, sure, but I can\u2019t promise I\u2019ll get to it. And I don\u2019t think I can commit to a longer sales call right now.",
+      "link": "https://www.onyx.app/4475787-26"
+    },
+    {
+      "text": "Arjun Mehta: Completely fine. Last quick question so I don\u2019t waste your inbox: when Sales does get pulled into an issue\u2014say a key account escalation\u2014where do they go today to understand status? Is it Slack, a CSM, a spreadsheet?",
+      "link": "https://www.onyx.app/4475787-27"
+    },
+    {
+      "text": "Jade Jacobs: Usually they ping the CSM or Support lead, and then someone asks Engineering if needed. It\u2019s messy, but it\u2019s workable.",
+      "link": "https://www.onyx.app/4475787-28"
+    },
+    {
+      "text": "Arjun Mehta: Understood. That \u201cmessy but workable\u201d is exactly the gap we address\u2014when it becomes frequent enough to justify standardizing. I\u2019ll send the short overview and a couple screenshots of the Zendesk-to-cluster-to-Jira back-link flow and the Salesforce opportunity linkage. If at some point you want to sanity-check fit, we can do a 20-minute discovery\u2014no prep\u2014just to confirm whether it\u2019s worth revisiting.",
+      "link": "https://www.onyx.app/4475787-29"
+    },
+    {
+      "text": "Jade Jacobs: Okay. Send it over and maybe we\u2019ll circle back later in the year.",
+      "link": "https://www.onyx.app/4475787-30"
+    },
+    {
+      "text": "Arjun Mehta: Will do. Thanks again for the time, Jade\u2014appreciate it. I\u2019ll keep it concise in email and won\u2019t spam you. Have a good rest of your day.",
+      "link": "https://www.onyx.app/4475787-31"
+    },
+    {
+      "text": "Jade Jacobs: Thanks. Bye.",
+      "link": "https://www.onyx.app/4475787-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "jade_jacobs@nimbunest_snacks.onyx.app"
+    }
+  ]
+}

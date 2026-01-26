@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#6",
+  "semantic_identifier": "6: feat: Follow-up prompts: refresh multi-threading eligibility on CRM/contact + stage changes; de-dupe rendered prompts",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-27",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "6",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "ryan_murphy",
+        "name": "ryan_murphy",
+        "email": "ryan_murphy@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "78",
+    "labels": [],
+    "created_at": "2025-07-27",
+    "updated_at": "2025-07-27",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nThis PR fixes stale/missing/duplicated multi-threading follow-up prompts by ensuring prompt eligibility is recomputed and the UI re-renders whenever underlying contact/CRM data or opportunity stage changes.\n\n## What changed\n- **Cache invalidation + recompute**: Prompt eligibility results are no longer reused across contact/opportunity mutations that affect threadability (e.g., CRM sync updates, contact merges, role/persona changes, opportunity stage changes). We invalidate the cached eligibility payload and re-run the prompt computation.\n- **Refresh triggers**:\n  - Contact record updates (including CRM sync writes)\n  - Contact merges\n  - Role/persona field changes\n  - Opportunity stage transitions\n  These events now publish a prompt-refresh signal for the affected account/opportunity scope.\n- **UI de-duplication**: The follow-up prompt list is normalized by a stable `promptId` (and scoped key where applicable) before rendering to prevent duplicate cards when multiple refreshes occur close together.\n- **Race-safety**: Refresh requests are coalesced per account/opportunity and only the latest computation result is applied to state to avoid \u201cdisappear then reappear\u201d behavior.\n\n## Instrumentation\n- Added lightweight logs/metrics around:\n  - Prompt refresh trigger source (contact update/merge/persona change/stage change)\n  - Account/opportunity identifiers\n  - Prompt IDs produced by the service and ultimately rendered by the UI\nThis is intended to validate refresh + de-dupe behavior in production with minimal overhead.\n\n## User impact\n- Follow-up prompts update immediately after CRM/contact changes and opportunity stage changes.\n- Duplicate prompt cards should no longer appear; prompts should not remain stale or vanish due to cached eligibility results.\n\n## Notes\n- Changes are scoped to the follow-up prompt service + UI refresh path; no product surface/UX changes beyond correctness.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#6"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

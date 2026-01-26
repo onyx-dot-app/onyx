@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_4978541",
+  "semantic_identifier": "4978541 - Willowarc Financial - buy - Discussion with Xavier Walker",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-03-20 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-03-20 00:00:00",
+    "duration_min": "21"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-03"
+      ],
+      "year_month": "2026-03",
+      "meeting_title": "4978541 - Willowarc Financial - buy - Discussion with Xavier Walker",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hey Xavier, good to see you again. For today, I wanted to focus on what it would take to get Willowarc live with Customer_Analyzer this month\u2014specifically how the positioning recommendations would support your product planning work, and then align on next steps if it\u2019s a fit. Sound good?",
+      "link": "https://www.onyx.app/9210812-1"
+    },
+    {
+      "text": "Xavier Walker: Yeah, that works. I\u2019m still interested, I just need to be convinced it\u2019s not going to be a black box we can\u2019t defend internally.",
+      "link": "https://www.onyx.app/9210812-2"
+    },
+    {
+      "text": "Mina Park: Totally fair\u2014and that\u2019s the right bar. Let me start with the two outputs we\u2019ve discussed: fit scoring and positioning recommendations. I\u2019ll keep it practical. For product planning, you\u2019d use fit scoring to identify which customer segments are both high-fit and showing unmet needs. Then positioning recommendations turns that into concrete messaging blocks your teams can actually ship\u2014like a segment-specific value prop, top use cases, differentiators, proof points to collect, and objection handling.  \nWhere I want to spend time today is: how you would validate the \u201cwhy\u201d behind those recommendations so it\u2019s not hand-wavy.",
+      "link": "https://www.onyx.app/9210812-3"
+    },
+    {
+      "text": "Xavier Walker: Exactly. If it gives us \u201cSegment A is high-fit\u201d but can\u2019t explain it, my team won\u2019t trust it. And our leadership won\u2019t sign off on changing messaging based on a model.",
+      "link": "https://www.onyx.app/9210812-4"
+    },
+    {
+      "text": "Mina Park: Makes sense. The way Customer_Analyzer addresses that is by linking every positioning block back to the drivers and the evidence. So if it suggests, say, \u201creduces time-to-close for finance teams\u201d as a value proposition, it will show the underlying drivers\u2014like usage event patterns, CRM outcomes, support themes, and onboarding survey language\u2014that led to that. It\u2019s not just an output; it\u2019s an editable set of messaging blocks with traceability.  \nFor example, for Willowarc, you\u2019d ingest the signals you already have\u2014CRM fields, onboarding surveys, product usage events, and support tickets. Then when it recommends a differentiator, it points to the specific phrases customers used and the segments where those phrases correlate with retention or expansion.",
+      "link": "https://www.onyx.app/9210812-5"
+    },
+    {
+      "text": "Xavier Walker: Okay, but how transparent is that, really? Like, can I open it up and show a product manager \u201chere are the five reasons\u201d and \u201chere\u2019s the proof,\u201d or is it more like \u201ctrust us, the system found it\u201d?",
+      "link": "https://www.onyx.app/9210812-6"
+    },
+    {
+      "text": "Mina Park: You can open it up and show the rationale. The recommendations are presented as messaging blocks\u2014website hero copy, sales deck bullets, email openers\u2014each with a \u201cwhy this\u201d view that lists the fit drivers and the evidence types used. The idea is your team can review it like a memo: \u201cWe\u2019re saying X because Y and Z,\u201d and then edit it.  \nBut I also don\u2019t want to pretend it\u2019s perfect on day one. The adoption pattern we see is: teams start by using it as a structured draft, validate with their own calls and notes, then converge on messaging they can defend.",
+      "link": "https://www.onyx.app/9210812-7"
+    },
+    {
+      "text": "Xavier Walker: That\u2019s helpful, but it still sounds like work. If we\u2019re validating it anyway, why not just do our own segmentation analysis and messaging workshop?",
+      "link": "https://www.onyx.app/9210812-8"
+    },
+    {
+      "text": "Mina Park: You can\u2014and some teams do. The difference is speed and consistency, and keeping it connected to live signals. Workshops are a snapshot. Customer_Analyzer keeps updating as new data comes in, so the fit drivers and recommended proof points evolve.  \nFor product planning specifically: instead of debating roadmap bets based on anecdotes, you can see, \u201cThis segment is high-fit, they\u2019re succeeding on these workflows, but tickets and surveys show a recurring unmet need here.\u201d That\u2019s where you can make a clearer roadmap bet.",
+      "link": "https://www.onyx.app/9210812-9"
+    },
+    {
+      "text": "Xavier Walker: I get the pitch. But I\u2019m still worried about our internal credibility. If I take this to our CMO and Head of Product, they\u2019ll ask: \u201cWhat exactly is it doing under the hood?\u201d and \u201cIs it going to tell us to reposition based on noisy signals?\u201d",
+      "link": "https://www.onyx.app/9210812-10"
+    },
+    {
+      "text": "Mina Park: Understood. Let me ask: what level of explanation would satisfy them? Are they looking for methodological details, or more about seeing the evidence and being able to audit the logic?",
+      "link": "https://www.onyx.app/9210812-11"
+    },
+    {
+      "text": "Xavier Walker: Both. Methodology matters for us. We\u2019re in financial services; we\u2019re cautious. If it\u2019s an algorithm we can\u2019t explain, it\u2019s a non-starter. And we can\u2019t risk rolling out messaging that\u2019s just statistically convenient but not true.",
+      "link": "https://www.onyx.app/9210812-12"
+    },
+    {
+      "text": "Mina Park: That\u2019s fair. Here\u2019s what I can do concretely. We can run a short validation pilot using a subset of your data\u2014like one product line or one segment\u2014so your team can inspect the evidence, compare the recommended messaging against what your best reps already say, and see if the proof points hold up.  \nIf we can align that the outputs are defensible, then we proceed to a paid rollout. If not, we stop.",
+      "link": "https://www.onyx.app/9210812-13"
+    },
+    {
+      "text": "Xavier Walker: Mina, we\u2019ve already done two calls and I\u2019ve looked at the materials. I\u2019m not sure I can get buy-in for a pilot unless I can answer the black-box question up front. A pilot sounds like \u201cpay to find out.\u201d",
+      "link": "https://www.onyx.app/9210812-14"
+    },
+    {
+      "text": "Mina Park: I hear you. Just to clarify: we can structure it so it\u2019s not \u201cpay to find out\u201d in a vague way. The goal would be very specific: validate that the positioning recommendations are traceable and that the fit drivers match what you see in your data.  \nBut if the blocker is \u201cwe need deeper explainability documentation before we even try,\u201d then we should address that head-on. Is that the main blocker to moving forward today?",
+      "link": "https://www.onyx.app/9210812-15"
+    },
+    {
+      "text": "Xavier Walker: Yes. And also procurement timing. We\u2019re at the end of the quarter, budgets are tight, and I can\u2019t champion something that might create internal debate. If it\u2019s explainable and low risk, maybe. But right now, it feels like I\u2019d be selling it internally.",
+      "link": "https://www.onyx.app/9210812-16"
+    },
+    {
+      "text": "Mina Park: Got it. Let me attempt a close, and you tell me if it\u2019s realistic. If we can provide an explainability packet\u2014how fit drivers are derived, what evidence gets surfaced, and what controls you have over the messaging blocks\u2014and we scope an initial rollout to product planning only, would you be comfortable moving ahead with Customer_Analyzer this month?",
+      "link": "https://www.onyx.app/9210812-17"
+    },
+    {
+      "text": "Xavier Walker: Honestly, no. Even with that, I think I\u2019d still need at least one reference in our industry and a clearer view of what our team would actually do week to week. And we don\u2019t have bandwidth to onboard a new tool right now.",
+      "link": "https://www.onyx.app/9210812-18"
+    },
+    {
+      "text": "Mina Park: That\u2019s helpful, even if it\u2019s not the answer I want. Let me zoom in on the \u201cweek to week\u201d point. In a product planning workflow, you\u2019d typically:  \n1) review the top high-fit segments and what\u2019s driving fit,  \n2) look at unmet needs emerging in tickets/surveys/usage,  \n3) use the positioning blocks to align product + marketing on narrative and proof points to collect.  \nBut if your team doesn\u2019t have bandwidth, forcing it will backfire. Is this more of a \u201cnot now\u201d than a \u201cnot ever\u201d?",
+      "link": "https://www.onyx.app/9210812-19"
+    },
+    {
+      "text": "Xavier Walker: Probably \u201cnot now.\u201d I like the concept. I just don\u2019t think we can make a decision this quarter. And the black-box perception is still a real issue for us.",
+      "link": "https://www.onyx.app/9210812-20"
+    },
+    {
+      "text": "Mina Park: Understood. Would it help if we agreed on concrete criteria for revisiting? For example: you\u2019re planning next quarter\u2019s roadmap in, say, eight to ten weeks\u2014if we time it to that planning cycle, and we bring an industry reference plus the explainability documentation, you can evaluate it when there\u2019s a real need.",
+      "link": "https://www.onyx.app/9210812-21"
+    },
+    {
+      "text": "Xavier Walker: That\u2019s more realistic. If you can bring references\u2014financial services ideally\u2014and a more technical overview, I can re-open it when we\u2019re in planning mode. But I don\u2019t want to drag you along if this isn\u2019t happening soon.",
+      "link": "https://www.onyx.app/9210812-22"
+    },
+    {
+      "text": "Mina Park: I appreciate the directness. Last thing I\u2019ll do is keep you in limbo. Here\u2019s what I propose: I\u2019ll send two items by end of week\u2014one is the explainability/traceability overview for fit drivers and positioning recommendations, and the second is a one-page \u201cproduct planning workflow\u201d showing exactly how a PM and a marketer would use it.  \nThen we pencil a 30-minute check-in for the first week of next quarter. If, at that point, it still feels like a mismatch or you don\u2019t have bandwidth, we\u2019ll close the loop.",
+      "link": "https://www.onyx.app/9210812-23"
+    },
+    {
+      "text": "Xavier Walker: That works. Please don\u2019t send a bunch of generic decks\u2014send the technical overview and the workflow, and if you can get a relevant reference, include that.",
+      "link": "https://www.onyx.app/9210812-24"
+    },
+    {
+      "text": "Mina Park: Deal. Before we wrap, just so I\u2019m crisp internally: the reason we\u2019re not moving forward now is timing and the need for more explainability and references, not lack of interest in the product itself. Is that accurate?",
+      "link": "https://www.onyx.app/9210812-25"
+    },
+    {
+      "text": "Xavier Walker: Yes, that\u2019s accurate.",
+      "link": "https://www.onyx.app/9210812-26"
+    },
+    {
+      "text": "Mina Park: Great. I\u2019ll follow up with those two docs and propose times for early next quarter. Thanks for being clear today, Xavier.",
+      "link": "https://www.onyx.app/9210812-27"
+    },
+    {
+      "text": "Xavier Walker: Thanks, Mina. Talk soon.",
+      "link": "https://www.onyx.app/9210812-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "xavier_walker@willowarc_financial.onyx.app"
+    }
+  ]
+}

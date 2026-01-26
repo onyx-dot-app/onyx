@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_3910621",
+  "semantic_identifier": "3910621 - Marinerock Outdoor Gear - buy - Discussion with Dustin Dean",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-09-24 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-09-24 00:00:00",
+    "duration_min": "33"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-09"
+      ],
+      "year_month": "2025-09",
+      "meeting_title": "3910621 - Marinerock Outdoor Gear - buy - Discussion with Dustin Dean",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hey Dustin, good to talk again. Last time we walked through how Sales_Accelerator sits on top of Salesforce and uses your existing data plus activity signals. For today, I want to keep it tight: confirm the outcomes you need for Q1, address the trust/explainability concern you raised, and\u2014if we\u2019re aligned\u2014lock down next steps to get this in place.",
+      "link": "https://www.onyx.app/5096578-1"
+    },
+    {
+      "text": "Dustin Dean: Sounds good, James. We\u2019re definitely interested. My main thing is still adoption\u2014my managers and reps won\u2019t follow \u201cAI guidance\u201d unless it\u2019s very clear why it\u2019s saying something.",
+      "link": "https://www.onyx.app/5096578-2"
+    },
+    {
+      "text": "James Choi: Totally fair\u2014and that\u2019s exactly where Sales_Accelerator is different from a black box. Let me anchor on two areas: the sales_forecast and the risk signals that drive deal reviews. On forecasting, you get commit/best-case/pipeline, but every number is explainable by drivers you can see: stage age, last touch, whether there\u2019s a next meeting scheduled, engagement trend, and optionally fit tier if you want to weight by ICP. When a deal flips from commit to best-case, it shows the \u201cwhy,\u201d not just the \u201cwhat.\u201d",
+      "link": "https://www.onyx.app/5096578-3"
+    },
+    {
+      "text": "Dustin Dean: Okay, but in practice what does that look like? My team has been burned by tools that say \u201cat risk\u201d and it\u2019s basically vibes.",
+      "link": "https://www.onyx.app/5096578-4"
+    },
+    {
+      "text": "James Choi: Yep. In your case, let\u2019s take the example you gave me: your \u201cSummitPro Retail Expansion\u201d opportunity type where deals often stall in late-stage because legal and merchandising move slowly. Sales_Accelerator would flag risk with specific, visible drivers like: \u201cStage age is 18 days over benchmark for this segment,\u201d \u201cNo next meeting scheduled,\u201d and \u201cNo outbound/inbound activity in 9 days.\u201d It\u2019s not just a red label; it\u2019s a checklist of conditions. Your manager can click in and see the benchmark it\u2019s using\u2014based on your historical cycle times for similar deals.",
+      "link": "https://www.onyx.app/5096578-5"
+    },
+    {
+      "text": "Dustin Dean: That benchmark part matters. We have different cycles for enterprise versus mid-market, and even by channel.",
+      "link": "https://www.onyx.app/5096578-6"
+    },
+    {
+      "text": "James Choi: Exactly. The forecast breaks down by segment/rep/source, so your enterprise retail channel can have different cycle-time expectations than, say, your B2B wholesale segment. And the explainability stays consistent across those slices. That also helps your VP Sales\u2014who you said is tired of the spreadsheet rollups\u2014because instead of debating whose spreadsheet is \u201cright,\u201d you can run the forecast call off the same drivers.",
+      "link": "https://www.onyx.app/5096578-7"
+    },
+    {
+      "text": "Dustin Dean: We do a lot of spreadsheet wrangling at the end of the month. It\u2019s painful. But I still worry reps will say, \u201cThis tool doesn\u2019t understand my deal.\u201d",
+      "link": "https://www.onyx.app/5096578-8"
+    },
+    {
+      "text": "James Choi: That\u2019s why we focus on surfacing signals they already believe in. Reps intuitively know \u201cI haven\u2019t talked to them,\u201d or \u201cwe don\u2019t have next steps,\u201d or \u201cthis deal\u2019s been sitting forever.\u201d Sales_Accelerator just standardizes it and puts it into the forecast so it\u2019s consistent. And it\u2019s not telling them to do random things; it\u2019s helping managers run targeted deal reviews. For example: \u201cHere are the five commit deals that look like they\u2019re weakening because stage age is high and there\u2019s no next meeting.\u201d That\u2019s a very coachable conversation.",
+      "link": "https://www.onyx.app/5096578-9"
+    },
+    {
+      "text": "Dustin Dean: Right. Our deal reviews can turn into storytelling sessions. If this can keep it grounded, that\u2019s good.",
+      "link": "https://www.onyx.app/5096578-10"
+    },
+    {
+      "text": "James Choi: Exactly. And you\u2019re not replacing Salesforce\u2014this sits on top. So your reps don\u2019t have to learn a new CRM. They keep working as they do; you\u2019re adding a layer that interprets what\u2019s happening and makes forecasting more accurate.",
+      "link": "https://www.onyx.app/5096578-11"
+    },
+    {
+      "text": "Dustin Dean: Let\u2019s talk accuracy. Our VP Sales wants more reliable commit. We\u2019ve missed a couple quarters because deals slipped late.",
+      "link": "https://www.onyx.app/5096578-12"
+    },
+    {
+      "text": "James Choi: Sales_Accelerator is built for that exact use case: quarter-end accuracy with fewer surprises. The forecast combines CRM stage with activity signals and cycle-time benchmarks, so it\u2019s harder for a deal to look \u201chealthy\u201d just because it\u2019s in a late stage. If it\u2019s late-stage but there\u2019s no next meeting and it\u2019s gone quiet, it will show up as risk\u2014early enough to do something about it, not just discover it on the last week of the quarter.",
+      "link": "https://www.onyx.app/5096578-13"
+    },
+    {
+      "text": "Dustin Dean: How early are we talking? Because if it only tells us in the last two weeks, it\u2019s not that helpful.",
+      "link": "https://www.onyx.app/5096578-14"
+    },
+    {
+      "text": "James Choi: Typically you start seeing weakening signals as soon as the activity pattern and stage age deviate from your norms\u2014often 3\u20136 weeks before quarter end, depending on your cycle length. And because it\u2019s driver-based, you can act on it: schedule the next meeting, re-engage the champion, or re-qualify and pull it out of commit. The value is less \u201cperfect prediction,\u201d more \u201cearlier visibility plus a consistent standard.\u201d",
+      "link": "https://www.onyx.app/5096578-15"
+    },
+    {
+      "text": "Dustin Dean: Okay. And what about scenario planning? You mentioned it on the earlier call.",
+      "link": "https://www.onyx.app/5096578-16"
+    },
+    {
+      "text": "James Choi: Yes\u2014lightly, because I don\u2019t want to boil the ocean. But it\u2019s useful for planning. You can answer questions like: \u201cIf we add 20 SQLs in our top ICP tier, what\u2019s the expected impact on revenue?\u201d That helps sales ops and your VP Sales connect pipeline generation with realistic outcomes. Again, with explainability: it shows assumptions like historical win rate for similar deals and average cycle time.",
+      "link": "https://www.onyx.app/5096578-17"
+    },
+    {
+      "text": "Dustin Dean: That could help us justify headcount or push marketing for more of the right leads. But adoption is still my gate. How do we make sure reps trust it from day one?",
+      "link": "https://www.onyx.app/5096578-18"
+    },
+    {
+      "text": "James Choi: Great question. There are two practical ways we handle that. First: we start with transparency. In the rollout, we explicitly train managers and reps to read the drivers\u2014stage age, last touch, next meeting, engagement. We\u2019re not asking them to \u201cbelieve the score,\u201d we\u2019re asking them to validate the drivers. Second: we run it in parallel for a short window\u2014two to three weeks\u2014where managers compare their forecast calls with Sales_Accelerator\u2019s view. When they see it consistently calling out the same deals that end up slipping, trust builds quickly.",
+      "link": "https://www.onyx.app/5096578-19"
+    },
+    {
+      "text": "Dustin Dean: Parallel run makes sense. My VP Sales will ask how much work this is for ops.",
+      "link": "https://www.onyx.app/5096578-20"
+    },
+    {
+      "text": "James Choi: Very manageable. Because it sits on top of Salesforce, the core setup is mapping your stages, confirming segmentation, and connecting activity sources like email/call/meeting signals. Then we calibrate cycle-time benchmarks from your historical data. You\u2019re not rewriting your process\u2014you\u2019re instrumenting it. Most teams get to a usable forecast view fast, and then refine.",
+      "link": "https://www.onyx.app/5096578-21"
+    },
+    {
+      "text": "Dustin Dean: And does it require reps to log every email or call perfectly? Because that\u2019s\u2026 not always reality.",
+      "link": "https://www.onyx.app/5096578-22"
+    },
+    {
+      "text": "James Choi: It helps, but it\u2019s not brittle. We can pull activity signals from connected systems so you\u2019re not relying on perfect manual logging. And even when activity is incomplete, stage age and next meeting scheduled are strong indicators. The system is designed to work with real-world CRM hygiene.",
+      "link": "https://www.onyx.app/5096578-23"
+    },
+    {
+      "text": "Dustin Dean: Good. So if we move forward, what exactly are we buying? And what\u2019s the timeline to value?",
+      "link": "https://www.onyx.app/5096578-24"
+    },
+    {
+      "text": "James Choi: You\u2019re buying Sales_Accelerator for your revenue team\u2014primarily your managers and ops for forecasting, and your AEs/SDRs for the guidance layer, though for this phase I\u2019d recommend we focus on forecasting and risk signals first since that\u2019s the highest urgency for you. Timeline: week 1 connect and map; week 2 calibrate and validate drivers; week 3 start parallel run; by week 4 you\u2019re using it in forecast calls.",
+      "link": "https://www.onyx.app/5096578-25"
+    },
+    {
+      "text": "Dustin Dean: That\u2019s reasonable. We\u2019re trying to tighten forecasting before the next quarter ramps. Pricing-wise, we\u2019re aligned with what you sent?",
+      "link": "https://www.onyx.app/5096578-26"
+    },
+    {
+      "text": "James Choi: Yes\u2014same scope we discussed: Sales_Accelerator with the sales_forecast module enabled, plus the risk diagnostics that feed targeted deal reviews. No surprise add-ons. If you\u2019re good, the cleanest path is: I send the order form today, you and procurement review, and we schedule a kickoff for next week.",
+      "link": "https://www.onyx.app/5096578-27"
+    },
+    {
+      "text": "Dustin Dean: I think we can do that. I\u2019ll need to get final sign-off from our VP Sales, but he\u2019s already leaning yes if we can prove it\u2019s explainable and helps quarter-end.",
+      "link": "https://www.onyx.app/5096578-28"
+    },
+    {
+      "text": "James Choi: Perfect. Why don\u2019t we do this: I\u2019ll send a one-page summary you can forward\u2014focused on the VP Sales use case: replacing spreadsheet rollups with an explainable forecast, highlighting weakening commit deals using stage age + no next meeting + low engagement, and running targeted deal reviews. Then I\u2019ll attach the order form. If you can get me an answer by Friday, we can hold the kickoff slot for Tuesday.",
+      "link": "https://www.onyx.app/5096578-29"
+    },
+    {
+      "text": "Dustin Dean: Friday is doable. Send it over, and I\u2019ll push it through. Assuming no curveballs, we\u2019ll move forward.",
+      "link": "https://www.onyx.app/5096578-30"
+    },
+    {
+      "text": "James Choi: Great. I\u2019ll get that email out within the hour. Before we wrap\u2014any last concerns that would block you, especially around the trust piece?",
+      "link": "https://www.onyx.app/5096578-31"
+    },
+    {
+      "text": "Dustin Dean: As long as the drivers are visible like you\u2019re describing, and we can do that parallel run, I\u2019m comfortable. My team will challenge it, but they\u2019ll come around if it\u2019s grounded in real signals.",
+      "link": "https://www.onyx.app/5096578-32"
+    },
+    {
+      "text": "James Choi: That\u2019s exactly the plan. I\u2019ll include the parallel-run approach in the summary. Thanks, Dustin\u2014I\u2019ll follow up shortly, and I\u2019ll pencil in Tuesday kickoff pending your Friday confirmation.",
+      "link": "https://www.onyx.app/5096578-33"
+    },
+    {
+      "text": "Dustin Dean: Sounds good. Talk soon, James.",
+      "link": "https://www.onyx.app/5096578-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "dustin_dean@marinerock_outdoor_gear.onyx.app"
+    }
+  ]
+}

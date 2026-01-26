@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#129",
+  "semantic_identifier": "129: feat: Add segment-scoped positioning templates model + minimal CRUD API (with versioning/audit)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-12",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "129",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "75",
+    "labels": [],
+    "created_at": "2025-04-12",
+    "updated_at": "2025-04-12",
+    "closed_at": "2025-05-06"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### Summary\nImplements the backend foundation for editable, segment-scoped positioning templates (value props, differentiators, proof points, objections) including versioning/audit fields, defaults, and minimal CRUD endpoints for the UI to fetch/update a segment\u2019s template.\n\n### Data model\n- Adds `positioning_templates` table/model scoped to `(workspace_id, segment_id)` with a single \u201ccurrent\u201d template per segment.\n- Stores template content as structured JSON (sections: `valueProps`, `differentiators`, `proofPoints`, `objections`), designed to be UI-friendly and extensible.\n- Adds audit/versioning fields:\n  - `version` (monotonic integer incremented on update)\n  - `created_at`, `updated_at`\n  - `created_by_user_id`, `updated_by_user_id`\n- Enforces uniqueness on `(workspace_id, segment_id)`.\n- Provides sensible defaults: if no row exists for a segment, API returns a default template shape (and optionally creates it on first write).\n\n### API endpoints\n- `GET /workspaces/:workspaceId/segments/:segmentId/positioning-template`\n  - Returns the current template + metadata (`version`, audit fields).\n  - If none exists, returns default payload shape.\n- `PUT /workspaces/:workspaceId/segments/:segmentId/positioning-template`\n  - Upserts the template content.\n  - Increments `version` and updates audit fields.\n  - Performs basic validation (required top-level keys, arrays of strings/objects where expected, max lengths).\n\n### Authorization & validation\n- Reuses existing workspace access checks (must be a workspace member with edit permissions).\n- Validates `workspaceId/segmentId` association to prevent cross-workspace access.\n- Returns standard 4xx errors for unauthorized access and invalid payloads.\n\n### Contract documentation\n- Adds API schema docs/examples for request/response payloads (including defaults and metadata) to unblock UI implementation in subsequent tickets.\n\n### Notes\n- Intentionally minimal scope (low priority): no history listing/rollback endpoints; only the current template is persisted and versioned.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#129"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

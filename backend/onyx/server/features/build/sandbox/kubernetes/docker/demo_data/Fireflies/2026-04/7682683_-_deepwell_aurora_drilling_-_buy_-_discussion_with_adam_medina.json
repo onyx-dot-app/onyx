@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_7682683",
+  "semantic_identifier": "7682683 - Deepwell Aurora Drilling - buy - Discussion with Adam Medina",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-04-15 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-04-15 00:00:00",
+    "duration_min": "17"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-04"
+      ],
+      "year_month": "2026-04",
+      "meeting_title": "7682683 - Deepwell Aurora Drilling - buy - Discussion with Adam Medina",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Adam, good to see you again. Since this is our third call, I\u2019d love to use today to confirm the last couple of open items and, if everything lines up, agree on next steps to get Sales_Accelerator purchased and implemented. Does that work?",
+      "link": "https://www.onyx.app/6818611-1"
+    },
+    {
+      "text": "Adam Medina: Yeah, that works. We\u2019re pretty close. I just want to make sure it\u2019s going to help our inbound follow-up and not become another tool reps ignore.",
+      "link": "https://www.onyx.app/6818611-2"
+    },
+    {
+      "text": "Irene Shen: Totally fair. Let me anchor on the one use case you\u2019ve emphasized: inbound speed-to-lead for the growth team. Sales_Accelerator\u2019s sales initiation recommendations will prioritize high-fit inbound leads, propose the best first-response message, and then track whether faster first-touch is actually correlating with higher win rate. The goal is: fewer \u201chot leads\u201d languishing in the queue, and more consistent outreach that matches your ICP and positioning.",
+      "link": "https://www.onyx.app/6818611-3"
+    },
+    {
+      "text": "Adam Medina: The prioritization part is what we want. Right now, it\u2019s basically first-in-first-out unless someone manually eyeballs the lead.",
+      "link": "https://www.onyx.app/6818611-4"
+    },
+    {
+      "text": "Irene Shen: Exactly. In your CRM, you already have account and lead data, plus engagement signals\u2014form fills, page visits, email opens if you\u2019re capturing those. Sales_Accelerator sits on top of that and then consumes Customer_Analyzer\u2019s fit scores and positioning blocks. So when an inbound comes in, it doesn\u2019t just say \u201chigh priority,\u201d it explains why\u2014fit drivers, segment, trigger events\u2014and it gives a recommended first-touch: email copy, LinkedIn opener, and a call talk track.",
+      "link": "https://www.onyx.app/6818611-5"
+    },
+    {
+      "text": "Adam Medina: That sounds good in theory. But one concern we raised last time: recommendations can get generic. We\u2019ve seen \u201cAI emails\u201d that read like everyone else\u2019s.",
+      "link": "https://www.onyx.app/6818611-6"
+    },
+    {
+      "text": "Irene Shen: I\u2019m glad you\u2019re calling that out, because it\u2019s the main risk if the inputs aren\u2019t maintained. The recommendations only stay sharp if Customer_Analyzer\u2019s positioning blocks are current and the segment mapping between the two systems is consistent. The way we mitigate that is two-fold: first, we map your segments once and validate with you\u2014like \u201cMid-market drilling ops\u201d versus \u201centerprise procurement-led\u201d\u2014so the system isn\u2019t guessing. Second, we set a lightweight cadence to keep positioning blocks updated\u2014monthly or quarterly depending on how quickly your messaging evolves. That prevents the \u201cgeneric drift.\u201d",
+      "link": "https://www.onyx.app/6818611-7"
+    },
+    {
+      "text": "Adam Medina: Okay. If we do that mapping correctly, how custom can the actual message be? Our inbound replies need to be pretty specific\u2014people ask about safety, uptime, and regulatory stuff.",
+      "link": "https://www.onyx.app/6818611-8"
+    },
+    {
+      "text": "Irene Shen: That\u2019s where the positioning blocks matter. For a safety-focused segment, the initiation playbook can be configured to lead with safety proof points and specific objection handlers\u2014like compliance concerns\u2014rather than a generic \u201cwe help you grow.\u201d And because the playbook links back to the rationale, reps can see: \u201cThis lead is high-fit because X and Y; lead with angle Z; here are the two proof points.\u201d It\u2019s not just a blob of text.",
+      "link": "https://www.onyx.app/6818611-9"
+    },
+    {
+      "text": "Adam Medina: I like the explainability. Reps won\u2019t trust it if it\u2019s a black box.",
+      "link": "https://www.onyx.app/6818611-10"
+    },
+    {
+      "text": "Irene Shen: Right\u2014and managers won\u2019t coach to it. Which brings me to the second feature I want to keep simple today: customizable initiation playbooks that are consistent across SDRs and AEs. You can standardize first-touch email, call talk track, and meeting agenda for each segment, while still letting reps personalize the first line or add context. That consistency is what improves speed-to-lead without sacrificing quality.",
+      "link": "https://www.onyx.app/6818611-11"
+    },
+    {
+      "text": "Adam Medina: What does implementation look like? We\u2019re on HubSpot, and we do have Customer_Analyzer already feeding fit scores.",
+      "link": "https://www.onyx.app/6818611-12"
+    },
+    {
+      "text": "Irene Shen: Perfect. Since you already have Customer_Analyzer, we\u2019re not duplicating that work. Implementation is essentially: connect to HubSpot, confirm the objects we\u2019re using\u2014leads, companies, deals\u2014then validate the segment mapping and pull in the fit scores and positioning blocks. After that, we build 2\u20133 initiation playbooks for your highest-volume inbound segments. Your team can start with inbound only, and expand to outbound later if you want.",
+      "link": "https://www.onyx.app/6818611-13"
+    },
+    {
+      "text": "Adam Medina: Timeline?",
+      "link": "https://www.onyx.app/6818611-14"
+    },
+    {
+      "text": "Irene Shen: For a focused inbound rollout: two weeks to get the integration and mapping right, then one week to finalize playbooks and QA the recommendations with a few real inbound examples. So you can realistically be live in about three weeks, assuming we can get an admin and one rev ops person for a few short sessions.",
+      "link": "https://www.onyx.app/6818611-15"
+    },
+    {
+      "text": "Adam Medina: That\u2019s reasonable. How do you measure whether it\u2019s working?",
+      "link": "https://www.onyx.app/6818611-16"
+    },
+    {
+      "text": "Irene Shen: We keep it tight around your stated goal. Three metrics: speed-to-lead (time to first-touch), meeting creation rate from inbound, and win rate by fit tier. Sales_Accelerator tracks whether faster first-touch correlates with higher win rate, so you can decide if you want to enforce SLAs or just monitor trends. And because the recommendation is tied to the fit score and segment, you can see where messaging is landing\u2014or not.",
+      "link": "https://www.onyx.app/6818611-17"
+    },
+    {
+      "text": "Adam Medina: Got it. Pricing and contract terms\u2014we\u2019re still aligned on what you sent over?",
+      "link": "https://www.onyx.app/6818611-18"
+    },
+    {
+      "text": "Irene Shen: Yes. The proposal we discussed: Sales_Accelerator for your growth team seats, annual term, with implementation included. No additional charge for the Customer_Analyzer integration since you already have it. If you\u2019re comfortable today, the next step would be I send the order form, you route it through procurement, and we schedule the kickoff.",
+      "link": "https://www.onyx.app/6818611-19"
+    },
+    {
+      "text": "Adam Medina: My last question is around adoption. If it\u2019s another dashboard, it won\u2019t stick. How do reps actually use it day to day?",
+      "link": "https://www.onyx.app/6818611-20"
+    },
+    {
+      "text": "Irene Shen: They don\u2019t have to leave HubSpot. The recommendations show up in their workflow: \u201cNext-best lead to contact,\u201d \u201csuggested first response,\u201d and the playbook talk track. The whole point is execution\u2014what to do next\u2014rather than another analytics surface. And for managers, you can see whether the team is following the initiation playbook and whether that\u2019s impacting meetings and wins.",
+      "link": "https://www.onyx.app/6818611-21"
+    },
+    {
+      "text": "Adam Medina: That makes sense. And the risk you mentioned\u2014positioning blocks staying current\u2014how do we operationalize that without making it a huge lift?",
+      "link": "https://www.onyx.app/6818611-22"
+    },
+    {
+      "text": "Irene Shen: We set it up as a simple governance step. For example: once a month, your rev ops or growth lead reviews the top two segments\u2019 positioning blocks in Customer_Analyzer, updates any proof points or objection handlers that changed, and we sync. If nothing changed, it\u2019s a 10-minute check. If you\u2019re launching a new campaign or entering a new region, we do a quick update. The key is: keep segment mapping stable, and treat positioning as a living asset.",
+      "link": "https://www.onyx.app/6818611-23"
+    },
+    {
+      "text": "Adam Medina: Okay. I think we\u2019re in a good spot. I can get this approved if procurement doesn\u2019t throw a curveball.",
+      "link": "https://www.onyx.app/6818611-24"
+    },
+    {
+      "text": "Irene Shen: Great. To make that easy, can I confirm your buying process? Who needs to sign, and what\u2019s the typical turnaround once you submit?",
+      "link": "https://www.onyx.app/6818611-25"
+    },
+    {
+      "text": "Adam Medina: It\u2019s me, then our VP of Revenue, then procurement for the papering. Usually a week, sometimes two.",
+      "link": "https://www.onyx.app/6818611-26"
+    },
+    {
+      "text": "Irene Shen: Perfect. Here\u2019s what I\u2019ll do right after this call: I\u2019ll send the order form and a one-page summary that highlights the inbound speed-to-lead use case, the two key features\u2014initiation recommendations and customizable playbooks\u2014and the implementation plan with the segment mapping and positioning upkeep so procurement sees we\u2019ve addressed the \u201cgeneric recommendations\u201d risk. If you can introduce me to your VP of Revenue over email today, we\u2019ll keep momentum.",
+      "link": "https://www.onyx.app/6818611-27"
+    },
+    {
+      "text": "Adam Medina: I can do that. Send me the docs and I\u2019ll forward with a note.",
+      "link": "https://www.onyx.app/6818611-28"
+    },
+    {
+      "text": "Irene Shen: Awesome. And assuming we get signature within the next two weeks, are you aiming to be live before next month\u2019s inbound campaign?",
+      "link": "https://www.onyx.app/6818611-29"
+    },
+    {
+      "text": "Adam Medina: Yes, ideally. We\u2019ve got a push coming and we don\u2019t want leads slipping again.",
+      "link": "https://www.onyx.app/6818611-30"
+    },
+    {
+      "text": "Irene Shen: Then we\u2019ll hold kickoff time on the calendar. I\u2019ll propose two options for next week\u201430 minutes\u2014with your HubSpot admin and whoever owns Customer_Analyzer messaging on your side. Sound good?",
+      "link": "https://www.onyx.app/6818611-31"
+    },
+    {
+      "text": "Adam Medina: Sounds good. Let\u2019s do it.",
+      "link": "https://www.onyx.app/6818611-32"
+    },
+    {
+      "text": "Irene Shen: Great\u2014thanks, Adam. I\u2019ll send the order form and summary within the hour, and I\u2019ll include the kickoff holds. If anything comes up in procurement\u2014security questions, data flow\u2014I\u2019ll jump on a quick call and get it handled.",
+      "link": "https://www.onyx.app/6818611-33"
+    },
+    {
+      "text": "Adam Medina: Appreciate it. Looking forward to getting this in place.",
+      "link": "https://www.onyx.app/6818611-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "adam_medina@deepwell_aurora_drilling.onyx.app"
+    }
+  ]
+}

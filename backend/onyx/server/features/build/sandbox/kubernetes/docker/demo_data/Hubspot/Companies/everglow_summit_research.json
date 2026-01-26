@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_3747189",
+  "semantic_identifier": "Everglow Summit Research",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-10-02 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "3747189",
+    "domain": "everglow_summit_research.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Everglow Summit Research\nDomain: everglow_summit_research.onyx.app",
+      "link": "https://www.onyx.app/86421"
+    },
+    {
+      "text": "Contact: Noel Barrett\nEmail: noel_barrett@everglow_summit_research.onyx.app",
+      "link": "https://www.onyx.app/59586"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

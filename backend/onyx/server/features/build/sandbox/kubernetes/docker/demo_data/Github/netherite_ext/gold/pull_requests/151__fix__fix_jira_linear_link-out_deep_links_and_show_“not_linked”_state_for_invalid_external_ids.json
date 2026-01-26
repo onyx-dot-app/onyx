@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#151",
+  "semantic_identifier": "151: fix: Fix Jira/Linear link-out deep links and show \u201cNot linked\u201d state for invalid external IDs",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-23",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "151",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "7",
+    "num_files_changed": "86",
+    "labels": [],
+    "created_at": "2025-04-23",
+    "updated_at": "2025-04-23",
+    "closed_at": "2025-05-18"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR fixes broken/misdirected Jira/Linear link-outs rendered from Issue_Tracker by making deep-link generation integration-aware and adding validation/fallback UI.\n\nChanges:\n- Deep link generation now uses the integration\u2019s configured base URL + workspace/org slug (instead of assuming a single global format), producing correct URLs across workspaces.\n- Added external ID/key validation before rendering a link:\n  - Jira: validate issue key shape (e.g., PROJECT-123) and ensure a baseUrl is present.\n  - Linear: validate issue identifier format and ensure workspace slug is present.\n- When the stored mapping is missing, malformed, or does not match the integration configuration, the UI renders a clear \u201cNot linked\u201d state instead of emitting a malformed anchor.\n- Added a retry/reconnect action that triggers a re-sync/relink flow for the affected integration (for stale mappings).\n\nUser impact:\n- Users will no longer land on 404s or the wrong downstream issue from Issue_Tracker link-outs.\n- If an item is not properly linked, users see an explicit state with a one-click path to restore the connection.\n\nNotes:\n- No data migration; existing stored external IDs are validated at render time. Potentially stale/incorrect mappings will surface as \u201cNot linked\u201d until reconnected/resynced.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#151"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

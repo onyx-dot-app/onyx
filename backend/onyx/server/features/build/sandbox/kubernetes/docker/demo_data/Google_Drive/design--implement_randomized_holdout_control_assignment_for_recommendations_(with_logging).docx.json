@@ -1,0 +1,30 @@
+{
+  "id": "6bdd6b0c6dec46b7b3044f0deebdedc1",
+  "semantic_identifier": "Design--Implement randomized holdout/control assignment for recommendations (with logging).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-28",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Implement randomized holdout/control assignment for recommendations (with logging).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add a deterministic bucketing service that assigns each unit (rep, account, or opportunity) into **control** or **treatment** for a given `(recommendation_type, model_version)` pair. Bucketing will be stable over time by hashing a composite key (e.g., `unit_type + unit_id + recommendation_type + model_version + experiment_id`) and mapping the hash into a percentile range; assignments are then derived from configurable thresholds (e.g., 10% control / 90% treatment). This ensures no re-randomization across requests while allowing independent experiments per recommendation type and model version.\n\nAt recommendation render/generation time, the caller will request an assignment for the relevant unit and context (\u201csurface\u201d). The surface config will define whether control users should see suppressed recommendations (hard holdout) or a placeholder/empty state, and what the control percentage is. For treatment, the system behaves as today. For control, the system will suppress emitting recommendations for that `(type, version)` on that surface, ensuring downstream metrics reflect a true baseline rather than partial exposure.\n\nWe will emit an analytics event on assignment evaluation (or at least on first evaluation per unit/type/version within a TTL), containing: `bucket` (control/treatment plus optional percentile), `unit_type`, `unit_id`, `recommendation_type`, `model_version`, `surface`, `experiment_id/config_version`, and `timestamp`. This event enables joining outcome metrics to assignment, validating stable bucketing, and computing uplift versus a true holdout. We should also log the computed hash/percentile in internal logs for debugging, but keep PII out of analytics.\n\nRollout will be controlled via configuration per surface (and optionally per recommendation type), supporting gradual ramp (e.g., start with 0% control to validate logging, then introduce 5\u201310% control) and the ability to disable bucketing quickly. Config changes should not reshuffle assignments within an experiment; we will version configs/experiments so changing thresholds only adjusts future exposure while keeping the underlying hash-based percentile stable. We\u2019ll add basic tests for determinism, distribution, and correct suppression behavior, plus dashboards/alerts for missing assignment events and unexpected bucket skews.",
+      "link": "https://www.onyx.app/69403"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

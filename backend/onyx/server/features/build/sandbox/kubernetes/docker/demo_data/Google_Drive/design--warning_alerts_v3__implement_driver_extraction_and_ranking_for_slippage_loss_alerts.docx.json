@@ -1,0 +1,30 @@
+{
+  "id": "1518005158b54b0186685e56adb56aee",
+  "semantic_identifier": "Design--Warning alerts v3: Implement driver extraction + ranking for slippage/loss alerts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-29",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Warning alerts v3: Implement driver extraction + ranking for slippage/loss alerts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a \u201cdrivers\u201d pipeline to Warning Alerts v3 that converts the v3 risk scoring output for slippage/loss into a ranked list of the most likely contributing factors. For each opportunity/deal alert, the service will emit a set of driver objects (e.g., stage duration too long, next step missing, activity decay, close date pushed out, low fit score), ordered by estimated contribution to risk. The output is intended to be consumed directly by downstream recommendations and the UI, so it must be stable, explainable, and consistent across CRM sources.\n\nAt a high level, the pipeline will (1) ingest the v3 model/scoring output and the minimal supporting feature values needed for explanation, (2) map raw feature signals into a canonical driver taxonomy, (3) compute a per-driver impact score (e.g., based on SHAP/feature contribution if available, otherwise via deterministic heuristics derived from model features), and (4) attach \u201cevidence\u201d fields that justify each driver (e.g., stage name + days in stage, missing next step boolean + last updated timestamp, activity count over N days, close date change delta + timestamps, fit score value + threshold). Normalization will happen at the mapping layer: Salesforce and HubSpot fields are translated into a shared intermediate representation (canonical opportunity fields and activity timeline metrics), ensuring the same driver definitions and evidence schema regardless of source CRM.\n\nThe API contract will return a stable schema such as: `drivers: [{ type, title, impact_score, direction, evidence, source_features, last_computed_at }]`, where `type` is a controlled enum (the canonical taxonomy), `impact_score` is a normalized numeric value used for ranking, and `evidence` is a typed object per driver type (versioned if needed). Ranking will be deterministic: tie-breaking is done by a fixed secondary key order (e.g., impact_score desc, type asc, then stable IDs/timestamps), and the pipeline will drop or down-rank drivers when required inputs are missing while still returning an empty/partial driver list rather than failing the alert.\n\nTesting will include unit tests covering (a) ranking determinism given identical inputs, including stable tie-breaking, (b) null/missing-field handling per driver type (e.g., missing stage enter date, missing next step field, missing activity events), and (c) CRM normalization correctness (same canonical drivers/evidence produced from equivalent Salesforce vs HubSpot inputs). We will also add snapshot-style tests for the returned schema to prevent accidental breaking changes, plus coverage for edge cases like newly created deals, reopened deals, and opportunities with no activity history.",
+      "link": "https://www.onyx.app/64279"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

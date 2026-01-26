@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_8444416",
+  "semantic_identifier": "8444416 - Ironspruce Robotics - sales_pitch - Discussion with Nora Wheeler",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-03-08 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-03-08 00:00:00",
+    "duration_min": "33"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-03"
+      ],
+      "year_month": "2025-03",
+      "meeting_title": "8444416 - Ironspruce Robotics - sales_pitch - Discussion with Nora Wheeler",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Nora, it\u2019s Megan Foster. Thanks for taking a few minutes\u2014did I catch you at an okay time?",
+      "link": "https://www.onyx.app/6682614-1"
+    },
+    {
+      "text": "Nora Wheeler: Hi Megan\u2014yes, I\u2019ve got about five minutes. What can I do for you?",
+      "link": "https://www.onyx.app/6682614-2"
+    },
+    {
+      "text": "Megan Foster: Perfect. I\u2019ll keep it tight. I\u2019m reaching out because a lot of product and go-to-market teams I talk to are trying to answer the same question you probably face at Ironspruce Robotics: \u201cWhich customer segments should we double down on next quarter, and how do we talk about the product in a way that actually lands?\u201d We built a SaaS product called Customer_Analyzer that helps teams get aligned on their best-fit customers and turns that into usable positioning for sales and marketing.",
+      "link": "https://www.onyx.app/6682614-3"
+    },
+    {
+      "text": "Nora Wheeler: Okay. We\u2019re definitely thinking about industry focus for next quarter. But we already have a CRM and dashboards. What\u2019s different here?",
+      "link": "https://www.onyx.app/6682614-4"
+    },
+    {
+      "text": "Megan Foster: Great question. Most dashboards tell you what happened. Customer_Analyzer is built to connect your customer signals\u2014things like CRM fields, onboarding surveys, product usage events, support tickets, even interview notes\u2014and translate them into two outcomes you can act on: a fit score by segment, and then positioning recommendations for the segments you want to prioritize.",
+      "link": "https://www.onyx.app/6682614-5"
+    },
+    {
+      "text": "Nora Wheeler: Fit score by segment\u2014so like a way to rank industries?",
+      "link": "https://www.onyx.app/6682614-6"
+    },
+    {
+      "text": "Megan Foster: Exactly. And not just by revenue. For example, one common use case is prioritizing which industries to target next quarter using retention and support burden signals. So you\u2019re not just chasing the loudest segment\u2014you\u2019re weighting who sticks around, who expands, and who doesn\u2019t drain your team with constant tickets.",
+      "link": "https://www.onyx.app/6682614-7"
+    },
+    {
+      "text": "Nora Wheeler: That\u2019s interesting. We\u2019ve had some segments that look great in bookings but turn into a support sinkhole.",
+      "link": "https://www.onyx.app/6682614-8"
+    },
+    {
+      "text": "Megan Foster: That\u2019s the exact pattern we see. The way teams use us is: they pull in renewal/retention data and support volume, tag it by industry or segment, and Customer_Analyzer surfaces \u201cthese are your highest-fit segments based on the drivers that correlate with healthy customers.\u201d Then the second part\u2014where teams usually get stuck\u2014is: \u201cCool, so what do we say to those segments?\u201d That\u2019s where our positioning_recommendation feature comes in.",
+      "link": "https://www.onyx.app/6682614-9"
+    },
+    {
+      "text": "Nora Wheeler: What does that actually produce? Because \u201cpositioning\u201d can get pretty fluffy.",
+      "link": "https://www.onyx.app/6682614-10"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Ours is intentionally not a strategy deck. positioning_recommendation generates segment-specific messaging blocks that your team can immediately use and edit\u2014like website hero copy, sales deck bullets, and email openers. And it links each recommendation back to the evidence and drivers it used\u2014so you can see, \u201cWe\u2019re emphasizing fast deployment because usage events and onboarding survey language show that\u2019s what best-fit customers care about,\u201d for example.",
+      "link": "https://www.onyx.app/6682614-11"
+    },
+    {
+      "text": "Nora Wheeler: So it\u2019s like it\u2019s pulling language from what customers actually say?",
+      "link": "https://www.onyx.app/6682614-12"
+    },
+    {
+      "text": "Megan Foster: Exactly. It combines observed customer language\u2014support tickets, call notes, surveys\u2014with the fit drivers you\u2019re using to prioritize segments. Then it outputs: a value proposition for that segment, top use cases, key differentiators, proof points you should collect, some pricing/value framing notes, and an objection-handling playbook. The goal is consistency\u2014so marketing and sales aren\u2019t improvising different narratives for the same segment.",
+      "link": "https://www.onyx.app/6682614-13"
+    },
+    {
+      "text": "Nora Wheeler: The objection-handling part is compelling. Our reps struggle with the same two objections in a couple verticals and everyone answers differently.",
+      "link": "https://www.onyx.app/6682614-14"
+    },
+    {
+      "text": "Megan Foster: That\u2019s a really common pain. And because it\u2019s tied to the segment, you\u2019re not getting generic rebuttals. You\u2019re getting \u201cIn robotics manufacturing accounts, the top objection is X; here\u2019s the response, here are the proof points to gather, and here\u2019s the email line that tends to work.\u201d Then your team can tweak it to match your voice.",
+      "link": "https://www.onyx.app/6682614-15"
+    },
+    {
+      "text": "Nora Wheeler: How hard is it to set up? Because I don\u2019t have appetite for a big integration project right now.",
+      "link": "https://www.onyx.app/6682614-16"
+    },
+    {
+      "text": "Megan Foster: It\u2019s typically lightweight to start. For a first pass, teams often begin with a CRM export plus a support ticket export, then optionally add onboarding survey data or a small set of interview notes. You can get an initial segment ranking and draft positioning pretty quickly, then decide if you want to connect product usage events later for more signal.",
+      "link": "https://www.onyx.app/6682614-17"
+    },
+    {
+      "text": "Nora Wheeler: Got it. And who usually owns this internally\u2014product marketing? Sales ops?",
+      "link": "https://www.onyx.app/6682614-18"
+    },
+    {
+      "text": "Megan Foster: Usually product marketing or growth owns the positioning output, and RevOps or analytics helps with the inputs. But the point is to get a shared artifact everyone can align around: \u201cThese are our best-fit segments next quarter, and here\u2019s the messaging we\u2019re using.\u201d",
+      "link": "https://www.onyx.app/6682614-19"
+    },
+    {
+      "text": "Nora Wheeler: This is relevant. We\u2019re in planning right now and there\u2019s a debate between two industries. One has higher ACV, the other renews better and is way easier on support.",
+      "link": "https://www.onyx.app/6682614-20"
+    },
+    {
+      "text": "Megan Foster: That\u2019s a perfect scenario for us. In a full walkthrough, we\u2019d show you how to compare those two segments side by side: retention trend, support burden, and any other drivers you care about\u2014then generate positioning for the one you choose to prioritize so your campaigns and outbound are aligned from day one.",
+      "link": "https://www.onyx.app/6682614-21"
+    },
+    {
+      "text": "Nora Wheeler: Okay. What would you need from us to make that discussion concrete?",
+      "link": "https://www.onyx.app/6682614-22"
+    },
+    {
+      "text": "Megan Foster: For the full call, ideally: a simple breakdown of your customer list with industry tags, retention or renewal outcomes if you have them, and a support ticket volume metric by account\u2014nothing fancy. Even if it\u2019s imperfect, it\u2019s enough to show how the fit drivers work and what the positioning output looks like.",
+      "link": "https://www.onyx.app/6682614-23"
+    },
+    {
+      "text": "Nora Wheeler: That sounds doable. Can we include someone from product marketing on our side?",
+      "link": "https://www.onyx.app/6682614-24"
+    },
+    {
+      "text": "Megan Foster: Absolutely\u2014actually that\u2019s ideal. How about we schedule a 30-minute session where I demo Customer_Analyzer specifically around \u201cwhich industries to target next quarter\u201d and then show the positioning_recommendation outputs\u2014hero copy, sales bullets, and the objection-handling playbook\u2014for your top two segments?",
+      "link": "https://www.onyx.app/6682614-25"
+    },
+    {
+      "text": "Nora Wheeler: Yes, that would be useful. Next week is better than this week for me.",
+      "link": "https://www.onyx.app/6682614-26"
+    },
+    {
+      "text": "Megan Foster: Great. I have Tuesday at 11:00am or Thursday at 2:30pm\u2014either work?",
+      "link": "https://www.onyx.app/6682614-27"
+    },
+    {
+      "text": "Nora Wheeler: Thursday at 2:30 works. I\u2019ll invite our product marketing lead.",
+      "link": "https://www.onyx.app/6682614-28"
+    },
+    {
+      "text": "Megan Foster: Perfect. I\u2019ll send a calendar invite for Thursday at 2:30 with a short list of suggested inputs\u2014CRM export fields and a support ticket summary\u2014so we can make it relevant to Ironspruce Robotics. Sound good?",
+      "link": "https://www.onyx.app/6682614-29"
+    },
+    {
+      "text": "Nora Wheeler: Sounds good. Send it over and I\u2019ll take a look.",
+      "link": "https://www.onyx.app/6682614-30"
+    },
+    {
+      "text": "Megan Foster: Will do. Thanks, Nora\u2014appreciate the time, and looking forward to digging into those segments with you next Thursday.",
+      "link": "https://www.onyx.app/6682614-31"
+    },
+    {
+      "text": "Nora Wheeler: Thanks, Megan. Talk then.",
+      "link": "https://www.onyx.app/6682614-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "nora_wheeler@ironspruce_robotics.onyx.app"
+    }
+  ]
+}

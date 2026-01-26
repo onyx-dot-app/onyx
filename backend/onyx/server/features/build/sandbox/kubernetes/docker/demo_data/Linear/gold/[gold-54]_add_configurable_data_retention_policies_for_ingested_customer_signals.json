@@ -1,0 +1,30 @@
+{
+  "id": "7413624",
+  "semantic_identifier": "[GOLD-54]: Add configurable data retention policies for ingested customer signals",
+  "title": "Add configurable data retention policies for ingested customer signals",
+  "source": "linear",
+  "doc_updated_at": "2025-12-12",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "backlog",
+    "priority": "low",
+    "created_at": "2025-12-12"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement per-workspace retention settings to automatically expire and delete stored customer signals (e.g., CRM fields, surveys, usage events, support tickets, notes) after a configurable period. Apply deletions to primary storage and search/index layers, with clear defaults that preserve current behavior if unset. Expose an admin-only API/config surface and record retention configuration changes for audit purposes.",
+      "link": "https://www.onyx.app/89203"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,181 @@
+{
+  "id": "FIREFLIES_6890610",
+  "semantic_identifier": "6890610 - Firefly Meridian Labs - sales_call - Discussion with Thomas Gray",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-10-21 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-10-21 00:00:00",
+    "duration_min": "31"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-10"
+      ],
+      "year_month": "2025-10",
+      "meeting_title": "6890610 - Firefly Meridian Labs - sales_call - Discussion with Thomas Gray",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Thomas\u2014good to see you again. Last time you mentioned you\u2019re trying to be more deliberate about which industries Firefly Meridian Labs targets next quarter, and you liked the idea of using retention and support load to guide that. Does that still feel like the priority?",
+      "link": "https://www.onyx.app/6065657-1"
+    },
+    {
+      "text": "Thomas Gray: Yeah, that\u2019s still the big one. We\u2019ve been spreading ourselves thin. Some industries churn fast or just hammer support, and we want to stop chasing those deals.",
+      "link": "https://www.onyx.app/6065657-2"
+    },
+    {
+      "text": "Camila Vega: Perfect. Then I want to focus today on one core piece of Customer_Analyzer: our fit estimation. The goal would be to give you a defensible fit score by industry and segment, and specifically tie it to outcomes you care about\u2014retention and support burden\u2014so you can prioritize where to aim marketing and sales.",
+      "link": "https://www.onyx.app/6065657-3"
+    },
+    {
+      "text": "Thomas Gray: Okay. When you say \u201cfit score,\u201d what\u2019s actually going into it? Because in theory that sounds great, but our data is\u2026 not pristine.",
+      "link": "https://www.onyx.app/6065657-4"
+    },
+    {
+      "text": "Camila Vega: Totally fair, and I want to be upfront: scoring is only as good as the signals available. Practically, we start with what you have. For your use case, I\u2019d propose a first version built from three buckets:\n1) Firmographics: industry, company size, maybe region if that matters.\n2) Outcome signals: retention/renewal status, expansion, time-to-value if you track it.\n3) Support burden: ticket volume, severity, time to resolution, and optionally themes if you tag them.\nThen Customer_Analyzer produces a 0\u2013100 fit score per account, and aggregates it by segment\u2014like Industry A SMB vs Industry A mid-market\u2014plus a driver breakdown that explains why.",
+      "link": "https://www.onyx.app/6065657-5"
+    },
+    {
+      "text": "Thomas Gray: The driver breakdown is interesting. But here\u2019s the issue: our CRM industry field is messy. Reps type whatever. And our support system isn\u2019t consistently tagged either. I don\u2019t want a fancy dashboard that\u2019s built on junk.",
+      "link": "https://www.onyx.app/6065657-6"
+    },
+    {
+      "text": "Camila Vega: That\u2019s the right skepticism. Two things we do to handle that without turning this into a six-month data cleanup project:\nFirst, we flag missingness and confidence. If an industry field is inconsistent, we\u2019ll show you coverage and how much the score is relying on that driver versus others. So you can tell \u201cthis segment\u2019s score is solid\u201d versus \u201cthis is directional.\u201d\nSecond, we can normalize a lot of the mess automatically. For industry, we typically map free-text values into a controlled list\u2014either your preferred taxonomy or a standard one\u2014so \u201cHealth,\u201d \u201cHealthcare,\u201d \u201cMedTech,\u201d doesn\u2019t fragment your segmenting.\nWould that kind of \u201cconfidence + normalization\u201d address the concern, or is there a specific data gap you\u2019re worried about?",
+      "link": "https://www.onyx.app/6065657-7"
+    },
+    {
+      "text": "Thomas Gray: The confidence part helps. The biggest gap is usage data. We have some product events, but they\u2019re not super consistent across customers. If usage is part of the fit, that might skew things.",
+      "link": "https://www.onyx.app/6065657-8"
+    },
+    {
+      "text": "Camila Vega: Yep\u2014and we don\u2019t have to force usage into the first pass. For the \u201cwhich industries next quarter\u201d decision, you can get a lot of value from retention + support burden + basic firmographics alone. Then, once you\u2019re comfortable, we can layer in adoption patterns where coverage is good.\nAlso, the system will show you, per segment, which drivers are contributing most. If usage coverage is low, it won\u2019t dominate the score; it\u2019ll show as sparse and lower confidence.",
+      "link": "https://www.onyx.app/6065657-9"
+    },
+    {
+      "text": "Thomas Gray: Got it. So we could start simpler. What would the output look like for me, as the person trying to make a recommendation internally?",
+      "link": "https://www.onyx.app/6065657-10"
+    },
+    {
+      "text": "Camila Vega: You\u2019d have a few views that map directly to that conversation:\n- A segment comparison table: industries on rows, segments like SMB/mid-market on columns, with average fit score and confidence.\n- A \u201cwhy\u201d panel for each segment: top positive drivers (e.g., high retention, low support hours) and negative drivers (e.g., slow time-to-value, high escalation rate).\n- And a recommended ICP profile based on observed outcomes\u2014basically: \u201cHere\u2019s the segment that looks most likely to renew and expand with the least support drag.\u201d\nSo when someone asks, \u201cWhy are we deprioritizing Industry X?\u201d you can say, \u201cBecause they churn 2x faster and generate 3x tickets per account, and the model weights those drivers heavily.\u201d",
+      "link": "https://www.onyx.app/6065657-11"
+    },
+    {
+      "text": "Thomas Gray: That\u2019s the kind of narrative I need. But I\u2019m also thinking about edge cases. We have one industry that\u2019s noisy in support because of a few big problematic accounts. Would the score over-penalize the whole segment?",
+      "link": "https://www.onyx.app/6065657-12"
+    },
+    {
+      "text": "Camila Vega: Great question. We handle outliers in two ways:\n1) You can see distribution, not just averages\u2014so if it\u2019s \u201ctwo accounts dragging the whole industry,\u201d it\u2019s obvious.\n2) You can configure the fit drivers to use robust metrics\u2014median support burden, percentile bands, or even exclude specific known outliers while you investigate.\nAnd since you get the driver breakdown, you can spot \u201csupport burden is the only reason this segment is low,\u201d and drill into which accounts are causing it.",
+      "link": "https://www.onyx.app/6065657-13"
+    },
+    {
+      "text": "Thomas Gray: Okay. That makes it less scary. What do you need from us to get a meaningful first cut?",
+      "link": "https://www.onyx.app/6065657-14"
+    },
+    {
+      "text": "Camila Vega: Minimal starting set:\n- CRM export with account ID, industry, size band, stage history if you have it, and renewal status or contract start/end dates.\n- Support data keyed to account: ticket count, severity if available, and time-to-close or hours.\nIf we can get those two, we can produce an initial fit model focused on your stated use case within a couple of weeks, then review it together and tune drivers/weights.",
+      "link": "https://www.onyx.app/6065657-15"
+    },
+    {
+      "text": "Thomas Gray: Two weeks is reasonable. But we\u2019ll need to involve RevOps for the CRM export and Support Ops for the ticket data. They\u2019ll ask: how much ongoing maintenance is this?",
+      "link": "https://www.onyx.app/6065657-16"
+    },
+    {
+      "text": "Camila Vega: Day-to-day, it\u2019s light. Once the initial mapping is set\u2014industry normalization rules, account ID matching\u2014updates can run on a schedule. If your fields stay consistent, it\u2019s mostly hands-off. The main \u201cmaintenance\u201d is you occasionally deciding to add a new driver or adjust a definition\u2014for example, if you redefine what counts as \u201chigh severity.\u201d\nI can also give RevOps a short checklist: required fields, preferred formats, and what we do when fields are missing.",
+      "link": "https://www.onyx.app/6065657-17"
+    },
+    {
+      "text": "Thomas Gray: That would help. Another concern: if the CRM industry is free text, we can normalize it, but what if we have accounts with multiple business lines? They might not fit cleanly into one industry.",
+      "link": "https://www.onyx.app/6065657-18"
+    },
+    {
+      "text": "Camila Vega: In that case, we usually support a primary industry plus an \u201cindustry tags\u201d field. If you have a notes field or a secondary category, we can map that into tags. Then you can analyze both \u201cprimary industry segments\u201d and cross-cutting tags like \u201cregulated,\u201d \u201chigh compliance,\u201d or \u201cembedded IT.\u201d\nBut for a first pass, we can keep it simple: primary industry with a \u201cmixed/other\u201d bucket, and we\u2019ll call out where ambiguity is affecting confidence.",
+      "link": "https://www.onyx.app/6065657-19"
+    },
+    {
+      "text": "Thomas Gray: Makes sense. So if we do this and it tells us Industry A is high fit and Industry B is low fit\u2014how do we translate that into action beyond just a chart?",
+      "link": "https://www.onyx.app/6065657-20"
+    },
+    {
+      "text": "Camila Vega: Great\u2014this is where the fit estimation becomes a buying decision tool, not a reporting tool. Concretely:\n- You use the fit score to set targeting: which industries get budget and SDR capacity next quarter.\n- You set qualification: what \u201cgood fit\u201d looks like so reps stop forcing bad deals through.\n- And you align product/CS: if a segment is high revenue but low fit due to time-to-value or support, that becomes a focused improvement initiative.\nFor today, since we\u2019re trying to get you to a decision: I\u2019d propose we define success criteria for a pilot that ends with a clear \u201cgo/no-go\u201d on rolling it out.",
+      "link": "https://www.onyx.app/6065657-21"
+    },
+    {
+      "text": "Thomas Gray: Okay. What would the pilot look like?",
+      "link": "https://www.onyx.app/6065657-22"
+    },
+    {
+      "text": "Camila Vega: Pilot scope:\n- Use case: \u201cPrioritize which industries to target next quarter using retention and support burden signals.\u201d\n- Data: last 12\u201318 months of renewals + support tickets + current CRM firmographics.\n- Deliverables: segment fit ranking, driver breakdown, and a recommended ICP shortlist\u2014say top 3 industries and 2 \u201cavoid\u201d industries\u2014with confidence indicators.\n- Review: one working session with you and RevOps to validate assumptions, then an exec-ready readout you can take to your leadership team.\nIf we can\u2019t create a ranking you trust because the data is too sparse, we stop. If it\u2019s useful, we move to annual.",
+      "link": "https://www.onyx.app/6065657-23"
+    },
+    {
+      "text": "Thomas Gray: That\u2019s pretty clean. What\u2019s the commercial side\u2014do we pay for the pilot, or is it rolled into the subscription?",
+      "link": "https://www.onyx.app/6065657-24"
+    },
+    {
+      "text": "Camila Vega: We typically structure it as a paid pilot that rolls into the subscription\u2014so you\u2019re not paying twice. For Firefly Meridian Labs, given your scope, it would be a 6-week pilot with a fixed fee, and if you move forward, that fee is credited toward your first term. If you don\u2019t move forward, you\u2019ve still paid for the work and outputs you can keep.",
+      "link": "https://www.onyx.app/6065657-25"
+    },
+    {
+      "text": "Thomas Gray: I like the crediting approach. I\u2019ll need rough numbers to get approval.",
+      "link": "https://www.onyx.app/6065657-26"
+    },
+    {
+      "text": "Camila Vega: Absolutely. Before I throw numbers, one quick check: assuming the pilot delivers a ranking your team trusts\u2014meaning you can confidently say \u201cwe\u2019re focusing on these industries next quarter\u201d\u2014are you the person who would sponsor moving to the annual subscription, or is there someone else who signs?",
+      "link": "https://www.onyx.app/6065657-27"
+    },
+    {
+      "text": "Thomas Gray: I\u2019d sponsor it, but our VP of Growth signs. I can bring it to her if I have a clear pilot plan and price.",
+      "link": "https://www.onyx.app/6065657-28"
+    },
+    {
+      "text": "Camila Vega: Perfect. Here\u2019s what I\u2019ll do: I\u2019ll send a one-page pilot proposal today with scope, required fields, timeline, and pricing options. Then we book a 25-minute call with you and your VP of Growth early next week to align on the decision criteria.\nIn parallel, can you intro me to RevOps and Support Ops so we can validate data availability this week?",
+      "link": "https://www.onyx.app/6065657-29"
+    },
+    {
+      "text": "Thomas Gray: Yes. I can loop in Jenna in RevOps and Malik in Support Ops. Send me what you need and I\u2019ll make the intro.",
+      "link": "https://www.onyx.app/6065657-30"
+    },
+    {
+      "text": "Camila Vega: Great. Last thing\u2014on the data quality concern: if we discover the CRM industry field is too inconsistent, are you open to us using a light enrichment pass or a standardized mapping to clean it, or is that a hard no internally?",
+      "link": "https://www.onyx.app/6065657-31"
+    },
+    {
+      "text": "Thomas Gray: We can do mapping. Enrichment might be a harder sell, but mapping what we already have is fine.",
+      "link": "https://www.onyx.app/6065657-32"
+    },
+    {
+      "text": "Camila Vega: Perfect. Then we\u2019ll design the pilot to rely on mapping first, and we\u2019ll only propose enrichment if we hit a wall\u2014and we\u2019d get explicit approval.\nI\u2019ll send the pilot doc and the field checklist right after this. Anything else you want to make sure we cover before we talk commercial next week?",
+      "link": "https://www.onyx.app/6065657-33"
+    },
+    {
+      "text": "Thomas Gray: No, I think you hit the main concerns. If you can keep it lightweight and still give me a credible \u201cgo target these industries\u201d output, that\u2019s exactly what we need.",
+      "link": "https://www.onyx.app/6065657-34"
+    },
+    {
+      "text": "Camila Vega: That\u2019s the goal. I\u2019ll follow up shortly with the proposal and next steps, and we\u2019ll aim to have the data validation call booked by Friday.",
+      "link": "https://www.onyx.app/6065657-35"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "thomas_gray@firefly_meridian_labs.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "9163472ff8b640ff8aa0cafd215d7bff",
+  "semantic_identifier": "Impact--issue_history v2: Add ownership fields + assignment events to issue history model.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-13",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--issue_history v2: Add ownership fields + assignment events to issue history model.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature expands `issue_history v2` to treat ownership as a first-class part of the issue lifecycle, not just an inferred attribute. We will add explicit fields for current owner, owning team, and assignee source, and ensure these are reliably populated so consumers can understand \u201cwho owns this issue right now\u201d at any point in time.\n\nIn addition, we will introduce dedicated assignment/ownership-change events in the issue history timeline. Rather than only reflecting the latest state, the model will capture each change (from unassigned \u2192 assigned, reassignment, team changes, etc.) as a queryable event alongside status changes, comments, and other history items.\n\nOn the ingestion/sync side, we will standardize how assignment data enters the system across sources. Assignments coming from connected delivery tools (Linear/Jira) and manual triage actions will be persisted through the same model and rules, reducing drift between integrations and ensuring the timeline and \u201ccurrent ownership\u201d fields remain consistent.\n\nThe primary impact is enabling downstream workflows that depend on accurate, time-based ownership: SLA timers that start/stop on assignment, reporting on time-to-owner and ownership churn, and decision notes that can reference who owned an issue when key actions were taken. It also improves UI/analytics experiences by allowing ownership to be displayed and filtered in the same way as other issue history events.",
+      "link": "https://www.onyx.app/42624"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

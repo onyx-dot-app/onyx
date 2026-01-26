@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_7331694",
+  "semantic_identifier": "Indigoriver Ventures - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-08-27 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed_won",
+    "pipeline": "default",
+    "amount": "104002",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "7331694"
+  },
+  "sections": [
+    {
+      "text": "Deal: Indigoriver Ventures\nAmount: $104002\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: warning_alerts\nClose Date: 2025-10-01 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/72330"
+    },
+    {
+      "text": "Contact: Hassan Rahman\nEmail: hassan_rahman@indigoriver_ventures.onyx.app",
+      "link": "https://www.onyx.app/87240"
+    },
+    {
+      "text": "Company: Indigoriver Ventures\nDomain: indigoriver_ventures.onyx.app",
+      "link": "https://www.onyx.app/13918"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/61485"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

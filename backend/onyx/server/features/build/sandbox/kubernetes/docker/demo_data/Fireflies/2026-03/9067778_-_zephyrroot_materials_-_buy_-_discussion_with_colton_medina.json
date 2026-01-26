@@ -1,0 +1,193 @@
+{
+  "id": "FIREFLIES_9067778",
+  "semantic_identifier": "9067778 - Zephyrroot Materials - buy - Discussion with Colton Medina",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-03-08 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-03-08 00:00:00",
+    "duration_min": "41"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-03"
+      ],
+      "year_month": "2026-03",
+      "meeting_title": "9067778 - Zephyrroot Materials - buy - Discussion with Colton Medina",
+      "organizer_email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Arjun Mehta: Hey Colton\u2014good to see you again. Since this is call three, I wanted to be respectful of time and focus on what you need to feel confident moving forward. Last time you mentioned the big goal is tightening product planning by getting really crisp on which customer segments are highest-fit and what unmet needs to build for. Is that still the priority for Zephyrroot Materials?",
+      "link": "https://www.onyx.app/1819895-1"
+    },
+    {
+      "text": "Colton Medina: Yeah, that\u2019s right. We\u2019ve got a lot of opinions internally, but not enough evidence. If we can align on who\u2019s actually a great fit and what patterns show up, that would help roadmap planning a lot.",
+      "link": "https://www.onyx.app/1819895-2"
+    },
+    {
+      "text": "Arjun Mehta: Perfect. Then I\u2019d like to anchor today on two things in Customer_Analyzer: first, the fit estimation\u2014so you get a clear, explainable fit score by account and by segment; and second, the driver breakdown and segment comparisons\u2014so your product planning discussions shift from \u201cwho we like\u201d to \u201cwho succeeds and why.\u201d Sound good?",
+      "link": "https://www.onyx.app/1819895-3"
+    },
+    {
+      "text": "Colton Medina: Sounds good. Fit scoring is the part my team keeps asking about. We just don\u2019t want a black box.",
+      "link": "https://www.onyx.app/1819895-4"
+    },
+    {
+      "text": "Arjun Mehta: Totally. The way fit_estimation works is you define the fit drivers you care about\u2014like industry, size, problem severity, time-to-value, adoption patterns, support burden, churn risk signals. Then we ingest the signals you already have\u2014CRM fields, onboarding surveys, product usage events, support tickets, even interview notes\u2014and we compute a 0\u2013100 fit score. The key is it\u2019s explainable: you get a driver-by-driver breakdown showing what pushed the score up or down.",
+      "link": "https://www.onyx.app/1819895-5"
+    },
+    {
+      "text": "Colton Medina: Okay, so if a segment is \u201chigh fit,\u201d we can see the actual reasons, not just a number.",
+      "link": "https://www.onyx.app/1819895-6"
+    },
+    {
+      "text": "Arjun Mehta: Exactly. And it becomes actionable for product planning because you can compare segments side-by-side: SMB vs mid-market, or manufacturing vs materials R&D, or however you slice it. Then the system recommends an ICP profile based on the outcomes you care about\u2014retention, expansion, conversion. In your case, you mentioned renewals and expansion are the two big signals that correlate with \u201cthis segment is worth building for.\u201d",
+      "link": "https://www.onyx.app/1819895-7"
+    },
+    {
+      "text": "Colton Medina: Right. The concern I have is segment definitions. Our industries overlap and personas overlap. We\u2019ve tried segmenting before and it turns into arguments because definitions aren\u2019t clean.",
+      "link": "https://www.onyx.app/1819895-8"
+    },
+    {
+      "text": "Arjun Mehta: That\u2019s a real issue, and I\u2019m glad you brought it up again. If segment definitions are ambiguous, recommendations can get confusing\u2014because you\u2019re not comparing apples to apples. The way we handle it is we start with a segmentation workshop inside the product. We create mutually exclusive segments where possible, and where overlap is unavoidable\u2014like industry + persona\u2014we treat it as a two-layer view: primary segment definitions for reporting, and then attributes for filtering.",
+      "link": "https://www.onyx.app/1819895-9"
+    },
+    {
+      "text": "Colton Medina: Give me an example of what that would look like for us.",
+      "link": "https://www.onyx.app/1819895-10"
+    },
+    {
+      "text": "Arjun Mehta: Sure. Let\u2019s say your \u201cindustry\u201d bucket includes advanced manufacturing and materials science companies, but you also sell into R&D teams inside broader industrial firms. Instead of trying to make one messy segment called \u201cmanufacturing/R&D,\u201d you\u2019d define primary segments like \u201cCompany type/vertical\u201d and \u201cCompany size,\u201d then you\u2019d tag persona attributes separately: \u201cR&D lead,\u201d \u201coperations,\u201d \u201cprocurement.\u201d Customer_Analyzer can score fit at the account level and then roll up to whichever segment view you choose, while keeping the driver breakdown consistent.",
+      "link": "https://www.onyx.app/1819895-11"
+    },
+    {
+      "text": "Colton Medina: So we can avoid the \u201cthis account belongs to three segments\u201d problem, or at least control it.",
+      "link": "https://www.onyx.app/1819895-12"
+    },
+    {
+      "text": "Arjun Mehta: Exactly. And practically, what you\u2019ll see is: \u201cSegment A has an 82 fit score driven by fast time-to-value and strong adoption; Segment B has a 61 driven down by high support burden and slow onboarding.\u201d That\u2019s the kind of evidence that stops the debate and supports roadmap bets\u2014like, \u201cWe should build X because it removes a driver that\u2019s suppressing fit for the segment we want.\u201d",
+      "link": "https://www.onyx.app/1819895-13"
+    },
+    {
+      "text": "Colton Medina: That\u2019s helpful. How quickly do we get something usable? I don\u2019t want a three-month implementation.",
+      "link": "https://www.onyx.app/1819895-14"
+    },
+    {
+      "text": "Arjun Mehta: You won\u2019t get that with us. For the initial fit model, we typically do a light setup in week one: connect CRM, pick the initial drivers, map 10\u201320 key fields, and ingest a baseline of support and product usage if you have it. Then you\u2019ll have a first pass fit score and driver breakdown quickly\u2014usually within two weeks, often sooner\u2014so you can sanity-check it with your team.",
+      "link": "https://www.onyx.app/1819895-15"
+    },
+    {
+      "text": "Colton Medina: And the model improves over time as more signals come in?",
+      "link": "https://www.onyx.app/1819895-16"
+    },
+    {
+      "text": "Arjun Mehta: Yes. You can start with what\u2019s easiest\u2014CRM + onboarding survey data\u2014and then layer in product events and support tickets to make the drivers more accurate. The big value is that it\u2019s not just \u201canalytics.\u201d It\u2019s a decision tool: segment comparisons, fit drivers, and a recommended ICP based on outcomes you care about.",
+      "link": "https://www.onyx.app/1819895-17"
+    },
+    {
+      "text": "Colton Medina: Okay. Internally, I need to justify this as product planning leverage, not just another tool. What\u2019s the core ROI story you see customers use?",
+      "link": "https://www.onyx.app/1819895-18"
+    },
+    {
+      "text": "Arjun Mehta: For product planning specifically, the ROI is: fewer roadmap bets aimed at low-fit customers, more focus on high-fit segments with unmet needs, and faster alignment across product, marketing, and sales. That translates into improved conversion and lower churn, but the immediate win for product teams is prioritization: you can point to fit drivers and outcomes and say, \u201cThis is why we\u2019re building this.\u201d",
+      "link": "https://www.onyx.app/1819895-19"
+    },
+    {
+      "text": "Colton Medina: That resonates. One other question: we already have people doing analysis manually in spreadsheets. What\u2019s the \u201cwhy now\u201d for Customer_Analyzer?",
+      "link": "https://www.onyx.app/1819895-20"
+    },
+    {
+      "text": "Arjun Mehta: Two reasons. First, you\u2019ll stop burning cycles re-creating the same analysis every quarter\u2014because the ingestion and scoring pipeline stays current as signals update. Second, you\u2019ll get consistent definitions and driver logic, so the organization debates the decision rather than the data. Spreadsheets can\u2019t reliably tie together CRM + usage + support + interview notes and keep it auditable with a driver breakdown.",
+      "link": "https://www.onyx.app/1819895-21"
+    },
+    {
+      "text": "Colton Medina: Fair. Let\u2019s talk decision. Pricing and terms\u2014where are we landing based on what we discussed last time?",
+      "link": "https://www.onyx.app/1819895-22"
+    },
+    {
+      "text": "Arjun Mehta: Based on your team size and data sources, I\u2019m recommending the standard annual plan for Customer_Analyzer. It includes fit estimation, driver breakdown, segment comparisons, and the ICP recommendation engine. We\u2019ll also include the segmentation onboarding workshop specifically to address the ambiguity issue you flagged, plus guided setup for your initial drivers and mappings.",
+      "link": "https://www.onyx.app/1819895-23"
+    },
+    {
+      "text": "Colton Medina: If we do this, I need confidence we won\u2019t end up with confusing segment outputs.",
+      "link": "https://www.onyx.app/1819895-24"
+    },
+    {
+      "text": "Arjun Mehta: Understood. Let\u2019s make it concrete: as part of onboarding, we\u2019ll deliver (1) a documented segmentation schema\u2014primary segments plus attribute tags, (2) a \u201csegment hygiene\u201d rule set so segments don\u2019t drift into overlap, and (3) an initial segment comparison report showing the top 3 segments by fit and the bottom 2 with clear driver explanations. That way you can take it straight into a roadmap discussion.",
+      "link": "https://www.onyx.app/1819895-25"
+    },
+    {
+      "text": "Colton Medina: That\u2019s exactly what I\u2019d want to show my VP Product.",
+      "link": "https://www.onyx.app/1819895-26"
+    },
+    {
+      "text": "Arjun Mehta: Great. So the remaining question is timeline. If we kick off next week, you\u2019d have first-pass fit scoring and the initial segment comparison shortly after, and you can use that in your next planning cycle. Are you ready to move forward today if I send the order form and we align on start date?",
+      "link": "https://www.onyx.app/1819895-27"
+    },
+    {
+      "text": "Colton Medina: Yeah, I think so. I\u2019ve got budget approval already earmarked, assuming we could address the segmentation concern. Your approach sounds solid.",
+      "link": "https://www.onyx.app/1819895-28"
+    },
+    {
+      "text": "Arjun Mehta: Excellent. To make it easy, I\u2019ll send the order form right after this call\u2014annual term, standard plan. For kickoff, do you prefer Tuesday or Thursday next week for the segmentation workshop?",
+      "link": "https://www.onyx.app/1819895-29"
+    },
+    {
+      "text": "Colton Medina: Thursday morning is better. Tuesday is packed.",
+      "link": "https://www.onyx.app/1819895-30"
+    },
+    {
+      "text": "Arjun Mehta: Thursday morning it is. I\u2019ll propose 10:00 a.m. your time. Before that, I\u2019ll send a short checklist: CRM fields export or access, any onboarding survey questions you use, and a sample of support ticket categories. Nothing heavy\u2014just enough to define the first set of drivers.",
+      "link": "https://www.onyx.app/1819895-31"
+    },
+    {
+      "text": "Colton Medina: Works for me. Send it over and I\u2019ll loop in our ops person for the CRM access.",
+      "link": "https://www.onyx.app/1819895-32"
+    },
+    {
+      "text": "Arjun Mehta: Perfect. Last thing\u2014any legal or security steps that could slow us down? I want to set expectations.",
+      "link": "https://www.onyx.app/1819895-33"
+    },
+    {
+      "text": "Colton Medina: We\u2019ll need security review, but it\u2019s usually straightforward for SaaS. If you have a standard security packet, that helps.",
+      "link": "https://www.onyx.app/1819895-34"
+    },
+    {
+      "text": "Arjun Mehta: We do. I\u2019ll include it in the email with the order form and the kickoff invite. If anything comes up in the security questionnaire\u2014especially around data ingestion sources\u2014tell me early and we\u2019ll knock it out quickly.",
+      "link": "https://www.onyx.app/1819895-35"
+    },
+    {
+      "text": "Colton Medina: Great. I\u2019m comfortable moving ahead.",
+      "link": "https://www.onyx.app/1819895-36"
+    },
+    {
+      "text": "Arjun Mehta: Awesome. I\u2019ll get everything over within the hour: order form, security packet, and the Thursday kickoff invite. Thanks, Colton\u2014excited to get Zephyrroot to a clearer ICP and more confident roadmap bets.",
+      "link": "https://www.onyx.app/1819895-37"
+    },
+    {
+      "text": "Colton Medina: Thanks, Arjun. Talk soon.",
+      "link": "https://www.onyx.app/1819895-38"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "arjun_mehta@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "colton_medina@zephyrroot_materials.onyx.app"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "29cce8219a1c4b33a80ee89b3ae5f2bc",
+  "semantic_identifier": "Impact--Add Fit Driver Selection Wizard with recommended defaults.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add Fit Driver Selection Wizard with recommended defaults.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a guided \u201cFit Driver Selection Wizard\u201d to the workspace setup flow, helping teams choose the inputs that will power fit scoring. Instead of asking users to start from a blank slate, the wizard pre-populates a recommended set of fit drivers based on the data sources they\u2019ve connected (e.g., CRM fields, survey responses, product usage events, and support ticket signals). Each recommendation includes a short explanation so users understand why it\u2019s suggested and how it will be used.\n\nThe primary impact is faster time-to-value and higher setup completion. An \u201caccept all\u201d option reduces friction for users who want to move quickly, while still providing the flexibility to add or remove drivers before continuing. This should meaningfully reduce decision fatigue in setup, especially for teams that aren\u2019t sure which signals are most predictive, and should increase the percentage of workspaces that reach a viable configuration on the first pass.\n\nA secondary impact is improved quality and consistency of fit scoring. By basing defaults on available connected data and persisting the final selection to the workspace configuration, downstream scoring will be aligned with what the customer explicitly chose. This reduces mismatches between what\u2019s connected, what\u2019s intended, and what the model actually uses, and makes results more explainable and repeatable across the product.\n\nFinally, this lays groundwork for iterative optimization over time. Persisted selections enable future product improvements like recommending additional drivers as new sources are connected, auditing configuration changes, and comparing scoring outcomes across different driver sets. It also provides clearer hooks for support and customer success to diagnose fit scoring issues by inspecting the exact driver configuration stored for each workspace.",
+      "link": "https://www.onyx.app/67083"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

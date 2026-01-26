@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#33",
+  "semantic_identifier": "33: feat: Customer_Analyzer v1: Backfill + daily refresh for segment_id and fit_tier on existing accounts",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-07-29",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "33",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "77",
+    "labels": [],
+    "created_at": "2025-07-29",
+    "updated_at": "2025-07-29",
+    "closed_at": "2025-08-06"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nThis PR adds an idempotent backfill and scheduled refresh to populate/maintain `Customer_Analyzer` `segment_id` and `fit_tier` for all existing Issue_Tracker accounts referenced by historically ingested conversations. It safely handles missing/unknown values and emits basic metrics/logging for operational visibility.\n\n## What changed\n- **Backfill job**\n  - Scans distinct Issue_Tracker `account_id`s referenced by past ingested conversations.\n  - For each account, fetches `segment_id` and `fit_tier` from Customer_Analyzer and upserts onto the account record.\n  - Normalizes absent/invalid responses to safe defaults (e.g., `segment_id = NULL`, `fit_tier = 'unknown'`) without failing the whole run.\n\n- **Scheduled refresh**\n  - Adds a daily scheduled job that refreshes `segment_id`/`fit_tier` using a per-account TTL.\n  - Uses `last_fetched_at` to skip accounts that were refreshed recently (prevents hammering Customer_Analyzer).\n\n- **Idempotency & rate protection**\n  - Upserts are no-op when values are unchanged.\n  - Uses TTL gating + bounded batching to limit outbound calls.\n  - Records `last_fetched_at` only on successful fetch/update to avoid locking in failures.\n\n- **Observability**\n  - Structured logs per run and per batch: totals scanned, attempted, updated, skipped (TTL), unknown/missing, failed.\n  - Metrics counters/gauges for success/failure rates and update counts.\n\n## Implementation details (high level)\n- New worker/command for backfill execution (safe to rerun).\n- New cron/scheduler entry for daily refresh.\n- Customer_Analyzer client handling updated to:\n  - Treat 404/empty payloads as \u201cunknown\u201d rather than hard errors.\n  - Retry transient failures with bounded backoff (where supported).\n\n## Operational notes\n- Run the backfill once after deploy (it is safe to rerun).\n- The daily job will keep data fresh while respecting TTL; if Customer_Analyzer is degraded, failures are logged/metric\u2019d and will retry on the next schedule.\n\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#33"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

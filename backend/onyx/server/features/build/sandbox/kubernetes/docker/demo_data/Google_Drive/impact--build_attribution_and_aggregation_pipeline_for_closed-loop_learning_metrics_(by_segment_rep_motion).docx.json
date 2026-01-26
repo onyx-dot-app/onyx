@@ -1,0 +1,30 @@
+{
+  "id": "3c65c8a6318b4a51a9b8ce8c51dacc9b",
+  "semantic_identifier": "Impact--Build attribution + aggregation pipeline for closed-loop learning metrics (by segment/rep/motion).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-27",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Build attribution + aggregation pipeline for closed-loop learning metrics (by segment/rep/motion).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a dedicated attribution and aggregation pipeline that ties persisted outcome events back to each `recommendation_instance_id`, enabling closed-loop learning on recommendation performance. By joining lifecycle outcomes to the original recommendation, we can quantify how recommendations move through key conversion steps (e.g., show\u2192accept, accept\u2192execute, execute\u2192meeting) and business outcomes (stage change, win/loss) rather than relying on proxy metrics.\n\nThe pipeline will produce daily, segmentable aggregates by customer segment, rep, and motion, and publish them into a queryable table and/or API that downstream analytics and optimization systems can consume. This creates a consistent source of truth for performance monitoring, experimentation readouts, and model/heuristic tuning, while reducing bespoke analyses and ensuring metrics are computed uniformly across teams.\n\nTo make the metrics trustworthy and operationally usable, the job will include basic data-quality checks and guardrails: detecting missing join keys, preventing double-counting, handling late-arriving events, and supporting backfills for recent history. The aggregation logic will be resilient to partial or missing lifecycle events so that incomplete funnels still yield meaningful counts/rates without corrupting totals.\n\nOperationally, the system will be designed to be isolated from core recommendation serving so it cannot degrade latency or availability of production recommendations. The net impact is faster iteration on recommendation strategies, clearer accountability by segment/rep/motion, and a scalable foundation for automated optimization and learning loops.",
+      "link": "https://www.onyx.app/82843"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "1734005",
+  "semantic_identifier": "[GOLD-50]: Expose messaging divergence results in UI and trigger alerts for high inconsistency",
+  "title": "Expose messaging divergence results in UI and trigger alerts for high inconsistency",
+  "source": "linear",
+  "doc_updated_at": "2025-10-18",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-10-18"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add a lightweight UI surface in Customer_Analyzer to display the messaging consistency audit results (from GOLD-48) by segment and channel, including the divergence score and the specific missing/altered value props, differentiators, and proof points. Implement threshold-based alerting (Slack/email) when divergence exceeds a configurable limit, linking to the relevant segment/channel details view. This focuses on reducing organizational drift by making inconsistencies visible and actionable without changing the underlying audit computation.",
+      "link": "https://www.onyx.app/18863"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

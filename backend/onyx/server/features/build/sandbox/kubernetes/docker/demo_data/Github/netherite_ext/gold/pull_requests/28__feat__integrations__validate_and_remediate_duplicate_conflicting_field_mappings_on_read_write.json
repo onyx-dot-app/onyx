@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#28",
+  "semantic_identifier": "28: feat: Integrations: Validate and remediate duplicate/conflicting field mappings on read/write",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-15",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "28",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "98",
+    "labels": [],
+    "created_at": "2025-08-15",
+    "updated_at": "2025-08-15",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nAdds backend validation and remediation for legacy integration field-mapping configs that contain duplicate or conflicting source\u2192destination pairs. Prevents downstream duplicate signals and reduces slow/failed syncs by surfacing issues at config load/save time.\n\n## What changed\n- **Canonical validation step** applied in two places:\n  - **On fetch (read path):** integration config responses now include a structured `mappingIssues` payload when duplicates/conflicts are detected.\n  - **On persist (write path):** validation runs before save; safe cases are auto-remediated, unsafe cases return a structured error requiring user resolution.\n\n## Detection logic (high level)\n- Normalizes mappings (e.g., trims/canonicalizes field identifiers) and computes collisions across:\n  - **Exact duplicates:** identical `{sourceField, destinationField}` pairs.\n  - **Conflicts:** same `sourceField` mapped to multiple destinations and/or same `destinationField` mapped from multiple sources (where not explicitly supported).\n- Produces issue objects with:\n  - `type` (DUPLICATE_PAIR | SOURCE_CONFLICT | DESTINATION_CONFLICT)\n  - `fields` involved\n  - `mappings` indices/ids implicated\n  - `recommendedAction` (AUTO_DEDUPED | USER_ACTION_REQUIRED)\n\n## Remediation behavior\n- **One-time auto-dedup (safe):** removes exact duplicate pairs deterministically (keeps first/most-recent per existing ordering rules) and returns a warning indicating what changed.\n- **User resolution required (unsafe):** for true conflicts, the API rejects the save (422) with the structured issue payload; read path returns warnings so clients can prompt cleanup before next save.\n\n## API/contract notes\n- Responses from integration config endpoints may now include `mappingIssues` (non-breaking additive field).\n- Save endpoints may now return 422 with `mappingIssues` when conflicts exist.\n\n## Operational impact\n- No migration required; remediation occurs lazily on read/save.\n- Affected integrations should see fewer duplicate downstream events and improved sync stability once configs are cleaned or auto-deduped.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#28"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

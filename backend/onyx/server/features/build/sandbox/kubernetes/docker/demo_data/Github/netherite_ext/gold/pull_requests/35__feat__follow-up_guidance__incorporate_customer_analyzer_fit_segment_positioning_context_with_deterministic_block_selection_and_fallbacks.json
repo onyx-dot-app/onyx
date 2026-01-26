@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#35",
+  "semantic_identifier": "35: feat: Follow-up guidance: incorporate Customer_Analyzer fit/segment/positioning context with deterministic block selection + fallbacks",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-05",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "35",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "33",
+    "labels": [],
+    "created_at": "2025-08-05",
+    "updated_at": "2025-08-05",
+    "closed_at": "2025-08-29"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nThis PR updates the follow-up guidance generation pipeline to incorporate Customer_Analyzer context returned by the retrieval layer\u2014fit score, segment, and approved positioning blocks\u2014when producing next-step recommendations and messaging for active opportunities.\n\n## Implementation details\n- **Context ingestion**: Extends the follow-up guidance generator input model to accept `customerAnalyzer` fields from retrieval (e.g., `fitScore`, `segment`, `approvedPositioningBlocks`).\n- **Prompt/templating updates**: Injects fit score + segment into the guidance context and conditionally references approved positioning blocks when present.\n- **Deterministic positioning block selection**:\n  - Filters to `approved` blocks only.\n  - Applies a stable ordering (explicit `rank`/`priority` when available, otherwise a deterministic fallback such as `blockId`/createdAt).\n  - Selects the top `N` blocks (configurable constant) to keep guidance concise and repeatable.\n- **Graceful fallback behavior**:\n  - If Customer_Analyzer data is missing, stale, or cannot be mapped to the opportunity/account, the generator falls back to the existing follow-up guidance flow without changing outputs.\n  - If only some fields are available (e.g., segment present but blocks missing), the generator uses partial context and omits unavailable sections.\n\n## Tests\n- Adds unit/fixture tests covering:\n  - Customer_Analyzer fields (fit/segment) being reflected in generated follow-up guidance.\n  - Deterministic selection/order of positioning blocks (stable across runs).\n  - Fallback to legacy behavior when Customer_Analyzer context is missing/stale/unmapped.\n\n## Notes for reviewers\n- No schema-breaking changes; new inputs are optional and guarded.\n- The behavioral change is additive only when Customer_Analyzer context is present and valid.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#35"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

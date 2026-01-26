@@ -1,0 +1,30 @@
+{
+  "id": "8e55500abc41451c87f9ddd6836951b1",
+  "semantic_identifier": "Design--Warning alerts v3: Generate recommended interventions from ranked risk drivers.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Warning alerts v3: Generate recommended interventions from ranked risk drivers.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add a **Recommendation Layer** to Warning Alerts v3 that takes the existing v3 risk output (overall risk score + ranked risk drivers + driver evidence) and returns a small, actionable set of **3\u20135 recommended interventions**. The response will be **deterministic and rule-based** for v1: given the same inputs it must always produce the same ordered recommendations, enabling consistent downstream UI and reliable testing. This layer will not change risk scoring; it is a pure post-processor that translates \u201cwhy this is risky\u201d into \u201cwhat to do next.\u201d\n\n**Inputs/Outputs & schema.** The service will accept a normalized payload containing: account/opportunity identifiers, risk score, ordered driver list (driver id/name, rank/weight), and optional driver evidence fields (e.g., last activity date, close date delta, next-step presence). It will return a stable JSON schema optimized for UI: an array of recommendations each with `id`, `title`, `rationale` (brief, driver-linked explanation), `priority` (e.g., P0/P1/P2 derived from driver rank/weight and risk score), `sourceDrivers` (driver ids), and `crmActions` (required fields and deep links, e.g., \u201cCreate task\u201d, \u201cUpdate next step\u201d, \u201cOpen opportunity in CRM\u201d). We will cap to 3\u20135 items, de-duplicate semantically similar actions, and ensure ordering is stable via a deterministic sort (priority desc, then driver rank, then recommendation id).\n\n**Rule engine & mapping.** v1 will be a straightforward mapping table from driver \u2192 intervention templates with lightweight guardrails based on evidence. Examples: if the \u201cNext step missing\u201d driver is present (or evidence indicates missing next step), recommend \u201cSchedule next meeting / add next step\u201d with required CRM fields for next-step and meeting date; if \u201cClose date slipped\u201d is present (or close date delta exceeds threshold), recommend \u201cReconfirm close plan\u201d with a link to the close plan/forecast fields; if \u201cActivity decays\u201d is present, recommend \u201cRe-engage champion\u201d with last touch context. When driver evidence is missing, we will still emit the recommendation if the driver is ranked, but mark rationale as evidence-light (e.g., \u201cDriver flagged by model; supporting fields unavailable\u201d) and omit CRM-required fields that cannot be reliably prefilled.\n\n**Testing & rollout.** We will add unit tests covering (1) exact driver-to-intervention mapping (including ordering and dedupe), (2) behavior when evidence is missing/partial (schema still valid, rationale degrades gracefully, no crashes), and (3) stable response schema/serialization for UI rendering (contract tests against a fixture). Implementation will be behind a feature flag, with logging for which drivers produced which interventions and any evidence gaps, so we can iterate on rules without changing the UI contract.",
+      "link": "https://www.onyx.app/45516"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

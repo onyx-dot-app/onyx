@@ -1,0 +1,30 @@
+{
+  "id": "3ca0aabab1a246d89d5edb7eaf4e45e7",
+  "semantic_identifier": "Impact--Add data sufficiency diagnostics (sample size + coverage) to fit score output.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-10",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add data sufficiency diagnostics (sample size + coverage) to fit score output.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds \u201cdata sufficiency\u201d diagnostics to the fit score output so customers can understand when a score may be less reliable due to limited underlying data. Today, fit scores can look equally confident even when they\u2019re generated from sparse or stale inputs, which increases the risk of misinterpretation and reduces trust when results don\u2019t match expectations.\n\nOn the backend, we will compute and return diagnostics per segment used in fit score generation: sample size, recency of the underlying data, and coverage of key signals (e.g., which required/important inputs were present vs. missing). These diagnostics will be attached to the existing fit score response contract, enabling the UI to present a clear \u201climited data\u201d warning and optionally expose the contributing reasons (e.g., \u201clow sample size\u201d or \u201cmissing key signals\u201d) without requiring additional calls.\n\nWe will introduce configurable thresholds (by environment and/or tenant as needed) that determine when a segment is considered low-data and should trigger a warning. This allows product and data teams to tune sensitivity as we learn, and provides a consistent, explainable standard for when we flag results rather than relying on ad hoc interpretation.\n\nFinally, we will add basic logging to quantify how often fit scores are produced under low-data conditions and which diagnostic dimensions are most commonly failing. This instrumentation helps us monitor rollout impact, identify segments where we should improve data collection or modeling strategy, and measure whether warnings reduce downstream confusion and support load over time.",
+      "link": "https://www.onyx.app/86748"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

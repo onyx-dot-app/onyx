@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_3987557",
+  "semantic_identifier": "3987557 - Nightfall Beacon Entertainment - sales_pitch - Discussion with Audrey Pierce",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-10 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-10 00:00:00",
+    "duration_min": "28"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "3987557 - Nightfall Beacon Entertainment - sales_pitch - Discussion with Audrey Pierce",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Audrey\u2014James Choi here. Thanks for taking a few minutes. I\u2019ll be quick: I\u2019m calling because a lot of teams end up guessing which customer segments to lean into next quarter, and it usually shows up later as higher support load or churn. I wanted to share how Customer_Analyzer helps make that decision more data-driven, especially when you\u2019re balancing retention and support burden.",
+      "link": "https://www.onyx.app/6648824-1"
+    },
+    {
+      "text": "Audrey Pierce: Hey James\u2014sure, I\u2019ve got a few minutes. We\u2019re actually in planning mode right now, so that\u2019s relevant. What exactly does it do?",
+      "link": "https://www.onyx.app/6648824-2"
+    },
+    {
+      "text": "James Choi: Customer_Analyzer pulls together the customer signals you already have\u2014things like CRM fields, product usage, onboarding surveys, support tickets, even notes from interviews\u2014and turns them into a simple fit score by account and by segment. So instead of \u201cwe think mid-market is better,\u201d you can see \u201cmid-market scores 82 because adoption is fast and retention is strong, while SMB scores 54 because support burden is high and time-to-value is longer.\u201d",
+      "link": "https://www.onyx.app/6648824-3"
+    },
+    {
+      "text": "Audrey Pierce: Okay. We have data in a few places, but we\u2019ve never really unified it. When you say fit score\u2014what is it actually measuring?",
+      "link": "https://www.onyx.app/6648824-4"
+    },
+    {
+      "text": "James Choi: Great question. The fit score is essentially \u201chow well does this customer type match your product\u2019s current strengths right now.\u201d You can define the drivers\u2014industry, company size, technographics, problem severity, willingness to pay, time-to-value, adoption patterns, support burden, churn risk signals. Then the system outputs a 0\u2013100 score plus a driver breakdown so you can see why it\u2019s high or low. It also compares segments side-by-side so your team can align quickly.",
+      "link": "https://www.onyx.app/6648824-5"
+    },
+    {
+      "text": "Audrey Pierce: That sounds useful, but we\u2019re Nightfall Beacon Entertainment\u2014we\u2019re pretty particular about segments. We\u2019re not a typical B2B SaaS. Does it still work if our segmentation is more\u2026 nuanced?",
+      "link": "https://www.onyx.app/6648824-6"
+    },
+    {
+      "text": "James Choi: Totally. The segmentation is flexible. Some teams do classic firmographics; others do \u201cuse case segments,\u201d or \u201cchannel segments,\u201d or \u201ccontent library size,\u201d or \u201clive events vs on-demand.\u201d The key is: as long as there are signals that correlate with outcomes\u2014retention, expansion, conversion, support load\u2014Customer_Analyzer can model it. We\u2019re not forcing you into a template; we\u2019re helping you test which segment definitions actually predict success.",
+      "link": "https://www.onyx.app/6648824-7"
+    },
+    {
+      "text": "Audrey Pierce: Interesting. Our biggest debate right now is which industries to prioritize next quarter. We\u2019ve got retention data, but support tickets are telling a different story\u2014some of our \u201cbest\u201d customers are expensive to support.",
+      "link": "https://www.onyx.app/6648824-8"
+    },
+    {
+      "text": "James Choi: That is exactly the use case where we tend to see quick wins: prioritizing which industries to target next quarter using retention and support burden signals. Customer_Analyzer can weight both. For example, if an industry has high retention but also high support burden and slow time-to-value, the score might land in the middle\u2014and the driver breakdown would explicitly show \u201cretention strong, support burden high.\u201d Then you can decide: do we invest in product improvements to lower support, or do we shift targeting toward the segment that renews *and* is lower-touch?",
+      "link": "https://www.onyx.app/6648824-9"
+    },
+    {
+      "text": "Audrey Pierce: That would help us have a less emotional conversation internally. Right now it\u2019s a lot of opinions.",
+      "link": "https://www.onyx.app/6648824-10"
+    },
+    {
+      "text": "James Choi: Exactly. And it also reduces the \u201cwe picked the wrong segment\u201d risk. One thing teams like is the recommended ICP profile the system generates based on observed outcomes\u2014so it\u2019s not just reporting; it\u2019s suggesting: \u201cHere\u2019s what your best-fit customers have in common,\u201d grounded in retention and expansion patterns.",
+      "link": "https://www.onyx.app/6648824-11"
+    },
+    {
+      "text": "Audrey Pierce: What data would you need from us to get started? I\u2019m a little concerned about implementation drag.",
+      "link": "https://www.onyx.app/6648824-12"
+    },
+    {
+      "text": "James Choi: Fair. We keep the first step lightweight. For a first pass, we typically start with three inputs: basic CRM account fields, whatever you have for retention/renewal outcomes, and support ticket metadata\u2014volume, categories, time-to-resolution. That alone usually lets us build an initial fit model for industry prioritization. If you also have product usage events, even better, but we don\u2019t need perfection on day one.",
+      "link": "https://www.onyx.app/6648824-13"
+    },
+    {
+      "text": "Audrey Pierce: And how long until we see something actionable? We\u2019re making next-quarter decisions pretty soon.",
+      "link": "https://www.onyx.app/6648824-14"
+    },
+    {
+      "text": "James Choi: If you can get us access to the core sources, you can usually see a first cut in a couple of weeks\u2014often faster depending on the systems. The key deliverables would be: industry-by-industry fit scores, the driver breakdown for each, and a segment comparison view that makes it easy to pick where to place bets next quarter.",
+      "link": "https://www.onyx.app/6648824-15"
+    },
+    {
+      "text": "Audrey Pierce: How do you avoid it being a black box? I\u2019ve seen \u201cscores\u201d before that no one trusts.",
+      "link": "https://www.onyx.app/6648824-16"
+    },
+    {
+      "text": "James Choi: Totally hear you. That\u2019s why we emphasize the driver breakdown. Every score comes with \u201chere\u2019s what drove it\u201d\u2014like adoption speed, support burden, churn signals\u2014so you can sanity check it. We also show segment comparisons and let you adjust the fit drivers and weights, so it reflects how *you* define success. The goal is something your product, marketing, and sales teams can all agree on, not a mysterious number.",
+      "link": "https://www.onyx.app/6648824-17"
+    },
+    {
+      "text": "Audrey Pierce: Okay, that\u2019s helpful. If we did this, who typically owns it internally? Product? Marketing? RevOps?",
+      "link": "https://www.onyx.app/6648824-18"
+    },
+    {
+      "text": "James Choi: Often it\u2019s a small triangle: someone from Product or Growth who cares about retention and time-to-value, someone from Marketing or Sales who cares about targeting and messaging, and RevOps or Analytics to help with data access. But for the initial \u201cwhich industries next quarter\u201d question, it can be just you plus whoever owns support ops and the CRM data.",
+      "link": "https://www.onyx.app/6648824-19"
+    },
+    {
+      "text": "Audrey Pierce: Makes sense. And you mentioned positioning recommendations\u2014are you pitching that too, or is today mainly the fit scoring?",
+      "link": "https://www.onyx.app/6648824-20"
+    },
+    {
+      "text": "James Choi: Today I\u2019d keep it focused on fit scoring because it maps directly to your immediate planning need. That said, once you know which segments are best-fit, we can also generate positioning recommendations\u2014value props, differentiators, proof points, objection handling\u2014tailored to those segments. But I don\u2019t want to overload you on this call.",
+      "link": "https://www.onyx.app/6648824-21"
+    },
+    {
+      "text": "Audrey Pierce: Appreciate that. I\u2019d like to see an example of what the output looks like\u2014especially the segment comparison and the driver breakdown.",
+      "link": "https://www.onyx.app/6648824-22"
+    },
+    {
+      "text": "James Choi: Perfect. How about we do a 30-minute working session this week: I\u2019ll walk you through a sample dashboard\u2014fit scores by industry, support burden overlay, and how the recommended ICP is formed. If it resonates, we can talk about what data sources you have and what an initial pilot would look like for Nightfall Beacon Entertainment.",
+      "link": "https://www.onyx.app/6648824-23"
+    },
+    {
+      "text": "Audrey Pierce: Yeah, that would be useful. Can you loop in someone from my team who owns support analytics? They\u2019ll have the best context on ticket drivers.",
+      "link": "https://www.onyx.app/6648824-24"
+    },
+    {
+      "text": "James Choi: Absolutely. Who should I include?",
+      "link": "https://www.onyx.app/6648824-25"
+    },
+    {
+      "text": "Audrey Pierce: Include Maya Chen\u2014she runs support ops reporting. And I can bring our RevOps manager if schedules allow.",
+      "link": "https://www.onyx.app/6648824-26"
+    },
+    {
+      "text": "James Choi: Great\u2014Maya Chen. I\u2019ll send a calendar invite for a 30-minute session. Do you prefer Wednesday afternoon or Thursday morning?",
+      "link": "https://www.onyx.app/6648824-27"
+    },
+    {
+      "text": "Audrey Pierce: Thursday morning would be better\u2014say 10:00?",
+      "link": "https://www.onyx.app/6648824-28"
+    },
+    {
+      "text": "James Choi: Thursday at 10:00 works. I\u2019ll send the invite with a short agenda: (1) example fit estimation outputs\u2014industry prioritization, (2) how support burden and retention are combined, (3) what data we\u2019d need for a first-pass model, and (4) next steps if you want to pilot. Sound good?",
+      "link": "https://www.onyx.app/6648824-29"
+    },
+    {
+      "text": "Audrey Pierce: Sounds good. Send it over, and I\u2019ll confirm with Maya.",
+      "link": "https://www.onyx.app/6648824-30"
+    },
+    {
+      "text": "James Choi: Will do. Thanks, Audrey\u2014talk Thursday.",
+      "link": "https://www.onyx.app/6648824-31"
+    },
+    {
+      "text": "Audrey Pierce: Thanks, James. Talk then.",
+      "link": "https://www.onyx.app/6648824-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "audrey_pierce@nightfall_beacon_entertainment.onyx.app"
+    }
+  ]
+}

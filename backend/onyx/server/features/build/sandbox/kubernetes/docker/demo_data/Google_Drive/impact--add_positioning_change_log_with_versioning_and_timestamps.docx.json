@@ -1,0 +1,30 @@
+{
+  "id": "eedc801b0a524d83ad3034cca3322b98",
+  "semantic_identifier": "Impact--Add positioning change log with versioning and timestamps.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-06",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add positioning change log with versioning and timestamps.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds an immutable, versioned audit log for all positioning recommendations\u2014value props, differentiators, proof points, and objections\u2014so every change is recorded with who made it, what changed, when it changed, and which segment/ICP it applies to. Each edit is stored as a new version rather than overwriting prior content, creating a complete, tamper-resistant history of our positioning over time.\n\nBy introducing stable version IDs and effective timestamps, we\u2019ll be able to precisely reference \u201cthe positioning that was live\u201d at any point in time. This reduces ambiguity in cross-functional workflows (Product Marketing, Sales, CS) and improves operational safety by making it easy to review prior iterations, understand decision context, and revert by re-promoting a previous version when needed.\n\nWe will also expose a read-only history endpoint that enables internal tooling and analytics to access the change log without risking mutation. This endpoint becomes the canonical source for change attribution, enabling downstream systems (dashboards, experiment analysis, CRM notes, enablement content tracking) to reference specific positioning versions consistently.\n\nThe primary impact is unlocking reliable attribution: correlating outcomes (win rate, conversion, pipeline quality, objection frequency) to the exact positioning version used for a given segment/ICP at a given time. In the near term, success is measured by completeness and correctness of the audit trail (100% of edits captured with actor/segment/timestamp/version), and by teams being able to answer \u201cwhat changed and why\u201d and \u201cwhat positioning was active when this result occurred\u201d without manual reconstruction.",
+      "link": "https://www.onyx.app/98929"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

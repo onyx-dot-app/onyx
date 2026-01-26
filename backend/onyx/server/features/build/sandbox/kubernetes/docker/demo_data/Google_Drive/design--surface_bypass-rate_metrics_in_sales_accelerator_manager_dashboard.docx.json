@@ -1,0 +1,30 @@
+{
+  "id": "441fd196466940bd939dea4b393d87ef",
+  "semantic_identifier": "Design--Surface bypass-rate metrics in Sales_Accelerator manager dashboard.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Surface bypass-rate metrics in Sales_Accelerator manager dashboard.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Summary / Goal  \nWe will add a lightweight \u201cBypass rate\u201d panel to the Sales_Accelerator manager (Sales Ops) dashboard to help leaders detect workflow adoption drift. The panel will compute and display bypass rate and underlying counts using existing bypass event data already available in the analytics warehouse\u2014no new product instrumentation, event schemas, or backend write paths required.\n\n## User Experience / UI  \nThe panel will live alongside existing manager dashboard metrics and include: (1) an overall bypass rate, (2) bypassed vs. total eligible counts, and (3) a simple segmentation table or grouped bars by **workflow** (best-next-action, forecast updates, risk alerts) and **team**. A date-range selector will support **Last 7 days** and **Last 30 days** (default to last 7) and will apply consistently across the panel. Hover/tooltips will define \u201cbypass\u201d and clarify denominator logic (e.g., \u201celigible workflow prompts/actions\u201d).\n\n## Data & Computation  \nWe will source data from the existing warehouse bypass events and the corresponding \u201celigible/served\u201d events that form the denominator (as already modeled today). The query will aggregate by `workflow`, `team_id` (or team name via existing dimension tables), and date bucket constrained by the selected range, returning `bypass_count`, `eligible_count`, and `bypass_rate = bypass_count / eligible_count`. The application will call a single read-only analytics endpoint (or reuse the dashboard\u2019s existing query layer) and cache results at the dashboard level to avoid repeated warehouse hits while users switch segments.\n\n## Rollout / Guardrails  \nWe will ship behind a feature flag for manager dashboards, validating correctness by reconciling a sample of teams/workflows against known warehouse totals. Edge cases include missing team attribution, sparse data (show \u201cInsufficient data\u201d when denominator is below a threshold), and partial workflow coverage (hide workflow rows with zero eligible events). Success will be measured by dashboard engagement with the panel and reduced time-to-detection for high bypass-rate teams, without any new instrumentation work.",
+      "link": "https://www.onyx.app/37904"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

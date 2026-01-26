@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#152",
+  "semantic_identifier": "152: feat: Warning alerts v3: Add normalized driver extraction + deterministic ranking for slippage/loss alerts",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-06",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "152",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "17",
+    "labels": [],
+    "created_at": "2025-11-06",
+    "updated_at": "2025-11-06",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements the v3 alert \u201cdrivers\u201d pipeline that converts risk scoring output into a ranked, CRM-normalized list of contributing factors for slippage/loss alerts.\n\nKey changes:\n- Adds a driver extraction layer that inspects v3 risk inputs/signals and emits per-driver records (e.g., stage duration, next-step missing, activity decay, close date movement, low fit score).\n- Normalizes CRM fields (Salesforce/HubSpot) into a canonical opportunity schema (stage, last_activity_at, next_step, close_date, stage_entered_at, fit_score, etc.) before driver evaluation to ensure consistent behavior across CRMs.\n- Introduces a stable `AlertDriver[]` output schema for downstream UI/recommendations:\n  - `key` (enum/string identifier), `label`, `impact` (numeric), `direction` (risk increase), `rank`, `evidence` (typed fields such as timestamps/deltas/field names/values), and `metadata` (crm + raw field references).\n- Implements deterministic ranking:\n  - primary sort by `impact` desc, secondary stable tie-breakers (driver priority map + key) to prevent reordering across runs.\n  - clamps/normalizes impact to a consistent scale for comparability across drivers.\n- Adds null/missing-field handling:\n  - gracefully skips drivers when required inputs are absent (or emits an \u201cunknown/missing data\u201d evidence payload where applicable) without throwing, and ensures schema remains stable.\n\nTests:\n- Unit tests covering driver extraction for both Salesforce and HubSpot-mapped inputs.\n- Ranking determinism tests (including tie scenarios) to guarantee stable ordering.\n- Null/missing-field tests validating no crashes, expected driver omission/zero-impact behavior, and stable schema output.\n\nUser-facing notes:\n- Downstream consumers can rely on a consistent driver schema and deterministic ordering for rendering recommendations and explanations in the warning alerts UI.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#152"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

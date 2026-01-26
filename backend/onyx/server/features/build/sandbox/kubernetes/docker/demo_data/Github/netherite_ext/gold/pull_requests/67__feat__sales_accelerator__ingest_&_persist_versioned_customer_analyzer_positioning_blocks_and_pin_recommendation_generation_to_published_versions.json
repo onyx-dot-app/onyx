@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#67",
+  "semantic_identifier": "67: feat: Sales_Accelerator: ingest & persist versioned Customer_Analyzer positioning blocks and pin recommendation generation to published versions",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-25",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "67",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "28",
+    "labels": [],
+    "created_at": "2025-06-25",
+    "updated_at": "2025-06-25",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Summary\nThis PR adds first-class support for versioned positioning blocks coming from Customer_Analyzer. Sales_Accelerator now stores version metadata (version_id, published_at, author/source) alongside the block payload and ensures downstream recommendation/messaging generation always references an explicit published version instead of an implicit \u201clatest\u201d. It also surfaces version fields in internal logs/telemetry for auditability.\n\n## Implementation details\n- **Data model/storage**\n  - Introduces a versioned representation for positioning blocks (block key + version metadata + payload).\n  - Persists version metadata fields: `version_id`, `published_at`, `source/author` (as provided by Customer_Analyzer).\n  - Maintains the existing \u201clatest\u201d read path only as a convenience (if present), but generation paths no longer rely on it.\n\n- **Ingestion changes**\n  - Updates the Customer_Analyzer ingest pipeline to accept version metadata and write immutable versioned records.\n  - Adds idempotency safeguards using `(block_id, version_id)` to avoid duplicate writes on retries.\n  - Validates presence/format of required version fields; rejects/flags unversioned payloads.\n\n- **Recommendation/messaging generation**\n  - Updates generators to accept and propagate `positioning_version_id` (and optionally `published_at`) and to fetch the corresponding stored version.\n  - When multiple versions exist, selects the most recent **published** version only when an explicit version is not provided by the caller, then pins the chosen version for the remainder of the request.\n\n- **Observability/auditability**\n  - Adds structured log/telemetry fields for: `block_id`, `version_id`, `published_at`, `source/author`, and whether a version was caller-specified vs auto-selected.\n  - Improves traceability by including version identifiers in internal events emitted during generation.\n\n## Backward compatibility / rollout notes (medium priority)\n- Existing stored unversioned blocks continue to be readable, but generation will prefer versioned records when available.\n- If a request references a version that is missing/unpublished, the service fails fast with a clear error and logs the attempted `version_id` for debugging.\n\n## What users need to know\n- Internal consumers generating recommendations should pass (or expect to receive) an explicit `positioning_version_id` to guarantee reproducible outputs.\n- Internal logs/telemetry now include version metadata to support audits and drift investigations.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#67"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#158",
+  "semantic_identifier": "158: feat: Admin UI for segment/ICP weighting: RBAC, validation, versioning, and audit trail",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-05-31",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "158",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "6",
+    "num_files_changed": "53",
+    "labels": [],
+    "created_at": "2025-05-31",
+    "updated_at": "2025-05-31",
+    "closed_at": "2025-06-26"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nImplements admin-configurable segment/ICP weighting controls end-to-end so Product/Support can adjust scoring influence without code changes.\n\nChanges included:\n- Admin Settings UI\n  - Added a new \"Scoring \u2192 Segment/ICP Weighting\" settings page.\n  - Displays current weights from the scoring service, editable inputs with inline help.\n  - Added \"Save\" and \"Reset to defaults\" actions.\n\n- Role-based access control\n  - UI route/entry point gated to allowed roles (Admin and PM).\n  - Backend authorization enforced on read/write endpoints to prevent bypass via direct API calls.\n\n- Validation + guardrails\n  - Server-side schema validation for all weight fields (type/required) and enforced min/max ranges.\n  - Rejects extreme/invalid values with user-friendly error messages surfaced in the UI.\n  - Reset-to-default uses service-provided defaults to avoid drift.\n\n- Versioning and auditability\n  - Weight updates are written as versioned configuration (monotonic revision + timestamps + actor).\n  - Each change appends a score audit trail entry capturing: previous values, new values, revision, and user identity, so downstream priority shifts can be traced.\n\nOperational notes:\n- Changes take effect immediately for new scoring runs; historical scores remain unchanged but can be explained via the recorded configuration revision in the audit trail.\n- Only Admin/PM users can access and modify these settings; other roles receive a forbidden response.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#158"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

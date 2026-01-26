@@ -1,0 +1,30 @@
+{
+  "id": "1c9f3adce8c940fcbe3decc030d7d9ae",
+  "semantic_identifier": "Design--Add explicit success metric definition & weighting to Fit Score configuration.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-05",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add explicit success metric definition & weighting to Fit Score configuration.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add an explicit, required \u201cSuccess Metric\u201d definition to Fit Score configuration so every segment/model clearly states what the score is optimizing. Today, Fit Score can be interpreted differently across teams; by forcing a concrete objective (e.g., retention, expansion, win rate) we make the optimization target unambiguous, comparable across segments, and easy to audit later.\n\nIn configuration, users will select one or more success metrics from an approved list (initially: retention, expansion, win rate; extensible), with required weights when multiple metrics are chosen. The system will validate that at least one metric is selected, weights are provided for multi-metric configs, and weights sum to 100% (or 1.0) after normalization. The resulting \u201csuccess objective\u201d becomes part of the model contract: it is written at training time into the model version metadata and cannot be changed retroactively without creating a new model version.\n\nOn the backend, we\u2019ll introduce a persisted schema for `success_metric_definition` on the segment/model config and copy it into each `model_version` record at creation time (immutable snapshot). Training jobs will consume this definition to determine the optimization target and to compute a composite target when multiple metrics are used (weighted aggregation). APIs that return Fit Score outputs will also return the associated success metric definition from the model version used to compute the score, ensuring downstream consumers can display and log the objective consistently.\n\nIn the UI, we\u2019ll surface the success metric definition in three places: (1) the segment/model configuration form (required field with weighting UI), (2) the Fit Score detail panel wherever Fit Score is shown (e.g., \u201cOptimized for: Retention (70%), Expansion (30%)\u201d), and (3) model/version history views for auditability. This feature is complete when every Fit Score shown in product can be traced to a model version with an immutable, visible success metric definition, eliminating ambiguity about what \u201cgood fit\u201d means for a given segment.",
+      "link": "https://www.onyx.app/68126"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,149 @@
+{
+  "id": "FIREFLIES_6852602",
+  "semantic_identifier": "6852602 - Pinewell Logistics - sales_pitch - Discussion with Grace Pierce",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-11-14 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-11-14 00:00:00",
+    "duration_min": "18"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-11"
+      ],
+      "year_month": "2025-11",
+      "meeting_title": "6852602 - Pinewell Logistics - sales_pitch - Discussion with Grace Pierce",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Grace\u2014Mina Park here. Thanks for taking a few minutes. I\u2019ll keep this quick: I work with teams that are drowning in support tickets and struggling to turn \u201cnoise\u201d into clear, prioritized issues engineering can act on. Curious\u2014how are you handling customer-reported problems today at Pinewell Logistics?",
+      "link": "https://www.onyx.app/9634561-1"
+    },
+    {
+      "text": "Grace Pierce: Hi Mina. Sure\u2014so we have Zendesk for support and Jira for engineering. Support tags tickets and escalates the big ones, but it\u2019s pretty manual. We definitely have duplicates and a lot of back-and-forth.",
+      "link": "https://www.onyx.app/9634561-2"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly the gap we focus on. The product is called Issue_Tracker. It sits between Zendesk/Intercom on one side and Jira/Linear on the other, and it standardizes what an \u201cissue\u201d is\u2014theme/root cause, evidence, impacted customers\u2014so you\u2019re not relying on ticket tags and tribal knowledge. In practice, teams ingest thousands of tickets a month and end up with ~80 active themes instead of 5,000 individual threads.",
+      "link": "https://www.onyx.app/9634561-3"
+    },
+    {
+      "text": "Grace Pierce: The deduping part sounds nice, but we\u2019ve tried macros and tagging projects. It still gets messy. How is this different from just better Zendesk hygiene?",
+      "link": "https://www.onyx.app/9634561-4"
+    },
+    {
+      "text": "Mina Park: Totally fair. Zendesk is great at managing individual conversations. Issue_Tracker is built for the layer above that: clustering and decisioning. It continuously pulls in tickets, detects duplicates, and groups them into a living cluster with representative examples and a list of affected customers\u2014then routes the top themes to product/engineering weekly. The big difference is it maintains an \u201cissue object\u201d that stays linked to the original customer conversations and the downstream Jira work, so the cluster doesn\u2019t fall apart when people change tags or switch teams.",
+      "link": "https://www.onyx.app/9634561-5"
+    },
+    {
+      "text": "Grace Pierce: Okay. One pain we have is losing context\u2014like why something got deprioritized, or what we told a customer two months ago.",
+      "link": "https://www.onyx.app/9634561-6"
+    },
+    {
+      "text": "Mina Park: That\u2019s one of our strongest features: issue_history. Every cluster has a full timeline\u2014when it was created, if it got merged or split, priority changes with the rationale, linked Jira items, and milestones like \u201cidentified \u2192 investigating \u2192 in progress \u2192 released.\u201d It also captures customer communications: who was notified, when, and what was promised. So when an account manager pings you, you\u2019re not hunting across Zendesk notes, Slack threads, and Jira comments.",
+      "link": "https://www.onyx.app/9634561-7"
+    },
+    {
+      "text": "Grace Pierce: That actually sounds useful. We get those \u201cdid we ever respond to this?\u201d questions all the time, and sometimes we accidentally contradict ourselves.",
+      "link": "https://www.onyx.app/9634561-8"
+    },
+    {
+      "text": "Mina Park: Exactly\u2014issue_history makes communication consistent and audit-friendly. And it creates accountability: when priorities change, there\u2019s a decision note attached, not just a quiet change to a field. Teams use it to cut down internal churn\u2014support stops re-escalating the same thing because they can see status and what\u2019s been communicated.",
+      "link": "https://www.onyx.app/9634561-9"
+    },
+    {
+      "text": "Grace Pierce: How does it decide what to prioritize? Because \u201cloudest customer wins\u201d is a problem for us.",
+      "link": "https://www.onyx.app/9634561-10"
+    },
+    {
+      "text": "Mina Park: Issue_Tracker prioritizes based on business impact. It pulls in customer/value context from CRM and tools like Customer_Analyzer\u2014so it can highlight revenue exposure, ICP/segment importance, and deal risk alongside the volume of tickets. Instead of \u201c50 tickets = top priority,\u201d it becomes \u201cthis theme affects three enterprise accounts and a renewal next month,\u201d or \u201cthis is widespread but low impact.\u201d The goal is a defensible top 10 list for your weekly product/engineering review.",
+      "link": "https://www.onyx.app/9634561-11"
+    },
+    {
+      "text": "Grace Pierce: I like the idea, but I\u2019m wary of adding another tool. We already have too many dashboards.",
+      "link": "https://www.onyx.app/9634561-12"
+    },
+    {
+      "text": "Mina Park: Also fair. We\u2019re not trying to replace Zendesk or Jira. Most teams keep working where they already work; Issue_Tracker becomes the connective tissue. Support can keep using Zendesk, engineering stays in Jira, and Issue_Tracker keeps the issue clusters and history in sync, with links back to source tickets and forward to the work items. In other words, it reduces dashboards by eliminating the spreadsheets and ad hoc docs people create to track themes.",
+      "link": "https://www.onyx.app/9634561-13"
+    },
+    {
+      "text": "Grace Pierce: What does adoption look like? Support is busy\u2014if it\u2019s a big process change, it\u2019ll be hard.",
+      "link": "https://www.onyx.app/9634561-14"
+    },
+    {
+      "text": "Mina Park: The lightest-weight rollout is: connect Zendesk, connect Jira, then start with one weekly ritual\u2014your top themes review. Support ops uses Issue_Tracker to cluster and merge duplicates, then shares the top 10 clusters with product/engineering, each with representative examples and affected customer lists. That\u2019s it to start. Over time, people naturally lean on issue_history because it saves time on status questions and customer follow-ups.",
+      "link": "https://www.onyx.app/9634561-15"
+    },
+    {
+      "text": "Grace Pierce: Do you have an example of what a cluster looks like? Like, what engineering sees?",
+      "link": "https://www.onyx.app/9634561-16"
+    },
+    {
+      "text": "Mina Park: Engineering sees a single cluster page: a clear title, a short problem statement/root cause hypothesis, evidence (a handful of the most representative tickets), impact metrics (volume, affected customers, segment/revenue exposure), and then linked Jira items. As work progresses, the status milestones update\u2014so support and customer-facing teams have one source of truth for \u201cwhat\u2019s happening\u201d without pinging engineers.",
+      "link": "https://www.onyx.app/9634561-17"
+    },
+    {
+      "text": "Grace Pierce: That would help. Right now our PMs get a messy export, and engineers don\u2019t trust it, so they ask for more context anyway.",
+      "link": "https://www.onyx.app/9634561-18"
+    },
+    {
+      "text": "Mina Park: Exactly\u2014trust is the missing piece. Because Issue_Tracker keeps the evidence attached\u2014actual customer conversations and examples\u2014engineers can quickly validate. And because merges/splits and priority changes are tracked in issue_history, you can see how the understanding evolved, rather than rewriting the story every week.",
+      "link": "https://www.onyx.app/9634561-19"
+    },
+    {
+      "text": "Grace Pierce: What would you need from us to see if this is worth it?",
+      "link": "https://www.onyx.app/9634561-20"
+    },
+    {
+      "text": "Mina Park: Great question. For a proper evaluation, we typically do a 30\u201345 minute working session where we map your current flow: Zendesk intake, escalation criteria, your Jira setup, and who runs the weekly triage. If you\u2019re open to it, we can also look at a sample month\u2014say a few thousand tickets\u2014and show you what clustering into ~80 themes would look like, plus what the \u201ctop 10\u201d would be when weighted by customer impact.",
+      "link": "https://www.onyx.app/9634561-21"
+    },
+    {
+      "text": "Grace Pierce: That sounds reasonable. I\u2019d want our support ops lead in that, and maybe someone from product.",
+      "link": "https://www.onyx.app/9634561-22"
+    },
+    {
+      "text": "Mina Park: Perfect. If you can bring your support ops lead and a PM, I\u2019ll bring a quick demo focused on clustering and issue_history\u2014no generic tour. We\u2019ll show how duplicates get merged, how clusters route to Jira, and how the communication timeline prevents the \u201cwhat did we promise?\u201d scramble.",
+      "link": "https://www.onyx.app/9634561-23"
+    },
+    {
+      "text": "Grace Pierce: Yeah, I\u2019m interested. Can you send times for next week? Tuesday or Thursday morning usually works.",
+      "link": "https://www.onyx.app/9634561-24"
+    },
+    {
+      "text": "Mina Park: Absolutely. I\u2019ll email you a couple options for Tuesday and Thursday morning, and I\u2019ll include a short checklist of what we\u2019ll want connected or exported ahead of time\u2014nothing heavy, just enough to make the session concrete. Sound good?",
+      "link": "https://www.onyx.app/9634561-25"
+    },
+    {
+      "text": "Grace Pierce: Sounds good. Send it over and I\u2019ll loop in the right people.",
+      "link": "https://www.onyx.app/9634561-26"
+    },
+    {
+      "text": "Mina Park: Great\u2014thanks, Grace. I\u2019ll follow up shortly with the invite options and agenda. Talk soon.",
+      "link": "https://www.onyx.app/9634561-27"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "grace_pierce@pinewell_logistics.onyx.app"
+    }
+  ]
+}

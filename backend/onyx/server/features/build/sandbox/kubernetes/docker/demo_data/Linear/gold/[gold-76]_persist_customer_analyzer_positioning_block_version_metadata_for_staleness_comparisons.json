@@ -1,0 +1,30 @@
+{
+  "id": "3715899",
+  "semantic_identifier": "[GOLD-76]: Persist Customer_Analyzer positioning block version metadata for staleness comparisons",
+  "title": "Persist Customer_Analyzer positioning block version metadata for staleness comparisons",
+  "source": "linear",
+  "doc_updated_at": "2025-05-19",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jiwon_kang",
+      "email": "jiwon_kang@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "low",
+    "created_at": "2025-05-19"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add support in Sales_Accelerator to store the Customer_Analyzer positioning block identifier/version and last-updated timestamp alongside the rendered block on each account/opportunity. Expose a lightweight API/service method to fetch the latest Customer_Analyzer metadata for a given record so the UI can compare pasted/edited content against the canonical version. This ticket focuses only on the data model + retrieval plumbing needed for stale-block detection and replacement flows.",
+      "link": "https://www.onyx.app/27591"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

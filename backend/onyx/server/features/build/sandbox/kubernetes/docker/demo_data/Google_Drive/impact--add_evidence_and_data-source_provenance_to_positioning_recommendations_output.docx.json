@@ -1,0 +1,30 @@
+{
+  "id": "58a19d771d9b49cf90a6a3f5caec2ebd",
+  "semantic_identifier": "Impact--Add evidence + data-source provenance to Positioning Recommendations output.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-20",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add evidence + data-source provenance to Positioning Recommendations output.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds lightweight evidence and data-source provenance to each Positioning Recommendation so customers can see what the recommendation is grounded in. Today, recommendations can feel \u201cblack box,\u201d especially when inputs are sparse; attaching provenance (top contributing signals/sources, supporting counts, and recency) makes the output more explainable without changing the underlying recommendation logic.\n\nThe primary user impact is increased trust and faster decision-making: teams can quickly judge whether a recommendation is based on meaningful, recent inputs (e.g., which CRM fields were used, how many interviews or tickets contributed, and the most recent supporting event). This is particularly valuable for smaller or newer datasets where confidence is naturally lower and users need reassurance before adopting messaging changes.\n\nOn the product side, exposing provenance via the recommendations API enables the UI to present \u201cwhy we think this\u201d context consistently across surfaces (e.g., tooltips, evidence drawers, badges like \u201cBased on 12 tickets; last updated 5 days ago\u201d). It also creates a foundation for future capabilities like confidence indicators, filtering by source, and troubleshooting data gaps\u2014without requiring a redesign of the recommendation engine.\n\nKey success metrics include improved qualitative feedback on recommendation credibility, higher adoption of Positioning Recommendations (views-to-actions or copy/export rates), and reduced support/escalation volume related to \u201chow did you get this?\u201d questions. We should also monitor any performance impact from generating provenance and ensure the evidence remains lightweight, stable, and privacy-safe for all connected data sources.",
+      "link": "https://www.onyx.app/35786"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,173 @@
+{
+  "id": "FIREFLIES_6617542",
+  "semantic_identifier": "6617542 - Jadecircuit Electronics - buy - Discussion with Liliana Zamora",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-06-18 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-06-18 00:00:00",
+    "duration_min": "34"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-06"
+      ],
+      "year_month": "2025-06",
+      "meeting_title": "6617542 - Jadecircuit Electronics - buy - Discussion with Liliana Zamora",
+      "organizer_email": "james_choi@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "James Choi: Hi Liliana, good to see you again. Since this is our third call, my goal today is simple\u2014confirm we\u2019re aligned on what you\u2019re buying, cover the couple of remaining risks you flagged, and if everything looks good, lock in next steps to get Customer_Analyzer live for Jadecircuit. Sound fair?",
+      "link": "https://www.onyx.app/9164858-1"
+    },
+    {
+      "text": "Liliana Zamora: Yes, that works. We\u2019re interested, I just want to be confident it\u2019ll actually help us decide which industries to target next quarter without turning into a big data cleanup project.",
+      "link": "https://www.onyx.app/9164858-2"
+    },
+    {
+      "text": "James Choi: Totally. Let\u2019s anchor on your core use case: prioritizing industries using retention signals and support burden. Customer_Analyzer takes the signals you already have\u2014CRM fields, product usage events if available, support tickets, and any onboarding survey data\u2014and produces two outputs you care about: a fit score by segment and practical positioning recommendations for the segments that look best.",
+      "link": "https://www.onyx.app/9164858-3"
+    },
+    {
+      "text": "Liliana Zamora: The fit score is the part we like. The positioning recommendations sounded promising too, but I don\u2019t want generic \u201cmarketing fluff.\u201d",
+      "link": "https://www.onyx.app/9164858-4"
+    },
+    {
+      "text": "James Choi: 100%. On the positioning side, the key is it\u2019s evidence-linked. For the top segments, Customer_Analyzer generates editable messaging blocks\u2014like website hero copy, sales deck bullets, and email openers\u2014but every recommendation links back to drivers and the underlying evidence, like \u201chigh retention in this industry\u201d or \u201clower support ticket volume\u201d plus actual language found in tickets or notes. So it\u2019s not fluffy; it\u2019s grounded in what\u2019s working.",
+      "link": "https://www.onyx.app/9164858-5"
+    },
+    {
+      "text": "Liliana Zamora: Okay. My concern is still data quality. Our CRM industry field is incomplete, and tagging is inconsistent. If the inputs are messy, the scoring might mislead us.",
+      "link": "https://www.onyx.app/9164858-6"
+    },
+    {
+      "text": "James Choi: That\u2019s the right concern, and we\u2019ve built around it. Two ways we typically handle this without a massive cleanup: First, we can start with the strongest signals you *do* trust\u2014support tickets and retention by account\u2014and treat CRM industry as a \u201cbest effort\u201d field initially. Second, we\u2019ll implement a simple \u201cconfidence\u201d indicator on segments so you can see where scoring is based on solid coverage versus sparse data. Practically, that means you can still prioritize industries next quarter, but you\u2019ll know which recommendations are high confidence versus \u201cneeds more tagging.\u201d",
+      "link": "https://www.onyx.app/9164858-7"
+    },
+    {
+      "text": "Liliana Zamora: How long does it usually take to get to something usable? We\u2019re planning next quarter\u2019s go-to-market in about four weeks.",
+      "link": "https://www.onyx.app/9164858-8"
+    },
+    {
+      "text": "James Choi: You\u2019re fine. For most teams, time-to-first-results is about 10\u201314 days once data connections are in place. For Jadecircuit, since you want industry prioritization, we\u2019d connect your CRM and support system first, then map a handful of key fields\u2014industry, ARR band if you have it, renewal status, ticket volume/severity. By week two, you\u2019re already getting a ranked set of segments with fit drivers like \u201cstrong retention + low support burden,\u201d and you can start socializing that internally.",
+      "link": "https://www.onyx.app/9164858-9"
+    },
+    {
+      "text": "Liliana Zamora: And the positioning recommendations\u2014what exactly would my team get? Like a report?",
+      "link": "https://www.onyx.app/9164858-10"
+    },
+    {
+      "text": "James Choi: More actionable than a report. For each prioritized segment, you get a positioning package: a segment-specific value proposition, top use cases, differentiators, proof points to collect, pricing/value framing notes, and an objection-handling playbook. And it\u2019s output as editable blocks\u2014so your marketing manager can copy it into a landing page draft, and your sales lead can paste the objection handling into the deck or enablement docs.",
+      "link": "https://www.onyx.app/9164858-11"
+    },
+    {
+      "text": "Liliana Zamora: That\u2019s attractive, especially the objection handling. Sales keeps running into the same pushback in certain industries and we don\u2019t have a consistent narrative.",
+      "link": "https://www.onyx.app/9164858-12"
+    },
+    {
+      "text": "James Choi: Exactly. And because it\u2019s tied to drivers, it stays consistent. If the system is telling you \u201cthis segment wins because implementation time is low and support outcomes are strong,\u201d then the recommendations reinforce that. It reduces the internal debate and speeds up creating a narrative that matches reality.",
+      "link": "https://www.onyx.app/9164858-13"
+    },
+    {
+      "text": "Liliana Zamora: Let\u2019s talk about scope. We don\u2019t want to boil the ocean. If we buy, I want to focus on two or three industries we\u2019re debating right now.",
+      "link": "https://www.onyx.app/9164858-14"
+    },
+    {
+      "text": "James Choi: Perfect approach. We can start with a \u201csegment bake-off.\u201d In onboarding, we\u2019ll define your candidate industries\u2014say three\u2014and have Customer_Analyzer score them using retention and support burden as primary drivers. Then the positioning recommendations will be generated specifically for the top one or two. That\u2019s a tight, low-risk first phase.",
+      "link": "https://www.onyx.app/9164858-15"
+    },
+    {
+      "text": "Liliana Zamora: What do you need from us to make that work if the CRM industry field is incomplete?",
+      "link": "https://www.onyx.app/9164858-16"
+    },
+    {
+      "text": "James Choi: Minimal. We\u2019ll do three things: (1) pull whatever industry data exists today; (2) use support ticket metadata and keywords to help infer industry patterns where possible; and (3) ask you for a small \u201cseed list\u201d of 30\u201350 accounts where you\u2019re confident about industry. That seed set helps calibrate the segment definitions quickly. No giant cleanup project\u2014just enough to make the scoring reliable for the decisions you need.",
+      "link": "https://www.onyx.app/9164858-17"
+    },
+    {
+      "text": "Liliana Zamora: That sounds manageable. Internally, the only other question is pricing and whether we can justify it with near-term impact.",
+      "link": "https://www.onyx.app/9164858-18"
+    },
+    {
+      "text": "James Choi: Let\u2019s tie it directly to outcomes. You\u2019re using it to choose which industries to target next quarter and to tighten the narrative for those segments. That\u2019s typically reflected in better conversion and shorter cycles, but even before that, it prevents wasted spend on segments with high churn or high support burden. If Customer_Analyzer helps you avoid just one bad segment bet\u2014or improves win rate in the right segment\u2014that usually covers the cost quickly.",
+      "link": "https://www.onyx.app/9164858-19"
+    },
+    {
+      "text": "Liliana Zamora: Right. I think we can justify it if we can get something defensible for the QBR and planning deck.",
+      "link": "https://www.onyx.app/9164858-20"
+    },
+    {
+      "text": "James Choi: You will. The segment fit score output is designed to be shareable: it summarizes the fit drivers\u2014retention, support burden, usage if available\u2014and shows why one industry is prioritized over another. Then the positioning package becomes the \u201cso what do we say?\u201d layer. So you\u2019ll have both: why we\u2019re choosing an industry, and how we\u2019re messaging to it.",
+      "link": "https://www.onyx.app/9164858-21"
+    },
+    {
+      "text": "Liliana Zamora: Okay. Implementation-wise, do we need IT heavily involved?",
+      "link": "https://www.onyx.app/9164858-22"
+    },
+    {
+      "text": "James Choi: Light involvement. Usually someone to approve the CRM and support integrations and answer field mapping questions. Most of the work is on our side: mapping, initial scoring, and generating the first set of positioning blocks. Your team\u2019s time is mainly a couple of check-ins to validate: \u201cDo these segments make sense?\u201d and \u201cDoes this language match what you hear?\u201d",
+      "link": "https://www.onyx.app/9164858-23"
+    },
+    {
+      "text": "Liliana Zamora: Good. If we move forward, I want to start this month so we can use it in planning.",
+      "link": "https://www.onyx.app/9164858-24"
+    },
+    {
+      "text": "James Choi: Great. Here\u2019s what I propose: we finalize the agreement today, kick off early next week, and aim to deliver the first industry ranking and fit drivers by the end of week two. Then week three we refine and generate the positioning recommendations for the top segment, including objection handling.",
+      "link": "https://www.onyx.app/9164858-25"
+    },
+    {
+      "text": "Liliana Zamora: What do you need from me to finalize today?",
+      "link": "https://www.onyx.app/9164858-26"
+    },
+    {
+      "text": "James Choi: Two things: confirmation of the package\u2014Customer_Analyzer with the fit scoring plus positioning recommendations\u2014and your approval to send the order form. Then we\u2019ll schedule the kickoff and send a short data checklist. If you\u2019re comfortable, I can send the paperwork right after this call.",
+      "link": "https://www.onyx.app/9164858-27"
+    },
+    {
+      "text": "Liliana Zamora: I\u2019m comfortable with that. Send the order form. I\u2019ll route it for signature today, but I\u2019ll need you to include that we\u2019re starting with the three-industry bake-off and the focus on retention and support burden signals.",
+      "link": "https://www.onyx.app/9164858-28"
+    },
+    {
+      "text": "James Choi: Absolutely. I\u2019ll include that as the initial scope in the statement of work: three candidate industries, scoring based on retention and support burden, plus positioning recommendations for the top one to two segments. I\u2019ll also note the data quality approach\u2014seed list and confidence indicator\u2014so expectations are clear.",
+      "link": "https://www.onyx.app/9164858-29"
+    },
+    {
+      "text": "Liliana Zamora: Perfect. Then yes, let\u2019s do it.",
+      "link": "https://www.onyx.app/9164858-30"
+    },
+    {
+      "text": "James Choi: Amazing. I\u2019ll email the order form in the next 15 minutes, and I\u2019ll propose kickoff times for Monday or Tuesday. Once signed, we\u2019ll start integration setup immediately. Anything else you want covered before we hang up?",
+      "link": "https://www.onyx.app/9164858-31"
+    },
+    {
+      "text": "Liliana Zamora: No, that covers it. Thanks, James.",
+      "link": "https://www.onyx.app/9164858-32"
+    },
+    {
+      "text": "James Choi: Thank you, Liliana. I\u2019ll get that over right now.",
+      "link": "https://www.onyx.app/9164858-33"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "james_choi@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "liliana_zamora@jadecircuit_electronics.onyx.app"
+    }
+  ]
+}

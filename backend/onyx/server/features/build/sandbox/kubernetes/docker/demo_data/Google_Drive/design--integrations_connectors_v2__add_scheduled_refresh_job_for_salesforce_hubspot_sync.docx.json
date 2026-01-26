@@ -1,0 +1,30 @@
+{
+  "id": "df8257ca56fe48d09aea76f3c43b4347",
+  "semantic_identifier": "Design--Integrations_connectors v2: Add scheduled refresh job for Salesforce/HubSpot sync.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-01",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Integrations_connectors v2: Add scheduled refresh job for Salesforce/HubSpot sync.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will add a scheduled refresh job for the Salesforce and HubSpot v2 connectors to keep ARR and opportunity data current for issue-to-customer/value linkage. Today these records are primarily fetched on-demand or via initial sync, which can drift from source-of-truth over time. The scheduled job will run per connected account/connector, re-pulling the relevant objects and updating our internal normalized store so downstream linkage logic always operates on fresh inputs.\n\n### Scheduling & Configuration\nEach connector/account will have a configurable refresh cadence (default e.g., hourly/daily, set via config and overridable per tenant). We\u2019ll implement the job as a recurring worker (e.g., in our existing background job framework) that enqueues per-account sync tasks, with guardrails to avoid concurrent runs for the same connector/account (distributed lock / idempotency key). The scheduler will be resilient to restarts and will only schedule accounts with valid auth tokens and enabled connector status.\n\n### Incremental Sync & State Persistence\nFor efficiency, the sync should be incremental when the source supports updated timestamps (Salesforce: `SystemModstamp` / `LastModifiedDate`; HubSpot: `hs_lastmodifieddate` or equivalent). We will persist per connector/account sync state: last successful sync timestamp, last attempted timestamp, and (if needed) pagination cursors. On each run, the worker fetches records updated since `last_successful_sync_at`, upserts them into our connector data tables, and updates the state only after the run completes successfully to avoid gaps. If updated timestamps are not available for a subset of objects, we\u2019ll fall back to periodic full refresh on a longer cadence or bounded windowed scans.\n\n### Reliability: Backoff, Retries, and Rate Limits\nThe worker will implement bounded retries with exponential backoff and jitter for transient failures, with specific handling for rate limits (Salesforce/HubSpot 429 or quota headers) by delaying until reset when available. We will track per-run metrics (duration, fetched/updated counts, error codes, retry counts) and log structured events for debugging. Failures will not advance `last_successful_sync_at`, ensuring the next run re-attempts the same range, and the scheduler will surface sustained failures via alerting/dashboards so we can intervene before linkage quality degrades.",
+      "link": "https://www.onyx.app/11356"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

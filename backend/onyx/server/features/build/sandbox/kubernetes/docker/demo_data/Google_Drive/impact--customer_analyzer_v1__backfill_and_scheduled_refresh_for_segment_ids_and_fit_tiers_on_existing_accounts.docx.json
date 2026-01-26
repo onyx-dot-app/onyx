@@ -1,0 +1,30 @@
+{
+  "id": "1a83893eb7a343be9f607bb5ddb44d88",
+  "semantic_identifier": "Impact--Customer_Analyzer v1: Backfill + scheduled refresh for segment IDs and fit tiers on existing accounts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Customer_Analyzer v1: Backfill + scheduled refresh for segment IDs and fit tiers on existing accounts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature ensures we can reliably populate and maintain Customer_Analyzer-derived attributes\u2014segment IDs and fit tiers\u2014for all existing Issue_Tracker accounts that appear in historical, already-ingested conversations. Today, many older accounts lack these fields, which creates gaps and \u201cunknown\u201d classifications that reduce the usefulness of segmentation across the product and downstream workflows.\n\nBy introducing a one-time backfill, we retroactively enrich the existing dataset while safely handling missing or unknown values so we don\u2019t block pipelines or mislabel accounts. This immediately improves the integrity of analytics, reporting, and any product surfaces that depend on segment and fit-tier signals, bringing legacy accounts up to parity with newly ingested ones.\n\nThe scheduled refresh (e.g., daily with a per-account TTL via `last_fetched_at`) keeps segment and fit-tier data reasonably current as Customer_Analyzer models evolve or customer profiles change, without overloading the Customer_Analyzer service. This reduces staleness-related inconsistencies and makes segmentation more dependable for ongoing decisioning, targeting, and prioritization.\n\nOperationally, requiring idempotency plus basic metrics/logging reduces risk and makes the system maintainable: reruns won\u2019t create duplicates or drift, and we\u2019ll have visibility into coverage, success/failure rates, and error patterns. This improves incident response, enables monitoring/alerting over time, and provides confidence that enrichment is continuously working as intended.",
+      "link": "https://www.onyx.app/43975"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

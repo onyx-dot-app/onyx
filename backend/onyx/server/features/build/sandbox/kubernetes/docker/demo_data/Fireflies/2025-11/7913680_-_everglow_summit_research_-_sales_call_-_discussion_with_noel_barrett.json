@@ -1,0 +1,189 @@
+{
+  "id": "FIREFLIES_7913680",
+  "semantic_identifier": "7913680 - Everglow Summit Research - sales_call - Discussion with Noel Barrett",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-11-19 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-11-19 00:00:00",
+    "duration_min": "22"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-11"
+      ],
+      "year_month": "2025-11",
+      "meeting_title": "7913680 - Everglow Summit Research - sales_call - Discussion with Noel Barrett",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Noel\u2014good to see you again. Thanks for making the time. Last time you mentioned you were trying to be more disciplined about which industries to prioritize next quarter, especially balancing retention with support burden. Is that still the main push?",
+      "link": "https://www.onyx.app/5268089-1"
+    },
+    {
+      "text": "Noel Barrett: Yep, that\u2019s still the goal. We have too many \u201cmaybe\u201d segments, and our support team is pretty vocal about certain industries being expensive.",
+      "link": "https://www.onyx.app/5268089-2"
+    },
+    {
+      "text": "Mina Park: Makes sense. For today, I wanted to keep this tight and focus on one piece of Customer_Analyzer that maps directly to that: **fit_estimation**. The idea is we ingest the signals you already have\u2014CRM fields, support tickets, usage events\u2014and produce a **fit score by account and by segment**, with a driver breakdown so you can see *why* a segment looks strong or risky. Then you can compare segments like \u201cHealthcare SMB vs Mid-market Tech\u201d and decide where to lean in next quarter. How are you deciding that today?",
+      "link": "https://www.onyx.app/5268089-3"
+    },
+    {
+      "text": "Noel Barrett: It\u2019s\u2026 a mix. Some of it is gut feel from sales leadership, some is retention spreadsheets, and support has their own view. We try to reconcile it, but it\u2019s messy. And honestly the CRM data isn\u2019t clean.",
+      "link": "https://www.onyx.app/5268089-4"
+    },
+    {
+      "text": "Mina Park: That\u2019s helpful context. On the \u201cmessy\u201d part\u2014what\u2019s the biggest pain? Missing fields, inconsistent tagging, or just not enough product usage data tied back to accounts?",
+      "link": "https://www.onyx.app/5268089-5"
+    },
+    {
+      "text": "Noel Barrett: All of the above, but mainly inconsistent tagging in the CRM. Industry fields are not standardized, and support tickets aren\u2019t always categorized well. We do have usage data, but it\u2019s not mapped cleanly to accounts either.",
+      "link": "https://www.onyx.app/5268089-6"
+    },
+    {
+      "text": "Mina Park: Got it. Let me describe what the workflow would look like with fit_estimation, and then we can pressure-test if it\u2019s realistic given your data. Step one: you pick a few **fit drivers** relevant to your use case\u2014like retention, support burden, adoption patterns, time-to-value. Step two: we connect data sources. Step three: you get a 0\u2013100 fit score with a breakdown\u2014like \u201csupport burden high is pulling this segment down\u201d or \u201cfast activation is pulling it up.\u201d Then you can compare segments for next quarter\u2019s targeting. If you could wave a wand, what two segments are you debating most right now?",
+      "link": "https://www.onyx.app/5268089-7"
+    },
+    {
+      "text": "Noel Barrett: We\u2019re debating professional services firms versus mid-market biotech. Pro services churn less, but tickets are painful. Biotech is promising, but we don\u2019t have enough history.",
+      "link": "https://www.onyx.app/5268089-8"
+    },
+    {
+      "text": "Mina Park: Perfect example. Customer_Analyzer would let you run that as a segment comparison: retention signals plus ticket volume/severity plus adoption patterns. Where pro services might score well on retention but be dragged down by support burden, and biotech might have a wider confidence interval because there\u2019s less data. When you say you don\u2019t have enough history\u2014how many biotech accounts are we talking about?",
+      "link": "https://www.onyx.app/5268089-9"
+    },
+    {
+      "text": "Noel Barrett: Maybe 12 active customers, and only a handful have been with us longer than six months.",
+      "link": "https://www.onyx.app/5268089-10"
+    },
+    {
+      "text": "Mina Park: Understood. In cases like that, we typically recommend starting with a hybrid model: lean on firmographics and early product signals for biotech, while weighting retention and expansion more heavily for segments where you have more maturity. But I want to be straight with you: the fit score is only as good as the signals. If industry and account mappings are inconsistent, you\u2019ll see noise. How much effort do you realistically have to clean up the tagging?",
+      "link": "https://www.onyx.app/5268089-11"
+    },
+    {
+      "text": "Noel Barrett: Not a lot. That\u2019s the thing. Everyone agrees it should be fixed, but nobody owns it. And I don\u2019t want to buy a tool that requires a data project to get value.",
+      "link": "https://www.onyx.app/5268089-12"
+    },
+    {
+      "text": "Mina Park: Completely fair. The \u201cno new data project\u201d constraint is real. What we usually do in onboarding is start with a narrow slice of data you trust most\u2014often retention and support ticket volume\u2014then layer in more as you validate. For example, even if industry is messy, we can create segment definitions using a combination of existing fields and simple rules. But if account mapping between usage and CRM is weak, that\u2019s harder. How often do you see usage events that you can\u2019t confidently tie to an account?",
+      "link": "https://www.onyx.app/5268089-13"
+    },
+    {
+      "text": "Noel Barrett: Pretty often. We have multiple workspaces per customer, and our CRM account hierarchy doesn\u2019t match. So usage is fragmented.",
+      "link": "https://www.onyx.app/5268089-14"
+    },
+    {
+      "text": "Mina Park: That\u2019s a common one. We can support workspace-to-account mapping, but it does require a consistent identifier somewhere\u2014domain, contract ID, something stable. Do you have anything like that across systems?",
+      "link": "https://www.onyx.app/5268089-15"
+    },
+    {
+      "text": "Noel Barrett: Not reliably. Domains help sometimes, but not with subsidiaries. Contract IDs exist, but they\u2019re not used in the product events.",
+      "link": "https://www.onyx.app/5268089-16"
+    },
+    {
+      "text": "Mina Park: Okay. That means if we\u2019re scoring adoption and time-to-value, we might undercount usage for certain accounts, which could unfairly depress a segment\u2019s fit score. For the specific use case\u2014prioritizing industries next quarter using retention and support burden\u2014do you at least have clean support data by account?",
+      "link": "https://www.onyx.app/5268089-17"
+    },
+    {
+      "text": "Noel Barrett: Support data is better, but still not perfect. We use Zendesk, and the account field is sometimes blank, and categorization is inconsistent. Plus some high-touch customers go through Slack, not tickets.",
+      "link": "https://www.onyx.app/5268089-18"
+    },
+    {
+      "text": "Mina Park: That\u2019s important. If the support burden signal is incomplete\u2014especially for high-touch accounts\u2014you might get a misleading view, like \u201cthis segment is low burden\u201d when it\u2019s just handled outside Zendesk. If we were to proceed, we\u2019d likely start by validating two drivers you trust, and we\u2019d be explicit about data confidence. But I hear you: you don\u2019t want a tool that becomes a data cleanup initiative.",
+      "link": "https://www.onyx.app/5268089-19"
+    },
+    {
+      "text": "Noel Barrett: Right. The concept is good\u2014fit score, driver breakdown, segment comparisons\u2014those are exactly what we need. I\u2019m just skeptical we can feed it well enough to make the outputs credible internally.",
+      "link": "https://www.onyx.app/5268089-20"
+    },
+    {
+      "text": "Mina Park: That internal credibility point is huge. If your sales leaders look at the score and say, \u201cWe don\u2019t trust the CRM,\u201d it won\u2019t drive decisions. Let me ask: if you could only get value from one thing in the next 30 days, would it be (a) a directional segment ranking, even if imperfect, or (b) a diagnostic on what data gaps are preventing a reliable ICP view?",
+      "link": "https://www.onyx.app/5268089-21"
+    },
+    {
+      "text": "Noel Barrett: Probably (b). We\u2019ve been burned by dashboards that look fancy but aren\u2019t trusted. A diagnostic would be useful, but I\u2019m not sure I can justify budget for that alone.",
+      "link": "https://www.onyx.app/5268089-22"
+    },
+    {
+      "text": "Mina Park: Understood. Typically customers justify it when the diagnostic translates into a clear action plan\u2014like \u201cstandardize industry values,\u201d \u201cmap workspaces to accounts,\u201d \u201cadd contract ID to event stream\u201d\u2014and we quantify what improves. But if you don\u2019t have an owner for those fixes, it can stall.",
+      "link": "https://www.onyx.app/5268089-23"
+    },
+    {
+      "text": "Noel Barrett: Exactly. And right now we\u2019re heading into planning season. I don\u2019t have bandwidth to rally engineering and ops around identifiers.",
+      "link": "https://www.onyx.app/5268089-24"
+    },
+    {
+      "text": "Mina Park: If bandwidth is the blocker, one option is to run a smaller pilot with only what\u2019s already reliable\u2014say, retention plus whatever portion of Zendesk is mapped\u2014and use that to answer a narrow question: \u201cWhich two industries should we deprioritize because they\u2019re high burden and low retention?\u201d But if Slack-based support is a big portion, even that might be incomplete. What percentage of support interactions are outside Zendesk?",
+      "link": "https://www.onyx.app/5268089-25"
+    },
+    {
+      "text": "Noel Barrett: Hard to say\u2014maybe 30\u201340% for our enterprise-ish customers.",
+      "link": "https://www.onyx.app/5268089-26"
+    },
+    {
+      "text": "Mina Park: That\u2019s significant. It would bias the support burden driver downward for exactly the customers you care most about. In that case, the pilot might produce more debate than alignment.",
+      "link": "https://www.onyx.app/5268089-27"
+    },
+    {
+      "text": "Noel Barrett: That\u2019s my worry. I can already imagine the argument: \u201cThis says biotech is low burden,\u201d and support says, \u201cNot if you include Slack.\u201d Then we\u2019re back to square one.",
+      "link": "https://www.onyx.app/5268089-28"
+    },
+    {
+      "text": "Mina Park: Yeah, that\u2019s a fair concern. Given what you\u2019ve shared, I think we\u2019re at a decision point: either we align on a minimum data standard and an owner to improve those fields, or we pause until those fundamentals are in place. I don\u2019t want to push you into buying something that you can\u2019t operationalize.",
+      "link": "https://www.onyx.app/5268089-29"
+    },
+    {
+      "text": "Noel Barrett: I appreciate that. I\u2019m not saying \u201cno forever,\u201d but I think we need to clean up the basics first. Otherwise I can\u2019t sell it internally.",
+      "link": "https://www.onyx.app/5268089-30"
+    },
+    {
+      "text": "Mina Park: That makes sense. Would it help if I sent a short checklist of the top three data requirements for fit_estimation\u2014like account mapping for usage, standardized industry taxonomy, and a consistent support burden capture\u2014including options for lightweight fixes? Then you can see what\u2019s feasible without a big project.",
+      "link": "https://www.onyx.app/5268089-31"
+    },
+    {
+      "text": "Noel Barrett: Yes, send that. That\u2019s probably the most useful next step.",
+      "link": "https://www.onyx.app/5268089-32"
+    },
+    {
+      "text": "Mina Park: Great. I\u2019ll send it today. And if it\u2019s helpful, we can do a quick follow-up in a few weeks once you\u2019ve sanity-checked what\u2019s possible with your ops or systems owner\u2014if you have one. Who would that be, if anyone?",
+      "link": "https://www.onyx.app/5268089-33"
+    },
+    {
+      "text": "Noel Barrett: Maybe our RevOps lead, but they\u2019re slammed. I can try to loop them in when things calm down.",
+      "link": "https://www.onyx.app/5268089-34"
+    },
+    {
+      "text": "Mina Park: Totally. I\u2019ll keep it lightweight\u2014no pressure. I\u2019ll send the checklist and a sample segment comparison view so you can show what \u201cgood\u201d looks like. If you decide to revisit, we can scope a pilot that matches your reality.",
+      "link": "https://www.onyx.app/5268089-35"
+    },
+    {
+      "text": "Noel Barrett: Sounds good. Thanks, Mina.",
+      "link": "https://www.onyx.app/5268089-36"
+    },
+    {
+      "text": "Mina Park: Thanks, Noel. I\u2019ll follow up shortly.",
+      "link": "https://www.onyx.app/5268089-37"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "noel_barrett@everglow_summit_research.onyx.app"
+    }
+  ]
+}

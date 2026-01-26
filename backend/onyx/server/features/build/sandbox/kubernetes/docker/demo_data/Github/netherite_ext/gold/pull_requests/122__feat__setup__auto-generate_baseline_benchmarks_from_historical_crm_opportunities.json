@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#122",
+  "semantic_identifier": "122: feat: Setup: Auto-generate baseline benchmarks from historical CRM opportunities",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-04-27",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "122",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "1",
+    "num_files_changed": "44",
+    "labels": [],
+    "created_at": "2025-04-27",
+    "updated_at": "2025-04-27",
+    "closed_at": "2025-05-16"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### What this PR does\n- Adds an optional setup wizard step that computes proposed baseline benchmarks from historical CRM opportunity data (default lookback: last 12 months, with fallback to 6 months if coverage is low).\n- Generates editable default benchmarks including:\n  - Average time-in-stage (per pipeline stage)\n  - Stage-to-stage conversion rates\n  - Overall win rate\n  - Typical deal size (median + mean), optionally segmented when a supported segment field is available (e.g., region/segment/owner team)\n- Displays coverage indicators alongside each benchmark (time window used, # opportunities, # stage transitions, last updated).\n- Persists the admin-approved benchmarks for use by forecasting calibration and \u201cdeal at risk\u201d alerting.\n\n### Implementation overview\n- Backend\n  - Introduces a benchmark generation service that queries opportunity + stage history events from the CRM sync tables, constrained by lookback window and closed/open status as applicable.\n  - Computes:\n    - Stage duration: derived from consecutive stage-change timestamps; excludes negative/overlapping intervals; caps extreme outliers via configurable percentile trimming.\n    - Conversion: counts transitions from stage A \u2192 stage B (or next stage) and divides by total entries into stage A.\n    - Win rate: closed-won / closed (won+lost) within the window.\n    - Deal size: median/mean of amount for won deals; optionally by segment if segment cardinality is within limits.\n  - Returns both values and coverage metadata (sample sizes per metric) to support UI indicators.\n  - Adds persistence for \u201cselected benchmarks\u201d with versioning and timestamps; setup writes the chosen values, later services read from the persisted config.\n\n- Frontend\n  - Adds a setup step UI that:\n    - Shows computed defaults + coverage metadata\n    - Allows inline editing per benchmark (and per segment, when present)\n    - Provides a \u201cUse these defaults\u201d action that saves the edited set\n\n### Notes for reviewers / users\n- No manual spreadsheet configuration required; admins can accept the proposed numbers or tune them before saving.\n- If historical data coverage is insufficient (below thresholds), the step still renders but flags low-confidence metrics and suggests manual edits.\n- Changes are additive and gated behind the setup flow; existing tenants are unaffected until they run setup/update benchmarks.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#122"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

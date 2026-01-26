@@ -1,0 +1,30 @@
+{
+  "id": "37bc11aa0ea644c7948d317ebba52dc1",
+  "semantic_identifier": "Design--Normalize and canonicalize identity fields for ticket\u2192account matching.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-14",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Normalize and canonicalize identity fields for ticket\u2192account matching.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We should add a canonicalization layer in the ticket ingestion pipeline that normalizes inbound identity signals used for ticket\u2192account matching: requester email/domain, company name, and any provided CRM account ID. The goal is to reduce false mismatches caused by formatting variability (case, whitespace, punctuation) and common naming/domain aliases, while keeping the existing matching logic and thresholds unchanged. Canonicalization will be applied as part of ingestion so downstream matching operates on consistent inputs.\n\nFor each identity field, we will compute and persist both a **raw** value (exactly as received) and a **canonical** value (normalized). Email normalization will lower-case and trim, and extract a canonical domain (e.g., remove surrounding whitespace, normalize Unicode, handle common alias domains via a maintained mapping table). Company name normalization will lower-case, collapse whitespace, strip punctuation, and remove common legal suffixes (e.g., \u201cinc\u201d, \u201cllc\u201d, \u201cltd\u201d, \u201cgmbh\u201d, \u201cco\u201d) using a configurable suffix list; we\u2019ll preserve the raw form for display and audit. CRM account IDs will be normalized by trimming and applying a deterministic formatting rule (e.g., lower-case if case-insensitive, strip known prefixes) but otherwise treated as an opaque identifier.\n\nImplementation-wise, we\u2019ll introduce a small canonicalization library with pure functions per field and a versioned configuration for suffixes and alias-domain mappings, so changes are traceable and testable. At ingestion, we\u2019ll write canonical fields alongside raw fields (e.g., `requester_email_raw`, `requester_email_canonical`, `company_name_raw`, `company_name_canonical`, etc.) and update the existing matching logic to read canonical values preferentially (falling back to raw if canonical is unavailable) without altering thresholds or scoring. We\u2019ll backfill canonical fields for recent tickets as a separate job if needed, but the primary path is forward-only ingestion.\n\nWe\u2019ll add observability to validate impact: counters for \u201cchanged by canonicalization\u201d per field, distribution of match outcomes before/after (in shadow metrics), and sampling logs that include raw/canonical pairs for debugging. Rollout can be gated behind a feature flag enabling canonical input to matching, allowing us to compare match rates and investigate regressions while keeping user-visible behavior stable.",
+      "link": "https://www.onyx.app/69148"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

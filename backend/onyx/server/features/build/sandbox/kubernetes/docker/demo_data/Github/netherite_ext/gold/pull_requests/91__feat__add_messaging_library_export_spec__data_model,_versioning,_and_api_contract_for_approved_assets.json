@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#91",
+  "semantic_identifier": "91: feat: Add Messaging Library export spec: data model, versioning, and API contract for approved assets",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-07",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "91",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "43",
+    "labels": [],
+    "created_at": "2025-11-07",
+    "updated_at": "2025-11-07",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR defines and documents the stable export contract for sending approved Messaging Library positioning assets (value props, differentiators, proof points, objections) to external sales/marketing tools.\n\nKey changes\n- Adds an explicit export data model (schema + field requirements) for all asset types:\n  - Common fields: `id` (internal UUID), `externalKey` (stable export identifier for upserts), `type`, `title`, `body`/`text`, `tags`, `category`, `audience`, `productArea`, `language`, `status` (approval state), `approvedAt`, `approvedBy`, `createdAt`, `updatedAt`, `version` (monotonic integer), `source` (Messaging Library), and optional `relationships` (e.g., proof point linked to differentiator).\n  - Rules: only `status=APPROVED` records are exportable; any non-approved state MUST be excluded.\n- Defines identifiers and update semantics:\n  - `externalKey` is the canonical mapping key for external systems; unchanged across edits.\n  - `version` increments on any content change after approval; consumers use (`externalKey`, `version`) for change detection.\n  - Exports are idempotent; repeated exports of the same (`externalKey`, `version`) produce the same payload.\n- Specifies API endpoints and payloads (OpenAPI-style docs added):\n  - `GET /api/messaging-library/exports/assets?type=...&since=...&cursor=...&limit=...` returns paginated approved assets.\n  - `GET /api/messaging-library/exports/assets/{externalKey}` returns the latest approved version for a given key.\n  - Response envelope includes `data`, `nextCursor`, and `schemaVersion`.\n- Adds contract-level versioning:\n  - `schemaVersion` (e.g., `2026-01-01`) included in responses; backward-compatible additive changes only within a schema version.\n- Documents authentication expectations:\n  - Bearer token auth (service-to-service) required; includes required headers, example tokens, and expected 401/403 behaviors.\n\nNotes for implementers\n- This PR is spec-only (low priority ticket): no integration logic with external tools is included.\n- Follow-up tickets can implement controllers/queries and enforce the approval/versioning rules exactly as documented here.\n\nTesting/validation\n- Contract examples and JSON schemas included for each asset type, plus sample paginated responses and error payloads.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#91"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

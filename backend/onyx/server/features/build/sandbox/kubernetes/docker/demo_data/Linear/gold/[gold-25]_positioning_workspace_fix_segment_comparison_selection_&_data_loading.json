@@ -1,0 +1,30 @@
+{
+  "id": "1256190",
+  "semantic_identifier": "[GOLD-25]: Positioning workspace: Fix segment comparison selection & data loading",
+  "title": "Positioning workspace: Fix segment comparison selection & data loading",
+  "source": "linear",
+  "doc_updated_at": "2025-07-07",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "high",
+    "created_at": "2025-07-07"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Segment comparisons in the Positioning workspace sometimes load incorrect or stale segment data (e.g., after switching segments quickly or navigating back). Ensure the comparison UI always reflects the currently selected primary and comparison segments, with a single source of truth for selection state and a deterministic data-fetch lifecycle (cancel/ignore in-flight requests, prevent race conditions). Add basic logging around selection changes and fetch completion to aid verification and future debugging.",
+      "link": "https://www.onyx.app/98565"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

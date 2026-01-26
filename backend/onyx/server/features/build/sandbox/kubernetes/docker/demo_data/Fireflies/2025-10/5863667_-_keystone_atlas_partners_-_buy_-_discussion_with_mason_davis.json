@@ -1,0 +1,165 @@
+{
+  "id": "FIREFLIES_5863667",
+  "semantic_identifier": "5863667 - Keystone Atlas Partners - buy - Discussion with Mason Davis",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-10-07 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-10-07 00:00:00",
+    "duration_min": "45"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-10"
+      ],
+      "year_month": "2025-10",
+      "meeting_title": "5863667 - Keystone Atlas Partners - buy - Discussion with Mason Davis",
+      "organizer_email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Irene Shen: Hi Mason\u2014good to see you again. Thanks for making time for call three. I wanted to use today to confirm whether Sales_Accelerator is a fit for Keystone Atlas Partners and, if so, align on next steps to get it purchased and rolled out. Sound good?",
+      "link": "https://www.onyx.app/9795279-1"
+    },
+    {
+      "text": "Mason Davis: Yeah, that works. I\u2019ll be upfront\u2014we like the concept, but I\u2019m not sure we\u2019re in a place to implement it cleanly.",
+      "link": "https://www.onyx.app/9795279-2"
+    },
+    {
+      "text": "Irene Shen: Totally fair, and that\u2019s exactly what I want to pressure-test. From the last call, you were most interested in deal progression\u2014keeping opportunities from stalling\u2014and having something consistent reps can follow without a heavy methodology shift. Can I quickly recap the two pieces I think map best: follow-up recommendations and the lightweight task queue inside your CRM?",
+      "link": "https://www.onyx.app/9795279-3"
+    },
+    {
+      "text": "Mason Davis: Sure.",
+      "link": "https://www.onyx.app/9795279-4"
+    },
+    {
+      "text": "Irene Shen: Great. First, sales follow-up recommendations. In practice, after a discovery or any customer meeting, Sales_Accelerator checks what happened\u2014who attended, whether there\u2019s a next step, whether a mutual plan exists, how many stakeholders are engaged, and recent activity. Then it recommends the next best action per opportunity. So if you had a meeting and no follow-up went out, it\u2019ll prompt a recap email with next steps. If only one contact is active, it\u2019ll recommend multi-threading and propose who else to bring in. And it can generate a mutual action plan checklist with due dates so the deal doesn\u2019t drift.",
+      "link": "https://www.onyx.app/9795279-5"
+    },
+    {
+      "text": "Mason Davis: I remember that. The recap email drafting is nice. Our AEs are inconsistent there.",
+      "link": "https://www.onyx.app/9795279-6"
+    },
+    {
+      "text": "Irene Shen: Exactly. Second, it ties into what you already have: it sits on top of Salesforce or HubSpot, and it can consume the fit scores and positioning blocks from Customer_Analyzer so the follow-up guidance isn\u2019t generic. For example, the recap email can pull two approved proof points from your positioning library\u2014so your team is sending consistent, on-message follow-ups rather than every rep inventing their own version.",
+      "link": "https://www.onyx.app/9795279-7"
+    },
+    {
+      "text": "Mason Davis: That part is compelling. But the big question is whether we\u2019ll get more noise than signal. Our CRM hygiene is\u2026 not great.",
+      "link": "https://www.onyx.app/9795279-8"
+    },
+    {
+      "text": "Irene Shen: I\u2019m glad you called that out, because it\u2019s the main thing that can make any execution layer feel spammy. If stages are stale, next steps missing, and close dates inconsistent, you can get alert fatigue and false positives. Let me ask: how often are reps updating stages and next steps today? Is it weekly, deal-by-deal, or more \u201cend of month catch-up\u201d?",
+      "link": "https://www.onyx.app/9795279-9"
+    },
+    {
+      "text": "Mason Davis: More like end-of-month catch-up. We\u2019ve tried to fix it. We have rules, we have pipeline meetings, but it\u2019s uneven. Our team is lean\u2014sales ops doesn\u2019t have bandwidth to police the data.",
+      "link": "https://www.onyx.app/9795279-10"
+    },
+    {
+      "text": "Irene Shen: Understood. In that situation, we usually take one of two approaches. One is: we start small, with just follow-up recommendations that are driven by recent activity\u2014meetings, emails, calendar events\u2014so it\u2019s less dependent on pristine fields. The other is: we make data hygiene part of the rollout with a short set of required fields and guardrails. But I don\u2019t want to pitch the second approach if you genuinely don\u2019t have capacity.",
+      "link": "https://www.onyx.app/9795279-11"
+    },
+    {
+      "text": "Mason Davis: We don\u2019t. Not right now. And if the tool depends on reps doing more admin, it\u2019s a hard sell internally.",
+      "link": "https://www.onyx.app/9795279-12"
+    },
+    {
+      "text": "Irene Shen: That makes sense. If we kept the scope tight\u2014say, only post-meeting follow-ups and mutual action plan prompts\u2014would that still create \u201cextra admin,\u201d or could it actually reduce it by drafting the email and turning it into a task list?",
+      "link": "https://www.onyx.app/9795279-13"
+    },
+    {
+      "text": "Mason Davis: It could reduce it, but we still have the core issue: our CRM activity capture isn\u2019t consistent either. Some people log, some don\u2019t. Some use the extension, some don\u2019t. So I\u2019m worried your recommendations won\u2019t have enough context.",
+      "link": "https://www.onyx.app/9795279-14"
+    },
+    {
+      "text": "Irene Shen: That\u2019s a fair concern. To work well, it needs reliable signals\u2014either from CRM fields or from activity integrations. If those signals are inconsistent, we can\u2019t promise the quality you saw in the demo. Let me ask a blunt question: what would have to be true in the next 30\u201360 days for you to feel confident buying? Is it \u201cwe fix hygiene,\u201d or is it \u201cwe prove value despite hygiene\u201d?",
+      "link": "https://www.onyx.app/9795279-15"
+    },
+    {
+      "text": "Mason Davis: Honestly, it\u2019s probably \u201cwe fix hygiene.\u201d Our CRO is pushing for tighter forecasting discipline this quarter, and we\u2019re not there. Buying a layer on top of messy data feels like putting paint on a cracked wall.",
+      "link": "https://www.onyx.app/9795279-16"
+    },
+    {
+      "text": "Irene Shen: I appreciate the directness. Given that, the last thing I want is to close you and then have you frustrated by alert fatigue. We can do a pilot, but even pilots need baseline data reliability. Would it be accurate to say the timing is the blocker, not the product?",
+      "link": "https://www.onyx.app/9795279-17"
+    },
+    {
+      "text": "Mason Davis: Yeah. Timing and readiness. The product does what you say. It\u2019s just not the right moment.",
+      "link": "https://www.onyx.app/9795279-18"
+    },
+    {
+      "text": "Irene Shen: Got it. Before we decide to pause, can I confirm what you\u2019d consider \u201cready\u201d? For example: 90% of opps have next steps filled in, stage changes within 48 hours, close dates updated weekly\u2014something like that?",
+      "link": "https://www.onyx.app/9795279-19"
+    },
+    {
+      "text": "Mason Davis: That\u2019s about right. I\u2019d want consistent stage hygiene and next steps. And I\u2019d want our activity capture standardized\u2014at least for the AEs.",
+      "link": "https://www.onyx.app/9795279-20"
+    },
+    {
+      "text": "Irene Shen: That\u2019s helpful. If we set a simple readiness checklist\u2014three or four measurable items\u2014and you hit those, we restart the purchase conversation with momentum. In the meantime, I can share a lightweight data hygiene playbook we\u2019ve seen work with lean ops teams. Would that be useful, or would it just be more noise?",
+      "link": "https://www.onyx.app/9795279-21"
+    },
+    {
+      "text": "Mason Davis: A playbook could be helpful, as long as it\u2019s actually lightweight. We don\u2019t want a big process overhaul.",
+      "link": "https://www.onyx.app/9795279-22"
+    },
+    {
+      "text": "Irene Shen: Completely. Think: minimal required fields, a weekly 15-minute hygiene sweep per rep, and a manager view that flags only the top issues. No methodology wars. If you\u2019re open, I\u2019ll send that plus a short \u201creadiness scorecard\u201d template. Then maybe we set a 20-minute check-in in, say, six weeks to see where you are.",
+      "link": "https://www.onyx.app/9795279-23"
+    },
+    {
+      "text": "Mason Davis: Six weeks is reasonable. I don\u2019t think we can commit to buying now, though.",
+      "link": "https://www.onyx.app/9795279-24"
+    },
+    {
+      "text": "Irene Shen: Understood. Just so I\u2019m clear\u2014are we formally closing this out as \u201cnot now,\u201d or do you want it left in an active evaluation state?",
+      "link": "https://www.onyx.app/9795279-25"
+    },
+    {
+      "text": "Mason Davis: Let\u2019s close it out as \u201cnot now.\u201d If we keep it active, it\u2019ll just linger.",
+      "link": "https://www.onyx.app/9795279-26"
+    },
+    {
+      "text": "Irene Shen: That\u2019s fair, and I respect it. I\u2019ll mark the opportunity as closed-lost due to timing/readiness, and I\u2019ll note the criteria to re-engage: consistent stage/next steps hygiene and standardized activity capture. I\u2019ll email you the lightweight playbook and the readiness scorecard today. Anything else you want me to include\u2014like an example of the mutual action plan checklist you liked?",
+      "link": "https://www.onyx.app/9795279-27"
+    },
+    {
+      "text": "Mason Davis: Yeah, include that. That was the clearest \u201cvalue\u201d piece for our team.",
+      "link": "https://www.onyx.app/9795279-28"
+    },
+    {
+      "text": "Irene Shen: Will do. And Mason, if you hit those readiness thresholds earlier than six weeks, just reply to the email and we\u2019ll re-open the conversation immediately.",
+      "link": "https://www.onyx.app/9795279-29"
+    },
+    {
+      "text": "Mason Davis: Sounds good. Thanks, Irene.",
+      "link": "https://www.onyx.app/9795279-30"
+    },
+    {
+      "text": "Irene Shen: Thank you. I\u2019ll follow up shortly with those materials and a tentative check-in invite for six weeks out.",
+      "link": "https://www.onyx.app/9795279-31"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "irene_shen@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mason_davis@keystone_atlas_partners.onyx.app"
+    }
+  ]
+}

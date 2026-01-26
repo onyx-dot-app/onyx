@@ -1,0 +1,30 @@
+{
+  "id": "58a19d771d9b49cf90a6a3f5caec2ebd",
+  "semantic_identifier": "Design--Add evidence + data-source provenance to Positioning Recommendations output.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-20",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add evidence + data-source provenance to Positioning Recommendations output.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "Positioning Recommendations today are delivered as \u201cnaked\u201d conclusions: they don\u2019t convey what data they were based on, which undermines trust\u2014especially when the underlying dataset is sparse. This feature adds lightweight evidence and data-source provenance to each recommendation so consumers (UI, downstream services) can present \u201cwhy we think this\u201d context without altering the existing recommendation generation/scoring logic.\n\nOn the backend, we will extend the recommendation assembly step to capture a small, bounded provenance payload per recommendation. The payload will summarize (a) top contributing signals/sources (e.g., CRM fields involved, interview/ticket themes referenced), (b) simple counts per source type (e.g., `interviews_count`, `tickets_count`, `crm_fields_count`), and (c) recency metadata (e.g., `latest_event_at` across all referenced items, and optionally per-source latest timestamps). This is intentionally aggregate/metadata-only: no raw text, no full documents, and no expensive trace graphs\u2014just enough to explain grounding and freshness.\n\nWe will expose this via the Recommendations API by adding an optional `provenance` object on each recommendation item in the response. Example fields: `provenance.sources[]` (type, label, contribution_rank/weight), `provenance.counts{}`, and `provenance.recency{latest_event_at, per_source_latest_at{}}`. The field will be additive and backwards-compatible; clients that don\u2019t understand it can ignore it. We\u2019ll gate the new data behind a feature flag and include the ability to omit provenance via query param if response size becomes a concern.\n\nOperationally, we\u2019ll compute provenance in the same request path that constructs recommendations, using existing intermediate artifacts (e.g., the set of documents/records already retrieved or referenced during generation) to avoid new expensive queries. We\u2019ll add tests to ensure provenance is present when inputs are present, stable in shape, and empty/null when no evidence exists. Monitoring will track response size and latency deltas, and privacy review will ensure we only return field names/types and aggregate counts/timestamps, not customer content.",
+      "link": "https://www.onyx.app/18896"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_2012454",
+  "semantic_identifier": "Ironspruce Robotics",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-03-08 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "2012454",
+    "domain": "ironspruce_robotics.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Ironspruce Robotics\nDomain: ironspruce_robotics.onyx.app",
+      "link": "https://www.onyx.app/52861"
+    },
+    {
+      "text": "Contact: Nora Wheeler\nEmail: nora_wheeler@ironspruce_robotics.onyx.app",
+      "link": "https://www.onyx.app/56898"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

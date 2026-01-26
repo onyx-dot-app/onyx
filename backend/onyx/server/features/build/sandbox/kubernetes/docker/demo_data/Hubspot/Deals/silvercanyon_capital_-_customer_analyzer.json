@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_8414035",
+  "semantic_identifier": "Silvercanyon Capital - Customer Analyzer",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-27 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "181356",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "8414035"
+  },
+  "sections": [
+    {
+      "text": "Deal: Silvercanyon Capital\nAmount: $181356\nProduct of Interest: Customer_Analyzer\nFeatures of Interest: fit_estimation\nClose Date: 2025-12-08 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/28098"
+    },
+    {
+      "text": "Contact: Selena Xie\nEmail: selena_xie@silvercanyon_capital.onyx.app",
+      "link": "https://www.onyx.app/21471"
+    },
+    {
+      "text": "Company: Silvercanyon Capital\nDomain: silvercanyon_capital.onyx.app",
+      "link": "https://www.onyx.app/20316"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/45240"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

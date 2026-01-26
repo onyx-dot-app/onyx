@@ -1,0 +1,30 @@
+{
+  "id": "1989ad12386843f1a92a6b7a77a638b8",
+  "semantic_identifier": "Design--Standardize capture of customer language/evidence in signal ingestion pipeline.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Standardize capture of customer language/evidence in signal ingestion pipeline.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We should standardize how we capture and persist customer language/evidence for every signal flowing through the ingestion pipeline (CRM notes, surveys, support tickets, interview transcripts, usage annotations). Today, each source encodes \u201cwhat the customer said\u201d differently (or not at all), which makes downstream positioning generation brittle and hard to debug. The goal is a single, consistent evidence shape that travels with ingested signals so we can reliably attribute claims to verbatim customer text and trace it back to the original artifact.\n\nProposed change: introduce a normalized `evidence` object (or `evidence[]` if multiple snippets apply) on the canonical ingested-signal record. Minimum required fields: `source_type` (enum: `crm_note|survey|support_ticket|interview|usage_annotation|other`), `timestamp` (when the evidence was created/recorded, with timezone), `verbatim` (the exact quote/snippet captured), and `source_ref` (a structured link back to the origin: e.g., `{system, artifact_id, url, optional_location}` such as ticket ID + permalink or transcript segment offset). Ingestion adapters for each source will map their native fields into this schema; if a source provides multiple quotes (e.g., multiple survey free-text answers), we store multiple evidence entries.\n\nTo avoid breaking downstream positioning generation, we\u2019ll backfill and default existing records. Where we can, we\u2019ll derive `source_type` from the originating connector, `timestamp` from the signal created/updated time, and `source_ref` from existing IDs/URLs; for `verbatim`, we\u2019ll populate with the closest available text field (e.g., note body, ticket comment, survey response) and fall back to a safe placeholder only if no text exists. We\u2019ll keep the old per-source fields during a transition window, but downstream consumers should migrate to the standardized `evidence` fields; we can add schema validation (and metrics) to ensure new ingestions always provide the minimum required evidence.\n\nRollout plan: (1) land the canonical schema change and update all ingestion connectors to populate it, (2) run a one-time backfill job over historical signals with best-effort derivation and logging for unbackfillable cases, and (3) update positioning generation to read from `evidence` and surface source attribution consistently (including the reference link). We\u2019ll monitor ingestion coverage (% signals with non-empty `verbatim` and valid `source_ref`), validate that positioning output remains stable, and then deprecate legacy evidence fields once adoption is complete.",
+      "link": "https://www.onyx.app/58628"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

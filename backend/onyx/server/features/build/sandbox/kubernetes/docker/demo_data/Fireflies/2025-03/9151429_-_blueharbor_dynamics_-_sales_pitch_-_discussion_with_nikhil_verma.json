@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_9151429",
+  "semantic_identifier": "9151429 - Blueharbor Dynamics - sales_pitch - Discussion with Nikhil Verma",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-03-21 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-03-21 00:00:00",
+    "duration_min": "45"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-03"
+      ],
+      "year_month": "2025-03",
+      "meeting_title": "9151429 - Blueharbor Dynamics - sales_pitch - Discussion with Nikhil Verma",
+      "organizer_email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Camila Vega: Hi Nikhil\u2014Camila Vega here. Thanks for taking a few minutes. I\u2019ll keep this quick: I\u2019m calling because we built Customer_Analyzer to help product and go-to-market teams get crisp on who their best customers are and what to build and say to win more of them. Curious\u2014are you currently trying to tighten your ICP or make roadmap decisions based on which segments are actually healthiest?",
+      "link": "https://www.onyx.app/7262916-1"
+    },
+    {
+      "text": "Nikhil Verma: Hey Camila, yeah, that\u2019s definitely on our list. We\u2019ve been debating which segment to lean into this year, and roadmap requests are all over the place.",
+      "link": "https://www.onyx.app/7262916-2"
+    },
+    {
+      "text": "Camila Vega: That\u2019s exactly the scenario Customer_Analyzer is designed for. The core piece I wanted to highlight is our fit estimation: we ingest signals you already have\u2014CRM fields, onboarding survey responses, product usage events, support tickets, even interview notes\u2014and we output a fit score from 0 to 100 at the account and segment level. Then we show the driver breakdown so you can see why a segment scores high or low, like adoption patterns, support burden, or time-to-value.",
+      "link": "https://www.onyx.app/7262916-3"
+    },
+    {
+      "text": "Nikhil Verma: We do have a lot of that data, but it\u2019s scattered. We\u2019ve tried building dashboards, and it turns into a data project that never ends.",
+      "link": "https://www.onyx.app/7262916-4"
+    },
+    {
+      "text": "Camila Vega: Totally\u2014dashboards tell you what happened, but they don\u2019t usually answer \u201cwho should we bet on\u201d or \u201cwhat\u2019s the best segment for the next two quarters.\u201d With fit estimation, you can compare segments directly\u2014like SMB versus mid-market\u2014and see not just revenue, but who retains, expands, and adopts quickly. Then it recommends an ICP profile based on observed outcomes, not just gut feel.",
+      "link": "https://www.onyx.app/7262916-5"
+    },
+    {
+      "text": "Nikhil Verma: When you say \u201crecommended ICP,\u201d what does that actually look like? Like a persona?",
+      "link": "https://www.onyx.app/7262916-6"
+    },
+    {
+      "text": "Camila Vega: It\u2019s more actionable than a persona doc. You get an ICP profile defined by the fit drivers you choose\u2014industry, size, technographics, severity of the problem you solve, willingness to pay, adoption/usage patterns, churn risk signals\u2014and it\u2019s tied to what your best customers actually do in product and in support. So instead of \u201cwe think mid-market fintech is good,\u201d you\u2019ll see \u201caccounts with X stack + Y onboarding behavior + low support burden + fast time-to-value are consistently high fit,\u201d and you can quantify it.",
+      "link": "https://www.onyx.app/7262916-7"
+    },
+    {
+      "text": "Nikhil Verma: That would help. Our biggest issue is roadmap planning\u2014everyone brings anecdotes from their favorite customers.",
+      "link": "https://www.onyx.app/7262916-8"
+    },
+    {
+      "text": "Camila Vega: Perfect use case. For product planning, teams use Customer_Analyzer to identify high-fit customers with unmet needs\u2014so you can separate \u201cloud requests\u201d from \u201crequests coming from customers who look like your best long-term cohort.\u201d It\u2019s a way to make roadmap bets with evidence: focus on problems that show up in high-fit segments, not just whoever is shouting the most.",
+      "link": "https://www.onyx.app/7262916-9"
+    },
+    {
+      "text": "Nikhil Verma: How do you handle situations where usage looks good but support is a mess? We\u2019ve got a segment like that\u2014active users, but tons of tickets.",
+      "link": "https://www.onyx.app/7262916-10"
+    },
+    {
+      "text": "Camila Vega: That\u2019s where the driver breakdown is really helpful. Support burden is one of the fit drivers we see matter a lot. You might find the fit score is dragged down by ticket volume or specific ticket themes, even if usage is high. And because it\u2019s at both account and segment level, you can see whether it\u2019s a few outliers or a segment pattern\u2014then decide if it\u2019s a product investment or a segment you should deprioritize.",
+      "link": "https://www.onyx.app/7262916-11"
+    },
+    {
+      "text": "Nikhil Verma: Interesting. We\u2019ve argued about that exact thing\u2014whether it\u2019s \u201cbad customers\u201d or \u201cour product is missing something.\u201d",
+      "link": "https://www.onyx.app/7262916-12"
+    },
+    {
+      "text": "Camila Vega: Exactly. The point isn\u2019t to label customers as \u201cbad\u201d\u2014it\u2019s to make the tradeoffs explicit. If a segment is high revenue but consistently slow time-to-value and high support burden, the model will surface that. Then you can decide: invest to improve onboarding and reduce tickets, or focus acquisition on the segment that\u2019s already succeeding with your current strengths.",
+      "link": "https://www.onyx.app/7262916-13"
+    },
+    {
+      "text": "Nikhil Verma: What does implementation look like? I\u2019m wary of anything that takes months.",
+      "link": "https://www.onyx.app/7262916-14"
+    },
+    {
+      "text": "Camila Vega: Fair. The quick version: we start with the data you already have. Most teams connect CRM plus product events and at least one qualitative source\u2014like onboarding surveys or support tickets. Then we work with you to define a handful of fit drivers that reflect your reality. You don\u2019t need 50 fields; you need the 6\u201310 signals that correlate with retention, expansion, and smooth adoption. From there, you\u2019ll get initial segment comparisons and a first pass ICP recommendation pretty quickly, and you can iterate.",
+      "link": "https://www.onyx.app/7262916-15"
+    },
+    {
+      "text": "Nikhil Verma: Who typically owns it? Product ops? Rev ops?",
+      "link": "https://www.onyx.app/7262916-16"
+    },
+    {
+      "text": "Camila Vega: Usually a product ops or growth/product analytics lead partners with rev ops on the CRM side. But it\u2019s meant to be shared\u2014product uses it for roadmap planning, marketing uses it for targeting and messaging, and sales uses it for qualification. The fit score creates a common language across teams.",
+      "link": "https://www.onyx.app/7262916-17"
+    },
+    {
+      "text": "Nikhil Verma: We\u2019ve struggled with alignment, so that\u2019s appealing. But I\u2019d need to see how \u201cfit\u201d is calculated. We\u2019ve been burned by black-box scoring before.",
+      "link": "https://www.onyx.app/7262916-18"
+    },
+    {
+      "text": "Camila Vega: Completely reasonable. It\u2019s not a black box\u2014you select or define the drivers, and the output includes the breakdown: \u201chere\u2019s the score, and here\u2019s what contributed.\u201d If churn risk signals are pulling a segment down, you\u2019ll see it. If time-to-value is boosting another segment, you\u2019ll see that. The whole idea is transparency so the team trusts the result.",
+      "link": "https://www.onyx.app/7262916-19"
+    },
+    {
+      "text": "Nikhil Verma: Okay. If we did this, what would you recommend as a first question to answer?",
+      "link": "https://www.onyx.app/7262916-20"
+    },
+    {
+      "text": "Camila Vega: For Blueharbor Dynamics, I\u2019d start with: \u201cWhich segment should we prioritize for the next two quarters given our current product strengths?\u201d Then we\u2019d compare your current segments across fit score and key drivers\u2014adoption patterns, support burden, and time-to-value are typically the fastest to reveal differences. From that, product planning becomes less about anecdotes and more about measurable cohorts.",
+      "link": "https://www.onyx.app/7262916-21"
+    },
+    {
+      "text": "Nikhil Verma: That\u2019s basically the question we\u2019re trying to answer right now.",
+      "link": "https://www.onyx.app/7262916-22"
+    },
+    {
+      "text": "Camila Vega: Great. What I\u2019d suggest is a longer working session\u2014maybe 30 minutes\u2014where you and I map your current segments and the signals you already track, and I can show you what the fit score output and driver breakdown looks like in practice. Then we can decide if it\u2019s worth a deeper evaluation. Would next week work?",
+      "link": "https://www.onyx.app/7262916-23"
+    },
+    {
+      "text": "Nikhil Verma: Yeah, I\u2019m open to that. Early next week is best.",
+      "link": "https://www.onyx.app/7262916-24"
+    },
+    {
+      "text": "Camila Vega: Perfect\u2014how\u2019s Tuesday at 10:30am your time? If that\u2019s tight, I can do Monday afternoon as well.",
+      "link": "https://www.onyx.app/7262916-25"
+    },
+    {
+      "text": "Nikhil Verma: Tuesday at 10:30 works. Send an invite and include what you need from us beforehand.",
+      "link": "https://www.onyx.app/7262916-26"
+    },
+    {
+      "text": "Camila Vega: Will do. I\u2019ll send a calendar invite for Tuesday 10:30 with a short checklist\u2014mostly what systems you use for CRM and product events, and what segments you\u2019re debating. Thanks, Nikhil\u2014looking forward to it.",
+      "link": "https://www.onyx.app/7262916-27"
+    },
+    {
+      "text": "Nikhil Verma: Sounds good. Thanks, Camila.",
+      "link": "https://www.onyx.app/7262916-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "camila_vega@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "nikhil_verma@blueharbor_dynamics.onyx.app"
+    }
+  ]
+}

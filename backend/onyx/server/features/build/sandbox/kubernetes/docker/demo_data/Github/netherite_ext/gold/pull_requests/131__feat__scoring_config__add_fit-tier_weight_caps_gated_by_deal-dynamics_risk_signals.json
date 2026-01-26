@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#131",
+  "semantic_identifier": "131: feat: Scoring config: add fit-tier weight caps gated by deal-dynamics risk signals",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-03",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "131",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jiwon_kang",
+        "name": "jiwon_kang",
+        "email": "jiwon_kang@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "4",
+    "num_files_changed": "73",
+    "labels": [],
+    "created_at": "2025-08-03",
+    "updated_at": "2025-08-03",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR introduces scoring-configuration plumbing to cap the fit-tier component weight when specific deal-dynamics risk signals are present (procurement stage, competition, internal alignment), without changing overall ranking logic.\n\nChanges:\n- Adds new scoring config fields for per-risk fit-tier caps (e.g., `fitTierCaps.procurement`, `fitTierCaps.competition`, `fitTierCaps.internalAlignment`) plus a default/no-risk baseline.\n- Persists these fields in the existing workspace/environment-scoped scoring config store, with defaults populated from the GOLD-97 audit recommendations.\n- Updates the score-component calculation for fit-tier to:\n  - evaluate whether each risk signal is triggered for the deal,\n  - compute the effective fit-tier weight as `min(baseFitTierWeight, activeCap)` (with a deterministic precedence when multiple risks are active),\n  - apply the capped weight only to the fit-tier component while leaving other components and final aggregation/ranking unchanged.\n- Adds config parsing/serialization + a small test suite covering defaulting, persistence, and cap application for single/multiple risk cases.\n\nNotes:\n- No UI/validation changes are included; configs can be tuned via existing config mechanisms per workspace/environment.\n- Ranking behavior is unchanged except for the fit-tier component weight being reduced when the configured risk conditions are met.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#131"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

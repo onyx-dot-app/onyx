@@ -1,0 +1,177 @@
+{
+  "id": "FIREFLIES_5822456",
+  "semantic_identifier": "5822456 - Granitewave Consulting - sales_call - Discussion with Debra Hawkins",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-12-01 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-12-01 00:00:00",
+    "duration_min": "31"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-12"
+      ],
+      "year_month": "2025-12",
+      "meeting_title": "5822456 - Granitewave Consulting - sales_call - Discussion with Debra Hawkins",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Debra\u2014good to see you again. Last time you mentioned you liked the idea of tightening up pipeline hygiene without adding more admin for reps. I wanted to focus today on Sales_Accelerator\u2019s warning alerts and how it ties into your Customer_Analyzer fit scores. Does that still line up with what you\u2019re trying to solve at Granitewave?",
+      "link": "https://www.onyx.app/1536841-1"
+    },
+    {
+      "text": "Debra Hawkins: Hi Mina. Yes, in principle. We\u2019re still interested, but we\u2019re also trying to be realistic about adding another layer on top of Salesforce. So I\u2019m open to hearing it, but I\u2019m cautious.",
+      "link": "https://www.onyx.app/1536841-2"
+    },
+    {
+      "text": "Mina Park: Totally fair. Let me keep it concrete. The core value is: it sits on top of Salesforce, pulls in the opportunity signals, and then proactively flags deals that are likely to slip\u2014like \u201cno next meeting scheduled,\u201d \u201cstage aging beyond your benchmark,\u201d \u201cinactivity/no touches,\u201d and \u201csingle-threaded champion risk.\u201d Instead of a manager manually hunting every Friday, you get a weekly pipeline hygiene workflow automatically.",
+      "link": "https://www.onyx.app/1536841-3"
+    },
+    {
+      "text": "Debra Hawkins: Okay. When you say \u201cflags,\u201d is it just more notifications? Because my team already complains about notification fatigue\u2014Slack pings, Salesforce tasks, emails, you name it.",
+      "link": "https://www.onyx.app/1536841-4"
+    },
+    {
+      "text": "Mina Park: Great question. You can control where alerts route\u2014Slack, email, or directly in CRM\u2014and you can throttle them. The best part is it doesn\u2019t just say \u201cthis is bad.\u201d It pairs each alert with a recommended remediation action. For example: if there\u2019s no upcoming meeting, it suggests \u201csend availability + propose agenda,\u201d or if it\u2019s single-threaded it recommends \u201cadd an exec alignment step\u201d or \u201cintroduce implementation contact.\u201d The manager view also gives reps an ordered top 10 fixes that will most improve forecast health.",
+      "link": "https://www.onyx.app/1536841-5"
+    },
+    {
+      "text": "Debra Hawkins: The \u201cordered top 10\u201d sounds nice on paper. But we\u2019re consulting\u2014our sales cycles vary a lot by service line. I worry those recommendations end up generic. If it tells my team to \u201cschedule exec alignment\u201d for everything, they\u2019ll ignore it after a week.",
+      "link": "https://www.onyx.app/1536841-6"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly where your existing Customer_Analyzer work comes in. Sales_Accelerator consumes the fit scores and positioning blocks you already maintain\u2014so the messaging and sequences aren\u2019t generic templates. It prioritizes \u201chigh-fit but at-risk\u201d deals first, and the recommendations can be tuned by segment. So your enterprise transformation deals won\u2019t get the same guidance as a shorter advisory engagement.",
+      "link": "https://www.onyx.app/1536841-7"
+    },
+    {
+      "text": "Debra Hawkins: \u201cCan be tuned\u201d is the part that tends to become work. Our positioning blocks in Customer_Analyzer aren\u2019t always current. We refresh them, but not religiously. If your system depends on that staying perfectly maintained, I can see us getting misfires.",
+      "link": "https://www.onyx.app/1536841-8"
+    },
+    {
+      "text": "Mina Park: You don\u2019t need perfection, but you do need consistency. If positioning blocks drift or segments are mapped inconsistently between Customer_Analyzer and Salesforce, recommendations can feel off. In most deployments we start by aligning segment mapping, then we run a calibration period\u2014two to three weeks\u2014where we review alert quality with sales ops and tweak thresholds.",
+      "link": "https://www.onyx.app/1536841-9"
+    },
+    {
+      "text": "Debra Hawkins: Who does that calibration? Because my sales ops team is two people and they\u2019re already underwater with forecasting requests from leadership.",
+      "link": "https://www.onyx.app/1536841-10"
+    },
+    {
+      "text": "Mina Park: Typically we partner with sales ops for the initial setup\u2014mapping stages, defining what \u201cstage aging\u201d means for you, and picking alert types to start with. After that, it\u2019s mostly maintenance. The weekly manager workflow is designed to reduce the ops burden, because you\u2019re not building one-off reports and chasing reps for updates.",
+      "link": "https://www.onyx.app/1536841-11"
+    },
+    {
+      "text": "Debra Hawkins: I get the intent. But our leadership team is very particular about forecast methodology. We already have a process: managers do commit calls, and we use a custom scorecard. How does Sales_Accelerator play with that? I don\u2019t want a tool that argues with our existing forecast every week.",
+      "link": "https://www.onyx.app/1536841-12"
+    },
+    {
+      "text": "Mina Park: It won\u2019t replace your methodology. Think of it as a signal layer that surfaces risks early\u2014like a commit deal with weakening signals: no recent touches, no scheduled meeting, stage aging. It helps managers ask better questions in commit calls. It\u2019s explainable\u2014each warning is tied to specific observed conditions, not a black-box score.",
+      "link": "https://www.onyx.app/1536841-13"
+    },
+    {
+      "text": "Debra Hawkins: Explainable is good. But we\u2019ve been burned by \u201csignal layers\u201d that create more debates than decisions. My managers end up saying, \u201cthe tool says red but I say green,\u201d and we waste time.",
+      "link": "https://www.onyx.app/1536841-14"
+    },
+    {
+      "text": "Mina Park: Understood. That\u2019s why we usually start with just a couple of alert types that are hard to argue with\u2014like \u201cno upcoming meeting\u201d and \u201cinactivity.\u201d Those are objective. Then once the team trusts it, we add things like champion risk or competitive risk signals.",
+      "link": "https://www.onyx.app/1536841-15"
+    },
+    {
+      "text": "Debra Hawkins: Competitive risk signals\u2014how are you detecting that? Notes? That sounds messy. Reps don\u2019t write consistent notes, and we have different terminology across teams.",
+      "link": "https://www.onyx.app/1536841-16"
+    },
+    {
+      "text": "Mina Park: You\u2019re right\u2014competitive signals from notes are only as good as your input. We can start without that. The two most immediate wins tend to be: (1) pipeline hygiene alerts for missing next steps and stage aging, and (2) the \u201ctop 10 fixes\u201d task queue so reps know exactly what to do Monday morning.",
+      "link": "https://www.onyx.app/1536841-17"
+    },
+    {
+      "text": "Debra Hawkins: If we\u2019re talking about next steps and stage aging, Salesforce already has reports for that. My managers can see stage duration, and we have validation rules for next steps.",
+      "link": "https://www.onyx.app/1536841-18"
+    },
+    {
+      "text": "Mina Park: Salesforce can show the raw data, but it doesn\u2019t operationalize it into prioritized actions with remediation steps, and it doesn\u2019t combine it with fit scores from Customer_Analyzer to tell you where to spend your limited time. The difference is: not all stale opps matter equally. A high-fit, late-stage deal with no next meeting is urgent. A low-fit, early-stage deal aging is less critical.",
+      "link": "https://www.onyx.app/1536841-19"
+    },
+    {
+      "text": "Debra Hawkins: That prioritization is appealing, but again, it depends on the Customer_Analyzer fit scores being correct and mapped properly. We\u2019ve had issues there\u2014especially when accounts are reclassified or when Salesforce fields don\u2019t match the segments in Customer_Analyzer.",
+      "link": "https://www.onyx.app/1536841-20"
+    },
+    {
+      "text": "Mina Park: That\u2019s a real risk, and I don\u2019t want to gloss over it. If segment mapping is inconsistent, you can get misaligned guidance. What I\u2019d propose is a short technical validation: we take a sample of, say, 30 opportunities across your main service lines, confirm segment mapping and fit score ingestion, and run the alerts in \u201csilent mode\u201d so only you and sales ops see them\u2014no rep noise. That tells us whether it\u2019s accurate enough to roll out.",
+      "link": "https://www.onyx.app/1536841-21"
+    },
+    {
+      "text": "Debra Hawkins: I\u2019m not sure we have appetite for another validation project this quarter. We\u2019re also evaluating a revops platform that bundles forecasting and alerts, so there\u2019s tool consolidation pressure.",
+      "link": "https://www.onyx.app/1536841-22"
+    },
+    {
+      "text": "Mina Park: That makes sense. Can I ask\u2014what\u2019s the decision criteria between a bundled platform and something like Sales_Accelerator on top of your CRM plus Customer_Analyzer?",
+      "link": "https://www.onyx.app/1536841-23"
+    },
+    {
+      "text": "Debra Hawkins: Less integration risk, honestly. One vendor, one data model. With layered tools, we end up with finger-pointing when something doesn\u2019t match. And our reps don\u2019t want another place to check.",
+      "link": "https://www.onyx.app/1536841-24"
+    },
+    {
+      "text": "Mina Park: We try to minimize that by routing everything back into Salesforce and Slack\u2014so reps aren\u2019t living in a separate tool. But I hear you on integration risk. If we could prove in that silent-mode test that the alerts are accurate and not generic, would that change the calculus?",
+      "link": "https://www.onyx.app/1536841-25"
+    },
+    {
+      "text": "Debra Hawkins: Potentially, but timing is bad. Leadership wants a recommendation on tools in the next three weeks, and I don\u2019t want to commit my ops team to another evaluation. Also, if your recommendations can become generic when positioning blocks aren\u2019t current, that\u2019s a real concern for us. We don\u2019t update positioning blocks every time we tweak our offers.",
+      "link": "https://www.onyx.app/1536841-26"
+    },
+    {
+      "text": "Mina Park: If positioning drift is expected, we can scope the rollout to rely more on objective CRM-based alerts first\u2014like inactivity and no next meeting\u2014and then add Customer_Analyzer-driven tailoring later when you\u2019re ready. That way you still get value without being dependent on perfect positioning hygiene from day one.",
+      "link": "https://www.onyx.app/1536841-27"
+    },
+    {
+      "text": "Debra Hawkins: But then we\u2019re basically buying an alerts layer for Salesforce, which we might get from the revops platform anyway. And I\u2019m not convinced the \u201ctop 10 fixes\u201d will be trusted if it\u2019s not anchored in accurate segmentation.",
+      "link": "https://www.onyx.app/1536841-28"
+    },
+    {
+      "text": "Mina Park: That\u2019s fair. It sounds like the biggest blockers are (1) integration and mapping consistency with Customer_Analyzer, and (2) change management and notification fatigue. If we can\u2019t get a small window for validation, it may not be the right quarter to push this.",
+      "link": "https://www.onyx.app/1536841-29"
+    },
+    {
+      "text": "Debra Hawkins: I think that\u2019s where I\u2019m landing. I like the concept, and I do think warning alerts could help. But we\u2019re going to prioritize the consolidated platform evaluation right now. I don\u2019t want to start another thread we can\u2019t finish.",
+      "link": "https://www.onyx.app/1536841-30"
+    },
+    {
+      "text": "Mina Park: I appreciate the clarity. How about this: I\u2019ll send a one-page summary focused only on two alert types\u2014no next meeting and inactivity\u2014and what the weekly manager pipeline hygiene workflow looks like. If after your consolidated platform decision you still have gaps, we can revisit with a tighter scope.",
+      "link": "https://www.onyx.app/1536841-31"
+    },
+    {
+      "text": "Debra Hawkins: That works. Send it over. And if you can include what the segment mapping requirements are\u2014like the exact fields you need aligned\u2014that would help us compare integration complexity.",
+      "link": "https://www.onyx.app/1536841-32"
+    },
+    {
+      "text": "Mina Park: Absolutely. I\u2019ll include a simple mapping checklist and what \u201csilent mode\u201d validation would entail, so you can judge the lift. Thanks, Debra\u2014let\u2019s stay in touch after your decision window.",
+      "link": "https://www.onyx.app/1536841-33"
+    },
+    {
+      "text": "Debra Hawkins: Sounds good. Thanks, Mina.",
+      "link": "https://www.onyx.app/1536841-34"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "debra_hawkins@granitewave_consulting.onyx.app"
+    }
+  ]
+}

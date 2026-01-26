@@ -1,0 +1,30 @@
+{
+  "id": "7661487",
+  "semantic_identifier": "[GOLD-12]: Add data sufficiency diagnostics (sample size + coverage) to fit score output",
+  "title": "Add data sufficiency diagnostics (sample size + coverage) to fit score output",
+  "source": "linear",
+  "doc_updated_at": "2025-05-10",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "brooke_spencer",
+      "email": "brooke_spencer@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "low",
+    "created_at": "2025-05-10"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement backend diagnostics that compute sample size, recency, and key-signal coverage for each segment used in fit score generation. Attach these diagnostics to the fit score response so the UI can display a clear \u201climited data\u201d warning when thresholds aren\u2019t met. Include configurable thresholds and basic logging to track how often outputs are generated under low-data conditions.",
+      "link": "https://www.onyx.app/11764"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

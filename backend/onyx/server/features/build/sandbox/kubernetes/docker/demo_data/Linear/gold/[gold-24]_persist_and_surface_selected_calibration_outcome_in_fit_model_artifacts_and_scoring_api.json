@@ -1,0 +1,30 @@
+{
+  "id": "7783857",
+  "semantic_identifier": "[GOLD-24]: Persist and surface selected calibration outcome in fit model artifacts + scoring API",
+  "title": "Persist and surface selected calibration outcome in fit model artifacts + scoring API",
+  "source": "linear",
+  "doc_updated_at": "2025-06-19",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "cancelled",
+    "priority": "medium",
+    "created_at": "2025-06-19"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Ensure the calibration pipeline stores the user-selected outcome (activation/retention/expansion) and label rule metadata on the trained model artifact/version, and that online/offline scoring reads from the correct calibrated model version. Update the fit score/segment endpoints to return the calibrated outcome metadata so downstream UI/reporting can\u2019t misinterpret what the fit score is optimized for. Add a regression test that verifies scoring responses include the correct outcome after recalibration.",
+      "link": "https://www.onyx.app/50753"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

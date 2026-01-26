@@ -1,0 +1,30 @@
+{
+  "id": "1387718",
+  "semantic_identifier": "[GOLD-141]: Implement issue_prioritization score computation (frequency + severity + ARR tier) using persisted config",
+  "title": "Implement issue_prioritization score computation (frequency + severity + ARR tier) using persisted config",
+  "source": "linear",
+  "doc_updated_at": "2025-05-25",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "ryan_murphy",
+      "email": "ryan_murphy@netherite-extraction.onyx.app"
+    },
+    "state": "in_review",
+    "priority": "medium",
+    "created_at": "2025-05-25"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add a scoring computation module/service that loads the active scoring configuration per workspace and calculates an issue\u2019s total priority score from frequency, severity, and ARR tier. The service should return both the total score and an explainable breakdown (per-factor contributions and any normalization applied). Handle missing/unknown ARR tiers and incomplete severity data with defined fallbacks so scoring is stable and deterministic.",
+      "link": "https://www.onyx.app/26271"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

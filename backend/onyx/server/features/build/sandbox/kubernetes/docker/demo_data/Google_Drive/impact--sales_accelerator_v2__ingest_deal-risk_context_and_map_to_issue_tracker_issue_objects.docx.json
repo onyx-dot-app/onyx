@@ -1,0 +1,30 @@
+{
+  "id": "5981bcd6ad3842469e6e3ce05b2ce7f3",
+  "semantic_identifier": "Impact--Sales_Accelerator v2: Ingest deal-risk context and map to Issue_Tracker issue objects.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-01",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Sales_Accelerator v2: Ingest deal-risk context and map to Issue_Tracker issue objects.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds the initial plumbing to ingest deal-risk signals from Sales_Accelerator v2 and attach them to the correct Issue_Tracker issue objects (e.g., theme/root cause). By using stable identifiers\u2014account/customer plus related conversation references\u2014we create a repeatable mapping so that risk context lands on the right issue rather than being stranded as standalone sales data.\n\nOnce mapped, we\u2019ll persist a normalized set of deal-risk fields on each issue\u2019s context record (risk score, impacted deal IDs, stage, ARR, etc.). This makes deal-risk information queryable and durable, enabling consistent downstream use across prioritization, reporting, and future automation without re-fetching or re-deriving signals.\n\nThe immediate product impact is improved visibility: teams can see which issues are linked to active revenue risk, and how big/urgent that risk is, directly where engineering triage happens. While this release explicitly does not change prioritization logic, it lays the foundation for \u201cpriority boosting\u201d and more revenue-aware triage in subsequent iterations.\n\nTo protect data quality early, we\u2019ll include basic validation and logging when mappings are missing or ambiguous (e.g., multiple candidate issues for the same account + conversation). This reduces silent failures, gives us observability into coverage and mapping accuracy, and helps us iterate on identifier strategy before we make deal-risk a decision-making input.",
+      "link": "https://www.onyx.app/78807"
+    }
+  ],
+  "primary_owners": [
+    "sofia_ramirez@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

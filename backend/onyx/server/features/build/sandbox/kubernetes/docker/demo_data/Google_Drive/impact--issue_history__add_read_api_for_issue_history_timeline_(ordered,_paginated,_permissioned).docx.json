@@ -1,0 +1,30 @@
+{
+  "id": "47505bb5e42d4b8195724849d1c520a9",
+  "semantic_identifier": "Impact--Issue History: Add read API for issue_history timeline (ordered, paginated, permissioned).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-04-28",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Issue History: Add read API for issue_history timeline (ordered, paginated, permissioned).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds a dedicated read API for an Issue\u2019s `issue_history` timeline so clients can fetch events in a stable chronological order with cursor-based pagination. It enables reliable timeline rendering in the UI without requiring the frontend to stitch together multiple sources or handle inconsistent ordering across event types.\n\nThe API will return a normalized, minimal payload per event type (e.g., status changes, priority changes, merge/split actions, notes, external link events) and include consistent actor metadata so the UI can display \u201cwho did what\u201d uniformly. This reduces client complexity, makes event rendering more predictable, and creates a clearer contract for adding future event types without breaking consumers.\n\nAccess control will match existing Issue visibility rules, ensuring users only see history they\u2019re entitled to. Where applicable, sensitive details will be redacted so the timeline remains useful while still respecting permissions and data privacy constraints.\n\nExpected impact is improved performance and user experience for long-running or high-activity issues: the timeline becomes faster to load, scalable via pagination, and less error-prone due to stable ordering. Basic coverage for ordering, pagination, and redaction lowers regression risk and increases confidence as we expand issue history functionality.",
+      "link": "https://www.onyx.app/53405"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "4260247",
+  "semantic_identifier": "[GOLD-32]: Add conflict detection for positioning recommendations across segments",
+  "title": "Add conflict detection for positioning recommendations across segments",
+  "source": "linear",
+  "doc_updated_at": "2025-07-22",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "ryan_murphy",
+      "email": "ryan_murphy@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-07-22"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement backend logic to detect when generated positioning recommendations for different segments directly contradict each other (e.g., opposing value props, differentiators, or objection responses). Define a canonical set of recommendation categories and a simple rule-based contradiction model to flag conflicts at generation time. Persist conflict metadata (segments, fields, and conflicting statements) so the UI can surface it in subsequent tickets.",
+      "link": "https://www.onyx.app/22172"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

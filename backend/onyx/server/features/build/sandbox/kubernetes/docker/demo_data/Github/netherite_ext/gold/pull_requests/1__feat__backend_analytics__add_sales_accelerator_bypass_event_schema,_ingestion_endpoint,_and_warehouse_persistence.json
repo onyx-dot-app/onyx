@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#1",
+  "semantic_identifier": "1: feat: Backend analytics: add Sales Accelerator bypass event schema, ingestion endpoint, and warehouse persistence",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-27",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "1",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "brooke_spencer",
+        "name": "brooke_spencer",
+        "email": "brooke_spencer@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "9",
+    "num_files_changed": "45",
+    "labels": [],
+    "created_at": "2025-11-27",
+    "updated_at": "2025-11-27",
+    "closed_at": "2025-12-09"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR implements end-to-end tracking for Sales_Accelerator \u201cbypass\u201d events in the backend analytics pipeline.\n\nChanges:\n- Defines a dedicated bypass event contract (schema + validation) with required fields: event_id, occurred_at, user_id, team_id, workflow_type, surface, and optional fields: account_id, opportunity_id, reason, session_id, metadata.\n- Adds a new ingestion endpoint for bypass events that authenticates the caller, validates payloads, and emits the event into the analytics event stream.\n- Implements idempotency/deduplication on (event_id) with an additional guard using (session_id, workflow_type, occurred_at) when event_id is reused/missing.\n- Persists events to the analytics warehouse (new table) with stable identifiers and normalized dimensions to support reliable segmentation by workflow and team.\n- Adds warehouse migrations/DDL, indexes/partitioning on occurred_at, and basic backfill-safe upsert semantics.\n- Includes tests for schema validation, ingestion, and dedupe behavior.\n\nNotes:\n- No UI changes are required; downstream dashboards/alerting can consume the new warehouse table immediately once deployed.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#1"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

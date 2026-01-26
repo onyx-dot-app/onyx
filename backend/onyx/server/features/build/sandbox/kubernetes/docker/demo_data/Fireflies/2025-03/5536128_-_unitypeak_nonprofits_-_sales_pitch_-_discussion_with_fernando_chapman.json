@@ -1,0 +1,153 @@
+{
+  "id": "FIREFLIES_5536128",
+  "semantic_identifier": "5536128 - Unitypeak Nonprofits - sales_pitch - Discussion with Fernando Chapman",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-03-30 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-03-30 00:00:00",
+    "duration_min": "23"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-03"
+      ],
+      "year_month": "2025-03",
+      "meeting_title": "5536128 - Unitypeak Nonprofits - sales_pitch - Discussion with Fernando Chapman",
+      "organizer_email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Megan Foster: Hi Fernando\u2014Megan Foster here. Thanks for taking a few minutes today. I work with revenue teams that live in Salesforce or HubSpot but want a cleaner way to turn what they already know about accounts into the next best actions, and also tighten forecasting so quarter-end isn\u2019t a surprise. How are things going at Unitypeak Nonprofits?",
+      "link": "https://www.onyx.app/6638533-1"
+    },
+    {
+      "text": "Fernando Chapman: Hey Megan\u2014doing well, thanks. We\u2019re in the middle of planning for the next quarter, so honestly forecasting and pipeline health are top of mind.",
+      "link": "https://www.onyx.app/6638533-2"
+    },
+    {
+      "text": "Megan Foster: Perfect timing then. I\u2019ll keep this quick. The product is called Sales_Accelerator\u2014think of it as a sales execution layer that sits on top of your CRM. It doesn\u2019t replace Salesforce; it pulls in your existing stages plus activity signals\u2014emails, calls, meetings\u2014and then explains what\u2019s driving your forecast and flags deals that are drifting. The big value is: more accurate commit numbers and clear guidance on what to do next on each opportunity.",
+      "link": "https://www.onyx.app/6638533-3"
+    },
+    {
+      "text": "Fernando Chapman: We\u2019ve tried a couple forecasting add-ons before. They usually end up being \u201canother dashboard\u201d that reps don\u2019t use. What\u2019s different here?",
+      "link": "https://www.onyx.app/6638533-4"
+    },
+    {
+      "text": "Megan Foster: Totally fair. Two things that tend to change adoption. First, the forecast isn\u2019t just a number\u2014it\u2019s explainable. For each opportunity it shows drivers like stage age, last touch, whether a next meeting is scheduled, and historical win rate for similar deals. So a manager can say, \u201cThis is in commit, but it\u2019s 21 days stale with no next meeting\u2014why?\u201d  \nSecond, it\u2019s action-oriented: reps get \u201cbest next action\u201d prompts tied to those drivers, like \u201cbook next meeting,\u201d \u201csend follow-up sequence,\u201d or \u201cre-engage champion,\u201d rather than passively looking at charts.",
+      "link": "https://www.onyx.app/6638533-5"
+    },
+    {
+      "text": "Fernando Chapman: Okay. How does it handle different segments? We have a mix\u2014smaller nonprofits with faster cycles, and larger orgs that move slow and have more stakeholders.",
+      "link": "https://www.onyx.app/6638533-6"
+    },
+    {
+      "text": "Megan Foster: That\u2019s exactly where it helps. Sales_Accelerator can forecast by segment, rep, and source, and it tracks stage conversion and slippage diagnostics. So you\u2019ll see, for example, \u201cEnterprise nonprofit segment is slipping in security review\u201d or \u201cMid-market is stuck between discovery and demo.\u201d Then sales ops can test a process fix\u2014like pulling a security checklist earlier\u2014and monitor whether conversion improves over the next few weeks.",
+      "link": "https://www.onyx.app/6638533-7"
+    },
+    {
+      "text": "Fernando Chapman: The bottleneck visibility is interesting. Right now we do that manually in spreadsheets, and it\u2019s\u2026 not fun. But reps will ask, \u201cWhere is this coming from?\u201d",
+      "link": "https://www.onyx.app/6638533-8"
+    },
+    {
+      "text": "Megan Foster: Yep\u2014and that\u2019s why the \u201cdrivers\u201d piece matters. It\u2019s not a black box. If the forecast changes, it will show why: stage age creeping up, fewer touches than your benchmark, no meeting on the calendar, or a lower historical win rate for deals that look like this one. That way your sales leaders can coach with evidence, and reps feel it\u2019s fair because it\u2019s based on the same activity and CRM data they already use.",
+      "link": "https://www.onyx.app/6638533-9"
+    },
+    {
+      "text": "Fernando Chapman: We\u2019re also trying to reduce end-of-quarter fire drills. Any tool claims it helps that.",
+      "link": "https://www.onyx.app/6638533-10"
+    },
+    {
+      "text": "Megan Foster: For sure. Where we typically see impact is early warning. You get alerts when deals are at risk\u2014like \u201cstalled in stage beyond benchmark,\u201d \u201clast touch exceeded threshold,\u201d or \u201cpushed close date twice.\u201d Instead of finding out in week 12, you see it in week 6 and can re-allocate time or build coverage. That translates into fewer surprises and a more realistic commit.",
+      "link": "https://www.onyx.app/6638533-11"
+    },
+    {
+      "text": "Fernando Chapman: Makes sense. We also care about accountability\u2014managers need to know what changed week to week.",
+      "link": "https://www.onyx.app/6638533-12"
+    },
+    {
+      "text": "Megan Foster: Exactly. Sales_Accelerator gives you commit / best-case / pipeline views, and then breakouts by rep and segment. On top of that, it\u2019s good for scenario planning. For example: \u201cIf we add 20 SQLs in our top segment, what\u2019s the expected impact on pipeline and commit?\u201d It uses your historical conversion and cycle-time benchmarks, so you can sanity-check growth plans with real data.",
+      "link": "https://www.onyx.app/6638533-13"
+    },
+    {
+      "text": "Fernando Chapman: Scenario planning would help. Our leadership always asks, \u201cWhat happens if we hire two more SDRs?\u201d and we end up guessing.",
+      "link": "https://www.onyx.app/6638533-14"
+    },
+    {
+      "text": "Megan Foster: Right\u2014and the nice part is it\u2019s grounded in your funnel reality, not generic benchmarks. Another quick example tied to your earlier point about segments: you can model \u201cIf we improve conversion from discovery to demo by 5% in enterprise nonprofits, what happens to forecasted revenue?\u201d That\u2019s a concrete way for sales ops to prioritize improvements.",
+      "link": "https://www.onyx.app/6638533-15"
+    },
+    {
+      "text": "Fernando Chapman: What does implementation look like? I don\u2019t want a six-month project.",
+      "link": "https://www.onyx.app/6638533-16"
+    },
+    {
+      "text": "Megan Foster: Totally. Typically it\u2019s lightweight because we\u2019re sitting on top of the CRM. We connect Salesforce or HubSpot, pull stages and historical opportunity data, and connect activity signals. Then we calibrate benchmarks\u2014cycle time by stage, touch thresholds, and basic segments. Many teams see value in a few weeks, not months, because the first win is visibility: what\u2019s stuck, what\u2019s slipping, and which deals need attention now.",
+      "link": "https://www.onyx.app/6638533-17"
+    },
+    {
+      "text": "Fernando Chapman: And it won\u2019t disrupt how reps work day to day?",
+      "link": "https://www.onyx.app/6638533-18"
+    },
+    {
+      "text": "Megan Foster: That\u2019s the goal\u2014minimal disruption. Reps still live in the CRM, but Sales_Accelerator surfaces prioritized actions and risks without making them re-enter data. Managers and ops get the forecasting and diagnostics layer that\u2019s usually missing in the CRM alone.",
+      "link": "https://www.onyx.app/6638533-19"
+    },
+    {
+      "text": "Fernando Chapman: Okay. This is definitely in our problem area. What would you need from us to see if this fits?",
+      "link": "https://www.onyx.app/6638533-20"
+    },
+    {
+      "text": "Megan Foster: Great question. For a proper evaluation, I\u2019d suggest a 30\u201345 minute working session with you and whoever owns forecasting\u2014maybe sales ops or a frontline manager. We\u2019ll map your stages, define two or three key segments, and I\u2019ll show you how the drivers and slippage diagnostics would look using a sample view. If you\u2019re open to it, we can also identify one bottleneck you suspect\u2014like late-stage approvals\u2014and walk through how we\u2019d test a process fix and monitor improvement.",
+      "link": "https://www.onyx.app/6638533-21"
+    },
+    {
+      "text": "Fernando Chapman: That sounds reasonable. I can loop in our sales ops manager\u2014she\u2019s been pushing for better pipeline diagnostics.",
+      "link": "https://www.onyx.app/6638533-22"
+    },
+    {
+      "text": "Megan Foster: Perfect. How about we schedule that for early next week? I can send an agenda: forecasting drivers, stage conversion/slippage by segment and rep, and a quick look at scenario planning. Then we\u2019ll confirm success criteria\u2014like reducing stale opportunities in commit and improving forecast accuracy.",
+      "link": "https://www.onyx.app/6638533-23"
+    },
+    {
+      "text": "Fernando Chapman: Monday or Tuesday afternoon could work. Send me a couple options and I\u2019ll bring her in.",
+      "link": "https://www.onyx.app/6638533-24"
+    },
+    {
+      "text": "Megan Foster: Will do. Last quick check: are you on Salesforce today, and do you track calls/emails through a tool like Outreach or directly in the CRM?",
+      "link": "https://www.onyx.app/6638533-25"
+    },
+    {
+      "text": "Fernando Chapman: We\u2019re on Salesforce. Activity is a mix\u2014some logged in Salesforce, some through Outreach.",
+      "link": "https://www.onyx.app/6638533-26"
+    },
+    {
+      "text": "Megan Foster: Great\u2014that\u2019s common and workable. I\u2019ll email two time slots and a short prep list\u2014nothing heavy. Appreciate the time, Fernando. Looking forward to digging in with you and your ops lead.",
+      "link": "https://www.onyx.app/6638533-27"
+    },
+    {
+      "text": "Fernando Chapman: Thanks Megan. This sounds promising\u2014send it over and we\u2019ll get it on the calendar.",
+      "link": "https://www.onyx.app/6638533-28"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "megan_foster@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "fernando_chapman@unitypeak_nonprofits.onyx.app"
+    }
+  ]
+}

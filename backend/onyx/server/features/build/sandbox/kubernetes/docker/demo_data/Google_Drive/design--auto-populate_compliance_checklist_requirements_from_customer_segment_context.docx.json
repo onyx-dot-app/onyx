@@ -1,0 +1,30 @@
+{
+  "id": "faaed6e197754a2ba7f79a8cf50446ca",
+  "semantic_identifier": "Design--Auto-populate compliance checklist requirements from customer/segment context.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-04",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Auto-populate compliance checklist requirements from customer/segment context.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Overview\nWe will extend the Deployment Readiness compliance checklist to auto-populate which checklist items are *required for deployment* using customer/account context (CRM + Customer_Analyzer). When an issue/theme is linked to one or more impacted customers, the system will compute a derived required set (e.g., security review, DPA, retention constraints) based on attributes like segment/ICP, region, and regulated flags, and then highlight any missing or incomplete items. This change is additive and does not alter the existing checklist UI or user workflow; it simply pre-selects and annotates requirements to reduce manual triage and late compliance surprises.\n\n## Inputs, rules, and derivation\nInputs come from (1) CRM account/customer attributes (e.g., legal entity, region, contract/DPA status, industry tags) and (2) Customer_Analyzer outputs (segment/ICP classification, regulated indicators, retention/data residency constraints). We will define a configurable mapping from attribute predicates \u2192 checklist requirements (e.g., `region in {EU, UK} => DPA required`, `regulated=true => security review required`, `retention_constraint != null => retention review required`). For issues/themes with multiple impacted customers, we will compute the required set as the union of all customers\u2019 derived requirements, and store per-requirement provenance (which customer/attribute triggered it) to support explainability and debugging.\n\n## System behavior and UI integration\nOn link/unlink of impacted customers, and on relevant attribute updates, we will (re)compute the derived required set and attach it to the issue/theme as derived metadata (separate from the user-edited checklist state). In the checklist UI, items that are derived-required will be auto-selected (or marked \u201cRequired\u201d) and any unmet required items will be highlighted as gaps; items not required remain unchanged. Users can still complete checklist items as usual; we will not introduce new steps, approvals, or blocking behavior\u2014only visibility into what is required and what is missing.\n\n## Data model, services, and rollout\nImplementation includes a small \u201cCompliance Requirements Deriver\u201d service/module that fetches customer context, applies the ruleset, and writes back derived requirements + provenance to the issue/theme. We\u2019ll add telemetry for rule hits, gap counts, and manual overrides (if any), plus admin tooling/config to evolve mappings without code deploys (initially can be a versioned config file, later a managed table). Rollout will start behind a feature flag with shadow-mode validation (compute and log without UI changes), followed by enabling UI annotations for a limited set of segments/regions, then general availability once rule accuracy and performance meet targets.",
+      "link": "https://www.onyx.app/54727"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,169 @@
+{
+  "id": "FIREFLIES_5293041",
+  "semantic_identifier": "5293041 - Granitewave Consulting - sales_pitch - Discussion with Debra Hawkins",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-20 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-20 00:00:00",
+    "duration_min": "26"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "5293041 - Granitewave Consulting - sales_pitch - Discussion with Debra Hawkins",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Debra\u2014Mina Park here. Thanks for taking a few minutes. I work with teams that run on Salesforce or HubSpot and feel like pipeline reviews turn into a manual \u201chunt for problems\u201d exercise. Is now still good?",
+      "link": "https://www.onyx.app/4346530-1"
+    },
+    {
+      "text": "Debra Hawkins: Yes, I\u2019ve got a few minutes. And yes\u2014pipeline reviews can definitely feel like that.",
+      "link": "https://www.onyx.app/4346530-2"
+    },
+    {
+      "text": "Mina Park: Perfect. I\u2019ll keep it tight. The reason I reached out is we built Sales_Accelerator, which sits on top of your CRM and helps reps and managers convert signals into action\u2014specifically by flagging risk early and giving a clear \u201cwhat to do next\u201d list so deals don\u2019t silently slip. Before I jump in\u2014what does your weekly pipeline hygiene look like today at Granitewave? More spreadsheet-driven, or inside the CRM?",
+      "link": "https://www.onyx.app/4346530-3"
+    },
+    {
+      "text": "Debra Hawkins: Mostly inside Salesforce, but there\u2019s still a lot of manual work. Managers are asking reps for updates, and we\u2019re chasing down basic stuff like next steps and stale stages.",
+      "link": "https://www.onyx.app/4346530-4"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly the gap we focus on. One core capability is warning_alerts\u2014proactive alerts when an account or opportunity is likely to slip or lose momentum. It\u2019s not just \u201csomething changed,\u201d it\u2019s specific risk types like: inactivity\u2014no touches in X days, stage aging beyond your benchmark, no upcoming meeting on the calendar, champion risk when it looks single-threaded, and forecast risk when a commit deal is weakening.",
+      "link": "https://www.onyx.app/4346530-5"
+    },
+    {
+      "text": "Debra Hawkins: We definitely have stage aging and \u201cno next meeting\u201d issues. Those are common.",
+      "link": "https://www.onyx.app/4346530-6"
+    },
+    {
+      "text": "Mina Park: Right\u2014and the difference is we don\u2019t stop at the alert. We route the alert wherever your team actually works\u2014Slack, email, or directly in Salesforce\u2014and we attach a recommended remediation action. So instead of a manager telling a rep \u201cfix your pipeline,\u201d the rep gets something like: \u201cNo upcoming meeting; recommended: send 3-option times and confirm decision process,\u201d or \u201cSingle-threaded; recommended: schedule exec alignment or add technical stakeholder,\u201d depending on the deal pattern.",
+      "link": "https://www.onyx.app/4346530-7"
+    },
+    {
+      "text": "Debra Hawkins: Interesting. How noisy does that get? Our reps already feel like they\u2019re drowning in notifications.",
+      "link": "https://www.onyx.app/4346530-8"
+    },
+    {
+      "text": "Mina Park: Totally fair. The design goal is fewer, higher-confidence alerts that drive action. Two ways we keep it from becoming noise: first, alert thresholds are benchmarked to your process\u2014your stage aging norms, your activity cadence, your cycle lengths\u2014so we\u2019re not firing generic rules. Second, we can roll alerts up into a prioritized queue: \u201chere are the top 10 fixes that will most improve forecast health this week.\u201d That way it\u2019s not 40 pings; it\u2019s an ordered list.",
+      "link": "https://www.onyx.app/4346530-9"
+    },
+    {
+      "text": "Debra Hawkins: That \u201ctop 10 fixes\u201d sounds helpful. My managers spend time just figuring out what to focus on.",
+      "link": "https://www.onyx.app/4346530-10"
+    },
+    {
+      "text": "Mina Park: Exactly. One of the most common use cases is a manager running weekly pipeline hygiene automatically. Instead of spending the first 30 minutes of a pipeline meeting identifying gaps\u2014missing next steps, stale opps, single-threaded deals\u2014the system surfaces them ahead of time and assigns the highest-impact actions to the right rep. Then the meeting can be about deal strategy, not data cleanup.",
+      "link": "https://www.onyx.app/4346530-11"
+    },
+    {
+      "text": "Debra Hawkins: That would change the tone of our pipeline calls, honestly.",
+      "link": "https://www.onyx.app/4346530-12"
+    },
+    {
+      "text": "Mina Park: That\u2019s what we hear. Quick question: when a deal slips at Granitewave, what\u2019s the most common \u201cwe should\u2019ve seen this sooner\u201d reason? Is it lack of activity, unclear timeline, multi-threading, something else?",
+      "link": "https://www.onyx.app/4346530-13"
+    },
+    {
+      "text": "Debra Hawkins: Usually it\u2019s that we thought we had a timeline, but there wasn\u2019t a real next meeting locked in\u2014or the deal was stuck with one champion and then went dark.",
+      "link": "https://www.onyx.app/4346530-14"
+    },
+    {
+      "text": "Mina Park: Then you\u2019re in the sweet spot for warning_alerts. We can flag \u201cno upcoming meeting\u201d as a leading indicator, and \u201cchampion risk\u201d when there\u2019s only one contact actively engaged. We also look at stage aging\u2014so if a deal has been in a stage longer than what wins typically look like, you\u2019ll get an early warning before it becomes a forecast surprise.",
+      "link": "https://www.onyx.app/4346530-15"
+    },
+    {
+      "text": "Debra Hawkins: And this is all on top of Salesforce? We don\u2019t want another CRM.",
+      "link": "https://www.onyx.app/4346530-16"
+    },
+    {
+      "text": "Mina Park: Exactly\u2014Sales_Accelerator is an execution layer. We\u2019re not asking reps to live somewhere else. We sit on top of Salesforce/HubSpot and push actions back into the systems you already use. Reps see recommended next steps, managers see risk and coverage, and ops can tune the rules and benchmarks without rebuilding your process.",
+      "link": "https://www.onyx.app/4346530-17"
+    },
+    {
+      "text": "Debra Hawkins: Okay. How much setup is involved? We don\u2019t have endless ops bandwidth.",
+      "link": "https://www.onyx.app/4346530-18"
+    },
+    {
+      "text": "Mina Park: Setup is typically lightweight because we start with what\u2019s already in your CRM\u2014stages, activity logs, meetings, contacts, and notes. Then we configure the alert types you care about most\u2014like inactivity, stage aging, no upcoming meeting, and champion risk\u2014and decide where to route them. If you want, we can start with just two alert categories and the \u201ctop 10 fixes\u201d queue for managers, prove it reduces slippage, and expand from there.",
+      "link": "https://www.onyx.app/4346530-19"
+    },
+    {
+      "text": "Debra Hawkins: That phased approach makes sense. Do you integrate with anything else we use?",
+      "link": "https://www.onyx.app/4346530-20"
+    },
+    {
+      "text": "Mina Park: Yes\u2014especially if you\u2019re already using something like Customer_Analyzer. Sales_Accelerator can consume fit scores and positioning blocks so the alerts can prioritize \u201chigh-fit but at-risk\u201d deals first. In practice, that means if an account is a strong match but it\u2019s going stale, it bubbles to the top for intervention rather than getting lost among lower-fit noise.",
+      "link": "https://www.onyx.app/4346530-21"
+    },
+    {
+      "text": "Debra Hawkins: We do have something like that\u2014fit scoring. Our issue is acting on it consistently.",
+      "link": "https://www.onyx.app/4346530-22"
+    },
+    {
+      "text": "Mina Park: Exactly. A lot of teams have insights, but not a consistent, explainable system that turns them into daily actions. The outcome we aim for is: fewer surprise slips, cleaner pipeline hygiene without nagging, and a more reliable forecast because risk is surfaced early with a specific fix attached.",
+      "link": "https://www.onyx.app/4346530-23"
+    },
+    {
+      "text": "Debra Hawkins: What would you need from me to see if this fits?",
+      "link": "https://www.onyx.app/4346530-24"
+    },
+    {
+      "text": "Mina Park: For the next step, I\u2019d suggest a 30-minute working session with you and whoever owns Salesforce/pipeline cadence\u2014maybe sales ops or a frontline manager. We\u2019ll map your current pipeline hygiene flow, pick the two or three alert types that would have caught your last few slips, and show what the rep task queue and manager view would look like in your environment. If it\u2019s compelling, we can outline a short pilot.",
+      "link": "https://www.onyx.app/4346530-25"
+    },
+    {
+      "text": "Debra Hawkins: I\u2019m open to that. I\u2019d want our Sales Ops lead on it.",
+      "link": "https://www.onyx.app/4346530-26"
+    },
+    {
+      "text": "Mina Park: Great. Who is the right Sales Ops contact, and what does your calendar look like early next week\u2014Tuesday or Wednesday?",
+      "link": "https://www.onyx.app/4346530-27"
+    },
+    {
+      "text": "Debra Hawkins: Our Sales Ops lead is Jordan Lee. Tuesday afternoon could work.",
+      "link": "https://www.onyx.app/4346530-28"
+    },
+    {
+      "text": "Mina Park: Perfect\u2014how about Tuesday at 2:00 pm your time for 30 minutes? I\u2019ll send an invite to you and Jordan, and I\u2019ll include a couple of prep questions\u2014mainly your stage definitions and what you consider \u201cstale\u201d by stage\u2014so we can make it concrete.",
+      "link": "https://www.onyx.app/4346530-29"
+    },
+    {
+      "text": "Debra Hawkins: Tuesday at 2 works. Send it over and I\u2019ll loop Jordan in if needed.",
+      "link": "https://www.onyx.app/4346530-30"
+    },
+    {
+      "text": "Mina Park: Will do. Thanks, Debra\u2014looking forward to showing you how the alerts and the prioritized fix list can take the manual chasing out of pipeline hygiene.",
+      "link": "https://www.onyx.app/4346530-31"
+    },
+    {
+      "text": "Debra Hawkins: Thanks, Mina. Talk Tuesday.",
+      "link": "https://www.onyx.app/4346530-32"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "debra_hawkins@granitewave_consulting.onyx.app"
+    }
+  ]
+}

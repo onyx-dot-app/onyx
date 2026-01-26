@@ -1,0 +1,30 @@
+{
+  "id": "4284236",
+  "semantic_identifier": "[GOLD-116]: Implement role-based access control for generated content and governance settings",
+  "title": "Implement role-based access control for generated content and governance settings",
+  "source": "linear",
+  "doc_updated_at": "2025-12-13",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jiwon_kang",
+      "email": "jiwon_kang@netherite-extraction.onyx.app"
+    },
+    "state": "in_review",
+    "priority": "medium",
+    "created_at": "2025-12-13"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add RBAC gates around viewing, generating, editing, and exporting AI-generated content (emails, call notes, next-best-action recommendations) and accessing governance settings in Sales_Accelerator. Define initial roles/permissions aligned to SDR/AE, Manager, and Sales Ops/Admin, with a default-deny posture for new endpoints. Update backend authorization checks and UI affordances so restricted actions/settings are hidden or blocked with clear error messaging.",
+      "link": "https://www.onyx.app/51956"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

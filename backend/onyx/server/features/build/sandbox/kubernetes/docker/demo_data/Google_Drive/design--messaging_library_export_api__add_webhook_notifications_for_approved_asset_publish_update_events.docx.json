@@ -1,0 +1,30 @@
+{
+  "id": "0c0510aeeead402a915c22f4c8b4cde3",
+  "semantic_identifier": "Design--Messaging Library Export API: add webhook notifications for approved asset publish/update events.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-13",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Messaging Library Export API: add webhook notifications for approved asset publish/update events.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview\nWe will extend the Messaging Library Export API with outbound webhooks that notify subscribed destinations when (a) an asset transitions into **Approved** state, or (b) an **already-approved** asset receives a **new approved version** (publish/update). The goal is to let downstream systems (e.g., sync services, CDPs) react immediately and perform a targeted pull via existing export endpoints, rather than polling.\n\n### Events & Payload\nWe will introduce two event types: `messaging_library.asset.approved` and `messaging_library.asset.updated` (emitted only when the asset remains approved and a new version is created). Each delivery will contain a minimal payload: `asset_id`, `external_id` (if present), `asset_version`, `approved_at` or `updated_at` (depending on event), plus a compact summary (e.g., `name`, `type`, `status`). We will include an `event_id` and `occurred_at` timestamp to support idempotency and ordering diagnostics on the receiver side.\n\n### Webhook Delivery, Signing, and Reliability\nWebhook endpoints will be configured with a destination URL and a shared secret. Deliveries will be signed (e.g., `X-Signature` header using HMAC-SHA256 over the raw request body plus timestamp) so receivers can verify authenticity and prevent replay (also include `X-Timestamp`). We will implement retry with exponential backoff on network errors and non-2xx responses, with a capped attempt count; all attempts will be recorded with status, response code/body snippet, and latency. After exhausting retries, the event will be moved to a dead-letter log/store for operational visibility and manual replay tooling later.\n\n### Data Model & Trigger Points\nWe will add a `webhook_subscriptions` table (or equivalent config store) keyed by tenant/workspace, including `url`, `secret_ref`, enabled event types, and status. We will emit events from the asset lifecycle boundaries: (1) on successful approval transaction commit, enqueue an \u201capproved\u201d delivery job; (2) on creation of a new version for an approved asset, enqueue an \u201cupdated\u201d delivery job. Delivery will be asynchronous via the existing job queue to avoid impacting user-facing approval latency, and guarded to ensure at-least-once delivery with receiver-side idempotency recommended via `event_id`.",
+      "link": "https://www.onyx.app/36935"
+    }
+  ],
+  "primary_owners": [
+    "kevin_sullivan"
+  ],
+  "secondary_owners": []
+}

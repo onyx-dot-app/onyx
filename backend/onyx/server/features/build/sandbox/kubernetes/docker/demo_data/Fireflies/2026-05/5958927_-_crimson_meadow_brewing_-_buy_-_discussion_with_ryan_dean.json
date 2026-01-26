@@ -1,0 +1,205 @@
+{
+  "id": "FIREFLIES_5958927",
+  "semantic_identifier": "5958927 - Crimson Meadow Brewing - buy - Discussion with Ryan Dean",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2026-05-13 00:00:00",
+  "metadata": {
+    "meeting_date": "2026-05-13 00:00:00",
+    "duration_min": "45"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2026-05"
+      ],
+      "year_month": "2026-05",
+      "meeting_title": "5958927 - Crimson Meadow Brewing - buy - Discussion with Ryan Dean",
+      "organizer_email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Sneha Reddy: Ryan, good to see you again. Since this is our third call, I wanted to make today really concrete\u2014are we in a place to finalize Customer_Analyzer this week, assuming we can land on the rollout plan and success criteria?",
+      "link": "https://www.onyx.app/9646701-1"
+    },
+    {
+      "text": "Ryan Dean: Hey Sneha. Yeah, appreciate you keeping it tight. I\u2019ll be upfront: there\u2019s interest, but we\u2019re not aligned internally. Sales wants one thing, Marketing wants another, Product is somewhere else. So I\u2019m not sure we\u2019re ready to finalize.",
+      "link": "https://www.onyx.app/9646701-2"
+    },
+    {
+      "text": "Sneha Reddy: Totally fair\u2014and honestly that\u2019s exactly the situation Customer_Analyzer is built to de-risk. If you\u2019re open to it, I want to focus on two things only: the fit estimation output\u2014so you can align on who your best customers are with evidence\u2014and the driver breakdown\u2014so each team can see *why* a segment is high or low fit without it becoming opinion-based. Does that map to the sticking point?",
+      "link": "https://www.onyx.app/9646701-3"
+    },
+    {
+      "text": "Ryan Dean: That\u2019s the sticking point, yes. But we already have reports in the CRM, and Product has their own view from usage. The issue is we don\u2019t trust each other\u2019s numbers, and nobody wants another tool.",
+      "link": "https://www.onyx.app/9646701-4"
+    },
+    {
+      "text": "Sneha Reddy: Understood. The difference here is we\u2019re not asking you to pick one team\u2019s dataset as \u201cthe truth.\u201d Customer_Analyzer ingests the signals you already have\u2014CRM fields, onboarding survey answers, usage events, support tickets, even interview notes\u2014and normalizes them into a single fit score from 0 to 100 at both the account and segment level. Then it shows the top drivers contributing to that score. So instead of Sales saying \u201cbreweries like X are best\u201d and Marketing saying \u201cno, it\u2019s Y,\u201d you can point to retention, expansion, conversion, and support burden patterns across segments.",
+      "link": "https://www.onyx.app/9646701-5"
+    },
+    {
+      "text": "Ryan Dean: Okay, but practically\u2014who owns it? If Sales owns it, Marketing won\u2019t use it. If Product owns it, Sales ignores it. That\u2019s been our pattern.",
+      "link": "https://www.onyx.app/9646701-6"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s a real risk. What I\u2019ve seen work is: one executive sponsor, but a shared \u201cfit council\u201d in the first month\u2014one person each from Sales, Marketing, Product. The outputs are shared artifacts: an agreed ICP profile plus two or three priority segments. In Customer_Analyzer you can literally compare segments\u2014like SMB vs mid-market\u2014side by side, with driver breakdowns. That makes the conversation about outcomes, not preferences.",
+      "link": "https://www.onyx.app/9646701-7"
+    },
+    {
+      "text": "Ryan Dean: I get the theory. But we\u2019re slammed. I don\u2019t have appetite for a big implementation.",
+      "link": "https://www.onyx.app/9646701-8"
+    },
+    {
+      "text": "Sneha Reddy: We keep it lightweight. For an initial pass, you don\u2019t need every signal type. You can start with: CRM fields for firmographics, one or two onboarding questions that reflect problem severity or willingness to pay, and one or two product usage markers that correlate with time-to-value. That\u2019s enough to generate a first fit model and show driver breakdown. Then you decide whether to add support signals or churn risk indicators later.",
+      "link": "https://www.onyx.app/9646701-9"
+    },
+    {
+      "text": "Ryan Dean: And you\u2019re confident it\u2019ll actually settle debates? Because right now every discussion ends with \u201cit depends\u201d and nothing changes.",
+      "link": "https://www.onyx.app/9646701-10"
+    },
+    {
+      "text": "Sneha Reddy: It won\u2019t eliminate judgment, but it changes the *starting point*. Instead of \u201cit depends,\u201d you get: \u201cSegment A has a 78 fit score because time-to-value is 3 days, adoption is high, and support burden is low; Segment B is 52 because onboarding completion is low and support tickets spike.\u201d That gives Product a roadmap hypothesis, Sales a targeting plan, and Marketing a positioning angle\u2014without everyone inventing their own story.",
+      "link": "https://www.onyx.app/9646701-11"
+    },
+    {
+      "text": "Ryan Dean: The part I\u2019m less convinced on is \u201cfit score.\u201d We\u2019ve had scoring models before. They become political.",
+      "link": "https://www.onyx.app/9646701-12"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s why the driver breakdown matters as much as the score. If someone disputes the score, you can inspect the drivers: industry, size, tech stack, problem severity proxies, adoption patterns, support burden, churn signals. And you can tune the weights transparently. We\u2019re not asking you to accept a black box.",
+      "link": "https://www.onyx.app/9646701-13"
+    },
+    {
+      "text": "Ryan Dean: Tuning weights is exactly where politics starts, though.",
+      "link": "https://www.onyx.app/9646701-14"
+    },
+    {
+      "text": "Sneha Reddy: Fair. So we anchor it to outcomes. The system recommends an ICP profile *based on observed outcomes*\u2014retention, expansion, conversion. You\u2019re not tuning it to make a team \u201cwin,\u201d you\u2019re tuning it to match what actually performs well for Crimson Meadow.",
+      "link": "https://www.onyx.app/9646701-15"
+    },
+    {
+      "text": "Ryan Dean: Let me ask: what\u2019s the immediate deliverable for Product? Because they\u2019re the hardest to get on board. They think this is a GTM thing.",
+      "link": "https://www.onyx.app/9646701-16"
+    },
+    {
+      "text": "Sneha Reddy: For Product, the use case is product planning: identify high-fit customers with unmet needs to guide roadmap bets. If you can see which segment has high retention but a consistent set of support tickets or feature requests, that\u2019s a roadmap lever. Or if a segment converts well but churns after 60 days, that\u2019s a time-to-value gap to fix. Customer_Analyzer helps connect those dots across sources\u2014usage + tickets + survey responses\u2014so Product isn\u2019t flying blind.",
+      "link": "https://www.onyx.app/9646701-17"
+    },
+    {
+      "text": "Ryan Dean: That would interest them, but they\u2019ll say they can already do that with analytics and Zendesk.",
+      "link": "https://www.onyx.app/9646701-18"
+    },
+    {
+      "text": "Sneha Reddy: They can, but it\u2019s usually fragmented and time-consuming. Customer_Analyzer\u2019s value is: one place where those signals roll up into segment comparisons and a recommended ICP profile, plus a driver view that ties it to outcomes. It\u2019s less \u201canother dashboard\u201d and more \u201ca shared decision system\u201d across teams.",
+      "link": "https://www.onyx.app/9646701-19"
+    },
+    {
+      "text": "Ryan Dean: Okay. Let\u2019s talk buying. You\u2019re pushing to close this week. I don\u2019t see how I get the internal yes that fast.",
+      "link": "https://www.onyx.app/9646701-20"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s the crux. What I\u2019m trying to avoid is you spending another month debating ICP with no resolution. If we close this week, we can schedule a kick-off and deliver the first segment fit readout within two to three weeks, assuming access to the core datasets. That gives you something tangible to unify around.",
+      "link": "https://www.onyx.app/9646701-21"
+    },
+    {
+      "text": "Ryan Dean: The issue is budget approval. And candidly, I don\u2019t have a single exec who wants to sponsor it right now. Everyone likes it, nobody wants to own it.",
+      "link": "https://www.onyx.app/9646701-22"
+    },
+    {
+      "text": "Sneha Reddy: If sponsorship is the blocker, could you position it as a short pilot that\u2019s explicitly about cross-functional alignment\u2014like \u201cprove we can agree on ICP using evidence\u201d? We can structure it with a clear success metric: \u201cAgree on top two priority segments and one de-prioritized segment based on fit score and drivers,\u201d plus \u201cdeliver an ICP profile recommendation backed by retention and expansion signals.\u201d",
+      "link": "https://www.onyx.app/9646701-23"
+    },
+    {
+      "text": "Ryan Dean: I can try, but the CFO is pushing back on pilots. We\u2019ve done too many \u201ctools for alignment\u201d that didn\u2019t stick.",
+      "link": "https://www.onyx.app/9646701-24"
+    },
+    {
+      "text": "Sneha Reddy: Then let\u2019s address adoption risk head-on. If you buy, we\u2019ll set a 30-day plan with three specific meetings: data alignment, fit model review, and ICP decision. And we\u2019ll assign owners for each meeting. That reduces \u201ctool shelfware.\u201d",
+      "link": "https://www.onyx.app/9646701-25"
+    },
+    {
+      "text": "Ryan Dean: Sneha, I hear you. But I\u2019m also dealing with a re-org. Sales leadership might change in the next month. Marketing is rethinking positioning. Product is in the middle of a roadmap reset. It\u2019s not a stable environment to introduce something new.",
+      "link": "https://www.onyx.app/9646701-26"
+    },
+    {
+      "text": "Sneha Reddy: That\u2019s tough timing. One angle: during a re-org, having a neutral, evidence-based view of \u201cwho we win with\u201d can actually create stability. But I don\u2019t want to force it if you don\u2019t have air cover. What would need to be true for you to feel confident signing?",
+      "link": "https://www.onyx.app/9646701-27"
+    },
+    {
+      "text": "Ryan Dean: I\u2019d need one exec to sponsor it and commit the teams to using it. I don\u2019t have that today. And I don\u2019t think I\u2019ll have it in the next two weeks.",
+      "link": "https://www.onyx.app/9646701-28"
+    },
+    {
+      "text": "Sneha Reddy: Okay. If the timeline is the issue, we can shift from \u201cclose this week\u201d to \u201cdecision after internal alignment.\u201d But I want to be careful: if we leave this vague, it\u2019ll drift. Would it help if I provided a one-page internal brief\u2014what signals we ingest, what outputs you get (fit score, driver breakdown, segment comparisons, recommended ICP), and the product planning use case\u2014so you can circulate it?",
+      "link": "https://www.onyx.app/9646701-29"
+    },
+    {
+      "text": "Ryan Dean: You can send it, yes. But I\u2019m not promising it changes anything. The objections are political, not informational.",
+      "link": "https://www.onyx.app/9646701-30"
+    },
+    {
+      "text": "Sneha Reddy: Understood. Another option: we do a working session just you and me where we map stakeholders and identify the one question they each need answered. For Sales, it might be \u201cwhich segment closes fastest and expands?\u201d For Marketing, \u201cwhich segment responds to which proof points?\u201d For Product, \u201cwhich segment has high fit but unmet needs?\u201d Then your internal conversation becomes structured.",
+      "link": "https://www.onyx.app/9646701-31"
+    },
+    {
+      "text": "Ryan Dean: That might help me prepare, but again, I\u2019m not sure it gets us to a signature.",
+      "link": "https://www.onyx.app/9646701-32"
+    },
+    {
+      "text": "Sneha Reddy: Let\u2019s be explicit then: it sounds like we\u2019re not closing this week because you don\u2019t have sponsorship or stable ownership across Sales/Marketing/Product. Is that accurate?",
+      "link": "https://www.onyx.app/9646701-33"
+    },
+    {
+      "text": "Ryan Dean: Yeah, that\u2019s accurate. I don\u2019t want to drag you along, but I also don\u2019t want to say \u201cno forever.\u201d It\u2019s more like \u201cnot now.\u201d",
+      "link": "https://www.onyx.app/9646701-34"
+    },
+    {
+      "text": "Sneha Reddy: I appreciate the clarity. Here\u2019s what I propose: I\u2019ll send the one-pager plus a simple rollout plan designed to reduce cross-functional friction\u2014three meetings, defined owners, and the initial minimal data set needed for fit estimation. You take it internally. If you can identify an exec sponsor, we reconvene. If not, we pause.",
+      "link": "https://www.onyx.app/9646701-35"
+    },
+    {
+      "text": "Ryan Dean: That works. Send it over. And maybe include pricing again\u2014I need it for the CFO conversation, even if it\u2019s not immediate.",
+      "link": "https://www.onyx.app/9646701-36"
+    },
+    {
+      "text": "Sneha Reddy: Will do. Before we wrap: is there a specific event you expect might create the sponsorship\u2014like after the re-org announcement, or after Q1 planning?",
+      "link": "https://www.onyx.app/9646701-37"
+    },
+    {
+      "text": "Ryan Dean: Probably after Q1 planning. If we can\u2019t agree on ICP in that process, then tools like yours become more attractive. Right now people think they can muscle through it.",
+      "link": "https://www.onyx.app/9646701-38"
+    },
+    {
+      "text": "Sneha Reddy: Got it. I\u2019ll send the materials today. Let\u2019s pencil a check-in for shortly after Q1 planning\u2014say four weeks from now\u2014and if things accelerate sooner, you can pull it forward.",
+      "link": "https://www.onyx.app/9646701-39"
+    },
+    {
+      "text": "Ryan Dean: Sounds good. Thanks, Sneha.",
+      "link": "https://www.onyx.app/9646701-40"
+    },
+    {
+      "text": "Sneha Reddy: Thanks, Ryan. I\u2019ll follow up with the brief, rollout plan, and pricing, and we\u2019ll regroup after Q1 planning.",
+      "link": "https://www.onyx.app/9646701-41"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "sneha_reddy@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "ryan_dean@crimson_meadow_brewing.onyx.app"
+    }
+  ]
+}

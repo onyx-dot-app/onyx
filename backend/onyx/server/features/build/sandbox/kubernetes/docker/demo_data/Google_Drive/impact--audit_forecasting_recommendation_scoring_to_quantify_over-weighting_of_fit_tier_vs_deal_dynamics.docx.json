@@ -1,0 +1,30 @@
+{
+  "id": "dc52b4bd9c41451487dfde0448c117e8",
+  "semantic_identifier": "Impact--Audit forecasting/recommendation scoring to quantify over-weighting of fit tier vs deal dynamics.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-06-02",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Audit forecasting/recommendation scoring to quantify over-weighting of fit tier vs deal dynamics.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds instrumentation to our forecasting and best-next-action scoring so we can quantify how much \u201cfit tier\u201d versus each deal-dynamics signal (procurement stage, competition, internal alignment) contributes to the final recommendation. Today, we suspect fit tier may be overpowering negative deal conditions, resulting in optimistic forecasts and suggested actions that don\u2019t match reality.\n\nBy logging per-signal score contributions and running a lightweight analysis over recent accounts/opportunities, we\u2019ll produce a report that correlates these contributions to actual outcomes. The report will explicitly surface patterns and outliers\u2014especially cases where high-fit opportunities still receive high scores despite clearly adverse deal dynamics\u2014so we can distinguish systematic bias from edge cases.\n\nThe primary impact is improved decision quality and trust: sales and leadership should see forecasts and recommendations that better reflect real deal health, reducing wasted effort on \u201chigh-fit but stalled/blocked\u201d deals and improving prioritization toward winnable opportunities. This also improves model governance by making scoring explainable at a signal level and enabling faster iteration based on evidence rather than intuition.\n\nFinally, the output of this work is a concrete set of target reweighting thresholds and a bundle of regression test cases derived from real opportunities. That creates a safe, measurable path for subsequent tickets to adjust weights without unintended behavior changes, and establishes ongoing monitoring so we can detect future drift or reintroductions of fit-tier over-weighting.",
+      "link": "https://www.onyx.app/41701"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

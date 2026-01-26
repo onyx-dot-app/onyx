@@ -1,0 +1,30 @@
+{
+  "id": "1ffdc48e4f284b9c9d98e5b6958f6856",
+  "semantic_identifier": "Design--Introduce deal-dynamics gating/penalty to forecasting and best-next-action scoring.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-19",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Introduce deal-dynamics gating/penalty to forecasting and best-next-action scoring.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview / Goal  \nWe will update the scoring pipeline to incorporate *deal-dynamics* risk signals as first-class modifiers on both forecasting and best-next-action (BNA) outputs. Today, high-fit accounts can surface with high scores even when clear execution risks exist (e.g., stalled procurement, strong competitor presence, low internal alignment). The goal is to explicitly down-weight (penalize) or gate (cap) scores when one or more negative deal-dynamics signals are present, so recommendations and forecasts better reflect real-world close likelihood and prioritization.\n\n### Proposed Approach  \nIntroduce a configurable \u201cdeal-dynamics modifier\u201d stage applied after base score computation (fit + intent + historical features) but before final normalization/ranking. This stage consumes a set of boolean/graded risk signals (e.g., `procurement_late`, `competition_strong`, `alignment_low`) and applies either: (a) additive/multiplicative penalties to reduce the score, and/or (b) a tier-based cap (e.g., \u201cFit Tier A cannot exceed 0.72 if any high-severity risk signal is active\u201d). Configuration will live in a centrally managed policy object (e.g., JSON in config service) defining per-signal severity, penalty weights, and cap thresholds, plus precedence rules when multiple signals trigger (e.g., max severity wins, or cumulative penalties with a minimum floor).\n\n### Consistency Across Forecasting and BNA  \nBoth the forecasting score generator and BNA ranker will call a shared library/module that computes the deal-dynamics modifier and returns an adjusted score plus metadata (triggered signals, applied penalty, applied cap). This ensures identical business logic, avoids drift, and allows downstream consumers to explain \u201cwhy did this account drop\u201d in UI/logs. We will version the modifier policy to allow controlled rollout and A/B comparison (e.g., `deal_dynamics_policy_v1`) and add unit + integration tests asserting that (1) caps are enforced, (2) multiple signals combine deterministically, and (3) no-risk paths match current scoring behavior.\n\n### Rollout / Observability  \nWe will ship behind a feature flag with shadow-mode logging first: compute both baseline and adjusted scores, emit deltas and triggered signals to analytics, and validate impact on rank shifts, forecast calibration, and recommendation acceptance rates. After validation, we will enable enforcement gradually (by org, segment, or percentage) and monitor key metrics (forecast error, opportunity progression rates, BNA engagement, and distribution of capped scores). The design intentionally keeps policy configurable so Sales Ops/RevOps can tune penalties and caps without code changes while engineering retains guardrails (schema validation, versioning, and safe defaults).",
+      "link": "https://www.onyx.app/24281"
+    }
+  ],
+  "primary_owners": [
+    "brooke_spencer"
+  ],
+  "secondary_owners": []
+}

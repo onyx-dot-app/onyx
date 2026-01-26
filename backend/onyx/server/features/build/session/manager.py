@@ -427,6 +427,9 @@ class SessionManager:
         # Get LLM config (uses user's selection or falls back to default)
         llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
 
+        # Determine if demo data mode is enabled
+        use_demo_data = user_work_area is not None and user_level is not None
+
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
         if PERSISTENT_DOCUMENT_STORAGE_PATH:
@@ -436,7 +439,9 @@ class SessionManager:
             # Ensure the user's document directory exists
             Path(user_file_system_path).mkdir(parents=True, exist_ok=True)
         else:
+            # Fallback for local development without persistent storage
             user_file_system_path = "/tmp/onyx-files"
+            Path(user_file_system_path).mkdir(parents=True, exist_ok=True)
 
         # Allocate port for this session (per-session port allocation)
         # Both LOCAL and KUBERNETES backends use the same port allocation strategy
@@ -509,6 +514,7 @@ class SessionManager:
         user = fetch_user_by_id(self._db_session, user_id)
         user_name = user.personal_name if user else None
         user_role = user.personal_role if user else None
+
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
@@ -520,6 +526,7 @@ class SessionManager:
             user_role=user_role,
             user_work_area=user_work_area,
             user_level=user_level,
+            use_demo_data=use_demo_data,
         )
         sandbox_id = sandbox.id
         logger.info(

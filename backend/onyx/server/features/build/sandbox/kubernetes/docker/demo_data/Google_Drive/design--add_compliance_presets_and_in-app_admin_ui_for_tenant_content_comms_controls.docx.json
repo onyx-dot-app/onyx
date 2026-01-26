@@ -1,0 +1,30 @@
+{
+  "id": "891dec6513fc4b80834345d116f5926c",
+  "semantic_identifier": "Design--Add compliance presets + in-app admin UI for tenant content/comms controls.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-31",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add compliance presets + in-app admin UI for tenant content/comms controls.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will add an in-app \u201cCompliance & Controls\u201d admin page in Sales_Accelerator that allows tenant admins to view and update the tenant-level compliance settings introduced in GOLD-131. The page will present each control as an explicit toggle (grouped by \u201cAI Generation\u201d and \u201cComms/Data Ingestion\u201d), with concise, user-facing descriptions of what is blocked when enabled/disabled (e.g., \u201cDisable AI generation: users can\u2019t generate emails, call summaries, or recommendations\u201d). The UI will show the current effective tenant policy, last updated time/user (if available from the backend), and require appropriate admin permissions; non-admin users will not see the page and will only experience policy enforcement messaging.\n\nWe will introduce \u201cpresets\u201d as one-click configurations for common regulated environments, such as \u201cRegulated / No AI Generation\u201d and \u201cPII-Restricted Comms Ingestion.\u201d Selecting a preset will stage the corresponding toggle values in the UI with a clear diff/confirmation step before saving, and safe defaults will be chosen to bias toward restriction (e.g., disabling generation or ingestion where applicable). Presets are an authoring convenience only: after applying a preset, admins can further customize individual toggles, and the system will persist the resulting explicit settings rather than a \u201cpreset name\u201d unless we decide to store it for audit/display.\n\nSaving settings will be validated both client-side (basic completeness and dependency checks) and server-side (authoritative validation and permission enforcement). The backend will expose read/write endpoints for the tenant compliance configuration (backed by the GOLD-131 schema), returning structured validation errors that the UI can render inline. The UI will use optimistic-but-safe UX: changes are staged locally, \u201cSave\u201d is disabled until the config is valid, and any server rejection will revert to last-known-good while preserving the admin\u2019s staged edits for correction.\n\nFinally, we will ensure product surfaces that perform generation or comms ingestion display an explicit \u201cblocked by policy\u201d message when a capability is disabled. This includes disabling entry points (buttons, menus, background ingestion flows) and providing a consistent rationale string that maps to the specific tenant policy toggle(s) causing the block (e.g., \u201cAI generation is disabled by your organization\u2019s compliance settings. Contact your admin.\u201d). This messaging will be returned from server enforcement where possible (to prevent client spoofing) and mirrored client-side for immediate UX, ensuring users understand \u201cwhat\u201d is blocked and \u201cwhy,\u201d and reducing support burden in regulated deployments.",
+      "link": "https://www.onyx.app/59768"
+    }
+  ],
+  "primary_owners": [
+    "tyler_jenkins"
+  ],
+  "secondary_owners": []
+}

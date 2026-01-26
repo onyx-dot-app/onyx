@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#167",
+  "semantic_identifier": "167: feat: Instrument ingestion pipeline with end-to-end metrics, tracing, structured logs, and dashboard/alerts",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-17",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "167",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "2",
+    "num_files_changed": "52",
+    "labels": [],
+    "created_at": "2025-08-17",
+    "updated_at": "2025-08-17",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n## Overview\nThis PR adds end-to-end observability to the ingestion pipeline (fetch \u2192 parse \u2192 dedupe/cluster \u2192 persist \u2192 downstream sync) to identify scaling bottlenecks and cost drivers as volume grows.\n\n## What\u2019s included\n- **Stage-level metrics**\n  - Latency (p50/p95/p99) per stage and overall ingest.\n  - Throughput counters (items/sec) per stage.\n  - Error counters (by stage + error class/retry vs. terminal).\n  - Queue depth/gauge metrics for the ingest work queue/backlog.\n  - **Cost proxies**: per-stage compute time (CPU time / wall time) and DB cost estimates (query count, total query duration, rows affected where available).\n\n- **Distributed tracing**\n  - A single trace spans the full pipeline for each ingested conversation/ticket.\n  - Child spans per stage, including DB spans for persist/sync operations.\n  - Span attributes include source type, tenant/org id (if applicable), stage name, batch size, and dedupe/cluster outcomes.\n\n- **Structured logs with correlation**\n  - JSON logs emitted at key boundaries (stage start/end, retries, terminal failures).\n  - Correlation IDs added to all logs/events:\n    - `correlation_id` (stable per source conversation/ticket)\n    - `ingestion_run_id` (per job/run)\n    - `trace_id`/`span_id` (to jump from logs \u2194 traces)\n\n- **Dashboard + alerts (basic)**\n  - Dashboard panels for pipeline latency, throughput, error rate, queue depth, and DB time share.\n  - Alert thresholds for:\n    - sustained queue depth growth (backlog)\n    - p95 latency regression per stage\n    - elevated error rate per stage\n\n## Implementation notes (high level)\n- Adds a lightweight instrumentation wrapper around each pipeline stage to record timing, counts, and failures.\n- Propagates correlation IDs and trace context through async boundaries and batch processing.\n- DB instrumentation aggregates query duration/counts within the persist/sync stages to produce stage-local DB cost metrics.\n\n## Operational notes\n- Metrics/tracing/logging are enabled by default but can be tuned via configuration (sampling rate for traces; log verbosity).\n- No functional changes to ingestion behavior are intended; changes are additive and focused on observability.\n\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#167"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

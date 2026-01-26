@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#136",
+  "semantic_identifier": "136: feat: Warning alerts v2: Manager Slack digest generation + formatted summaries (grouped/deduped)",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-08-12",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "136",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "kevin_sullivan",
+        "name": "kevin_sullivan",
+        "email": "kevin_sullivan@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "7",
+    "num_files_changed": "29",
+    "labels": [],
+    "created_at": "2025-08-12",
+    "updated_at": "2025-08-12",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds Slack digest message generation for Warning alerts v2, producing manager-ready summary digests over a configurable digest window.\n\nKey changes:\n- Introduces a digest builder that aggregates Warning alerts v2 events for a routed recipient (routing provided externally by GOLD-92).\n- Groups alerts by entity (Account/Opportunity) and collapses repeated triggers within the digest window using a stable dedupe key (alert type + risk signal + entity id), keeping the most recent `lastUpdated` while tracking the count of occurrences.\n- Generates Slack Block Kit payloads for digests:\n  - Header with digest window and total unique alerts\n  - Per Account/Opportunity section showing: alert type, risk signal, last updated time, and occurrence count when deduped\n  - Deep links back to the relevant Account/Opportunity in Sales_Accelerator/CRM (via existing URL helpers/config)\n- Adds unit tests for grouping/deduping behavior, ordering (most recently updated first within groups), and Slack rendering.\n\nNotes:\n- This PR does not implement recipient selection/routing; it assumes the caller provides the target manager(s) per GOLD-92.\n- No new alert detection logic is added; this only consumes Warning alerts v2 records and formats/aggregates them for Slack.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#136"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

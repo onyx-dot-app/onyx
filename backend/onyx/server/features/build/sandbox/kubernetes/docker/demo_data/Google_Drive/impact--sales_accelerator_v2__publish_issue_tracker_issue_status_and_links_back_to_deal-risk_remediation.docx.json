@@ -1,0 +1,30 @@
+{
+  "id": "8efa29f0afe04fa0b4b821ca8931c6e9",
+  "semantic_identifier": "Impact--Sales_Accelerator v2: Publish Issue_Tracker issue status + links back to deal-risk remediation.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Sales_Accelerator v2: Publish Issue_Tracker issue status + links back to deal-risk remediation.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature enables Sales_Accelerator v2 to stay automatically in sync with Issue_Tracker as remediation work progresses. When an Issue_Tracker issue changes state (e.g., triaged \u2192 in progress \u2192 resolved), Sales_Accelerator will receive an updated signal for any impacted deals, including the issue ID, current status, and last-updated timestamp.\n\nFor sellers and deal teams, this materially improves context and trust in the \u201cdeal risk\u201d view by replacing stale snapshots with live status. Deep links back to the Issue_Tracker issue and any downstream engineering work (Linear/Jira) reduce back-and-forth and make it easier to understand what\u2019s being worked on, by whom, and what the current blockers are\u2014directly from the deal workflow.\n\nFrom an operational standpoint, adding idempotency plus retry/backoff ensures updates are reliable and safe under duplicate events or transient failures, preventing incorrect deal-risk states or alert churn. This reduces manual interventions from Sales Ops/Eng and minimizes cases where sellers act on outdated remediation info.\n\nFinally, logging and metrics for successful vs. failed updates provide the observability needed to run this integration at scale. This allows the team to detect regressions quickly, track data freshness/coverage, and confidently expand the signal\u2019s use in pipeline reviews and forecasting decisions.",
+      "link": "https://www.onyx.app/45246"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

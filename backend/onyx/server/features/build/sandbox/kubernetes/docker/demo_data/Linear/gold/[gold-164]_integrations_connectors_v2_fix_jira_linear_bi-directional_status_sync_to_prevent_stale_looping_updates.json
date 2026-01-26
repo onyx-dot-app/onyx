@@ -1,0 +1,30 @@
+{
+  "id": "8368648",
+  "semantic_identifier": "[GOLD-164]: Integrations_connectors v2: Fix Jira/Linear bi-directional status sync to prevent stale/looping updates",
+  "title": "Integrations_connectors v2: Fix Jira/Linear bi-directional status sync to prevent stale/looping updates",
+  "source": "linear",
+  "doc_updated_at": "2025-06-11",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "tyler_jenkins",
+      "email": "tyler_jenkins@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "medium",
+    "created_at": "2025-06-11"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Resolve an issue where status changes between Jira/Linear and Issue_Tracker don\u2019t reliably propagate or can bounce back due to missing source-of-truth and idempotency handling. Implement per-issue sync metadata (last_synced_state, last_synced_at, and origin) and update logic to ignore self-generated updates while still applying legitimate remote changes. Ensure transitions map correctly across systems and add targeted logs/metrics to surface dropped or conflicting updates.",
+      "link": "https://www.onyx.app/83801"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

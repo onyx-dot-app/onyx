@@ -1,0 +1,30 @@
+{
+  "id": "debcb7a2a4b64637a4880aabdbe2b3b3",
+  "semantic_identifier": "Design--Surface Success Metric context in Fit Score outputs (API, exports, reports).docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-09-23",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Surface Success Metric context in Fit Score outputs (API, exports, reports).docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We\u2019ll update all Fit Score read paths to return \u201cSuccess Metric context\u201d alongside every Fit Score value, so consumers can understand what objective the score is optimized for and avoid comparing scores across different objectives. Concretely, the Fit Score API responses will include the configured Success Metric definition (id/name/description) and, when applicable, the metric weighting configuration used by the model (e.g., per-signal weights or objective weights). The same context will be embedded into any Fit Score CSV/PDF exports and persisted into share-link payloads so that links remain self-describing even when viewed outside the product.\n\nOn the backend, we\u2019ll standardize on a single source of truth for Success Metric configuration per model/version (or per score run, if scores can be computed under multiple configs) and introduce a small \u201ccontext envelope\u201d in the Fit Score domain response object. All read endpoints and export/report generators will call the same helper to hydrate this envelope, ensuring consistent behavior and avoiding drift between API and export implementations. Where weights are not applicable (or not configured), the envelope will omit weights but still include the metric definition so consumers can label the score correctly.\n\nOn the frontend and downstream surfaces, dashboards, reporting views, and integration-facing UI will render the Success Metric label adjacent to the Fit Score (e.g., \u201cFit Score (Success Metric: Pipeline Created)\u201d) with a hover/detail view for full definition and weights when present. CSV/PDF exports will add columns/sections for Success Metric name (and optionally id/version) plus a serialized weights summary, and share links will display the same context near the score. This ensures a user can immediately see \u201cwhat this score means\u201d wherever it appears.\n\nFor legacy model versions that do not have a Success Metric definition stored, we\u2019ll return a clear fallback in the context envelope (e.g., `successMetric: null`, `contextMessage: \"Success Metric not available for this model version\"`), and UIs/exports will display that message instead of a metric label. We\u2019ll add coverage tests to verify every Fit Score read path includes the envelope and that legacy behavior degrades gracefully, and we\u2019ll monitor for any consumer breakage by keeping existing Fit Score fields unchanged while only adding new fields/columns.",
+      "link": "https://www.onyx.app/56188"
+    }
+  ],
+  "primary_owners": [
+    "jiwon_kang"
+  ],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "6310904",
+  "semantic_identifier": "[GOLD-103]: Enforce published-only positioning usage in Sales_Accelerator with clear UX when a version is unavailable",
+  "title": "Enforce published-only positioning usage in Sales_Accelerator with clear UX when a version is unavailable",
+  "source": "linear",
+  "doc_updated_at": "2025-08-14",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "andre_robinson",
+      "email": "andre_robinson@netherite-extraction.onyx.app"
+    },
+    "state": "done",
+    "priority": "high",
+    "created_at": "2025-08-14"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Add server-side validation to ensure Sales_Accelerator can only generate/send messaging from Customer_Analyzer positioning block versions marked as published/approved, never drafts or unversioned payloads. When a pinned version is missing or unpublished, return a structured error that the UI can render as a blocking state with an explicit reason and the last known pinned version as the only fallback. Update the messaging/recommendation UI to display the pinned positioning version and show a clear prompt to request Marketing publish a new variant rather than silently switching content.",
+      "link": "https://www.onyx.app/91024"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "9502606",
+  "semantic_identifier": "[GOLD-119]: Add server-side PII redaction for AI-generated artifacts prior to storage and export",
+  "title": "Add server-side PII redaction for AI-generated artifacts prior to storage and export",
+  "source": "linear",
+  "doc_updated_at": "2025-10-28",
+  "metadata": {
+    "team": "engineering",
+    "creator": {
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignee": {
+      "name": "jiwon_kang",
+      "email": "jiwon_kang@netherite-extraction.onyx.app"
+    },
+    "state": "open",
+    "priority": "low",
+    "created_at": "2025-10-28"
+  },
+  "doc_metadata": null,
+  "sections": [
+    {
+      "text": "Implement a backend PII detection/redaction step for AI-generated emails, call notes, and next-best-action text so sensitive fields (e.g., email, phone, addresses) can be masked before persisting and before any export/share APIs return content. Add a per-tenant configuration flag (default off) and ensure redaction is consistently applied across UI and API entrypoints without duplicating RBAC, audit logging, or retention logic. Record in metadata that redaction was applied (and which policy/version), but never store raw PII in audit/event payloads when redaction is enabled.",
+      "link": "https://www.onyx.app/66481"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

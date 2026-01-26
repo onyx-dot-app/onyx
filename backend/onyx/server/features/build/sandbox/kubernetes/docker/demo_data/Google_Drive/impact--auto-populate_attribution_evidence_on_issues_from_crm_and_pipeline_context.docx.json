@@ -1,0 +1,30 @@
+{
+  "id": "d006d63ea0364c6eab208324688f88ea",
+  "semantic_identifier": "Impact--Auto-populate Attribution Evidence on Issues from CRM + pipeline context.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-12-10",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Auto-populate Attribution Evidence on Issues from CRM + pipeline context.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature will automatically enrich Issue records with Attribution Evidence pulled from CRM and pipeline context\u2014using linked accounts, open opportunities, and support conversation metadata\u2014so that attribution decisions are based on consistent, verifiable inputs rather than manual interpretation. By auto-populating these new fields, we reduce time spent hunting for context across tools and make Issue-level attribution more reliable and repeatable.\n\nThe enrichment job will run incrementally, updating only when upstream source data changes. This minimizes unnecessary churn on Issue records, avoids noisy field edits, and keeps the system performant as data volume grows. A one-time backfill will ensure existing Issues with known account/opportunity links benefit immediately, improving historical reporting quality without waiting for new Issues to be created.\n\nEach populated Attribution Evidence value will retain a source reference (e.g., account/opportunity IDs and timestamps), making the provenance of the data explicit. This directly reduces internal disputes by allowing stakeholders to trace \u201cwhy\u201d an attribution field was set and to validate it against the originating system, improving trust in downstream reporting and decision-making.\n\nOverall impact: faster, lower-effort attribution workflows; fewer cross-functional disagreements; and higher-confidence analytics tying product issues to revenue and customer context. This enables more accurate prioritization (e.g., revenue-risk issues, active deal blockers) and supports clearer executive reporting on how Issues connect to pipeline and customer impact.",
+      "link": "https://www.onyx.app/81683"
+    }
+  ],
+  "primary_owners": [
+    "michael_anderson@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

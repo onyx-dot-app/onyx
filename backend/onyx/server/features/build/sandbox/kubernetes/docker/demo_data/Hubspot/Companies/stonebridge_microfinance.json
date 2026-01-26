@@ -1,0 +1,32 @@
+{
+  "id": "hubspot_company_8835995",
+  "semantic_identifier": "Stonebridge Microfinance",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-10-16 00:00:00",
+  "metadata": {
+    "object_type": "company",
+    "company_id": "8835995",
+    "domain": "stonebridge_microfinance.onyx.app",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Companies"
+      ]
+    }
+  },
+  "sections": [
+    {
+      "text": "Company: Stonebridge Microfinance\nDomain: stonebridge_microfinance.onyx.app",
+      "link": "https://www.onyx.app/42642"
+    },
+    {
+      "text": "Contact: Beau Medina\nEmail: beau_medina@stonebridge_microfinance.onyx.app",
+      "link": "https://www.onyx.app/90851"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

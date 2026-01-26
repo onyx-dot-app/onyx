@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#109",
+  "semantic_identifier": "109: feat: Add telemetry for Customer_Analyzer stale positioning block detection and replace/keep actions",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-06-13",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "109",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "michael_anderson",
+      "name": "michael_anderson",
+      "email": "michael_anderson@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "tyler_jenkins",
+        "name": "tyler_jenkins",
+        "email": "tyler_jenkins@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "5",
+    "num_files_changed": "4",
+    "labels": [],
+    "created_at": "2025-06-13",
+    "updated_at": "2025-06-13",
+    "closed_at": "2025-06-23"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR instruments end-to-end product analytics for the Customer_Analyzer (CA) positioning block staleness flow to measure how often users paste/edit outdated blocks, when warnings are shown, and whether users keep or replace the block.\n\nImplementation:\n- Introduces new analytics events emitted from the CA block editor and staleness-check flow:\n  - `ca_positioning_block_pasted_or_edited`: fired when the positioning block content is inserted or edited.\n  - `ca_positioning_block_staleness_checked`: fired after staleness evaluation completes with the result.\n  - `ca_positioning_block_staleness_warning_shown`: fired when the UI warning/toast/modal is rendered.\n  - `ca_positioning_block_staleness_action_taken`: fired when the user chooses to keep the existing block or replace with the canonical version.\n- Ensures each event includes consistent identifiers and version metadata:\n  - `account_id`, `opportunity_id`\n  - `canonical_ca_version` and `canonical_ca_timestamp`\n  - `block_version_detected`/`block_timestamp_detected` (when available) and staleness result fields\n  - `action` for user choice (`kept` | `replaced`) and `surface` for where the warning was presented\n- Adds a shared helper to build the payload and enforce schema consistency across emit points.\n- Wires instrumentation through the existing analytics client, gating emissions behind existing analytics enablement/environment checks.\n\nValidation:\n- Verified in staging that events fire in the expected order and contain the required fields for both stale and non-stale paths (paste/edit, staleness check, warning shown, keep/replace action).\n\nDocumentation:\n- Adds/updates analytics schema documentation for the four events (event names, required/optional properties, and example payloads) for downstream reporting.\r\n\r\n## How Has This Been Tested?\r\n\r\nstaging\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#109"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

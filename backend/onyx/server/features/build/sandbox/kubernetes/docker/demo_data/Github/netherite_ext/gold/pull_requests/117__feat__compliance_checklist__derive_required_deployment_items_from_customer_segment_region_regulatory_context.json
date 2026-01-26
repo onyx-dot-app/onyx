@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#117",
+  "semantic_identifier": "117: feat: Compliance checklist: derive required deployment items from customer segment/region/regulatory context",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-10",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "117",
+    "merged": "False",
+    "state": "open",
+    "user": {
+      "login": "sofia_ramirez",
+      "name": "sofia_ramirez",
+      "email": "sofia_ramirez@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "jason_morris",
+        "name": "jason_morris",
+        "email": "jason_morris@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "8",
+    "num_files_changed": "61",
+    "labels": [],
+    "created_at": "2025-11-10",
+    "updated_at": "2025-11-10",
+    "closed_at": ""
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\n### What\n- Auto-computes a \u201cRequired for deployment\u201d subset of the existing Deployment Readiness compliance checklist based on impacted customer/account context (CRM attributes + Customer_Analyzer outputs).\n- Highlights missing/unchecked required items to surface compliance blockers earlier, without changing the current checklist interaction model.\n\n### How\n- Adds a lightweight rules engine (`ComplianceRequirementDeriver`) that maps normalized customer context to required checklist items (e.g., regulated => Security Review, EU region => DPA, specific segments => retention constraints).\n- Introduces a context aggregation layer (`ImpactedCustomerContextResolver`) that:\n  - collects linked impacted customers from the issue/theme,\n  - fetches CRM account fields (region, regulated flags, etc.),\n  - fetches Customer_Analyzer fields (segment/ICP),\n  - normalizes/merges into a single derived context with deterministic precedence.\n- Computes the union of required items across all impacted customers and attaches it to the checklist payload as `derivedRequiredItemIds` + `missingRequiredItemIds`.\n- UI updates are additive only: the checklist renders required badges and gap highlighting using the new fields; existing item selection/checkbox workflow remains unchanged.\n\n### Notes\n- Safe-by-default behavior: if customer context is unavailable, no additional requirements are inferred.\n- Includes unit tests for rule evaluation and multi-customer union behavior; adds a small integration test covering the end-to-end derivation payload.\n\n### User impact\n- When an issue/theme has impacted customers linked, the checklist will show which items are required for deployment and which required items are still incomplete.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#117"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

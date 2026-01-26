@@ -1,0 +1,30 @@
+{
+  "id": "9874fdaf4d084c62ba682b5711b2c22c",
+  "semantic_identifier": "Design--Add representative example accounts to Fit Score explainability payload.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-11-30",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Add representative example accounts to Fit Score explainability payload.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "We will extend the Fit Score explainability service payload to include a small set of representative \u201cexample accounts\u201d for the evaluated segment, grouped by score bucket (e.g., high-fit, medium-fit, low-fit). Each example will include `account_id`, `account_name`, and `fit_score`, and will be returned alongside existing explainability fields so consumers can show concrete references (e.g., \u201caccounts like these scored high/medium/low\u201d) without additional round-trips.\n\nSelection will be deterministic to prevent noisy diffs between runs. For a given segment evaluation, we will compute each account\u2019s score bucket using the same bucket boundaries used elsewhere in Fit Score, then filter candidates by minimum data completeness (e.g., required fields present / non-null signals used in scoring). Within each bucket we will rank accounts by: (1) most recent activity/updated timestamp (recency), (2) highest completeness score, and (3) a stable tie-breaker (account_id ascending) and pick the top N (configurable, default 3). This ensures repeatability while still surfacing timely and well-supported examples.\n\nAPI/SDK changes will be strictly backward-compatible by adding an optional field such as `example_accounts: { high_fit: [], medium_fit: [], low_fit: [] }` (or an array with a `bucket` attribute) to the existing response schema; existing fields and semantics remain unchanged. If a segment has insufficient candidates (empty bucket, low-signal data, or no accounts meeting completeness threshold), we will return an empty list for that bucket rather than omitting the field, enabling consistent client rendering without breaking older clients.\n\nWe will add unit tests covering: bucket assignment correctness at boundary values, deterministic ordering/tie-breaking, handling of empty segments and low-signal buckets (returns empty arrays), and ensuring the response remains compatible when the new field is absent/ignored by older SDK versions. We will also add a regression test asserting stable outputs given a fixed input set and timestamps, to prevent future changes from reintroducing nondeterminism.",
+      "link": "https://www.onyx.app/15565"
+    }
+  ],
+  "primary_owners": [
+    "jason_morris"
+  ],
+  "secondary_owners": []
+}

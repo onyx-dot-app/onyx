@@ -737,15 +737,18 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
+        use_demo_data: bool = False,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
         Executes kubectl exec to:
         1. Create sessions/$session_id/ directory
-        2. Copy outputs template from local templates (downloaded during init)
-        3. Write AGENTS.md
-        4. Write opencode.json with LLM config
-        5. Create org_info/ directory with user identity file
+        2. Create files/ symlink (to demo data or S3-synced user files)
+        3. Copy outputs template from local templates (downloaded during init)
+        4. Write AGENTS.md
+        5. Write opencode.json with LLM config
+        6. Create org_info/ directory with user identity file (if demo data enabled)
+        7. Start Next.js dev server
 
         Note: Snapshot restoration is not supported in Kubernetes mode since the
         main container doesn't have S3 access. Snapshots would need to be
@@ -755,10 +758,14 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            file_system_path: Not used in k8s (files synced from S3 during init)
+            file_system_path: Path to user's S3-synced knowledge files (/workspace/files)
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
+            user_name: User's name for personalization in AGENTS.md
+            user_role: User's role/title for personalization in AGENTS.md
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
+            use_demo_data: If True, symlink files/ to /workspace/demo-data;
+                          else to /workspace/files (S3-synced user files)
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -819,6 +826,25 @@ printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile
 printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
 """
 
+        # Build files symlink setup
+        # Choose between demo data (baked in image) or user's S3-synced files
+        if use_demo_data:
+            # Demo mode: symlink to demo data baked into the container image
+            symlink_target = "/workspace/demo-data"
+            files_symlink_setup = f"""
+# Create files symlink to demo data (baked into image)
+echo "Creating files symlink to demo data: {symlink_target}"
+ln -sf {symlink_target} {session_path}/files
+"""
+        else:
+            # Normal mode: symlink to user's S3-synced knowledge files
+            symlink_target = "/workspace/files"
+            files_symlink_setup = f"""
+# Create files symlink to user's knowledge files (synced from S3)
+echo "Creating files symlink to user files: {symlink_target}"
+ln -sf {symlink_target} {session_path}/files
+"""
+
         # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
 # Copy outputs template (baked into image at build time)
@@ -841,7 +867,7 @@ set -e
 echo "Creating session directory: {session_path}"
 mkdir -p {session_path}/outputs
 mkdir -p {session_path}/attachments
-
+{files_symlink_setup}
 # Setup outputs
 {outputs_setup}
 

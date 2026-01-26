@@ -1,0 +1,209 @@
+{
+  "id": "FIREFLIES_6953808",
+  "semantic_identifier": "6953808 - Vividcedar Marketing - buy - Discussion with Ricardo Alvarez",
+  "title": null,
+  "source": "fireflies",
+  "doc_updated_at": "2025-08-12 00:00:00",
+  "metadata": {
+    "meeting_date": "2025-08-12 00:00:00",
+    "duration_min": "35"
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "2025-08"
+      ],
+      "year_month": "2025-08",
+      "meeting_title": "6953808 - Vividcedar Marketing - buy - Discussion with Ricardo Alvarez",
+      "organizer_email": "mina_park@netherite-extraction.onyx.app"
+    }
+  },
+  "sections": [
+    {
+      "text": "Mina Park: Hi Ricardo\u2014good to see you again. Since this is our third call, I\u2019d love to use today to confirm the exact rollout plan and, if everything looks right, get you comfortable moving forward with Customer_Analyzer.",
+      "link": "https://www.onyx.app/3143113-1"
+    },
+    {
+      "text": "Ricardo Alvarez: Hey Mina. Yes, that\u2019s the goal on my side too. We\u2019ve had good internal traction, I just want to make sure it\u2019ll work with our data reality and that we\u2019re buying the right scope.",
+      "link": "https://www.onyx.app/3143113-2"
+    },
+    {
+      "text": "Mina Park: Perfect. Let me anchor on what you told me last time: Vividcedar wants to prioritize which industries to target next quarter, and you want that decision grounded in retention and support burden\u2014not just top-of-funnel volume. Still accurate?",
+      "link": "https://www.onyx.app/3143113-3"
+    },
+    {
+      "text": "Ricardo Alvarez: Exactly. We\u2019ve been chasing a couple verticals because they \u201clook\u201d promising, but our CS team says they\u2019re a drain. We need something more objective than opinions.",
+      "link": "https://www.onyx.app/3143113-4"
+    },
+    {
+      "text": "Mina Park: That\u2019s exactly where Customer_Analyzer is strongest. I\u2019ll focus on two things today: the Fit Estimation feature\u2014how we compute and explain a fit score\u2014and the segment comparisons that let you stack industries against each other using retention and support signals. Then we\u2019ll talk about data quality and what \u201cgood enough\u201d looks like to start.",
+      "link": "https://www.onyx.app/3143113-5"
+    },
+    {
+      "text": "Ricardo Alvarez: Sounds good. Fit score is the headline for us, but I don\u2019t want a black box number.",
+      "link": "https://www.onyx.app/3143113-6"
+    },
+    {
+      "text": "Mina Park: Totally. The fit score is 0\u2013100, but the real value is the driver breakdown. You can define fit drivers you care about\u2014like industry, company size, problem severity, time-to-value, adoption patterns, support burden, churn risk signals\u2014and we\u2019ll show exactly which drivers pushed a segment up or down.",
+      "link": "https://www.onyx.app/3143113-7"
+    },
+    {
+      "text": "Ricardo Alvarez: So if we say \u201csupport burden\u201d matters a lot, it\u2019ll weight that?",
+      "link": "https://www.onyx.app/3143113-8"
+    },
+    {
+      "text": "Mina Park: Yes. You can set weights, or start from our recommended defaults and tune. For your use case\u2014prioritizing industries next quarter\u2014we typically set a heavier weight on retention and support burden, with a secondary weight on time-to-value and expansion. That way you\u2019re not just picking \u201cwho converts,\u201d you\u2019re picking \u201cwho sticks and grows without crushing your team.\u201d",
+      "link": "https://www.onyx.app/3143113-9"
+    },
+    {
+      "text": "Ricardo Alvarez: That\u2019s the dream. Right now we\u2019re getting a mismatch between sales and CS incentives.",
+      "link": "https://www.onyx.app/3143113-10"
+    },
+    {
+      "text": "Mina Park: Exactly\u2014and the segment comparisons help align that conversation. You can compare, say, \u201cAgency Marketing\u201d vs \u201cSaaS Marketing\u201d vs \u201cE-commerce\u201d and see: average fit score, retention outcomes, support tickets per account, and the main drivers. Then the system recommends an ICP profile based on observed outcomes\u2014like the attributes of accounts that convert and renew.",
+      "link": "https://www.onyx.app/3143113-11"
+    },
+    {
+      "text": "Ricardo Alvarez: Okay, but here\u2019s my concern: our CRM isn\u2019t pristine. We\u2019ve got incomplete fields, inconsistent tagging, and product usage data is decent but not perfect. How sensitive is your scoring to missing data?",
+      "link": "https://www.onyx.app/3143113-12"
+    },
+    {
+      "text": "Mina Park: Good question\u2014and I want to be direct: data quality does affect scoring accuracy. But you don\u2019t need perfect data to get value. We handle this in three ways. First, we ingest multiple signal sources so you\u2019re not relying on one messy system\u2014CRM plus support tickets plus product usage events, for example. Second, we show data coverage per driver so you can see where you\u2019re making decisions with high confidence versus \u201cneeds cleanup.\u201d Third, we can start with a minimal driver set that you have reliably today, and expand over time.",
+      "link": "https://www.onyx.app/3143113-13"
+    },
+    {
+      "text": "Ricardo Alvarez: What\u2019s \u201cminimal\u201d in your mind for us?",
+      "link": "https://www.onyx.app/3143113-14"
+    },
+    {
+      "text": "Mina Park: For Vividcedar, based on what you shared: (1) industry and size from CRM\u2014even if imperfect, we can normalize and map common variants; (2) retention outcome\u2014renewed, churned, expanded\u2014however you track it; and (3) support burden from your ticketing system\u2014ticket volume and tags. If we have those three, you can already rank industries for next quarter with more rigor than you have today.",
+      "link": "https://www.onyx.app/3143113-15"
+    },
+    {
+      "text": "Ricardo Alvarez: We can do that. Our retention outcome is reliable, support tickets are solid, industry is messy but workable.",
+      "link": "https://www.onyx.app/3143113-16"
+    },
+    {
+      "text": "Mina Park: Great\u2014that\u2019s a very normal starting point. And to avoid the \u201cgarbage in, garbage out\u201d worry, we\u2019ll set up the initial model with conservative assumptions. If a segment has low data coverage, the system flags it, and the score reflects uncertainty rather than pretending it\u2019s precise.",
+      "link": "https://www.onyx.app/3143113-17"
+    },
+    {
+      "text": "Ricardo Alvarez: That\u2019s important. My leadership team will ask, \u201cHow do we trust this?\u201d",
+      "link": "https://www.onyx.app/3143113-18"
+    },
+    {
+      "text": "Mina Park: And the answer is: you trust it because it\u2019s explainable. When your VP asks \u201cWhy is e-commerce lower fit than SaaS?\u201d, you can point to the driver breakdown: maybe higher support burden and lower retention outweigh slightly better conversion. It becomes a business discussion, not a debate about anecdotes.",
+      "link": "https://www.onyx.app/3143113-19"
+    },
+    {
+      "text": "Ricardo Alvarez: Makes sense. Now, in terms of actually using it\u2014how does the output show up for my team?",
+      "link": "https://www.onyx.app/3143113-20"
+    },
+    {
+      "text": "Mina Park: Two core outputs. First, the fit score at the account and segment level\u2014so your team can look at industries, sizes, even subsegments if you want. Second, positioning recommendations that translate the insights into messaging: value propositions, differentiators, proof points, and objection handling. For today, since we\u2019re trying to get your Q2 industry priority locked, the fit estimation and segment comparisons are the main drivers. Then we can use the positioning piece to arm sales and marketing with a narrative for the chosen industries.",
+      "link": "https://www.onyx.app/3143113-21"
+    },
+    {
+      "text": "Ricardo Alvarez: I like that you\u2019re not trying to boil the ocean. We want to pick two industries and go all in.",
+      "link": "https://www.onyx.app/3143113-22"
+    },
+    {
+      "text": "Mina Park: Exactly. That\u2019s the \u201cclose the loop\u201d motion: prioritize, then message. One practical example: if a segment scores high because time-to-value is short and support burden is low, we\u2019ll recommend messaging that leans into fast onboarding and low operational overhead\u2014with proof points pulled from your best-fit customers.",
+      "link": "https://www.onyx.app/3143113-23"
+    },
+    {
+      "text": "Ricardo Alvarez: Okay. Let\u2019s talk implementation. What would the first 30 days look like?",
+      "link": "https://www.onyx.app/3143113-24"
+    },
+    {
+      "text": "Mina Park: Week 1: connect data sources\u2014CRM, support ticketing, and product usage if you want it now or later. Week 2: define your initial fit drivers and weights\u2014especially retention and support burden for your use case\u2014and run a first scoring pass. Week 3: review segment comparison results with you and one stakeholder from sales/CS to sanity check. Week 4: lock the \u201crecommended ICP profile\u201d and export it into your planning docs, plus the initial positioning recommendations for the top two industries.",
+      "link": "https://www.onyx.app/3143113-25"
+    },
+    {
+      "text": "Ricardo Alvarez: And what\u2019s the lift on our side?",
+      "link": "https://www.onyx.app/3143113-26"
+    },
+    {
+      "text": "Mina Park: One ops person for the integrations and field mapping\u2014usually a few hours spread over a week\u2014and then you plus maybe one CS lead for the review session. Most customers like you don\u2019t do a big data cleanup upfront; they start, see gaps highlighted, and then fix the top 3\u20135 fields that make the biggest difference.",
+      "link": "https://www.onyx.app/3143113-27"
+    },
+    {
+      "text": "Ricardo Alvarez: That\u2019s realistic. Pricing-wise, we\u2019re aligned with what you sent, but my CFO will ask if we can start smaller.",
+      "link": "https://www.onyx.app/3143113-28"
+    },
+    {
+      "text": "Mina Park: We can. Given your stated goal\u2014industry prioritization next quarter\u2014the essential scope is Fit Estimation plus segment comparisons, connected to CRM and support tickets. We can start there, and add more data sources or deeper positioning workflows after you\u2019ve proven impact. If you\u2019re ready to move forward today, I can send an order form with that scope and a 12-month term, and we can aim to kick off next Tuesday.",
+      "link": "https://www.onyx.app/3143113-29"
+    },
+    {
+      "text": "Ricardo Alvarez: Before I say yes, I want to confirm: we can still add product usage later without redoing everything?",
+      "link": "https://www.onyx.app/3143113-30"
+    },
+    {
+      "text": "Mina Park: Yes. The scoring framework is modular. Adding usage events later just gives you richer drivers\u2014like adoption patterns and time-to-value with more precision. It won\u2019t invalidate what you\u2019ve already learned from retention and support burden; it typically strengthens it.",
+      "link": "https://www.onyx.app/3143113-31"
+    },
+    {
+      "text": "Ricardo Alvarez: Good. And the messy industry tagging\u2014do you help normalize that, or is that on us?",
+      "link": "https://www.onyx.app/3143113-32"
+    },
+    {
+      "text": "Mina Park: We help. We\u2019ll provide a mapping layer where \u201cEcomm,\u201d \u201cE-commerce,\u201d \u201cOnline Retail,\u201d etc. can be rolled up consistently. If you want to clean your CRM long term, great, but you don\u2019t need to do that before you get value.",
+      "link": "https://www.onyx.app/3143113-33"
+    },
+    {
+      "text": "Ricardo Alvarez: Alright. I think we\u2019re there. I can get approval if the contract reflects the lean scope you described and we have a clear success plan.",
+      "link": "https://www.onyx.app/3143113-34"
+    },
+    {
+      "text": "Mina Park: Great. Let\u2019s define success in plain terms: by end of month one, you have ranked industries using retention plus support burden, you\u2019ve selected your top two target industries for next quarter, and you have an ICP profile you can share with sales and marketing. If we hit that, you\u2019ll have justified the investment quickly.",
+      "link": "https://www.onyx.app/3143113-35"
+    },
+    {
+      "text": "Ricardo Alvarez: Yes\u2014those are the exact deliverables I want.",
+      "link": "https://www.onyx.app/3143113-36"
+    },
+    {
+      "text": "Mina Park: Perfect. Next step: I\u2019ll send the order form today with the scope\u2014Fit Estimation, segment comparisons, CRM + support integration\u2014plus an implementation plan and the success criteria we just stated. If you can countersign by Friday, we\u2019ll schedule kickoff for Tuesday.",
+      "link": "https://www.onyx.app/3143113-37"
+    },
+    {
+      "text": "Ricardo Alvarez: Send it over. I\u2019ll route it to finance this afternoon. Assuming no surprises, we\u2019ll sign by Friday.",
+      "link": "https://www.onyx.app/3143113-38"
+    },
+    {
+      "text": "Mina Park: Awesome. I\u2019ll get it in your inbox within the hour. Anything else you want to see in the paperwork\u2014security, data retention, or an SLA note?",
+      "link": "https://www.onyx.app/3143113-39"
+    },
+    {
+      "text": "Ricardo Alvarez: Add the standard security doc and data retention language. That\u2019s usually the last hurdle.",
+      "link": "https://www.onyx.app/3143113-40"
+    },
+    {
+      "text": "Mina Park: Will do. Thanks, Ricardo\u2014excited to get Vividcedar to a more confident ICP decision for next quarter.",
+      "link": "https://www.onyx.app/3143113-41"
+    },
+    {
+      "text": "Ricardo Alvarez: Same here. Talk soon once I\u2019ve reviewed the order form.",
+      "link": "https://www.onyx.app/3143113-42"
+    }
+  ],
+  "primary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "mina_park@netherite-extraction.onyx.app"
+    }
+  ],
+  "secondary_owners": [
+    {
+      "display_name": null,
+      "first_name": null,
+      "middle_initial": null,
+      "last_name": null,
+      "email": "ricardo_alvarez@vividcedar_marketing.onyx.app"
+    }
+  ]
+}

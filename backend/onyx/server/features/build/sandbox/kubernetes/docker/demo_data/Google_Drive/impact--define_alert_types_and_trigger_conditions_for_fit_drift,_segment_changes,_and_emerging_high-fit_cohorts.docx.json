@@ -1,0 +1,30 @@
+{
+  "id": "10ddddb93d454b70a77652c1462de614",
+  "semantic_identifier": "Impact--Define alert types and trigger conditions for fit drift, segment changes, and emerging high-fit cohorts.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-10-30",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Define alert types and trigger conditions for fit drift, segment changes, and emerging high-fit cohorts.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature establishes the \u201calert contract\u201d for three high-value alert categories: fit drift detection, segment membership changes, and newly emerging high-fit cohorts. By defining alert types up front, we create a shared language and consistent behavior across data, backend, and UI, so downstream implementation isn\u2019t blocked by ambiguity or repeated rework.\n\nThe primary impact is reliability and actionability: each alert will have explicit trigger logic (thresholds, required signals, evaluation cadence, and minimum data requirements) that reduces false positives/negatives and ensures alerts fire when users would expect. This also improves user trust\u2014alerts become predictable, explainable, and comparable over time, rather than \u201cblack box\u201d notifications.\n\nOperationally, documenting edge cases (missing or delayed inputs, low-volume segments, backfills, and reprocessing) prevents noisy alert storms and gaps in coverage. Clear rules for suppression, cooldowns, and how historical backfills should or should not generate alerts will protect both customer experience and system stability as data pipelines evolve.\n\nFinally, specifying the alert payload schema (fields required for delivery, UI rendering, and audit/debugging) unblocks engineering and QA: the team can implement to a single contract and validate behavior with deterministic test cases. This contract also future-proofs the platform by making it easy to add new alert types or delivery channels without redefining fundamentals each time.",
+      "link": "https://www.onyx.app/27591"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

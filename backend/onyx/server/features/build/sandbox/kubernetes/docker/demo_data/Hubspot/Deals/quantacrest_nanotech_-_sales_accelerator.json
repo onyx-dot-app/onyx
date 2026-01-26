@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_3585628",
+  "semantic_identifier": "Quantacrest Nanotech - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-09-04 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "105638",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "3585628"
+  },
+  "sections": [
+    {
+      "text": "Deal: Quantacrest Nanotech\nAmount: $105638\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_forecast\nClose Date: 2025-10-14 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/25892"
+    },
+    {
+      "text": "Contact: Wendy Warren\nEmail: wendy_warren@quantacrest_nanotech.onyx.app",
+      "link": "https://www.onyx.app/77076"
+    },
+    {
+      "text": "Company: Quantacrest Nanotech\nDomain: quantacrest_nanotech.onyx.app",
+      "link": "https://www.onyx.app/90299"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/58622"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

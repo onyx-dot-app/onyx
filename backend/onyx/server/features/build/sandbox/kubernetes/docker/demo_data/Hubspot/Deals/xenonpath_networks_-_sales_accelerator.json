@@ -1,0 +1,43 @@
+{
+  "id": "hubspot_deal_9424763",
+  "semantic_identifier": "Xenonpath Networks - Sales Accelerator",
+  "title": null,
+  "source": "hubspot",
+  "doc_updated_at": "2025-10-13 00:00:00",
+  "metadata": {
+    "object_type": "deal",
+    "deal_stage": "closed-lost",
+    "pipeline": "default",
+    "amount": "102304",
+    "associated_contact_ids": []
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "Deals"
+      ]
+    },
+    "object_type": "deal",
+    "object_id": "9424763"
+  },
+  "sections": [
+    {
+      "text": "Deal: Xenonpath Networks\nAmount: $102304\nProduct of Interest: Sales_Accelerator\nFeatures of Interest: sales_initiation_recommendations\nClose Date: 2026-01-31 00:00:00\nPipeline: default",
+      "link": "https://www.onyx.app/80301"
+    },
+    {
+      "text": "Contact: Eva Daniels\nEmail: eva_daniels@xenonpath_networks.onyx.app",
+      "link": "https://www.onyx.app/41816"
+    },
+    {
+      "text": "Company: Xenonpath Networks\nDomain: xenonpath_networks.onyx.app",
+      "link": "https://www.onyx.app/44503"
+    },
+    {
+      "text": "In the works",
+      "link": "https://www.onyx.app/83400"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}

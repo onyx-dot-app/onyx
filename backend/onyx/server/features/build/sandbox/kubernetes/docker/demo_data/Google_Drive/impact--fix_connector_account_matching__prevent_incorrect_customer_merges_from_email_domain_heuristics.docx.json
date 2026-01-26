@@ -1,0 +1,30 @@
+{
+  "id": "2d8db0c5197a4f86aca8dc2980060bd1",
+  "semantic_identifier": "Impact--Fix connector account matching: prevent incorrect customer merges from email/domain heuristics.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-05-07",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Fix connector account matching: prevent incorrect customer merges from email/domain heuristics.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This change reduces the risk of incorrectly merging or linking customer records during CSV, Zendesk, and Intercom ingestion. Today, our email/domain heuristics can associate conversations with the wrong account when domains are shared across subsidiaries/resellers, when customers use freemail domains, or when multiple companies share a support inbox\u2014creating silent data corruption that is hard to detect and unwind.\n\nWe will tighten connector account matching to require higher-confidence signals (e.g., a verified domain plus a known CRM account mapping) before automatically linking activity to an existing customer. When signals are ambiguous, the system will intentionally fall back to an \u201cunmatched\u201d state instead of forcing a best-guess association, preventing incorrect merges and reducing downstream cleanup work for CS/RevOps.\n\nThe primary product impact is improved accuracy of customer history, impacted-customer counts, and revenue exposure attribution. This ensures that dashboards, alerts, and account insights reflect the correct customer, and prevents misrouted internal workflows (e.g., escalations, renewals outreach) driven by incorrectly attributed conversations or sentiment.\n\nTo preserve operational visibility, we will add logging and metrics for match decisions and introduce a review queue entry for ambiguous cases. This provides traceability for why a record was (or wasn\u2019t) linked, allows teams to resolve edge cases intentionally, and gives us measurable insight into how often ambiguity occurs and where connector rules should be improved over time.",
+      "link": "https://www.onyx.app/60841"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

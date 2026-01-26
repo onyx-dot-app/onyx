@@ -1,0 +1,30 @@
+{
+  "id": "8efa29f0afe04fa0b4b821ca8931c6e9",
+  "semantic_identifier": "Design--Sales_Accelerator v2: Publish Issue_Tracker issue status + links back to deal-risk remediation.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2026-01-22",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Design--Sales_Accelerator v2: Publish Issue_Tracker issue status + links back to deal-risk remediation.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "### Overview  \nWe will implement an outbound synchronization from Issue_Tracker to Sales_Accelerator v2 that publishes remediation signals to impacted deals whenever an Issue_Tracker issue changes status (e.g., triaged \u2192 in progress \u2192 resolved). The goal is to keep seller-facing deal risk state accurate and actionable, and to provide immediate context via deep links to the underlying issue and any downstream engineering work items.\n\n### Data + API contract  \nIssue_Tracker will emit (or Sales_Accelerator will consume) an \u201cIssueStatusUpdated\u201d event containing: `issue_id` (stable identifier), `status` (canonical enum), `last_updated_at` (source-of-truth timestamp), `impacted_deal_ids` (or a resolvable key used to map issues \u2192 deals), and `links` (`issue_tracker_url`, plus optional `work_item_urls` for Linear/Jira). Sales_Accelerator will upsert a remediation record keyed by `(issue_id, deal_id)` and display status + links in the deal-risk remediation UI; `last_updated_at` will be used to ignore out-of-order updates.\n\n### Delivery, idempotency, retries  \nOutbound delivery will be at-least-once. To ensure idempotency, each update will include an idempotency key (e.g., `issue_id + last_updated_at` or an event UUID) and Sales_Accelerator will store the latest processed key per `(issue_id, deal_id)` to dedupe replays. Issue_Tracker will implement retry with exponential backoff and jitter for non-2xx responses and transient network failures; hard failures (4xx validation/auth) will not be retried and will be routed to alerting. Both sides must tolerate duplicate deliveries and partial deal lists (e.g., impacted deals changing over time).\n\n### Observability + failure handling  \nWe will add structured logs with correlation identifiers (`issue_id`, delivery attempt, response code) and metrics for: successful deliveries, failed deliveries by class (4xx/5xx/timeout), retry counts, end-to-end latency (Issue_Tracker update \u2192 Sales_Accelerator applied), and dedupe rate. A lightweight dead-letter mechanism (or persistent retry queue) will capture events that exceed retry limits for manual replay. Dashboards and alerts will be created for sustained failure rate, backlog growth, and elevated latency to ensure sellers consistently receive timely remediation status updates.",
+      "link": "https://www.onyx.app/51774"
+    }
+  ],
+  "primary_owners": [
+    "ryan_murphy"
+  ],
+  "secondary_owners": []
+}

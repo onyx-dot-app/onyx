@@ -1,0 +1,30 @@
+{
+  "id": "e60888243fcb4a28bee6b5e456233375",
+  "semantic_identifier": "Impact--Add segment-based impact slicing on issues/themes using Customer_Analyzer segment IDs.docx",
+  "title": null,
+  "source": "google_doc",
+  "doc_updated_at": "2025-07-03",
+  "metadata": {
+    "owner_names": ""
+  },
+  "doc_metadata": {
+    "hierarchy": {
+      "source_path": [
+        "My Drive"
+      ],
+      "drive_id": null,
+      "file_name": "Impact--Add segment-based impact slicing on issues/themes using Customer_Analyzer segment IDs.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  },
+  "sections": [
+    {
+      "text": "This feature adds segment-based \u201cimpact slicing\u201d to every issue/theme by aggregating impacted customers using existing Customer_Analyzer `segment_id` values, and attaching `fit_tier` where available. Instead of only knowing total impacted customers/accounts, we will be able to see a consistent breakdown of impact by segment (and tier), enabling faster prioritization and clearer narratives about \u201cwho is affected\u201d for any given problem.\n\nThe primary product impact is improved decision quality across Product, Support, and GTM: teams can quickly distinguish whether an issue is concentrated in strategic segments (e.g., high-value tiers or specific segments) versus long-tail customers. This supports more accurate severity scoring, better roadmap tradeoffs, and more targeted remediation/communications plans (e.g., prioritize fixes that disproportionately affect key segments, or tailor outreach based on the impacted segment mix).\n\nFrom a platform perspective, the work is intentionally non-opinionated: it introduces no new ICP logic and relies strictly on Customer_Analyzer\u2019s existing segment identifiers. The backend will compute and persist the segment/tier breakdown as first-class fields in the Issue_Tracker API/DB so downstream consumers (UI, reporting, analytics) can query the same canonical data rather than re-deriving it inconsistently across clients.\n\nReliability and completeness are improved by explicitly handling missing data: any account without a `segment_id` and/or `fit_tier` is grouped into an \u201cunknown\u201d bucket. This ensures segment slicing never blocks or distorts overall impact calculations, while still making data quality gaps visible and measurable for future cleanup.",
+      "link": "https://www.onyx.app/93492"
+    }
+  ],
+  "primary_owners": [
+    "kenji_watanabe@netherite-extraction.onyx.app"
+  ],
+  "secondary_owners": []
+}

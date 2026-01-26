@@ -1,0 +1,53 @@
+{
+  "id": "https://github.com/onyx-dot-app/onyx#135",
+  "semantic_identifier": "135: feat: Define alert contracts + trigger specs for fit drift, segment changes, and emerging high-fit cohorts",
+  "title": null,
+  "source": "github",
+  "doc_updated_at": "2025-11-03",
+  "metadata": {
+    "object_type": "PullRequest",
+    "id": "135",
+    "merged": "True",
+    "state": "closed",
+    "user": {
+      "login": "kenji_watanabe",
+      "name": "kenji_watanabe",
+      "email": "kenji_watanabe@netherite-extraction.onyx.app"
+    },
+    "assignees": [
+      {
+        "login": "andre_robinson",
+        "name": "andre_robinson",
+        "email": "andre_robinson@netherite-extraction.onyx.app"
+      }
+    ],
+    "repo": "netherite-ext/gold",
+    "num_commits": "3",
+    "num_files_changed": "50",
+    "labels": [],
+    "created_at": "2025-11-03",
+    "updated_at": "2025-11-03",
+    "closed_at": "2025-11-20"
+  },
+  "doc_metadata": {
+    "repo": "netherite-ext/gold",
+    "hierarchy": {
+      "source_path": [
+        "netherite-ext",
+        "gold",
+        "pull_requests"
+      ],
+      "owner": "netherite-ext",
+      "repo": "gold",
+      "object_type": "pull_request"
+    }
+  },
+  "sections": [
+    {
+      "text": "## Description\r\n\r\nThis PR adds the first-version spec and contract for our alerting system covering three alert categories: (1) fit drift detection, (2) segment membership changes, and (3) newly emerging high-fit cohorts.\n\nChanges included:\n- Introduces a versioned alert contract (AlertType enum + shared payload schema) with required fields: alert_id, alert_type, account_id/org_id, segment_id (optional), cohort_id (optional), evaluation_window, baseline_window, computed_metrics, thresholds, trigger_reason, severity, dedupe_key, created_at, run_id, and raw_signal_refs.\n- Documents exact trigger logic per alert type:\n  - Fit drift: compare current fit score distribution vs baseline using configured metric(s) (e.g., mean/median and/or % above threshold), minimum sample size, drift threshold, and significance/guardrails.\n  - Segment membership changes: detect adds/removes for accounts between consecutive evaluation snapshots with configurable minimum impact (% change and absolute count) and optional stability window.\n  - Emerging high-fit cohorts: identify new cohorts crossing a high-fit threshold and meeting minimum volume/growth conditions vs prior windows.\n- Defines evaluation cadence (default daily) and required inputs/signals (fit scores, segment snapshots, cohort definitions, timestamps), including how windows are constructed and how late-arriving/backfilled data is handled.\n- Specifies edge-case behavior:\n  - Missing data: skip with reason + emit non-trigger diagnostic payload when configured.\n  - Low-volume segments: do not trigger below min_n; include suppression reason.\n  - Backfills: tag alerts with run_type=backfill and enforce dedupe/update semantics.\n- Adds downstream-facing payload expectations for delivery/UI (human-readable summary fields, metric deltas, links/refs) and a stable dedupe strategy to prevent alert spam.\n\nNotes for reviewers:\n- This PR is spec-only (contract + documentation) to unblock implementation/QA in follow-up tickets; it establishes the canonical definitions engineering will implement against.\r\n\r\n## How Has This Been Tested?\r\n\r\nlocal\r\n",
+      "link": "https://github.com/onyx-dot-app/onyx#135"
+    }
+  ],
+  "primary_owners": [],
+  "secondary_owners": []
+}
