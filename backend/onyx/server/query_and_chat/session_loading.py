@@ -4,6 +4,7 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
+from onyx.chat.citation_utils import extract_citation_order_from_text
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
@@ -521,6 +522,13 @@ def translate_assistant_message_to_packets(
                     )
                 )
 
+        # Sort citations by order of appearance in message text
+        citation_order = extract_citation_order_from_text(chat_message.message or "")
+        order_map = {num: idx for idx, num in enumerate(citation_order)}
+        citation_info_list.sort(
+            key=lambda c: order_map.get(c.citation_number, float("inf"))
+        )
+
     # Message comes after tool calls, with optional reasoning step beforehand
     message_turn_index = max_tool_turn + 1
     if chat_message.reasoning_tokens:
@@ -572,7 +580,7 @@ def translate_assistant_message_to_packets(
     # Determine stop reason - check if message indicates user cancelled
     stop_reason: str | None = None
     if chat_message.message:
-        if "Generation was stopped" in chat_message.message:
+        if "generation was stopped" in chat_message.message.lower():
             stop_reason = "user_cancelled"
 
     # Add overall stop packet at the end

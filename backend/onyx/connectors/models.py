@@ -244,6 +244,9 @@ def convert_metadata_dict_to_list_of_strings(
     Each string is a key-value pair separated by the INDEX_SEPARATOR. If a key
     points to a list of values, each value generates a unique pair.
 
+    NOTE: Whatever formatting strategy is used here to generate a key-value
+    string must be replicated when constructing query filters.
+
     Args:
         metadata: The metadata dict to convert where values can be either a
             string or a list of strings.

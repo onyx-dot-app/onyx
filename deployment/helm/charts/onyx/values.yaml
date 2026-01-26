@@ -701,6 +701,44 @@ celery_worker_user_file_processing:
   tolerations: []
   affinity: {}
 
+# Discord bot for Onyx
+# The bot offloads message processing to scalable API pods via HTTP requests.
+discordbot:
+  enabled: false  # Disabled by default - requires bot token configuration
+  # Bot token can be provided directly or via a Kubernetes secret
+  # Option 1: Direct token (not recommended for production)
+  botToken: ""
+  # Option 2: Reference a Kubernetes secret (recommended)
+  botTokenSecretName: ""  # Name of the secret containing the bot token
+  botTokenSecretKey: "token"  # Key within the secret (default: "token")
+  # Command prefix for bot commands (default: "!")
+  invokeChar: "!"
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+    app: discord-bot
+  deploymentLabels:
+    app: discord-bot
+  podSecurityContext:
+    {}
+  securityContext:
+    {}
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2000Mi"
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 slackbot:
   enabled: true
   replicaCount: 1
@@ -1159,6 +1197,8 @@ configMap:
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   ONYX_BOT_RESPOND_EVERY_CHANNEL: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
+  DISCORD_BOT_TOKEN: ""
+  DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""

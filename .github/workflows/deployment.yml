@@ -356,6 +356,7 @@ jobs:
           releaseBody: "See the assets to download this version and install."
           releaseDraft: true
           prerelease: false
+          assetNamePattern: "[name]_[arch][ext]"
           args: ${{ matrix.args }}
 
   build-web-amd64:

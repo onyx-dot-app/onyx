@@ -700,6 +700,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                     stopGenerating={stopGenerating}
                     onResubmit={handleResubmitLastMessage}
                     anchorNodeId={anchorNodeId}
+                    disableBlur={!hasBackground}
                   />
                 </ChatScrollContainer>
               )}

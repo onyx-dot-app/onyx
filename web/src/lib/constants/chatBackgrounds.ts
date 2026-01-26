@@ -37,20 +37,6 @@ export const CHAT_BACKGROUND_OPTIONS: ChatBackgroundOption[] = [
     label: "Hills",
   },
   {
-    id: "rainbow",
-    url: "https://images.unsplash.com/photo-1500964757637-c85e8a162699?w=1920&q=80&auto=format",
-    thumbnail:
-      "https://images.unsplash.com/photo-1500964757637-c85e8a162699?w=200&h=150&fit=crop&q=70&auto=format",
-    label: "Rainbow",
-  },
-  {
-    id: "gradient-mesh",
-    url: "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80&auto=format",
-    thumbnail:
-      "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=200&h=150&fit=crop&q=70&auto=format",
-    label: "Gradient",
-  },
-  {
     id: "plant",
     url: "https://images.unsplash.com/photo-1692520883599-d543cfe6d43d?w=1920&q=80&auto=format",
     thumbnail:

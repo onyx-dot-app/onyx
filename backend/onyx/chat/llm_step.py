@@ -860,6 +860,11 @@ def run_llm_step_pkt_generator(
                                     ),
                                     obj=result,
                                 )
+                                # Track emitted citation for saving
+                                if state_container:
+                                    state_container.add_emitted_citation(
+                                        result.citation_number
+                                    )
                     else:
                         # When citation_processor is None, use delta.content directly without modification
                         accumulated_answer += delta.content
@@ -986,6 +991,9 @@ def run_llm_step_pkt_generator(
                     ),
                     obj=result,
                 )
+                # Track emitted citation for saving
+                if state_container:
+                    state_container.add_emitted_citation(result.citation_number)
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)

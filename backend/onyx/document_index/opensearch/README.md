@@ -28,8 +28,8 @@ of "minimum value clipping".
 ## On time decay and boosting
 Embedding models do not have a uniform distribution from 0 to 1. The values typically cluster strongly around 0.6 to 0.8 but also
 varies between models and even the query. It is not a safe assumption to pre-normalize the scores so we also cannot apply any
-additive or multiplicative boost to it. Ie. if results of a doc cluster around 0.6 to 0.8 and I give a 50% penalty to the score,
-it doesn't bring a result from the top of the range to 50 percentile, it brings its under the 0.6 and is now the worst match.
+additive or multiplicative boost to it. i.e. if results of a doc cluster around 0.6 to 0.8 and I give a 50% penalty to the score,
+it doesn't bring a result from the top of the range to 50th percentile, it brings it under the 0.6 and is now the worst match.
 Same logic applies to additive boosting.
 
 So these boosts can only be applied after normalization. Unfortunately with Opensearch, the normalization processor runs last
@@ -40,7 +40,7 @@ and vector would make the docs which only came because of time filter very low s
 scored documents from the union of all the `Search` phase documents to show up higher and potentially not get dropped before
 being fetched and returned to the user. But there are other issues of including these:
 - There is no way to sort by this field, only a filter, so there's no way to guarantee the best docs even irrespective of the
-contents. If there are lots of updates, this may miss
+contents. If there are lots of updates, this may miss.
 - There is not a good way to normalize this field, the best is to clip it on the bottom.
 - This would require using min-max norm but z-score norm is better for the other functions due to things like it being less
 sensitive to outliers, better handles distribution drifts (min-max assumes stable meaningful ranges), better for comparing

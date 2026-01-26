@@ -42,6 +42,7 @@ import {
   SvgUsers,
   SvgZoomIn,
   SvgPaintBrush,
+  SvgDiscordMono,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
@@ -90,11 +91,18 @@ const custom_assistants_items = (
   ];
 
   if (!isCurator) {
-    items.push({
-      name: "Slack Bots",
-      icon: SlackIconSkeleton,
-      link: "/admin/bots",
-    });
+    items.push(
+      {
+        name: "Slack Bots",
+        icon: SlackIconSkeleton,
+        link: "/admin/bots",
+      },
+      {
+        name: "Discord Bots",
+        icon: SvgDiscordMono,
+        link: "/admin/discord-bot",
+      }
+    );
   }
 
   items.push(

@@ -221,6 +221,13 @@ services:
       - NOTIFY_SLACKBOT_NO_ANSWER=${NOTIFY_SLACKBOT_NO_ANSWER:-}
       - ONYX_BOT_MAX_QPM=${ONYX_BOT_MAX_QPM:-}
       - ONYX_BOT_MAX_WAIT_TIME=${ONYX_BOT_MAX_WAIT_TIME:-}
+      # Discord Bot Configuration (runs via supervisord, requires DISCORD_BOT_TOKEN to be set)
+      # IMPORTANT: Only one Discord bot instance can run per token - do not scale background workers
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
+      # API Server connection for Discord bot message processing
+      - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
+      - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
       # Logging
       # Leave this on pretty please? Nothing sensitive is collected!
       - DISABLE_TELEMETRY=${DISABLE_TELEMETRY:-}

@@ -369,6 +369,8 @@ def _patch_openai_responses_chunk_parser() -> None:
             # New output item added
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
+                # Track that we've received tool calls via streaming
+                self._has_streamed_tool_calls = True
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
@@ -394,6 +396,8 @@ def _patch_openai_responses_chunk_parser() -> None:
         elif event_type == "response.function_call_arguments.delta":
             content_part: Optional[str] = parsed_chunk.get("delta", None)
             if content_part:
+                # Track that we've received tool calls via streaming
+                self._has_streamed_tool_calls = True
                 return GenericStreamingChunk(
                     text="",
                     tool_use=ChatCompletionToolCallChunk(
@@ -491,21 +495,71 @@ def _patch_openai_responses_chunk_parser() -> None:
 
         elif event_type == "response.completed":
             # Final event signaling all output items (including parallel tool calls) are done
+            # Check if we already received tool calls via streaming events
+            # There is an issue where OpenAI (not via Azure) will give back the tool calls streamed out as tokens
+            # But on Azure, it's only given out all at once. OpenAI also happens to give back the tool calls in the
+            # response.completed event so we need to throw it out here or there are duplicate tool calls.
+            has_streamed_tool_calls = getattr(self, "_has_streamed_tool_calls", False)
+
             response_data = parsed_chunk.get("response", {})
-            # Determine finish reason based on response content
-            finish_reason = "stop"
-            if response_data.get("output"):
-                for item in response_data["output"]:
-                    if isinstance(item, dict) and item.get("type") == "function_call":
-                        finish_reason = "tool_calls"
-                        break
-            return GenericStreamingChunk(
-                text="",
-                tool_use=None,
-                is_finished=True,
-                finish_reason=finish_reason,
-                usage=None,
+            output_items = response_data.get("output", [])
+
+            # Check if there are function_call items in the output
+            has_function_calls = any(
+                isinstance(item, dict) and item.get("type") == "function_call"
+                for item in output_items
             )
+
+            if has_function_calls and not has_streamed_tool_calls:
+                # Azure's Responses API returns all tool calls in response.completed
+                # without streaming them incrementally. Extract them here.
+                from litellm.types.utils import (
+                    Delta,
+                    ModelResponseStream,
+                    StreamingChoices,
+                )
+
+                tool_calls = []
+                for idx, item in enumerate(output_items):
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        tool_calls.append(
+                            ChatCompletionToolCallChunk(
+                                id=item.get("call_id"),
+                                index=idx,
+                                type="function",
+                                function=ChatCompletionToolCallFunctionChunk(
+                                    name=item.get("name"),
+                                    arguments=item.get("arguments", ""),
+                                ),
+                            )
+                        )
+
+                return ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(tool_calls=tool_calls),
+                            finish_reason="tool_calls",
+                        )
+                    ]
+                )
+            elif has_function_calls:
+                # Tool calls were already streamed, just signal completion
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=None,
+                    is_finished=True,
+                    finish_reason="tool_calls",
+                    usage=None,
+                )
+            else:
+                return GenericStreamingChunk(
+                    text="",
+                    tool_use=None,
+                    is_finished=True,
+                    finish_reason="stop",
+                    usage=None,
+                )
 
         else:
             pass
@@ -631,6 +685,40 @@ def _patch_openai_responses_transform_response() -> None:
     LiteLLMResponsesTransformationHandler.transform_response = _patched_transform_response  # type: ignore[method-assign]
 
 
+def _patch_azure_responses_should_fake_stream() -> None:
+    """
+    Patches AzureOpenAIResponsesAPIConfig.should_fake_stream to always return False.
+
+    By default, LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
+    not in its database. This causes Azure custom model deployments to buffer the entire
+    response before yielding, resulting in poor time-to-first-token.
+
+    Azure's Responses API supports native streaming, so we override this to always use
+    real streaming (SyncResponsesAPIStreamingIterator).
+    """
+    from litellm.llms.azure.responses.transformation import (
+        AzureOpenAIResponsesAPIConfig,
+    )
+
+    if (
+        getattr(AzureOpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
+        == "_patched_should_fake_stream"
+    ):
+        return
+
+    def _patched_should_fake_stream(
+        self: Any,
+        model: Optional[str],
+        stream: Optional[bool],
+        custom_llm_provider: Optional[str] = None,
+    ) -> bool:
+        # Azure Responses API supports native streaming - never fake it
+        return False
+
+    _patched_should_fake_stream.__name__ = "_patched_should_fake_stream"
+    AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream  # type: ignore[method-assign]
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -640,12 +728,13 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
-    - Patching LiteLLMResponsesTransformationHandler._convert_content_str_to_input_text for tool content types
+    - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
     """
     _patch_ollama_transform_request()
     _patch_ollama_chunk_parser()
     _patch_openai_responses_chunk_parser()
     _patch_openai_responses_transform_response()
+    _patch_azure_responses_should_fake_stream()
 
 
 def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:

@@ -492,7 +492,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             indexed_result, crawled_result = run_functions_tuples_in_parallel(
                 [
                     (_retrieve_indexed_with_filters, (all_requests,)),
-                    (self._fetch_web_content, (urls,)),
+                    (self._fetch_web_content, (urls, override_kwargs.url_snippet_map)),
                 ],
                 allow_failures=True,
                 timeout=OPEN_URL_TIMEOUT_SECONDS,
@@ -800,7 +800,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         return merged_sections
 
     def _fetch_web_content(
-        self, urls: list[str]
+        self, urls: list[str], url_snippet_map: dict[str, str]
     ) -> tuple[list[InferenceSection], list[str]]:
         if not urls:
             return [], []
@@ -831,7 +831,11 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 and content.full_content
                 and not is_insufficient
             ):
-                sections.append(inference_section_from_internet_page_scrape(content))
+                sections.append(
+                    inference_section_from_internet_page_scrape(
+                        content, url_snippet_map.get(content.link, "")
+                    )
+                )
             else:
                 # TODO: Slight improvement - if failed URL reasons are passed back to the LLM
                 # for example, if it tries to crawl Reddit and fails, it should know (probably) that this error would

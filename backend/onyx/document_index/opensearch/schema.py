@@ -172,24 +172,23 @@ class DocumentChunk(BaseModel):
         return serialized_exclude_none
 
     @field_serializer("last_updated", mode="wrap")
-    def serialize_datetime_fields_to_epoch_millis(
+    def serialize_datetime_fields_to_epoch_seconds(
         self, value: datetime | None, handler: SerializerFunctionWrapHandler
     ) -> int | None:
         """
-        Serializes datetime fields to milliseconds since the Unix epoch.
+        Serializes datetime fields to seconds since the Unix epoch.
 
         If there is no datetime, returns None.
         """
         if value is None:
             return None
         value = set_or_convert_timezone_to_utc(value)
-        # timestamp returns a float in seconds so convert to millis.
-        return int(value.timestamp() * 1000)
+        return int(value.timestamp())
 
     @field_validator("last_updated", mode="before")
     @classmethod
-    def parse_epoch_millis_to_datetime(cls, value: Any) -> datetime | None:
-        """Parses milliseconds since the Unix epoch to a datetime object.
+    def parse_epoch_seconds_to_datetime(cls, value: Any) -> datetime | None:
+        """Parses seconds since the Unix epoch to a datetime object.
 
         If the input is None, returns None.
 
@@ -204,7 +203,7 @@ class DocumentChunk(BaseModel):
             raise ValueError(
                 f"Bug: Expected an int for the last_updated property from OpenSearch, got {type(value)} instead."
             )
-        return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(value, tz=timezone.utc)
 
     @field_serializer("tenant_id", mode="wrap")
     def serialize_tenant_state(
@@ -354,11 +353,9 @@ class DocumentSchema:
                 },
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
                 METADATA_LIST_FIELD_NAME: {"type": "keyword"},
-                # TODO(andrei): Check if Vespa stores seconds, we may wanna do
-                # seconds here not millis.
                 LAST_UPDATED_FIELD_NAME: {
                     "type": "date",
-                    "format": "epoch_millis",
+                    "format": "epoch_second",
                     # For some reason date defaults to False, even though it
                     # would make sense to sort by date.
                     "doc_values": True,
@@ -366,14 +363,21 @@ class DocumentSchema:
                 # Access control fields.
                 # Whether the doc is public. Could have fallen under access
                 # control list but is such a broad and critical filter that it
-                # is its own field.
+                # is its own field. If true, ACCESS_CONTROL_LIST_FIELD_NAME
+                # should have no effect on queries.
                 PUBLIC_FIELD_NAME: {"type": "boolean"},
                 # Access control list for the doc, excluding public access,
                 # which is covered above.
+                # If a user's access set contains at least one entry from this
+                # set, the user should be able to retrieve this document. This
+                # only applies if public is set to false; public non-hidden
+                # documents are always visible to anyone in a given tenancy
+                # regardless of this field.
                 ACCESS_CONTROL_LIST_FIELD_NAME: {"type": "keyword"},
-                # Whether the doc is hidden from search results. Should clobber
-                # all other search filters; up to search implementations to
-                # guarantee this.
+                # Whether the doc is hidden from search results.
+                # Should clobber all other access search filters, namely
+                # PUBLIC_FIELD_NAME and ACCESS_CONTROL_LIST_FIELD_NAME; up to
+                # search implementations to guarantee this.
                 HIDDEN_FIELD_NAME: {"type": "boolean"},
                 GLOBAL_BOOST_FIELD_NAME: {"type": "integer"},
                 # This field is only used for displaying a useful name for the
@@ -447,7 +451,6 @@ class DocumentSchema:
                 DOCUMENT_ID_FIELD_NAME: {"type": "keyword"},
                 CHUNK_INDEX_FIELD_NAME: {"type": "integer"},
                 # The maximum number of tokens this chunk's content can hold.
-                # TODO(andrei): Can we generalize this to embedding type?
                 MAX_CHUNK_SIZE_FIELD_NAME: {"type": "integer"},
             },
         }
