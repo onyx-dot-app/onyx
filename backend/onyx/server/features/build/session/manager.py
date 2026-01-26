@@ -419,11 +419,16 @@ class SessionManager:
         # Determine if demo data mode is enabled
         use_demo_data = user_work_area is not None and user_level is not None
 
-        # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
+        # Build tenant/user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
+        # Path structure: {base_path}/{tenant_id}/knowledge/{user_id}/
+        # This matches the path structure used by PersistentDocumentWriter
         if PERSISTENT_DOCUMENT_STORAGE_PATH:
             user_file_system_path = str(
-                Path(PERSISTENT_DOCUMENT_STORAGE_PATH) / str(user_id)
+                Path(PERSISTENT_DOCUMENT_STORAGE_PATH)
+                / tenant_id
+                / "knowledge"
+                / str(user_id)
             )
             # Ensure the user's document directory exists
             Path(user_file_system_path).mkdir(parents=True, exist_ok=True)

@@ -3,12 +3,14 @@ Persistent Document Writer for writing indexed documents to local filesystem or 
 hierarchical directory structure that mirrors the source organization.
 
 Local mode (SandboxBackend.LOCAL):
-    Writes to local filesystem at PERSISTENT_DOCUMENT_STORAGE_PATH
+    Writes to local filesystem at {PERSISTENT_DOCUMENT_STORAGE_PATH}/{tenant_id}/knowledge/{user_id}/...
 
 Kubernetes mode (SandboxBackend.KUBERNETES):
     Writes to S3 at s3://{SANDBOX_S3_BUCKET}/{tenant_id}/knowledge/{user_id}/...
     This is the same location that kubernetes_sandbox_manager.py reads from when
     provisioning sandboxes.
+
+Both modes use consistent tenant/user-segregated paths for multi-tenant isolation.
 """
 
 import hashlib
@@ -185,18 +187,20 @@ def serialize_document(doc: Document) -> dict[str, Any]:
 class PersistentDocumentWriter:
     """Writes indexed documents to local filesystem with hierarchical structure.
 
-    Documents are stored in user-segregated paths:
-    {base_path}/{user_id}/{source}/{hierarchy}/document.json
+    Documents are stored in tenant/user-segregated paths:
+    {base_path}/{tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/document.json
 
-    This enables per-user isolation for sandbox access control.
+    This enables per-tenant and per-user isolation for sandbox access control.
     """
 
     def __init__(
         self,
         base_path: str,
+        tenant_id: str,
         user_id: str,
     ):
         self.base_path = Path(base_path)
+        self.tenant_id = tenant_id
         self.user_id = user_id
 
     def write_documents(self, documents: list[Document]) -> list[str]:
@@ -231,13 +235,13 @@ class PersistentDocumentWriter:
     def _build_directory_path(self, doc: Document) -> Path:
         """Build directory path from document metadata.
 
-        Documents are stored under user-segregated paths:
-        {base_path}/{user_id}/{source}/{hierarchy}/
+        Documents are stored under tenant/user-segregated paths:
+        {base_path}/{tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/
 
-        This enables per-user isolation for sandbox access control.
+        This enables per-tenant and per-user isolation for sandbox access control.
         """
-        # User segregation prefix
-        parts = [self.user_id]
+        # Tenant and user segregation prefix (matches S3 path structure)
+        parts = [self.tenant_id, "knowledge", self.user_id]
         # Add source and hierarchy from document
         parts.extend(build_document_subpath(doc, replace_slash=True))
 
@@ -365,15 +369,17 @@ class S3PersistentDocumentWriter:
 
 def get_persistent_document_writer(
     user_id: str,
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> PersistentDocumentWriter | S3PersistentDocumentWriter:
     """Factory function to create a PersistentDocumentWriter with default configuration.
 
     Args:
         user_id: User ID for user-segregated storage paths.
-                 Documents are stored under {base_path}/{user_id}/... (local)
-                 or s3://{bucket}/{tenant_id}/knowledge/{user_id}/... (S3)
-        tenant_id: Tenant ID for multi-tenant isolation (required for S3/Kubernetes mode)
+        tenant_id: Tenant ID for multi-tenant isolation.
+
+    Both local and S3 modes use consistent tenant/user-segregated paths:
+        - Local: {base_path}/{tenant_id}/knowledge/{user_id}/...
+        - S3: s3://{bucket}/{tenant_id}/knowledge/{user_id}/...
 
     Returns:
         PersistentDocumentWriter for local mode, S3PersistentDocumentWriter for K8s mode
@@ -381,11 +387,10 @@ def get_persistent_document_writer(
     if SANDBOX_BACKEND == SandboxBackend.LOCAL:
         return PersistentDocumentWriter(
             base_path=PERSISTENT_DOCUMENT_STORAGE_PATH,
+            tenant_id=tenant_id,
             user_id=user_id,
         )
     elif SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-        if tenant_id is None:
-            raise ValueError("tenant_id is required for S3/Kubernetes mode")
         return S3PersistentDocumentWriter(
             tenant_id=tenant_id,
             user_id=user_id,

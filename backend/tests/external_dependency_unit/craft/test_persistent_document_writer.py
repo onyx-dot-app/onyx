@@ -49,15 +49,24 @@ def _create_test_document(doc_id: str, name: str) -> Document:
 def test_local_persistent_document_writer() -> None:
     """Test writing documents to local filesystem."""
     with tempfile.TemporaryDirectory() as temp_dir:
+        tenant_id = TEST_TENANT_ID
         user_id = str(uuid4())
-        writer = PersistentDocumentWriter(base_path=temp_dir, user_id=user_id)
+        writer = PersistentDocumentWriter(
+            base_path=temp_dir, tenant_id=tenant_id, user_id=user_id
+        )
 
         doc = _create_test_document("doc-001", "Test Document")
         written_paths = writer.write_documents([doc])
 
         assert len(written_paths) == 1
         assert written_paths[0] == os.path.join(
-            temp_dir, user_id, "web", "Folder", "Test_Document.json"
+            temp_dir,
+            tenant_id,
+            "knowledge",
+            user_id,
+            "web",
+            "Folder",
+            "Test_Document.json",
         )
         assert os.path.exists(written_paths[0])
 
