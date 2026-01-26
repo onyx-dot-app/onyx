@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
 import { WithoutStyles } from "@/types";
+import Text from "@/refresh-components/texts/Text";
 
 const buttonClassNames = {
   main: {
@@ -157,9 +158,9 @@ export default function LineItem({
           )}
         </Section>
         {description && (
-          <Truncated secondaryBody text03 className="text-left w-full">
+          <Text secondaryBody text03 className="text-left w-full">
             {description}
-          </Truncated>
+          </Text>
         )}
       </Section>
     </button>
