@@ -80,7 +80,7 @@ function AppHeader() {
   if (!isMobile && !customHeaderContent) return null;
 
   return (
-    <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+    <header className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 dbg-red">
       {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
       <div className="flex-1">
         <IconButton
@@ -221,12 +221,4 @@ export interface StickyHeaderProps {
   className?: string;
 }
 
-function StickyHeader({ children, className }: StickyHeaderProps) {
-  return (
-    <header className={cn("sticky top-0 z-sticky w-full", className)}>
-      {children}
-    </header>
-  );
-}
-
-export { AppRoot as Root, StickyHeader, Footer };
+export { AppRoot as Root, Footer };

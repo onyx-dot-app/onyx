@@ -217,7 +217,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   } = useDocumentSearch();
 
   // Determine if we're showing search results
+  // Don't show search UI while classifying in auto mode - wait for classification result
   const showSearchResults =
+    !isClassifying &&
     (appMode === "search" || isSearchFlow === true) &&
     (searchResults.length > 0 || isSearchLoading || pendingSearchQuery);
 
@@ -430,6 +432,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [currentChatSessionId]);
 
+  // Reset search state when navigating between sessions
+  // Search results are ephemeral and should not persist across navigation
+  useEffect(() => {
+    resetSearch();
+    setPendingSearchQuery(null);
+  }, [currentChatSessionId, resetSearch]);
+
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
   >(null);
@@ -477,8 +486,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const handleChatInputSubmit = useCallback(
     async (message: string) => {
+      // If we're in an existing chat session, always use chat mode
+      // (appMode only applies to new sessions)
+      const effectiveMode = currentChatSessionId ? "chat" : appMode;
+
       // If mode is explicitly set to chat, skip classification
-      if (appMode === "chat") {
+      if (effectiveMode === "chat") {
         resetSearch();
         resetClassification();
         onSubmit({
@@ -493,7 +506,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
 
       // If mode is explicitly set to search, skip classification and go directly to search
-      if (appMode === "search") {
+      if (effectiveMode === "search") {
         setPendingSearchQuery(message);
         await performSearch(message);
         return;
@@ -520,6 +533,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
     },
     [
+      currentChatSessionId,
       appMode,
       onSubmit,
       currentMessageFiles,
@@ -532,52 +546,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       resetClassification,
     ]
   );
-
-  // Handle "Ask about these results" action from search panel
-  const handleAskAboutSearchResults = useCallback(() => {
-    if (!pendingSearchQuery) return;
-
-    // Switch to chat mode with the original query
-    setAppMode("chat");
-
-    // Submit the query to chat, optionally with top search results as context
-    const topDocs = searchResults.slice(0, 5);
-    setSelectedDocuments(
-      topDocs.map((doc) => ({
-        document_id: doc.document_id,
-        semantic_identifier: doc.semantic_identifier,
-        link: doc.link ?? "",
-        source_type: doc.source_type,
-        blurb: doc.blurb,
-        boost: doc.boost,
-        hidden: doc.hidden,
-        score: doc.score ?? 0,
-        chunk_ind: doc.chunk_ind,
-        match_highlights: doc.match_highlights,
-        metadata: doc.metadata as Record<string, string>,
-        updated_at: doc.updated_at,
-        is_internet: doc.is_internet,
-      }))
-    );
-
-    resetSearch();
-    resetClassification();
-
-    onSubmit({
-      message: pendingSearchQuery,
-      currentMessageFiles: currentMessageFiles,
-      deepResearch: deepResearchEnabled,
-    });
-  }, [
-    pendingSearchQuery,
-    searchResults,
-    setSelectedDocuments,
-    resetSearch,
-    resetClassification,
-    onSubmit,
-    currentMessageFiles,
-    deepResearchEnabled,
-  ]);
 
   // Handle document click from search results
   const handleSearchDocumentClick = useCallback(
@@ -830,7 +798,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {/* Welcome message when no session and not showing search results */}
               {!currentChatSessionId &&
                 !currentProjectId &&
-                !showSearchResults && (
+                !showSearchResults &&
+                !isClassifying && (
                   <div className="w-full flex-1 flex flex-col items-center justify-end">
                     <WelcomeMessage
                       agent={liveAssistant}
@@ -840,20 +809,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </div>
                 )}
 
-              {/* Search Results Panel */}
-              {!currentChatSessionId && showSearchResults && (
-                <div className="w-full flex-1 overflow-auto">
-                  <SearchResultsPanel
-                    query={pendingSearchQuery || ""}
-                    executedQueries={executedQueries}
-                    results={searchResults}
-                    llmSelectedDocIds={llmSelectedDocIds}
-                    isLoading={isSearchLoading || isClassifying}
-                    error={searchError}
-                    onDocumentClick={handleSearchDocumentClick}
-                    onAskAboutResults={handleAskAboutSearchResults}
-                  />
-                </div>
+              {/* Spacer during classification to keep input bar centered */}
+              {!currentChatSessionId && isClassifying && (
+                <div className="w-full flex-1" />
               )}
 
               {/* ChatInputBar container - absolutely positioned when in chat, centered when no session */}
@@ -934,10 +892,31 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
               </div>
 
+              {/* Search Results Panel - shown below input bar */}
+              {!currentChatSessionId && showSearchResults && (
+                <div className="w-full flex-1 overflow-auto">
+                  <SearchResultsPanel
+                    query={pendingSearchQuery || ""}
+                    executedQueries={executedQueries}
+                    results={searchResults}
+                    llmSelectedDocIds={llmSelectedDocIds}
+                    isLoading={isSearchLoading || isClassifying}
+                    error={searchError}
+                    onDocumentClick={handleSearchDocumentClick}
+                  />
+                </div>
+              )}
+
+              {/* Spacer below input bar during classification */}
+              {!currentChatSessionId && isClassifying && (
+                <div className="w-full flex-1" />
+              )}
+
               {/* Suggestions - only show when not in search mode with results */}
               {!currentChatSessionId &&
                 !currentProjectId &&
-                !showSearchResults && (
+                !showSearchResults &&
+                !isClassifying && (
                   <div className="flex flex-1 flex-col items-center w-full">
                     {liveAssistant?.starter_messages &&
                       liveAssistant.starter_messages.length > 0 &&
