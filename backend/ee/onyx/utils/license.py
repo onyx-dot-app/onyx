@@ -21,7 +21,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # Path to the license public key file
-_LICENSE_PUBLIC_KEY_PATH = Path(__file__).parent.parent.parent.parent / "keys" / "license_public_key.pem"
+_LICENSE_PUBLIC_KEY_PATH = (
+    Path(__file__).parent.parent.parent.parent / "keys" / "license_public_key.pem"
+)
 
 
 def _get_public_key() -> RSAPublicKey:
@@ -58,14 +60,6 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         ValueError: If license data is invalid or signature verification fails
     """
     try:
-        # Decode the license data
-        license_preview = (
-            license_data[:50] + "..." if len(license_data) > 50 else license_data
-        )
-        logger.info(
-            f"[verify_license] Starting verification, license_preview={license_preview}"
-        )
-
         decoded = json.loads(base64.b64decode(license_data))
 
         # Parse into LicenseData to validate structure
