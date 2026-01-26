@@ -22,7 +22,7 @@ from onyx.chat.chat_utils import is_last_assistant_message_clarification
 from onyx.chat.chat_utils import load_all_chat_files
 from onyx.chat.compression import calculate_total_history_tokens
 from onyx.chat.compression import compress_chat_history
-from onyx.chat.compression import get_compressed_history
+from onyx.chat.compression import find_summary_for_branch
 from onyx.chat.compression import get_compression_params
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
@@ -464,18 +464,13 @@ def handle_stream_message_objects(
 
             chat_history.append(user_message)
 
-        # Apply chat history compression if a summary exists
-        # This filters chat_history to only recent messages (after the summary cutoff)
-        summary_message: ChatMessage | None = None
-        if chat_session.summary_message_id is not None:
-            summary_message, recent_messages = get_compressed_history(
-                db_session=db_session,
-                chat_session=chat_session,
-            )
-            if summary_message and summary_message.last_summarized_message_id:
-                # Filter chat_history to only messages after the cutoff
-                cutoff_id = summary_message.last_summarized_message_id
-                chat_history = [m for m in chat_history if m.id > cutoff_id]
+        # Find applicable summary for the current branch
+        # Summary applies if its parent_message_id is in current chat_history
+        summary_message = find_summary_for_branch(db_session, chat_history)
+        if summary_message and summary_message.last_summarized_message_id:
+            cutoff_id = summary_message.last_summarized_message_id
+            # Filter chat_history to only messages after the cutoff
+            chat_history = [m for m in chat_history if m.id > cutoff_id]
 
         memories = get_memories(user, db_session)
 
@@ -631,10 +626,12 @@ def handle_stream_message_objects(
             )
 
             # Check if compression is needed after saving the message
-            total_tokens = calculate_total_history_tokens(
-                db_session=db_session,
+            # Rebuild chat_history to include the newly saved messages
+            updated_chat_history = create_chat_history_chain(
                 chat_session_id=chat_session.id,
+                db_session=db_session,
             )
+            total_tokens = calculate_total_history_tokens(updated_chat_history)
             compression_params = get_compression_params(
                 llm=llm,
                 current_history_tokens=total_tokens,
@@ -642,7 +639,7 @@ def handle_stream_message_objects(
             if compression_params.should_compress:
                 compress_chat_history(
                     db_session=db_session,
-                    chat_session=chat_session,
+                    chat_history=updated_chat_history,
                     llm=llm,
                     compression_params=compression_params,
                 )

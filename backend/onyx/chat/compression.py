@@ -3,23 +3,23 @@ Chat history compression via summarization.
 
 This module handles compressing long chat histories by summarizing older messages
 while keeping recent messages verbatim.
+
+Summaries are branch-aware: each summary's parent_message_id points to the last
+message when compression triggered, making it part of the tree structure.
 """
 
-from dataclasses import dataclass
-from uuid import UUID
-
-from sqlalchemy import func
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import COMPRESSION_TRIGGER_RATIO
 from onyx.configs.constants import MessageType
-from onyx.db.chat import get_or_create_root_message
 from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.prompts.compression_prompts import PROGRESSIVE_SUMMARY_USER_PROMPT
+from onyx.prompts.compression_prompts import SUMMARY_SYSTEM_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -30,37 +30,8 @@ RESERVED_CONTEXT_TOKENS = 3000
 # Ratio of available context to allocate for recent messages after compression
 RECENT_MESSAGES_RATIO = 0.25
 
-SUMMARY_SYSTEM_PROMPT = """You are a conversation summarizer. Your task is to create \
-a concise but comprehensive summary of the conversation history provided.
 
-Your summary MUST preserve:
-1. Key decisions and conclusions reached
-2. Important user requirements and preferences stated
-3. Technical context (files discussed, errors encountered, solutions proposed)
-4. Any ongoing tasks or unresolved questions
-5. Relevant code snippets or commands (abbreviated if long)
-
-Format your summary as:
-
-## Context
-[Brief overview of what this conversation is about]
-
-## Key Points
-- [Important point 1]
-- [Important point 2]
-
-## Decisions Made
-- [Decision 1]
-- [Decision 2]
-
-## Current State
-[Where the conversation left off, any pending items]
-
-Be concise but thorough. The summary will be used to maintain context in a long conversation."""
-
-
-@dataclass
-class CompressionResult:
+class CompressionResult(BaseModel):
     """Result of a compression operation."""
 
     summary_created: bool
@@ -68,37 +39,24 @@ class CompressionResult:
     error: str | None = None
 
 
-@dataclass
-class CompressionParams:
+class CompressionParams(BaseModel):
     """Parameters for compression operation."""
 
     should_compress: bool
     tokens_for_recent: int = 0
 
 
-def calculate_total_history_tokens(
-    db_session: Session,
-    chat_session_id: UUID,
-) -> int:
+def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
     """
-    Calculate the total token count for a chat session.
-
-    This uses an aggregate query (SUM) which is fast and doesn't load message content.
+    Calculate the total token count for the given chat history.
 
     Args:
-        db_session: Database session
-        chat_session_id: The chat session ID
+        chat_history: Branch-aware list of messages
 
     Returns:
-        Total token count for all messages in the session
+        Total token count for the history
     """
-    result = (
-        db_session.query(func.sum(ChatMessage.token_count))
-        .filter(ChatMessage.chat_session_id == chat_session_id)
-        .scalar()
-    )
-
-    return result or 0
+    return sum(m.token_count or 0 for m in chat_history)
 
 
 def get_compression_params(
@@ -134,63 +92,81 @@ def get_compression_params(
     )
 
 
-def get_messages_to_summarize(
+def find_summary_for_branch(
     db_session: Session,
-    chat_session: ChatSession,
+    chat_history: list[ChatMessage],
+) -> ChatMessage | None:
+    """
+    Find the most recent summary that applies to the current branch.
+
+    A summary applies if its parent_message_id is in the current chat history,
+    meaning it was created on this branch.
+
+    Args:
+        db_session: Database session
+        chat_history: Branch-aware list of messages
+
+    Returns:
+        The applicable summary message, or None if no summary exists for this branch
+    """
+    if not chat_history:
+        return None
+
+    history_ids = {m.id for m in chat_history}
+    chat_session_id = chat_history[0].chat_session_id
+
+    # Query all summaries for this session (typically few), then filter in Python.
+    summaries = (
+        db_session.query(ChatMessage)
+        .filter(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.last_summarized_message_id.isnot(None),
+        )
+        .order_by(ChatMessage.last_summarized_message_id.desc())
+        .all()
+    )
+    # Optimazation to avoid using IN clause for large histories
+    for summary in summaries:
+        if summary.parent_message_id in history_ids:
+            return summary
+
+    return None
+
+
+def get_messages_to_summarize(
+    chat_history: list[ChatMessage],
+    existing_summary: ChatMessage | None,
     tokens_for_recent: int,
-) -> tuple[list[ChatMessage], list[ChatMessage], ChatMessage | None]:
+) -> tuple[list[ChatMessage], list[ChatMessage]]:
     """
     Split messages into those to summarize and those to keep verbatim.
 
     Args:
-        db_session: Database session
-        chat_session: The chat session to process
+        chat_history: Branch-aware list of messages
+        existing_summary: Existing summary for this branch (if any)
         tokens_for_recent: Token budget for recent messages to keep
 
     Returns:
-        Tuple of (messages_to_summarize, messages_to_keep, existing_summary_message)
+        Tuple of (messages_to_summarize, messages_to_keep)
     """
-    from onyx.db.chat import get_chat_messages_by_session
-
-    all_messages = get_chat_messages_by_session(
-        chat_session_id=chat_session.id,
-        user_id=None,
-        db_session=db_session,
-        skip_permission_check=True,
-        prefetch_top_two_level_tool_calls=False,
-    )
-
-    # Get existing summary if present
-    existing_summary: ChatMessage | None = None
-    cutoff_id: int | None = None
-    if chat_session.summary_message_id is not None:
-        existing_summary = db_session.get(ChatMessage, chat_session.summary_message_id)
-        if existing_summary:
-            cutoff_id = existing_summary.last_summarized_message_id
-
-    # Filter to messages after the cutoff (exclude summary message itself)
-    if cutoff_id is not None:
-        all_messages = [
-            m
-            for m in all_messages
-            if m.id > cutoff_id and m.id != chat_session.summary_message_id
-        ]
+    # Filter to messages after the existing summary's cutoff
+    if existing_summary and existing_summary.last_summarized_message_id:
+        cutoff_id = existing_summary.last_summarized_message_id
+        messages = [m for m in chat_history if m.id > cutoff_id]
     else:
-        all_messages = [
-            m for m in all_messages if m.id != chat_session.summary_message_id
-        ]
+        messages = list(chat_history)
 
-    # Filter out root message (empty message with no parent)
-    all_messages = [m for m in all_messages if m.message]
+    # Filter out empty messages
+    messages = [m for m in messages if m.message]
 
-    if not all_messages:
-        return [], [], existing_summary
+    if not messages:
+        return [], []
 
     # Work backwards from most recent, keeping messages until we exceed budget
     to_keep: list[ChatMessage] = []
     tokens_used = 0
 
-    for msg in reversed(all_messages):
+    for msg in reversed(messages):
         msg_tokens = msg.token_count or 0
         if tokens_used + msg_tokens > tokens_for_recent and to_keep:
             break
@@ -199,9 +175,9 @@ def get_messages_to_summarize(
 
     # Everything else gets summarized
     keep_ids = {m.id for m in to_keep}
-    to_summarize = [m for m in all_messages if m.id not in keep_ids]
+    to_summarize = [m for m in messages if m.id not in keep_ids]
 
-    return to_summarize, to_keep, existing_summary
+    return to_summarize, to_keep
 
 
 def format_messages_for_summary(messages: list[ChatMessage]) -> str:
@@ -234,17 +210,14 @@ def generate_summary(
     messages_text = format_messages_for_summary(messages)
 
     if existing_summary:
-        user_prompt = f"""The conversation has a previous summary:
-
-{existing_summary}
-
-Now, incorporate the following new messages into an updated summary:
-
-{messages_text}
-
-Create a unified summary that combines both the previous context and new information."""
+        user_prompt = PROGRESSIVE_SUMMARY_USER_PROMPT.format(
+            existing_summary=existing_summary,
+            messages_text=messages_text,
+        )
     else:
-        user_prompt = f"Please summarize the following conversation:\n\n{messages_text}"
+        user_prompt = (
+            f"Summarize this conversation (most recent topic first):\n\n{messages_text}"
+        )
 
     response = llm.invoke(
         [
@@ -257,27 +230,36 @@ Create a unified summary that combines both the previous context and new informa
 
 def compress_chat_history(
     db_session: Session,
-    chat_session: ChatSession,
+    chat_history: list[ChatMessage],
     llm: LLM,
     compression_params: CompressionParams,
 ) -> CompressionResult:
     """
     Main compression function. Creates a summary ChatMessage.
 
+    The summary message's parent_message_id points to the last message in
+    chat_history, making it branch-aware via the tree structure.
+
     Args:
         db_session: Database session
-        chat_session: The chat session to compress
+        chat_history: Branch-aware list of messages
         llm: LLM to use for summarization
         compression_params: Parameters from get_compression_params
 
     Returns:
         CompressionResult indicating success/failure
     """
+    if not chat_history:
+        return CompressionResult(summary_created=False, messages_summarized=0)
+
     try:
-        # Get messages to summarize and existing summary
-        to_summarize, to_keep, existing_summary = get_messages_to_summarize(
-            db_session,
-            chat_session,
+        # Find existing summary for this branch
+        existing_summary = find_summary_for_branch(db_session, chat_history)
+
+        # Get messages to summarize
+        to_summarize, to_keep = get_messages_to_summarize(
+            chat_history,
+            existing_summary,
             tokens_for_recent=compression_params.tokens_for_recent,
         )
 
@@ -296,32 +278,23 @@ def compress_chat_history(
         tokenizer = get_tokenizer(None, None)
         summary_token_count = len(tokenizer.encode(summary_text))
 
-        # Get the root message to use as parent for the summary
-        root_message = get_or_create_root_message(
-            chat_session_id=chat_session.id,
-            db_session=db_session,
-        )
-
         # Create new summary as a ChatMessage
+        # Parent is the last message in history - this makes the summary branch-aware
         summary_message = ChatMessage(
-            chat_session_id=chat_session.id,
+            chat_session_id=chat_history[0].chat_session_id,
             message_type=MessageType.ASSISTANT,
             message=summary_text,
             token_count=summary_token_count,
-            parent_message_id=root_message.id,  # Child of root to avoid conflicts
+            parent_message_id=chat_history[-1].id,
             last_summarized_message_id=to_summarize[-1].id,
         )
         db_session.add(summary_message)
-        db_session.flush()  # Get the ID
-
-        # Update chat session to point to new summary
-        chat_session.summary_message_id = summary_message.id
-
         db_session.commit()
 
         logger.info(
             f"Compressed {len(to_summarize)} messages into summary "
-            f"(session_id={chat_session.id}, summary_tokens={summary_token_count})"
+            f"(session_id={chat_history[0].chat_session_id}, "
+            f"summary_tokens={summary_token_count})"
         )
 
         return CompressionResult(
@@ -330,58 +303,12 @@ def compress_chat_history(
         )
 
     except Exception as e:
-        logger.exception(f"Compression failed for session {chat_session.id}: {e}")
+        logger.exception(
+            f"Compression failed for session {chat_history[0].chat_session_id}: {e}"
+        )
         db_session.rollback()
         return CompressionResult(
             summary_created=False,
             messages_summarized=0,
             error=str(e),
         )
-
-
-def get_compressed_history(
-    db_session: Session,
-    chat_session: ChatSession,
-) -> tuple[ChatMessage | None, list[ChatMessage]]:
-    """
-    Get the compressed history for a chat session.
-
-    Args:
-        db_session: Database session
-        chat_session: The chat session
-
-    Returns:
-        Tuple of (summary_message, recent_messages) - summary may be None if no compression done
-    """
-    from onyx.db.chat import get_chat_messages_by_session
-
-    # Get summary message if exists
-    summary_message: ChatMessage | None = None
-    cutoff_id: int | None = None
-    if chat_session.summary_message_id is not None:
-        summary_message = db_session.get(ChatMessage, chat_session.summary_message_id)
-        if summary_message:
-            cutoff_id = summary_message.last_summarized_message_id
-
-    # Get all messages
-    all_messages = get_chat_messages_by_session(
-        chat_session_id=chat_session.id,
-        user_id=None,
-        db_session=db_session,
-        skip_permission_check=True,
-        prefetch_top_two_level_tool_calls=False,
-    )
-
-    # Filter to messages after cutoff, excluding the summary message itself
-    if cutoff_id is not None:
-        recent_messages = [
-            m
-            for m in all_messages
-            if m.id > cutoff_id and m.id != chat_session.summary_message_id
-        ]
-    else:
-        recent_messages = [
-            m for m in all_messages if m.id != chat_session.summary_message_id
-        ]
-
-    return summary_message, recent_messages

@@ -18,18 +18,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add summary_message_id to chat_session
-    op.add_column(
-        "chat_session",
-        sa.Column(
-            "summary_message_id",
-            sa.Integer(),
-            sa.ForeignKey("chat_message.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
-    )
-
     # Add last_summarized_message_id to chat_message
+    # This field marks a message as a summary and indicates the last message it covers.
+    # Summaries are branch-aware via their parent_message_id pointing to the branch.
     op.add_column(
         "chat_message",
         sa.Column(
@@ -43,4 +34,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("chat_message", "last_summarized_message_id")
-    op.drop_column("chat_session", "summary_message_id")

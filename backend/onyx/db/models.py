@@ -2297,12 +2297,6 @@ class ChatSession(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Points to the summary ChatMessage for this session (if compression has occurred)
-    summary_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
