@@ -66,7 +66,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         icon: FiLink,
         status: null,
         content: <div />,
-        supportsCompact: true,
+        supportsCollapsible: false,
       },
     ]);
   }
@@ -80,7 +80,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       {
         icon: null,
         status: null,
-        supportsCompact: true,
+        supportsCollapsible: false,
         content: (
           <div className="flex flex-col">
             <Text as="p" text02 className="text-sm mb-1">
@@ -121,7 +121,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     {
       icon: FiLink,
       status: "Opening URLs:",
-      supportsCompact: false,
+      supportsCollapsible: false,
       content: (
         <div className="flex flex-col">
           {displayDocuments ? (

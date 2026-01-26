@@ -21,8 +21,8 @@ export interface StepContainerProps {
   onToggle?: () => void;
   /** Whether collapse control is shown */
   collapsible?: boolean;
-  /** Collapse button shown only when renderer supports compact mode */
-  supportsCompact?: boolean;
+  /** Collapse button shown only when renderer supports collapsible mode */
+  supportsCollapsible?: boolean;
   /** Additional class names */
   className?: string;
   /** Last step (no bottom connector) */
@@ -46,7 +46,7 @@ export function StepContainer({
   isExpanded = true,
   onToggle,
   collapsible = true,
-  supportsCompact = false,
+  supportsCollapsible = false,
   isLastStep = false,
   isFirstStep = false,
   className,
@@ -54,7 +54,7 @@ export function StepContainer({
   isHover = false,
   collapsedIcon: CollapsedIconComponent,
 }: StepContainerProps) {
-  const showCollapseControls = collapsible && supportsCompact && onToggle;
+  const showCollapseControls = collapsible && supportsCollapsible && onToggle;
 
   return (
     <div className={cn("flex w-full", className)}>

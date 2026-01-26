@@ -97,7 +97,7 @@ export const TimelineRendererComponent = React.memo(
           icon: null,
           status: null,
           content: <></>,
-          supportsCompact: false,
+          supportsCollapsible: false,
           isExpanded,
           onToggle: handleToggle,
           renderType,

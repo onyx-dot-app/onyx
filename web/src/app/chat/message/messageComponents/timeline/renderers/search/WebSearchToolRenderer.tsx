@@ -1,5 +1,5 @@
 import React from "react";
-import { SvgSearch, SvgGlobe, SvgSearchMenu } from "@opal/icons";
+import { SvgSearch, SvgGlobe, SvgSearchMenu, SvgCircle } from "@opal/icons";
 import { SearchToolPacket } from "@/app/chat/services/streamingModels";
 import {
   MessageRenderer,
@@ -22,14 +22,15 @@ import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   id: `query-${index}`,
-  title: query,
+  title: typeof query === "string" ? query : "",
   sourceType: ValidSources.Web,
   icon: SvgSearch,
 });
 
 const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
   id: doc.document_id,
-  title: doc.semantic_identifier || "",
+  title:
+    typeof doc.semantic_identifier === "string" ? doc.semantic_identifier : "",
   sourceType: doc.source_type,
   sourceUrl: doc.link,
   description: doc.blurb,
@@ -40,17 +41,16 @@ const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
 });
 
 /**
- * SearchToolRenderer - Renders search tool execution steps
+ * WebSearchToolRenderer - Renders web search tool execution steps
  *
  * RenderType modes:
- * - FULL: Shows all details (queries list + results). Header passed as `status` prop.
+ * - FULL: Shows 2 timeline steps (queries list, then results).
  *         Used when step is expanded in timeline.
- * - COMPACT: Shows only results (no queries). Header passed as `status` prop.
- *            Used when step is collapsed in timeline, still wrapped in StepContainer.
  * - HIGHLIGHT: Shows only results with header embedded directly in content.
  *              No StepContainer wrapper. Used for parallel streaming preview.
+ * - INLINE: Phase-based (queries -> results) for collapsed streaming view.
  */
-export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
+export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   packets,
   onComplete,
   animate,
@@ -59,27 +59,22 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   children,
 }) => {
   const searchState = constructCurrentSearchState(packets);
-  const { queries, results, isSearching, isComplete, isInternetSearch } =
-    searchState;
+  const { queries, results } = searchState;
 
-  const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
   const isInline = renderType === RenderType.INLINE;
 
   const hasResults = results.length > 0;
 
-  const icon = isInternetSearch ? SvgGlobe : SvgSearchMenu;
-  const queriesHeader = isInternetSearch
-    ? "Searching the web for:"
-    : "Searching internal documents for:";
+  const queriesHeader = "Searching the web for:";
 
   if (queries.length === 0) {
     return children([
       {
-        icon,
+        icon: SvgGlobe,
         status: null,
         content: <div />,
-        supportsCompact: true,
+        supportsCollapsible: false,
       },
     ]);
   }
@@ -90,7 +85,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
       {
         icon: null,
         status: null,
-        supportsCompact: true,
+        supportsCollapsible: false,
         content: (
           <div className="flex flex-col">
             <Text as="p" text02 className="text-sm mb-1">
@@ -125,7 +120,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         {
           icon: null,
           status: queriesHeader,
-          supportsCompact: true,
+          supportsCollapsible: false,
           content: (
             <SearchChipList
               items={queries}
@@ -147,7 +142,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
       {
         icon: null,
         status: "Reading results",
-        supportsCompact: true,
+        supportsCollapsible: false,
         content: (
           <SearchChipList
             items={results}
@@ -169,106 +164,54 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     ]);
   }
 
-  // FULL mode for web search: return 2 separate timeline steps
-  if (!isCompact && isInternetSearch) {
-    const steps: RendererResult[] = [
-      {
-        icon: SvgGlobe,
-        status: "Searching the web for:",
-        content: (
-          <SearchChipList
-            items={queries}
-            initialCount={INITIAL_QUERIES_TO_SHOW}
-            expansionCount={QUERIES_PER_EXPANSION}
-            getKey={(_, index) => index}
-            toSourceInfo={queryToSourceInfo}
-            emptyState={
-              !stopPacketSeen && !hasResults ? <BlinkingDot /> : undefined
-            }
-            showDetailsCard={false}
-            isQuery={true}
-          />
-        ),
-        supportsCompact: true,
-      },
-    ];
+  // FULL mode: return 2 separate timeline steps
+  const steps: RendererResult[] = [
+    {
+      icon: SvgGlobe,
+      status: "Searching the web for:",
+      content: (
+        <SearchChipList
+          items={queries}
+          initialCount={INITIAL_QUERIES_TO_SHOW}
+          expansionCount={QUERIES_PER_EXPANSION}
+          getKey={(_, index) => index}
+          toSourceInfo={queryToSourceInfo}
+          emptyState={
+            !stopPacketSeen && !hasResults ? <BlinkingDot /> : undefined
+          }
+          showDetailsCard={false}
+          isQuery={true}
+        />
+      ),
+      supportsCollapsible: false,
+    },
+  ];
 
-    // Add results step when results arrive
-    if (hasResults) {
-      steps.push({
-        icon: SvgSearchMenu,
-        status: "Reading results:",
-        content: (
-          <SearchChipList
-            items={results}
-            initialCount={INITIAL_RESULTS_TO_SHOW}
-            expansionCount={RESULTS_PER_EXPANSION}
-            getKey={(doc: OnyxDocument, index: number) =>
-              doc.document_id ?? `result-${index}`
+  // Add results step when results arrive
+  if (hasResults) {
+    steps.push({
+      icon: SvgCircle,
+      status: "Reading results:",
+      content: (
+        <SearchChipList
+          items={results}
+          initialCount={INITIAL_RESULTS_TO_SHOW}
+          expansionCount={RESULTS_PER_EXPANSION}
+          getKey={(doc: OnyxDocument, index: number) =>
+            doc.document_id ?? `result-${index}`
+          }
+          toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
+          onClick={(doc: OnyxDocument) => {
+            if (doc.link) {
+              window.open(doc.link, "_blank");
             }
-            toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-            onClick={(doc: OnyxDocument) => {
-              if (doc.link) {
-                window.open(doc.link, "_blank");
-              }
-            }}
-            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-          />
-        ),
-        supportsCompact: true,
-      });
-    }
-
-    return children(steps);
+          }}
+          emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+        />
+      ),
+      supportsCollapsible: false,
+    });
   }
 
-  // Internal search or COMPACT mode: single-result behavior
-  return children([
-    {
-      icon,
-      status: queriesHeader,
-      supportsCompact: true,
-      content: (
-        <div className="flex flex-col">
-          {!isCompact && (
-            <SearchChipList
-              items={queries}
-              initialCount={INITIAL_QUERIES_TO_SHOW}
-              expansionCount={QUERIES_PER_EXPANSION}
-              getKey={(_, index) => index}
-              toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-              showDetailsCard={false}
-              isQuery={true}
-            />
-          )}
-
-          {(results.length > 0 || queries.length > 0) && (
-            <>
-              {!isCompact && (
-                <Text as="p" mainUiMuted text03>
-                  Reading results:
-                </Text>
-              )}
-              <SearchChipList
-                items={results}
-                initialCount={INITIAL_RESULTS_TO_SHOW}
-                expansionCount={RESULTS_PER_EXPANSION}
-                getKey={(doc: OnyxDocument, index: number) =>
-                  doc.document_id ?? `result-${index}`
-                }
-                toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-                onClick={(doc: OnyxDocument) => {
-                  if (doc.link) {
-                    window.open(doc.link, "_blank");
-                  }
-                }}
-                emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-              />
-            </>
-          )}
-        </div>
-      ),
-    },
-  ]);
+  return children(steps);
 };

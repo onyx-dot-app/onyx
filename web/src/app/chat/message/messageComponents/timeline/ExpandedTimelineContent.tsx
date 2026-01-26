@@ -76,7 +76,7 @@ const TimelineStep = React.memo(function TimelineStep({
               isExpanded={result.isExpanded}
               onToggle={result.onToggle}
               collapsible={true}
-              supportsCompact={result.supportsCompact}
+              supportsCollapsible={result.supportsCollapsible}
               isLastStep={index === results.length - 1 && isLastStep}
               isFirstStep={index === 0 && isFirstStep}
               hideHeader={results.length === 1 && isSingleStep}

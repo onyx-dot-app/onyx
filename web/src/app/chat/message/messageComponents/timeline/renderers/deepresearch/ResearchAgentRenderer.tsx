@@ -180,7 +180,7 @@ export const ResearchAgentRenderer: MessageRenderer<
               />
             </div>
           ),
-          supportsCompact: true,
+          supportsCollapsible: true,
         },
       ]);
     }
@@ -215,7 +215,7 @@ export const ResearchAgentRenderer: MessageRenderer<
                       ))}
                     </>
                   ),
-                  supportsCompact: true,
+                  supportsCollapsible: true,
                 },
               ])
             }
@@ -238,7 +238,7 @@ export const ResearchAgentRenderer: MessageRenderer<
               <div className="text-text-600 text-sm">{researchTask}</div>
             </div>
           ),
-          supportsCompact: true,
+          supportsCollapsible: true,
         },
       ]);
     }
@@ -248,7 +248,7 @@ export const ResearchAgentRenderer: MessageRenderer<
         icon: null,
         status: null,
         content: <></>,
-        supportsCompact: true,
+        supportsCollapsible: true,
       },
     ]);
   }
@@ -314,7 +314,7 @@ export const ResearchAgentRenderer: MessageRenderer<
                         !researchTask && index === 0 && resultIndex === 0
                       }
                       isHover={result.isHover}
-                      supportsCompact={result.supportsCompact}
+                      supportsCollapsible={result.supportsCollapsible}
                     >
                       {result.content}
                     </StepContainer>
@@ -363,7 +363,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       icon: null,
       status: null,
       content: researchAgentContent,
-      supportsCompact: true,
+      supportsCollapsible: true,
     },
   ]);
 };

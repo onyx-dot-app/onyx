@@ -73,7 +73,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       {
         icon,
         status: status,
-        supportsCompact: true,
+        supportsCollapsible: true,
         content: (
           <div className="text-sm text-muted-foreground">
             {isRunning && `${toolName} running...`}
@@ -88,7 +88,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     {
       icon,
       status,
-      supportsCompact: true,
+      supportsCollapsible: true,
       content: (
         <div className="flex flex-col gap-3">
           {/* File responses */}
