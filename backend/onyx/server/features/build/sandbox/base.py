@@ -310,12 +310,12 @@ class SandboxManager(ABC):
 
     @abstractmethod
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
-        """Read a file from the session's outputs directory.
+        """Read a file from the session's workspace.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            path: Relative path within sessions/$session_id/outputs/
+            path: Relative path within sessions/$session_id/
 
         Returns:
             File contents as bytes
@@ -385,6 +385,23 @@ class SandboxManager(ABC):
 
         Returns:
             Tuple of (file_count, total_size_bytes)
+        """
+        ...
+
+    @abstractmethod
+    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
+        """Get the webapp URL for a session's Next.js server.
+
+        Returns the appropriate URL based on the backend:
+        - Local: Returns localhost URL with port
+        - Kubernetes: Returns internal cluster service URL
+
+        Args:
+            sandbox_id: The sandbox ID
+            port: The session's allocated Next.js port
+
+        Returns:
+            URL to access the webapp
         """
         ...
 

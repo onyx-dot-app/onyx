@@ -7,7 +7,6 @@ It orchestrates session CRUD, message handling, artifact management, and file sy
 import io
 import json
 import mimetypes
-import os
 import zipfile
 from collections.abc import Generator
 from datetime import datetime
@@ -49,7 +48,6 @@ from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
-from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -1234,21 +1232,26 @@ class SessionManager:
         if sandbox is None:
             return None
 
-        # Use session-specific path
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
-        )
         artifacts: list[dict[str, Any]] = []
-        output_dir = session_path / "outputs"
-
-        if not output_dir.exists():
-            return artifacts
-
         now = datetime.now(timezone.utc)
 
-        # Check for webapp
-        web_dir = output_dir / "web"
-        if web_dir.exists():
+        # Check for outputs directory using sandbox manager
+        try:
+            output_entries = self._sandbox_manager.list_directory(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                path="outputs",
+            )
+        except ValueError:
+            # Directory doesn't exist
+            return artifacts
+
+        # Check for webapp (web directory in outputs)
+        has_webapp = any(
+            entry.is_directory and entry.name == "web" for entry in output_entries
+        )
+
+        if has_webapp:
             artifacts.append(
                 {
                     "id": str(uuid.uuid4()),
@@ -1293,26 +1296,29 @@ class SessionManager:
         if sandbox is None:
             return None
 
-        # Use session-specific path
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
-        )
-        file_path = session_path / path
-
-        if not file_path.exists():
-            return None
-
-        if file_path.is_dir():
-            raise ValueError("Cannot download directory")
+        # Extract filename from path
+        filename = Path(path).name
 
         # Filter out opencode.json files
-        if file_path.name == "opencode.json":
+        if filename == "opencode.json":
             return None
 
-        content = file_path.read_bytes()
-        mime_type, _ = mimetypes.guess_type(str(file_path))
+        # Use sandbox manager to read file (works for both local and K8s)
+        try:
+            content = self._sandbox_manager.read_file(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                path=path,
+            )
+        except ValueError as e:
+            # read_file raises ValueError for not found or directory
+            if "Not a file" in str(e):
+                raise ValueError("Cannot download directory")
+            return None
 
-        return (content, mime_type or "application/octet-stream", file_path.name)
+        mime_type, _ = mimetypes.guess_type(filename)
+
+        return (content, mime_type or "application/octet-stream", filename)
 
     def get_webapp_info(
         self,
@@ -1338,10 +1344,11 @@ class SessionManager:
         if sandbox is None:
             return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
 
-        # Build webapp URL if we have a port and webapp exists
+        # Return the proxy URL - the proxy handles routing to the correct sandbox
+        # for both local and Kubernetes environments
         webapp_url = None
         if session.nextjs_port:
-            webapp_url = f"{WEB_DOMAIN}:{session.nextjs_port}"
+            webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
 
         return {
             "has_webapp": session.nextjs_port is not None,
@@ -1373,25 +1380,56 @@ class SessionManager:
         if sandbox is None:
             return None
 
-        # Check if web directory exists (in session workspace)
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
-        )
-        web_dir = session_path / "outputs" / "web"
-
-        if not web_dir.exists():
+        # Check if web directory exists using sandbox manager
+        try:
+            self._sandbox_manager.list_directory(
+                sandbox_id=sandbox.id,
+                session_id=session_id,
+                path="outputs/web",
+            )
+        except ValueError:
+            # Directory doesn't exist
             return None
+
+        # Recursively collect all files in the web directory
+        def collect_files(dir_path: str) -> list[tuple[str, str]]:
+            """Collect all files recursively, returning (full_path, relative_path) tuples."""
+            files: list[tuple[str, str]] = []
+            try:
+                entries = self._sandbox_manager.list_directory(
+                    sandbox_id=sandbox.id,
+                    session_id=session_id,
+                    path=dir_path,
+                )
+                for entry in entries:
+                    if entry.is_directory:
+                        # Recursively collect files from subdirectory
+                        files.extend(collect_files(entry.path))
+                    else:
+                        # entry.path is relative to session root (e.g., "outputs/web/file.txt")
+                        # arcname should be relative to web dir (e.g., "file.txt")
+                        arcname = entry.path.replace("outputs/web/", "", 1)
+                        files.append((entry.path, arcname))
+            except ValueError:
+                pass  # Directory doesn't exist, skip
+            return files
+
+        file_list = collect_files("outputs/web")
 
         # Create zip file in memory
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # Walk through the web directory and add all files
-            for root, _, files in os.walk(web_dir):
-                for file in files:
-                    file_path = Path(root) / file
-                    # Create relative path for the zip archive
-                    arcname = file_path.relative_to(web_dir)
-                    zip_file.write(file_path, arcname)
+            for full_path, arcname in file_list:
+                try:
+                    content = self._sandbox_manager.read_file(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        path=full_path,
+                    )
+                    zip_file.writestr(arcname, content)
+                except ValueError:
+                    # Skip files that can't be read
+                    pass
 
         zip_buffer.seek(0)
 
@@ -1438,45 +1476,19 @@ class SessionManager:
         if sandbox is None:
             return None
 
-        # Use session-specific path
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
+        # Use sandbox manager to list directory (works for both local and K8s)
+        raw_entries = self._sandbox_manager.list_directory(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            path=path,
         )
-        target_dir = session_path / path if path else session_path
 
-        # Security check: ensure path doesn't escape session workspace via .. traversal
-        try:
-            normalized = os.path.normpath(str(target_dir))
-            session_normalized = os.path.normpath(str(session_path))
-            if not normalized.startswith(session_normalized):
-                raise ValueError("Access denied - path traversal")
-        except ValueError:
-            raise
-
-        if not target_dir.exists():
-            raise ValueError("Directory not found")
-
-        if not target_dir.is_dir():
-            raise ValueError("Path is not a directory")
-
-        entries: list[FileSystemEntry] = []
-
-        for item in target_dir.iterdir():
-            # Filter hidden files and directories
-            if item.name in HIDDEN_PATTERNS or item.name.startswith("."):
-                continue
-
-            rel_path = f"{path}/{item.name}" if path else item.name
-            is_dir = item.is_dir()
-
-            entry = FileSystemEntry(
-                name=item.name,
-                path=rel_path,
-                is_directory=is_dir,
-                size=item.stat().st_size if not is_dir else None,
-                mime_type=mimetypes.guess_type(str(item))[0] if not is_dir else None,
-            )
-            entries.append(entry)
+        # Filter hidden files and directories
+        entries: list[FileSystemEntry] = [
+            entry
+            for entry in raw_entries
+            if entry.name not in HIDDEN_PATTERNS and not entry.name.startswith(".")
+        ]
 
         # Sort: directories first, then files, both alphabetically
         entries.sort(key=lambda e: (not e.is_directory, e.name.lower()))

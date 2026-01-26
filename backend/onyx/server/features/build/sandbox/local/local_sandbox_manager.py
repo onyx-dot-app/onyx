@@ -7,10 +7,10 @@ IMPORTANT: This manager does NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
 """
 
+import mimetypes
 import re
 import threading
 from collections.abc import Generator
-from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -612,25 +612,27 @@ class LocalSandboxManager(SandboxManager):
         entries = []
         for item in target_path.iterdir():
             stat = item.stat()
+            is_file = item.is_file()
+            mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
             entries.append(
                 FilesystemEntry(
                     name=item.name,
                     path=str(item.relative_to(session_path)),
                     is_directory=item.is_dir(),
-                    size_bytes=stat.st_size if item.is_file() else None,
-                    modified_at=datetime.fromtimestamp(stat.st_mtime),
+                    size=stat.st_size if is_file else None,
+                    mime_type=mime_type,
                 )
             )
 
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
-        """Read a file from the session's outputs directory.
+        """Read a file from the session's workspace.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            path: Relative path within sessions/$session_id/outputs/
+            path: Relative path within sessions/$session_id/
 
         Returns:
             File contents as bytes
@@ -639,12 +641,11 @@ class LocalSandboxManager(SandboxManager):
             ValueError: If path traversal attempted or path is not a file
         """
         session_path = self._get_session_path(sandbox_id, session_id)
-        outputs_path = session_path / "outputs"
-        target_path = outputs_path / path.lstrip("/")
+        target_path = session_path / path.lstrip("/")
 
-        # Security: ensure path is within outputs directory
+        # Security: ensure path is within session directory
         try:
-            target_path.resolve().relative_to(outputs_path.resolve())
+            target_path.resolve().relative_to(session_path.resolve())
         except ValueError:
             raise ValueError("Path traversal not allowed")
 
@@ -783,3 +784,17 @@ class LocalSandboxManager(SandboxManager):
                 total_size += item.stat().st_size
 
         return file_count, total_size
+
+    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
+        """Get the webapp URL for a session's Next.js server.
+
+        For local backend, returns localhost URL with port.
+
+        Args:
+            sandbox_id: The sandbox ID (not used in local backend)
+            port: The session's allocated Next.js port
+
+        Returns:
+            URL to access the webapp (e.g., http://localhost:3015)
+        """
+        return f"http://localhost:{port}"

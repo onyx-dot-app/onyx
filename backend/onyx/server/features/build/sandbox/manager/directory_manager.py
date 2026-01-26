@@ -239,7 +239,9 @@ class DirectoryManager:
             if self._outputs_template_path.exists():
                 shutil.copytree(self._outputs_template_path, output_dir, symlinks=True)
             else:
-                output_dir.mkdir(parents=True)
+                raise RuntimeError(
+                    f"Outputs template path does not exist: {self._outputs_template_path}"
+                )
 
         # Create additional output directories for generated content
         (output_dir / "slides").mkdir(parents=True, exist_ok=True)

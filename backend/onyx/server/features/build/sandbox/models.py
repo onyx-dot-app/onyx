@@ -59,11 +59,12 @@ class SnapshotInfo(BaseModel):
 class FilesystemEntry(BaseModel):
     """Represents a file or directory entry in the sandbox filesystem.
 
-    Used for directory listing operations.
+    Used for directory listing operations. This is the canonical model used
+    by both sandbox managers and the API layer.
     """
 
     name: str
     path: str
     is_directory: bool
-    size_bytes: int | None
-    modified_at: datetime | None
+    size: int | None = None  # File size in bytes (None for directories)
+    mime_type: str | None = None  # MIME type (None for directories)

@@ -450,7 +450,7 @@ def download_artifact(
     )
 
 
-@router.get("/{session_id}/webapp", response_model=WebappInfo)
+@router.get("/{session_id}/webapp-info", response_model=WebappInfo)
 def get_webapp_info(
     session_id: UUID,
     user: User = Depends(current_user),

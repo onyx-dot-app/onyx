@@ -301,7 +301,7 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
 export async function fetchWebappInfo(
   sessionId: string
 ): Promise<ApiWebappInfoResponse> {
-  const res = await fetch(`${API_BASE}/sessions/${sessionId}/webapp`);
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/webapp-info`);
 
   if (!res.ok) {
     throw new Error(`Failed to fetch webapp info: ${res.status}`);
