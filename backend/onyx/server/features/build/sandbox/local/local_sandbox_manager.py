@@ -796,3 +796,17 @@ class LocalSandboxManager(SandboxManager):
                 total_size += item.stat().st_size
 
         return file_count, total_size
+
+    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
+        """Get the webapp URL for a session's Next.js server.
+
+        For local backend, returns localhost URL with port.
+
+        Args:
+            sandbox_id: The sandbox ID (not used in local backend)
+            port: The session's allocated Next.js port
+
+        Returns:
+            URL to access the webapp (e.g., http://localhost:3015)
+        """
+        return f"http://localhost:{port}"
