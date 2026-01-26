@@ -150,6 +150,24 @@
       "consoleTitle": "Slack Bot Console"
     },
     {
+      "name": "Discord Bot",
+      "consoleName": "Discord Bot",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "onyx/onyxbot/discord/client.py",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Discord Bot Console"
+    },
+    {
       "name": "MCP Server",
       "consoleName": "MCP Server",
       "type": "debugpy",
@@ -600,6 +618,27 @@
       "presentation": {
         "group": "4",
         "order": 0
+      }
+    },
+    {
+      "name": "Restore seeded database dump",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--fetch-seeded",
+        "--yes"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
       }
     },
     {
