@@ -47,7 +47,7 @@ export default function BuildWelcome({
       <div className="flex flex-col items-center gap-4 mb-6">
         <Logo folded size={48} />
         <Text headingH2 text05>
-          What are we crafting today?
+          What shall we craft today?
         </Text>
       </div>
       <div className="w-full max-w-2xl">
@@ -55,7 +55,7 @@ export default function BuildWelcome({
           ref={inputBarRef}
           onSubmit={onSubmit}
           isRunning={isRunning}
-          placeholder="Create a React app that shows a dashboard..."
+          placeholder="Analyze my data and create a dashboard..."
           sandboxInitializing={sandboxInitializing}
           preProvisionedSessionId={preProvisionedSessionId}
         />

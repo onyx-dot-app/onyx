@@ -318,7 +318,7 @@ def ensure_build_mode_intro_notification(user: User, db_session: Session) -> Non
         user_id=user.id,
         notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
         db_session=db_session,
-        title="Introducing Onyx Build Mode",
-        description="Unleash AI agents to create slides, dashboards, documents, and more.",
+        title="Introducing Onyx Craft",
+        description="Unleash Onyx to create dashboards, slides, documents, and more with your connected data.",
         additional_data={"feature": BUILD_MODE_FEATURE_ID},
     )

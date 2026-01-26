@@ -37,11 +37,18 @@ export default function BuildModeIntroContent({
                   <Text
                     headingH1
                     className="!text-9xl !text-white relative inline-block"
+                    style={{
+                      fontFamily: "var(--font-kh-teka)",
+                      fontWeight: 500,
+                    }}
                   >
                     Craft
                   </Text>
                 </span>
-                <span className="pointer-events-none absolute top-3 -right-14 text-[1em] font-black uppercase tracking-[0.2em]">
+                <span
+                  className="pointer-events-none absolute top-3 -right-14 text-[1em] uppercase tracking-[0.2em] !text-white"
+                  style={{ fontFamily: "var(--font-kh-teka)", fontWeight: 500 }}
+                >
                   BETA
                 </span>
               </div>

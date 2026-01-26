@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState, useEffect } from "react";
+import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
@@ -207,13 +207,20 @@ const MemoizedAppSidebarInner = memo(
 
     // State for intro animation overlay
     const [showIntroAnimation, setShowIntroAnimation] = useState(false);
+    // Track if auto-trigger has fired (prevents race condition during dismiss)
+    const hasAutoTriggeredRef = useRef(false);
 
-    // Show intro animation when build mode notification exists and Onyx Craft is enabled
+    // Auto-show intro once when there's an undismissed notification
     useEffect(() => {
-      if (isOnyxCraftEnabled && buildModeNotification && !showIntroAnimation) {
+      if (
+        isOnyxCraftEnabled &&
+        buildModeNotification &&
+        !hasAutoTriggeredRef.current
+      ) {
+        hasAutoTriggeredRef.current = true;
         setShowIntroAnimation(true);
       }
-    }, [buildModeNotification, isOnyxCraftEnabled, showIntroAnimation]);
+    }, [buildModeNotification, isOnyxCraftEnabled]);
 
     // Dismiss the build mode notification
     const dismissBuildModeNotification = useCallback(async () => {
@@ -473,6 +480,10 @@ const MemoizedAppSidebarInner = memo(
       ),
       [folded, createProjectModal.toggle, createProjectModal.isOpen]
     );
+    const handleShowBuildIntro = useCallback(() => {
+      setShowIntroAnimation(true);
+    }, []);
+
     const settingsButton = useMemo(
       () => (
         <div>
@@ -485,10 +496,15 @@ const MemoizedAppSidebarInner = memo(
               {isAdmin ? "Admin Panel" : "Curator Panel"}
             </SidebarTab>
           )}
-          <UserAvatarPopover folded={folded} />
+          <UserAvatarPopover
+            folded={folded}
+            onShowBuildIntro={
+              isOnyxCraftEnabled ? handleShowBuildIntro : undefined
+            }
+          />
         </div>
       ),
-      [folded, isAdmin, isCurator]
+      [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
     );
 
     return (
@@ -548,8 +564,9 @@ const MemoizedAppSidebarInner = memo(
                   dismissBuildModeNotification();
                 }}
                 onTryBuildMode={() => {
+                  setShowIntroAnimation(false);
                   dismissBuildModeNotification();
-                  router.push("/build");
+                  router.push("/build/v1");
                 }}
               />
             </motion.div>
