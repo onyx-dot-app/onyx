@@ -13,6 +13,7 @@ import {
   sendMessageStream,
   processSSEStream,
   fetchSession,
+  generateFollowupSuggestions,
 } from "@/app/build/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
@@ -96,6 +97,12 @@ export function useBuildStreaming() {
   );
   const triggerWebappRefresh = useBuildSessionStore(
     (state) => state.triggerWebappRefresh
+  );
+  const setFollowupSuggestions = useBuildSessionStore(
+    (state) => state.setFollowupSuggestions
+  );
+  const setSuggestionsLoading = useBuildSessionStore(
+    (state) => state.setSuggestionsLoading
   );
 
   /**
@@ -395,6 +402,39 @@ export function useBuildStreaming() {
                   .map((item) => item.content)
                   .join("");
 
+                // Check if this is the first assistant message
+                const isFirstAssistantMessage =
+                  session.messages.filter((m) => m.type === "assistant")
+                    .length === 0;
+
+                // Get first user message for suggestion generation
+                const firstUserMessage = session.messages.find(
+                  (m) => m.type === "user"
+                );
+
+                // Generate suggestions asynchronously (don't block) after first response
+                if (
+                  isFirstAssistantMessage &&
+                  firstUserMessage &&
+                  textContent
+                ) {
+                  // Fire and forget - don't await
+                  (async () => {
+                    try {
+                      setSuggestionsLoading(sessionId, true);
+                      const suggestions = await generateFollowupSuggestions(
+                        sessionId,
+                        firstUserMessage.content,
+                        textContent
+                      );
+                      setFollowupSuggestions(sessionId, suggestions);
+                    } catch (err) {
+                      console.error("Failed to generate suggestions:", err);
+                      setFollowupSuggestions(sessionId, null);
+                    }
+                  })();
+                }
+
                 // Save the complete stream items in message_metadata for full rendering
                 appendMessageToSession(sessionId, {
                   id: genId("assistant-msg"),
@@ -461,6 +501,8 @@ export function useBuildStreaming() {
       addArtifactToSession,
       appendMessageToSession,
       triggerWebappRefresh,
+      setFollowupSuggestions,
+      setSuggestionsLoading,
     ]
   );
 

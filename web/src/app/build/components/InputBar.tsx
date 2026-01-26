@@ -46,6 +46,8 @@ export interface InputBarProps {
   preProvisionedSessionId?: string | null;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
+  /** When true, removes bottom rounding to allow seamless connection with components below */
+  noBottomRounding?: boolean;
 }
 
 /**
@@ -120,6 +122,7 @@ const InputBar = React.memo(
         sessionId,
         preProvisionedSessionId,
         sandboxInitializing = false,
+        noBottomRounding = false,
       },
       ref
     ) => {
@@ -270,7 +273,8 @@ const InputBar = React.memo(
         <div
           ref={containerRef}
           className={cn(
-            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
+            "w-full flex flex-col shadow-01 bg-background-neutral-00",
+            noBottomRounding ? "rounded-t-16 rounded-b-none" : "rounded-16",
             disabled && "opacity-50 cursor-not-allowed pointer-events-none"
           )}
           aria-disabled={disabled}

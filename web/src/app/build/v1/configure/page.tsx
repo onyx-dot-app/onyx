@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import useSWR from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -10,13 +9,13 @@ import {
   useIsPreProvisioning,
 } from "@/app/build/hooks/useBuildSessionStore";
 import { useBuildLlmSelection } from "@/app/build/hooks/useBuildLlmSelection";
+import { useBuildConnectors } from "@/app/build/hooks/useBuildConnectors";
 import { BuildLLMPopover } from "@/app/build/components/BuildLLMPopover";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { SvgPlug, SvgSettings, SvgChevronDown } from "@opal/icons";
 import { FiInfo } from "react-icons/fi";
 import { ValidSources } from "@/lib/types";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import ConnectorCard, {
   BuildConnectorConfig,
 } from "@/app/build/v1/configure/components/ConnectorCard";
@@ -59,10 +58,6 @@ const BUILD_CONNECTORS: ValidSources[] = [
   ValidSources.Fireflies,
   ValidSources.Hubspot,
 ];
-
-interface BuildConnectorListResponse {
-  connectors: BuildConnectorConfig[];
-}
 
 interface SelectedConnectorState {
   type: ValidSources;
@@ -262,11 +257,8 @@ export default function BuildConfigPage() {
 
   const hasLlmProvider = (llmProviders?.length ?? 0) > 0;
 
-  const { data, mutate, isLoading } = useSWR<BuildConnectorListResponse>(
-    "/api/build/connectors",
-    errorHandlingFetcher,
-    { refreshInterval: 30000 } // 30 seconds - matches other connector status hooks
-  );
+  const { connectors, hasActiveConnector, isLoading, mutate } =
+    useBuildConnectors();
 
   // Check for OAuth return state on mount
   useEffect(() => {
@@ -291,13 +283,8 @@ export default function BuildConfigPage() {
   // Merge configured status with all available build connectors
   const connectorStates = BUILD_CONNECTORS.map((type) => ({
     type,
-    config: data?.connectors?.find((c) => c.source === type) || null,
+    config: connectors.find((c) => c.source === type) || null,
   }));
-
-  // Check if there's at least one connector in "connected" (active) state
-  const hasActiveConnector = connectorStates.some(
-    ({ config }) => config?.status === "connected"
-  );
 
   // Auto-enable demo data when all connectors are disconnected
   useEffect(() => {

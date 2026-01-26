@@ -17,11 +17,15 @@ from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DirectoryListing
+from onyx.server.features.build.api.models import GenerateSuggestionsRequest
+from onyx.server.features.build.api.models import GenerateSuggestionsResponse
 from onyx.server.features.build.api.models import SessionCreateRequest
 from onyx.server.features.build.api.models import SessionListResponse
 from onyx.server.features.build.api.models import SessionNameGenerateResponse
 from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
+from onyx.server.features.build.api.models import SuggestionBubble
+from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
 from onyx.server.features.build.db.build_session import get_build_session
@@ -151,6 +155,41 @@ def generate_session_name(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return SessionNameGenerateResponse(name=generated_name)
+
+
+@router.post(
+    "/{session_id}/generate-suggestions", response_model=GenerateSuggestionsResponse
+)
+def generate_suggestions(
+    session_id: UUID,
+    request: GenerateSuggestionsRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> GenerateSuggestionsResponse:
+    """Generate follow-up suggestions based on the first exchange in a session."""
+    session_manager = SessionManager(db_session)
+
+    # Verify session exists and belongs to user
+    session = session_manager.get_session(session_id, user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Generate suggestions
+    suggestions_data = session_manager.generate_followup_suggestions(
+        user_message=request.user_message,
+        assistant_message=request.assistant_message,
+    )
+
+    # Convert to response model
+    suggestions = [
+        SuggestionBubble(
+            theme=SuggestionTheme(item["theme"]),
+            text=item["text"],
+        )
+        for item in suggestions_data
+    ]
+
+    return GenerateSuggestionsResponse(suggestions=suggestions)
 
 
 @router.put("/{session_id}/name", response_model=SessionResponse)
