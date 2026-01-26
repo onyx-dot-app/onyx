@@ -1524,7 +1524,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sessionHistory: [
             {
               id: sessionId,
-              title: "New Build Session",
+              title: "Fresh Craft",
               createdAt: new Date(),
             },
             ...sessionHistory,

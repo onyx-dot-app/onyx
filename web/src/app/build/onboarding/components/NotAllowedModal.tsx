@@ -49,12 +49,15 @@ export default function NotAllowedModal({
             {/* Header */}
             <div className="flex flex-col items-center gap-2 text-center">
               <Text headingH2 text05>
-                Build Mode Access Restricted
+                Custom Crafting Restricted
               </Text>
               <Text mainUiBody text03 className="max-w-sm">
-                Unfortunately, connecting your own data to Build Mode requires
-                admin permissions. You can create a new Onyx account and try
-                Build Mode with your own data!
+                Unfortunately, connecting your own data to Craft requires admin
+                permissions.
+                <br />
+                <br />
+                Luckily, you can create a new Onyx account to become an admin
+                and craft with your own data!
               </Text>
             </div>
           </div>

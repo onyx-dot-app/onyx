@@ -316,8 +316,8 @@ export default function BuildConfigPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgPlug}
-        title="Configure Build Mode"
-        description="Select data sources and your build mode LLM"
+        title="Configure Onyx Craft"
+        description="Select data sources and your default LLM"
         rightChildren={
           <div className="flex items-center gap-2">
             <Button
@@ -395,7 +395,7 @@ export default function BuildConfigPage() {
                 >
                   <InputLayouts.Horizontal
                     title="Default LLM"
-                    description="Select the language model for your build sessions"
+                    description="Select the language model to craft with"
                     center
                   >
                     <BuildLLMPopover
@@ -432,7 +432,7 @@ export default function BuildConfigPage() {
                     Connectors
                   </Text>
                   <Text secondaryBody text03>
-                    Connect your data sources to build mode
+                    Connect your own data sources
                   </Text>
                 </div>
                 <div className="w-fit flex-shrink-0">

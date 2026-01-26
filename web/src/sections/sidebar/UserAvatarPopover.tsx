@@ -141,9 +141,13 @@ function SettingsPopover({
 
 export interface SettingsProps {
   folded?: boolean;
+  onShowBuildIntro?: () => void;
 }
 
-export default function UserAvatarPopover({ folded }: SettingsProps) {
+export default function UserAvatarPopover({
+  folded,
+  onShowBuildIntro,
+}: SettingsProps) {
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
@@ -227,6 +231,7 @@ export default function UserAvatarPopover({ folded }: SettingsProps) {
           <NotificationsPopover
             onClose={() => setPopupState("Settings")}
             onNavigate={() => setPopupState(undefined)}
+            onShowBuildIntro={onShowBuildIntro}
           />
         )}
       </Popover.Content>

@@ -15,6 +15,16 @@
 @import "css/switch.css";
 @import "css/z-index.css";
 
+/* KH Teka Font */
+
+@font-face {
+  font-family: "KH Teka";
+  src: url("/fonts/KHTeka-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -167,6 +177,8 @@
     "Segoe UI", Roboto, sans-serif;
   --font-dm-mono: "DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
     Consolas, "Courier New", monospace;
+  --font-kh-teka: "KH Teka", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
 }
 
 /* HEADING STYLES */

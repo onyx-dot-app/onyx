@@ -61,17 +61,13 @@ function BuildSessionButton({
   const prevTitleRef = useRef(historyItem.title);
   const [shouldAnimate, setShouldAnimate] = useState(false);
 
-  // Detect when title changes from "New Build Session" to a real name (auto-naming)
+  // Detect when title changes from "Fresh Craft" to a real name (auto-naming)
   useEffect(() => {
     const prevTitle = prevTitleRef.current;
     const newTitle = historyItem.title;
 
     // Animate only when transitioning from default name to LLM-generated name
-    if (
-      prevTitle !== newTitle &&
-      prevTitle === "New Build Session" &&
-      !renaming
-    ) {
+    if (prevTitle !== newTitle && prevTitle === "Fresh Craft" && !renaming) {
       setShouldAnimate(true);
     }
 
@@ -181,8 +177,8 @@ function BuildSessionButton({
             </Button>
           }
         >
-          Are you sure you want to delete this build session? This action cannot
-          be undone.
+          Are you sure you want to delete this build? This action cannot be
+          undone.
         </ConfirmationModalLayout>
       )}
     </>
@@ -250,7 +246,7 @@ const MemoizedBuildSidebarInner = memo(
           folded={folded}
           onClick={handleNewBuild}
         >
-          New Build
+          Start Crafting
         </SidebarTab>
       ),
       [folded, handleNewBuild]
