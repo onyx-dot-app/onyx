@@ -16,7 +16,7 @@ import {
   LEVEL_OPTIONS,
   WORK_AREAS_WITH_LEVEL,
   setBuildLlmSelection,
-  BUILD_MODE_PROVIDERS,
+  getBuildLlmSelection,
 } from "@/app/build/onboarding/constants";
 import {
   LLMProviderDescriptor,
@@ -99,6 +99,57 @@ const PROVIDERS: ProviderConfig[] = [
     apiKeyLabel: "OpenRouter Dashboard",
   },
 ];
+
+// Priority order for auto-selecting LLM when user completes onboarding without explicit selection
+const LLM_AUTO_SELECT_PRIORITY = [
+  { provider: "anthropic", model: "claude-opus-4-5" },
+  { provider: "openai", model: "gpt-5.2" },
+  { provider: "anthropic", model: "claude-sonnet-4-5" },
+  { provider: "openai", model: "gpt-5.1-codex" },
+  { provider: "openrouter", model: "moonshotai/kimi-k2-thinking" },
+] as const;
+
+/**
+ * Auto-select the best available LLM based on priority order.
+ * Used when user completes onboarding without going through LLM setup step.
+ */
+function autoSelectBestLlm(
+  llmProviders: LLMProviderDescriptor[] | undefined
+): void {
+  // Don't override if user already has a selection
+  if (getBuildLlmSelection()) return;
+
+  if (!llmProviders || llmProviders.length === 0) return;
+
+  // Try each priority option in order
+  for (const { provider, model } of LLM_AUTO_SELECT_PRIORITY) {
+    const matchingProvider = llmProviders.find((p) => p.provider === provider);
+    if (matchingProvider) {
+      // Check if the preferred model is available
+      const hasModel = matchingProvider.model_configurations.some(
+        (m) => m.name === model
+      );
+      if (hasModel) {
+        setBuildLlmSelection({
+          providerName: matchingProvider.name,
+          provider: matchingProvider.provider,
+          modelName: model,
+        });
+        return;
+      }
+    }
+  }
+
+  // Fallback: use the default provider's default model
+  const defaultProvider = llmProviders.find((p) => p.is_default_provider);
+  if (defaultProvider) {
+    setBuildLlmSelection({
+      providerName: defaultProvider.name,
+      provider: defaultProvider.provider,
+      modelName: defaultProvider.default_model_name,
+    });
+  }
+}
 
 interface SelectableButtonProps {
   selected: boolean;
@@ -469,6 +520,10 @@ export default function BuildOnboardingModal({
       if (steps.includes("llm-setup") && connectionStatus === "success") {
         await onLlmComplete();
       }
+
+      // Auto-select best available LLM if user didn't go through LLM setup
+      // (e.g., non-admin users or when all providers already configured)
+      autoSelectBestLlm(llmProviders);
 
       await onComplete({
         firstName: firstName.trim(),

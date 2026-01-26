@@ -1,6 +1,17 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  forwardRef,
+  useImperativeHandle,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { cn, isImageFile } from "@/lib/utils";
 import {
@@ -111,8 +122,8 @@ function BuildFileCard({
   return cardContent;
 }
 
-const InputBar = React.memo(
-  React.forwardRef<InputBarHandle, InputBarProps>(
+const InputBar = memo(
+  forwardRef<InputBarHandle, InputBarProps>(
     (
       {
         onSubmit,
@@ -146,7 +157,7 @@ const InputBar = React.memo(
       } = useUploadFilesContext();
 
       // Expose reset, focus, and setMessage methods to parent via ref
-      React.useImperativeHandle(ref, () => ({
+      useImperativeHandle(ref, () => ({
         reset: () => {
           setMessage("");
           clearFiles();
@@ -185,7 +196,7 @@ const InputBar = React.memo(
       }, []);
 
       const handleFileSelect = useCallback(
-        async (e: React.ChangeEvent<HTMLInputElement>) => {
+        async (e: ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
           // Pass effectiveSessionId so files upload immediately if session exists
@@ -196,7 +207,7 @@ const InputBar = React.memo(
       );
 
       const handlePaste = useCallback(
-        (event: React.ClipboardEvent) => {
+        (event: ClipboardEvent) => {
           const items = event.clipboardData?.items;
           if (items) {
             const pastedFiles: File[] = [];
@@ -218,7 +229,7 @@ const InputBar = React.memo(
       );
 
       const handleInputChange = useCallback(
-        (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+        (event: ChangeEvent<HTMLTextAreaElement>) => {
           setMessage(event.target.value);
         },
         []
@@ -249,7 +260,7 @@ const InputBar = React.memo(
       ]);
 
       const handleKeyDown = useCallback(
-        (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        (event: KeyboardEvent<HTMLTextAreaElement>) => {
           if (
             event.key === "Enter" &&
             !event.shiftKey &&

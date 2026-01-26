@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 
 export interface BigButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  extends ButtonHTMLAttributes<HTMLButtonElement> {
   // Subvariants
   primary?: boolean;
   secondary?: boolean;
@@ -14,7 +14,7 @@ export interface BigButtonProps
   inverted?: boolean;
 }
 
-const BigButton = React.forwardRef<HTMLButtonElement, BigButtonProps>(
+const BigButton = forwardRef<HTMLButtonElement, BigButtonProps>(
   (
     { primary, secondary, inverted, disabled, children, className, ...props },
     ref

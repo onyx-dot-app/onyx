@@ -8,7 +8,6 @@ import {
   OnboardingModalMode,
   OnboardingModalController,
   BuildUserInfo,
-  OnboardingStep,
 } from "@/app/build/onboarding/types";
 import {
   getBuildUserPersona,
@@ -167,37 +166,4 @@ export function useOnboardingModal(): OnboardingModalController {
     allProvidersConfigured,
     hasAnyProvider,
   };
-}
-
-// Helper to compute which pages to show based on mode
-export function getStepsForMode(
-  mode: OnboardingModalMode,
-  isAdmin: boolean,
-  allProvidersConfigured: boolean,
-  hasUserInfo: boolean
-): OnboardingStep[] {
-  switch (mode.type) {
-    case "initial-onboarding":
-      // Full flow: user-info (if needed) → llm-setup (if admin + not all configured) → page1 → page2
-      const steps: OnboardingStep[] = [];
-      if (!hasUserInfo) {
-        steps.push("user-info");
-      }
-      if (isAdmin && !allProvidersConfigured) {
-        steps.push("llm-setup");
-      }
-      steps.push("page1", "page2");
-      return steps;
-
-    case "edit-persona":
-      // Just user-info
-      return ["user-info"];
-
-    case "add-llm":
-      // Just llm-setup
-      return ["llm-setup"];
-
-    case "closed":
-      return [];
-  }
 }

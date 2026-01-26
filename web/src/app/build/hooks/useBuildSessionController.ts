@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
 import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
+import { getBuildUserPersona } from "@/app/build/onboarding/constants";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { useUser } from "@/components/user/UserProvider";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */
@@ -27,6 +30,20 @@ export function useBuildSessionController({
   existingSessionId,
 }: UseBuildSessionControllerProps) {
   const router = useRouter();
+
+  // Check LLM provider availability
+  const { llmProviders } = useLLMProviders();
+  const hasAnyProvider = !!(llmProviders && llmProviders.length > 0);
+
+  // Get user state - this updates when refreshUser() is called after onboarding
+  const { user } = useUser();
+
+  // Check if user has completed onboarding (persona cookie is set)
+  // Re-evaluate when user changes (refreshUser is called after onboarding completes)
+  const hasCompletedOnboarding = useMemo(() => {
+    const persona = getBuildUserPersona();
+    return persona !== null;
+  }, [user]);
 
   // Refs to track previous session state
   const priorSessionIdRef = useRef<string | null>(null);
@@ -85,10 +102,14 @@ export function useBuildSessionController({
       // Trigger pre-provisioning if:
       // 1. We haven't already triggered for this "visit" to new build page
       // 2. Status is idle (not already provisioning or ready)
-      // This prevents re-triggering when consuming (state goes idle, effect runs, URL unchanged)
+      // 3. User has completed onboarding (persona cookie is set)
+      // 4. At least one LLM provider is available
+      // This prevents pre-provisioning before onboarding is complete
       if (
         !hasTriggeredProvisioningRef.current &&
-        preProvisioning.status === "idle"
+        preProvisioning.status === "idle" &&
+        hasCompletedOnboarding &&
+        hasAnyProvider
       ) {
         hasTriggeredProvisioningRef.current = true;
         ensurePreProvisionedSession();
@@ -146,6 +167,8 @@ export function useBuildSessionController({
     loadSession,
     preProvisioning,
     ensurePreProvisionedSession,
+    hasCompletedOnboarding,
+    hasAnyProvider,
   ]);
 
   /**
