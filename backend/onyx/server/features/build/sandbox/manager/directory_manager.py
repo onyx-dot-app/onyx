@@ -364,6 +364,7 @@ class DirectoryManager:
         api_base: str | None = None,
         disabled_tools: list[str] | None = None,
         overwrite: bool = True,
+        dev_mode: bool = False,
     ) -> None:
         """Create opencode.json configuration file for the agent.
 
@@ -378,6 +379,8 @@ class DirectoryManager:
             api_base: Optional custom API base URL
             disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
             overwrite: If True, overwrite existing config. If False, preserve existing config.
+            dev_mode: If True, allow all external directories (local dev).
+                      If False (default), only whitelist /workspace/files and /workspace/demo-data.
         """
         config_path = sandbox_path / "opencode.json"
         if not overwrite and config_path.exists():
@@ -393,6 +396,7 @@ class DirectoryManager:
             api_key=api_key,
             api_base=api_base,
             disabled_tools=disabled_tools,
+            dev_mode=dev_mode,
         )
 
         config_json = json.dumps(config, indent=2)
