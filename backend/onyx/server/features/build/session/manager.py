@@ -576,7 +576,10 @@ class SessionManager:
         """Get existing empty session or create a new one with provisioned sandbox.
 
         Used for pre-provisioning sandboxes when user lands on /build/v1.
-        Returns existing recent empty session if one exists, otherwise creates new.
+        Returns existing recent empty session if one exists and has a healthy sandbox,
+        otherwise creates new. If an empty session exists but its sandbox is
+        unhealthy/terminated/missing, the stale session is deleted and a fresh
+        one is created (which will handle sandbox recovery/re-provisioning).
 
         Args:
             user_id: The user ID
@@ -594,10 +597,34 @@ class SessionManager:
         """
         existing = get_empty_session_for_user(user_id, self._db_session)
         if existing:
-            logger.info(
-                f"Returning existing empty session {existing.id} for user {user_id}"
-            )
-            return existing
+            # Verify sandbox is healthy before returning existing session
+            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+
+            if sandbox and sandbox.status.is_active():
+                # Quick health check to verify sandbox is actually responsive
+                if self._sandbox_manager.health_check(
+                    sandbox.id, nextjs_port=existing.nextjs_port, timeout=5.0
+                ):
+                    logger.info(
+                        f"Returning existing empty session {existing.id} for user {user_id}"
+                    )
+                    return existing
+                else:
+                    logger.warning(
+                        f"Empty session {existing.id} has unhealthy sandbox {sandbox.id}. "
+                        f"Deleting and creating fresh session."
+                    )
+            else:
+                logger.warning(
+                    f"Empty session {existing.id} has no active sandbox "
+                    f"(sandbox={'missing' if not sandbox else sandbox.status}). "
+                    f"Deleting and creating fresh session."
+                )
+
+            # Delete the stale empty session - create_session__no_commit will
+            # handle sandbox recovery/re-provisioning
+            delete_build_session__no_commit(existing.id, user_id, self._db_session)
+
         return self.create_session__no_commit(
             user_id=user_id,
             user_work_area=user_work_area,
