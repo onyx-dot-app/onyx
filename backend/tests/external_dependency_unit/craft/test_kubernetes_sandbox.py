@@ -693,7 +693,7 @@ def test_kubernetes_sandbox_file_sync() -> None:
             k8s_client.connect_get_namespaced_pod_exec,
             name=pod_name,
             namespace=SANDBOX_NAMESPACE,
-            container="sandbox",
+            container="file-sync",
             command=exec_command,
             stderr=True,
             stdin=False,
