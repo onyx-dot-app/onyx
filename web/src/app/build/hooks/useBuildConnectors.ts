@@ -14,8 +14,10 @@ interface BuildConnectorListResponse {
  *
  * @returns Object containing:
  * - `connectors`: Array of connector configurations
- * - `hasActiveConnector`: True if at least one connector has status "connected"
- * - `hasAnyConnector`: True if any connectors exist (regardless of status)
+ * - `hasActiveConnector`: True if at least one connector has status "connected" (currently synced)
+ * - `hasConnectorEverSucceeded`: True if any connector has ever succeeded (has last_indexed timestamp).
+ *   Use this to determine if demo data can be disabled or if banners should be hidden.
+ * - `hasAnyConnector`: True if any connectors exist (regardless of status). Useful for general checks.
  * - `isLoading`: True while fetching
  * - `mutate`: Function to refetch connectors
  */
@@ -31,12 +33,19 @@ export function useBuildConnectors() {
   // At least one connector with status "connected" (actively synced)
   const hasActiveConnector = connectors.some((c) => c.status === "connected");
 
+  // Check if any connector has ever succeeded (has last_indexed timestamp)
+  // This allows demo data to be turned off even if connectors currently have errors
+  const hasConnectorEverSucceeded = connectors.some(
+    (c) => c.last_indexed !== null
+  );
+
   // Any connector exists (regardless of status)
   const hasAnyConnector = connectors.length > 0;
 
   return {
     connectors,
     hasActiveConnector,
+    hasConnectorEverSucceeded,
     hasAnyConnector,
     isLoading,
     mutate,

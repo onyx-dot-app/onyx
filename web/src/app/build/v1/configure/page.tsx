@@ -257,7 +257,7 @@ export default function BuildConfigPage() {
 
   const hasLlmProvider = (llmProviders?.length ?? 0) > 0;
 
-  const { connectors, hasActiveConnector, isLoading, mutate } =
+  const { connectors, hasConnectorEverSucceeded, isLoading, mutate } =
     useBuildConnectors();
 
   // Check for OAuth return state on mount
@@ -286,15 +286,15 @@ export default function BuildConfigPage() {
     config: connectors.find((c) => c.source === type) || null,
   }));
 
-  // Auto-enable demo data when all connectors are disconnected
+  // Auto-enable demo data when no connectors have ever succeeded
   useEffect(() => {
-    if (!hasActiveConnector && !demoDataEnabled) {
+    if (!hasConnectorEverSucceeded && !demoDataEnabled) {
       setDemoDataEnabled(true);
       // Also sync pending state so UI stays consistent
       setPendingDemoData(true);
       setOriginalDemoData(true);
     }
-  }, [hasActiveConnector, demoDataEnabled, setDemoDataEnabled]);
+  }, [hasConnectorEverSucceeded, demoDataEnabled, setDemoDataEnabled]);
 
   const handleDeleteConfirm = async () => {
     if (!connectorToDelete) return;
@@ -440,25 +440,31 @@ export default function BuildConfigPage() {
                     tooltip={
                       isUpdating || isPreProvisioning
                         ? "Please wait while your session is being provisioned"
-                        : !hasActiveConnector
+                        : !hasConnectorEverSucceeded
                           ? "Connect and sync a data source to disable demo data"
                           : undefined
                     }
                     disabled={
-                      hasActiveConnector && !isUpdating && !isPreProvisioning
+                      hasConnectorEverSucceeded &&
+                      !isUpdating &&
+                      !isPreProvisioning
                     }
                   >
                     <Card
                       padding={0.75}
                       className={
-                        !hasActiveConnector || isUpdating || isPreProvisioning
+                        !hasConnectorEverSucceeded ||
+                        isUpdating ||
+                        isPreProvisioning
                           ? "opacity-50"
                           : ""
                       }
                     >
                       <div
                         className={`flex items-center gap-3 ${
-                          !hasActiveConnector || isUpdating || isPreProvisioning
+                          !hasConnectorEverSucceeded ||
+                          isUpdating ||
+                          isPreProvisioning
                             ? "pointer-events-none"
                             : ""
                         }`}
@@ -476,7 +482,7 @@ export default function BuildConfigPage() {
                           disabled={
                             isUpdating ||
                             isPreProvisioning ||
-                            !hasActiveConnector
+                            !hasConnectorEverSucceeded
                           }
                           onCheckedChange={(newValue) => {
                             setPendingDemoDataEnabled(newValue);
