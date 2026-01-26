@@ -38,6 +38,7 @@ import io
 import json
 import os
 import re
+import shlex
 import tarfile
 import threading
 import time
@@ -1137,9 +1138,11 @@ echo "Session cleanup complete"
                 )
 
             # Create session directory structure in pod
+            # Use shlex.quote to prevent shell injection
+            safe_session_path = shlex.quote(session_path)
             setup_script = f"""
 set -e
-mkdir -p {session_path}/outputs
+mkdir -p {safe_session_path}/outputs
 """
             k8s_stream(
                 self._core_api.connect_get_namespaced_pod_exec,
@@ -1166,7 +1169,7 @@ mkdir -p {session_path}/outputs
             # Extract in the session directory (tar was created with outputs/ as root)
             extract_script = f"""
 set -e
-cd {session_path}
+cd {safe_session_path}
 echo '{tar_b64}' | base64 -d | tar -xzf -
 """
             resp = k8s_stream(
