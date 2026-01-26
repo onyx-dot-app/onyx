@@ -26,6 +26,7 @@ from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 from sqlalchemy.orm import Session as DBSession
 
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.llm import fetch_default_provider
@@ -1340,7 +1341,7 @@ class SessionManager:
         # Build webapp URL if we have a port and webapp exists
         webapp_url = None
         if session.nextjs_port:
-            webapp_url = f"http://localhost:{session.nextjs_port}"
+            webapp_url = f"{WEB_DOMAIN}:{session.nextjs_port}"
 
         return {
             "has_webapp": session.nextjs_port is not None,
