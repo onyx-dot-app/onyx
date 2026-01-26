@@ -883,11 +883,10 @@ export default function AgentEditorPage({
         message: "Agent deleted successfully",
       });
 
+      deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/chat/agents");
     }
-
-    deleteAgentModal.toggle(false);
   }
 
   // FilePickerPopover callbacks - defined outside render to avoid inline functions
@@ -1048,15 +1047,18 @@ export default function AgentEditorPage({
 
                 <shareAgentModal.Provider>
                   <ShareAgentModal
-                    agent={existingAgent}
+                    agentId={existingAgent?.id}
+                    userIds={values.shared_user_ids}
+                    groupIds={values.shared_group_ids}
+                    isPublic={values.is_public}
                     onShare={(userIds, groupIds, isPublic) => {
                       setFieldValue("shared_user_ids", userIds);
                       setFieldValue("shared_group_ids", groupIds);
                       setFieldValue("is_public", isPublic);
+                      shareAgentModal.toggle(false);
                     }}
                   />
                 </shareAgentModal.Provider>
-
                 <deleteAgentModal.Provider>
                   {deleteAgentModal.isOpen && (
                     <ConfirmationModalLayout
@@ -1303,6 +1305,7 @@ export default function AgentEditorPage({
                                       wrap
                                       gap={0.5}
                                       justifyContent="start"
+                                      alignItems="start"
                                     >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
@@ -1479,7 +1482,7 @@ export default function AgentEditorPage({
                           <Card>
                             <InputLayouts.Horizontal
                               title="Share This Agent"
-                              description="Share this agent with other users, groups, or everyone in your organization. "
+                              description="Share this agent with other users, groups, or everyone in your organization."
                               center
                             >
                               <Button

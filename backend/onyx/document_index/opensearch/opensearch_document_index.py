@@ -3,7 +3,9 @@ from typing import Any
 
 import httpx
 
+from onyx.access.models import DocumentAccess
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
+from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -66,6 +68,18 @@ from shared_configs.model_server_models import Embedding
 
 
 logger = setup_logger(__name__)
+
+
+def generate_opensearch_filtered_access_control_list(
+    access: DocumentAccess,
+) -> list[str]:
+    """Generates an access control list with PUBLIC_DOC_PAT removed.
+
+    In the OpenSearch schema this is represented by PUBLIC_FIELD_NAME.
+    """
+    access_control_list = access.to_acl()
+    access_control_list.discard(PUBLIC_DOC_PAT)
+    return list(access_control_list)
 
 
 def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
@@ -152,10 +166,9 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata_suffix=chunk.metadata_suffix_keyword,
         last_updated=chunk.source_document.doc_updated_at,
         public=chunk.access.is_public,
-        # TODO(andrei): When going over ACL look very carefully at
-        # access_control_list. Notice DocumentAccess::to_acl prepends every
-        # string with a type.
-        access_control_list=list(chunk.access.to_acl()),
+        access_control_list=generate_opensearch_filtered_access_control_list(
+            chunk.access
+        ),
         global_boost=chunk.boost,
         semantic_identifier=chunk.source_document.semantic_identifier,
         image_file_id=chunk.image_file_id,
@@ -578,8 +591,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # here so we don't have to think about passing in the
             # appropriate types into this dict.
             if update_request.access is not None:
-                properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = list(
-                    update_request.access.to_acl()
+                properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = (
+                    generate_opensearch_filtered_access_control_list(
+                        update_request.access
+                    )
                 )
             if update_request.document_sets is not None:
                 properties_to_update[DOCUMENT_SETS_FIELD_NAME] = list(
@@ -625,13 +640,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def id_based_retrieval(
         self,
         chunk_requests: list[DocumentSectionRequest],
-        # TODO(andrei): When going over ACL look very carefully at
-        # access_control_list. Notice DocumentAccess::to_acl prepends every
-        # string with a type.
         filters: IndexFilters,
         # TODO(andrei): Remove this from the new interface at some point; we
         # should not be exposing this.
         batch_retrieval: bool = False,
+        # TODO(andrei): Add a param for whether to retrieve hidden docs.
     ) -> list[InferenceChunk]:
         """
         TODO(andrei): Consider implementing this method to retrieve on document
@@ -646,6 +659,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             query_body = DocumentQuery.get_from_document_id_query(
                 document_id=chunk_request.document_id,
                 tenant_state=self._tenant_state,
+                index_filters=filters,
+                include_hidden=False,
                 max_chunk_size=chunk_request.max_chunk_size,
                 min_chunk_index=chunk_request.min_chunk_ind,
                 max_chunk_index=chunk_request.max_chunk_ind,
@@ -672,9 +687,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
         query_embedding: Embedding,
         final_keywords: list[str] | None,
         query_type: QueryType,
-        # TODO(andrei): When going over ACL look very carefully at
-        # access_control_list. Notice DocumentAccess::to_acl prepends every
-        # string with a type.
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,
@@ -688,6 +700,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_candidates=1000,  # TODO(andrei): Magic number.
             num_hits=num_to_retrieve,
             tenant_state=self._tenant_state,
+            index_filters=filters,
+            include_hidden=False,
         )
         search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
             body=query_body,

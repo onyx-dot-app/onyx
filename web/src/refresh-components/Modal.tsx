@@ -77,6 +77,7 @@ const useModalContext = () => {
 const widthClasses = {
   lg: "w-[80dvw]",
   md: "w-[60rem]",
+  "md-sm": "w-[40rem]",
   sm: "w-[32rem]",
 };
 

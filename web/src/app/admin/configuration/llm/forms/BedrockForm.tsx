@@ -31,6 +31,7 @@ import { fetchBedrockModels } from "../utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
+import { cn } from "@/lib/utils";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
@@ -135,7 +136,7 @@ function BedrockFormInternals({
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
   return (
-    <Form className={LLM_FORM_CLASS_NAME}>
+    <Form className={cn(LLM_FORM_CLASS_NAME, "w-full")}>
       <DisplayNameField disabled={!!existingLlmProvider} />
 
       <SelectorFormField
@@ -176,7 +177,7 @@ function BedrockFormInternals({
           </Tabs.Content>
 
           <Tabs.Content value={AUTH_METHOD_ACCESS_KEY}>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 w-full">
               <TextFormField
                 name={FIELD_AWS_ACCESS_KEY_ID}
                 label="AWS Access Key ID"
@@ -191,7 +192,7 @@ function BedrockFormInternals({
           </Tabs.Content>
 
           <Tabs.Content value={AUTH_METHOD_LONG_TERM_API_KEY}>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 w-full">
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
                 label="AWS Bedrock Long-term API Key"

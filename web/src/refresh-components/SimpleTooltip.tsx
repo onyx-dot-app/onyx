@@ -45,7 +45,7 @@ import Text from "@/refresh-components/texts/Text";
 export interface SimpleTooltipProps
   extends React.ComponentPropsWithoutRef<typeof TooltipContent> {
   disabled?: boolean;
-  tooltip?: React.ReactNode | string;
+  tooltip?: React.ReactNode;
   children?: React.ReactNode;
   delayDuration?: number;
 }

@@ -1,0 +1,98 @@
+{{- if .Values.discordbot.enabled }}
+# Discord bot MUST run as a single replica - Discord only allows one client connection per bot token.
+# Do NOT enable HPA or increase replicas. Message processing is offloaded to scalable API pods via HTTP.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-discordbot
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.discordbot.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  # CRITICAL: Discord bots cannot be horizontally scaled - only one WebSocket connection per token is allowed
+  replicas: 1
+  strategy:
+    type: Recreate  # Ensure old pod is terminated before new one starts to avoid duplicate connections
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      {{- if .Values.discordbot.deploymentLabels }}
+      {{- toYaml .Values.discordbot.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.discordbot.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        {{- with .Values.discordbot.deploymentLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.discordbot.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.discordbot.podSecurityContext | nindent 8 }}
+      {{- with .Values.discordbot.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.discordbot.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.discordbot.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: discordbot
+          securityContext:
+            {{- toYaml .Values.discordbot.securityContext | nindent 12 }}
+          image: "{{ .Values.discordbot.image.repository }}:{{ .Values.discordbot.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command: ["python", "onyx/onyxbot/discord/client.py"]
+          resources:
+            {{- toYaml .Values.discordbot.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx.envSecrets" . | nindent 12}}
+            # Discord bot token - required for bot to connect
+            {{- if .Values.discordbot.botToken }}
+            - name: DISCORD_BOT_TOKEN
+              value: {{ .Values.discordbot.botToken | quote }}
+            {{- end }}
+            {{- if .Values.discordbot.botTokenSecretName }}
+            - name: DISCORD_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.discordbot.botTokenSecretName }}
+                  key: {{ .Values.discordbot.botTokenSecretKey | default "token" }}
+            {{- end }}
+            # Command prefix for bot commands (default: "!")
+            {{- if .Values.discordbot.invokeChar }}
+            - name: DISCORD_BOT_INVOKE_CHAR
+              value: {{ .Values.discordbot.invokeChar | quote }}
+            {{- end }}
+          {{- with .Values.discordbot.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.discordbot.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

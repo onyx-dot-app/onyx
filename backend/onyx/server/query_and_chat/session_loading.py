@@ -580,7 +580,7 @@ def translate_assistant_message_to_packets(
     # Determine stop reason - check if message indicates user cancelled
     stop_reason: str | None = None
     if chat_message.message:
-        if "Generation was stopped" in chat_message.message:
+        if "generation was stopped" in chat_message.message.lower():
             stop_reason = "user_cancelled"
 
     # Add overall stop packet at the end
