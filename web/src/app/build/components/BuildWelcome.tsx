@@ -6,6 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import Logo from "@/refresh-components/Logo";
 import InputBar, { InputBarHandle } from "@/app/build/components/InputBar";
 import SuggestedPrompts from "@/app/build/components/SuggestedPrompts";
+import ConnectDataBanner from "@/app/build/components/ConnectDataBanner";
 
 interface BuildWelcomeProps {
   onSubmit: (
@@ -42,7 +43,7 @@ export default function BuildWelcome({
       <div className="flex flex-col items-center gap-4 mb-6">
         <Logo folded size={48} />
         <Text headingH2 text05>
-          What would you like to build?
+          What are we crafting today?
         </Text>
       </div>
       <div className="w-full max-w-2xl">
@@ -54,6 +55,7 @@ export default function BuildWelcome({
           sandboxInitializing={sandboxInitializing}
           preProvisionedSessionId={preProvisionedSessionId}
         />
+        <ConnectDataBanner />
         <SuggestedPrompts onPromptClick={handlePromptClick} />
       </div>
     </div>

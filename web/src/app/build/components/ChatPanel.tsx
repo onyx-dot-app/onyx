@@ -12,6 +12,8 @@ import {
   useBuildSessionStore,
   useIsPreProvisioning,
   usePreProvisionedSessionId,
+  useFollowupSuggestions,
+  useSuggestionsLoading,
 } from "@/app/build/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/build/hooks/useBuildStreaming";
 import {
@@ -22,9 +24,11 @@ import {
 import { uploadFile } from "@/app/build/services/apiServices";
 import { BUILD_SEARCH_PARAM_NAMES } from "@/app/build/services/searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import InputBar from "@/app/build/components/InputBar";
+import InputBar, { InputBarHandle } from "@/app/build/components/InputBar";
 import BuildWelcome from "@/app/build/components/BuildWelcome";
 import BuildMessageList from "@/app/build/components/BuildMessageList";
+import SuggestionBubbles from "@/app/build/components/SuggestionBubbles";
+import ConnectorBannersRow from "@/app/build/components/ConnectorBannersRow";
 import SandboxStatusIndicator from "@/app/build/components/SandboxStatusIndicator";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
@@ -98,12 +102,20 @@ export default function BuildChatPanel({
   const isPreProvisioning = useIsPreProvisioning();
   const preProvisionedSessionId = usePreProvisionedSessionId();
   const { currentMessageFiles, hasUploadingFiles } = useUploadFilesContext();
+  const followupSuggestions = useFollowupSuggestions();
+  const suggestionsLoading = useSuggestionsLoading();
+  const clearFollowupSuggestions = useBuildSessionStore(
+    (state) => state.clearFollowupSuggestions
+  );
 
   // Ref to access current file state in async callbacks
   const currentFilesRef = useRef(currentMessageFiles);
   useEffect(() => {
     currentFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
+
+  // Ref to access InputBar methods
+  const inputBarRef = useRef<InputBarHandle>(null);
 
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -187,6 +199,11 @@ export default function BuildChatPanel({
     setShowScrollButton(false);
   }, [sessionId]);
 
+  // Handle suggestion bubble click - populate InputBar with the suggestion
+  const handleSuggestionSelect = useCallback((text: string) => {
+    inputBarRef.current?.setMessage(text);
+  }, []);
+
   const handleSubmit = useCallback(
     async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
       if (hasSession && sessionId) {
@@ -199,6 +216,9 @@ export default function BuildChatPanel({
           });
           return;
         }
+
+        // Clear follow-up suggestions when user sends a new message
+        clearFollowupSuggestions(sessionId);
 
         // Add user message to state
         appendMessageToCurrent({
@@ -321,6 +341,7 @@ export default function BuildChatPanel({
       appendMessageToSession,
       nameBuildSession,
       router,
+      clearFollowupSuggestions,
     ]
   );
 
@@ -331,11 +352,11 @@ export default function BuildChatPanel({
       <div
         className={cn(
           "flex flex-col h-full transition-all duration-300 ease-in-out",
-          outputPanelOpen ? "w-1/2" : "w-full"
+          outputPanelOpen ? "w-1/2 pl-4" : "w-full"
         )}
       >
         {/* Chat header */}
-        <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3">
+        <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
           <div className="flex flex-row items-center gap-2">
             {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
             {isMobile && leftSidebarFolded && (
@@ -358,6 +379,8 @@ export default function BuildChatPanel({
               iconClassName="!stroke-text-04"
             />
           )}
+          {/* Soft fade border at bottom */}
+          <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
         </div>
 
         {/* Main content area */}
@@ -386,6 +409,8 @@ export default function BuildChatPanel({
         {/* Input bar at bottom when session exists */}
         {(hasSession || existingSessionId) && (
           <div className="px-4 pb-8 pt-4 relative">
+            {/* Soft fade border at top */}
+            <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
             <div className="max-w-2xl mx-auto">
               {/* Scroll to bottom button - shown when user has scrolled away */}
               {showScrollButton && (
@@ -396,19 +421,35 @@ export default function BuildChatPanel({
                       className={cn(
                         "flex items-center justify-center",
                         "w-8 h-8 rounded-full",
-                        "bg-background-neutral-00 border border-border-01",
+                        "bg-background-neutral-inverted-00 border border-border-01",
                         "shadow-01 hover:shadow-02",
                         "transition-all duration-200",
-                        "hover:bg-background-tint-01"
+                        "hover:bg-background-tint-inverted-01"
                       )}
                       aria-label="Scroll to bottom"
                     >
-                      <SvgChevronDown size={16} className="stroke-text-04" />
+                      <SvgChevronDown
+                        size={20}
+                        className="stroke-background-neutral-00"
+                      />
                     </button>
                   </SimpleTooltip>
                 </div>
               )}
+              {/* Follow-up suggestion bubbles - show after first assistant message */}
+              {(followupSuggestions || suggestionsLoading) && (
+                <div className="mb-3">
+                  <SuggestionBubbles
+                    suggestions={followupSuggestions ?? []}
+                    loading={suggestionsLoading}
+                    onSelect={handleSuggestionSelect}
+                  />
+                </div>
+              )}
+              {/* Connector banners - always show above input, connector check hides when user has connectors */}
+              <ConnectorBannersRow className="" />
               <InputBar
+                ref={inputBarRef}
                 onSubmit={handleSubmit}
                 isRunning={isRunning}
                 placeholder="Continue the conversation..."

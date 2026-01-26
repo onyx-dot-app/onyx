@@ -40,7 +40,8 @@ function TypewriterText({
   // Store the target text we're animating towards
   const targetTextRef = useRef(text);
   // Store the previous text for comparison
-  const prevTextRef = useRef(text);
+  // When animateOnMount is true, initialize to empty so animation triggers
+  const prevTextRef = useRef(animateOnMount ? "" : text);
   // Track if this is the first render
   const isFirstRender = useRef(true);
   // Animation frame ID for cleanup
@@ -56,10 +57,28 @@ function TypewriterText({
         targetTextRef.current = text;
         return;
       }
+      // When animateOnMount is true, we want to animate from empty to text
+      // So we skip the delete phase and go straight to typing
+      // Set prevTextRef to empty so subsequent renders don't trigger delete phase
+      prevTextRef.current = "";
+      targetTextRef.current = text;
+      setIsDeleting(false); // Start in typing phase
+      return;
     }
 
     // If text hasn't changed, no animation needed
     if (text === prevTextRef.current) {
+      return;
+    }
+
+    // If we're currently animating from empty (animateOnMount case), don't restart
+    // This happens when prevTextRef is "" (from animateOnMount) and we're typing
+    if (
+      prevTextRef.current === "" &&
+      displayedText.length < targetTextRef.current.length &&
+      !isDeleting
+    ) {
+      // We're in the middle of typing from animateOnMount, don't interrupt
       return;
     }
 
@@ -103,7 +122,8 @@ function TypewriterText({
         displayedText.length === target.length &&
         displayedText === target
       ) {
-        // Animation complete
+        // Animation complete - update prevTextRef so future changes are detected
+        prevTextRef.current = target;
         onAnimationComplete?.();
       }
     }
@@ -115,15 +135,7 @@ function TypewriterText({
     };
   }, [displayedText, isDeleting, charSpeed, onAnimationComplete]);
 
-  return (
-    <span className={className}>
-      {displayedText}
-      {/* Blinking cursor during animation */}
-      {(isDeleting || displayedText !== targetTextRef.current) && (
-        <span className="animate-pulse">|</span>
-      )}
-    </span>
-  );
+  return <span className={className}>{displayedText}</span>;
 }
 
 export default memo(TypewriterText);

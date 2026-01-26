@@ -149,11 +149,21 @@ function BuildSessionButton({
                 onClose={() => setRenaming(false)}
               />
             ) : shouldAnimate ? (
-              <TypewriterText
-                text={historyItem.title}
-                charSpeed={25}
-                onAnimationComplete={() => setShouldAnimate(false)}
-              />
+              <Text
+                as="p"
+                data-state={isActive ? "active" : "inactive"}
+                className={cn(
+                  "sidebar-tab-text-defaulted line-clamp-1 break-all text-left"
+                )}
+                mainUiBody
+              >
+                <TypewriterText
+                  text={historyItem.title}
+                  charSpeed={25}
+                  animateOnMount={true}
+                  onAnimationComplete={() => setShouldAnimate(false)}
+                />
+              </Text>
             ) : (
               historyItem.title
             )}

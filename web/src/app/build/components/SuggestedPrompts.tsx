@@ -48,7 +48,7 @@ export default function SuggestedPrompts({
           </span>
           {/* Square image - cropped to half height for demonstration */}
           {prompt.image && (
-            <div className="w-full aspect-[2/1] rounded-08 overflow-hidden bg-background-neutral-01">
+            <div className="w-full aspect-[4/1] rounded-08 overflow-hidden bg-background-neutral-01">
               <img
                 src={prompt.image}
                 alt={prompt.summary}
