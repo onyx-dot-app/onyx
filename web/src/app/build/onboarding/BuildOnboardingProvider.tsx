@@ -1,8 +1,10 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import { useRouter } from "next/navigation";
 import { useOnboardingModal } from "@/app/build/onboarding/hooks/useOnboardingModal";
 import BuildOnboardingModal from "@/app/build/onboarding/components/BuildOnboardingModal";
+import NoLlmProvidersModal from "@/app/build/onboarding/components/NoLlmProvidersModal";
 import { OnboardingModalController } from "@/app/build/onboarding/types";
 import { useUser } from "@/components/user/UserProvider";
 
@@ -26,6 +28,7 @@ interface BuildOnboardingProviderProps {
 export function BuildOnboardingProvider({
   children,
 }: BuildOnboardingProviderProps) {
+  const router = useRouter();
   const { user } = useUser();
   const controller = useOnboardingModal();
 
@@ -38,21 +41,33 @@ export function BuildOnboardingProvider({
     );
   }
 
+  // Non-admin users with no LLM providers cannot use Craft
+  const showNoProvidersModal =
+    !controller.isAdmin && !controller.hasAnyProvider;
+
   return (
     <OnboardingContext.Provider value={controller}>
-      {/* Unified onboarding modal */}
-      <BuildOnboardingModal
-        mode={controller.mode}
-        llmProviders={controller.llmProviders}
-        initialValues={controller.initialValues}
-        isAdmin={controller.isAdmin}
-        hasUserInfo={controller.hasUserInfo}
-        allProvidersConfigured={controller.allProvidersConfigured}
-        hasAnyProvider={controller.hasAnyProvider}
-        onComplete={controller.completeUserInfo}
-        onLlmComplete={controller.completeLlmSetup}
-        onClose={controller.close}
+      {/* Block non-admin users when no LLM providers are configured */}
+      <NoLlmProvidersModal
+        open={showNoProvidersModal}
+        onClose={() => router.push("/chat")}
       />
+
+      {/* Unified onboarding modal - only show if not blocked by no providers */}
+      {!showNoProvidersModal && (
+        <BuildOnboardingModal
+          mode={controller.mode}
+          llmProviders={controller.llmProviders}
+          initialValues={controller.initialValues}
+          isAdmin={controller.isAdmin}
+          hasUserInfo={controller.hasUserInfo}
+          allProvidersConfigured={controller.allProvidersConfigured}
+          hasAnyProvider={controller.hasAnyProvider}
+          onComplete={controller.completeUserInfo}
+          onLlmComplete={controller.completeLlmSetup}
+          onClose={controller.close}
+        />
+      )}
 
       {/* Build content - always rendered, modals overlay it */}
       {children}
