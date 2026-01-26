@@ -741,6 +741,24 @@ def connector_document_extraction(
                 total_batches=batch_num,
             )
 
+        # Trigger file sync to user's sandbox (if running) - only for FILE_SYSTEM mode
+        # This syncs the newly written documents from S3 to any running sandbox pod
+        if processing_mode == ProcessingMode.FILE_SYSTEM:
+            creator_id = index_attempt.connector_credential_pair.creator_id
+            if creator_id:
+                app.send_task(
+                    OnyxCeleryTask.SANDBOX_FILE_SYNC,
+                    kwargs={
+                        "user_id": str(creator_id),
+                        "tenant_id": tenant_id,
+                    },
+                    queue=OnyxCeleryQueues.SANDBOX,
+                )
+                logger.info(
+                    f"Triggered sandbox file sync for user {creator_id} "
+                    f"after indexing complete"
+                )
+
     except Exception as e:
         logger.exception(
             f"Document extraction failed: "

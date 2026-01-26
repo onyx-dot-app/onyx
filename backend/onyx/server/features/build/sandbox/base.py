@@ -407,6 +407,30 @@ class SandboxManager(ABC):
         """
         ...
 
+    @abstractmethod
+    def sync_files(
+        self,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+    ) -> bool:
+        """Sync files from S3 to the sandbox's /workspace/files directory.
+
+        For Kubernetes backend: Executes `aws s3 sync` in the file-sync sidecar container.
+        For Local backend: No-op since files are directly accessible via symlink.
+
+        This is idempotent - only downloads changed files.
+
+        Args:
+            sandbox_id: The sandbox UUID
+            user_id: The user ID (for S3 path construction)
+            tenant_id: The tenant ID (for S3 path construction)
+
+        Returns:
+            True if sync was successful, False otherwise.
+        """
+        ...
+
 
 # Singleton instance cache for the factory
 _sandbox_manager_instance: SandboxManager | None = None

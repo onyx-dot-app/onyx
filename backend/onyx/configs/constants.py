@@ -570,6 +570,9 @@ class OnyxCeleryTask:
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 
+    # Sandbox file sync
+    SANDBOX_FILE_SYNC = "sandbox_file_sync"
+
 
 # this needs to correspond to the matching entry in supervisord
 ONYX_CELERY_BEAT_HEARTBEAT_KEY = "onyx:celery:beat:heartbeat"

@@ -1,4 +1,4 @@
-"""Celery tasks for sandbox cleanup operations."""
+"""Celery tasks for sandbox operations (cleanup, file sync, etc.)."""
 
 from uuid import UUID
 
@@ -10,11 +10,14 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SandboxStatus
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -232,6 +235,61 @@ def _list_session_directories(
     except ApiException as e:
         task_logger.warning(f"Failed to list session directories: {e}")
         return []
+
+
+@shared_task(
+    name=OnyxCeleryTask.SANDBOX_FILE_SYNC,
+    soft_time_limit=TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def sync_sandbox_files(self: Task, *, user_id: str, tenant_id: str) -> bool:
+    """Sync files from S3 to a user's running sandbox.
+
+    This task is triggered after documents are written to S3 during indexing.
+    It executes `aws s3 sync` in the file-sync sidecar container to download
+    any new or changed files.
+
+    This is safe to call multiple times - aws s3 sync is idempotent.
+
+    Args:
+        user_id: The user ID whose sandbox should be synced
+        tenant_id: The tenant ID for S3 path construction
+
+    Returns:
+        True if sync was successful, False if skipped or failed
+    """
+    task_logger.info(
+        f"sync_sandbox_files starting for user {user_id} in tenant {tenant_id}"
+    )
+
+    with get_session_with_current_tenant() as db_session:
+        sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
+
+        if sandbox is None:
+            task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
+            return False
+
+        if sandbox.status not in [SandboxStatus.RUNNING, SandboxStatus.IDLE]:
+            task_logger.debug(
+                f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
+                f"skipping sync"
+            )
+            return False
+
+        sandbox_manager = get_sandbox_manager()
+        result = sandbox_manager.sync_files(
+            sandbox_id=sandbox.id,
+            user_id=UUID(user_id),
+            tenant_id=tenant_id,
+        )
+
+        if result:
+            task_logger.info(f"File sync completed for user {user_id}")
+        else:
+            task_logger.warning(f"File sync failed for user {user_id}")
+
+        return result
 
 
 # NOTE: in the future, may need to add this. For now, will do manual cleanup.
