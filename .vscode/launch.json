@@ -606,6 +606,27 @@
       }
     },
     {
+      "name": "Restore seeded database dump",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--fetch-seeded",
+        "--yes"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
       "name": "Clean restore seeded database dump (destructive)",
       "type": "node",
       "request": "launch",
