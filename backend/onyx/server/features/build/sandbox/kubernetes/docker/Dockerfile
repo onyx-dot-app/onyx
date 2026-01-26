@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     procps \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (matches pod securityContext)
@@ -54,9 +55,11 @@ RUN mkdir -p workspace/sessions /workspace/files /workspace/templates /workspace
 COPY --exclude=.next --exclude=node_modules templates/outputs /workspace/templates/outputs
 RUN chown -R sandbox:sandbox /workspace/templates
 
-# Copy demo data (optional - will be empty if demo_data/ doesn't exist)
-COPY demo_data /workspace/demo-data
-RUN chown -R sandbox:sandbox /workspace/demo-data
+# Copy and extract demo data from zip file
+COPY demo_data.zip /tmp/demo_data.zip
+RUN unzip -q /tmp/demo_data.zip -d /workspace/demo-data && \
+    rm /tmp/demo_data.zip && \
+    chown -R sandbox:sandbox /workspace/demo-data
 
 # Copy and install Python requirements into a venv
 COPY initial-requirements.txt /tmp/initial-requirements.txt
