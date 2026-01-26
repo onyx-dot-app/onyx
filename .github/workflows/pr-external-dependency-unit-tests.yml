@@ -45,6 +45,9 @@ env:
   # TODO: debug why this is failing and enable
   CODE_INTERPRETER_BASE_URL: http://localhost:8000
 
+  # OpenSearch
+  OPENSEARCH_ADMIN_PASSWORD: "StrongPassword123!"
+
 jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -125,11 +128,13 @@ jobs:
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
+            -f docker-compose.opensearch.yml \
             up -d \
             minio \
             relational_db \
             cache \
             index \
+            opensearch \
             code-interpreter
 
       - name: Run migrations
@@ -158,7 +163,7 @@ jobs:
           cd deployment/docker_compose
 
           # Get list of running containers
-          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
+          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.opensearch.yml ps -q)
 
           # Collect logs from each container
           for container in $containers; do

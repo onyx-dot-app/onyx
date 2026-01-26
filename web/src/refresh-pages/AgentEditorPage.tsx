@@ -75,7 +75,7 @@ import {
   updatePersona,
   PersonaUpsertParameters,
 } from "@/app/admin/assistants/lib";
-import useMcpServers from "@/hooks/useMcpServers";
+import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
@@ -344,7 +344,7 @@ function MCPServerCard({
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn
               placeholder="Search tools..."
-              internal
+              variant="internal"
               leftSearchIcon
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -494,7 +494,7 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData } = useMcpServers();
+  const { mcpData } = useMcpServersForAgentEditor();
   const { openApiTools: openApiToolsRaw } = useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];
@@ -883,11 +883,10 @@ export default function AgentEditorPage({
         message: "Agent deleted successfully",
       });
 
+      deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/chat/agents");
     }
-
-    deleteAgentModal.toggle(false);
   }
 
   // FilePickerPopover callbacks - defined outside render to avoid inline functions
@@ -1048,15 +1047,18 @@ export default function AgentEditorPage({
 
                 <shareAgentModal.Provider>
                   <ShareAgentModal
-                    agent={existingAgent}
+                    agentId={existingAgent?.id}
+                    userIds={values.shared_user_ids}
+                    groupIds={values.shared_group_ids}
+                    isPublic={values.is_public}
                     onShare={(userIds, groupIds, isPublic) => {
                       setFieldValue("shared_user_ids", userIds);
                       setFieldValue("shared_group_ids", groupIds);
                       setFieldValue("is_public", isPublic);
+                      shareAgentModal.toggle(false);
                     }}
                   />
                 </shareAgentModal.Provider>
-
                 <deleteAgentModal.Provider>
                   {deleteAgentModal.isOpen && (
                     <ConfirmationModalLayout
@@ -1303,6 +1305,7 @@ export default function AgentEditorPage({
                                       wrap
                                       gap={0.5}
                                       justifyContent="start"
+                                      alignItems="start"
                                     >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
@@ -1479,7 +1482,7 @@ export default function AgentEditorPage({
                           <Card>
                             <InputLayouts.Horizontal
                               title="Share This Agent"
-                              description="Share this agent with other users, groups, or everyone in your organization. "
+                              description="Share this agent with other users, groups, or everyone in your organization."
                               center
                             >
                               <Button
@@ -1497,7 +1500,6 @@ export default function AgentEditorPage({
                               name="llm_model"
                               title="Default Model"
                               description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
-                              center
                             >
                               <LLMSelector
                                 llmProviders={llmProviders ?? []}
@@ -1511,7 +1513,6 @@ export default function AgentEditorPage({
                               name="knowledge_cutoff_date"
                               title="Knowledge Cutoff Date"
                               description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
-                              center
                             >
                               <InputDatePickerField name="knowledge_cutoff_date" />
                             </InputLayouts.Horizontal>

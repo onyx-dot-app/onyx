@@ -23,10 +23,13 @@ export function checkUserOwnsAssistant(
 /**
  * Checks if the given user ID owns the specified assistant.
  *
- * Returns true if any of the following conditions are met (and the assistant is not built-in):
- * - No user ID is provided
- * - The user is a no-auth user
+ * Returns true if a valid user ID is provided and any of the following conditions
+ * are met (and the assistant is not built-in):
+ * - The user is a no-auth user (authentication is disabled)
  * - The user ID matches the assistant owner's ID
+ *
+ * Returns false if userId is undefined (e.g., user is loading or unauthenticated)
+ * to prevent granting ownership access prematurely.
  *
  * @param userId - The user ID to check ownership for
  * @param assistant - The assistant to check ownership of
@@ -37,9 +40,8 @@ export function checkUserIdOwnsAssistant(
   assistant: MinimalPersonaSnapshot | Persona
 ) {
   return (
-    (!userId ||
-      checkUserIsNoAuthUser(userId) ||
-      assistant.owner?.id === userId) &&
+    !!userId &&
+    (checkUserIsNoAuthUser(userId) || assistant.owner?.id === userId) &&
     !assistant.builtin_persona
   );
 }

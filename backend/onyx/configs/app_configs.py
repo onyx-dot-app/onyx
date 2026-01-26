@@ -208,8 +208,19 @@ OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 920
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
 
-ENABLE_OPENSEARCH_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_FOR_ONYX", "").lower() == "true"
+# This is the "base" config for now, the idea is that at least for our dev
+# environments we always want to be dual indexing into both OpenSearch and Vespa
+# to stress test the new codepaths. Only enable this if there is some instance
+# of OpenSearch running for the relevant Onyx instance.
+ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
+    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "").lower() == "true"
+)
+# Given that the "base" config above is true, this enables whether we want to
+# retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
+# in the event we see issues with OpenSearch retrieval in our dev environments.
+ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
 )
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
@@ -738,6 +749,10 @@ JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
+
+PROMPT_CACHE_CHAT_HISTORY = (
+    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
+)
 # If set to `true` will enable additional logs about Vespa query performance
 # (time spent on finding the right docs + time spent fetching summaries from disk)
 LOG_VESPA_TIMING_INFORMATION = (
@@ -1016,3 +1031,14 @@ INSTANCE_TYPE = (
 ## Discord Bot Configuration
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 DISCORD_BOT_INVOKE_CHAR = os.environ.get("DISCORD_BOT_INVOKE_CHAR", "!")
+
+
+## Stripe Configuration
+# URL to fetch the Stripe publishable key from a public S3 bucket.
+# Publishable keys are safe to expose publicly - they can only initialize
+# Stripe.js and tokenize payment info, not make charges or access data.
+STRIPE_PUBLISHABLE_KEY_URL = (
+    "https://onyx-stripe-public.s3.amazonaws.com/publishable-key.txt"
+)
+# Override for local testing with Stripe test keys (pk_test_*)
+STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")

@@ -582,29 +582,33 @@ else
     fi
 
     # Ask for authentication schema
-    echo ""
-    print_info "Which authentication schema would you like to set up?"
-    echo ""
-    echo "1) Basic - Username/password authentication"
-    echo "2) No Auth - Open access (development/testing)"
-    echo ""
-    read -p "Choose an option (1-2) [default 1]: " -r AUTH_CHOICE
-    echo ""
+    # echo ""
+    # print_info "Which authentication schema would you like to set up?"
+    # echo ""
+    # echo "1) Basic - Username/password authentication"
+    # echo "2) No Auth - Open access (development/testing)"
+    # echo ""
+    # read -p "Choose an option (1) [default 1]: " -r AUTH_CHOICE
+    # echo ""
 
-    case "${AUTH_CHOICE:-1}" in
-        1)
-            AUTH_SCHEMA="basic"
-            print_info "Selected: Basic authentication"
-            ;;
-        2)
-            AUTH_SCHEMA="disabled"
-            print_info "Selected: No authentication"
-            ;;
-        *)
-            AUTH_SCHEMA="basic"
-            print_info "Invalid choice, using basic authentication"
-            ;;
-    esac
+    # case "${AUTH_CHOICE:-1}" in
+    #     1)
+    #         AUTH_SCHEMA="basic"
+    #         print_info "Selected: Basic authentication"
+    #         ;;
+    #     # 2)
+    #     #     AUTH_SCHEMA="disabled"
+    #     #     print_info "Selected: No authentication"
+    #     #     ;;
+    #     *)
+    #         AUTH_SCHEMA="basic"
+    #         print_info "Invalid choice, using basic authentication"
+    #         ;;
+    # esac
+
+    # TODO (jessica): Uncomment this once no auth users still have an account
+    # Use basic auth by default
+    AUTH_SCHEMA="basic"
 
     # Create .env file from template
     print_info "Creating .env file with your selections..."

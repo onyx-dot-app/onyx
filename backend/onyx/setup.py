@@ -6,7 +6,6 @@ from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
-from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
@@ -14,9 +13,6 @@ from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
 from onyx.context.search.models import SavedSearchSettings
-from onyx.context.search.retrieval.search_runner import (
-    download_nltk_data,
-)
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import create_initial_default_connector
 from onyx.db.connector_credential_pair import associate_default_cc_pair
@@ -36,7 +32,7 @@ from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
@@ -46,7 +42,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.llm_provider_options import get_openai_model_names
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from onyx.seeding.load_yamls import load_input_prompts_from_yaml
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
@@ -116,9 +111,6 @@ def setup_onyx(
                 f"Multilingual query expansion is enabled with {search_settings.multilingual_expansion}."
             )
 
-    logger.notice("Verifying query preprocessing (NLTK) data is downloaded")
-    download_nltk_data()
-
     # setup Postgres with default credential, llm providers, etc.
     setup_postgres(db_session)
 
@@ -132,13 +124,15 @@ def setup_onyx(
     # Ensure Vespa is setup correctly, this step is relatively near the end because Vespa
     # takes a bit of time to start up
     logger.notice("Verifying Document Index(s) is/are available.")
-    document_index = get_default_document_index(
+    # This flow is for setting up the document index so we get all indices here.
+    document_indices = get_all_document_indices(
         search_settings,
         secondary_search_settings,
+        None,
     )
 
-    success = setup_vespa(
-        document_index,
+    success = setup_document_indices(
+        document_indices,
         IndexingSetting.from_db_model(search_settings),
         (
             IndexingSetting.from_db_model(secondary_search_settings)
@@ -147,7 +141,9 @@ def setup_onyx(
         ),
     )
     if not success:
-        raise RuntimeError("Could not connect to Vespa within the specified timeout.")
+        raise RuntimeError(
+            "Could not connect to a document index within the specified timeout."
+        )
 
     logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
     if search_settings.provider_type is None:
@@ -229,44 +225,62 @@ def mark_reindex_flag(db_session: Session) -> None:
         kv_store.store(KV_REINDEX_KEY, False)
 
 
-def setup_vespa(
-    document_index: DocumentIndex,
+def setup_document_indices(
+    document_indices: list[DocumentIndex],
     index_setting: IndexingSetting,
     secondary_index_setting: IndexingSetting | None,
     num_attempts: int = VESPA_NUM_ATTEMPTS_ON_STARTUP,
 ) -> bool:
-    # Vespa startup is a bit slow, so give it a few seconds
-    WAIT_SECONDS = 5
-    for x in range(num_attempts):
-        try:
-            logger.notice(f"Setting up Vespa (attempt {x+1}/{num_attempts})...")
-            document_index.ensure_indices_exist(
-                primary_embedding_dim=index_setting.final_embedding_dim,
-                primary_embedding_precision=index_setting.embedding_precision,
-                secondary_index_embedding_dim=(
-                    secondary_index_setting.final_embedding_dim
-                    if secondary_index_setting
-                    else None
-                ),
-                secondary_index_embedding_precision=(
-                    secondary_index_setting.embedding_precision
-                    if secondary_index_setting
-                    else None
-                ),
-            )
+    """Sets up all input document indices.
 
-            logger.notice("Vespa setup complete.")
-            return True
-        except Exception:
-            logger.exception(
-                f"Vespa setup did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
-            )
-            time.sleep(WAIT_SECONDS)
+    If any document index setup fails, the function will return False. Otherwise
+    returns True.
+    """
+    for document_index in document_indices:
+        # Document index startup is a bit slow, so give it a few seconds.
+        WAIT_SECONDS = 5
+        document_index_setup_success = False
+        for x in range(num_attempts):
+            try:
+                logger.notice(
+                    f"Setting up document index {document_index.__class__.__name__} (attempt {x+1}/{num_attempts})..."
+                )
+                document_index.ensure_indices_exist(
+                    primary_embedding_dim=index_setting.final_embedding_dim,
+                    primary_embedding_precision=index_setting.embedding_precision,
+                    secondary_index_embedding_dim=(
+                        secondary_index_setting.final_embedding_dim
+                        if secondary_index_setting
+                        else None
+                    ),
+                    secondary_index_embedding_precision=(
+                        secondary_index_setting.embedding_precision
+                        if secondary_index_setting
+                        else None
+                    ),
+                )
 
-    logger.error(
-        f"Vespa setup did not succeed. Attempt limit reached. ({num_attempts})"
-    )
-    return False
+                logger.notice(
+                    f"Document index {document_index.__class__.__name__} setup complete."
+                )
+                document_index_setup_success = True
+                break
+            except Exception:
+                logger.exception(
+                    f"Document index {document_index.__class__.__name__} setup did not succeed. "
+                    "The relevant service may not be ready yet. "
+                    f"Retrying in {WAIT_SECONDS} seconds."
+                )
+                time.sleep(WAIT_SECONDS)
+
+        if not document_index_setup_success:
+            logger.error(
+                f"Document index {document_index.__class__.__name__} setup did not succeed. "
+                f"Attempt limit reached. ({num_attempts})"
+            )
+            return False
+
+    return True
 
 
 def setup_postgres(db_session: Session) -> None:
@@ -274,10 +288,6 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_public_credential(db_session)
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
-
-    # Load input prompts and user folders from YAML
-    logger.notice("Loading input prompts and user folders")
-    load_input_prompts_from_yaml(db_session, INPUT_PROMPT_YAML)
 
     if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
         # Only for dev flows
@@ -347,6 +357,8 @@ def setup_multitenant_onyx() -> None:
 
 
 def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) -> bool:
+    # TODO(andrei): We don't yet support OpenSearch for multi-tenant instances
+    # so this function remains unchanged.
     # This is for local testing
     WAIT_SECONDS = 5
     VESPA_ATTEMPTS = 5

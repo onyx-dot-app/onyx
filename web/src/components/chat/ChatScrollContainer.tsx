@@ -13,7 +13,6 @@ import React, {
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
 const DEFAULT_FADE_THRESHOLD_PX = 80; // 5rem
 const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
-const SCROLL_DEBOUNCE_MS = 100;
 const FADE_OVERLAY_HEIGHT = "h-8"; // 2rem
 
 export interface ScrollState {
@@ -30,8 +29,8 @@ export interface ChatScrollContainerProps {
   children: React.ReactNode;
 
   /**
-   * CSS selector for the element to anchor at top (e.g., "#message-123")
-   * When set, positions this element at top with spacer below content
+   * CSS selector for the anchor element (e.g., "#message-123")
+   * Used to scroll to a specific message position
    */
   anchorSelector?: string;
 
@@ -46,6 +45,9 @@ export interface ChatScrollContainerProps {
 
   /** Session ID - resets scroll state when changed */
   sessionId?: string;
+
+  /** Disable fade overlays (e.g., when a background image is set) */
+  disableFadeOverlay?: boolean;
 }
 
 const FadeOverlay = React.memo(
@@ -79,6 +81,7 @@ const ChatScrollContainer = React.memo(
         isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
+        disableFadeOverlay = false,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -90,7 +93,6 @@ const ChatScrollContainer = React.memo(
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
 
-      const [spacerHeight, setSpacerHeight] = useState(0);
       const [hasContentAbove, setHasContentAbove] = useState(false);
       const [hasContentBelow, setHasContentBelow] = useState(false);
       const [isAtBottom, setIsAtBottom] = useState(true);
@@ -109,22 +111,6 @@ const ChatScrollContainer = React.memo(
       autoScrollRef.current = autoScroll;
       const isStreamingRef = useRef(isStreaming);
       isStreamingRef.current = isStreaming;
-
-      // Calculate spacer height to position anchor at top
-      const calcSpacerHeight = useCallback(
-        (anchorElement: HTMLElement): number => {
-          if (!endDivRef.current || !scrollContainerRef.current) return 0;
-          const contentEnd = endDivRef.current.offsetTop;
-          const contentFromAnchor = contentEnd - anchorElement.offsetTop;
-          return Math.max(
-            0,
-            scrollContainerRef.current.clientHeight -
-              contentFromAnchor -
-              anchorOffsetPx
-          );
-        },
-        [anchorOffsetPx]
-      );
 
       // Get current scroll state
       const getScrollState = useCallback((): ScrollState => {
@@ -156,11 +142,8 @@ const ChatScrollContainer = React.memo(
         setHasContentAbove(state.hasContentAbove);
         setHasContentBelow(state.hasContentBelow);
 
-        // Compute button visibility: hide when at bottom, or during streaming with auto-scroll
-        const shouldShowButton =
-          !state.isAtBottom &&
-          !(autoScrollRef.current && isStreamingRef.current);
-        onScrollButtonVisibilityChangeRef.current?.(shouldShowButton);
+        // Show button when user is not at bottom (e.g., scrolled up)
+        onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
       }, [getScrollState]);
 
       // Scroll to bottom of content
@@ -200,11 +183,10 @@ const ChatScrollContainer = React.memo(
       // Expose scrollToBottom via ref
       useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
 
-      // Re-evaluate button visibility when streaming state changes
+      // Re-evaluate button visibility when at-bottom state changes
       useEffect(() => {
-        const shouldShowButton = !isAtBottom && !(autoScroll && isStreaming);
-        onScrollButtonVisibilityChangeRef.current?.(shouldShowButton);
-      }, [isAtBottom, autoScroll, isStreaming]);
+        onScrollButtonVisibilityChangeRef.current?.(!isAtBottom);
+      }, [isAtBottom]);
 
       // Handle scroll events (user scrolls)
       const handleScroll = useCallback(() => {
@@ -228,22 +210,9 @@ const ChatScrollContainer = React.memo(
           setHasContentAbove(state.hasContentAbove);
           setHasContentBelow(state.hasContentBelow);
           // Update button visibility based on actual position
-          const shouldShowButton =
-            !state.isAtBottom &&
-            !(autoScrollRef.current && isStreamingRef.current);
-          onScrollButtonVisibilityChangeRef.current?.(shouldShowButton);
+          onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
         }
-
-        // Recalculate spacer for non-auto-scroll mode during user scroll
-        if (!autoScrollRef.current && anchorSelector && endDivRef.current) {
-          const anchorElement = container.querySelector(
-            anchorSelector
-          ) as HTMLElement;
-          if (anchorElement) {
-            setSpacerHeight(calcSpacerHeight(anchorElement));
-          }
-        }
-      }, [anchorSelector, calcSpacerHeight, updateScrollState, getScrollState]);
+      }, [updateScrollState, getScrollState]);
 
       // Watch for content changes (MutationObserver + ResizeObserver)
       useEffect(() => {
@@ -259,16 +228,6 @@ const ChatScrollContainer = React.memo(
 
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
-
-            // Update spacer for non-auto-scroll mode
-            if (!autoScrollRef.current && anchorSelector) {
-              const anchorElement = container.querySelector(
-                anchorSelector
-              ) as HTMLElement;
-              if (anchorElement) {
-                setSpacerHeight(calcSpacerHeight(anchorElement));
-              }
-            }
 
             // Auto-scroll: follow content if we were at bottom
             if (autoScrollRef.current && wasAtBottom) {
@@ -297,7 +256,7 @@ const ChatScrollContainer = React.memo(
           resizeObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
-      }, [anchorSelector, calcSpacerHeight, updateScrollState, scrollToBottom]);
+      }, [updateScrollState, scrollToBottom]);
 
       // Handle session changes and anchor changes
       useEffect(() => {
@@ -336,13 +295,6 @@ const ChatScrollContainer = React.memo(
           return;
         }
 
-        // Calculate spacer
-        if (!autoScrollRef.current) {
-          setSpacerHeight(calcSpacerHeight(anchorElement));
-        } else {
-          setSpacerHeight(0);
-        }
-
         // Determine scroll behavior
         // New session with existing content = instant, new anchor = smooth
         const isLoadingExistingContent =
@@ -351,12 +303,21 @@ const ChatScrollContainer = React.memo(
           ? "instant"
           : "smooth";
 
-        // Defer scroll to next tick so spacer height takes effect
+        // Defer scroll to next tick for layout to settle
         const timeoutId = setTimeout(() => {
-          const targetScrollTop = Math.max(
-            0,
-            anchorElement.offsetTop - anchorOffsetPx
-          );
+          let targetScrollTop: number;
+
+          // When loading an existing conversation, scroll to bottom
+          // Otherwise (e.g., anchor change during conversation), scroll to anchor
+          if (isLoadingExistingContent) {
+            targetScrollTop = container.scrollHeight - container.clientHeight;
+          } else {
+            targetScrollTop = Math.max(
+              0,
+              anchorElement.offsetTop - anchorOffsetPx
+            );
+          }
+
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Update prevScrollTopRef so scroll direction is measured from new position
@@ -364,9 +325,8 @@ const ChatScrollContainer = React.memo(
 
           updateScrollState();
 
-          // When autoScroll is on, assume we're "at bottom" after positioning
-          // so that MutationObserver will continue auto-scrolling
-          if (autoScrollRef.current) {
+          // Mark as "at bottom" after scrolling to bottom so auto-scroll continues
+          if (isLoadingExistingContent || autoScrollRef.current) {
             isAtBottomRef.current = true;
           }
 
@@ -376,30 +336,30 @@ const ChatScrollContainer = React.memo(
         }, 0);
 
         return () => clearTimeout(timeoutId);
-      }, [
-        sessionId,
-        anchorSelector,
-        anchorOffsetPx,
-        calcSpacerHeight,
-        updateScrollState,
-      ]);
+      }, [sessionId, anchorSelector, anchorOffsetPx, updateScrollState]);
 
       return (
         <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-[7.5rem]">
-          <FadeOverlay show={hasContentAbove} position="top" />
-          <FadeOverlay show={hasContentBelow} position="bottom" />
+          <FadeOverlay
+            show={!disableFadeOverlay && hasContentAbove}
+            position="top"
+          />
+          <FadeOverlay
+            show={!disableFadeOverlay && hasContentBelow}
+            position="bottom"
+          />
 
           <div
             key={sessionId}
             ref={scrollContainerRef}
-            className="flex flex-1 justify-center min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
+            className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden default-scrollbar"
             onScroll={handleScroll}
             style={{
               scrollbarGutter: "stable both-edges",
             }}
           >
             <div
-              className="w-full flex flex-col items-center"
+              className="w-full flex-1 flex flex-col items-center"
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",
@@ -407,13 +367,8 @@ const ChatScrollContainer = React.memo(
             >
               {children}
 
-              {/* End marker - before spacer so we can measure content end */}
+              {/* End marker to measure content end */}
               <div ref={endDivRef} />
-
-              {/* Spacer to allow scrolling anchor to top */}
-              {spacerHeight > 0 && (
-                <div style={{ height: spacerHeight }} aria-hidden="true" />
-              )}
             </div>
           </div>
         </div>

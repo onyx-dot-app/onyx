@@ -14,6 +14,10 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 
 
+# Counter for generating unique file IDs in mock file store
+_mock_file_id_counter = 0
+
+
 def ensure_default_llm_provider(db_session: Session) -> None:
     """Ensure a default LLM provider exists for tests that exercise chat flows."""
 
@@ -81,10 +85,33 @@ def mock_vespa_query() -> Iterator[None]:
 
 
 @pytest.fixture
+def mock_file_store() -> Iterator[None]:
+    """Mock the file store to avoid S3/storage dependencies in tests."""
+    global _mock_file_id_counter
+
+    def _mock_save_file(*args: Any, **kwargs: Any) -> str:
+        global _mock_file_id_counter
+        _mock_file_id_counter += 1
+        # Return a predictable file ID for tests
+        return "123"
+
+    mock_store = MagicMock()
+    mock_store.save_file.side_effect = _mock_save_file
+    mock_store.initialize.return_value = None
+
+    with patch(
+        "onyx.file_store.utils.get_default_file_store",
+        return_value=mock_store,
+    ):
+        yield
+
+
+@pytest.fixture
 def mock_external_deps(
     mock_nlp_embeddings_post: None,
     mock_gpu_status: None,
     mock_vespa_query: None,
+    mock_file_store: None,
 ) -> Iterator[None]:
     """Convenience fixture to enable all common external dependency mocks."""
     yield

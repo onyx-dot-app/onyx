@@ -4,6 +4,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { SettingsForm } from "@/app/admin/settings/SettingsForm";
 import Text from "@/components/ui/text";
 import { SvgSettings } from "@opal/icons";
+
 export default function Page() {
   return (
     <>

@@ -10,6 +10,7 @@ export interface AuthTypeMetadata {
   requiresVerification: boolean;
   anonymousUserEnabled: boolean | null;
   passwordMinLength: number;
+  hasUsers: boolean;
 }
 
 export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
@@ -23,6 +24,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
     requires_verification: boolean;
     anonymous_user_enabled: boolean | null;
     password_min_length: number;
+    has_users: boolean;
   } = await res.json();
 
   let authType: AuthType;
@@ -43,6 +45,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
       requiresVerification: data.requires_verification,
       anonymousUserEnabled: data.anonymous_user_enabled,
       passwordMinLength: data.password_min_length,
+      hasUsers: data.has_users,
     };
   }
   return {
@@ -51,6 +54,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
     passwordMinLength: data.password_min_length,
+    hasUsers: data.has_users,
   };
 };
 
@@ -59,37 +63,23 @@ export const getAuthDisabledSS = async (): Promise<boolean> => {
 };
 
 const getOIDCAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
-  const url = UrlBuilder.fromInternalUrl("/auth/oidc/authorize");
+  const url = UrlBuilder.fromClientUrl("/api/auth/oidc/authorize");
   if (nextUrl) {
     url.addParam("next", nextUrl);
   }
+  url.addParam("redirect", true);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error("Failed to fetch data");
-  }
-
-  const data: { authorization_url: string } = await res.json();
-  return data.authorization_url;
+  return url.toString();
 };
 
 const getGoogleOAuthUrlSS = async (nextUrl: string | null): Promise<string> => {
-  const url = UrlBuilder.fromInternalUrl("/auth/oauth/authorize");
+  const url = UrlBuilder.fromClientUrl("/api/auth/oauth/authorize");
   if (nextUrl) {
     url.addParam("next", nextUrl);
   }
+  url.addParam("redirect", true);
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      cookie: processCookies(await cookies()),
-    },
-  });
-  if (!res.ok) {
-    throw new Error("Failed to fetch data");
-  }
-
-  const data: { authorization_url: string } = await res.json();
-  return data.authorization_url;
+  return url.toString();
 };
 
 const getSAMLAuthUrlSS = async (nextUrl: string | null): Promise<string> => {

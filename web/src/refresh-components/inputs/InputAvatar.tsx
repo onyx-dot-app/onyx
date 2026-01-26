@@ -13,7 +13,7 @@ const InputAvatar = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
-      wrapperClasses.main,
+      wrapperClasses.primary,
       className
     )}
     {...props}

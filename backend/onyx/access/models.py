@@ -125,9 +125,11 @@ class DocumentAccess(ExternalAccess):
         )
 
     def to_acl(self) -> set[str]:
-        # the acl's emitted by this function are prefixed by type
-        # to get the native objects, access the member variables directly
+        """Converts the access state to a set of formatted ACL strings.
 
+        NOTE: When querying for documents, the supplied ACL filter strings must
+        be formatted in the same way as this function.
+        """
         acl_set: set[str] = set()
         for user_email in self.user_emails:
             if user_email:

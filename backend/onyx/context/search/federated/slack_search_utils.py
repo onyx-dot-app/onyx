@@ -15,6 +15,7 @@ from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
+from onyx.natural_language_processing.english_stopwords import ENGLISH_STOPWORDS_SET
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.prompts.federated_search import SLACK_DATE_EXTRACTION_PROMPT
 from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
@@ -113,7 +114,7 @@ def is_recency_query(query: str) -> bool:
     if not has_recency_keyword:
         return False
 
-    # Get combined stop words (NLTK + Slack-specific)
+    # Get combined stop words (English + Slack-specific)
     all_stop_words = _get_combined_stop_words()
 
     # Extract content words (excluding stop words)
@@ -488,7 +489,7 @@ def build_channel_override_query(channel_references: set[str], time_filter: str)
     return f"__CHANNEL_OVERRIDE__ {channel_filter}{time_filter}"
 
 
-# Slack-specific stop words (in addition to standard NLTK stop words)
+# Slack-specific stop words (in addition to standard English stop words)
 # These include Slack-specific terms and temporal/recency keywords
 SLACK_SPECIFIC_STOP_WORDS = frozenset(
     RECENCY_KEYWORDS
@@ -508,27 +509,16 @@ SLACK_SPECIFIC_STOP_WORDS = frozenset(
 )
 
 
-def _get_combined_stop_words() -> set[str]:
-    """Get combined NLTK + Slack-specific stop words.
+def _get_combined_stop_words() -> frozenset[str]:
+    """Get combined English + Slack-specific stop words.
 
-    Returns a set of stop words for filtering content words.
-    Falls back to just Slack-specific stop words if NLTK is unavailable.
+    Returns a frozenset of stop words for filtering content words.
 
     Note: Currently only supports English stop words. Non-English queries
     may have suboptimal content word extraction. Future enhancement could
     detect query language and load appropriate stop words.
     """
-    try:
-        from nltk.corpus import stopwords  # type: ignore
-
-        # TODO: Support multiple languages - currently hardcoded to English
-        # Could detect language or allow configuration
-        nltk_stop_words = set(stopwords.words("english"))
-    except Exception:
-        # Fallback if NLTK not available
-        nltk_stop_words = set()
-
-    return nltk_stop_words | SLACK_SPECIFIC_STOP_WORDS
+    return ENGLISH_STOPWORDS_SET | SLACK_SPECIFIC_STOP_WORDS
 
 
 def extract_content_words_from_recency_query(
@@ -536,7 +526,7 @@ def extract_content_words_from_recency_query(
 ) -> list[str]:
     """Extract meaningful content words from a recency query.
 
-    Filters out NLTK stop words, Slack-specific terms, channel references, and proper nouns.
+    Filters out English stop words, Slack-specific terms, channel references, and proper nouns.
 
     Args:
         query_text: The user's query text
@@ -545,7 +535,7 @@ def extract_content_words_from_recency_query(
     Returns:
         List of content words (up to MAX_CONTENT_WORDS)
     """
-    # Get combined stop words (NLTK + Slack-specific)
+    # Get combined stop words (English + Slack-specific)
     all_stop_words = _get_combined_stop_words()
 
     words = query_text.split()
@@ -565,6 +555,23 @@ def extract_content_words_from_recency_query(
     content_words_filtered = [word for word in content_words if not word[0].isupper()]
 
     return content_words_filtered[:MAX_CONTENT_WORDS]
+
+
+def _is_valid_keyword_query(line: str) -> bool:
+    """Check if a line looks like a valid keyword query vs explanatory text.
+
+    Returns False for lines that appear to be LLM explanations rather than keywords.
+    """
+    # Reject lines that start with parentheses (explanatory notes)
+    if line.startswith("("):
+        return False
+
+    # Reject lines that are too long (likely sentences, not keywords)
+    # Keywords should be short - reject if > 50 chars or > 6 words
+    if len(line) > 50 or len(line.split()) > 6:
+        return False
+
+    return True
 
 
 def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
@@ -589,9 +596,17 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
         response_clean = _parse_llm_code_block_response(response)
 
         # Split into lines and filter out empty lines
-        rephrased_queries = [
+        raw_queries = [
             line.strip() for line in response_clean.split("\n") if line.strip()
         ]
+
+        # Filter out lines that look like explanatory text rather than keywords
+        rephrased_queries = [q for q in raw_queries if _is_valid_keyword_query(q)]
+
+        # Log if we filtered out garbage
+        if len(raw_queries) != len(rephrased_queries):
+            filtered_out = set(raw_queries) - set(rephrased_queries)
+            logger.warning(f"Filtered out non-keyword LLM responses: {filtered_out}")
 
         # If no queries generated, use empty query
         if not rephrased_queries:

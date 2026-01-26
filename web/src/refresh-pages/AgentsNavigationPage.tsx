@@ -479,7 +479,7 @@ export default function AgentsNavigationPage() {
                     <InputTypeIn
                       key="created-by"
                       placeholder="Created by..."
-                      internal
+                      variant="internal"
                       leftSearchIcon
                       value={creatorSearchQuery}
                       onChange={(e) => setCreatorSearchQuery(e.target.value)}
@@ -556,7 +556,7 @@ export default function AgentsNavigationPage() {
                     <InputTypeIn
                       key="actions"
                       placeholder="Filter actions..."
-                      internal
+                      variant="internal"
                       leftSearchIcon
                       value={actionsSearchQuery}
                       onChange={(e) => setActionsSearchQuery(e.target.value)}

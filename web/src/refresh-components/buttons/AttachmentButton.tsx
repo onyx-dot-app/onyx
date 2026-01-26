@@ -64,7 +64,7 @@
  */
 
 import React from "react";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
