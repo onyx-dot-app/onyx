@@ -61,19 +61,19 @@ import {
   SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
-  SvgLogOut,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
-  SvgPlayCircle,
   SvgSettings,
 } from "@opal/icons";
 import BuildModeIntroBackground from "@/app/build/components/IntroBackground";
 import BuildModeIntroContent from "@/app/build/components/IntroContent";
 import { motion, AnimatePresence } from "motion/react";
-import { Notification } from "@/app/admin/settings/interfaces";
+import {
+  Notification,
+  NotificationType,
+} from "@/app/admin/settings/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
-import { logout } from "@/lib/user";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -190,23 +190,30 @@ const MemoizedAppSidebarInner = memo(
       Notification[]
     >("/api/notifications", errorHandlingFetcher);
 
-    // Find build_mode feature announcement notification
-    const buildModeNotification = notifications?.find(
-      (n) =>
-        n.notif_type === "feature_announcement" &&
-        n.additional_data?.feature === "build_mode" &&
-        !n.dismissed
-    );
+    // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
+    // Only explicit true enables the feature; false or undefined = disabled
+    const isOnyxCraftEnabled =
+      combinedSettings?.settings?.onyx_craft_enabled === true;
+
+    // Find build_mode feature announcement notification (only if Onyx Craft is enabled)
+    const buildModeNotification = isOnyxCraftEnabled
+      ? notifications?.find(
+          (n) =>
+            n.notif_type === NotificationType.FEATURE_ANNOUNCEMENT &&
+            n.additional_data?.feature === "build_mode" &&
+            !n.dismissed
+        )
+      : undefined;
 
     // State for intro animation overlay
     const [showIntroAnimation, setShowIntroAnimation] = useState(false);
 
-    // Show intro animation when build mode notification exists
+    // Show intro animation when build mode notification exists and Onyx Craft is enabled
     useEffect(() => {
-      if (buildModeNotification && !showIntroAnimation) {
+      if (isOnyxCraftEnabled && buildModeNotification && !showIntroAnimation) {
         setShowIntroAnimation(true);
       }
-    }, [buildModeNotification]);
+    }, [buildModeNotification, isOnyxCraftEnabled, showIntroAnimation]);
 
     // Dismiss the build mode notification
     const dismissBuildModeNotification = useCallback(async () => {
@@ -425,65 +432,11 @@ const MemoizedAppSidebarInner = memo(
       () => (
         <div data-testid="AppSidebar/build">
           <SidebarTab leftIcon={SvgDevKit} folded={folded} href="/build/v1">
-            Build
+            Craft
           </SidebarTab>
         </div>
       ),
       [folded]
-    );
-
-    const playIntroButton = useMemo(
-      () => (
-        <div data-testid="AppSidebar/play-intro">
-          <SidebarTab
-            leftIcon={SvgPlayCircle}
-            folded={folded}
-            onClick={() => setShowIntroAnimation(true)}
-          >
-            [DEV] Play intro animation
-          </SidebarTab>
-        </div>
-      ),
-      [folded]
-    );
-
-    const clearNotificationsAndLogoutButton = useMemo(
-      () => (
-        <div data-testid="AppSidebar/clear-notifications-and-logout">
-          <SidebarTab
-            leftIcon={SvgLogOut}
-            folded={folded}
-            onClick={async () => {
-              try {
-                // Fire both requests simultaneously - don't wait for clear to finish
-                const clearPromise = fetch(
-                  "/api/build/dev/clear-feature-announcements-and-logout",
-                  {
-                    method: "POST",
-                    credentials: "include",
-                  }
-                ).catch((error) => {
-                  console.error("Error clearing notifications:", error);
-                });
-
-                // Logout immediately without waiting for clear to finish
-                await logout();
-                // Redirect to login page
-                router.push("/auth/login");
-              } catch (error) {
-                console.error("Error logging out:", error);
-                setPopup({
-                  message: "Failed to logout",
-                  type: "error",
-                });
-              }
-            }}
-          >
-            [DEV] Clear user's notifications and logout
-          </SidebarTab>
-        </div>
-      ),
-      [folded, router, setPopup]
     );
 
     const moreAgentsButton = useMemo(
@@ -610,9 +563,7 @@ const MemoizedAppSidebarInner = memo(
             actionButtons={
               <>
                 {newSessionButton}
-                {buildButton}
-                {playIntroButton}
-                {clearNotificationsAndLogoutButton}
+                {isOnyxCraftEnabled && buildButton}
               </>
             }
           >

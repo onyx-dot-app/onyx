@@ -80,3 +80,5 @@ class UserSettings(Settings):
     notifications: list[Notification]
     needs_reindexing: bool
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA
+    # Feature flag for Onyx Craft (Build Mode) - used for server-side redirects
+    onyx_craft_enabled: bool = False
