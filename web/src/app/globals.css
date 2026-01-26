@@ -110,6 +110,11 @@
   .prose > :first-child {
     margin-top: 0;
   }
+
+  /* Remove bottom margin from last child to avoid extra space */
+  .prose > :last-child {
+    margin-bottom: 0;
+  }
 }
 
 @layer utilities {

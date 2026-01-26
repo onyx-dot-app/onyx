@@ -169,3 +169,21 @@ export function hasNonImageFiles(
 ): boolean {
   return files.some((file) => !isImageFile(file.name));
 }
+
+/**
+ * Merges multiple refs into a single callback ref.
+ * Useful when a component needs both an internal ref and a forwarded ref.
+ */
+export function mergeRefs<T>(
+  ...refs: (React.Ref<T> | undefined)[]
+): React.RefCallback<T> {
+  return (node: T | null) => {
+    refs.forEach((ref) => {
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        (ref as React.MutableRefObject<T | null>).current = node;
+      }
+    });
+  };
+}
