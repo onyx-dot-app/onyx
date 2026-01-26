@@ -558,7 +558,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         print(f"DEBUG: Next.js server returned content (first 200 chars): {resp[:200]}")
 
         # Verify get_nextjs_url returns correctly formatted cluster URL
-        nextjs_url = manager.get_nextjs_url(sandbox_id, test_nextjs_port)
+        nextjs_url = manager.get_webapp_url(sandbox_id, test_nextjs_port)
         expected_service_name = f"sandbox-{str(sandbox_id)[:8]}"
         expected_url_pattern = (
             f"http://{expected_service_name}.{SANDBOX_NAMESPACE}.svc.cluster.local:"
