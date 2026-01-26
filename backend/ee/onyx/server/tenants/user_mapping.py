@@ -1,6 +1,7 @@
 from fastapi_users import exceptions
 from sqlalchemy import select
 
+from ee.onyx.db.license import invalidate_license_cache
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import get_pending_users
 from onyx.auth.invited_users import write_invited_users
@@ -47,6 +48,8 @@ def get_tenant_id_for_email(email: str) -> str:
                     mapping.active = True
                     db_session.commit()
                     tenant_id = mapping.tenant_id
+                    # Invalidate license cache so used_seats reflects the new count
+                    invalidate_license_cache(tenant_id)
     except Exception as e:
         logger.exception(f"Error getting tenant id for email {email}: {e}")
         raise exceptions.UserNotExists()
@@ -113,6 +116,9 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
             db_session.commit()
             logger.info(f"Successfully added users {emails} to tenant {tenant_id}")
 
+            # Invalidate license cache so used_seats reflects the new count
+            invalidate_license_cache(tenant_id)
+
         except Exception:
             logger.exception(f"Failed to add users to tenant {tenant_id}")
             db_session.rollback()
@@ -135,6 +141,9 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
                 db_session.delete(mapping)
 
             db_session.commit()
+
+            # Invalidate license cache so used_seats reflects the new count
+            invalidate_license_cache(tenant_id)
         except Exception as e:
             logger.exception(
                 f"Failed to remove users from tenant {tenant_id}: {str(e)}"
@@ -148,6 +157,9 @@ def remove_all_users_from_tenant(tenant_id: str) -> None:
             UserTenantMapping.tenant_id == tenant_id
         ).delete()
         db_session.commit()
+
+    # Invalidate license cache so used_seats reflects the new count
+    invalidate_license_cache(tenant_id)
 
 
 def invite_self_to_tenant(email: str, tenant_id: str) -> None:
@@ -176,6 +188,9 @@ def approve_user_invite(email: str, tenant_id: str) -> None:
         new_mapping = UserTenantMapping(email=email, tenant_id=tenant_id, active=True)
         db_session.add(new_mapping)
         db_session.commit()
+
+    # Invalidate license cache so used_seats reflects the new count
+    invalidate_license_cache(tenant_id)
 
     # Also remove the user from pending users list
     # Remove from pending users
@@ -237,6 +252,9 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
                 mapping.active = True
                 db_session.commit()
                 logger.info(f"User {email} accepted invitation to tenant {tenant_id}")
+
+                # Invalidate license cache so used_seats reflects the new count
+                invalidate_license_cache(tenant_id)
             else:
                 logger.warning(
                     f"No invitation found for user {email} in tenant {tenant_id}"
@@ -297,15 +315,36 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
 
 def get_tenant_count(tenant_id: str) -> int:
     """
-    Get the number of active users for this tenant
+    Get the number of active users for this tenant.
+
+    A user counts toward the seat count if:
+    1. They have an active mapping to this tenant (UserTenantMapping.active == True)
+    2. AND the User is active (User.is_active == True)
     """
+    from onyx.db.models import User
+
+    # First get all emails with active mappings to this tenant
     with get_session_with_shared_schema() as db_session:
-        # Count the number of active users for this tenant
-        user_count = (
-            db_session.query(UserTenantMapping)
+        active_mapping_emails = (
+            db_session.query(UserTenantMapping.email)
             .filter(
                 UserTenantMapping.tenant_id == tenant_id,
                 UserTenantMapping.active == True,  # noqa: E712
+            )
+            .all()
+        )
+        emails = [email for (email,) in active_mapping_emails]
+
+    if not emails:
+        return 0
+
+    # Now count how many of those users are actually active in the tenant's User table
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        user_count = (
+            db_session.query(User)
+            .filter(
+                User.email.in_(emails),
+                User.is_active == True,  # noqa: E712
             )
             .count()
         )
