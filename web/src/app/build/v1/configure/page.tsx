@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import useSWR from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { useLlmManager } from "@/lib/hooks";
-import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
+import {
+  useBuildSessionStore,
+  useIsPreProvisioning,
+} from "@/app/build/hooks/useBuildSessionStore";
+import { useBuildLlmSelection } from "@/app/build/hooks/useBuildLlmSelection";
+import { BuildLLMPopover } from "@/app/build/components/BuildLLMPopover";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
-import { SvgPlug, SvgSettings } from "@opal/icons";
+import { SvgPlug, SvgSettings, SvgChevronDown } from "@opal/icons";
 import { FiInfo } from "react-icons/fi";
 import { ValidSources } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -20,11 +23,14 @@ import ConnectorCard, {
 import ConfigureConnectorModal from "@/app/build/v1/configure/components/ConfigureConnectorModal";
 import ComingSoonConnectors from "@/app/build/v1/configure/components/ComingSoonConnectors";
 import DemoDataConfirmModal from "@/app/build/v1/configure/components/DemoDataConfirmModal";
+import {
+  ConnectorInfoOverlay,
+  ReprovisionWarningOverlay,
+} from "@/app/build/v1/configure/components/ConfigureOverlays";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { deleteConnector } from "@/app/build/services/apiServices";
-import BackButton from "@/refresh-components/buttons/BackButton";
-import { useRouter } from "next/navigation";
+import Button from "@/refresh-components/buttons/Button";
 import { OAUTH_STATE_KEY } from "@/app/build/v1/constants";
 import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
@@ -34,11 +40,14 @@ import NotAllowedModal from "@/app/build/onboarding/components/NotAllowedModal";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUser } from "@/components/user/UserProvider";
 import { updateUserPersonalization } from "@/lib/userSettings";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import {
   WORK_AREA_OPTIONS,
   LEVEL_OPTIONS,
   getBuildUserPersona,
   setBuildUserPersona,
+  BuildLlmSelection,
+  BUILD_MODE_PROVIDERS,
 } from "@/app/build/onboarding/constants";
 import { BuildUserInfo } from "@/app/build/onboarding/types";
 
@@ -70,8 +79,6 @@ interface SelectedConnectorState {
  * Uses SettingsLayouts like AgentEditorPage does.
  */
 export default function BuildConfigPage() {
-  const router = useRouter();
-  const llmManager = useLlmManager();
   const { refreshUser, user, isAdmin, isCurator } = useUser();
   const { llmProviders, refetch: refetchLlmProviders } = useLLMProviders();
   const [selectedConnector, setSelectedConnector] =
@@ -85,16 +92,168 @@ export default function BuildConfigPage() {
   const [pendingDemoDataEnabled, setPendingDemoDataEnabled] = useState<
     boolean | null
   >(null);
+  // LLM onboarding modal - opens to specific provider when clicking "Connect"
+  const [llmOnboardingProvider, setLlmOnboardingProvider] = useState<
+    string | null
+  >(null);
+
+  // Pending state for tracking unsaved changes
+  const [pendingLlmSelection, setPendingLlmSelection] =
+    useState<BuildLlmSelection | null>(null);
+  const [pendingDemoData, setPendingDemoData] = useState<boolean | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Track original values (set on mount and after Update)
+  const [originalLlmSelection, setOriginalLlmSelection] =
+    useState<BuildLlmSelection | null>(null);
+  const [originalDemoData, setOriginalDemoData] = useState<boolean | null>(
+    null
+  );
 
   const isBasicUser = !isAdmin && !isCurator;
+  const isPreProvisioning = useIsPreProvisioning();
 
-  // Get store values - update store directly on switch change
+  // Build mode LLM selection (cookie-based)
+  const { selection: llmSelection, updateSelection: updateLlmSelection } =
+    useBuildLlmSelection(llmProviders);
+
+  // Get store values
   const demoDataEnabled = useBuildSessionStore(
     (state) => state.demoDataEnabled
   );
   const setDemoDataEnabled = useBuildSessionStore(
     (state) => state.setDemoDataEnabled
   );
+  const clearPreProvisionedSession = useBuildSessionStore(
+    (state) => state.clearPreProvisionedSession
+  );
+  const ensurePreProvisionedSession = useBuildSessionStore(
+    (state) => state.ensurePreProvisionedSession
+  );
+
+  // Initialize pending state from current values on mount
+  useEffect(() => {
+    if (llmSelection && pendingLlmSelection === null) {
+      setPendingLlmSelection(llmSelection);
+      setOriginalLlmSelection(llmSelection);
+    }
+  }, [llmSelection, pendingLlmSelection]);
+
+  useEffect(() => {
+    if (pendingDemoData === null) {
+      setPendingDemoData(demoDataEnabled);
+      setOriginalDemoData(demoDataEnabled);
+    }
+  }, [demoDataEnabled, pendingDemoData]);
+
+  // Compute whether there are unsaved changes
+  const hasChanges = useMemo(() => {
+    const llmChanged =
+      pendingLlmSelection !== null &&
+      originalLlmSelection !== null &&
+      (pendingLlmSelection.provider !== originalLlmSelection.provider ||
+        pendingLlmSelection.modelName !== originalLlmSelection.modelName);
+
+    const demoDataChanged =
+      pendingDemoData !== null &&
+      originalDemoData !== null &&
+      pendingDemoData !== originalDemoData;
+
+    return llmChanged || demoDataChanged;
+  }, [
+    pendingLlmSelection,
+    pendingDemoData,
+    originalLlmSelection,
+    originalDemoData,
+  ]);
+
+  // Compute display name for the pending LLM selection
+  const pendingLlmDisplayName = useMemo(() => {
+    if (!pendingLlmSelection) return "Select model";
+
+    // 1. Try to get display name from backend llmProviders
+    if (llmProviders) {
+      for (const provider of llmProviders) {
+        const config = provider.model_configurations.find(
+          (m) => m.name === pendingLlmSelection.modelName
+        );
+        if (config) {
+          return config.display_name || config.name;
+        }
+      }
+    }
+
+    // 2. Fall back to BUILD_MODE_PROVIDERS labels (for unconfigured providers)
+    for (const provider of BUILD_MODE_PROVIDERS) {
+      const model = provider.models.find(
+        (m) => m.name === pendingLlmSelection.modelName
+      );
+      if (model) {
+        return model.label;
+      }
+    }
+
+    // 3. Fall back to raw model name
+    return pendingLlmSelection.modelName;
+  }, [pendingLlmSelection, llmProviders]);
+
+  // Handle LLM selection change - only update pending state
+  const handleLlmSelectionChange = useCallback(
+    (newSelection: BuildLlmSelection) => {
+      setPendingLlmSelection(newSelection);
+    },
+    []
+  );
+
+  // Handle demo data toggle change - only update pending state (after confirmation)
+  const handleDemoDataConfirm = useCallback(() => {
+    if (pendingDemoDataEnabled !== null) {
+      setPendingDemoData(pendingDemoDataEnabled);
+    }
+    setShowDemoDataConfirmModal(false);
+    setPendingDemoDataEnabled(null);
+  }, [pendingDemoDataEnabled]);
+
+  // Restore changes - revert pending state to original values
+  const handleRestoreChanges = useCallback(() => {
+    setPendingLlmSelection(originalLlmSelection);
+    setPendingDemoData(originalDemoData);
+  }, [originalLlmSelection, originalDemoData]);
+
+  // Update - apply pending changes and re-provision sandbox
+  const handleUpdate = useCallback(async () => {
+    setIsUpdating(true);
+    try {
+      // 1. Clear pre-provisioned session so it can be recreated with new settings
+      await clearPreProvisionedSession();
+
+      // 2. Apply LLM selection to cookie
+      if (pendingLlmSelection) {
+        updateLlmSelection(pendingLlmSelection);
+        setOriginalLlmSelection(pendingLlmSelection);
+      }
+
+      // 3. Apply demo data change to store/cookie
+      if (pendingDemoData !== null) {
+        setDemoDataEnabled(pendingDemoData);
+        setOriginalDemoData(pendingDemoData);
+      }
+
+      // 4. Start provisioning a new session with updated settings (in background)
+      ensurePreProvisionedSession();
+    } catch (error) {
+      console.error("Failed to update settings:", error);
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [
+    pendingLlmSelection,
+    pendingDemoData,
+    updateLlmSelection,
+    setDemoDataEnabled,
+    clearPreProvisionedSession,
+    ensurePreProvisionedSession,
+  ]);
 
   // Read persona from cookies
   const existingPersona = getBuildUserPersona();
@@ -135,14 +294,10 @@ export default function BuildConfigPage() {
     [refreshUser]
   );
 
-  const handleNavigateBack = () => {
-    router.push("/build/v1");
-  };
-
   const { data, mutate, isLoading } = useSWR<BuildConnectorListResponse>(
     "/api/build/connectors",
     errorHandlingFetcher,
-    { refreshInterval: 5000 }
+    { refreshInterval: 30000 } // 30 seconds - matches other connector status hooks
   );
 
   // Check for OAuth return state on mount
@@ -180,6 +335,9 @@ export default function BuildConfigPage() {
   useEffect(() => {
     if (!hasActiveConnector && !demoDataEnabled) {
       setDemoDataEnabled(true);
+      // Also sync pending state so UI stays consistent
+      setPendingDemoData(true);
+      setOriginalDemoData(true);
     }
   }, [hasActiveConnector, demoDataEnabled, setDemoDataEnabled]);
 
@@ -205,7 +363,23 @@ export default function BuildConfigPage() {
         icon={SvgPlug}
         title="Configure Build Mode"
         description="Select data sources and your build mode LLM"
-        rightChildren={<BackButton behaviorOverride={handleNavigateBack} />}
+        rightChildren={
+          <div className="flex items-center gap-2">
+            <Button
+              secondary
+              onClick={handleRestoreChanges}
+              disabled={!hasChanges || isUpdating}
+            >
+              Restore Changes
+            </Button>
+            <Button
+              onClick={handleUpdate}
+              disabled={!hasChanges || isUpdating || isPreProvisioning}
+            >
+              {isUpdating || isPreProvisioning ? "Updating..." : "Update"}
+            </Button>
+          </div>
+        }
       />
       <SettingsLayouts.Body>
         {isLoading ? (
@@ -251,14 +425,50 @@ export default function BuildConfigPage() {
                   </SimpleTooltip>
                 </InputLayouts.Horizontal>
               </Card>
-              <Card>
-                <InputLayouts.Horizontal
-                  title="Default LLM"
-                  description="Select the language model for your build sessions"
-                  center
+              <Card
+                className={isUpdating || isPreProvisioning ? "opacity-50" : ""}
+                title={
+                  isUpdating || isPreProvisioning
+                    ? "Please wait while your session is being provisioned"
+                    : undefined
+                }
+              >
+                <div
+                  className={`w-full ${
+                    isUpdating || isPreProvisioning ? "pointer-events-none" : ""
+                  }`}
                 >
-                  <LLMPopover llmManager={llmManager} />
-                </InputLayouts.Horizontal>
+                  <InputLayouts.Horizontal
+                    title="Default LLM"
+                    description="Select the language model for your build sessions"
+                    center
+                  >
+                    <BuildLLMPopover
+                      currentSelection={pendingLlmSelection}
+                      onSelectionChange={handleLlmSelectionChange}
+                      llmProviders={llmProviders}
+                      onOpenOnboarding={(providerKey) =>
+                        setLlmOnboardingProvider(providerKey)
+                      }
+                      disabled={isUpdating || isPreProvisioning}
+                    >
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-08 border border-border-01 bg-background-tint-00 hover:bg-background-tint-01 transition-colors"
+                      >
+                        {pendingLlmSelection?.provider &&
+                          (() => {
+                            const ProviderIcon = getProviderIcon(
+                              pendingLlmSelection.provider
+                            );
+                            return <ProviderIcon className="w-4 h-4" />;
+                          })()}
+                        <Text mainUiAction>{pendingLlmDisplayName}</Text>
+                        <SvgChevronDown className="w-4 h-4 text-text-03" />
+                      </button>
+                    </BuildLLMPopover>
+                  </InputLayouts.Horizontal>
+                </div>
               </Card>
               <Separator />
               <div className="w-full flex items-center justify-between">
@@ -273,19 +483,29 @@ export default function BuildConfigPage() {
                 <div className="w-fit flex-shrink-0">
                   <SimpleTooltip
                     tooltip={
-                      !hasActiveConnector
-                        ? "Connect and sync a data source to disable demo data"
-                        : undefined
+                      isUpdating || isPreProvisioning
+                        ? "Please wait while your session is being provisioned"
+                        : !hasActiveConnector
+                          ? "Connect and sync a data source to disable demo data"
+                          : undefined
                     }
-                    disabled={hasActiveConnector}
+                    disabled={
+                      hasActiveConnector && !isUpdating && !isPreProvisioning
+                    }
                   >
                     <Card
                       padding={0.75}
-                      className={!hasActiveConnector ? "opacity-50" : ""}
+                      className={
+                        !hasActiveConnector || isUpdating || isPreProvisioning
+                          ? "opacity-50"
+                          : ""
+                      }
                     >
                       <div
                         className={`flex items-center gap-3 ${
-                          !hasActiveConnector ? "pointer-events-none" : ""
+                          !hasActiveConnector || isUpdating || isPreProvisioning
+                            ? "pointer-events-none"
+                            : ""
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -297,7 +517,12 @@ export default function BuildConfigPage() {
                           <Text mainUiAction>Use Demo Dataset</Text>
                         </div>
                         <Switch
-                          checked={demoDataEnabled}
+                          checked={pendingDemoData ?? demoDataEnabled}
+                          disabled={
+                            isUpdating ||
+                            isPreProvisioning ||
+                            !hasActiveConnector
+                          }
                           onCheckedChange={(newValue) => {
                             setPendingDemoDataEnabled(newValue);
                             setShowDemoDataConfirmModal(true);
@@ -332,6 +557,14 @@ export default function BuildConfigPage() {
             </Section>
           </Section>
         )}
+
+        {/* Sticky overlay for reprovision warning */}
+        <div className="sticky z-toast bottom-10 w-fit mx-auto">
+          <ReprovisionWarningOverlay visible={hasChanges && !isLoading} />
+        </div>
+
+        {/* Fixed overlay for connector info - centered on screen like the modal */}
+        <ConnectorInfoOverlay visible={!!selectedConnector} />
       </SettingsLayouts.Body>
 
       <ConfigureConnectorModal
@@ -378,6 +611,28 @@ export default function BuildConfigPage() {
         }}
       />
 
+      {/* LLM Onboarding Modal - opens when clicking "Connect" in BuildLLMPopover */}
+      <BuildOnboardingModal
+        open={!!llmOnboardingProvider}
+        showLlmSetup={true}
+        skipInfoSlides={true}
+        initialProvider={llmOnboardingProvider ?? undefined}
+        llmProviders={llmProviders}
+        onComplete={async () => {
+          setLlmOnboardingProvider(null);
+        }}
+        onLlmComplete={async () => {
+          await refetchLlmProviders();
+          setLlmOnboardingProvider(null);
+        }}
+        initialValues={{
+          firstName: initialFirstName,
+          lastName: initialLastName,
+          workArea: workAreaValue,
+          level: levelValue,
+        }}
+      />
+
       <NotAllowedModal
         open={showNotAllowedModal}
         onClose={() => setShowNotAllowedModal(false)}
@@ -390,13 +645,7 @@ export default function BuildConfigPage() {
           setPendingDemoDataEnabled(null);
         }}
         pendingDemoDataEnabled={pendingDemoDataEnabled}
-        onConfirm={() => {
-          if (pendingDemoDataEnabled !== null) {
-            setDemoDataEnabled(pendingDemoDataEnabled);
-          }
-          setShowDemoDataConfirmModal(false);
-          setPendingDemoDataEnabled(null);
-        }}
+        onConfirm={handleDemoDataConfirm}
       />
     </SettingsLayouts.Root>
   );

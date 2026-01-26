@@ -55,6 +55,9 @@ from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
+from onyx.server.features.build.db.build_session import (
+    fetch_llm_provider_by_type_for_build_mode,
+)
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
@@ -292,6 +295,69 @@ class SessionManager:
             )
 
     # =========================================================================
+    # LLM Configuration
+    # =========================================================================
+
+    def _get_llm_config(
+        self,
+        requested_provider_type: str | None,
+        requested_model_name: str | None,
+    ) -> LLMProviderConfig:
+        """Get LLM config for sandbox provisioning.
+
+        Resolution priority:
+        1. User's requested provider/model (from cookie)
+        2. System default provider
+
+        Args:
+            requested_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
+            requested_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
+
+        Returns:
+            LLMProviderConfig for sandbox provisioning
+
+        Raises:
+            ValueError: If no LLM provider is configured
+        """
+        if requested_provider_type and requested_model_name:
+            # Look up provider by type (e.g., "anthropic", "openai", "openrouter")
+            provider = fetch_llm_provider_by_type_for_build_mode(
+                self._db_session, requested_provider_type
+            )
+            if provider:
+                # Validate model exists in this provider's configurations
+                valid_models = [m.name for m in provider.model_configurations]
+                if requested_model_name in valid_models:
+                    return LLMProviderConfig(
+                        provider=provider.provider,
+                        model_name=requested_model_name,
+                        api_key=provider.api_key,
+                        api_base=provider.api_base,
+                    )
+                else:
+                    logger.warning(
+                        f"Requested model {requested_model_name} not found in provider "
+                        f"{requested_provider_type}, falling back to default"
+                    )
+            else:
+                logger.warning(
+                    f"Requested provider type {requested_provider_type} not found, "
+                    f"falling back to default"
+                )
+
+        # Fallback to system default
+        default_provider = fetch_default_provider(self._db_session)
+        if not default_provider:
+            raise ValueError("No LLM provider configured")
+
+        return LLMProviderConfig(
+            provider=default_provider.provider,
+            model_name=default_provider.default_model_name,
+            api_key=default_provider.api_key,
+            api_base=default_provider.api_base,
+        )
+
+    # =========================================================================
     # Session CRUD Operations
     # =========================================================================
 
@@ -315,6 +381,8 @@ class SessionManager:
         name: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
+        llm_provider_type: str | None = None,
+        llm_model_name: str | None = None,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
@@ -328,6 +396,8 @@ class SessionManager:
             name: Optional session name
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
+            llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
+            llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
 
         Returns:
             The created BuildSession model
@@ -352,17 +422,8 @@ class SessionManager:
                     f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
                 )
 
-        # Fetch LLM provider configuration
-        llm_provider = fetch_default_provider(self._db_session)
-        if not llm_provider:
-            raise ValueError("No default LLM provider configured")
-
-        llm_config = LLMProviderConfig(
-            provider=llm_provider.provider,
-            model_name=llm_provider.default_model_name,
-            api_key=llm_provider.api_key,
-            api_base=llm_provider.api_base,
-        )
+        # Get LLM config (uses user's selection or falls back to default)
+        llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
 
         # Build user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
@@ -473,6 +534,8 @@ class SessionManager:
         user_id: UUID,
         user_work_area: str | None = None,
         user_level: str | None = None,
+        llm_provider_type: str | None = None,
+        llm_model_name: str | None = None,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
@@ -483,6 +546,8 @@ class SessionManager:
             user_id: The user ID
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
+            llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
+            llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
 
         Returns:
             BuildSession (existing empty or newly created)
@@ -501,7 +566,51 @@ class SessionManager:
             user_id=user_id,
             user_work_area=user_work_area,
             user_level=user_level,
+            llm_provider_type=llm_provider_type,
+            llm_model_name=llm_model_name,
         )
+
+    def delete_empty_session(self, user_id: UUID) -> bool:
+        """Delete user's pre-provisioned (empty) session if one exists.
+
+        A session is considered "empty" if it has no messages.
+        This is called when user changes LLM selection or toggles demo data
+        so the session can be re-created with the new LLM configuration.
+
+        Args:
+            user_id: The user ID
+
+        Returns:
+            True if a session was deleted, False if none found
+        """
+        empty_session = get_empty_session_for_user(user_id, self._db_session)
+
+        if not empty_session:
+            logger.info(f"No empty session found for user {user_id}")
+            return False
+
+        session_id = empty_session.id
+
+        # Get user's sandbox to clean up session workspace
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox and sandbox.status.is_active():
+            try:
+                self._sandbox_manager.cleanup_session_workspace(
+                    sandbox_id=sandbox.id,
+                    session_id=session_id,
+                )
+                logger.info(
+                    f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
+                )
+            except Exception as e:
+                # Log but don't fail - session can still be deleted
+                logger.warning(f"Failed to cleanup session workspace {session_id}: {e}")
+
+        # Delete session (cascade deletes artifacts)
+        delete_build_session__no_commit(session_id, user_id, self._db_session)
+        logger.info(f"Deleted empty session {session_id} for user {user_id}")
+
+        return True
 
     def get_session(
         self,

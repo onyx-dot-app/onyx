@@ -78,6 +78,8 @@ def create_session(
             user.id,
             user_work_area=request.user_work_area,
             user_level=request.user_level,
+            llm_provider_type=request.llm_provider_type,
+            llm_model_name=request.llm_model_name,
         )
         db_session.commit()
     except ValueError as e:
