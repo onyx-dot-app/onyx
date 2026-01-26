@@ -48,39 +48,6 @@ export function extractText(content: unknown): string {
 }
 
 // =============================================================================
-// Path Utilities
-// =============================================================================
-
-/**
- * Strip sandbox path prefix to get clean relative path
- */
-export function getRelativePath(fullPath: string): string {
-  if (!fullPath) return "";
-  const outputsMatch = fullPath.match(/\/outputs\/(.+)$/);
-  if (outputsMatch && outputsMatch[1]) return outputsMatch[1];
-  const sandboxMatch = fullPath.match(/\/sandboxes\/[^/]+\/(.+)$/);
-  if (sandboxMatch && sandboxMatch[1]) return sandboxMatch[1];
-  const lastSlash = fullPath.lastIndexOf("/");
-  return lastSlash >= 0 ? fullPath.slice(lastSlash + 1) : fullPath;
-}
-
-/**
- * Clean sandbox paths embedded in text content.
- * Replaces paths like /Users/.../sandboxes/<uuid>/files/foo with just foo
- * Uses getRelativePath for consistent path cleaning logic.
- */
-export function cleanSandboxPathsInText(text: string): string {
-  if (!text) return "";
-
-  // Match absolute paths that contain /sandboxes/ or /outputs/
-  // Pattern matches: /any/path/sandboxes/... or /any/path/outputs/...
-  return text.replace(
-    /\/[^\s]*(?:\/sandboxes\/[^/\s]+|\/outputs)\/[^\s]+/g,
-    (match) => getRelativePath(match)
-  );
-}
-
-// =============================================================================
 // Tool Detection
 // =============================================================================
 
@@ -275,7 +242,7 @@ export function getFilePath(packet: Record<string, unknown>): string {
     const path = (rawInput.file_path || rawInput.filePath || rawInput.path) as
       | string
       | undefined;
-    if (path) return getRelativePath(path);
+    if (path) return path;
   }
 
   // 2. Check content array for diff items (edit packets store path in diff)
@@ -290,14 +257,14 @@ export function getFilePath(packet: Record<string, unknown>): string {
         const diffPath = (item as Record<string, unknown>).path as
           | string
           | undefined;
-        if (diffPath) return getRelativePath(diffPath);
+        if (diffPath) return diffPath;
       }
     }
   }
 
   // 3. Fall back to title (often contains file path for edit packets)
   const title = packet.title as string | undefined;
-  if (title && title.includes("/")) return getRelativePath(title);
+  if (title && title.includes("/")) return title;
   return "";
 }
 
@@ -331,7 +298,7 @@ export function getDescription(packet: Record<string, unknown>): string {
 
   if (normalizedKind === "execute") {
     if (rawInput?.description && typeof rawInput.description === "string") {
-      return cleanSandboxPathsInText(rawInput.description);
+      return rawInput.description;
     }
     return "Running command";
   }
@@ -371,8 +338,7 @@ export function getCommand(packet: Record<string, unknown>): string {
   }
 
   if (normalizedKind === "execute" && rawInput) {
-    if (typeof rawInput.command === "string")
-      return cleanSandboxPathsInText(rawInput.command);
+    if (typeof rawInput.command === "string") return rawInput.command;
   }
 
   if (normalizedKind === "read" || normalizedKind === "other") {
@@ -512,8 +478,7 @@ export function getTaskOutput(packet: Record<string, unknown>): string | null {
     if (metadataIndex >= 0) {
       output = output.slice(0, metadataIndex).trim();
     }
-    // Clean sandbox paths from the output for cleaner display
-    return cleanSandboxPathsInText(output);
+    return output;
   }
 
   return null;
@@ -537,8 +502,7 @@ export function getRawOutput(packet: Record<string, unknown>): string {
       unknown
     > | null;
     if (rawInput?.prompt && typeof rawInput.prompt === "string") {
-      // Clean sandbox paths from the prompt for cleaner display
-      return cleanSandboxPathsInText(rawInput.prompt);
+      return rawInput.prompt;
     }
     // Don't fall back to rawOutput JSON - keep showing the prompt
     return "";
@@ -551,8 +515,7 @@ export function getRawOutput(packet: Record<string, unknown>): string {
     > | null;
     if (!rawOutput) return "";
     const metadata = rawOutput.metadata as Record<string, unknown> | null;
-    const output = (metadata?.output || rawOutput.output || "") as string;
-    return cleanSandboxPathsInText(output);
+    return (metadata?.output || rawOutput.output || "") as string;
   }
 
   if (normalizedKind === "read") {
@@ -591,20 +554,10 @@ export function getRawOutput(packet: Record<string, unknown>): string {
     > | null;
     if (!rawOutput) return "";
     if (typeof rawOutput.output === "string") {
-      // Clean file paths in the output string (one path per line)
-      return rawOutput.output
-        .split("\n")
-        .map((line) => {
-          // If line looks like a file path, clean it
-          if (line.includes("/sandboxes/") || line.includes("/outputs/")) {
-            return getRelativePath(line);
-          }
-          return line;
-        })
-        .join("\n");
+      return rawOutput.output;
     }
     if (rawOutput.files && Array.isArray(rawOutput.files)) {
-      return (rawOutput.files as string[]).map(getRelativePath).join("\n");
+      return (rawOutput.files as string[]).join("\n");
     }
     return JSON.stringify(rawOutput, null, 2);
   }

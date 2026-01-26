@@ -13,6 +13,7 @@ def build_opencode_config(
     api_key: str | None = None,
     api_base: str | None = None,
     disabled_tools: list[str] | None = None,
+    dev_mode: bool = False,
 ) -> dict[str, Any]:
     """Build opencode.json configuration dict.
 
@@ -25,6 +26,8 @@ def build_opencode_config(
         api_key: Optional API key for the provider
         api_base: Optional custom API base URL
         disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
+        dev_mode: If True, allow all external directories. If False (Docker/Kubernetes),
+                  only whitelist /workspace/files and /workspace/demo-data.
 
     Returns:
         Configuration dict ready to be serialized to JSON
@@ -106,7 +109,20 @@ def build_opencode_config(
         "skill": "allow",
         "question": "allow",
         "webfetch": "allow",
-        "external_directory": "allow",  # Allow access to symlinked files directory
+        # External directory permissions:
+        # - dev_mode: Allow all external directories for local development
+        # - Docker/Kubernetes: Whitelist only specific directories
+        "external_directory": (
+            "allow"
+            if dev_mode
+            else {
+                "*": "deny",  # Deny all external directories by default
+                "/workspace/files": "allow",  # Allow files directory
+                "/workspace/files/*": "allow",  # Allow files directory contents
+                "/workspace/demo-data": "allow",  # Allow demo data directory
+                "/workspace/demo-data/*": "allow",  # Allow demo data directory contents
+            }
+        ),
     }
 
     # Disable specified tools via permissions

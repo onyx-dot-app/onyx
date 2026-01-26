@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
+from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import DEMO_DATA_PATH
@@ -350,6 +351,7 @@ class LocalSandboxManager(SandboxManager):
                 api_key=llm_config.api_key,
                 api_base=llm_config.api_base,
                 disabled_tools=OPENCODE_DISABLED_TOOLS,
+                dev_mode=DEV_MODE,
             )
             logger.debug("Opencode config ready")
 
