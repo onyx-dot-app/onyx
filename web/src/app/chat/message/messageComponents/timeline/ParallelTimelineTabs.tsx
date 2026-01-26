@@ -17,7 +17,7 @@ import {
 } from "../toolDisplayHelpers";
 import {
   TimelineRendererComponent,
-  TimelineRendererResult,
+  TimelineRendererOutput,
 } from "./TimelineRendererComponent";
 import Tabs from "@/refresh-components/Tabs";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
@@ -82,33 +82,40 @@ export function ParallelTimelineTabs({
   //will be removed on cleanup
   // Stable callbacks to avoid creating new functions on every render
   const noopComplete = useCallback(() => {}, []);
+
   const renderTabContent = useCallback(
-    ({
-      icon,
-      status,
-      content,
-      isExpanded,
-      onToggle,
-      isLastStep,
-      isHover,
-    }: TimelineRendererResult) =>
-      isResearchAgentPackets(activeStep?.packets ?? []) ? (
-        content
-      ) : (
-        <StepContainer
-          stepIcon={icon as FunctionComponent<IconProps> | undefined}
-          header={status}
-          isExpanded={isExpanded}
-          onToggle={onToggle}
-          collapsible={true}
-          isLastStep={isLastStep}
-          isFirstStep={false}
-          isHover={isHover}
-        >
-          {content}
-        </StepContainer>
-      ),
-    [activeStep?.packets]
+    (results: TimelineRendererOutput) => {
+      if (isResearchAgentPackets(activeStep?.packets ?? [])) {
+        return (
+          <>
+            {results.map((result, index) => (
+              <React.Fragment key={index}>{result.content}</React.Fragment>
+            ))}
+          </>
+        );
+      }
+
+      return (
+        <>
+          {results.map((result, index) => (
+            <StepContainer
+              key={index}
+              stepIcon={result.icon as FunctionComponent<IconProps> | undefined}
+              header={result.status}
+              isExpanded={result.isExpanded}
+              onToggle={result.onToggle}
+              collapsible={true}
+              isLastStep={index === results.length - 1 && isLastTurnGroup}
+              isFirstStep={false}
+              isHover={result.isHover}
+            >
+              {result.content}
+            </StepContainer>
+          ))}
+        </>
+      );
+    },
+    [activeStep?.packets, isLastTurnGroup]
   );
 
   return (

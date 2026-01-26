@@ -4,6 +4,7 @@ import { SearchToolPacket } from "@/app/chat/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
+  RendererResult,
 } from "@/app/chat/message/messageComponents/interfaces";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -73,119 +74,28 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     : "Searching internal documents for:";
 
   if (queries.length === 0) {
-    return children({
-      icon,
-      status: null,
-      content: <div />,
-      supportsCompact: true,
-    });
+    return children([
+      {
+        icon,
+        status: null,
+        content: <div />,
+        supportsCompact: true,
+      },
+    ]);
   }
 
   // HIGHLIGHT mode: header embedded in content, no StepContainer
   if (isHighlight) {
-    return children({
-      icon: null,
-      status: null,
-      supportsCompact: true,
-      content: (
-        <div className="flex flex-col">
-          <Text as="p" text02 className="text-sm mb-1">
-            {queriesHeader}
-          </Text>
-          <SearchChipList
-            items={results}
-            initialCount={INITIAL_RESULTS_TO_SHOW}
-            expansionCount={RESULTS_PER_EXPANSION}
-            getKey={(doc: OnyxDocument, index: number) =>
-              doc.document_id ?? `result-${index}`
-            }
-            toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-            onClick={(doc: OnyxDocument) => {
-              if (doc.link) {
-                window.open(doc.link, "_blank");
-              }
-            }}
-            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-          />
-        </div>
-      ),
-    });
-  }
-
-  // INLINE mode: dynamic phase-based content for collapsed streaming view
-  if (isInline) {
-    // Querying phase: show queries
-    if (!hasResults) {
-      return children({
+    return children([
+      {
         icon: null,
-        status: queriesHeader,
+        status: null,
         supportsCompact: true,
         content: (
-          <SearchChipList
-            items={queries}
-            initialCount={INITIAL_QUERIES_TO_SHOW}
-            expansionCount={QUERIES_PER_EXPANSION}
-            getKey={(_, index) => index}
-            toSourceInfo={queryToSourceInfo}
-            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-            showDetailsCard={false}
-            isQuery={true}
-          />
-        ),
-      });
-    }
-
-    // Reading results phase: show results
-    return children({
-      icon: null,
-      status: "Reading results",
-      supportsCompact: true,
-      content: (
-        <SearchChipList
-          items={results}
-          initialCount={INITIAL_RESULTS_TO_SHOW}
-          expansionCount={RESULTS_PER_EXPANSION}
-          getKey={(doc: OnyxDocument, index: number) =>
-            doc.document_id ?? `result-${index}`
-          }
-          toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-          onClick={(doc: OnyxDocument) => {
-            if (doc.link) {
-              window.open(doc.link, "_blank");
-            }
-          }}
-          emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-        />
-      ),
-    });
-  }
-
-  return children({
-    icon,
-    status: queriesHeader,
-    supportsCompact: true,
-    content: (
-      <div className="flex flex-col">
-        {!isCompact && (
-          <SearchChipList
-            items={queries}
-            initialCount={INITIAL_QUERIES_TO_SHOW}
-            expansionCount={QUERIES_PER_EXPANSION}
-            getKey={(_, index) => index}
-            toSourceInfo={queryToSourceInfo}
-            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-            showDetailsCard={false}
-            isQuery={true}
-          />
-        )}
-
-        {(results.length > 0 || queries.length > 0) && (
-          <>
-            {!isCompact && (
-              <Text as="p" mainUiMuted text03>
-                Reading results:
-              </Text>
-            )}
+          <div className="flex flex-col">
+            <Text as="p" text02 className="text-sm mb-1">
+              {queriesHeader}
+            </Text>
             <SearchChipList
               items={results}
               initialCount={INITIAL_RESULTS_TO_SHOW}
@@ -201,9 +111,164 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               }}
               emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
             />
-          </>
-        )}
-      </div>
-    ),
-  });
+          </div>
+        ),
+      },
+    ]);
+  }
+
+  // INLINE mode: dynamic phase-based content for collapsed streaming view
+  if (isInline) {
+    // Querying phase: show queries
+    if (!hasResults) {
+      return children([
+        {
+          icon: null,
+          status: queriesHeader,
+          supportsCompact: true,
+          content: (
+            <SearchChipList
+              items={queries}
+              initialCount={INITIAL_QUERIES_TO_SHOW}
+              expansionCount={QUERIES_PER_EXPANSION}
+              getKey={(_, index) => index}
+              toSourceInfo={queryToSourceInfo}
+              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              showDetailsCard={false}
+              isQuery={true}
+            />
+          ),
+        },
+      ]);
+    }
+
+    // Reading results phase: show results
+    return children([
+      {
+        icon: null,
+        status: "Reading results",
+        supportsCompact: true,
+        content: (
+          <SearchChipList
+            items={results}
+            initialCount={INITIAL_RESULTS_TO_SHOW}
+            expansionCount={RESULTS_PER_EXPANSION}
+            getKey={(doc: OnyxDocument, index: number) =>
+              doc.document_id ?? `result-${index}`
+            }
+            toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
+            onClick={(doc: OnyxDocument) => {
+              if (doc.link) {
+                window.open(doc.link, "_blank");
+              }
+            }}
+            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+          />
+        ),
+      },
+    ]);
+  }
+
+  // FULL mode for web search: return 2 separate timeline steps
+  if (!isCompact && isInternetSearch) {
+    const steps: RendererResult[] = [
+      {
+        icon: SvgGlobe,
+        status: "Searching the web for:",
+        content: (
+          <SearchChipList
+            items={queries}
+            initialCount={INITIAL_QUERIES_TO_SHOW}
+            expansionCount={QUERIES_PER_EXPANSION}
+            getKey={(_, index) => index}
+            toSourceInfo={queryToSourceInfo}
+            emptyState={
+              !stopPacketSeen && !hasResults ? <BlinkingDot /> : undefined
+            }
+            showDetailsCard={false}
+            isQuery={true}
+          />
+        ),
+        supportsCompact: true,
+      },
+    ];
+
+    // Add results step when results arrive
+    if (hasResults) {
+      steps.push({
+        icon: SvgSearchMenu,
+        status: "Reading results:",
+        content: (
+          <SearchChipList
+            items={results}
+            initialCount={INITIAL_RESULTS_TO_SHOW}
+            expansionCount={RESULTS_PER_EXPANSION}
+            getKey={(doc: OnyxDocument, index: number) =>
+              doc.document_id ?? `result-${index}`
+            }
+            toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
+            onClick={(doc: OnyxDocument) => {
+              if (doc.link) {
+                window.open(doc.link, "_blank");
+              }
+            }}
+            emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+          />
+        ),
+        supportsCompact: true,
+      });
+    }
+
+    return children(steps);
+  }
+
+  // Internal search or COMPACT mode: single-result behavior
+  return children([
+    {
+      icon,
+      status: queriesHeader,
+      supportsCompact: true,
+      content: (
+        <div className="flex flex-col">
+          {!isCompact && (
+            <SearchChipList
+              items={queries}
+              initialCount={INITIAL_QUERIES_TO_SHOW}
+              expansionCount={QUERIES_PER_EXPANSION}
+              getKey={(_, index) => index}
+              toSourceInfo={queryToSourceInfo}
+              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              showDetailsCard={false}
+              isQuery={true}
+            />
+          )}
+
+          {(results.length > 0 || queries.length > 0) && (
+            <>
+              {!isCompact && (
+                <Text as="p" mainUiMuted text03>
+                  Reading results:
+                </Text>
+              )}
+              <SearchChipList
+                items={results}
+                initialCount={INITIAL_RESULTS_TO_SHOW}
+                expansionCount={RESULTS_PER_EXPANSION}
+                getKey={(doc: OnyxDocument, index: number) =>
+                  doc.document_id ?? `result-${index}`
+                }
+                toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
+                onClick={(doc: OnyxDocument) => {
+                  if (doc.link) {
+                    window.open(doc.link, "_blank");
+                  }
+                }}
+                emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+              />
+            </>
+          )}
+        </div>
+      ),
+    },
+  ]);
 };

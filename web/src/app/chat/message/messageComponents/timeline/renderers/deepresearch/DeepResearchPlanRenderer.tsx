@@ -70,10 +70,12 @@ export const DeepResearchPlanRenderer: MessageRenderer<
     />
   );
 
-  return children({
-    icon: FiList,
-    status: statusText,
-    content: planContent,
-    expandedText: planContent,
-  });
+  return children([
+    {
+      icon: FiList,
+      status: statusText,
+      content: planContent,
+      expandedText: planContent,
+    },
+  ]);
 };

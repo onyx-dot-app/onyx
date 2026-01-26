@@ -7,7 +7,7 @@ import { TransformedStep } from "./transformers";
 import { cn } from "@/lib/utils";
 import {
   TimelineRendererComponent,
-  TimelineRendererResult,
+  TimelineRendererOutput,
 } from "./TimelineRendererComponent";
 
 // =============================================================================
@@ -49,7 +49,13 @@ export const CollapsedStreamingContent = React.memo(
   }: CollapsedStreamingContentProps) {
     const noopComplete = useCallback(() => {}, []);
     const renderContentOnly = useCallback(
-      ({ content }: TimelineRendererResult) => content,
+      (results: TimelineRendererOutput) => (
+        <>
+          {results.map((result, index) => (
+            <React.Fragment key={index}>{result.content}</React.Fragment>
+          ))}
+        </>
+      ),
       []
     );
 

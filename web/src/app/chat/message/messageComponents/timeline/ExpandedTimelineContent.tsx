@@ -9,6 +9,7 @@ import { IconProps } from "@opal/types";
 import {
   TimelineRendererComponent,
   TimelineRendererResult,
+  TimelineRendererOutput,
 } from "./TimelineRendererComponent";
 import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
 import { StepContainer } from "./StepContainer";
@@ -54,36 +55,44 @@ const TimelineStep = React.memo(function TimelineStep({
   );
 
   const renderStep = useCallback(
-    ({
-      icon,
-      status,
-      content,
-      isExpanded,
-      onToggle,
-      isLastStep: rendererIsLastStep,
-      supportsCompact,
-    }: TimelineRendererResult) =>
-      isResearchAgent ? (
-        content
-      ) : (
-        <StepContainer
-          stepIcon={icon as FunctionComponent<IconProps> | undefined}
-          header={status}
-          isExpanded={isExpanded}
-          onToggle={onToggle}
-          collapsible={true}
-          supportsCompact={supportsCompact}
-          isLastStep={rendererIsLastStep}
-          isFirstStep={isFirstStep}
-          hideHeader={isSingleStep}
-          collapsedIcon={
-            isSearchTool ? (icon as FunctionComponent<IconProps>) : undefined
-          }
-        >
-          {content}
-        </StepContainer>
-      ),
-    [isResearchAgent, isSearchTool, step.packets, isFirstStep, isSingleStep]
+    (results: TimelineRendererOutput) => {
+      if (isResearchAgent) {
+        return (
+          <>
+            {results.map((result, index) => (
+              <React.Fragment key={index}>{result.content}</React.Fragment>
+            ))}
+          </>
+        );
+      }
+
+      return (
+        <>
+          {results.map((result, index) => (
+            <StepContainer
+              key={index}
+              stepIcon={result.icon as FunctionComponent<IconProps> | undefined}
+              header={result.status}
+              isExpanded={result.isExpanded}
+              onToggle={result.onToggle}
+              collapsible={true}
+              supportsCompact={result.supportsCompact}
+              isLastStep={index === results.length - 1 && isLastStep}
+              isFirstStep={index === 0 && isFirstStep}
+              hideHeader={results.length === 1 && isSingleStep}
+              collapsedIcon={
+                isSearchTool
+                  ? (result.icon as FunctionComponent<IconProps>)
+                  : undefined
+              }
+            >
+              {result.content}
+            </StepContainer>
+          ))}
+        </>
+      );
+    },
+    [isResearchAgent, isSearchTool, isFirstStep, isLastStep, isSingleStep]
   );
 
   return (

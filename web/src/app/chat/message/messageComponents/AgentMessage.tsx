@@ -189,7 +189,13 @@ const AgentMessage = React.memo(function AgentMessage({
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
               >
-                {({ content }) => <div>{content}</div>}
+                {(results) => (
+                  <>
+                    {results.map((r, i) => (
+                      <div key={i}>{r.content}</div>
+                    ))}
+                  </>
+                )}
               </RendererComponent>
             ))}
             {/* Show stopped message when user cancelled and no display content */}

@@ -11,6 +11,7 @@ import {
   MessageRenderer,
   RenderType,
   RendererResult,
+  RendererOutput,
 } from "./interfaces";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
@@ -131,7 +132,7 @@ interface RendererComponentProps {
   stopPacketSeen: boolean;
   stopReason?: StopReason;
   useShortRenderer?: boolean;
-  children: (result: RendererResult) => JSX.Element;
+  children: (result: RendererOutput) => JSX.Element;
 }
 
 // Custom comparison to prevent unnecessary re-renders
@@ -165,7 +166,7 @@ export const RendererComponent = memo(function RendererComponent({
   const renderType = useShortRenderer ? RenderType.HIGHLIGHT : RenderType.FULL;
 
   if (!RendererFn) {
-    return children({ icon: null, status: null, content: <></> });
+    return children([{ icon: null, status: null, content: <></> }]);
   }
 
   return (
@@ -178,7 +179,7 @@ export const RendererComponent = memo(function RendererComponent({
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
     >
-      {children}
+      {(results: RendererOutput) => children(results)}
     </RendererFn>
   );
 }, areRendererPropsEqual);

@@ -16,7 +16,10 @@ import {
 } from "@/app/chat/message/messageComponents/interfaces";
 import { getToolName } from "@/app/chat/message/messageComponents/toolDisplayHelpers";
 import { StepContainer } from "@/app/chat/message/messageComponents/timeline/StepContainer";
-import { TimelineRendererComponent } from "@/app/chat/message/messageComponents/timeline/TimelineRendererComponent";
+import {
+  TimelineRendererComponent,
+  TimelineRendererOutput,
+} from "@/app/chat/message/messageComponents/timeline/TimelineRendererComponent";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { useMarkdownRenderer } from "@/app/chat/message/messageComponents/markdownUtils";
@@ -159,25 +162,27 @@ export const ResearchAgentRenderer: MessageRenderer<
   // HIGHLIGHT mode: return raw content with header embedded in content
   if (isHighlight) {
     if (showOnlyReport) {
-      return children({
-        icon: null,
-        status: null,
-        content: (
-          <div className="flex flex-col">
-            <Text as="p" text02 className="text-sm mb-1">
-              Research Report
-            </Text>
-            <ExpandableTextDisplay
-              title="Research Report"
-              content={fullReportContent}
-              maxLines={5}
-              renderContent={renderReport}
-              isStreaming={isReportStreaming}
-            />
-          </div>
-        ),
-        supportsCompact: true,
-      });
+      return children([
+        {
+          icon: null,
+          status: null,
+          content: (
+            <div className="flex flex-col">
+              <Text as="p" text02 className="text-sm mb-1">
+                Research Report
+              </Text>
+              <ExpandableTextDisplay
+                title="Research Report"
+                content={fullReportContent}
+                maxLines={5}
+                renderContent={renderReport}
+                isStreaming={isReportStreaming}
+              />
+            </div>
+          ),
+          supportsCompact: true,
+        },
+      ]);
     }
 
     if (showOnlyTools) {
@@ -196,13 +201,23 @@ export const ResearchAgentRenderer: MessageRenderer<
             isLastStep={true}
             isHover={isHover}
           >
-            {({ content }) =>
-              children({
-                icon: null,
-                status: null,
-                content,
-                supportsCompact: true,
-              })
+            {(results: TimelineRendererOutput) =>
+              children([
+                {
+                  icon: null,
+                  status: null,
+                  content: (
+                    <>
+                      {results.map((result, index) => (
+                        <React.Fragment key={index}>
+                          {result.content}
+                        </React.Fragment>
+                      ))}
+                    </>
+                  ),
+                  supportsCompact: true,
+                },
+              ])
             }
           </TimelineRendererComponent>
         );
@@ -211,27 +226,31 @@ export const ResearchAgentRenderer: MessageRenderer<
 
     // Fallback: research task with header embedded
     if (researchTask) {
-      return children({
-        icon: null,
-        status: null,
-        content: (
-          <div className="flex flex-col">
-            <Text as="p" text02 className="text-sm mb-1">
-              Research Task
-            </Text>
-            <div className="text-text-600 text-sm">{researchTask}</div>
-          </div>
-        ),
-        supportsCompact: true,
-      });
+      return children([
+        {
+          icon: null,
+          status: null,
+          content: (
+            <div className="flex flex-col">
+              <Text as="p" text02 className="text-sm mb-1">
+                Research Task
+              </Text>
+              <div className="text-text-600 text-sm">{researchTask}</div>
+            </div>
+          ),
+          supportsCompact: true,
+        },
+      ]);
     }
 
-    return children({
-      icon: null,
-      status: null,
-      content: <></>,
-      supportsCompact: true,
-    });
+    return children([
+      {
+        icon: null,
+        status: null,
+        content: <></>,
+        supportsCompact: true,
+      },
+    ]);
   }
 
   // Build content using StepContainer pattern
@@ -276,28 +295,31 @@ export const ResearchAgentRenderer: MessageRenderer<
               isLastStep={isLastNestedStep}
               isHover={isHover}
             >
-              {({
-                icon,
-                status,
-                content,
-                isExpanded,
-                onToggle,
-                isHover,
-                supportsCompact,
-              }) => (
-                <StepContainer
-                  stepIcon={icon as FunctionComponent<IconProps> | undefined}
-                  header={status}
-                  isExpanded={isExpanded}
-                  onToggle={onToggle}
-                  collapsible={true}
-                  isLastStep={isLastNestedStep}
-                  isFirstStep={!researchTask && index === 0}
-                  isHover={isHover}
-                  supportsCompact={supportsCompact}
-                >
-                  {content}
-                </StepContainer>
+              {(results: TimelineRendererOutput) => (
+                <>
+                  {results.map((result, resultIndex) => (
+                    <StepContainer
+                      key={resultIndex}
+                      stepIcon={
+                        result.icon as FunctionComponent<IconProps> | undefined
+                      }
+                      header={result.status}
+                      isExpanded={result.isExpanded}
+                      onToggle={result.onToggle}
+                      collapsible={true}
+                      isLastStep={
+                        resultIndex === results.length - 1 && isLastNestedStep
+                      }
+                      isFirstStep={
+                        !researchTask && index === 0 && resultIndex === 0
+                      }
+                      isHover={result.isHover}
+                      supportsCompact={result.supportsCompact}
+                    >
+                      {result.content}
+                    </StepContainer>
+                  ))}
+                </>
               )}
             </TimelineRendererComponent>
           );
@@ -336,10 +358,12 @@ export const ResearchAgentRenderer: MessageRenderer<
   );
 
   // Return simplified result (no icon, no status)
-  return children({
-    icon: null,
-    status: null,
-    content: researchAgentContent,
-    supportsCompact: true,
-  });
+  return children([
+    {
+      icon: null,
+      status: null,
+      content: researchAgentContent,
+      supportsCompact: true,
+    },
+  ]);
 };

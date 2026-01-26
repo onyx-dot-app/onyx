@@ -2,7 +2,12 @@
 
 import React, { useState, useCallback, JSX } from "react";
 import { Packet, StopReason } from "@/app/chat/services/streamingModels";
-import { FullChatState, RenderType, RendererResult } from "../interfaces";
+import {
+  FullChatState,
+  RenderType,
+  RendererResult,
+  RendererOutput,
+} from "../interfaces";
 import { findRenderer } from "../renderMessageComponent";
 
 /** Extended result that includes collapse state */
@@ -18,6 +23,9 @@ export interface TimelineRendererResult extends RendererResult {
   /** Hover state from parent */
   isHover: boolean;
 }
+
+// All renderers return an array of results
+export type TimelineRendererOutput = TimelineRendererResult[];
 
 export interface TimelineRendererComponentProps {
   /** Packets to render */
@@ -40,8 +48,8 @@ export interface TimelineRendererComponentProps {
   isHover?: boolean;
   /** Override render type (if not set, derives from defaultExpanded) */
   renderTypeOverride?: RenderType;
-  /** Children render function - receives extended result with collapse state */
-  children: (result: TimelineRendererResult) => JSX.Element;
+  /** Children render function - receives extended result with collapse state (single or array) */
+  children: (result: TimelineRendererOutput) => JSX.Element;
 }
 
 // Custom comparison function to prevent unnecessary re-renders
@@ -84,18 +92,30 @@ export const TimelineRendererComponent = React.memo(
       renderTypeOverride ?? (isExpanded ? RenderType.FULL : RenderType.COMPACT);
 
     if (!RendererFn) {
-      return children({
-        icon: null,
-        status: null,
-        content: <></>,
-        supportsCompact: false,
-        isExpanded,
-        onToggle: handleToggle,
-        renderType,
-        isLastStep: isLastStep ?? true,
-        isHover,
-      });
+      return children([
+        {
+          icon: null,
+          status: null,
+          content: <></>,
+          supportsCompact: false,
+          isExpanded,
+          onToggle: handleToggle,
+          renderType,
+          isLastStep: isLastStep ?? true,
+          isHover,
+        },
+      ]);
     }
+
+    // Helper to add timeline context to a result
+    const enhanceResult = (result: RendererResult): TimelineRendererResult => ({
+      ...result,
+      isExpanded,
+      onToggle: handleToggle,
+      renderType,
+      isLastStep: isLastStep ?? true,
+      isHover,
+    });
 
     return (
       <RendererFn
@@ -109,19 +129,8 @@ export const TimelineRendererComponent = React.memo(
         isLastStep={isLastStep}
         isHover={isHover}
       >
-        {({ icon, status, content, expandedText, supportsCompact }) =>
-          children({
-            icon,
-            status,
-            content,
-            expandedText,
-            supportsCompact,
-            isExpanded,
-            onToggle: handleToggle,
-            renderType,
-            isLastStep: isLastStep ?? true,
-            isHover,
-          })
+        {(rendererOutput: RendererOutput) =>
+          children(rendererOutput.map((result) => enhanceResult(result)))
         }
       </RendererFn>
     );

@@ -42,6 +42,9 @@ export interface RendererResult {
   supportsCompact?: boolean;
 }
 
+// All renderers return an array of results (even single-step renderers return a 1-element array)
+export type RendererOutput = RendererResult[];
+
 export type MessageRenderer<
   T extends Packet,
   S extends Partial<FullChatState>,
@@ -57,5 +60,5 @@ export type MessageRenderer<
   isLastStep?: boolean;
   /** Hover state from parent */
   isHover?: boolean;
-  children: (result: RendererResult) => JSX.Element;
+  children: (result: RendererOutput) => JSX.Element;
 }>;
