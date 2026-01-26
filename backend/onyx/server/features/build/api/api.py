@@ -235,6 +235,8 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
         raise HTTPException(status_code=404, detail="Session not found")
     if session.nextjs_port is None:
         raise HTTPException(status_code=503, detail="Session port not allocated")
+    if session.user_id is None:
+        raise HTTPException(status_code=404, detail="User not found")
 
     # Get the user's sandbox to get the sandbox_id
     sandbox = get_sandbox_by_user_id(db_session, session.user_id)

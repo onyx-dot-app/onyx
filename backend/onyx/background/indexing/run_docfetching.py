@@ -57,7 +57,9 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from onyx.indexing.persistent_document_writer import get_persistent_document_writer
+from onyx.server.features.build.indexing.persistent_document_writer import (
+    get_persistent_document_writer,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.variable_functionality import global_version
@@ -650,7 +652,10 @@ def connector_document_extraction(
                             "must have a creator_id for persistent document storage"
                         )
                     user_id_str: str = str(creator_id)
-                    writer = get_persistent_document_writer(user_id=user_id_str)
+                    writer = get_persistent_document_writer(
+                        user_id=user_id_str,
+                        tenant_id=tenant_id,
+                    )
                     written_paths = writer.write_documents(doc_batch_cleaned)
 
                     # Update coordination directly (no docprocessing task)
