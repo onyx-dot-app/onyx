@@ -228,11 +228,12 @@ class SandboxManager(ABC):
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,
+        nextjs_port: int,
     ) -> None:
         """Restore a snapshot into a session's workspace directory.
 
-        Downloads the snapshot from storage and extracts it into
-        sessions/$session_id/outputs/.
+        Downloads the snapshot from storage, extracts it into
+        sessions/$session_id/outputs/, and starts the NextJS server.
 
         For Kubernetes backend, this downloads from S3 and streams
         into the pod via kubectl exec (since the pod has no S3 access).
@@ -242,6 +243,7 @@ class SandboxManager(ABC):
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in storage
             tenant_id: Tenant identifier for storage access
+            nextjs_port: Port number for the NextJS dev server
 
         Raises:
             RuntimeError: If snapshot restoration fails

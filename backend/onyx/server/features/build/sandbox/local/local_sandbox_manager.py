@@ -7,14 +7,13 @@ IMPORTANT: This manager does NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
 """
 
-import mimetypes
 import re
 import threading
 from collections.abc import Generator
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
-from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import DEMO_DATA_PATH
@@ -351,7 +350,6 @@ class LocalSandboxManager(SandboxManager):
                 api_key=llm_config.api_key,
                 api_base=llm_config.api_base,
                 disabled_tools=OPENCODE_DISABLED_TOOLS,
-                dev_mode=DEV_MODE,
             )
             logger.debug("Opencode config ready")
 
@@ -490,14 +488,16 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,
+        nextjs_port: int,
     ) -> None:
-        """Restore a snapshot into a session's workspace directory.
+        """Restore a snapshot into a session's workspace directory and start NextJS.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in storage
             tenant_id: Tenant identifier for storage access
+            nextjs_port: Port number for the NextJS dev server
 
         Raises:
             RuntimeError: If snapshot restoration fails
@@ -515,6 +515,19 @@ class LocalSandboxManager(SandboxManager):
         )
 
         logger.info(f"Restored snapshot for session {session_id}")
+
+        # Start NextJS dev server
+        web_dir = session_path / "outputs" / "web"
+        if web_dir.exists():
+            logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
+            self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            logger.info(
+                f"Started NextJS server for session {session_id} on port {nextjs_port}"
+            )
+        else:
+            logger.warning(
+                f"Web directory not found at {web_dir}, skipping NextJS startup"
+            )
 
     def health_check(
         self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
@@ -612,27 +625,25 @@ class LocalSandboxManager(SandboxManager):
         entries = []
         for item in target_path.iterdir():
             stat = item.stat()
-            is_file = item.is_file()
-            mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
             entries.append(
                 FilesystemEntry(
                     name=item.name,
                     path=str(item.relative_to(session_path)),
                     is_directory=item.is_dir(),
-                    size=stat.st_size if is_file else None,
-                    mime_type=mime_type,
+                    size_bytes=stat.st_size if item.is_file() else None,
+                    modified_at=datetime.fromtimestamp(stat.st_mtime),
                 )
             )
 
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
-        """Read a file from the session's workspace.
+        """Read a file from the session's outputs directory.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            path: Relative path within sessions/$session_id/
+            path: Relative path within sessions/$session_id/outputs/
 
         Returns:
             File contents as bytes
@@ -641,11 +652,12 @@ class LocalSandboxManager(SandboxManager):
             ValueError: If path traversal attempted or path is not a file
         """
         session_path = self._get_session_path(sandbox_id, session_id)
-        target_path = session_path / path.lstrip("/")
+        outputs_path = session_path / "outputs"
+        target_path = outputs_path / path.lstrip("/")
 
-        # Security: ensure path is within session directory
+        # Security: ensure path is within outputs directory
         try:
-            target_path.resolve().relative_to(session_path.resolve())
+            target_path.resolve().relative_to(outputs_path.resolve())
         except ValueError:
             raise ValueError("Path traversal not allowed")
 
@@ -784,17 +796,3 @@ class LocalSandboxManager(SandboxManager):
                 total_size += item.stat().st_size
 
         return file_count, total_size
-
-    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
-        """Get the webapp URL for a session's Next.js server.
-
-        For local backend, returns localhost URL with port.
-
-        Args:
-            sandbox_id: The sandbox ID (not used in local backend)
-            port: The session's allocated Next.js port
-
-        Returns:
-            URL to access the webapp (e.g., http://localhost:3015)
-        """
-        return f"http://localhost:{port}"
