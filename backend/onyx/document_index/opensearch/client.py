@@ -559,6 +559,32 @@ class OpenSearchClient:
         """
         self._client.indices.refresh(index=self._index_name)
 
+    def set_cluster_auto_create_index_setting(self, enabled: bool) -> bool:
+        """Sets the cluster auto create index setting.
+
+        By default, when you index a document to a non-existent index,
+        OpenSearch will automatically create the index. This behavior is
+        undesirable so this function exposes the ability to disable it.
+
+        See
+        https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index/#updating-cluster-settings-using-the-api
+
+        Args:
+            enabled: Whether to enable the auto create index setting.
+        """
+        try:
+            body = {"persistent": {"action.auto_create_index": enabled}}
+            response = self._client.cluster.put_settings(body=body)
+            if response.get("acknowledged", False):
+                logger.debug(f"Successfully set action.auto_create_index to {enabled}.")
+                return True
+            else:
+                logger.error(f"Failed to update setting: {response}.")
+                return False
+        except Exception as e:
+            logger.exception(f"Error setting auto_create_index: {e}.")
+            return False
+
     def ping(self) -> bool:
         """Pings the OpenSearch cluster.
 
