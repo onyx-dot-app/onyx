@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import SessionCreateRequest
@@ -22,12 +24,17 @@ from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
+from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -197,6 +204,136 @@ def delete_session(
         )
 
     return Response(status_code=204)
+
+
+# Lock timeout should be longer than max restore time (5 minutes)
+RESTORE_LOCK_TIMEOUT_SECONDS = 300
+
+
+@router.post("/{session_id}/restore", response_model=SessionResponse)
+def restore_session(
+    session_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> SessionResponse:
+    """Restore sandbox and load session snapshot. Blocks until complete.
+
+    Uses Redis lock to ensure only one restore runs per sandbox at a time.
+    If another restore is in progress, waits for it to complete.
+
+    Handles two cases:
+    1. Sandbox is SLEEPING: Re-provision pod, then load session snapshot
+    2. Sandbox is RUNNING but session not loaded: Just load session snapshot
+
+    Returns immediately if session workspace already exists in pod.
+    """
+    session = get_build_session(session_id, user.id, db_session)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
+    # If sandbox is already running, check if session workspace exists
+    sandbox_manager = get_sandbox_manager()
+    tenant_id = get_current_tenant_id()
+
+    # Quick check - if sandbox is running and session exists, return immediately
+    if sandbox.status == SandboxStatus.RUNNING:
+        if sandbox_manager.session_workspace_exists(sandbox.id, session_id):
+            logger.info(
+                f"Session {session_id} workspace already exists, no restore needed"
+            )
+            return SessionResponse.from_model(session, sandbox)
+
+    # Need to do some work - acquire Redis lock
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock_key = f"sandbox_restore:{sandbox.id}"
+    lock = redis_client.lock(lock_key, timeout=RESTORE_LOCK_TIMEOUT_SECONDS)
+
+    # blocking=True means wait if another restore is in progress
+    acquired = lock.acquire(
+        blocking=True, blocking_timeout=RESTORE_LOCK_TIMEOUT_SECONDS
+    )
+    if not acquired:
+        raise HTTPException(
+            status_code=503,
+            detail="Restore operation timed out waiting for lock",
+        )
+
+    try:
+        # Re-fetch sandbox status (may have changed while waiting for lock)
+        db_session.refresh(sandbox)
+
+        # Also re-check if session workspace exists (another request may have
+        # restored it while we were waiting)
+        if sandbox.status == SandboxStatus.RUNNING:
+            if sandbox_manager.session_workspace_exists(sandbox.id, session_id):
+                logger.info(
+                    f"Session {session_id} workspace was restored by another request"
+                )
+                return SessionResponse.from_model(session, sandbox)
+
+        session_manager = SessionManager(db_session)
+
+        if sandbox.status == SandboxStatus.SLEEPING:
+            # 1. Re-provision the pod
+            logger.info(f"Re-provisioning sleeping sandbox {sandbox.id}")
+            llm_config = session_manager._get_llm_config(None, None)
+            sandbox_manager.provision(
+                sandbox_id=sandbox.id,
+                user_id=user.id,
+                tenant_id=tenant_id,
+                llm_config=llm_config,
+            )
+            update_sandbox_status__no_commit(
+                db_session, sandbox.id, SandboxStatus.RUNNING
+            )
+            db_session.commit()
+            db_session.refresh(sandbox)
+
+        # 2. Check if session workspace needs to be loaded
+        if sandbox.status == SandboxStatus.RUNNING:
+            if not sandbox_manager.session_workspace_exists(sandbox.id, session_id):
+                # Get latest snapshot and restore it
+                snapshot = get_latest_snapshot_for_session(db_session, session_id)
+                if snapshot:
+                    logger.info(
+                        f"Restoring snapshot for session {session_id} "
+                        f"from {snapshot.storage_path}"
+                    )
+                    sandbox_manager.restore_snapshot(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        snapshot_storage_path=snapshot.storage_path,
+                        tenant_id=tenant_id,
+                    )
+                else:
+                    # No snapshot - set up fresh workspace
+                    logger.info(
+                        f"No snapshot found for session {session_id}, "
+                        f"setting up fresh workspace"
+                    )
+                    llm_config = session_manager._get_llm_config(None, None)
+                    sandbox_manager.setup_session_workspace(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        llm_config=llm_config,
+                        nextjs_port=session.nextjs_port or 3010,
+                    )
+
+    except Exception as e:
+        logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to restore session: {e}",
+        )
+    finally:
+        if lock.owned():
+            lock.release()
+
+    return SessionResponse.from_model(session, sandbox)
 
 
 # =============================================================================

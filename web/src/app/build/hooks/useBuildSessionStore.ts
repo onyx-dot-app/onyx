@@ -35,6 +35,7 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchArtifacts,
+  restoreSession,
 } from "@/app/build/services/apiServices";
 
 import {
@@ -1233,8 +1234,24 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     setCurrentSession(sessionId);
 
     try {
-      const [sessionData, messages, artifacts] = await Promise.all([
-        fetchSession(sessionId),
+      // First fetch session to check sandbox status
+      let sessionData = await fetchSession(sessionId);
+
+      // If sandbox is sleeping, restore it first (this blocks until restore completes)
+      if (sessionData.sandbox?.status === "sleeping") {
+        console.log(`Sandbox is sleeping, restoring session ${sessionId}...`);
+        // Update UI to show restoring state
+        updateSessionData(sessionId, {
+          status: "creating", // Use "creating" to show loading indicator
+        });
+
+        // Call restore endpoint (blocks until complete)
+        sessionData = await restoreSession(sessionId);
+        console.log(`Session ${sessionId} restored successfully`);
+      }
+
+      // Now fetch messages and artifacts
+      const [messages, artifacts] = await Promise.all([
         fetchMessages(sessionId),
         fetchArtifacts(sessionId),
       ]);

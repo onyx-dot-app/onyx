@@ -38,6 +38,7 @@ import io
 import json
 import os
 import re
+import shlex
 import tarfile
 import threading
 import time
@@ -1061,6 +1062,170 @@ echo "Session cleanup complete"
             storage_path=storage_path,
             size_bytes=size_bytes,
         )
+
+    def session_workspace_exists(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Check if a session's workspace directory exists in the pod.
+
+        Execs into pod to check for /workspace/sessions/{session_id}/outputs/.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to check
+
+        Returns:
+            True if the session workspace exists, False otherwise
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = f"/workspace/sessions/{session_id}/outputs"
+
+        # Use exec to check if directory exists
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f'[ -d "{session_path}" ] && echo "EXISTS" || echo "NOT_EXISTS"',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            return "EXISTS" in resp
+
+        except ApiException as e:
+            logger.warning(
+                f"Failed to check session workspace exists for {session_id}: {e}"
+            )
+            return False
+
+    def restore_snapshot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        snapshot_storage_path: str,
+        tenant_id: str,
+    ) -> None:
+        """Download snapshot from S3 and extract into session workspace.
+
+        Since the sandbox pod doesn't have S3 access, this method:
+        1. Downloads snapshot from S3 (using boto3 directly)
+        2. Creates the session directory structure in pod
+        3. Streams the tar.gz into the pod via kubectl exec
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to restore
+            snapshot_storage_path: Path to the snapshot in S3 (relative path)
+            tenant_id: Tenant identifier for storage access
+
+        Raises:
+            RuntimeError: If snapshot restoration fails
+            FileNotFoundError: If snapshot does not exist
+        """
+        import tempfile
+
+        import boto3
+
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = f"/workspace/sessions/{session_id}"
+
+        # Build full S3 path
+        s3_key = snapshot_storage_path
+
+        logger.info(f"Restoring snapshot for session {session_id} from {s3_key}")
+
+        # Download snapshot from S3 to temp file
+        s3_client = boto3.client("s3")
+        tmp_path: str | None = None
+
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=".tar.gz", delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+
+            try:
+                s3_client.download_file(self._s3_bucket, s3_key, tmp_path)
+            except s3_client.exceptions.NoSuchKey:
+                raise FileNotFoundError(
+                    f"Snapshot not found: s3://{self._s3_bucket}/{s3_key}"
+                )
+
+            # Create session directory structure in pod
+            # Use shlex.quote to prevent shell injection
+            safe_session_path = shlex.quote(session_path)
+            setup_script = f"""
+set -e
+mkdir -p {safe_session_path}/outputs
+"""
+            k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", setup_script],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            # Stream tar.gz into pod and extract
+            # We use kubectl exec with stdin to pipe the tar file
+            with open(tmp_path, "rb") as tar_file:
+                tar_data = tar_file.read()
+
+            # Use base64 encoding to safely transfer binary data
+            import base64
+
+            tar_b64 = base64.b64encode(tar_data).decode("ascii")
+
+            # Extract in the session directory (tar was created with outputs/ as root)
+            extract_script = f"""
+set -e
+cd {safe_session_path}
+echo '{tar_b64}' | base64 -d | tar -xzf -
+"""
+            resp = k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", extract_script],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            logger.debug(f"Snapshot restore output: {resp}")
+            logger.info(f"Restored snapshot for session {session_id}")
+
+        except ApiException as e:
+            raise RuntimeError(f"Failed to restore snapshot: {e}") from e
+        finally:
+            # Cleanup temp file
+            if tmp_path:
+                try:
+                    import os
+
+                    os.unlink(tmp_path)
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Failed to cleanup temp file {tmp_path}: {cleanup_error}"
+                    )
 
     def health_check(
         self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0

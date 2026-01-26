@@ -202,6 +202,54 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def session_workspace_exists(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Check if a session's workspace directory exists in the sandbox.
+
+        Used to determine if we need to restore from snapshot.
+        Checks for sessions/$session_id/outputs/ directory.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to check
+
+        Returns:
+            True if the session workspace exists, False otherwise
+        """
+        ...
+
+    @abstractmethod
+    def restore_snapshot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        snapshot_storage_path: str,
+        tenant_id: str,
+    ) -> None:
+        """Restore a snapshot into a session's workspace directory.
+
+        Downloads the snapshot from storage and extracts it into
+        sessions/$session_id/outputs/.
+
+        For Kubernetes backend, this downloads from S3 and streams
+        into the pod via kubectl exec (since the pod has no S3 access).
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to restore
+            snapshot_storage_path: Path to the snapshot in storage
+            tenant_id: Tenant identifier for storage access
+
+        Raises:
+            RuntimeError: If snapshot restoration fails
+            FileNotFoundError: If snapshot does not exist
+        """
+        ...
+
+    @abstractmethod
     def health_check(
         self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
     ) -> bool:

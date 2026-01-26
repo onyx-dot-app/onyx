@@ -15,6 +15,8 @@ from onyx.db.models import User
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
 from onyx.server.features.build.api.models import MessageResponse
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.session.manager import RateLimitError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
@@ -84,6 +86,12 @@ async def send_message(
 
     Follows the same pattern as /chat/send-message for consistency.
     """
+    # Update sandbox heartbeat - this is the only place we track activity
+    # for determining when a sandbox should be put to sleep
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if sandbox and sandbox.status.is_active():
+        update_sandbox_heartbeat(db_session, sandbox.id)
+
     session_manager = SessionManager(db_session)
 
     # Stream the CLI agent's response
