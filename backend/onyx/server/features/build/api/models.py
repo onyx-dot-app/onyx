@@ -15,9 +15,7 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
-    demo_data_enabled: bool = (
-        True  # Whether to mount demo data files in sandbox (not yet implemented)
-    )
+    demo_data_enabled: bool = True  # Whether to enable demo org_info data in sandbox
     user_work_area: str | None = None  # User's work area (e.g., "engineering")
     user_level: str | None = None  # User's level (e.g., "ic", "manager")
     # LLM selection from user's cookie

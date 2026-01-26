@@ -397,7 +397,6 @@ class DirectoryManager:
 
         config_json = json.dumps(config, indent=2)
         config_path.write_text(config_json)
-        logger.debug(f"Created opencode.json at {config_path}:\n{config_json}")
 
     def cleanup_sandbox_directory(self, sandbox_path: Path) -> None:
         """Remove sandbox directory and all contents.

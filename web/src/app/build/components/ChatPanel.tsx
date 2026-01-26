@@ -189,8 +189,6 @@ export default function BuildChatPanel({
 
   const handleSubmit = useCallback(
     async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
-      // TODO: Pass demoDataEnabled to createSession when backend is implemented
-      console.log("Demo data enabled:", demoDataEnabled);
       if (hasSession && sessionId) {
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
