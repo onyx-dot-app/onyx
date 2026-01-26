@@ -64,7 +64,7 @@ export default function ExpandableTextDisplay({
   content,
   displayContent,
   subtitle,
-  maxLines = 5,
+  maxLines = 1,
   className,
   renderContent,
   isStreaming = false,
@@ -73,6 +73,7 @@ export default function ExpandableTextDisplay({
   const [isTruncated, setIsTruncated] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevIsStreamingRef = useRef(isStreaming);
 
   const lineCount = useMemo(() => getLineCount(content), [content]);
   const contentSize = useMemo(() => getContentSize(content), [content]);
@@ -88,12 +89,21 @@ export default function ExpandableTextDisplay({
     }
   }, [content, displayContent, maxLines, isStreaming, renderContent]);
 
-  // Auto-scroll to bottom when streaming
+  // Auto-scroll to bottom when streaming, reset to top when streaming ends
   // Use useEffect (not useLayoutEffect) to ensure content is fully rendered before scrolling
   useEffect(() => {
     if (isStreaming && scrollRef.current) {
+      // Auto-scroll to bottom during streaming
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    } else if (
+      prevIsStreamingRef.current &&
+      !isStreaming &&
+      scrollRef.current
+    ) {
+      // When streaming just ended, reset scroll to top
+      scrollRef.current.scrollTop = 0;
     }
+    prevIsStreamingRef.current = isStreaming;
   }, [isStreaming, content, displayContent]);
 
   const handleDownload = () => {
@@ -114,7 +124,7 @@ export default function ExpandableTextDisplay({
   return (
     <>
       {/* Collapsed View */}
-      <div className={cn("w-full flex", className)}>
+      <div className={cn("w-full flex bg-red-400", className)}>
         {(() => {
           // Build the content element
           const contentElement =
@@ -125,7 +135,9 @@ export default function ExpandableTextDisplay({
               <div
                 ref={scrollRef}
                 className={cn(
-                  isStreaming ? "overflow-y-auto" : "overflow-hidden",
+                  isStreaming
+                    ? "overflow-y-auto no-scrollbar"
+                    : "overflow-hidden",
                   !renderContent && "whitespace-pre-wrap"
                 )}
                 style={{ maxHeight: `${maxLines * LINE_HEIGHT_PX}px` }}
