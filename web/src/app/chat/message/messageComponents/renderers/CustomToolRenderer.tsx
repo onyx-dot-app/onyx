@@ -68,10 +68,11 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
   const icon = FiTool;
 
-  if (renderType === RenderType.HIGHLIGHT) {
+  if (renderType === RenderType.COMPACT) {
     return children({
       icon,
       status: status,
+      supportsCompact: true,
       content: (
         <div className="text-sm text-muted-foreground">
           {isRunning && `${toolName} running...`}
@@ -84,6 +85,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   return children({
     icon,
     status,
+    supportsCompact: true,
     content: (
       <div className="flex flex-col gap-3">
         {/* File responses */}

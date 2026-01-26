@@ -139,6 +139,7 @@ export interface Message {
 
   // new gen
   packets: Packet[];
+  packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
   // cached values for easy access
   documents?: OnyxDocument[] | null;
