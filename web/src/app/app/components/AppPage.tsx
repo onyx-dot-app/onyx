@@ -44,7 +44,7 @@ import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
 import { useQueryClassification } from "@/app/app/hooks/useQueryClassification";
 import { useDocumentSearch } from "@/app/app/hooks/useDocumentSearch";
 import { SearchResultsPanel } from "@/app/app/components/search/SearchResultsPanel";
-import { AppMode, CompactModeToggle } from "@/app/app/components/ModeToggle";
+import { useAppMode } from "@/providers/AppModeProvider";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
@@ -196,7 +196,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   });
 
   // Unified Search and Chat: Mode and search state
-  const [appMode, setAppMode] = useState<AppMode>("auto");
+  const { appMode, setAppMode } = useAppMode();
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(
     null
   );
@@ -788,6 +788,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <div className="absolute inset-0 bg-background/80 pointer-events-none" />
               )}
 
+              {/* App Header - flex positioned at top */}
+              <AppHeader />
+
               {/* ProjectUI */}
               {!!currentProjectId && projectPanelVisible && (
                 <ProjectContextPanel
@@ -808,9 +811,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   onScrollButtonVisibilityChange={setShowScrollButton}
                   disableFadeOverlay={hasBackground}
                 >
-                  <AppLayouts.StickyHeader>
-                    <AppHeader />
-                  </AppLayouts.StickyHeader>
                   <MessageList
                     liveAssistant={liveAssistant}
                     llmManager={llmManager}
@@ -894,17 +894,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         llmDescriptors={llmDescriptors}
                       />
                     )}
-
-                  {/* Mode Toggle - only show when no active chat session */}
-                  {!currentChatSessionId && (
-                    <div className="flex justify-center mb-2">
-                      <CompactModeToggle
-                        mode={appMode}
-                        onModeChange={setAppMode}
-                        disabled={isClassifying || isSearchLoading}
-                      />
-                    </div>
-                  )}
 
                   <ChatInputBar
                     ref={chatInputBarRef}

@@ -2,9 +2,9 @@
 
 import React from "react";
 import Tabs from "@/refresh-components/Tabs";
-import { SvgBubbleText, SvgSearch } from "@opal/icons";
-
-export type AppMode = "chat" | "search" | "auto";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { SvgBubbleText, SvgSearch, SvgSparkle } from "@opal/icons";
+import { AppMode } from "@/providers/AppModeProvider";
 
 export interface ModeToggleProps {
   /** Current mode */
@@ -86,7 +86,16 @@ export function ModeToggle({
 }
 
 /**
- * Compact mode toggle for use in tight spaces (e.g., input bar)
+ * Compact mode toggle dropdown for selecting between Auto, Search, and Chat modes.
+ *
+ * @example
+ * ```tsx
+ * <CompactModeToggle
+ *   mode={appMode}
+ *   onModeChange={setAppMode}
+ *   disabled={isLoading}
+ * />
+ * ```
  */
 export function CompactModeToggle({
   mode,
@@ -94,58 +103,37 @@ export function CompactModeToggle({
   disabled,
 }: Omit<ModeToggleProps, "isClassifying">) {
   return (
-    <div className="flex items-center gap-1 bg-background-tint-03 rounded-full p-0.5">
-      <button
-        type="button"
-        onClick={() => onModeChange("auto")}
+    <div className="w-32">
+      <InputSelect
+        value={mode}
+        onValueChange={(value) => onModeChange(value as AppMode)}
         disabled={disabled}
-        className={`
-          px-2 py-1 text-xs rounded-full transition-colors
-          ${
-            mode === "auto"
-              ? "bg-background-neutral-00 text-text-04 shadow-01"
-              : "text-text-03 hover:text-text-04"
-          }
-          ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-        `}
-        title="Auto-detect mode"
       >
-        Auto
-      </button>
-      <button
-        type="button"
-        onClick={() => onModeChange("search")}
-        disabled={disabled}
-        className={`
-          px-2 py-1 text-xs rounded-full transition-colors flex items-center gap-1
-          ${
-            mode === "search"
-              ? "bg-background-neutral-00 text-text-04 shadow-01"
-              : "text-text-03 hover:text-text-04"
-          }
-          ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-        `}
-        title="Search mode"
-      >
-        <SvgSearch size={12} />
-      </button>
-      <button
-        type="button"
-        onClick={() => onModeChange("chat")}
-        disabled={disabled}
-        className={`
-          px-2 py-1 text-xs rounded-full transition-colors flex items-center gap-1
-          ${
-            mode === "chat"
-              ? "bg-background-neutral-00 text-text-04 shadow-01"
-              : "text-text-03 hover:text-text-04"
-          }
-          ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-        `}
-        title="Chat mode"
-      >
-        <SvgBubbleText size={12} />
-      </button>
+        <InputSelect.Trigger placeholder="Select mode" />
+        <InputSelect.Content>
+          <InputSelect.Item
+            value="auto"
+            icon={SvgSparkle}
+            description="Automatic Search/Chat mode"
+          >
+            Auto
+          </InputSelect.Item>
+          <InputSelect.Item
+            value="search"
+            icon={SvgSearch}
+            description="Quick search for documents"
+          >
+            Search
+          </InputSelect.Item>
+          <InputSelect.Item
+            value="chat"
+            icon={SvgBubbleText}
+            description="Conversation and research with follow-up questions"
+          >
+            Chat
+          </InputSelect.Item>
+        </InputSelect.Content>
+      </InputSelect>
     </div>
   );
 }

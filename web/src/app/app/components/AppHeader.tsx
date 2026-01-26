@@ -33,21 +33,25 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { CompactModeToggle } from "@/app/app/components/ModeToggle";
+import { useAppMode } from "@/providers/AppModeProvider";
 
 /**
- * Chat Header Component
+ * App Header Component
  *
- * Renders the header for chat sessions with share, move, and delete actions.
- * Designed to be rendered inside ChatScrollContainer with sticky positioning.
+ * Renders the header for the app with mode toggle and chat session actions.
+ * Flex-positioned at the top of the page layout.
  *
  * Features:
- * - Share chat functionality
+ * - Mode toggle (Auto/Search/Chat) on the left when no active chat
+ * - Share chat functionality when chat session exists
  * - Move chat to project (with confirmation for custom agents)
  * - Delete chat with confirmation
  * - Mobile-responsive sidebar toggle
  * - Custom header content from enterprise settings
  */
 export default function AppHeader() {
+  const { appMode, setAppMode } = useAppMode();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -218,9 +222,6 @@ export default function AppHeader() {
     handleMoveClick,
   ]);
 
-  // Don't render if no chat session
-  if (!currentChatSessionId) return null;
-
   return (
     <>
       {popup}
@@ -265,30 +266,23 @@ export default function AppHeader() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 relative">
-        {/* Fading blur overlay for mobile/tablet - hidden on xl+ */}
-        <div
-          className="absolute inset-0 backdrop-blur-md xl:hidden pointer-events-none"
-          style={{
-            maskImage:
-              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
-          }}
-        />
-
-        {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
-        <div className="flex-1 relative z-sticky">
+      <div className="w-full flex flex-row items-center py-3 px-4 h-16">
+        {/* Left - sidebar toggle (mobile) + mode toggle (when no chat session) */}
+        <div className="flex-1 flex items-center gap-2">
           <IconButton
             icon={SvgSidebar}
             onClick={() => setFolded(false)}
-            className={cn(!isMobile && "invisible")}
+            className={cn(!isMobile && "hidden")}
             internal
           />
+          {/* Mode toggle - only show when no active chat session */}
+          {!currentChatSessionId && (
+            <CompactModeToggle mode={appMode} onModeChange={setAppMode} />
+          )}
         </div>
 
         {/* Center - contains the custom-header-content */}
-        <div className="flex-1 flex flex-col items-center overflow-hidden relative z-sticky">
+        <div className="flex-1 flex flex-col items-center overflow-hidden">
           <Text
             as="p"
             text03
@@ -299,34 +293,38 @@ export default function AppHeader() {
           </Text>
         </div>
 
-        {/* Right - contains the share and more-options buttons */}
-        <div className="flex-1 flex flex-row items-center justify-end px-1 relative z-sticky">
-          <Button
-            leftIcon={SvgShare}
-            transient={showShareModal}
-            tertiary
-            onClick={() => setShowShareModal(true)}
-          >
-            Share Chat
-          </Button>
-          <SimplePopover
-            trigger={
-              <IconButton
-                icon={SvgMoreHorizontal}
-                className="ml-2"
-                transient={popoverOpen}
+        {/* Right - contains the share and more-options buttons (only when chat session exists) */}
+        <div className="flex-1 flex flex-row items-center justify-end px-1">
+          {currentChatSessionId && (
+            <>
+              <Button
+                leftIcon={SvgShare}
+                transient={showShareModal}
                 tertiary
-              />
-            }
-            onOpenChange={(state) => {
-              setPopoverOpen(state);
-              if (!state) setShowMoveOptions(false);
-            }}
-            side="bottom"
-            align="end"
-          >
-            <PopoverMenu>{popoverItems}</PopoverMenu>
-          </SimplePopover>
+                onClick={() => setShowShareModal(true)}
+              >
+                Share Chat
+              </Button>
+              <SimplePopover
+                trigger={
+                  <IconButton
+                    icon={SvgMoreHorizontal}
+                    className="ml-2"
+                    transient={popoverOpen}
+                    tertiary
+                  />
+                }
+                onOpenChange={(state) => {
+                  setPopoverOpen(state);
+                  if (!state) setShowMoveOptions(false);
+                }}
+                side="bottom"
+                align="end"
+              >
+                <PopoverMenu>{popoverItems}</PopoverMenu>
+              </SimplePopover>
+            </>
+          )}
         </div>
       </div>
     </>
