@@ -29,11 +29,35 @@ from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.utils import is_build_mode_enabled
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/build")
+
+# -----------------------------------------------------------------------------
+# Feature Flag Dependency
+# -----------------------------------------------------------------------------
+
+
+def require_build_mode_enabled(
+    user: User | None = Depends(current_user),
+) -> None:
+    """
+    Dependency that checks if Build Mode is enabled for the user.
+    Raises 404 if Build Mode is disabled via PostHog feature flag.
+
+    This dependency is applied to all build routes automatically.
+    """
+    if not is_build_mode_enabled(user):
+        raise HTTPException(
+            status_code=404,
+            detail="Not found",
+        )
+
+
+# Apply the feature flag check to all routes in this router
+router = APIRouter(prefix="/build", dependencies=[Depends(require_build_mode_enabled)])
 
 # Include sub-routers for sessions and messages
 router.include_router(sessions_router, tags=["build"])
@@ -348,6 +372,27 @@ def clear_feature_announcements_and_logout(
         db_session.commit()
 
     return {"status": "success", "message": "Notifications deleted"}
+
+
+# Separate router for checking build mode status (not protected by feature flag)
+# This allows the frontend to check if build mode is enabled before rendering
+build_status_router = APIRouter(prefix="/build-status")
+
+
+@build_status_router.get("/enabled")
+def check_build_mode_enabled(
+    user: User | None = Depends(current_user),
+) -> dict[str, bool]:
+    """
+    Check if Build Mode is enabled for the current user.
+
+    This endpoint is NOT protected by the build mode feature flag,
+    allowing the frontend to check availability before rendering.
+
+    Returns:
+        {"enabled": true/false}
+    """
+    return {"enabled": is_build_mode_enabled(user)}
 
 
 # Separate router for Next.js static assets at /_next/*

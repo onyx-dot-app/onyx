@@ -9,6 +9,7 @@ from onyx.configs.constants import NotificationType
 from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.feature_flags_keys import BUILD_MODE_ENABLED
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
@@ -320,3 +321,46 @@ def ensure_build_mode_intro_notification(user: User, db_session: Session) -> Non
         description="Unleash AI agents to create slides, dashboards, documents, and more.",
         additional_data={"feature": BUILD_MODE_FEATURE_ID},
     )
+
+
+# =============================================================================
+# Build Mode Feature Flag
+# =============================================================================
+
+
+def is_build_mode_enabled(user: User | None) -> bool:
+    """
+    Check if Build Mode is enabled for the user.
+
+    Uses the PostHog feature flag 'build-mode-enabled' to determine access.
+    - Flag = True → enabled (allow access)
+    - Flag = False or not found → disabled (deny access)
+
+    In local development with NoOp provider, defaults to enabled.
+    """
+    feature_flag_provider = get_default_feature_flag_provider()
+
+    # If no PostHog configured (NoOp provider), default behavior:
+    # - local environment: enabled (for development)
+    # - other environments: disabled
+    if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
+        # NoOpFeatureFlagProvider returns True for local, False otherwise
+        return feature_flag_provider.feature_enabled(
+            BUILD_MODE_ENABLED,
+            user.id if user else None,  # type: ignore
+        )
+
+    # Check PostHog feature flag
+    if user is None:
+        # No user context - deny access
+        return False
+
+    is_enabled = feature_flag_provider.feature_enabled(
+        BUILD_MODE_ENABLED,
+        user.id,
+    )
+
+    if not is_enabled:
+        logger.debug(f"Build Mode disabled for user {user.id} via PostHog feature flag")
+
+    return is_enabled
