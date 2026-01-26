@@ -1257,9 +1257,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       // First fetch session to check sandbox status
       let sessionData = await fetchSession(sessionId);
 
-      // If sandbox is sleeping, restore it first (this blocks until restore completes)
-      if (sessionData.sandbox?.status === "sleeping") {
-        console.log(`Sandbox is sleeping, restoring session ${sessionId}...`);
+      // Check if session needs to be restored:
+      // - Sandbox is sleeping or terminated
+      // - Sandbox is running but session workspace is not loaded
+      const needsRestore =
+        sessionData.sandbox?.status === "sleeping" ||
+        sessionData.sandbox?.status === "terminated" ||
+        (sessionData.sandbox?.status === "running" &&
+          !sessionData.session_loaded_in_sandbox);
+
+      if (needsRestore) {
+        console.log(`Restoring session ${sessionId}...`);
         // Update UI to show restoring state
         updateSessionData(sessionId, {
           status: "creating", // Use "creating" to show loading indicator
