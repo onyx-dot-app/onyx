@@ -19,6 +19,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import ProcessingMode
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
+from onyx.db.models import BuildSession
 from onyx.db.models import User
 from onyx.db.notification import get_notifications
 from onyx.server.features.build.api.messages_api import router as messages_router
@@ -28,6 +29,8 @@ from onyx.server.features.build.api.models import BuildConnectorStatus
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
 
@@ -211,26 +214,36 @@ REWRITABLE_CONTENT_TYPES = {
 
 
 def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
-    """Get the localhost URL for a session's Next.js server.
+    """Get the internal URL for a session's Next.js server.
+
+    Uses the sandbox manager to get the correct URL for both local and
+    Kubernetes environments.
 
     Args:
         session_id: The build session ID
         db_session: Database session
 
     Returns:
-        The localhost URL (e.g., "http://localhost:3010")
+        The internal URL to proxy requests to
 
     Raises:
-        HTTPException: If session not found or port not allocated
+        HTTPException: If session not found, port not allocated, or sandbox not found
     """
-    from onyx.db.models import BuildSession
 
     session = db_session.get(BuildSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if session.nextjs_port is None:
         raise HTTPException(status_code=503, detail="Session port not allocated")
-    return f"http://localhost:{session.nextjs_port}"
+
+    # Get the user's sandbox to get the sandbox_id
+    sandbox = get_sandbox_by_user_id(db_session, session.user_id)
+    if sandbox is None:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
+    # Use sandbox manager to get the correct internal URL
+    sandbox_manager = get_sandbox_manager()
+    return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port)
 
 
 def _proxy_request(

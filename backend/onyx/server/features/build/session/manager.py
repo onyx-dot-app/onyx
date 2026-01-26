@@ -25,6 +25,7 @@ from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 from sqlalchemy.orm import Session as DBSession
 
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.llm import fetch_default_provider
@@ -1343,13 +1344,11 @@ class SessionManager:
         if sandbox is None:
             return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
 
-        # Build webapp URL using sandbox manager (handles both local and K8s)
+        # Return the proxy URL - the proxy handles routing to the correct sandbox
+        # for both local and Kubernetes environments
         webapp_url = None
         if session.nextjs_port:
-            webapp_url = self._sandbox_manager.get_webapp_url(
-                sandbox_id=sandbox.id,
-                port=session.nextjs_port,
-            )
+            webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
 
         return {
             "has_webapp": session.nextjs_port is not None,

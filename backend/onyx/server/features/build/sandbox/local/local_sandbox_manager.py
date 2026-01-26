@@ -795,6 +795,4 @@ class LocalSandboxManager(SandboxManager):
         Returns:
             URL to access the webapp (e.g., http://localhost:3015)
         """
-        from onyx.configs.app_configs import WEB_DOMAIN
-
-        return f"{WEB_DOMAIN}:{port}"
+        return f"http://localhost:{port}"

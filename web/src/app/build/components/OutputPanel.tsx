@@ -185,7 +185,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     session.status !== "creating";
 
   const { data: webappInfo, mutate } = useSWR(
-    shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp` : null,
+    shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp-info` : null,
     () => (session?.id ? fetchWebappInfo(session.id) : null),
     {
       refreshInterval: 0, // Disable polling, use event-based refresh
