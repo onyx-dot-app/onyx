@@ -98,6 +98,11 @@ AGENT_PORT = 8081
 POD_READY_TIMEOUT_SECONDS = 120
 POD_READY_POLL_INTERVAL_SECONDS = 2
 
+# Resource deletion timeout and polling interval
+# Kubernetes deletes are async - we need to wait for resources to actually be gone
+RESOURCE_DELETION_TIMEOUT_SECONDS = 30
+RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
+
 
 def _build_nextjs_start_script(
     session_path: str,
@@ -325,7 +330,12 @@ class KubernetesSandboxManager(SandboxManager):
         file_sync_container = client.V1Container(
             name="file-sync",
             image="amazon/aws-cli:latest",
-            env=_get_local_aws_credential_env_vars(),
+            env=_get_local_aws_credential_env_vars()
+            + [
+                # Set HOME to a writable directory so AWS CLI can create .aws config dir
+                # Without this, AWS CLI tries to access /.aws which fails with permission denied
+                client.V1EnvVar(name="HOME", value="/tmp"),
+            ],
             command=["/bin/sh", "-c"],
             args=[
                 f"""
@@ -727,8 +737,75 @@ sleep infinity
             self._cleanup_kubernetes_resources(str(sandbox_id))
             raise
 
-    def _cleanup_kubernetes_resources(self, sandbox_id: str) -> None:
-        """Clean up Kubernetes resources for a sandbox."""
+    def _wait_for_resource_deletion(
+        self,
+        resource_type: str,
+        name: str,
+        timeout: float = RESOURCE_DELETION_TIMEOUT_SECONDS,
+    ) -> bool:
+        """Wait for a Kubernetes resource to be fully deleted.
+
+        Kubernetes delete calls are asynchronous - the API returns immediately
+        but the resource may still exist in a 'Terminating' state. This method
+        polls until the resource returns 404 (not found).
+
+        Args:
+            resource_type: Type of resource ("pod" or "service")
+            name: Name of the resource
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            True if resource was deleted, False if timeout
+        """
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                if resource_type == "pod":
+                    self._core_api.read_namespaced_pod(
+                        name=name,
+                        namespace=self._namespace,
+                    )
+                elif resource_type == "service":
+                    self._core_api.read_namespaced_service(
+                        name=name,
+                        namespace=self._namespace,
+                    )
+                else:
+                    raise ValueError(f"Unknown resource type: {resource_type}")
+
+                # Resource still exists, wait and retry
+                logger.debug(f"Waiting for {resource_type} {name} to be deleted...")
+                time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
+
+            except ApiException as e:
+                if e.status == 404:
+                    # Resource is gone
+                    logger.debug(f"{resource_type.capitalize()} {name} fully deleted")
+                    return True
+                # Other error, log and continue waiting
+                logger.warning(f"Error checking {resource_type} {name} status: {e}")
+                time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
+
+        logger.warning(
+            f"Timeout waiting for {resource_type} {name} to be deleted "
+            f"after {timeout}s"
+        )
+        return False
+
+    def _cleanup_kubernetes_resources(
+        self,
+        sandbox_id: str,
+        wait_for_deletion: bool = True,
+    ) -> None:
+        """Clean up Kubernetes resources for a sandbox.
+
+        Args:
+            sandbox_id: The sandbox ID to clean up
+            wait_for_deletion: If True, wait for resources to be fully deleted
+                before returning. This prevents 409 conflicts when immediately
+                re-provisioning with the same sandbox ID.
+        """
         # Convert UUID objects to strings if needed (Kubernetes client requires strings)
         sandbox_id = str(sandbox_id)
 
@@ -736,25 +813,43 @@ sleep infinity
         service_name = self._get_service_name(sandbox_id)
 
         # Delete in reverse order of creation
+        service_deleted = False
         try:
             self._core_api.delete_namespaced_service(
                 name=service_name,
                 namespace=self._namespace,
             )
             logger.debug(f"Deleted Service {service_name}")
+            service_deleted = True
         except ApiException as e:
-            if e.status != 404:
+            if e.status == 404:
+                # Already deleted
+                service_deleted = True
+            else:
                 logger.warning(f"Error deleting Service {service_name}: {e}")
 
+        pod_deleted = False
         try:
             self._core_api.delete_namespaced_pod(
                 name=pod_name,
                 namespace=self._namespace,
             )
             logger.debug(f"Deleted Pod {pod_name}")
+            pod_deleted = True
         except ApiException as e:
-            if e.status != 404:
+            if e.status == 404:
+                # Already deleted
+                pod_deleted = True
+            else:
                 logger.warning(f"Error deleting Pod {pod_name}: {e}")
+
+        # Wait for resources to be fully deleted to prevent 409 conflicts
+        # on immediate re-provisioning
+        if wait_for_deletion:
+            if service_deleted:
+                self._wait_for_resource_deletion("service", service_name)
+            if pod_deleted:
+                self._wait_for_resource_deletion("pod", pod_name)
 
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
