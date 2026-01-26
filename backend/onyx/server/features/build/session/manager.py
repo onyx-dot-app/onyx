@@ -45,13 +45,10 @@ from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
-from onyx.server.features.build.configs import KUBERNETES_NEXTJS_PORT
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
-from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -442,11 +439,8 @@ class SessionManager:
             user_file_system_path = "/tmp/onyx-files"
 
         # Allocate port for this session (per-session port allocation)
-        nextjs_port: int | None = None
-        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-            nextjs_port = allocate_nextjs_port(self._db_session)
-        else:
-            nextjs_port = KUBERNETES_NEXTJS_PORT
+        # Both LOCAL and KUBERNETES backends use the same port allocation strategy
+        nextjs_port = allocate_nextjs_port(self._db_session)
 
         # Create BuildSession record with allocated port (uses flush, caller commits)
         build_session = create_build_session__no_commit(
@@ -1336,20 +1330,13 @@ class SessionManager:
         if sandbox is None:
             return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
 
-        # Check if web directory exists (in session workspace)
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
-        )
-        web_dir = session_path / "outputs" / "web"
-        has_webapp = web_dir.exists()
-
         # Build webapp URL if we have a port and webapp exists
         webapp_url = None
-        if has_webapp and session.nextjs_port:
+        if session.nextjs_port:
             webapp_url = f"http://localhost:{session.nextjs_port}"
 
         return {
-            "has_webapp": has_webapp,
+            "has_webapp": session.nextjs_port is not None,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
         }

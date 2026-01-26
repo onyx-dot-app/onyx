@@ -23,9 +23,9 @@ from kubernetes.stream import stream as k8s_stream  # type: ignore[import-untype
 
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.configs import KUBERNETES_NEXTJS_PORT
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
+from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -202,7 +202,7 @@ def test_kubernetes_sandbox_provision() -> None:
             sandbox_id=sandbox_id,
             session_id=session_id,
             llm_config=llm_config,
-            nextjs_port=KUBERNETES_NEXTJS_PORT,
+            nextjs_port=SANDBOX_NEXTJS_PORT_START,
             file_system_path=None,
             snapshot_path=None,
             user_name="Test User",
@@ -353,7 +353,7 @@ def test_kubernetes_sandbox_send_message() -> None:
         is_healthy = False
         for _ in range(10):
             is_healthy = manager.health_check(
-                sandbox_id, nextjs_port=KUBERNETES_NEXTJS_PORT
+                sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START
             )
             if is_healthy:
                 break
@@ -363,7 +363,7 @@ def test_kubernetes_sandbox_send_message() -> None:
         print("DEBUG: Sandbox agent is healthy")
 
         manager.setup_session_workspace(
-            sandbox_id, session_id, llm_config, nextjs_port=KUBERNETES_NEXTJS_PORT
+            sandbox_id, session_id, llm_config, nextjs_port=SANDBOX_NEXTJS_PORT_START
         )
 
         # Send a simple message
@@ -472,7 +472,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         is_healthy = False
         for _ in range(10):
             is_healthy = manager.health_check(
-                sandbox_id, nextjs_port=KUBERNETES_NEXTJS_PORT
+                sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START
             )
             if is_healthy:
                 break
@@ -486,7 +486,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
             sandbox_id=sandbox_id,
             session_id=session_id,
             llm_config=llm_config,
-            nextjs_port=KUBERNETES_NEXTJS_PORT,
+            nextjs_port=SANDBOX_NEXTJS_PORT_START,
             file_system_path=None,
             snapshot_path=None,
             user_name="Test User",
@@ -498,6 +498,8 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         pod_name = f"sandbox-{str(sandbox_id)[:8]}"
 
         # Wait for Next.js server to be ready (it may take a few seconds to start)
+        # The session uses the first port in the configured range
+        test_nextjs_port = SANDBOX_NEXTJS_PORT_START
         nextjs_ready = False
         for attempt in range(30):
             exec_command = [
@@ -505,7 +507,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
                 "-c",
                 (
                     f"curl -s -o /dev/null -w '%{{http_code}}' "
-                    f"http://localhost:{KUBERNETES_NEXTJS_PORT}/ 2>/dev/null || echo 'failed'"
+                    f"http://localhost:{test_nextjs_port}/ 2>/dev/null || echo 'failed'"
                 ),
             ]
             resp = k8s_stream(
@@ -527,14 +529,14 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
 
         assert (
             nextjs_ready
-        ), f"Next.js server should be accessible at localhost:{KUBERNETES_NEXTJS_PORT}"
+        ), f"Next.js server should be accessible at localhost:{SANDBOX_NEXTJS_PORT_START}"
         print("DEBUG: Next.js server is ready")
 
         # Verify we can fetch actual content from the Next.js server
         exec_command = [
             "/bin/sh",
             "-c",
-            f"curl -s http://localhost:{KUBERNETES_NEXTJS_PORT}/ | head -c 500",
+            f"curl -s http://localhost:{SANDBOX_NEXTJS_PORT_START}/ | head -c 500",
         ]
         resp = k8s_stream(
             k8s_client.connect_get_namespaced_pod_exec,
@@ -556,7 +558,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         print(f"DEBUG: Next.js server returned content (first 200 chars): {resp[:200]}")
 
         # Verify get_nextjs_url returns correctly formatted cluster URL
-        nextjs_url = manager.get_nextjs_url(sandbox_id)
+        nextjs_url = manager.get_nextjs_url(sandbox_id, test_nextjs_port)
         expected_service_name = f"sandbox-{str(sandbox_id)[:8]}"
         expected_url_pattern = (
             f"http://{expected_service_name}.{SANDBOX_NAMESPACE}.svc.cluster.local:"
@@ -566,8 +568,8 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
             f"Expected to start with: {expected_url_pattern}, Got: {nextjs_url}"
         )
         assert (
-            str(KUBERNETES_NEXTJS_PORT) in nextjs_url
-        ), f"Next.js URL should contain port {KUBERNETES_NEXTJS_PORT}. Got: {nextjs_url}"
+            str(SANDBOX_NEXTJS_PORT_START) in nextjs_url
+        ), f"Next.js URL should contain port {SANDBOX_NEXTJS_PORT_START}. Got: {nextjs_url}"
         print(f"DEBUG: get_nextjs_url returned: {nextjs_url}")
 
         # Verify the service is accessible via the cluster URL from within the pod

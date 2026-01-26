@@ -57,6 +57,8 @@ from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
+from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
+from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -89,7 +91,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # Constants for pod configuration
-NEXTJS_PORT = 3000
+# Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
+# SANDBOX_NEXTJS_PORT_END range, with one port per session.
 AGENT_PORT = 8081
 POD_READY_TIMEOUT_SECONDS = 120
 POD_READY_POLL_INTERVAL_SECONDS = 2
@@ -209,12 +212,18 @@ class KubernetesSandboxManager(SandboxManager):
         """Generate service name from sandbox ID."""
         return self._get_pod_name(sandbox_id)
 
-    def _get_nextjs_url(self, sandbox_id: str) -> str:
-        """Get the internal cluster URL for the Next.js server."""
+    def _get_nextjs_url(self, sandbox_id: str, port: int) -> str:
+        """Get the internal cluster URL for a session's Next.js server.
+
+        Args:
+            sandbox_id: The sandbox ID (string)
+            port: The session's allocated Next.js port
+
+        Returns:
+            Internal cluster URL for the Next.js server on the specified port
+        """
         service_name = self._get_service_name(sandbox_id)
-        return (
-            f"http://{service_name}.{self._namespace}.svc.cluster.local:{NEXTJS_PORT}"
-        )
+        return f"http://{service_name}.{self._namespace}.svc.cluster.local:{port}"
 
     def _load_agent_instructions(
         self,
@@ -249,7 +258,7 @@ class KubernetesSandboxManager(SandboxManager):
             files_path=None,  # Files are synced after pod creation
             provider=provider,
             model_name=model_name,
-            nextjs_port=nextjs_port if nextjs_port else NEXTJS_PORT,
+            nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
@@ -299,12 +308,13 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         )
 
         # Main sandbox container
+        # Note: Container ports are informational only in K8s. Each session's Next.js
+        # server binds to its allocated port from the SANDBOX_NEXTJS_PORT_START-END range.
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
             image_pull_policy="IfNotPresent",
             ports=[
-                client.V1ContainerPort(name="nextjs", container_port=NEXTJS_PORT),
                 client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
             ],
             volume_mounts=[
@@ -316,14 +326,9 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
                 requests={"cpu": "500m", "memory": "1Gi"},
                 limits={"cpu": "2000m", "memory": "4Gi"},
             ),
-            # TODO: Re-enable probes when sandbox container runs actual services
-            # readiness_probe=client.V1Probe(
-            #     http_get=client.V1HTTPGetAction(path="/", port=NEXTJS_PORT),
-            #     initial_delay_seconds=10,
-            #     period_seconds=5,
-            #     timeout_seconds=3,
-            #     failure_threshold=6,
-            # ),
+            # TODO: Re-enable probes when sandbox container runs actual services.
+            # Note: Next.js ports are now per-session (dynamic), so container-level
+            # probes would need to check the agent port or use a different approach.
             # liveness_probe=client.V1Probe(
             #     http_get=client.V1HTTPGetAction(path="/global/health", port=AGENT_PORT),
             #     initial_delay_seconds=30,
@@ -404,12 +409,31 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         sandbox_id: UUID,
         tenant_id: str,
     ) -> client.V1Service:
-        """Create ClusterIP Service for sandbox pod."""
+        """Create ClusterIP Service for sandbox pod.
+
+        Exposes the agent port and a range of ports for per-session Next.js servers.
+        The port range matches SANDBOX_NEXTJS_PORT_START to SANDBOX_NEXTJS_PORT_END.
+        """
         # Convert UUID objects to strings if needed (Kubernetes client requires strings)
         sandbox_id_str: str = str(sandbox_id)
         tenant_id_str: str = str(tenant_id)
 
         service_name = self._get_service_name(sandbox_id_str)
+
+        # Build port list: agent port + all session Next.js ports
+        ports = [
+            client.V1ServicePort(name="agent", port=AGENT_PORT, target_port=AGENT_PORT),
+        ]
+
+        # Add ports for session Next.js servers (one port per potential session)
+        for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
+            ports.append(
+                client.V1ServicePort(
+                    name=f"nextjs-{port}",
+                    port=port,
+                    target_port=port,
+                )
+            )
 
         return client.V1Service(
             api_version="v1",
@@ -427,14 +451,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
             spec=client.V1ServiceSpec(
                 type="ClusterIP",
                 selector={"onyx.app/sandbox-id": sandbox_id_str},
-                ports=[
-                    client.V1ServicePort(
-                        name="nextjs", port=NEXTJS_PORT, target_port=NEXTJS_PORT
-                    ),
-                    client.V1ServicePort(
-                        name="agent", port=AGENT_PORT, target_port=AGENT_PORT
-                    ),
-                ],
+                ports=ports,
             ),
         )
 
@@ -759,7 +776,7 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         agent_instructions = self._load_agent_instructions(
             provider=llm_config.provider,
             model_name=llm_config.model_name,
-            nextjs_port=NEXTJS_PORT,
+            nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
@@ -837,11 +854,11 @@ echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
 {org_info_setup}
 # Start Next.js dev server in background
-echo "Starting Next.js dev server on port {NEXTJS_PORT}..."
+echo "Starting Next.js dev server on port {nextjs_port}..."
 cd {session_path}/outputs/web
 
 # Start npm run dev in background with output to log file
-nohup npm run dev -- -p {NEXTJS_PORT} > {session_path}/nextjs.log 2>&1 &
+nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 
@@ -1233,18 +1250,19 @@ echo "Session cleanup complete"
         except ApiException as e:
             raise RuntimeError(f"Failed to read file: {e}") from e
 
-    def get_nextjs_url(self, sandbox_id: UUID) -> str:
-        """Get the Next.js URL for the sandbox.
+    def get_nextjs_url(self, sandbox_id: UUID, port: int) -> str:
+        """Get the Next.js URL for a session in the sandbox.
 
         Used for proxying preview requests to the sandbox.
 
         Args:
             sandbox_id: The sandbox ID
+            port: The session's allocated Next.js port
 
         Returns:
-            Internal cluster URL for the Next.js server
+            Internal cluster URL for the Next.js server on the specified port
         """
-        return self._get_nextjs_url(str(sandbox_id))
+        return self._get_nextjs_url(str(sandbox_id), port)
 
     def upload_file(
         self,
