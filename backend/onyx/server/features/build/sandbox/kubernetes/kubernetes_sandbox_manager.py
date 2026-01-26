@@ -319,9 +319,10 @@ class KubernetesSandboxManager(SandboxManager):
         """
         pod_name = self._get_pod_name(sandbox_id)
 
-        # Init container for S3 file sync (knowledge files only)
-        # Outputs template is baked into the main container image at /workspace/templates/outputs/
-        init_container = client.V1Container(
+        # File-sync sidecar container for S3 file sync (knowledge files only)
+        # Runs as sidecar (not init container) so we can trigger incremental syncs
+        # via kubectl exec after new documents are indexed
+        file_sync_container = client.V1Container(
             name="file-sync",
             image="amazon/aws-cli:latest",
             env=_get_local_aws_credential_env_vars(),
@@ -330,18 +331,21 @@ class KubernetesSandboxManager(SandboxManager):
                 f"""
 set -e
 
-# Sync knowledge files for this user/tenant (shared across sessions)
-echo "Syncing knowledge files for tenant: {tenant_id} / user: {user_id}"
+# Initial sync on startup - sync knowledge files for this user/tenant
+echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
 aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
 
-echo "Sandbox init complete (user-level only, no sessions yet)"
+echo "Initial sync complete, staying alive for incremental syncs"
+# Stay alive - incremental sync commands will be executed via kubectl exec
+sleep infinity
 """
             ],
             volume_mounts=[
                 client.V1VolumeMount(name="files", mount_path="/workspace/files"),
             ],
             resources=client.V1ResourceRequirements(
-                requests={"cpu": "100m", "memory": "256Mi"},
+                # Reduced resources since sidecar is mostly idle (sleeping)
+                requests={"cpu": "50m", "memory": "128Mi"},
                 limits={"cpu": "1000m", "memory": "1Gi"},
             ),
         )
@@ -397,10 +401,11 @@ echo "Sandbox init complete (user-level only, no sessions yet)"
         ]
 
         # Pod spec
+        # Note: file_sync_container runs as sidecar (not init container) so we can
+        # trigger incremental S3 syncs via kubectl exec after new documents are indexed
         pod_spec = client.V1PodSpec(
             service_account_name=self._file_sync_service_account,
-            init_containers=[init_container],
-            containers=[sandbox_container],
+            containers=[sandbox_container, file_sync_container],
             volumes=volumes,
             restart_policy="Never",
             termination_grace_period_seconds=600,
@@ -1503,6 +1508,48 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             Internal cluster URL for the Next.js server on the specified port
         """
         return self._get_nextjs_url(str(sandbox_id), port)
+
+    def sync_files(
+        self,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+    ) -> bool:
+        """Sync files from S3 to the running pod via the file-sync sidecar.
+
+        Executes `aws s3 sync` in the file-sync sidecar container to download
+        any new or changed files from S3 to /workspace/files/.
+
+        This is safe to call multiple times - aws s3 sync is idempotent.
+
+        Args:
+            sandbox_id: The sandbox UUID
+            user_id: The user ID (for S3 path construction)
+            tenant_id: The tenant ID (for S3 path construction)
+
+        Returns:
+            True if sync was successful, False otherwise.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        sync_command = [
+            "/bin/sh",
+            "-c",
+            f'aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/" /workspace/files/',
+        ]
+        resp = k8s_stream(
+            self._core_api.connect_get_namespaced_pod_exec,
+            pod_name,
+            self._namespace,
+            container="file-sync",  # Execute in sidecar, not sandbox container
+            command=sync_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        logger.debug(f"File sync response: {resp}")
+        return True
 
     def upload_file(
         self,

@@ -112,7 +112,7 @@ def run_jobs() -> None:
             "--loglevel=INFO",
             "--hostname=heavy@%n",
             "-Q",
-            "connector_pruning",
+            "connector_pruning,sandbox",
         ]
         cmd_worker_kg_processing = [
             "celery",
