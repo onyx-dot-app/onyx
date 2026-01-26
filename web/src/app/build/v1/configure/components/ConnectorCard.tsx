@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 export type ConnectorStatus =
   | "not_connected"
   | "connected"
+  | "connected_with_errors"
   | "indexing"
   | "error"
   | "deleting";
@@ -41,6 +42,7 @@ interface ConnectorCardProps {
 
 const STATUS_COLORS: Record<ConnectorStatus, string> = {
   connected: "bg-status-success-05",
+  connected_with_errors: "bg-status-warning-05",
   indexing: "bg-status-warning-05 animate-pulse",
   error: "bg-status-error-05",
   deleting: "bg-status-error-05 animate-pulse",
@@ -53,6 +55,10 @@ function getStatusText(status: ConnectorStatus, docsIndexed: number): string {
       return docsIndexed > 0
         ? `${docsIndexed.toLocaleString()} docs`
         : "Connected";
+    case "connected_with_errors":
+      return docsIndexed > 0
+        ? `${docsIndexed.toLocaleString()} docs`
+        : "Connected, has errors";
     case "indexing":
       return "Syncing...";
     case "error":
@@ -98,7 +104,8 @@ export default function ConnectorCard({
   const router = useRouter();
   const sourceMetadata = getSourceMetadata(connectorType);
   const status: ConnectorStatus = config?.status || "not_connected";
-  const isConnected = status !== "not_connected";
+  const isConnected =
+    status !== "not_connected" && status !== "error" && status !== "deleting";
 
   const isDeleting = status === "deleting";
 

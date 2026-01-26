@@ -155,7 +155,7 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
         "Visualize what my team did this month with interactive drill-downs",
       fullText:
         "What did my team work on this month? Create a dashboard that 1) shows the number of actions per activity, 2) shows the individual work items when I select something in the dashboard.",
-      image: "/craft_suggested_image_3.png",
+      image: "/craft_suggested_image_4.png",
     },
     {
       id: "product-4",
@@ -163,7 +163,7 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
         "Find churned customers who would have benefited from the releases this month",
       fullText:
         "Look at the PRs that my team merged this month. Then look at the customers we lost over the last 2 months and tell me which of the customers would have likely benefitted from the merged PRs. Rank the customers by importance. Present in a dashboard.",
-      image: "/craft_suggested_image_4.png",
+      image: "/craft_suggested_image_3.png",
     },
     {
       id: "product-5",

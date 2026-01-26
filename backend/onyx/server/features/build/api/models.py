@@ -242,6 +242,7 @@ class BuildConnectorStatus(str, Enum):
 
     NOT_CONNECTED = "not_connected"
     CONNECTED = "connected"
+    CONNECTED_WITH_ERRORS = "connected_with_errors"
     INDEXING = "indexing"
     ERROR = "error"
     DELETING = "deleting"

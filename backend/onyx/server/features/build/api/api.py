@@ -103,12 +103,19 @@ def get_build_connectors(
 
         # Determine status
         error_message: str | None = None
+        has_ever_succeeded = cc_pair.last_successful_index_time is not None
 
         if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
             status = BuildConnectorStatus.DELETING
         elif cc_pair.status == ConnectorCredentialPairStatus.INVALID:
-            status = BuildConnectorStatus.ERROR
-            error_message = "Connector credentials are invalid"
+            # If connector has succeeded before but credentials are now invalid,
+            # show as connected_with_errors so user can still disable demo data
+            if has_ever_succeeded:
+                status = BuildConnectorStatus.CONNECTED_WITH_ERRORS
+                error_message = "Connector credentials are invalid"
+            else:
+                status = BuildConnectorStatus.ERROR
+                error_message = "Connector credentials are invalid"
         else:
             # Check latest index attempt for errors
             latest_attempt = get_latest_index_attempt_for_cc_pair_id(
@@ -119,13 +126,22 @@ def get_build_connectors(
             )
 
             if latest_attempt and latest_attempt.status == IndexingStatus.FAILED:
-                status = BuildConnectorStatus.ERROR
+                # If connector has succeeded before but latest attempt failed,
+                # show as connected_with_errors
+                if has_ever_succeeded:
+                    status = BuildConnectorStatus.CONNECTED_WITH_ERRORS
+                else:
+                    status = BuildConnectorStatus.ERROR
                 error_message = latest_attempt.error_msg
             elif (
                 latest_attempt
                 and latest_attempt.status == IndexingStatus.COMPLETED_WITH_ERRORS
             ):
-                status = BuildConnectorStatus.ERROR
+                # Completed with errors - if it has succeeded before, show as connected_with_errors
+                if has_ever_succeeded:
+                    status = BuildConnectorStatus.CONNECTED_WITH_ERRORS
+                else:
+                    status = BuildConnectorStatus.ERROR
                 error_message = "Indexing completed with errors"
             elif cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
                 status = BuildConnectorStatus.CONNECTED

@@ -37,10 +37,10 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectorBannersRow({
   className,
 }: ConnectorBannersRowProps) {
-  const { hasAnyConnector } = useBuildConnectors();
+  const { hasConnectorEverSucceeded } = useBuildConnectors();
 
-  // Hide if user has any connectors configured
-  if (hasAnyConnector) {
+  // Hide if user has successfully synced at least one connector
+  if (hasConnectorEverSucceeded) {
     return null;
   }
 
