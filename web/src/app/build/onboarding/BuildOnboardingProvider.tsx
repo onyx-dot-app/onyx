@@ -42,8 +42,9 @@ export function BuildOnboardingProvider({
   }
 
   // Non-admin users with no LLM providers cannot use Craft
+  // Don't show modal while loading to prevent flash
   const showNoProvidersModal =
-    !controller.isAdmin && !controller.hasAnyProvider;
+    !controller.isLoading && !controller.isAdmin && !controller.hasAnyProvider;
 
   return (
     <OnboardingContext.Provider value={controller}>

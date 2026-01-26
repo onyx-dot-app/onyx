@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   getPromptsForPersona,
   UserPersona,
+  BuildPrompt,
 } from "@/app/build/constants/exampleBuildPrompts";
 
 interface SuggestedPromptsProps {
@@ -12,19 +14,51 @@ interface SuggestedPromptsProps {
 }
 
 /**
+ * Shuffles an array using Fisher-Yates algorithm
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = shuffled[i]!;
+    shuffled[i] = shuffled[j]!;
+    shuffled[j] = temp;
+  }
+  return shuffled;
+}
+
+/**
+ * Randomly selects 4 prompts from the available prompts
+ */
+function selectRandomPrompts(prompts: BuildPrompt[]): BuildPrompt[] {
+  const shuffled = shuffleArray(prompts);
+  return shuffled.slice(0, 4);
+}
+
+/**
  * SuggestedPrompts - Displays clickable prompt suggestions in a 2x2 grid
  *
  * Shows a 2x2 grid of example prompts based on user persona.
  * Each prompt has summary text on top and a cropped image below it.
  * Clicking a prompt triggers the onPromptClick callback.
+ * Randomly selects 4 prompts from the available prompts for the persona.
+ * Shuffles on every component mount (when user returns) and when persona changes.
  */
 export default function SuggestedPrompts({
   persona = "default",
   onPromptClick,
 }: SuggestedPromptsProps) {
-  const prompts = getPromptsForPersona(persona);
-  // Take only the first 4 prompts for the 2x2 grid
-  const gridPrompts = prompts.slice(0, 4);
+  // Randomly select 4 prompts - shuffles on mount and when persona changes
+  const [gridPrompts, setGridPrompts] = useState<BuildPrompt[]>(() => {
+    const prompts = getPromptsForPersona(persona);
+    return selectRandomPrompts(prompts);
+  });
+
+  // Reshuffle when persona changes
+  useEffect(() => {
+    const prompts = getPromptsForPersona(persona);
+    setGridPrompts(selectRandomPrompts(prompts));
+  }, [persona]);
 
   return (
     <div className="mt-4 w-full grid grid-cols-2 gap-4">
@@ -48,7 +82,7 @@ export default function SuggestedPrompts({
           </span>
           {/* Image resized to cut in half height (4:1 aspect ratio) */}
           {prompt.image && (
-            <div className="w-full aspect-[4/1] rounded-08 overflow-hidden bg-background-neutral-01">
+            <div className="w-full aspect-[3/1] rounded-08 overflow-hidden bg-background-neutral-01">
               <img
                 src={prompt.image}
                 alt={prompt.summary}

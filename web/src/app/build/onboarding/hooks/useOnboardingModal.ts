@@ -165,5 +165,6 @@ export function useOnboardingModal(): OnboardingModalController {
     hasUserInfo,
     allProvidersConfigured,
     hasAnyProvider,
+    isLoading: isLoadingLlm,
   };
 }
