@@ -1221,20 +1221,13 @@ class SessionManager:
         if sandbox is None:
             return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
 
-        # Check if web directory exists (in session workspace)
-        session_path = (
-            Path(SANDBOX_BASE_PATH) / str(sandbox.id) / "sessions" / str(session_id)
-        )
-        web_dir = session_path / "outputs" / "web"
-        has_webapp = web_dir.exists()
-
         # Build webapp URL if we have a port and webapp exists
         webapp_url = None
-        if has_webapp and session.nextjs_port:
+        if session.nextjs_port:
             webapp_url = f"http://localhost:{session.nextjs_port}"
 
         return {
-            "has_webapp": has_webapp,
+            "has_webapp": session.nextjs_port is not None,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
         }
