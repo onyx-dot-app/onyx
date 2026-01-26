@@ -26,7 +26,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
 import Modal from "@/refresh-components/Modal";
@@ -45,6 +45,7 @@ import { useQueryClassification } from "@/app/app/hooks/useQueryClassification";
 import { useDocumentSearch } from "@/app/app/hooks/useDocumentSearch";
 import { SearchResultsPanel } from "@/sections/search/SearchResultsPanel";
 import { useAppMode } from "@/providers/AppModeProvider";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
@@ -77,10 +78,7 @@ import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import { Section } from "@/layouts/general-layouts";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -195,7 +193,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   });
 
   // Unified Search and Chat: Mode and search state
-  const { appMode, setAppMode } = useAppMode();
+  const { appMode } = useAppMode();
+  const { appBackgroundUrl, hasBackground } = useAppBackground();
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(
     null
   );
@@ -668,12 +667,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     );
   }
 
-  // Chat background logic
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
-
   if (!isReady) return <OnyxInitializingLoader />;
 
   return (
@@ -741,17 +734,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             <div
               className={cn(
                 "h-full w-full flex flex-col items-center outline-none relative",
-                hasBackground && "bg-cover bg-center bg-fixed"
+                !!appBackgroundUrl && "bg-cover bg-center bg-fixed"
               )}
               style={
-                hasBackground
-                  ? { backgroundImage: `url(${chatBackground.url})` }
+                !!appBackgroundUrl
+                  ? { backgroundImage: `url(${appBackgroundUrl})` }
                   : undefined
               }
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* Semi-transparent overlay for readability when background is set */}
-              {hasBackground && (
+              {!!appBackgroundUrl && (
                 <div className="absolute inset-0 bg-background/80 pointer-events-none" />
               )}
 
@@ -775,6 +768,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   onScrollButtonVisibilityChange={setShowScrollButton}
                   disableFadeOverlay={hasBackground}
                 >
+                  {showScrollButton && (
+                    <div className="absolute bottom-4">
+                      <IconButton
+                        icon={SvgChevronDown}
+                        onClick={handleScrollToBottom}
+                        secondary
+                        aria-label="Scroll to bottom"
+                      />
+                    </div>
+                  )}
+
                   <MessageList
                     liveAssistant={liveAssistant}
                     llmManager={llmManager}
@@ -792,50 +796,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               )}
 
               {/* Welcome message when no session and not showing search results */}
-              {!currentChatSessionId &&
-                !currentProjectId &&
-                !showSearchResults &&
-                !isClassifying && (
-                  <div className="w-full flex-1 flex flex-col items-center justify-end">
-                    <WelcomeMessage
-                      agent={liveAssistant}
-                      isDefaultAgent={isDefaultAgent}
-                    />
-                    <Spacer rem={1.5} />
-                  </div>
-                )}
 
               {/* Spacer during classification to keep input bar centered */}
               {!currentChatSessionId && isClassifying && (
                 <div className="w-full flex-1" />
               )}
 
-              {/* ChatInputBar container - absolutely positioned when in chat, centered when no session */}
-              <div
-                className={cn(
-                  "flex justify-center",
-                  currentChatSessionId
-                    ? "absolute bottom-0 left-0 right-0 pointer-events-none"
-                    : "w-full"
-                )}
-              >
-                <div
-                  className={cn(
-                    "w-[min(50rem,100%)] z-sticky flex flex-col px-4",
-                    currentChatSessionId && "pointer-events-auto"
-                  )}
-                >
-                  {/* Scroll to bottom button - positioned above ChatInputBar */}
-                  {showScrollButton && (
-                    <div className="mb-2 self-center">
-                      <IconButton
-                        icon={SvgChevronDown}
-                        onClick={handleScrollToBottom}
-                        aria-label="Scroll to bottom"
-                      />
-                    </div>
-                  )}
-
+              <div className="w-[min(50rem,100%)] pointer-events-auto py-1">
+                <Section gap={0.5}>
                   {(showOnboarding ||
                     (user?.role !== UserRole.ADMIN &&
                       !user?.personalization?.name)) &&
@@ -849,6 +817,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       />
                     )}
 
+                  {!currentChatSessionId &&
+                    !currentProjectId &&
+                    !showSearchResults &&
+                    !isClassifying && (
+                      <Section height="fit">
+                        <WelcomeMessage
+                          agent={liveAssistant}
+                          isDefaultAgent={isDefaultAgent}
+                        />
+                      </Section>
+                    )}
                   <ChatInputBar
                     ref={chatInputBarRef}
                     deepResearchEnabled={deepResearchEnabled}
@@ -882,10 +861,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     }
                   />
 
-                  <Spacer rem={0.5} />
-
                   {!!currentProjectId && <ProjectChatSessionList />}
-                </div>
+                </Section>
               </div>
 
               {/* Search Results Panel - shown below input bar */}

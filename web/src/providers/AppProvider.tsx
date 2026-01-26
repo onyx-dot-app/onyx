@@ -20,10 +20,11 @@
  *
  * 1. **SettingsProvider** - Application settings and feature flags
  * 2. **UserProvider** - Current user authentication and profile
- * 3. **ProviderContextProvider** - LLM provider configuration
- * 4. **ModalProvider** - Global modal state management
- * 5. **AppSidebarProvider** - Sidebar open/closed state
- * 6. **AppModeProvider** - Search/Chat mode selection
+ * 3. **AppBackgroundProvider** - App background image/URL based on user preferences
+ * 4. **ProviderContextProvider** - LLM provider configuration
+ * 5. **ModalProvider** - Global modal state management
+ * 6. **AppSidebarProvider** - Sidebar open/closed state
+ * 7. **AppModeProvider** - Search/Chat mode selection
  *
  * ## Usage
  *
@@ -38,12 +39,13 @@
  * Individual providers can then be accessed via their respective hooks:
  * - `useSettingsContext()` - from SettingsProvider
  * - `useUser()` - from UserProvider
+ * - `useAppBackground()` - from AppBackgroundProvider
  * - `useAppMode()` - from AppModeProvider
  * - etc.
  *
  * @TODO(@raunakab): The providers wrapped by this component are currently
  * scattered across multiple directories:
- * - `@/components/user/UserProvider`
+ * - `@/providers/UserProvider`
  * - `@/components/chat/ProviderContext`
  * - `@/components/settings/SettingsProvider`
  * - `@/components/context/ModalContext`
@@ -56,7 +58,7 @@
 "use client";
 
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { UserProvider } from "@/components/user/UserProvider";
+import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/components/settings/SettingsProvider";
 import { User } from "@/lib/types";
@@ -64,6 +66,7 @@ import { ModalProvider } from "@/components/context/ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
 import { AppSidebarProvider } from "@/refresh-components/contexts/AppSidebarContext";
 import { AppModeProvider } from "@/providers/AppModeProvider";
+import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -87,13 +90,15 @@ export default function AppProvider({
         user={user}
         authTypeMetadata={authTypeMetadata}
       >
-        <ProviderContextProvider>
-          <ModalProvider user={user}>
-            <AppSidebarProvider folded={!!folded}>
-              <AppModeProvider>{children}</AppModeProvider>
-            </AppSidebarProvider>
-          </ModalProvider>
-        </ProviderContextProvider>
+        <AppBackgroundProvider>
+          <ProviderContextProvider>
+            <ModalProvider user={user}>
+              <AppSidebarProvider folded={!!folded}>
+                <AppModeProvider>{children}</AppModeProvider>
+              </AppSidebarProvider>
+            </ModalProvider>
+          </ProviderContextProvider>
+        </AppBackgroundProvider>
       </UserProvider>
     </SettingsProvider>
   );

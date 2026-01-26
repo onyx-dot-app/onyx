@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";

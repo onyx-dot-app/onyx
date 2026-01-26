@@ -1,5 +1,5 @@
 /**
- * Mock for @/components/user/UserProvider
+ * Mock for @/providers/UserProvider
  *
  * Why this mock exists:
  * The real UserProvider requires complex props (authTypeMetadata, settings, user)
@@ -8,7 +8,7 @@
  *
  * Usage:
  * Automatically applied via jest.config.js moduleNameMapper.
- * Any component that imports from "@/components/user/UserProvider" will get this mock.
+ * Any component that imports from "@/providers/UserProvider" will get this mock.
  *
  * To customize user values in a specific test:
  * You would need to either:

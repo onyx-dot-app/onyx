@@ -6,7 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import {
   CHAT_BACKGROUND_OPTIONS,

@@ -52,7 +52,7 @@ import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";

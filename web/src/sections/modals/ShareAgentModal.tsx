@@ -22,7 +22,7 @@ import Text from "@/refresh-components/texts/Text";
 import useUsers from "@/hooks/useUsers";
 import useGroups from "@/hooks/useGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 import IconButton from "@/refresh-components/buttons/IconButton";
