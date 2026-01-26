@@ -125,7 +125,7 @@ def find_summary_for_branch(
         .order_by(ChatMessage.last_summarized_message_id.desc())
         .all()
     )
-    # Optimazation to avoid using IN clause for large histories
+    # Optimization to avoid using IN clause for large histories
     for summary in summaries:
         if summary.parent_message_id in history_ids:
             return summary
