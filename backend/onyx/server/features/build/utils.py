@@ -14,9 +14,6 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
 
 logger = setup_logger()
 
@@ -291,41 +288,17 @@ def is_onyx_craft_enabled(user: User) -> bool:
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
         return False
 
-    # Try to get raw PostHog value to distinguish between False and null/not found
-    try:
-        # Try to import PostHog client from EE module
-        posthog_client = fetch_versioned_implementation_with_fallback(
-            module="onyx.utils.posthog_client",
-            attribute="posthog",
-            fallback=None,
-        )
+    # Use the feature flag provider
+    is_enabled = feature_flag_provider.feature_enabled(
+        ONYX_CRAFT_ENABLED_FLAG,
+        user.id,
+    )
 
-        if posthog_client is not None:
-            # PostHog will automatically use persisted person properties (including tenant_id)
-            # that were set via identify calls
-            raw_flag_value = posthog_client.feature_enabled(
-                ONYX_CRAFT_ENABLED_FLAG,
-                str(user.id),
-            )
-
-            # Only explicit True enables the feature
-            # False or None (not found) means disabled
-            if raw_flag_value is True:
-                logger.debug("Onyx Craft enabled via PostHog feature flag (flag=True)")
-                return True
-            else:
-                logger.debug(
-                    f"Onyx Craft disabled: feature flag is {raw_flag_value} "
-                    f"(only explicit True enables)"
-                )
-                return False
-
-        # PostHog client not available → disabled
-        logger.debug("Onyx Craft disabled: PostHog client not available")
-        return False
-
-    except Exception as e:
-        logger.debug(f"Could not get raw PostHog flag value: {e}")
+    if is_enabled:
+        logger.debug("Onyx Craft enabled via PostHog feature flag")
+        return True
+    else:
+        logger.debug("Onyx Craft disabled via PostHog feature flag")
         return False
 
 
