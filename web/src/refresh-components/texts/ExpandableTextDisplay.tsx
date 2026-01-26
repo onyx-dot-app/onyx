@@ -64,7 +64,7 @@ export default function ExpandableTextDisplay({
   content,
   displayContent,
   subtitle,
-  maxLines = 1,
+  maxLines = 5,
   className,
   renderContent,
   isStreaming = false,
