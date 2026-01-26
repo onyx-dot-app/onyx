@@ -2,6 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 from typing import TYPE_CHECKING
+from typing import Union
 
 from pydantic import BaseModel
 
@@ -109,7 +110,7 @@ class SessionResponse(BaseModel):
 
     @classmethod
     def from_model(
-        cls, session: "BuildSession", sandbox: "Sandbox" | None = None
+        cls, session: "BuildSession", sandbox: Union["Sandbox", None] = None
     ) -> "SessionResponse":
         """Convert BuildSession ORM model to response.
 
