@@ -113,3 +113,5 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
 SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
     "SANDBOX_FILE_SYNC_SERVICE_ACCOUNT", "sandbox-file-sync"
 )
+
+ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"

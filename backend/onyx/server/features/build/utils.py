@@ -12,6 +12,7 @@ from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
 from onyx.utils.logger import setup_logger
 
@@ -284,9 +285,9 @@ def is_onyx_craft_enabled(user: User) -> bool:
     """
     feature_flag_provider = get_default_feature_flag_provider()
 
-    # If no PostHog configured (NoOp provider), default to disabled
+    # If no PostHog configured (NoOp provider), use ENABLE_CRAFT env var
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
-        return False
+        return ENABLE_CRAFT
 
     # Use the feature flag provider
     is_enabled = feature_flag_provider.feature_enabled(

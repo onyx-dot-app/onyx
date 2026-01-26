@@ -7,6 +7,10 @@ have a contract or agreement with DanswerAI, you are not permitted to use the En
 Edition features outside of personal development or testing purposes. Please reach out to \
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
+# Build argument for Craft support (disabled by default)
+# Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI
+ARG ENABLE_CRAFT=false
+
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV DANSWER_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
@@ -46,7 +50,23 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
+# Conditionally install Node.js 20 for Craft (required for Next.js)
+# Only installed when ENABLE_CRAFT=true
+RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
+        echo "Installing Node.js 20 for Craft support..." && \
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+        apt-get install -y nodejs && \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
 
+# Conditionally install opencode CLI for Craft agent functionality
+# Only installed when ENABLE_CRAFT=true
+# TODO: download a specific, versioned release of the opencode CLI
+RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
+        echo "Installing opencode CLI for Craft support..." && \
+        curl -fsSL https://opencode.ai/install | bash; \
+    fi
+ENV PATH="/root/.opencode/bin:${PATH}"
 
 # Install Python dependencies
 # Remove py which is pulled in by retry, py is not needed and is a CVE
@@ -89,6 +109,12 @@ RUN uv pip install --system --no-cache-dir --upgrade \
 RUN python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
 
+# Pre-downloading NLTK for setups with limited egress
+RUN python -c "import nltk; \
+    nltk.download('stopwords', quiet=True); \
+    nltk.download('punkt_tab', quiet=True);"
+# nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
+
 # Pre-downloading tiktoken for setups with limited egress
 RUN python -c "import tiktoken; \
 tiktoken.get_encoding('cl100k_base')"
@@ -113,7 +139,8 @@ COPY --chown=onyx:onyx ./static /app/static
 COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging
 COPY --chown=onyx:onyx ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
 COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervisord_entrypoint.sh
-RUN chmod +x /app/scripts/supervisord_entrypoint.sh
+COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
+RUN chmod +x /app/scripts/supervisord_entrypoint.sh /app/scripts/setup_craft_templates.sh
 
 # Put logo in assets
 COPY --chown=onyx:onyx ./assets /app/assets
