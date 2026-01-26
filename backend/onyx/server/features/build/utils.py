@@ -295,16 +295,14 @@ def is_onyx_craft_enabled(user: User) -> bool:
     try:
         # Try to import PostHog client from EE module
         posthog_client = fetch_versioned_implementation_with_fallback(
-            module="ee.onyx.utils.posthog_client",
+            module="onyx.utils.posthog_client",
             attribute="posthog",
             fallback=None,
         )
 
         if posthog_client is not None:
-            # Set user properties
-            posthog_client.set(distinct_id=str(user.id))
-
-            # Get raw flag value (can be None if flag doesn't exist)
+            # PostHog will automatically use persisted person properties (including tenant_id)
+            # that were set via identify calls
             raw_flag_value = posthog_client.feature_enabled(
                 ONYX_CRAFT_ENABLED_FLAG,
                 str(user.id),
