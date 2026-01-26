@@ -74,6 +74,7 @@ export interface NavigationItem {
 
 export interface EnterpriseSettings {
   application_name: string | null;
+  help_docs_url?: string | null;
   use_custom_logo: boolean;
   use_custom_logotype: boolean;
   logo_display_style: "logo_and_name" | "logo_only" | "name_only" | null;

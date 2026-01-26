@@ -36,6 +36,7 @@ class EnterpriseSettings(BaseModel):
     NOTE: don't put anything sensitive in here, as this is accessible without auth."""
 
     application_name: str | None = None
+    help_docs_url: str | None = None
     use_custom_logo: bool = False
     use_custom_logotype: bool = False
     logo_display_style: LogoDisplayStyle | None = None

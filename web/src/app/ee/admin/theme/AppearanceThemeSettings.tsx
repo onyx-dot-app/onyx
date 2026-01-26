@@ -11,6 +11,7 @@ import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
 import Button from "@/refresh-components/buttons/Button";
 import { useFormikContext } from "formik";
+import { DOCS_BASE_URL } from "@/lib/constants";
 import {
   forwardRef,
   useEffect,
@@ -50,6 +51,7 @@ export const AppearanceThemeSettings = forwardRef<
   const { values, errors, setFieldValue } = useFormikContext<any>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const applicationNameInputRef = useRef<HTMLInputElement>(null);
+  const helpDocsUrlInputRef = useRef<HTMLInputElement>(null);
   const greetingMessageInputRef = useRef<HTMLInputElement>(null);
   const headerContentInputRef = useRef<HTMLInputElement>(null);
   const lowerDisclaimerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -87,6 +89,7 @@ export const AppearanceThemeSettings = forwardRef<
       // Focus on the first field with an error, in priority order
       const fieldRefs = [
         { name: "application_name", ref: applicationNameInputRef },
+        { name: "help_docs_url", ref: helpDocsUrlInputRef },
         { name: "custom_greeting_message", ref: greetingMessageInputRef },
         { name: "custom_header_content", ref: headerContentInputRef },
         {
@@ -240,6 +243,27 @@ export const AppearanceThemeSettings = forwardRef<
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.application_name as string }}
+            />
+          </FormField>
+
+          <FormField state={errors.help_docs_url ? "error" : "idle"}>
+            <FormField.Label>Help & FAQ URL</FormField.Label>
+            <FormField.Control asChild>
+              <InputTypeIn
+                ref={helpDocsUrlInputRef}
+                data-label="help-docs-url-input"
+                showClearButton
+                variant={errors.help_docs_url ? "error" : undefined}
+                value={values.help_docs_url}
+                onChange={(e) => setFieldValue("help_docs_url", e.target.value)}
+              />
+            </FormField.Control>
+            <FormField.Description>
+              Optional. Overrides the Help & FAQ link in the user menu. Leave
+              blank to use {DOCS_BASE_URL}.
+            </FormField.Description>
+            <FormField.Message
+              messages={{ error: errors.help_docs_url as string }}
             />
           </FormField>
 

@@ -14,6 +14,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
 import { useRouter } from "next/navigation";
+import { ensureHrefProtocol } from "@/lib/utils";
 
 const CHAR_LIMITS = {
   application_name: 50,
@@ -24,6 +25,8 @@ const CHAR_LIMITS = {
   custom_popup_content: 500,
   consent_screen_prompt: 200,
 };
+
+const HELP_DOCS_URL_MAX_LENGTH = 2048;
 
 export default function ThemePage() {
   const router = useRouter();
@@ -68,6 +71,30 @@ export default function ThemePage() {
         CHAR_LIMITS.application_name,
         `Maximum ${CHAR_LIMITS.application_name} characters`
       )
+      .nullable(),
+    help_docs_url: Yup.string()
+      .trim()
+      .max(
+        HELP_DOCS_URL_MAX_LENGTH,
+        `Maximum ${HELP_DOCS_URL_MAX_LENGTH} characters`
+      )
+      .test("help-docs-url", "Enter a valid URL", (value) => {
+        if (!value || !value.trim()) {
+          return true;
+        }
+
+        const normalized = ensureHrefProtocol(value.trim());
+        if (!normalized) {
+          return false;
+        }
+
+        try {
+          const parsed = new URL(normalized);
+          return parsed.protocol === "http:" || parsed.protocol === "https:";
+        } catch {
+          return false;
+        }
+      })
       .nullable(),
     logo_display_style: Yup.string()
       .oneOf(["logo_and_name", "logo_only", "name_only"])
@@ -129,6 +156,7 @@ export default function ThemePage() {
     <Formik
       initialValues={{
         application_name: enterpriseSettings?.application_name || "",
+        help_docs_url: enterpriseSettings?.help_docs_url || "",
         logo_display_style:
           enterpriseSettings?.logo_display_style || "logo_and_name",
         use_custom_logo: enterpriseSettings?.use_custom_logo || false,
@@ -175,6 +203,7 @@ export default function ThemePage() {
           logo_display_style: values.logo_display_style || null,
           custom_nav_items: enterpriseSettings?.custom_nav_items || [],
           custom_greeting_message: values.custom_greeting_message || null,
+          help_docs_url: values.help_docs_url?.trim() || null,
           custom_header_content: values.custom_header_content || null,
           custom_lower_disclaimer_content:
             values.custom_lower_disclaimer_content || null,

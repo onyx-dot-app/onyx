@@ -1,18 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { ANONYMOUS_USER_NAME, LOGOUT_DISABLED } from "@/lib/constants";
+import {
+  ANONYMOUS_USER_NAME,
+  DOCS_BASE_URL,
+  LOGOUT_DISABLED,
+} from "@/lib/constants";
 import { Notification } from "@/app/admin/settings/interfaces";
 import useSWR, { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import { useUser } from "@/components/user/UserProvider";
+import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { cn, ensureHrefProtocol } from "@/lib/utils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
@@ -25,6 +30,8 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import useAppFocus from "@/hooks/useAppFocus";
+
+const HELP_DOCS_ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 
 function getDisplayName(email?: string, personalName?: string): string {
   // Prioritize custom personal name if set
@@ -40,6 +47,27 @@ function getDisplayName(email?: string, personalName?: string): string {
   return email.substring(0, atIndex);
 }
 
+function resolveHelpDocsUrl(rawUrl?: string | null): string {
+  if (!rawUrl || !rawUrl.trim()) {
+    return DOCS_BASE_URL;
+  }
+
+  const normalized = ensureHrefProtocol(rawUrl.trim());
+  if (!normalized) {
+    return DOCS_BASE_URL;
+  }
+
+  try {
+    const parsedUrl = new URL(normalized);
+    if (!HELP_DOCS_ALLOWED_PROTOCOLS.has(parsedUrl.protocol)) {
+      return DOCS_BASE_URL;
+    }
+    return parsedUrl.toString();
+  } catch {
+    return DOCS_BASE_URL;
+  }
+}
+
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
   onOpenNotifications: () => void;
@@ -50,6 +78,7 @@ function SettingsPopover({
   onOpenNotifications,
 }: SettingsPopoverProps) {
   const { user } = useUser();
+  const settings = useSettingsContext();
   const { data: notifications } = useSWR<Notification[]>(
     "/api/notifications",
     errorHandlingFetcher,
@@ -59,6 +88,9 @@ function SettingsPopover({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { popup, setPopup } = usePopup();
+  const helpDocsUrl = resolveHelpDocsUrl(
+    settings.enterpriseSettings?.help_docs_url
+  );
 
   const undismissedCount =
     notifications?.filter((n) => !n.dismissed).length ?? 0;
@@ -113,11 +145,7 @@ function SettingsPopover({
             key="help-faq"
             icon={SvgExternalLink}
             onClick={() =>
-              window.open(
-                "https://docs.onyx.app",
-                "_blank",
-                "noopener,noreferrer"
-              )
+              window.open(helpDocsUrl, "_blank", "noopener,noreferrer")
             }
           >
             Help & FAQ
