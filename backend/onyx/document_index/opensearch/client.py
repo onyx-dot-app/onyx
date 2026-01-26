@@ -585,8 +585,8 @@ class OpenSearchClient:
             else:
                 logger.error(f"Failed to update setting: {response}.")
                 return False
-        except Exception as e:
-            logger.exception(f"Error setting auto_create_index: {e}.")
+        except Exception:
+            logger.exception("Error setting auto_create_index.")
             return False
 
     def ping(self) -> bool:
