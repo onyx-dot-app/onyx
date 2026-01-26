@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
@@ -11,6 +12,10 @@ from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.sandbox.models import (
     FilesystemEntry as FileSystemEntry,
 )
+
+if TYPE_CHECKING:
+    from onyx.db.models import Sandbox
+    from onyx.db.models import BuildSession
 
 
 # ===== Session Models =====
@@ -103,7 +108,9 @@ class SessionResponse(BaseModel):
     artifacts: list[ArtifactResponse]
 
     @classmethod
-    def from_model(cls, session: Any, sandbox: Any | None = None) -> "SessionResponse":
+    def from_model(
+        cls, session: "BuildSession", sandbox: "Sandbox" | None = None
+    ) -> "SessionResponse":
         """Convert BuildSession ORM model to response.
 
         Args:
@@ -121,6 +128,27 @@ class SessionResponse(BaseModel):
             nextjs_port=session.nextjs_port,
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
+        )
+
+
+class DetailedSessionResponse(SessionResponse):
+    """Extended session response with sandbox state details.
+
+    Used for single-session endpoints where we compute expensive fields
+    like session_loaded_in_sandbox.
+    """
+
+    session_loaded_in_sandbox: bool
+
+    @classmethod
+    def from_session_response(
+        cls,
+        base: SessionResponse,
+        session_loaded_in_sandbox: bool,
+    ) -> "DetailedSessionResponse":
+        return cls(
+            **base.model_dump(),
+            session_loaded_in_sandbox=session_loaded_in_sandbox,
         )
 
 

@@ -155,6 +155,10 @@ export interface ApiSessionResponse {
   artifacts: ApiArtifactResponse[];
 }
 
+export interface ApiDetailedSessionResponse extends ApiSessionResponse {
+  session_loaded_in_sandbox: boolean;
+}
+
 export interface ApiMessageResponse {
   id: string;
   session_id: string;
