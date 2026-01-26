@@ -64,9 +64,6 @@ def verify_license_signature(license_data: str) -> LicensePayload:
 
         # Parse into LicenseData to validate structure
         license_obj = LicenseData(**decoded)
-        logger.info(
-            f"[verify_license] Parsed LicenseData, tenant_id={license_obj.payload.tenant_id}"
-        )
 
         # IMPORTANT: Use the ORIGINAL payload JSON for signature verification,
         # not re-serialized through Pydantic. Pydantic may format fields differently
@@ -76,9 +73,7 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         signature_bytes = base64.b64decode(license_obj.signature)
 
         # Verify signature using PSS padding (modern standard)
-        logger.info("[verify_license] Loading public key...")
         public_key = _get_public_key()
-        logger.info("[verify_license] Verifying signature...")
 
         public_key.verify(
             signature_bytes,
@@ -90,9 +85,6 @@ def verify_license_signature(license_data: str) -> LicensePayload:
             hashes.SHA256(),
         )
 
-        logger.info(
-            f"[verify_license] SUCCESS: license verified for tenant {license_obj.payload.tenant_id}"
-        )
         return license_obj.payload
 
     except InvalidSignature:
