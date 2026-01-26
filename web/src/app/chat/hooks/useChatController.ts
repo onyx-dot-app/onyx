@@ -860,6 +860,7 @@ export function useChatController({
                   stopReason: stopReason,
                   packets: packets,
                   packetsVersion: packetsVersion,
+                  packetCount: packets.length,
                 },
               ],
               // Pass the latest map state
@@ -886,6 +887,7 @@ export function useChatController({
               toolCall: null,
               parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
               packets: [],
+              packetCount: 0,
             },
             {
               nodeId: initialAssistantNode.nodeId,
@@ -895,6 +897,7 @@ export function useChatController({
               toolCall: null,
               parentNodeId: initialUserNode.nodeId,
               packets: [],
+              packetCount: 0,
               stackTrace: stackTrace,
               errorCode: errorCode,
               isRetryable: isRetryable,
