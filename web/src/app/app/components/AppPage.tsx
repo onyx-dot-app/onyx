@@ -43,7 +43,7 @@ import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
 import { useQueryClassification } from "@/app/app/hooks/useQueryClassification";
 import { useDocumentSearch } from "@/app/app/hooks/useDocumentSearch";
-import { SearchResultsPanel } from "@/app/app/components/search/SearchResultsPanel";
+import { SearchResultsPanel } from "@/sections/search/SearchResultsPanel";
 import { useAppMode } from "@/providers/AppModeProvider";
 import {
   useChatSessionStore,
@@ -74,7 +74,6 @@ import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import AppHeader from "@/app/app/components/AppHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
@@ -731,7 +730,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root disableFooter>
+      <AppLayouts.Root>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -755,9 +754,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {hasBackground && (
                 <div className="absolute inset-0 bg-background/80 pointer-events-none" />
               )}
-
-              {/* App Header - flex positioned at top */}
-              <AppHeader />
 
               {/* ProjectUI */}
               {!!currentProjectId && projectPanelVisible && (
@@ -819,7 +815,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 className={cn(
                   "flex justify-center",
                   currentChatSessionId
-                    ? "absolute bottom-6 left-0 right-0 pointer-events-none"
+                    ? "absolute bottom-0 left-0 right-0 pointer-events-none"
                     : "w-full"
                 )}
               >
@@ -929,7 +925,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       )}
                   </div>
                 )}
-              <AppLayouts.Footer />
             </div>
           )}
         </Dropzone>

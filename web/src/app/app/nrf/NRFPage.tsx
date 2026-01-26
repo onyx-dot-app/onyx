@@ -423,7 +423,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             </div>
             {!hasMessages && <div className="flex-1 w-full" />}
-            <AppLayouts.Footer />
           </div>
         )}
       </Dropzone>

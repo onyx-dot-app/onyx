@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { SearchDocWithContent } from "@/lib/search/searchApi";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
@@ -10,6 +9,7 @@ import { ValidSources } from "@/lib/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Card from "@/refresh-components/cards/Card";
 import { Section } from "@/layouts/general-layouts";
+import Hoverable from "@/refresh-components/Hoverable";
 
 export interface SearchResultCardProps {
   /** The search result document to display */
@@ -46,77 +46,60 @@ export function SearchResultCard({
     document.score != null ? `${Math.round(document.score * 100)}%` : null;
 
   return (
-    <button onClick={handleClick} className="w-full text-left">
-      <Card variant={isLlmSelected ? "primary" : "secondary"}>
-        {/* Header: Icon, Title */}
-        <Section
-          flexDirection="row"
-          height="fit"
-          alignItems="center"
-          justifyContent="start"
-          gap={0.5}
-        >
-          {isWebSource && document.link ? (
-            <WebResultIcon url={document.link} size={18} />
-          ) : (
-            <SourceIcon sourceType={document.source_type} iconSize={18} />
-          )}
+    <Hoverable onClick={handleClick}>
+      <Card variant="secondary" borderless gap={0.25}>
+        <Section alignItems="start" gap={0.125}>
+          <Section flexDirection="row" justifyContent="start" gap={0.5}>
+            {isWebSource && document.link ? (
+              <WebResultIcon url={document.link} size={18} />
+            ) : (
+              <SourceIcon sourceType={document.source_type} iconSize={22} />
+            )}
 
-          <Text
-            as="p"
-            mainUiBody
-            text04
-            className="truncate flex-1 !m-0 font-medium"
+            <Text mainUiBody text04>
+              {document.semantic_identifier}
+            </Text>
+          </Section>
+
+          <Section
+            flexDirection="row"
+            height="fit"
+            alignItems="center"
+            justifyContent="start"
+            gap={0.75}
+            wrap
           >
-            {document.semantic_identifier || document.document_id}
-          </Text>
+            {/* Source type badge */}
+            <Text as="span" figureSmallLabel text03 className="capitalize">
+              {document.source_type.replace(/_/g, " ")}
+            </Text>
 
-          {isLlmSelected && (
-            <span className="text-xs bg-accent-100 text-accent-700 px-2 py-0.5 rounded-full">
-              Recommended
-            </span>
-          )}
+            {/* Updated date */}
+            {document.updated_at &&
+              !isNaN(new Date(document.updated_at).getTime()) && (
+                <Text as="span" figureSmallLabel text03>
+                  Updated {new Date(document.updated_at).toLocaleDateString()}
+                </Text>
+              )}
+
+            {/* Relevance score */}
+            {scoreDisplay && (
+              <Text as="span" figureSmallLabel text03>
+                Relevance: {scoreDisplay}
+              </Text>
+            )}
+          </Section>
         </Section>
 
         {/* Blurb / Match Highlights */}
-        <Text as="p" secondaryBody text03 className="line-clamp-3 !m-0">
+        <Text secondaryBody text03 className="text-left">
           {buildDocumentSummaryDisplay(
             document.match_highlights,
             document.blurb
           ) || document.blurb}
         </Text>
-
-        {/* Metadata row */}
-        <Section
-          flexDirection="row"
-          height="fit"
-          alignItems="center"
-          justifyContent="start"
-          gap={0.75}
-          wrap
-        >
-          {/* Source type badge */}
-          <Text as="span" figureSmallLabel text03 className="capitalize">
-            {document.source_type.replace(/_/g, " ")}
-          </Text>
-
-          {/* Updated date */}
-          {document.updated_at &&
-            !isNaN(new Date(document.updated_at).getTime()) && (
-              <Text as="span" figureSmallLabel text03>
-                Updated {new Date(document.updated_at).toLocaleDateString()}
-              </Text>
-            )}
-
-          {/* Relevance score */}
-          {scoreDisplay && (
-            <Text as="span" figureSmallLabel text03>
-              Relevance: {scoreDisplay}
-            </Text>
-          )}
-        </Section>
       </Card>
-    </button>
+    </Hoverable>
   );
 }
 
