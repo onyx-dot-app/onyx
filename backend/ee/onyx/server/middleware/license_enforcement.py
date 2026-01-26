@@ -25,6 +25,7 @@ from shared_configs.contextvars import get_current_tenant_id
 #   /me - Basic user info needed for UI rendering
 #   /settings, /enterprise-settings - View app status and branding
 #   /tenants/billing-* - Manage subscription to resolve gating
+#   /proxy - Self-hosted proxy endpoints (have own license-based auth)
 ALLOWED_PATH_PREFIXES = {
     "/auth",
     "/license",
@@ -35,6 +36,7 @@ ALLOWED_PATH_PREFIXES = {
     "/tenants/billing-information",
     "/tenants/create-customer-portal-session",
     "/tenants/create-subscription-session",
+    "/proxy",
 }
 
 
