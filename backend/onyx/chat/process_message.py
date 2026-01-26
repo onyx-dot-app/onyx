@@ -20,12 +20,17 @@ from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.chat.chat_utils import is_last_assistant_message_clarification
 from onyx.chat.chat_utils import load_all_chat_files
+from onyx.chat.compression import calculate_total_history_tokens
+from onyx.chat.compression import compress_chat_history
+from onyx.chat.compression import get_compressed_history
+from onyx.chat.compression import get_compression_params
 from onyx.chat.emitter import get_default_emitter
 from onyx.chat.llm_loop import run_llm_loop
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import ChatLoadedFile
+from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import MessageResponseIDInfo
@@ -459,6 +464,19 @@ def handle_stream_message_objects(
 
             chat_history.append(user_message)
 
+        # Apply chat history compression if a summary exists
+        # This filters chat_history to only recent messages (after the summary cutoff)
+        summary_message: ChatMessage | None = None
+        if chat_session.summary_message_id is not None:
+            summary_message, recent_messages = get_compressed_history(
+                db_session=db_session,
+                chat_session=chat_session,
+            )
+            if summary_message and summary_message.last_summarized_message_id:
+                # Filter chat_history to only messages after the cutoff
+                cutoff_id = summary_message.last_summarized_message_id
+                chat_history = [m for m in chat_history if m.id > cutoff_id]
+
         memories = get_memories(user, db_session)
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
@@ -572,6 +590,15 @@ def handle_stream_message_objects(
             tool_id_to_name_map=tool_id_to_name_map,
         )
 
+        # Prepend summary message if compression exists
+        if summary_message is not None:
+            summary_simple = ChatMessageSimple(
+                message=summary_message.message,
+                token_count=summary_message.token_count,
+                message_type=MessageType.ASSISTANT,
+            )
+            simple_chat_history.insert(0, summary_simple)
+
         redis_client = get_redis_client()
 
         reset_cancel_status(
@@ -602,6 +629,23 @@ def handle_stream_message_objects(
                 is_connected=check_is_connected,
                 assistant_message=assistant_response,
             )
+
+            # Check if compression is needed after saving the message
+            total_tokens = calculate_total_history_tokens(
+                db_session=db_session,
+                chat_session_id=chat_session.id,
+            )
+            compression_params = get_compression_params(
+                llm=llm,
+                current_history_tokens=total_tokens,
+            )
+            if compression_params.should_compress:
+                compress_chat_history(
+                    db_session=db_session,
+                    chat_session=chat_session,
+                    llm=llm,
+                    compression_params=compression_params,
+                )
 
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
