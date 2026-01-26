@@ -36,6 +36,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 
 import io
 import json
+import mimetypes
 import os
 import re
 import shlex
@@ -43,7 +44,6 @@ import tarfile
 import threading
 import time
 from collections.abc import Generator
-from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
@@ -1355,21 +1355,14 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
 
             is_directory = line.startswith("d")
             size_str = parts[4]
-            timestamp_str = parts[5] if len(parts) > 6 else None
 
             try:
-                size_bytes = int(size_str) if not is_directory else None
+                size = int(size_str) if not is_directory else None
             except ValueError:
-                size_bytes = None
+                size = None
 
-            try:
-                modified_at = (
-                    datetime.fromtimestamp(int(timestamp_str))
-                    if timestamp_str
-                    else None
-                )
-            except (ValueError, TypeError):
-                modified_at = None
+            # Guess MIME type for files based on extension
+            mime_type = mimetypes.guess_type(name)[0] if not is_directory else None
 
             entry_path = f"{base_path}/{name}".lstrip("/")
             entries.append(
@@ -1377,22 +1370,22 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                     name=name,
                     path=entry_path,
                     is_directory=is_directory,
-                    size_bytes=size_bytes,
-                    modified_at=modified_at,
+                    size=size,
+                    mime_type=mime_type,
                 )
             )
 
         return entries
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
-        """Read a file from the session's outputs directory.
+        """Read a file from the session's workspace.
 
         For Kubernetes backend, we exec into the pod to read the file.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            path: Relative path within sessions/$session_id/outputs/
+            path: Relative path within sessions/$session_id/
 
         Returns:
             File contents as bytes
@@ -1405,7 +1398,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
 
         # Security: sanitize path
         clean_path = path.lstrip("/").replace("..", "")
-        target_path = f"/workspace/sessions/{session_id}/outputs/{clean_path}"
+        target_path = f"/workspace/sessions/{session_id}/{clean_path}"
 
         # Use exec to read file (base64 encode to handle binary)
         exec_command = [
@@ -1441,10 +1434,10 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         except ApiException as e:
             raise RuntimeError(f"Failed to read file: {e}") from e
 
-    def get_nextjs_url(self, sandbox_id: UUID, port: int) -> str:
-        """Get the Next.js URL for a session in the sandbox.
+    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
+        """Get the webapp URL for a session's Next.js server.
 
-        Used for proxying preview requests to the sandbox.
+        For Kubernetes backend, returns internal cluster service URL.
 
         Args:
             sandbox_id: The sandbox ID
