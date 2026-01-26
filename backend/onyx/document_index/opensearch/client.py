@@ -571,6 +571,10 @@ class OpenSearchClient:
 
         Args:
             enabled: Whether to enable the auto create index setting.
+
+        Returns:
+            True if the setting was updated successfully, False otherwise. Does
+                not raise.
         """
         try:
             body = {"persistent": {"action.auto_create_index": enabled}}
