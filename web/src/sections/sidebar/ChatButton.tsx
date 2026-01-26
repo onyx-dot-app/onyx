@@ -435,7 +435,7 @@ const ChatButton = memo(
       >
         <Popover.Anchor>
           <SidebarTab
-            href={`/app?chatId=${chatSession.id}`}
+            href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
             onClick={handleClick}
             transient={active}
             rightChildren={rightMenu}
