@@ -529,28 +529,21 @@ class LocalSandboxManager(SandboxManager):
                 f"Web directory not found at {web_dir}, skipping NextJS startup"
             )
 
-    def health_check(
-        self, sandbox_id: UUID, nextjs_port: int | None, timeout: float = 60.0
-    ) -> bool:
-        """Check if the sandbox is healthy (Next.js server running).
+    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+        """Check if the sandbox is healthy (folder exists).
 
         Args:
             sandbox_id: The sandbox ID to check
-            nextjs_port: The Next.js port to check
             timeout: Health check timeout in seconds
 
         Returns:
             True if sandbox is healthy, False otherwise
         """
         # assume healthy if no port is specified
-        if not nextjs_port:
-            return True
-
-        # Check Next.js server is responsive on the sandbox's allocated port
-        return self._process_manager._wait_for_server(
-            f"http://localhost:{nextjs_port}",
-            timeout=timeout,
-        )
+        sandbox_path = self._get_sandbox_path(sandbox_id)
+        if not sandbox_path.exists():
+            return False
+        return True
 
     def send_message(
         self,

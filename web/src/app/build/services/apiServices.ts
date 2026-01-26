@@ -1,5 +1,6 @@
 import {
   ApiSessionResponse,
+  ApiDetailedSessionResponse,
   ApiMessageResponse,
   ApiArtifactResponse,
   ApiUsageLimitsResponse,
@@ -90,7 +91,7 @@ export interface CreateSessionOptions {
 
 export async function createSession(
   options?: CreateSessionOptions
-): Promise<ApiSessionResponse> {
+): Promise<ApiDetailedSessionResponse> {
   const res = await fetch(`${API_BASE}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -113,7 +114,7 @@ export async function createSession(
 
 export async function fetchSession(
   sessionId: string
-): Promise<ApiSessionResponse> {
+): Promise<ApiDetailedSessionResponse> {
   const res = await fetch(`${API_BASE}/sessions/${sessionId}`);
 
   if (!res.ok) {
@@ -219,7 +220,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
  */
 export async function restoreSession(
   sessionId: string
-): Promise<ApiSessionResponse> {
+): Promise<ApiDetailedSessionResponse> {
   const res = await fetch(`${API_BASE}/sessions/${sessionId}/restore`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

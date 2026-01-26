@@ -9,6 +9,7 @@ EXPECTED_DISK_GB=32
 # Parse command line arguments
 SHUTDOWN_MODE=false
 DELETE_DATA_MODE=false
+INCLUDE_CRAFT=false  # Disabled by default, use --include-craft to enable
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -20,18 +21,24 @@ while [[ $# -gt 0 ]]; do
             DELETE_DATA_MODE=true
             shift
             ;;
+        --include-craft)
+            INCLUDE_CRAFT=true
+            shift
+            ;;
         --help|-h)
             echo "Onyx Installation Script"
             echo ""
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --shutdown     Stop (pause) Onyx containers"
-            echo "  --delete-data  Remove all Onyx data (containers, volumes, and files)"
-            echo "  --help, -h     Show this help message"
+            echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
+            echo "  --shutdown       Stop (pause) Onyx containers"
+            echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
+            echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                    # Install Onyx"
+            echo "  $0 --include-craft    # Install Onyx with Craft enabled"
             echo "  $0 --shutdown         # Pause Onyx services"
             echo "  $0 --delete-data      # Completely remove Onyx and all data"
             exit 0
@@ -212,7 +219,7 @@ else
     echo ""
 fi
 
-# GitHub repo base URL - using docker-compose-easy branch
+# GitHub repo base URL - using main branch
 GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose"
 
 # Check system requirements
@@ -630,6 +637,17 @@ else
         print_success "Basic authentication enabled in configuration"
     fi
 
+    # Configure Craft based on flag
+    # By default, env.template has Craft commented out (disabled)
+    # Only enable if --include-craft flag was passed
+    if [ "$INCLUDE_CRAFT" = true ]; then
+        # Uncomment and set Craft config (replace commented line with uncommented)
+        sed -i.bak 's/^# ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Onyx Craft enabled (image will include Node.js and opencode CLI)"
+    else
+        print_info "Onyx Craft disabled (use --include-craft to enable)"
+    fi
+
     print_success ".env file created with your preferences"
     echo ""
     print_info "IMPORTANT: The .env file has been configured with your selections."
@@ -637,6 +655,7 @@ else
     echo "  • Advanced authentication (OAuth, SAML, etc.)"
     echo "  • AI model configuration"
     echo "  • Domain settings (for production)"
+    echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
     echo ""
 fi
 

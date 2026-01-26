@@ -16,6 +16,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
+from onyx.server.features.build.api.models import DetailedSessionResponse
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import GenerateSuggestionsRequest
 from onyx.server.features.build.api.models import GenerateSuggestionsResponse
@@ -69,12 +70,12 @@ def list_sessions(
     )
 
 
-@router.post("", response_model=SessionResponse)
+@router.post("", response_model=DetailedSessionResponse)
 def create_session(
     request: SessionCreateRequest,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> SessionResponse:
+) -> DetailedSessionResponse:
     """
     Create or get an existing empty build session.
 
@@ -115,19 +116,24 @@ def create_session(
 
     # Get the user's sandbox to include in response
     sandbox = get_sandbox_by_user_id(db_session, user.id)
-    return SessionResponse.from_model(build_session, sandbox)
+    base_response = SessionResponse.from_model(build_session, sandbox)
+    # Session was just created, so it's loaded in the sandbox
+    return DetailedSessionResponse.from_session_response(
+        base_response, session_loaded_in_sandbox=True
+    )
 
 
-@router.get("/{session_id}", response_model=SessionResponse)
+@router.get("/{session_id}", response_model=DetailedSessionResponse)
 def get_session_details(
     session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> SessionResponse:
+) -> DetailedSessionResponse:
     """
     Get details of a specific build session.
 
-    If the sandbox is terminated, this will restore it synchronously.
+    Returns session_loaded_in_sandbox to indicate if the session workspace
+    exists in the running sandbox.
     """
     session_manager = SessionManager(db_session)
 
@@ -138,7 +144,19 @@ def get_session_details(
 
     # Get the user's sandbox to include in response
     sandbox = get_sandbox_by_user_id(db_session, user.id)
-    return SessionResponse.from_model(session, sandbox)
+
+    # Check if session workspace exists in the sandbox
+    session_loaded = False
+    if sandbox and sandbox.status == SandboxStatus.RUNNING:
+        sandbox_manager = get_sandbox_manager()
+        session_loaded = sandbox_manager.session_workspace_exists(
+            sandbox.id, session_id
+        )
+
+    base_response = SessionResponse.from_model(session, sandbox)
+    return DetailedSessionResponse.from_session_response(
+        base_response, session_loaded_in_sandbox=session_loaded
+    )
 
 
 @router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)
@@ -250,12 +268,12 @@ def delete_session(
 RESTORE_LOCK_TIMEOUT_SECONDS = 300
 
 
-@router.post("/{session_id}/restore", response_model=SessionResponse)
+@router.post("/{session_id}/restore", response_model=DetailedSessionResponse)
 def restore_session(
     session_id: UUID,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> SessionResponse:
+) -> DetailedSessionResponse:
     """Restore sandbox and load session snapshot. Blocks until complete.
 
     Uses Redis lock to ensure only one restore runs per sandbox at a time.
@@ -266,6 +284,7 @@ def restore_session(
     2. Sandbox is RUNNING but session not loaded: Just load session snapshot
 
     Returns immediately if session workspace already exists in pod.
+    Always returns session_loaded_in_sandbox=True on success.
     """
     session = get_build_session(session_id, user.id, db_session)
     if not session:
@@ -302,16 +321,17 @@ def restore_session(
         # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
             # Verify pod is healthy before proceeding
-            is_healthy = sandbox_manager.health_check(
-                sandbox.id, nextjs_port=session.nextjs_port, timeout=5.0
-            )
+            is_healthy = sandbox_manager.health_check(sandbox.id, timeout=10.0)
             if is_healthy and sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             ):
                 logger.info(
                     f"Session {session_id} workspace was restored by another request"
                 )
-                return SessionResponse.from_model(session, sandbox)
+                base_response = SessionResponse.from_model(session, sandbox)
+                return DetailedSessionResponse.from_session_response(
+                    base_response, session_loaded_in_sandbox=True
+                )
 
             if not is_healthy:
                 logger.warning(
@@ -403,7 +423,10 @@ def restore_session(
         if lock.owned():
             lock.release()
 
-    return SessionResponse.from_model(session, sandbox)
+    base_response = SessionResponse.from_model(session, sandbox)
+    return DetailedSessionResponse.from_session_response(
+        base_response, session_loaded_in_sandbox=True
+    )
 
 
 # =============================================================================
