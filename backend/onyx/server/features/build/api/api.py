@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import NotificationType
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -21,7 +20,6 @@ from onyx.db.enums import ProcessingMode
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import BuildSession
 from onyx.db.models import User
-from onyx.db.notification import get_notifications
 from onyx.server.features.build.api.messages_api import router as messages_router
 from onyx.server.features.build.api.models import BuildConnectorInfo
 from onyx.server.features.build.api.models import BuildConnectorListResponse
@@ -32,11 +30,26 @@ from onyx.server.features.build.api.sessions_api import router as sessions_route
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.utils import is_onyx_craft_enabled
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/build")
+
+def require_onyx_craft_enabled(user: User = Depends(current_user)) -> User:
+    """
+    Dependency that checks if Onyx Craft is enabled for the user.
+    Raises HTTP 403 if Onyx Craft is disabled via feature flag.
+    """
+    if not is_onyx_craft_enabled(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Onyx Craft is not available",
+        )
+    return user
+
+
+router = APIRouter(prefix="/build", dependencies=[Depends(require_onyx_craft_enabled)])
 
 # Include sub-routers for sessions and messages
 router.include_router(sessions_router, tags=["build"])
@@ -328,39 +341,6 @@ def get_webapp_path(
 ) -> StreamingResponse | Response:
     """Proxy any subpath of the webapp (static assets, etc.) for a specific session."""
     return _proxy_request(path, request, session_id, db_session)
-
-
-# -----------------------------------------------------------------------------
-# Development Endpoints
-# -----------------------------------------------------------------------------
-
-
-@router.post("/dev/clear-feature-announcements-and-logout")
-def clear_feature_announcements_and_logout(
-    user: User = Depends(current_user),
-    db_session: Session = Depends(get_session),
-) -> dict[str, str]:
-    """
-    [DEV] Delete all FEATURE_ANNOUNCEMENT notifications for the current user from the database.
-
-    This is a temporary development endpoint for testing purposes.
-    The frontend should call logout after this endpoint succeeds.
-    """
-    # Get all FEATURE_ANNOUNCEMENT notifications for the current user (including dismissed)
-    feature_announcements = get_notifications(
-        user=user,
-        db_session=db_session,
-        notif_type=NotificationType.FEATURE_ANNOUNCEMENT,
-        include_dismissed=True,
-    )
-
-    # Delete all of them from the database
-    if feature_announcements:
-        for notification in feature_announcements:
-            db_session.delete(notification)
-        db_session.commit()
-
-    return {"status": "success", "message": "Notifications deleted"}
 
 
 # Separate router for Next.js static assets at /_next/*

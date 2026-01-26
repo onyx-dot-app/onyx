@@ -14,6 +14,9 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 
 logger = setup_logger()
 
@@ -263,41 +266,69 @@ def validate_file(
 # Build Mode Feature Announcements
 # =============================================================================
 
-# PostHog feature flag key (inverted: True = disabled, so "not found" defaults to enabled)
-BUILD_MODE_INTRO_DISABLED_FLAG = "build-mode-intro-disabled"
+# PostHog feature flag key for enabling Onyx Craft (cloud rollout control)
+# Flag logic: True = enabled, False/null/not found = disabled
+ONYX_CRAFT_ENABLED_FLAG = "onyx-craft-enabled"
 
 # Feature identifier in additional_data
 BUILD_MODE_FEATURE_ID = "build_mode"
 
 
-def is_build_mode_intro_enabled(user: User) -> bool:
+def is_onyx_craft_enabled(user: User) -> bool:
     """
-    Check if Build Mode intro should be shown.
+    Check if Onyx Craft (Build Mode) is enabled for the user.
 
-    Uses inverted flag logic: checks if "build-mode-intro-disabled" is True.
-    - Flag = True → disabled (don't show)
-    - Flag = False or not found → enabled (show)
+    Flag logic for "onyx-craft-enabled":
+    - Flag = True → enabled (Onyx Craft is available)
+    - Flag = False → disabled (Onyx Craft is not available)
+    - Flag = null/not found → disabled (Onyx Craft is not available)
 
-    This ensures "not found" defaults to enabled since PostHog returns False for missing flags.
+    Only explicit True enables the feature.
     """
-    # NOTE: This is where we should invert the logic to globally disable the intro notification
-
     feature_flag_provider = get_default_feature_flag_provider()
 
-    # If no PostHog configured (NoOp provider), default to enabled
+    # If no PostHog configured (NoOp provider), default to disabled
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
-        return True
-
-    is_disabled = feature_flag_provider.feature_enabled(
-        BUILD_MODE_INTRO_DISABLED_FLAG,
-        user.id,
-    )
-
-    if is_disabled:
-        logger.debug("Build Mode intro disabled via PostHog feature flag")
         return False
 
-    return True
+    # Try to get raw PostHog value to distinguish between False and null/not found
+    try:
+        # Try to import PostHog client from EE module
+        posthog_client = fetch_versioned_implementation_with_fallback(
+            module="ee.onyx.utils.posthog_client",
+            attribute="posthog",
+            fallback=None,
+        )
+
+        if posthog_client is not None:
+            # Set user properties
+            posthog_client.set(distinct_id=str(user.id))
+
+            # Get raw flag value (can be None if flag doesn't exist)
+            raw_flag_value = posthog_client.feature_enabled(
+                ONYX_CRAFT_ENABLED_FLAG,
+                str(user.id),
+            )
+
+            # Only explicit True enables the feature
+            # False or None (not found) means disabled
+            if raw_flag_value is True:
+                logger.debug("Onyx Craft enabled via PostHog feature flag (flag=True)")
+                return True
+            else:
+                logger.debug(
+                    f"Onyx Craft disabled: feature flag is {raw_flag_value} "
+                    f"(only explicit True enables)"
+                )
+                return False
+
+        # PostHog client not available → disabled
+        logger.debug("Onyx Craft disabled: PostHog client not available")
+        return False
+
+    except Exception as e:
+        logger.debug(f"Could not get raw PostHog flag value: {e}")
+        return False
 
 
 def ensure_build_mode_intro_notification(user: User, db_session: Session) -> None:
@@ -307,8 +338,8 @@ def ensure_build_mode_intro_notification(user: User, db_session: Session) -> Non
     Called from /api/notifications endpoint. Uses notification deduplication
     to ensure each user only gets one notification.
     """
-    # Posthog feature flag check
-    if not is_build_mode_intro_enabled(user):
+    # PostHog feature flag check - only show notification if Onyx Craft is enabled
+    if not is_onyx_craft_enabled(user):
         return
 
     # Create notification (will be skipped if already exists due to deduplication)
