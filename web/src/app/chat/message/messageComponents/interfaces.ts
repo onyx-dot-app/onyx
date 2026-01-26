@@ -11,6 +11,7 @@ import { CitationMap } from "../../interfaces";
 export enum RenderType {
   HIGHLIGHT = "highlight",
   FULL = "full",
+  COMPACT = "compact",
 }
 
 export interface FullChatState {
@@ -35,6 +36,9 @@ export interface RendererResult {
   // used for things that should just show text w/o an icon or header
   // e.g. ReasoningRenderer
   expandedText?: JSX.Element;
+
+  // Whether this renderer supports compact mode (collapse button shown only when true)
+  supportsCompact?: boolean;
 }
 
 export type MessageRenderer<
@@ -48,5 +52,7 @@ export type MessageRenderer<
   animate: boolean;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
+  /** Whether this is the last step in the timeline (for connector line decisions) */
+  isLastStep?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }>;
