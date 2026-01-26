@@ -28,6 +28,7 @@ from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
+from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
@@ -338,16 +339,33 @@ def restore_session(
                 # Get latest snapshot and restore it
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
                 if snapshot:
+                    # Allocate a new port for the restored session
+                    new_port = allocate_nextjs_port(db_session)
+                    session.nextjs_port = new_port
+                    db_session.commit()
+
                     logger.info(
                         f"Restoring snapshot for session {session_id} "
-                        f"from {snapshot.storage_path}"
+                        f"from {snapshot.storage_path} with port {new_port}"
                     )
-                    sandbox_manager.restore_snapshot(
-                        sandbox_id=sandbox.id,
-                        session_id=session_id,
-                        snapshot_storage_path=snapshot.storage_path,
-                        tenant_id=tenant_id,
-                    )
+
+                    try:
+                        sandbox_manager.restore_snapshot(
+                            sandbox_id=sandbox.id,
+                            session_id=session_id,
+                            snapshot_storage_path=snapshot.storage_path,
+                            tenant_id=tenant_id,
+                            nextjs_port=new_port,
+                        )
+                    except Exception as e:
+                        # Clear the port allocation on failure so it can be reused
+                        logger.error(
+                            f"Failed to restore session {session_id}, "
+                            f"clearing port {new_port}: {e}"
+                        )
+                        session.nextjs_port = None
+                        db_session.commit()
+                        raise
                 else:
                     # No snapshot - set up fresh workspace
                     logger.info(

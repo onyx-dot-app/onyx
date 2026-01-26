@@ -99,6 +99,44 @@ POD_READY_TIMEOUT_SECONDS = 120
 POD_READY_POLL_INTERVAL_SECONDS = 2
 
 
+def _build_nextjs_start_script(
+    session_path: str,
+    nextjs_port: int,
+    check_node_modules: bool = False,
+) -> str:
+    """Build shell script to start the NextJS dev server.
+
+    Args:
+        session_path: Path to the session directory (should be shell-safe)
+        nextjs_port: Port number for the NextJS dev server
+        check_node_modules: If True, check for node_modules and run npm install if missing
+
+    Returns:
+        Shell script string to start the NextJS server
+    """
+    npm_install_check = ""
+    if check_node_modules:
+        npm_install_check = """
+# Check if npm dependencies are installed
+if [ ! -d "node_modules" ]; then
+    echo "Installing npm dependencies..."
+    npm install
+fi
+"""
+
+    return f"""
+set -e
+cd {session_path}/outputs/web
+{npm_install_check}
+# Start npm run dev in background
+echo "Starting Next.js dev server on port {nextjs_port}..."
+nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+NEXTJS_PID=$!
+echo "Next.js server started with PID $NEXTJS_PID"
+echo $NEXTJS_PID > {session_path}/nextjs.pid
+"""
+
+
 def _get_local_aws_credential_env_vars() -> list[client.V1EnvVar]:
     """Get AWS credential environment variables from local environment.
 
@@ -861,6 +899,11 @@ else
 fi
 """
 
+        # Build NextJS startup script (npm install already done in outputs_setup)
+        nextjs_start_script = _build_nextjs_start_script(
+            session_path, nextjs_port, check_node_modules=False
+        )
+
         setup_script = f"""
 set -e
 
@@ -880,17 +923,8 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
 {org_info_setup}
-# Start Next.js dev server in background
-echo "Starting Next.js dev server on port {nextjs_port}..."
-cd {session_path}/outputs/web
-
-# Start npm run dev in background with output to log file
-nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
-NEXTJS_PID=$!
-echo "Next.js server started with PID $NEXTJS_PID"
-
-# Store PID for potential cleanup
-echo $NEXTJS_PID > {session_path}/nextjs.pid
+# Start Next.js dev server
+{nextjs_start_script}
 
 echo "Session workspace setup complete"
 """
@@ -1116,19 +1150,22 @@ echo "Session cleanup complete"
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,
+        nextjs_port: int,
     ) -> None:
-        """Download snapshot from S3 and extract into session workspace.
+        """Download snapshot from S3, extract into session workspace, and start NextJS.
 
         Since the sandbox pod doesn't have S3 access, this method:
         1. Downloads snapshot from S3 (using boto3 directly)
         2. Creates the session directory structure in pod
         3. Streams the tar.gz into the pod via kubectl exec
+        4. Starts the NextJS dev server
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in S3 (relative path)
             tenant_id: Tenant identifier for storage access
+            nextjs_port: Port number for the NextJS dev server
 
         Raises:
             RuntimeError: If snapshot restoration fails
@@ -1212,6 +1249,25 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
 
             logger.debug(f"Snapshot restore output: {resp}")
             logger.info(f"Restored snapshot for session {session_id}")
+
+            # Start NextJS dev server (check node_modules since restoring from snapshot)
+            start_script = _build_nextjs_start_script(
+                safe_session_path, nextjs_port, check_node_modules=True
+            )
+            k8s_stream(
+                self._core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", start_script],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+            logger.info(
+                f"Started NextJS server for session {session_id} on port {nextjs_port}"
+            )
 
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e

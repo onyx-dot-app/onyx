@@ -478,6 +478,31 @@ def allocate_nextjs_port(db_session: Session) -> int:
     )
 
 
+def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
+    """Clear nextjs_port for all sessions belonging to a user.
+
+    Called when sandbox goes to sleep to release port allocations.
+
+    Args:
+        db_session: Database session
+        user_id: The user whose sessions should have ports cleared
+
+    Returns:
+        Number of sessions updated
+    """
+    result = (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            BuildSession.nextjs_port.isnot(None),
+        )
+        .update({BuildSession.nextjs_port: None})
+    )
+    db_session.flush()
+    logger.info(f"Cleared {result} nextjs_port allocations for user {user_id}")
+    return result
+
+
 def fetch_llm_provider_by_type_for_build_mode(
     db_session: Session, provider_type: str
 ) -> LLMProviderView | None:

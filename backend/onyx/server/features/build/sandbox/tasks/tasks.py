@@ -15,6 +15,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 
 if TYPE_CHECKING:
     from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -148,6 +149,13 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
 
                     # Terminate the pod (but keep sandbox record)
                     sandbox_manager.terminate(sandbox_id)
+
+                    # Zero out nextjs ports for all sessions (ports are no longer in use)
+                    cleared = clear_nextjs_ports_for_user(db_session, sandbox.user_id)
+                    task_logger.debug(
+                        f"Cleared {cleared} nextjs_port allocations for user "
+                        f"{sandbox.user_id}"
+                    )
 
                     # Mark sandbox as SLEEPING (not TERMINATED)
                     update_sandbox_status__no_commit(
