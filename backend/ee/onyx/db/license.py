@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import LicenseSource
+from onyx.auth.schemas import UserRole
+from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.db.models import License
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
@@ -93,6 +95,34 @@ def delete_license(db_session: Session) -> bool:
 # -----------------------------------------------------------------------------
 
 
+def _count_users_from_db(tenant_id: str | None = None) -> int:
+    """Count users directly from database (no caching).
+
+    Excludes:
+    - API key dummy users (not real users)
+    - External permission users (EXT_PERM_USER role)
+    """
+    if MULTI_TENANT:
+        from ee.onyx.server.tenants.user_mapping import get_tenant_count
+
+        return get_tenant_count(tenant_id or get_current_tenant_id())
+    else:
+        # Self-hosted: count active users (excluding API keys and external perm users)
+        from onyx.db.engine.sql_engine import get_session_with_current_tenant
+
+        with get_session_with_current_tenant() as db_session:
+            result = db_session.execute(
+                select(func.count())
+                .select_from(User)
+                .where(
+                    User.is_active,
+                    ~User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN),
+                    User.role != UserRole.EXT_PERM_USER,
+                )
+            )
+            return result.scalar() or 0
+
+
 def get_used_seats(tenant_id: str | None = None) -> int:
     """
     Get current seat usage.
@@ -100,20 +130,11 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     For multi-tenant: counts users in UserTenantMapping for this tenant.
     For self-hosted: counts all active users (includes both Onyx UI users
     and Slack users who have been converted to Onyx users).
+
+    Note: Seat count is stored in the license metadata cache, so this
+    function is only called when refreshing the license cache.
     """
-    if MULTI_TENANT:
-        from ee.onyx.server.tenants.user_mapping import get_tenant_count
-
-        return get_tenant_count(tenant_id or get_current_tenant_id())
-    else:
-        # Self-hosted: count all active users (Onyx + converted Slack users)
-        from onyx.db.engine.sql_engine import get_session_with_current_tenant
-
-        with get_session_with_current_tenant() as db_session:
-            result = db_session.execute(
-                select(func.count()).select_from(User).where(User.is_active)  # type: ignore
-            )
-            return result.scalar() or 0
+    return _count_users_from_db(tenant_id)
 
 
 # -----------------------------------------------------------------------------
@@ -135,6 +156,9 @@ def get_cached_license_metadata(tenant_id: str | None = None) -> LicenseMetadata
     redis_client = get_redis_replica_client(tenant_id=tenant)
 
     cached = redis_client.get(LICENSE_METADATA_KEY)
+    logger.info(
+        f"[get_cached_license_metadata] tenant={tenant}, key={LICENSE_METADATA_KEY}, cached={'yes' if cached else 'no'}"
+    )
     if cached:
         try:
             cached_str: str
@@ -192,6 +216,9 @@ def update_license_cache(
     from ee.onyx.utils.license import get_license_status
 
     tenant = tenant_id or get_current_tenant_id()
+    logger.info(
+        f"[update_license_cache] Writing to tenant={tenant}, key={LICENSE_METADATA_KEY}"
+    )
     redis_client = get_redis_client(tenant_id=tenant)
 
     used_seats = get_used_seats(tenant)
@@ -276,3 +303,41 @@ def get_license_metadata(
 
     # Refresh from database
     return refresh_license_cache(db_session, tenant_id)
+
+
+def check_seat_availability(
+    db_session: Session,
+    seats_needed: int = 1,
+    tenant_id: str | None = None,
+) -> tuple[bool, str | None]:
+    """
+    Check if there are enough seats available to add users.
+
+    Args:
+        db_session: Database session
+        seats_needed: Number of seats needed (default 1)
+        tenant_id: Tenant ID (for multi-tenant deployments)
+
+    Returns:
+        (True, None) if seats are available
+        (False, error_message) if seat limit would be exceeded
+        (True, None) if no license exists (self-hosted without license = unlimited)
+    """
+    metadata = get_license_metadata(db_session, tenant_id)
+
+    # No license = no enforcement (self-hosted without license)
+    if metadata is None:
+        return (True, None)
+
+    # Calculate current usage directly from DB (not cache) for accuracy
+    current_used = _count_users_from_db(tenant_id)
+    total_seats = metadata.seats
+
+    if current_used + seats_needed > total_seats:
+        return (
+            False,
+            f"Seat limit would be exceeded: {current_used} of {total_seats} seats used, "
+            f"cannot add {seats_needed} more user(s).",
+        )
+
+    return (True, None)
