@@ -477,7 +477,40 @@ class SessionManager:
                 )
                 sandbox.status = sandbox_info.status
                 self._db_session.flush()
+            elif sandbox.status.is_active():
+                # Verify pod is healthy before reusing (use short timeout for quick check)
+                if not self._sandbox_manager.health_check(
+                    sandbox_id, nextjs_port=nextjs_port, timeout=5.0
+                ):
+                    logger.warning(
+                        f"Sandbox {sandbox_id} marked as {sandbox.status} but pod is "
+                        f"unhealthy/missing. Entering recovery mode."
+                    )
+                    # Terminate to clean up any lingering K8s resources
+                    self._sandbox_manager.terminate(sandbox_id)
+
+                    # Mark as terminated and re-provision
+                    sandbox.status = SandboxStatus.TERMINATED
+                    self._db_session.flush()
+
+                    logger.info(
+                        f"Re-provisioning sandbox {sandbox_id} for user {user_id}"
+                    )
+                    sandbox_info = self._sandbox_manager.provision(
+                        sandbox_id=sandbox_id,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                        llm_config=llm_config,
+                    )
+                    sandbox.status = sandbox_info.status
+                    self._db_session.flush()
+                else:
+                    logger.info(
+                        f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
+                        f"for new session {session_id}"
+                    )
             else:
+                # Handle other statuses (SLEEPING, PROVISIONING, FAILED, etc.)
                 logger.info(
                     f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
                     f"for new session {session_id}"
