@@ -454,7 +454,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search pipelines.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary."
+            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary, "
+            "with embedding dimension {embedding_dim}."
         )
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
