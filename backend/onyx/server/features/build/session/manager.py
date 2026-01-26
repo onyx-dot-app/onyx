@@ -48,6 +48,8 @@ from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -430,11 +432,12 @@ class SessionManager:
                 / "knowledge"
                 / str(user_id)
             )
-            # Ensure the user's document directory exists
-            Path(user_file_system_path).mkdir(parents=True, exist_ok=True)
         else:
             # Fallback for local development without persistent storage
             user_file_system_path = "/tmp/onyx-files"
+
+        # Ensure the user's document directory exists (if local)
+        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
             Path(user_file_system_path).mkdir(parents=True, exist_ok=True)
 
         # Allocate port for this session (per-session port allocation)
