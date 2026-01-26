@@ -35,21 +35,18 @@ import { OAUTH_STATE_KEY } from "@/app/build/v1/constants";
 import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import BuildOnboardingModal from "@/app/build/onboarding/components/BuildOnboardingModal";
 import NotAllowedModal from "@/app/build/onboarding/components/NotAllowedModal";
+import { useOnboarding } from "@/app/build/onboarding/BuildOnboardingProvider";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUser } from "@/components/user/UserProvider";
-import { updateUserPersonalization } from "@/lib/userSettings";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import {
   WORK_AREA_OPTIONS,
   LEVEL_OPTIONS,
   getBuildUserPersona,
-  setBuildUserPersona,
   BuildLlmSelection,
   BUILD_MODE_PROVIDERS,
 } from "@/app/build/onboarding/constants";
-import { BuildUserInfo } from "@/app/build/onboarding/types";
 
 // Build mode connectors
 const BUILD_CONNECTORS: ValidSources[] = [
@@ -79,22 +76,18 @@ interface SelectedConnectorState {
  * Uses SettingsLayouts like AgentEditorPage does.
  */
 export default function BuildConfigPage() {
-  const { refreshUser, user, isAdmin, isCurator } = useUser();
-  const { llmProviders, refetch: refetchLlmProviders } = useLLMProviders();
+  const { isAdmin, isCurator } = useUser();
+  const { llmProviders } = useLLMProviders();
+  const { openPersonaEditor, openLlmSetup } = useOnboarding();
   const [selectedConnector, setSelectedConnector] =
     useState<SelectedConnectorState | null>(null);
   const [connectorToDelete, setConnectorToDelete] =
     useState<BuildConnectorConfig | null>(null);
-  const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showNotAllowedModal, setShowNotAllowedModal] = useState(false);
   const [showDemoDataConfirmModal, setShowDemoDataConfirmModal] =
     useState(false);
   const [pendingDemoDataEnabled, setPendingDemoDataEnabled] = useState<
     boolean | null
-  >(null);
-  // LLM onboarding modal - opens to specific provider when clicking "Connect"
-  const [llmOnboardingProvider, setLlmOnboardingProvider] = useState<
-    string | null
   >(null);
 
   // Pending state for tracking unsaved changes
@@ -267,32 +260,7 @@ export default function BuildConfigPage() {
   const levelLabel =
     LEVEL_OPTIONS.find((o) => o.value === levelValue)?.label || levelValue;
 
-  // Get initial values for the modal
-  const existingName = user?.personalization?.name || "";
-  const spaceIndex = existingName.indexOf(" ");
-  const initialFirstName =
-    spaceIndex > 0 ? existingName.slice(0, spaceIndex) : existingName;
-  const initialLastName =
-    spaceIndex > 0 ? existingName.slice(spaceIndex + 1) : "";
-
   const hasLlmProvider = (llmProviders?.length ?? 0) > 0;
-
-  // Handle persona update
-  const handlePersonaComplete = useCallback(
-    async (info: BuildUserInfo) => {
-      const fullName = `${info.firstName} ${info.lastName}`.trim();
-      await updateUserPersonalization({ name: fullName });
-
-      setBuildUserPersona({
-        workArea: info.workArea,
-        level: info.level,
-      });
-
-      await refreshUser();
-      setShowPersonaModal(false);
-    },
-    [refreshUser]
-  );
 
   const { data, mutate, isLoading } = useSWR<BuildConnectorListResponse>(
     "/api/build/connectors",
@@ -416,7 +384,7 @@ export default function BuildConfigPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => setShowPersonaModal(true)}
+                      onClick={() => openPersonaEditor()}
                       disabled={!hasLlmProvider}
                       className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -448,7 +416,7 @@ export default function BuildConfigPage() {
                       onSelectionChange={handleLlmSelectionChange}
                       llmProviders={llmProviders}
                       onOpenOnboarding={(providerKey) =>
-                        setLlmOnboardingProvider(providerKey)
+                        openLlmSetup(providerKey)
                       }
                       disabled={isUpdating || isPreProvisioning}
                     >
@@ -593,45 +561,6 @@ export default function BuildConfigPage() {
           onSubmit={handleDeleteConfirm}
         />
       )}
-
-      <BuildOnboardingModal
-        open={showPersonaModal}
-        showLlmSetup={false}
-        skipInfoSlides={true}
-        llmProviders={llmProviders}
-        onComplete={handlePersonaComplete}
-        onLlmComplete={async () => {
-          await refetchLlmProviders();
-        }}
-        initialValues={{
-          firstName: initialFirstName,
-          lastName: initialLastName,
-          workArea: workAreaValue,
-          level: levelValue,
-        }}
-      />
-
-      {/* LLM Onboarding Modal - opens when clicking "Connect" in BuildLLMPopover */}
-      <BuildOnboardingModal
-        open={!!llmOnboardingProvider}
-        showLlmSetup={true}
-        skipInfoSlides={true}
-        initialProvider={llmOnboardingProvider ?? undefined}
-        llmProviders={llmProviders}
-        onComplete={async () => {
-          setLlmOnboardingProvider(null);
-        }}
-        onLlmComplete={async () => {
-          await refetchLlmProviders();
-          setLlmOnboardingProvider(null);
-        }}
-        initialValues={{
-          firstName: initialFirstName,
-          lastName: initialLastName,
-          workArea: workAreaValue,
-          level: levelValue,
-        }}
-      />
 
       <NotAllowedModal
         open={showNotAllowedModal}
