@@ -51,13 +51,13 @@ class TestLicenseEnforcementCheck:
     """Tests for _check_license_enforcement_enabled function."""
 
     def test_raises_when_disabled(self) -> None:
-        """Test that 503 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
+        """Test that 501 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
         with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", False):
             with pytest.raises(HTTPException) as exc_info:
                 _check_license_enforcement_enabled()
 
-            assert exc_info.value.status_code == 503
-            assert "LICENSE_ENFORCEMENT_ENABLED" in str(exc_info.value.detail)
+            assert exc_info.value.status_code == 501
+            assert "cloud data plane" in str(exc_info.value.detail).lower()
 
     def test_passes_when_enabled(self) -> None:
         """Test that no exception is raised when LICENSE_ENFORCEMENT_ENABLED=True."""
@@ -139,13 +139,13 @@ class TestVerifyLicenseAuth:
 
             assert result == payload
 
-    def test_raises_503_when_enforcement_disabled(self) -> None:
-        """Test that 503 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
+    def test_raises_501_when_enforcement_disabled(self) -> None:
+        """Test that 501 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
         with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", False):
             with pytest.raises(HTTPException) as exc_info:
                 verify_license_auth("any_license", allow_expired=False)
 
-            assert exc_info.value.status_code == 503
+            assert exc_info.value.status_code == 501
 
 
 class TestGetLicensePayload:
@@ -257,13 +257,13 @@ class TestGetOptionalLicensePayload:
             assert result == payload
 
     @pytest.mark.asyncio
-    async def test_raises_503_when_enforcement_disabled(self) -> None:
-        """Test that 503 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
+    async def test_raises_501_when_enforcement_disabled(self) -> None:
+        """Test that 501 is raised when LICENSE_ENFORCEMENT_ENABLED=False."""
         with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", False):
             with pytest.raises(HTTPException) as exc_info:
                 await get_optional_license_payload(None)
 
-            assert exc_info.value.status_code == 503
+            assert exc_info.value.status_code == 501
 
 
 class TestForwardToControlPlane:

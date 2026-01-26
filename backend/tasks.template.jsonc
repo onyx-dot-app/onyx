@@ -1,0 +1,101 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "austin",
+            "label": "Profile celery beat",
+            "envFile": "${workspaceFolder}/.env",
+            "options": {
+              "cwd": "${workspaceFolder}/backend"
+            },
+            "command": [
+                "sudo",
+                "-E"
+            ],
+            "args": [
+              "celery",
+              "-A",
+              "onyx.background.celery.versioned_apps.beat",
+              "beat",
+              "--loglevel=INFO"
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "Generate Onyx OpenAPI Python client",
+            "cwd": "${workspaceFolder}/backend",
+            "envFile": "${workspaceFolder}/.env",
+            "options": {
+              "cwd": "${workspaceFolder}/backend"
+            },
+            "command": [
+                "openapi-generator"
+            ],
+            "args": [
+                "generate",
+                "-i",
+                "generated/openapi.json",
+                "-g",
+                "python",
+                "-o",
+                "generated/onyx_openapi_client",
+                "--package-name",
+                "onyx_openapi_client",
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "Generate Typescript Fetch client (openapi-generator)",
+            "envFile": "${workspaceFolder}/.env",
+            "options": {
+              "cwd": "${workspaceFolder}"
+            },
+            "command": [
+                "openapi-generator"
+            ],
+            "args": [
+                "generate",
+                "-i",
+                "backend/generated/openapi.json",
+                "-g",
+                "typescript-fetch",
+                "-o",
+                "${workspaceFolder}/web/src/lib/generated/onyx_api",
+                "--additional-properties=disallowAdditionalPropertiesIfNotPresent=false,legacyDiscriminatorBehavior=false,supportsES6=true",
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "Generate TypeScript Client (openapi-ts)",
+            "envFile": "${workspaceFolder}/.env",
+            "options": {
+              "cwd": "${workspaceFolder}/web"
+            },
+            "command": [
+                "npx"
+            ],
+            "args": [
+                "openapi-typescript",
+                "../backend/generated/openapi.json",
+                "--output",
+                "./src/lib/generated/onyx-schema.ts",
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "Generate TypeScript Client (orval)",
+            "envFile": "${workspaceFolder}/.env",
+            "options": {
+              "cwd": "${workspaceFolder}/web"
+            },
+            "command": [
+                "npx"
+            ],
+            "args": [
+            	"orval",
+                "--config",
+                "orval.config.js",
+            ]
+        }
+    ]
+}

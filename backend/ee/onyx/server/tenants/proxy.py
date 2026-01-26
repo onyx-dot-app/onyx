@@ -44,11 +44,6 @@ logger = setup_logger()
 router = APIRouter(prefix="/proxy")
 
 
-def _is_cloud_data_plane() -> bool:
-    """Check if running as cloud data plane (receives requests from self-hosted)."""
-    return LICENSE_ENFORCEMENT_ENABLED
-
-
 def _check_license_enforcement_enabled() -> None:
     """Ensure LICENSE_ENFORCEMENT_ENABLED is true (proxy endpoints only work on cloud DP)."""
     if not LICENSE_ENFORCEMENT_ENABLED:
@@ -201,13 +196,11 @@ def fetch_and_store_license(tenant_id: str, license_data: str) -> None:
             tenant_id=tenant_id,
         )
 
-        logger.info(f"License stored and cached for tenant {tenant_id}")
-
     except ValueError as e:
-        logger.error(f"Failed to verify license for tenant {tenant_id}: {e}")
+        logger.error(f"Failed to verify license: {e}")
         raise
     except Exception:
-        logger.exception(f"Failed to store license for tenant {tenant_id}")
+        logger.exception("Failed to store license")
         raise
 
 
@@ -240,9 +233,6 @@ async def proxy_create_checkout_session(
     If license provided, expired is OK (for renewals).
     """
     tenant_id = license_payload.tenant_id if license_payload else None
-    logger.info(
-        f"Proxying create-checkout-session for tenant {tenant_id or 'new customer'}"
-    )
 
     body: dict = {
         "billing_period": request_body.billing_period,
@@ -284,31 +274,14 @@ async def proxy_claim_license(
     """
     _check_license_enforcement_enabled()
 
-    session_id = request_body.session_id
-    session_preview = session_id[:16] + "..." if len(session_id) > 16 else session_id
-
-    logger.info(f"[claim-license] Received request for session_id={session_preview}")
-
     result = forward_to_control_plane(
         "POST",
         "/claim-license",
-        body={"session_id": session_id},
+        body={"session_id": request_body.session_id},
     )
 
     tenant_id = result["tenant_id"]
     license_data = result["license"]
-    license_preview = (
-        license_data[:50] + "..." if len(license_data) > 50 else license_data
-    )
-
-    # Note: We don't store the license on the cloud DP - this endpoint is used
-    # by self-hosted instances which will store the license locally.
-    # The license is returned in the response for the caller to handle.
-
-    logger.info(
-        f"[claim-license] Success: session_id={session_preview}, "
-        f"tenant_id={tenant_id}, license_preview={license_preview}"
-    )
 
     return ClaimLicenseResponse(
         tenant_id=tenant_id,
@@ -335,7 +308,6 @@ async def proxy_create_customer_portal_session(
     Auth: License required, expired OK (need portal to fix payment issues).
     """
     tenant_id = license_payload.tenant_id
-    logger.info(f"Proxying create-customer-portal-session for tenant {tenant_id}")
 
     body: dict = {"tenant_id": tenant_id}
     if request_body and request_body.return_url:
@@ -372,7 +344,6 @@ async def proxy_billing_information(
     Auth: Valid (non-expired) license required.
     """
     tenant_id = license_payload.tenant_id
-    logger.info(f"Proxying billing-information for tenant {tenant_id}")
 
     result = forward_to_control_plane(
         "GET", "/billing-information", params={"tenant_id": tenant_id}
@@ -403,8 +374,6 @@ async def proxy_license_fetch(
             status_code=403,
             detail="Cannot fetch license for a different tenant",
         )
-
-    logger.info(f"Proxying license fetch for tenant {tenant_id}")
 
     result = forward_to_control_plane("GET", f"/license/{tenant_id}")
 
