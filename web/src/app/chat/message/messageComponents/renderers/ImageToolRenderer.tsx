@@ -72,6 +72,7 @@ export const ImageToolRenderer: MessageRenderer<
       return children({
         icon: FiImage,
         status: "Generating images...",
+        supportsCompact: false,
         content: (
           <div className="flex flex-col">
             <div>
@@ -89,6 +90,7 @@ export const ImageToolRenderer: MessageRenderer<
         status: `Generated ${images.length} image${
           images.length !== 1 ? "s" : ""
         }`,
+        supportsCompact: false,
         content: (
           <div className="flex flex-col my-1">
             {images.length > 0 ? (
@@ -122,6 +124,7 @@ export const ImageToolRenderer: MessageRenderer<
     return children({
       icon: FiImage,
       status: status,
+      supportsCompact: false,
       content: <div></div>,
     });
   }
@@ -131,6 +134,7 @@ export const ImageToolRenderer: MessageRenderer<
     return children({
       icon: FiImage,
       status: "Generating image...",
+      supportsCompact: false,
       content: (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <div className="flex gap-0.5">
@@ -154,6 +158,7 @@ export const ImageToolRenderer: MessageRenderer<
     return children({
       icon: FiImage,
       status: "Image generation failed",
+      supportsCompact: false,
       content: (
         <div className="text-sm text-red-600 dark:text-red-400">
           Image generation failed
@@ -166,6 +171,7 @@ export const ImageToolRenderer: MessageRenderer<
     return children({
       icon: FiImage,
       status: `Generated ${images.length} image${images.length > 1 ? "s" : ""}`,
+      supportsCompact: false,
       content: (
         <div className="text-sm text-muted-foreground">
           Generated {images.length} image
@@ -178,6 +184,7 @@ export const ImageToolRenderer: MessageRenderer<
   return children({
     icon: FiImage,
     status: "Image generation",
+    supportsCompact: false,
     content: (
       <div className="text-sm text-muted-foreground">Image generation</div>
     ),
