@@ -211,7 +211,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const renderHeader = useCallback(() => {
     switch (uiState) {
       case TimelineUIState.STREAMING_PARALLEL:
-        if (lastTurnGroup) {
+        // Only show parallel header when collapsed (showParallelTabs includes !isExpanded check)
+        if (showParallelTabs && lastTurnGroup) {
           return (
             <ParallelStreamingHeader
               steps={lastTurnGroup.steps}
@@ -223,7 +224,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             />
           );
         }
-      // falls through to sequential if no lastTurnGroup
+      // falls through to sequential header when expanded or no lastTurnGroup
       case TimelineUIState.STREAMING_SEQUENTIAL:
         return (
           <StreamingHeader
@@ -271,6 +272,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     }
   }, [
     uiState,
+    showParallelTabs,
     lastTurnGroup,
     parallelActiveTab,
     setParallelActiveTab,

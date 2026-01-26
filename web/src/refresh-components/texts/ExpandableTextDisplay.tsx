@@ -124,7 +124,7 @@ export default function ExpandableTextDisplay({
   return (
     <>
       {/* Collapsed View */}
-      <div className={cn("w-full flex bg-red-400", className)}>
+      <div className={cn("w-full flex", className)}>
         {(() => {
           // Build the content element
           const contentElement =
