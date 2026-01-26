@@ -46,6 +46,7 @@ export interface OnboardingModalController {
   hasUserInfo: boolean; // User has completed user-info (name + workArea)
   allProvidersConfigured: boolean; // All 3 providers (anthropic, openai, openrouter) are configured
   hasAnyProvider: boolean; // At least 1 provider is configured (allows skipping)
+  isLoading: boolean; // True while LLM providers are loading
 
   // Callbacks
   completeUserInfo: (info: BuildUserInfo) => Promise<void>;

@@ -30,14 +30,14 @@ export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
   const router = useRouter();
-  const { hasAnyConnector } = useBuildConnectors();
+  const { hasAnyConnector, isLoading } = useBuildConnectors();
 
   const handleClick = () => {
     router.push("/build/v1/configure");
   };
 
-  // Hide banner if user has any connectors configured
-  if (hasAnyConnector) {
+  // Only show banner if user has no connectors configured (and not loading)
+  if (isLoading || hasAnyConnector) {
     return null;
   }
 
