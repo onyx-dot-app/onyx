@@ -20,7 +20,7 @@ Auth levels by endpoint:
 
 from typing import Literal
 
-import requests
+import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Header
@@ -131,7 +131,7 @@ async def get_optional_license_payload(
     return verify_license_auth(license_data, allow_expired=True)
 
 
-def forward_to_control_plane(
+async def forward_to_control_plane(
     method: str,
     path: str,
     body: dict | None = None,
@@ -147,27 +147,28 @@ def forward_to_control_plane(
     url = f"{CONTROL_PLANE_API_BASE_URL}{path}"
 
     try:
-        if method == "GET":
-            response = requests.get(url, headers=headers, params=params, timeout=30)
-        elif method == "POST":
-            response = requests.post(url, headers=headers, json=body, timeout=30)
-        else:
-            raise ValueError(f"Unsupported HTTP method: {method}")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if method == "GET":
+                response = await client.get(url, headers=headers, params=params)
+            elif method == "POST":
+                response = await client.post(url, headers=headers, json=body)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
 
-        response.raise_for_status()
-        return response.json()
+            response.raise_for_status()
+            return response.json()
 
-    except requests.HTTPError as e:
-        status_code = e.response.status_code if e.response is not None else 502
+    except httpx.HTTPStatusError as e:
+        status_code = e.response.status_code
         detail = "Control plane request failed"
         try:
-            error_data = e.response.json() if e.response is not None else {}
+            error_data = e.response.json()
             detail = error_data.get("detail", detail)
         except Exception:
             pass
         logger.error(f"Control plane returned {status_code}: {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
-    except requests.RequestException:
+    except httpx.RequestError:
         logger.exception("Failed to connect to control plane")
         raise HTTPException(
             status_code=502, detail="Failed to connect to control plane"
@@ -246,7 +247,9 @@ async def proxy_create_checkout_session(
     if request_body.cancel_url:
         body["cancel_url"] = request_body.cancel_url
 
-    result = forward_to_control_plane("POST", "/create-checkout-session", body=body)
+    result = await forward_to_control_plane(
+        "POST", "/create-checkout-session", body=body
+    )
     return CreateCheckoutSessionResponse(url=result["url"])
 
 
@@ -274,7 +277,7 @@ async def proxy_claim_license(
     """
     _check_license_enforcement_enabled()
 
-    result = forward_to_control_plane(
+    result = await forward_to_control_plane(
         "POST",
         "/claim-license",
         body={"session_id": request_body.session_id},
@@ -313,7 +316,7 @@ async def proxy_create_customer_portal_session(
     if request_body and request_body.return_url:
         body["return_url"] = request_body.return_url
 
-    result = forward_to_control_plane(
+    result = await forward_to_control_plane(
         "POST", "/create-customer-portal-session", body=body
     )
     return CreateCustomerPortalSessionResponse(url=result["url"])
@@ -345,7 +348,7 @@ async def proxy_billing_information(
     """
     tenant_id = license_payload.tenant_id
 
-    result = forward_to_control_plane(
+    result = await forward_to_control_plane(
         "GET", "/billing-information", params={"tenant_id": tenant_id}
     )
     # Add tenant_id from license if not in response (control plane may not include it)
@@ -375,7 +378,7 @@ async def proxy_license_fetch(
             detail="Cannot fetch license for a different tenant",
         )
 
-    result = forward_to_control_plane("GET", f"/license/{tenant_id}")
+    result = await forward_to_control_plane("GET", f"/license/{tenant_id}")
 
     # Auto-store the refreshed license
     license_data = result["license"]

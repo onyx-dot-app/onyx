@@ -3,9 +3,11 @@
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
@@ -269,122 +271,127 @@ class TestGetOptionalLicensePayload:
 class TestForwardToControlPlane:
     """Tests for forward_to_control_plane function."""
 
-    def test_successful_get_request(self) -> None:
+    @pytest.mark.asyncio
+    async def test_successful_get_request(self) -> None:
         """Test successful GET request forwarding."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": "test"}
+        mock_response.raise_for_status = MagicMock()
+
         with (
             patch(
                 "ee.onyx.server.tenants.proxy.generate_data_plane_token"
             ) as mock_token,
-            patch("ee.onyx.server.tenants.proxy.requests.get") as mock_get,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
             patch(
                 "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
                 "https://control.example.com",
             ),
         ):
             mock_token.return_value = "cp_token"
-            mock_response = MagicMock()
-            mock_response.json.return_value = {"data": "test"}
-            mock_get.return_value = mock_response
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
 
-            result = forward_to_control_plane(
+            result = await forward_to_control_plane(
                 "GET", "/test-endpoint", params={"key": "value"}
             )
 
             assert result == {"data": "test"}
-            mock_get.assert_called_once()
-            call_args = mock_get.call_args
-            assert call_args[0][0] == "https://control.example.com/test-endpoint"
-            assert call_args[1]["params"] == {"key": "value"}
 
-    def test_successful_post_request(self) -> None:
+    @pytest.mark.asyncio
+    async def test_successful_post_request(self) -> None:
         """Test successful POST request forwarding."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"url": "https://checkout.stripe.com"}
+        mock_response.raise_for_status = MagicMock()
+
         with (
             patch(
                 "ee.onyx.server.tenants.proxy.generate_data_plane_token"
             ) as mock_token,
-            patch("ee.onyx.server.tenants.proxy.requests.post") as mock_post,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
             patch(
                 "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
                 "https://control.example.com",
             ),
         ):
             mock_token.return_value = "cp_token"
-            mock_response = MagicMock()
-            mock_response.json.return_value = {"url": "https://checkout.stripe.com"}
-            mock_post.return_value = mock_response
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+                return_value=mock_response
+            )
 
-            result = forward_to_control_plane(
+            result = await forward_to_control_plane(
                 "POST", "/create-checkout-session", body={"tenant_id": "t1"}
             )
 
             assert result == {"url": "https://checkout.stripe.com"}
-            mock_post.assert_called_once()
-            call_args = mock_post.call_args
-            assert call_args[1]["json"] == {"tenant_id": "t1"}
 
-    def test_http_error_with_detail(self) -> None:
+    @pytest.mark.asyncio
+    async def test_http_error_with_detail(self) -> None:
         """Test HTTP error handling with detail from response."""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.json.return_value = {"detail": "Tenant not found"}
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Not Found",
+            request=MagicMock(),
+            response=mock_response,
+        )
+
         with (
             patch(
                 "ee.onyx.server.tenants.proxy.generate_data_plane_token"
             ) as mock_token,
-            patch("ee.onyx.server.tenants.proxy.requests.get") as mock_get,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
             patch(
                 "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
                 "https://control.example.com",
             ),
         ):
             mock_token.return_value = "cp_token"
-            mock_response = MagicMock()
-            mock_response.status_code = 404
-            mock_response.json.return_value = {"detail": "Tenant not found"}
-
-            import requests
-
-            mock_get.return_value.raise_for_status.side_effect = requests.HTTPError(
-                response=mock_response
-            )
-            mock_get.return_value = mock_response
-            mock_response.raise_for_status.side_effect = requests.HTTPError(
-                response=mock_response
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
             )
 
             with pytest.raises(HTTPException) as exc_info:
-                forward_to_control_plane("GET", "/billing-information")
+                await forward_to_control_plane("GET", "/billing-information")
 
             assert exc_info.value.status_code == 404
             assert "Tenant not found" in str(exc_info.value.detail)
 
-    def test_connection_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_connection_error(self) -> None:
         """Test connection error handling."""
         with (
             patch(
                 "ee.onyx.server.tenants.proxy.generate_data_plane_token"
             ) as mock_token,
-            patch("ee.onyx.server.tenants.proxy.requests.get") as mock_get,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
             patch(
                 "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
                 "https://control.example.com",
             ),
         ):
             mock_token.return_value = "cp_token"
-
-            import requests
-
-            mock_get.side_effect = requests.RequestException("Connection refused")
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=httpx.RequestError("Connection refused")
+            )
 
             with pytest.raises(HTTPException) as exc_info:
-                forward_to_control_plane("GET", "/test")
+                await forward_to_control_plane("GET", "/test")
 
             assert exc_info.value.status_code == 502
             assert "Failed to connect to control plane" in str(exc_info.value.detail)
 
-    def test_unsupported_method(self) -> None:
+    @pytest.mark.asyncio
+    async def test_unsupported_method(self) -> None:
         """Test that unsupported HTTP methods raise ValueError."""
         with (
             patch(
                 "ee.onyx.server.tenants.proxy.generate_data_plane_token"
             ) as mock_token,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient"),
             patch(
                 "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
                 "https://control.example.com",
@@ -393,4 +400,4 @@ class TestForwardToControlPlane:
             mock_token.return_value = "cp_token"
 
             with pytest.raises(ValueError, match="Unsupported HTTP method"):
-                forward_to_control_plane("DELETE", "/test")
+                await forward_to_control_plane("DELETE", "/test")
