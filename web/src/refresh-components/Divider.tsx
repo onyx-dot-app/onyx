@@ -56,10 +56,10 @@ export interface DividerProps
  * <Divider showTitle text="Settings" icon={SvgSettings} />
  *
  * // Foldable divider (collapsed)
- * <Divider showTitle text="Details" foldable expanded={false} onExpandedChange={setExpanded} />
+ * <Divider showTitle text="Details" foldable expanded={false} onClick={setExpanded} />
  *
  * // Foldable divider (expanded)
- * <Divider showTitle text="Details" foldable expanded onExpandedChange={setExpanded} />
+ * <Divider showTitle text="Details" foldable expanded onClick={setExpanded} />
  *
  * // With info icon and text
  * <Divider showTitle text="Section" showInfo infoText="3 items" />
@@ -110,6 +110,7 @@ export default function Divider({
     <div
       ref={ref}
       role={foldable ? "button" : "separator"}
+      aria-expanded={foldable ? expanded : undefined}
       tabIndex={foldable ? 0 : undefined}
       data-selected={isHighlighted ? "true" : undefined}
       onClick={foldable ? handleClick : undefined}
