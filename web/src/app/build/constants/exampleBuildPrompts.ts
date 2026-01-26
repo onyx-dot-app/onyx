@@ -56,6 +56,7 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
         "Compare and contrast which messaging resonates the most with our prospects",
       fullText:
         "If you look at the customer calls over the last 30 days, which part of our messaging seems to resonate the best, and appears to drive the most customer value? Generate a slide that effectively tells the story.",
+      image: "/craft_demo_image_1.png",
     },
   ],
   engineering: [
@@ -64,18 +65,21 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
       summary: "Enrich my open PRs with customer insights and feedback",
       fullText:
         "Look at my open PRs and find information from customer discussions regarding these PRs that could help to implement better. Also find for each PR the design doc I wrote and create a new one that is appropriately updated.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "eng-2",
       summary: "Track engineering velocity from ticket to merged PR",
       fullText:
         "What is the average time it takes the engineers to merge PRs after my team created a Linear ticket? Create a dashboard that shows the average time by engineering team.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "eng-3",
       summary: "Build a visual roadmap story from my quarterly contributions",
       fullText:
         "Create an image (slide) that groups my PRs by quarter, finds the common thread, and presents a coherent story. This will later go into a historical roadmap.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "eng-4",
@@ -83,11 +87,13 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
         "Find churned customers who would have benefited from our releases",
       fullText:
         "Look at the PRs that my team merged this month. Then look at the customers we lost over the last 2 months and tell me which of the customers would have likely benefitted from the merged PRs. Rank the customers by importance. Present in a dashboard.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "eng-5",
       summary: "Build a Linear dashboard to track my team's progress",
       fullText: "Create a Linear dashboard for my team.",
+      image: "/craft_demo_image_1.png",
     },
   ],
   sales: [
@@ -96,30 +102,35 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
       summary: "Identify sales blockers and quantify their revenue impact",
       fullText:
         "Look at the customer calls that my team had last month and identify the 3 most important sales blockers. Those could be product-related, messaging-related, or persona-chemistry. Create a dashboard showing how much revenue seems to be associated with each blocker.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "sales-2",
       summary: "Prepare winning talking points for my upcoming meeting",
       fullText:
         "I have a meeting with a prospect next week. Please go through the objections they raised and suggest good talking points based on other customer situations, upcoming product changes, etc.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "sales-3",
       summary: "Learn how my teammates overcame similar deal objections",
       fullText:
         "I don't want to give up on this opportunity. Find customer discussions from other members of my team where similar issues came up and were overcome. Provide some recommendations.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "sales-4",
       summary: "Discover which pitch messaging resonates most with customers",
       fullText:
         "If you look at the customer calls over the last 30 days, which part of our messaging seems to resonate the best, and appears to drive the most customer value? Generate a slide that effectively tells the story.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "sales-5",
       summary: "Surface the top product challenges from customer calls",
       fullText:
         "Based on the customer calls this week, what are the 5 most important challenges with the product? Create a table in a dashboard that shows the challenge and the customers that complained about it.",
+      image: "/craft_demo_image_1.png",
     },
   ],
   product: [
@@ -128,18 +139,21 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
       summary: "Summarize my monthly impact for my manager",
       fullText:
         "I need to explain to my manager what I did last month, and how it matters for customer impact.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "product-2",
       summary: "Connect my backlog to real customer conversations",
       fullText:
         "For each of my open Linear tickets, find at least 2 customers that have discussed related issues. Present the results in a dashboard table.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "product-3",
       summary: "Visualize my team's work with interactive drill-downs",
       fullText:
         "What did my team work on this month? Create a dashboard that 1) shows the number of actions per activity, 2) shows the individual work items when I select something in the dashboard.",
+      image: "/craft_demo_image_1.png",
     },
     {
       id: "product-4",
@@ -147,12 +161,14 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
         "Find churned customers who would have benefited from our releases",
       fullText:
         "Look at the PRs that my team merged this month. Then look at the customers we lost over the last 2 months and tell me which of the customers would have likely benefitted from the merged PRs. Rank the customers by importance. Present in a dashboard.",
+      image: "/craft_demo_image_2.png",
     },
     {
       id: "product-5",
       summary: "Analyze team productivity by month across my organization",
       fullText:
         "Create a dashboard with the number of closed tickets per month. Split by priority and compare teams.",
+      image: "/craft_demo_image_1.png",
     },
   ],
 };
@@ -163,4 +179,21 @@ export const exampleBuildPrompts: Record<UserPersona, BuildPrompt[]> = {
  */
 export function getPromptsForPersona(persona: UserPersona): BuildPrompt[] {
   return exampleBuildPrompts[persona] ?? exampleBuildPrompts.default;
+}
+
+/**
+ * Maps a workArea value from the build_user_persona cookie to a UserPersona.
+ * Work areas that don't have dedicated prompts (executive, marketing, other) fall back to default.
+ */
+export function workAreaToPersona(workArea: string | undefined): UserPersona {
+  switch (workArea) {
+    case "engineering":
+      return "engineering";
+    case "sales":
+      return "sales";
+    case "product":
+      return "product";
+    default:
+      return "default";
+  }
 }

@@ -7,6 +7,8 @@ import Logo from "@/refresh-components/Logo";
 import InputBar, { InputBarHandle } from "@/app/build/components/InputBar";
 import SuggestedPrompts from "@/app/build/components/SuggestedPrompts";
 import ConnectDataBanner from "@/app/build/components/ConnectDataBanner";
+import { getBuildUserPersona } from "@/app/build/onboarding/constants";
+import { workAreaToPersona } from "@/app/build/constants/exampleBuildPrompts";
 
 interface BuildWelcomeProps {
   onSubmit: (
@@ -33,6 +35,8 @@ export default function BuildWelcome({
   preProvisionedSessionId,
 }: BuildWelcomeProps) {
   const inputBarRef = useRef<InputBarHandle>(null);
+  const userPersona = getBuildUserPersona();
+  const persona = workAreaToPersona(userPersona?.workArea);
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -56,7 +60,7 @@ export default function BuildWelcome({
           preProvisionedSessionId={preProvisionedSessionId}
         />
         <ConnectDataBanner />
-        <SuggestedPrompts onPromptClick={handlePromptClick} />
+        <SuggestedPrompts persona={persona} onPromptClick={handlePromptClick} />
       </div>
     </div>
   );
