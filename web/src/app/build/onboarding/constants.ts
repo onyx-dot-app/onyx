@@ -15,7 +15,12 @@ export const RECOMMENDED_BUILD_MODELS = {
     modelName: "claude-opus-4-5",
     displayName: "Claude Opus 4.5",
   },
-  alternatives: [{ provider: "anthropic", modelName: "claude-sonnet-4-5" }],
+  alternatives: [
+    { provider: "anthropic", modelName: "claude-sonnet-4-5" },
+    { provider: "openai", modelName: "gpt-5.2" },
+    { provider: "openai", modelName: "gpt-5.1-codex" },
+    { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
+  ],
 } as const;
 
 // Cookie utilities
@@ -79,6 +84,10 @@ export interface BuildModeProvider {
   providerName: string;
   recommended?: boolean;
   models: BuildModeModel[];
+  // API-related fields (optional, only needed for onboarding modal)
+  apiKeyPlaceholder?: string;
+  apiKeyUrl?: string;
+  apiKeyLabel?: string;
 }
 
 export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
@@ -91,6 +100,9 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
       { name: "claude-opus-4-5", label: "Claude Opus 4.5", recommended: true },
       { name: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
     ],
+    apiKeyPlaceholder: "sk-ant-...",
+    apiKeyUrl: "https://console.anthropic.com/dashboard",
+    apiKeyLabel: "Anthropic Console",
   },
   {
     key: "openai",
@@ -98,8 +110,11 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "openai",
     models: [
       { name: "gpt-5.2", label: "GPT-5.2", recommended: true },
-      { name: "gpt-5.1", label: "GPT-5.1" },
+      { name: "gpt-5.1-codex", label: "GPT-5.1 Codex" },
     ],
+    apiKeyPlaceholder: "sk-...",
+    apiKeyUrl: "https://platform.openai.com/api-keys",
+    apiKeyLabel: "OpenAI Dashboard",
   },
   {
     key: "openrouter",
@@ -107,13 +122,14 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "openrouter",
     models: [
       {
-        name: "moonshotai/kimi-k2-thinking",
-        label: "Kimi K2 Thinking",
+        name: "minimax/minimax-m2.1",
+        label: "MiniMax M2.1",
         recommended: true,
       },
-      { name: "google/gemini-3-pro-preview", label: "Gemini 3 Pro" },
-      { name: "qwen/qwen3-235b-a22b-thinking-2507", label: "Qwen3 235B" },
     ],
+    apiKeyPlaceholder: "sk-or-...",
+    apiKeyUrl: "https://openrouter.ai/keys",
+    apiKeyLabel: "OpenRouter Dashboard",
   },
 ];
 

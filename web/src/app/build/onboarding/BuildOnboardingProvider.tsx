@@ -1,8 +1,23 @@
 "use client";
 
-import { useBuildOnboarding } from "@/app/build/onboarding/hooks/useBuildOnboarding";
-import NotAllowedModal from "@/app/build/onboarding/components/NotAllowedModal";
+import { createContext, useContext } from "react";
+import { useOnboardingModal } from "@/app/build/onboarding/hooks/useOnboardingModal";
 import BuildOnboardingModal from "@/app/build/onboarding/components/BuildOnboardingModal";
+import { OnboardingModalController } from "@/app/build/onboarding/types";
+import { useUser } from "@/components/user/UserProvider";
+
+// Context for accessing onboarding modal controls
+const OnboardingContext = createContext<OnboardingModalController | null>(null);
+
+export function useOnboarding(): OnboardingModalController {
+  const ctx = useContext(OnboardingContext);
+  if (!ctx) {
+    throw new Error(
+      "useOnboarding must be used within BuildOnboardingProvider"
+    );
+  }
+  return ctx;
+}
 
 interface BuildOnboardingProviderProps {
   children: React.ReactNode;
@@ -11,10 +26,11 @@ interface BuildOnboardingProviderProps {
 export function BuildOnboardingProvider({
   children,
 }: BuildOnboardingProviderProps) {
-  const { flow, actions, isLoading, llmProviders, initialValues } =
-    useBuildOnboarding();
+  const { user } = useUser();
+  const controller = useOnboardingModal();
 
-  if (isLoading) {
+  // Show loading state while user data is loading
+  if (!user) {
     return (
       <div className="flex items-center justify-center w-full h-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text-01" />
@@ -22,29 +38,24 @@ export function BuildOnboardingProvider({
     );
   }
 
-  // Show combined onboarding modal if user info or LLM setup is needed
-  const showOnboardingModal = flow.showUserInfoModal || flow.showLlmModal;
-
   return (
-    <>
-      {/* Blocking modal - takes precedence */}
-      <NotAllowedModal
-        open={flow.showNotAllowedModal}
-        onClose={actions.closeNotAllowedModal}
-      />
-
-      {/* Combined onboarding modal */}
+    <OnboardingContext.Provider value={controller}>
+      {/* Unified onboarding modal */}
       <BuildOnboardingModal
-        open={showOnboardingModal && !flow.showNotAllowedModal}
-        showLlmSetup={flow.showLlmModal}
-        llmProviders={llmProviders}
-        onComplete={actions.completeUserInfo}
-        onLlmComplete={actions.completeLlmSetup}
-        initialValues={initialValues}
+        mode={controller.mode}
+        llmProviders={controller.llmProviders}
+        initialValues={controller.initialValues}
+        isAdmin={controller.isAdmin}
+        hasUserInfo={controller.hasUserInfo}
+        allProvidersConfigured={controller.allProvidersConfigured}
+        hasAnyProvider={controller.hasAnyProvider}
+        onComplete={controller.completeUserInfo}
+        onLlmComplete={controller.completeLlmSetup}
+        onClose={controller.close}
       />
 
       {/* Build content - always rendered, modals overlay it */}
       {children}
-    </>
+    </OnboardingContext.Provider>
   );
 }

@@ -1,17 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { SvgArrowRight, SvgArrowLeft, SvgCheckCircle } from "@opal/icons";
 import { FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import { BuildUserInfo } from "@/app/build/onboarding/types";
+import {
+  BuildUserInfo,
+  OnboardingModalMode,
+  OnboardingStep,
+} from "@/app/build/onboarding/types";
 import {
   WORK_AREA_OPTIONS,
   LEVEL_OPTIONS,
   WORK_AREAS_WITH_LEVEL,
   setBuildLlmSelection,
+  BUILD_MODE_PROVIDERS,
 } from "@/app/build/onboarding/constants";
 import {
   LLMProviderDescriptor,
@@ -95,14 +100,13 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
-type Step = "user-info" | "page1" | "page2" | "llm-setup";
-
 interface SelectableButtonProps {
   selected: boolean;
   onClick: () => void;
   children: React.ReactNode;
   subtext?: string;
   disabled?: boolean;
+  tooltip?: string;
 }
 
 function SelectableButton({
@@ -111,8 +115,9 @@ function SelectableButton({
   children,
   subtext,
   disabled,
+  tooltip,
 }: SelectableButtonProps) {
-  return (
+  const button = (
     <div className="flex flex-col items-center gap-1">
       <button
         type="button"
@@ -135,6 +140,12 @@ function SelectableButton({
       )}
     </div>
   );
+
+  if (tooltip) {
+    return <SimpleTooltip tooltip={tooltip}>{button}</SimpleTooltip>;
+  }
+
+  return button;
 }
 
 interface ModelSelectButtonProps {
@@ -185,80 +196,127 @@ interface InitialValues {
 }
 
 interface BuildOnboardingModalProps {
-  open: boolean;
-  showLlmSetup: boolean;
+  mode: OnboardingModalMode;
   llmProviders?: LLMProviderDescriptor[];
+  initialValues: InitialValues;
+  isAdmin: boolean;
+  hasUserInfo: boolean;
+  allProvidersConfigured: boolean;
+  hasAnyProvider: boolean;
   onComplete: (info: BuildUserInfo) => Promise<void>;
-  onLlmComplete?: () => Promise<void>;
-  initialValues?: InitialValues;
-  skipInfoSlides?: boolean;
-  /** Provider to pre-select when opening directly to LLM setup (e.g., "anthropic", "openai") */
-  initialProvider?: string;
+  onLlmComplete: () => Promise<void>;
+  onClose: () => void;
+}
+
+// Helper to compute steps for mode
+function getStepsForMode(
+  mode: OnboardingModalMode,
+  isAdmin: boolean,
+  allProvidersConfigured: boolean,
+  hasUserInfo: boolean
+): OnboardingStep[] {
+  switch (mode.type) {
+    case "initial-onboarding":
+      // Full flow: user-info (if needed) → llm-setup (if admin + not all configured) → page1 → page2
+      const steps: OnboardingStep[] = [];
+      if (!hasUserInfo) {
+        steps.push("user-info");
+      }
+      if (isAdmin && !allProvidersConfigured) {
+        steps.push("llm-setup");
+      }
+      steps.push("page1", "page2");
+      return steps;
+
+    case "edit-persona":
+      return ["user-info"];
+
+    case "add-llm":
+      return ["llm-setup"];
+
+    case "closed":
+      return [];
+  }
 }
 
 export default function BuildOnboardingModal({
-  open,
-  showLlmSetup,
+  mode,
   llmProviders,
+  initialValues,
+  isAdmin,
+  hasUserInfo,
+  allProvidersConfigured,
+  hasAnyProvider,
   onComplete,
   onLlmComplete,
-  initialValues,
-  skipInfoSlides = false,
-  initialProvider,
+  onClose,
 }: BuildOnboardingModalProps) {
-  // Navigation - start at llm-setup if skipping info slides and showing LLM setup
-  const [currentStep, setCurrentStep] = useState<Step>(
-    skipInfoSlides && showLlmSetup ? "llm-setup" : "user-info"
+  // Compute steps based on mode
+  const steps = useMemo(
+    () => getStepsForMode(mode, isAdmin, allProvidersConfigured, hasUserInfo),
+    [mode, isAdmin, allProvidersConfigured, hasUserInfo]
   );
 
-  // User info state - pre-fill from initialValues if available
-  const [firstName, setFirstName] = useState(initialValues?.firstName || "");
-  const [lastName, setLastName] = useState(initialValues?.lastName || "");
-  const [workArea, setWorkArea] = useState(initialValues?.workArea || "");
-  const [level, setLevel] = useState(initialValues?.level || "");
+  // Determine initial step based on mode
+  const initialStep = useMemo((): OnboardingStep => {
+    if (mode.type === "add-llm") return "llm-setup";
+    return steps[0] || "user-info";
+  }, [mode.type, steps]);
 
-  // Update form values if initialValues changes (e.g., after user data loads)
+  // Navigation state
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(initialStep);
+
+  // Reset step when mode changes
   useEffect(() => {
-    if (initialValues) {
-      if (initialValues.firstName && !firstName)
-        setFirstName(initialValues.firstName);
-      if (initialValues.lastName && !lastName)
-        setLastName(initialValues.lastName);
-      if (initialValues.workArea && !workArea)
-        setWorkArea(initialValues.workArea);
-      if (initialValues.level && !level) setLevel(initialValues.level);
+    if (mode.type !== "closed") {
+      setCurrentStep(initialStep);
     }
+  }, [mode.type, initialStep]);
+
+  // User info state - pre-fill from initialValues
+  const [firstName, setFirstName] = useState(initialValues.firstName);
+  const [lastName, setLastName] = useState(initialValues.lastName);
+  const [workArea, setWorkArea] = useState(initialValues.workArea);
+  const [level, setLevel] = useState(initialValues.level);
+
+  // Update form values when initialValues changes
+  useEffect(() => {
+    setFirstName(initialValues.firstName);
+    setLastName(initialValues.lastName);
+    setWorkArea(initialValues.workArea);
+    setLevel(initialValues.level);
   }, [initialValues]);
 
-  // Set initial provider and step when modal opens with initialProvider
-  useEffect(() => {
-    if (open && initialProvider) {
-      const providerConfig = PROVIDERS.find((p) => p.key === initialProvider);
-      if (providerConfig) {
-        setSelectedProvider(providerConfig.key);
-        // Set the first model as default
-        if (providerConfig.models[0]) {
-          setSelectedModel(providerConfig.models[0].name);
-        }
-      }
-      // Navigate to LLM setup step
-      if (skipInfoSlides && showLlmSetup) {
-        setCurrentStep("llm-setup");
-      }
-    }
-  }, [open, initialProvider, skipInfoSlides, showLlmSetup]);
+  // Determine initial provider for add-llm mode
+  const initialProvider = mode.type === "add-llm" ? mode.provider : undefined;
 
   // LLM setup state
-  const [selectedProvider, setSelectedProvider] =
-    useState<ProviderKey>("anthropic");
+  const [selectedProvider, setSelectedProvider] = useState<ProviderKey>(
+    (initialProvider as ProviderKey) || "anthropic"
+  );
   const [selectedModel, setSelectedModel] = useState<string>(
-    PROVIDERS[0]?.models[0]?.name || ""
+    PROVIDERS.find((p) => p.key === (initialProvider || "anthropic"))?.models[0]
+      ?.name || ""
   );
   const [apiKey, setApiKey] = useState("");
   const [connectionStatus, setConnectionStatus] = useState<
     "idle" | "testing" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Reset LLM state when mode changes to add-llm with a specific provider
+  useEffect(() => {
+    if (mode.type === "add-llm" && mode.provider) {
+      const providerConfig = PROVIDERS.find((p) => p.key === mode.provider);
+      if (providerConfig) {
+        setSelectedProvider(providerConfig.key);
+        setSelectedModel(providerConfig.models[0]?.name || "");
+        setApiKey("");
+        setConnectionStatus("idle");
+        setErrorMessage("");
+      }
+    }
+  }, [mode]);
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -271,72 +329,39 @@ export default function BuildOnboardingModal({
   )!;
   const isLlmValid = apiKey.trim() && selectedModel;
 
-  // Calculate total steps - if skipping info slides, only count user-info and optionally llm-setup
-  const totalSteps = skipInfoSlides
-    ? showLlmSetup
-      ? 2
-      : 1
-    : showLlmSetup
-      ? 4
-      : 3; // user-info, (optional: llm-setup), page1, page2
-  const currentStepIndex =
-    currentStep === "user-info"
-      ? 0
-      : currentStep === "llm-setup"
-        ? 1
-        : currentStep === "page1"
-          ? showLlmSetup
-            ? 2
-            : 1
-          : showLlmSetup
-            ? 3
-            : 2;
+  // Check if a provider is already configured
+  const isProviderConfigured = (providerName: string) => {
+    return llmProviders?.some((p) => p.provider === providerName) ?? false;
+  };
+
+  // Calculate step navigation
+  const currentStepIndex = steps.indexOf(currentStep);
+  const totalSteps = steps.length;
 
   const handleProviderChange = (provider: ProviderKey) => {
-    setSelectedProvider(provider);
     const providerConfig = PROVIDERS.find((p) => p.key === provider)!;
-    // Auto-select the first (recommended) model for this provider
+    // Don't allow selecting already-configured providers
+    if (isProviderConfigured(providerConfig.providerName)) return;
+
+    setSelectedProvider(provider);
     setSelectedModel(providerConfig.models[0]?.name || "");
-    // Reset connection state
     setConnectionStatus("idle");
     setErrorMessage("");
   };
 
   const handleNext = () => {
-    setErrorMessage(""); // Clear any errors when navigating
-    if (currentStep === "user-info" && showLlmSetup) {
-      setCurrentStep("llm-setup");
-    } else if (currentStep === "user-info" && !showLlmSetup) {
-      // Skip info slides if skipInfoSlides is true
-      if (skipInfoSlides) {
-        // Directly submit instead of going to page1
-        handleSubmit();
-        return;
-      }
-      setCurrentStep("page1");
-    } else if (currentStep === "llm-setup") {
-      // Skip info slides if skipInfoSlides is true
-      if (skipInfoSlides) {
-        // Directly submit instead of going to page1
-        handleSubmit();
-        return;
-      }
-      setCurrentStep("page1");
-    } else if (currentStep === "page1") {
-      setCurrentStep("page2");
+    setErrorMessage("");
+    const nextIndex = currentStepIndex + 1;
+    if (nextIndex < steps.length) {
+      setCurrentStep(steps[nextIndex]!);
     }
   };
 
   const handleBack = () => {
-    setErrorMessage(""); // Clear any errors when navigating
-    if (currentStep === "page2") {
-      setCurrentStep("page1");
-    } else if (currentStep === "page1" && showLlmSetup) {
-      setCurrentStep("llm-setup");
-    } else if (currentStep === "page1" && !showLlmSetup) {
-      setCurrentStep("user-info");
-    } else if (currentStep === "llm-setup") {
-      setCurrentStep("user-info");
+    setErrorMessage("");
+    const prevIndex = currentStepIndex - 1;
+    if (prevIndex >= 0) {
+      setCurrentStep(steps[prevIndex]!);
     }
   };
 
@@ -362,7 +387,6 @@ export default function BuildOnboardingModal({
       })),
     };
 
-    // Test the connection first
     const testResult = await testApiKeyHelper(
       currentProviderConfig.providerName,
       payload
@@ -376,7 +400,6 @@ export default function BuildOnboardingModal({
       return;
     }
 
-    // If test succeeds, create the provider
     try {
       const response = await fetch(
         `${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`,
@@ -395,7 +418,6 @@ export default function BuildOnboardingModal({
         return;
       }
 
-      // Set as default provider if it's the first one
       if (!llmProviders || llmProviders.length === 0) {
         const newProvider = await response.json();
         if (newProvider?.id) {
@@ -405,16 +427,12 @@ export default function BuildOnboardingModal({
         }
       }
 
-      // Set the LLM selection cookie with user's choice
-      // The provider name format is "build-mode-{provider}" (e.g., "build-mode-anthropic")
       setBuildLlmSelection({
         providerName: providerName,
         provider: currentProviderConfig.providerName,
         modelName: selectedModel,
       });
 
-      // Don't call onLlmComplete here - it will update the flow state and close the modal
-      // We'll call it when the user completes onboarding in handleSubmit
       setConnectionStatus("success");
     } catch (error) {
       console.error("Error connecting LLM provider:", error);
@@ -426,25 +444,40 @@ export default function BuildOnboardingModal({
   };
 
   const handleSubmit = async () => {
+    // For add-llm mode, just close after successful connection
+    if (mode.type === "add-llm") {
+      if (connectionStatus === "success") {
+        await onLlmComplete();
+        onClose();
+      }
+      return;
+    }
+
     if (!isUserInfoValid) return;
-    // If LLM setup was required, ensure it was completed
-    if (showLlmSetup && connectionStatus !== "success") return;
+    // If LLM setup was part of the flow and user has no providers (can't skip), require completion
+    if (
+      steps.includes("llm-setup") &&
+      !hasAnyProvider &&
+      connectionStatus !== "success"
+    )
+      return;
 
     setIsSubmitting(true);
 
     try {
-      // Refresh LLM providers list if LLM was set up (this will update flow state)
-      if (showLlmSetup && onLlmComplete) {
+      // Refresh LLM providers if LLM was set up
+      if (steps.includes("llm-setup") && connectionStatus === "success") {
         await onLlmComplete();
       }
 
-      // Complete with user info (LLM provider was already created in handleConnect)
       await onComplete({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         workArea,
         level: useLevelForPrompt && level ? level : undefined,
       });
+
+      onClose();
     } catch (error) {
       console.error("Error completing onboarding:", error);
       setErrorMessage(
@@ -455,11 +488,22 @@ export default function BuildOnboardingModal({
     }
   };
 
-  if (!open) return null;
+  // Handle final step action based on mode
+  const handleFinalAction = () => {
+    if (currentStep === steps[steps.length - 1]) {
+      handleSubmit();
+    } else {
+      handleNext();
+    }
+  };
+
+  if (mode.type === "closed") return null;
 
   const canProceedUserInfo = isUserInfoValid;
   const isConnecting = connectionStatus === "testing";
   const canTestConnection = isLlmValid && !isConnecting;
+  const isLastStep = currentStepIndex === steps.length - 1;
+  const isFirstStep = currentStepIndex === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -584,20 +628,36 @@ export default function BuildOnboardingModal({
                   Provider
                 </Text>
                 <div className="flex justify-center gap-3 w-full max-w-md">
-                  {PROVIDERS.map((provider) => (
-                    <div key={provider.key} className="flex-1">
-                      <SelectableButton
-                        selected={selectedProvider === provider.key}
-                        onClick={() => handleProviderChange(provider.key)}
-                        subtext={
-                          provider.recommended ? "Recommended" : undefined
-                        }
-                        disabled={connectionStatus === "testing"}
-                      >
-                        {provider.label}
-                      </SelectableButton>
-                    </div>
-                  ))}
+                  {PROVIDERS.map((provider) => {
+                    const isConfigured = isProviderConfigured(
+                      provider.providerName
+                    );
+                    return (
+                      <div key={provider.key} className="flex-1">
+                        <SelectableButton
+                          selected={selectedProvider === provider.key}
+                          onClick={() => handleProviderChange(provider.key)}
+                          subtext={
+                            isConfigured
+                              ? "Already configured"
+                              : provider.recommended
+                                ? "Recommended"
+                                : undefined
+                          }
+                          disabled={
+                            connectionStatus === "testing" || isConfigured
+                          }
+                          tooltip={
+                            isConfigured
+                              ? "This provider is already configured"
+                              : undefined
+                          }
+                        >
+                          {provider.label}
+                        </SelectableButton>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -647,7 +707,7 @@ export default function BuildOnboardingModal({
                         "opacity-50 cursor-not-allowed"
                     )}
                   />
-                  {/* Message area - reserved space to prevent layout shift */}
+                  {/* Message area */}
                   <div className="min-h-[2rem] flex justify-center pt-4">
                     {connectionStatus === "error" && (
                       <Text secondaryBody className="text-red-500">
@@ -690,7 +750,7 @@ export default function BuildOnboardingModal({
             </div>
           )}
 
-          {/* Page 2 - Blank page with temporary text */}
+          {/* Page 2 - Let's get started */}
           {currentStep === "page2" && (
             <div className="flex-1 flex flex-col gap-6 items-center justify-center">
               <Text headingH2 text05>
@@ -704,7 +764,7 @@ export default function BuildOnboardingModal({
               <Text mainContentBody text04 className="text-center">
                 While we sync your data, try our demo dataset
                 <br />
-                of 1,000+ simulated documents across 5 connectable apps.
+                of 1,000+ simulated documents across 5 apps!
                 <br />
               </Text>
               <div className="flex items-center justify-center gap-4">
@@ -741,7 +801,7 @@ export default function BuildOnboardingModal({
           <div className="relative flex justify-between items-center pt-2">
             {/* Back button */}
             <div>
-              {currentStep !== "user-info" && (
+              {!isFirstStep && (
                 <button
                   type="button"
                   onClick={handleBack}
@@ -753,7 +813,7 @@ export default function BuildOnboardingModal({
               )}
             </div>
 
-            {/* Step indicator - absolutely centered */}
+            {/* Step indicator */}
             {totalSteps > 1 && (
               <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center gap-2">
                 {Array.from({ length: totalSteps }).map((_, i) => (
@@ -776,9 +836,7 @@ export default function BuildOnboardingModal({
             {currentStep === "user-info" && (
               <button
                 type="button"
-                onClick={
-                  skipInfoSlides && !showLlmSetup ? handleSubmit : handleNext
-                }
+                onClick={isLastStep ? handleSubmit : handleNext}
                 disabled={!canProceedUserInfo || isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
@@ -795,13 +853,13 @@ export default function BuildOnboardingModal({
                       : "text-text-02"
                   )}
                 >
-                  {skipInfoSlides && !showLlmSetup
+                  {isLastStep
                     ? isSubmitting
                       ? "Saving..."
                       : "Save"
                     : "Continue"}
                 </Text>
-                {(!skipInfoSlides || showLlmSetup) && (
+                {!isLastStep && (
                   <SvgArrowRight
                     className={cn(
                       "w-4 h-4",
@@ -853,40 +911,57 @@ export default function BuildOnboardingModal({
             )}
 
             {currentStep === "llm-setup" && connectionStatus !== "success" && (
-              <button
-                type="button"
-                onClick={handleConnect}
-                disabled={!canTestConnection || isConnecting}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                  canTestConnection && !isConnecting
-                    ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
-                    : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
+              <div className="flex items-center gap-2">
+                {/* Skip button - only shown if user has at least one provider */}
+                {hasAnyProvider && !isLastStep && (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={isConnecting}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
+                  >
+                    <Text mainUiAction>Skip</Text>
+                    <SvgArrowRight className="w-4 h-4" />
+                  </button>
                 )}
-              >
-                <Text
-                  mainUiAction
+                {/* Connect button */}
+                <button
+                  type="button"
+                  onClick={handleConnect}
+                  disabled={!canTestConnection || isConnecting}
                   className={cn(
+                    "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
                     canTestConnection && !isConnecting
-                      ? "text-white dark:text-black"
-                      : "text-text-02"
+                      ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
+                      : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
                   )}
                 >
-                  {isConnecting ? "Connecting..." : "Connect"}
-                </Text>
-              </button>
+                  <Text
+                    mainUiAction
+                    className={cn(
+                      canTestConnection && !isConnecting
+                        ? "text-white dark:text-black"
+                        : "text-text-02"
+                    )}
+                  >
+                    {isConnecting ? "Connecting..." : "Connect"}
+                  </Text>
+                </button>
+              </div>
             )}
 
             {currentStep === "llm-setup" && connectionStatus === "success" && (
               <button
                 type="button"
-                onClick={handleNext}
+                onClick={isLastStep ? handleSubmit : handleNext}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-12 bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-colors"
               >
                 <Text mainUiAction className="text-white dark:text-black">
-                  Continue
+                  {isLastStep ? "Done" : "Continue"}
                 </Text>
-                <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
+                {!isLastStep && (
+                  <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
+                )}
               </button>
             )}
           </div>
