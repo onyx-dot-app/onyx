@@ -61,6 +61,14 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
 ]
 
+# Endpoints hit before a tenant context exists (e.g., pre-login).
+# These must never require tenant/user context to respond.
+TENANTLESS_PUBLIC_ENDPOINT_SPECS = [
+    ("/health", {"GET"}),
+    ("/auth/type", {"GET"}),
+    ("/version", {"GET"}),
+]
+
 
 def is_route_in_spec_list(
     route: BaseRoute, public_endpoint_specs: list[tuple[str, set[str]]]

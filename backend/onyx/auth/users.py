@@ -198,7 +198,14 @@ def user_needs_to_be_verified() -> bool:
 
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
-    redis_client = get_redis_client(tenant_id=tenant_id)
+    try:
+        redis_client = get_redis_client(tenant_id=tenant_id)
+    except RuntimeError as exc:
+        if tenant_id is None and MULTI_TENANT and "Tenant ID is not set" in str(exc):
+            # Pre-login/public endpoints may be hit before a tenant context exists.
+            # Treat as disabled rather than erroring.
+            return False
+        raise
     value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
 
     if value is None:
