@@ -363,13 +363,24 @@ sleep infinity
         # Main sandbox container
         # Note: Container ports are informational only in K8s. Each session's Next.js
         # server binds to its allocated port from the SANDBOX_NEXTJS_PORT_START-END range.
+        # We declare all ports for documentation, tooling, and network policies.
+        container_ports = [
+            client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
+        ]
+        # Add ports for session Next.js servers (one port per potential session)
+        for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
+            container_ports.append(
+                client.V1ContainerPort(
+                    name=f"nextjs-{port}",
+                    container_port=port,
+                )
+            )
+
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
             image_pull_policy="IfNotPresent",
-            ports=[
-                client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
-            ],
+            ports=container_ports,
             volume_mounts=[
                 client.V1VolumeMount(
                     name="files", mount_path="/workspace/files", read_only=True
@@ -1462,6 +1473,8 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         clean_path = path.lstrip("/").replace("..", "")
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
 
+        logger.info(f"Listing directory {target_path} in pod {pod_name}")
+
         # Use exec to list directory
         exec_command = [
             "/bin/sh",
@@ -1496,7 +1509,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         entries = []
         lines = ls_output.strip().split("\n")
 
+        logger.debug(f"Parsing {len(lines)} lines of ls output for {base_path}")
+
         for line in lines:
+            logger.debug(f"Parsing line: {line}")
+
             # Skip header line and . / .. entries
             if line.startswith("total") or not line:
                 continue
