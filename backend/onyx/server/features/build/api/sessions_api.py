@@ -75,10 +75,14 @@ def create_session(
     session_manager = SessionManager(db_session)
 
     try:
+        # Only pass user_work_area and user_level if demo data is enabled
+        # This prevents org_info directory creation when demo data is disabled
         build_session = session_manager.get_or_create_empty_session(
             user.id,
-            user_work_area=request.user_work_area,
-            user_level=request.user_level,
+            user_work_area=(
+                request.user_work_area if request.demo_data_enabled else None
+            ),
+            user_level=request.user_level if request.demo_data_enabled else None,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
         )
