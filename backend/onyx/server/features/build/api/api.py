@@ -194,10 +194,18 @@ def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
     text = content.decode("utf-8")
     # Rewrite /_next/ paths to go through our proxy
     text = text.replace("/_next/", f"{webapp_base_path}/_next/")
-    # Rewrite root-level JSON data file fetch paths (e.g., /data.json, /pr_data.json)
-    # Only matches paths like "/filename.json" (no subdirectories)
-    text = re.sub(r'"(/[a-zA-Z0-9_-]+\.json)"', f'"{webapp_base_path}\\1"', text)
-    text = re.sub(r"'(/[a-zA-Z0-9_-]+\.json)'", f"'{webapp_base_path}\\1'", text)
+    # Rewrite JSON data file fetch paths (e.g., /data.json, /data/tickets.json)
+    # Matches paths like "/filename.json" or "/path/to/file.json"
+    text = re.sub(
+        r'"(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)"',
+        f'"{webapp_base_path}\\1"',
+        text,
+    )
+    text = re.sub(
+        r"'(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)'",
+        f"'{webapp_base_path}\\1'",
+        text,
+    )
     # Rewrite favicon
     text = text.replace('"/favicon.ico', f'"{webapp_base_path}/favicon.ico')
     return text.encode("utf-8")
@@ -235,6 +243,8 @@ def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
         raise HTTPException(status_code=404, detail="Session not found")
     if session.nextjs_port is None:
         raise HTTPException(status_code=503, detail="Session port not allocated")
+    if session.user_id is None:
+        raise HTTPException(status_code=404, detail="User not found")
 
     # Get the user's sandbox to get the sandbox_id
     sandbox = get_sandbox_by_user_id(db_session, session.user_id)

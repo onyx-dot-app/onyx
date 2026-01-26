@@ -1,6 +1,5 @@
 """Celery tasks for sandbox cleanup operations."""
 
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from celery import shared_task
@@ -16,11 +15,9 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
-
-if TYPE_CHECKING:
-    from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-        KubernetesSandboxManager,
-    )
+from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
+    KubernetesSandboxManager,
+)
 
 
 # Snapshot retention period in days
@@ -81,9 +78,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
             update_sandbox_status__no_commit,
         )
         from onyx.server.features.build.sandbox import get_sandbox_manager
-        from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-            KubernetesSandboxManager,
-        )
 
         sandbox_manager = get_sandbox_manager()
 
