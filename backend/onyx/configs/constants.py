@@ -241,6 +241,7 @@ class NotificationType(str, Enum):
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
+    FEATURE_ANNOUNCEMENT = "feature_announcement"
 
 
 class BlobType(str, Enum):
@@ -327,6 +328,7 @@ class FileOrigin(str, Enum):
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
+    SANDBOX_SNAPSHOT = "sandbox_snapshot"
     USER_FILE = "user_file"
 
 
@@ -344,6 +346,7 @@ class MilestoneRecordType(str, Enum):
     MULTIPLE_ASSISTANTS = "multiple_assistants"
     CREATED_ASSISTANT = "created_assistant"
     CREATED_ONYX_BOT = "created_onyx_bot"
+    REQUESTED_CONNECTOR = "requested_connector"
 
 
 class PostgresAdvisoryLocks(Enum):
@@ -382,6 +385,9 @@ class OnyxCeleryQueues:
 
     # KG processing queue
     KG_PROCESSING = "kg_processing"
+
+    # Sandbox processing queue
+    SANDBOX = "sandbox"
 
 
 class OnyxRedisLocks:
@@ -430,6 +436,10 @@ class OnyxRedisLocks:
 
     # Release notes
     RELEASE_NOTES_FETCH_LOCK = "da_lock:release_notes_fetch"
+
+    # Sandbox cleanup
+    CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
+    CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK = "da_lock:cleanup_old_snapshots_beat"
 
 
 class OnyxRedisSignals:
@@ -555,6 +565,13 @@ class OnyxCeleryTask:
     KG_CLUSTERING_ONLY = "kg_clustering_only"
     CHECK_KG_PROCESSING_CLUSTERING_ONLY = "check_kg_processing_clustering_only"
     KG_RESET_SOURCE_INDEX = "kg_reset_source_index"
+
+    # Sandbox cleanup
+    CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
+    CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
+
+    # Sandbox file sync
+    SANDBOX_FILE_SYNC = "sandbox_file_sync"
 
 
 # this needs to correspond to the matching entry in supervisord

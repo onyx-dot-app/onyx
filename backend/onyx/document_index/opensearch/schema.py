@@ -476,16 +476,22 @@ class DocumentSchema:
         }
 
     @staticmethod
-    def get_bulk_index_settings() -> dict[str, Any]:
+    def get_index_settings_for_aws_managed_opensearch() -> dict[str, Any]:
         """
-        Optimized settings for bulk indexing: disable refresh and replicas.
+        Settings for AWS-managed OpenSearch.
+
+        Our AWS-managed OpenSearch cluster has 3 data nodes in 3 availability
+        zones.
+          - We use 3 shards to distribute load across all data nodes.
+          - We use 2 replicas to ensure each shard has a copy in each
+            availability zone. This is a hard requirement from AWS. The number
+            of data copies, including the primary (not a replica) copy, must be
+            divisible by the number of AZs.
         """
         return {
             "index": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0,  # No replication during bulk load.
-                # Disables auto-refresh, improves performance in pure indexing (no searching) scenarios.
-                "refresh_interval": "-1",
+                "number_of_shards": 3,
+                "number_of_replicas": 2,
                 # Required for vector search.
                 "knn": True,
                 "knn.algo_param.ef_search": EF_SEARCH,

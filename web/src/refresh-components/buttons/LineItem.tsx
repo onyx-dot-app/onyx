@@ -21,18 +21,30 @@ const buttonClassNames = {
     normal: "line-item-button-danger",
     emphasized: "line-item-button-danger-emphasized",
   },
+  action: {
+    normal: "line-item-button-action",
+    emphasized: "line-item-button-action-emphasized",
+  },
+  muted: {
+    normal: "line-item-button-muted",
+    emphasized: "line-item-button-muted-emphasized",
+  },
 } as const;
 
 const textClassNames = {
   main: "line-item-text-main",
   strikethrough: "line-item-text-strikethrough",
   danger: "line-item-text-danger",
+  action: "line-item-text-action",
+  muted: "line-item-text-muted",
 } as const;
 
 const iconClassNames = {
   main: "line-item-icon-main",
   strikethrough: "line-item-icon-strikethrough",
   danger: "line-item-icon-danger",
+  action: "line-item-icon-action",
+  muted: "line-item-icon-muted",
 } as const;
 
 export interface LineItemProps
@@ -43,6 +55,8 @@ export interface LineItemProps
   // line-item variants
   strikethrough?: boolean;
   danger?: boolean;
+  action?: boolean;
+  muted?: boolean;
 
   // modifier (makes the background more pronounced when selected).
   emphasized?: boolean;
@@ -95,10 +109,15 @@ export interface LineItemProps
  * <LineItem icon={SvgArchive} strikethrough>
  *   Archived Feature
  * </LineItem>
+ *
+ * // Muted variant (less prominent items)
+ * <LineItem icon={SvgFolder} muted>
+ *   Secondary Item
+ * </LineItem>
  * ```
  *
  * @remarks
- * - Variants are mutually exclusive: only one of `strikethrough` or `danger` should be used
+ * - Variants are mutually exclusive: only one of `strikethrough`, `danger`, `action`, or `muted` should be used
  * - The `selected` prop modifies text/icon colors for `main` and `danger` variants
  * - The `emphasized` prop adds background colors when combined with `selected`
  * - The component automatically adds a `data-selected="true"` attribute for custom styling
@@ -107,6 +126,8 @@ export default function LineItem({
   selected,
   strikethrough,
   danger,
+  action,
+  muted,
   emphasized,
   icon: Icon,
   description,
@@ -116,8 +137,16 @@ export default function LineItem({
   ref,
   ...props
 }: LineItemProps) {
-  // Determine variant (mutually exclusive, with priority order)
-  const variant = strikethrough ? "strikethrough" : danger ? "danger" : "main";
+  // Determine variant (mutually exclusive, with priority order: strikethrough > danger > action > muted > main)
+  const variant = strikethrough
+    ? "strikethrough"
+    : danger
+      ? "danger"
+      : action
+        ? "action"
+        : muted
+          ? "muted"
+          : "main";
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 

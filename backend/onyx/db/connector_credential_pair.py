@@ -22,6 +22,7 @@ from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ProcessingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -116,7 +117,14 @@ def get_connector_credential_pairs_for_user(
     eager_load_user: bool = False,
     order_by_desc: bool = False,
     source: DocumentSource | None = None,
+    processing_mode: ProcessingMode | None = ProcessingMode.REGULAR,
 ) -> list[ConnectorCredentialPair]:
+    """Get connector credential pairs for a user.
+
+    Args:
+        processing_mode: Filter by processing mode. Defaults to REGULAR to hide
+            FILE_SYSTEM connectors from standard admin UI. Pass None to get all.
+    """
     if eager_load_user:
         assert (
             eager_load_credential
@@ -142,6 +150,9 @@ def get_connector_credential_pairs_for_user(
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
 
+    if processing_mode is not None:
+        stmt = stmt.where(ConnectorCredentialPair.processing_mode == processing_mode)
+
     if order_by_desc:
         stmt = stmt.order_by(desc(ConnectorCredentialPair.id))
 
@@ -160,6 +171,7 @@ def get_connector_credential_pairs_for_user_parallel(
     eager_load_user: bool = False,
     order_by_desc: bool = False,
     source: DocumentSource | None = None,
+    processing_mode: ProcessingMode | None = ProcessingMode.REGULAR,
 ) -> list[ConnectorCredentialPair]:
     with get_session_with_current_tenant() as db_session:
         return get_connector_credential_pairs_for_user(
@@ -172,6 +184,7 @@ def get_connector_credential_pairs_for_user_parallel(
             eager_load_user=eager_load_user,
             order_by_desc=order_by_desc,
             source=source,
+            processing_mode=processing_mode,
         )
 
 
@@ -501,6 +514,7 @@ def add_credential_to_connector(
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.SCHEDULED,
     last_successful_index_time: datetime | None = None,
     seeding_flow: bool = False,
+    processing_mode: ProcessingMode = ProcessingMode.REGULAR,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
 
@@ -566,6 +580,7 @@ def add_credential_to_connector(
         access_type=access_type,
         auto_sync_options=auto_sync_options,
         last_successful_index_time=last_successful_index_time,
+        processing_mode=processing_mode,
     )
     db_session.add(association)
     db_session.flush()  # make sure the association has an id

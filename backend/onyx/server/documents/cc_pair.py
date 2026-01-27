@@ -564,6 +564,7 @@ def associate_credential_to_connector(
             access_type=metadata.access_type,
             auto_sync_options=metadata.auto_sync_options,
             groups=metadata.groups,
+            processing_mode=metadata.processing_mode,
         )
 
         # trigger indexing immediately

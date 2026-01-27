@@ -738,7 +738,7 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
 
         # Fallback: try using litellm.supports_reasoning() for newer models
         try:
-            logger.debug("Falling back to `litellm.supports_reasoning`")
+            # logger.debug("Falling back to `litellm.supports_reasoning`")
             full_model_name = (
                 f"{model_provider}/{model_name}"
                 if model_provider not in model_name

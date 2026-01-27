@@ -8,7 +8,8 @@
  * - Padding: 1rem by default (configurable)
  * - Flex column layout with 1rem gap
  * - Rounded-16 corners
- * - Accepts all standard div HTML attributes except className (enforced by WithoutStyles)
+ * - Accepts optional className for custom styling
+ * - Accepts all standard div HTML attributes except style (enforced by WithoutStyles)
  *
  * Variants:
  * - `primary`: Solid background with border. The default, most prominent card style.
@@ -47,6 +48,7 @@
  */
 
 import { Section, SectionProps } from "@/layouts/general-layouts";
+import { cn } from "@/lib/utils";
 
 type CardVariant =
   // The main card variant.
@@ -63,6 +65,8 @@ export interface CardProps extends SectionProps {
   variant?: CardVariant;
   // Remove the border from the card. Can be combined with any variant.
   borderless?: boolean;
+  // Optional className to apply custom styles
+  className?: string;
 
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -71,13 +75,14 @@ export default function Card({
   variant = "primary",
   borderless = false,
   padding = 1,
+  className,
   ref,
   ...props
 }: CardProps) {
   return (
     <div
       ref={ref}
-      className="card"
+      className={cn("card", className)}
       data-variant={variant}
       data-borderless={borderless}
     >

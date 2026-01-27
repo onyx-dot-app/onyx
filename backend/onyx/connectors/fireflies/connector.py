@@ -89,6 +89,9 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
     meeting_date_unix = transcript["date"]
     meeting_date = datetime.fromtimestamp(meeting_date_unix / 1000, tz=timezone.utc)
 
+    # Build hierarchy based on meeting date (year-month)
+    year_month = meeting_date.strftime("%Y-%m")
+
     meeting_organizer_email = transcript["organizer_email"]
     organizer_email_user_info = [BasicExpertInfo(email=meeting_organizer_email)]
 
@@ -102,6 +105,14 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
         sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.FIREFLIES,
         semantic_identifier=meeting_title,
+        doc_metadata={
+            "hierarchy": {
+                "source_path": [year_month],
+                "year_month": year_month,
+                "meeting_title": meeting_title,
+                "organizer_email": meeting_organizer_email,
+            }
+        },
         metadata={
             k: str(v)
             for k, v in {

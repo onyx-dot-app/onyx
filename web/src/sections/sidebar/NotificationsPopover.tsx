@@ -32,11 +32,13 @@ function getNotificationIcon(
 interface NotificationsPopoverProps {
   onClose: () => void;
   onNavigate: () => void;
+  onShowBuildIntro?: () => void;
 }
 
 export default function NotificationsPopover({
   onClose,
   onNavigate,
+  onShowBuildIntro,
 }: NotificationsPopoverProps) {
   const router = useRouter();
   const posthog = usePostHog();
@@ -47,6 +49,17 @@ export default function NotificationsPopover({
   } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
 
   const handleNotificationClick = (notification: Notification) => {
+    // Handle build_mode feature announcement specially - show intro animation
+    if (
+      notification.notif_type === NotificationType.FEATURE_ANNOUNCEMENT &&
+      notification.additional_data?.feature === "build_mode" &&
+      onShowBuildIntro
+    ) {
+      onNavigate();
+      onShowBuildIntro();
+      return;
+    }
+
     const link = notification.additional_data?.link;
     if (!link) return;
 

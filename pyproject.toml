@@ -23,7 +23,10 @@ dependencies = [
     "uvicorn==0.35.0",
     "voyageai==0.2.3",
     "brotli>=1.2.0",
+    "claude-agent-sdk>=0.1.19",
+    "agent-client-protocol>=0.7.1",
     "discord-py==2.4.0",
+    "kubernetes>=31.0.0",
 ]
 
 [project.optional-dependencies]
@@ -61,6 +64,7 @@ backend = [
     "inflection==0.5.1",
     "jira==3.10.5",
     "jsonref==1.1.0",
+    "kubernetes==31.0.0",
     "trafilatura==1.12.2",
     "langchain==0.3.23",
     "langchain-core==0.3.81",
