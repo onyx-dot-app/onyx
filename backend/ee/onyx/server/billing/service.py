@@ -166,7 +166,7 @@ async def create_checkout_session(
         body=body,
         error_message="Failed to create checkout session",
     )
-    return CreateCheckoutSessionResponse(url=data["url"])
+    return CreateCheckoutSessionResponse(stripe_checkout_url=data["url"])
 
 
 async def create_customer_portal_session(
@@ -197,7 +197,7 @@ async def create_customer_portal_session(
         body=body,
         error_message="Failed to create customer portal session",
     )
-    return CreateCustomerPortalSessionResponse(url=data["url"])
+    return CreateCustomerPortalSessionResponse(stripe_customer_portal_url=data["url"])
 
 
 async def get_billing_information(

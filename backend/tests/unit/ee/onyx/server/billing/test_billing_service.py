@@ -147,7 +147,7 @@ class TestCreateCheckoutSession:
         )
 
         assert isinstance(result, CreateCheckoutSessionResponse)
-        assert result.url == "https://checkout.stripe.com/session"
+        assert result.stripe_checkout_url == "https://checkout.stripe.com/session"
 
         call_kwargs = mock_request.call_args[1]
         assert call_kwargs["method"] == "POST"
@@ -176,7 +176,7 @@ class TestCreateCustomerPortalSession:
         )
 
         assert isinstance(result, CreateCustomerPortalSessionResponse)
-        assert result.url == "https://billing.stripe.com/portal"
+        assert result.stripe_customer_portal_url == "https://billing.stripe.com/portal"
 
 
 class TestGetBillingInformation:

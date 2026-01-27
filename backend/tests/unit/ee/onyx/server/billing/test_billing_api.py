@@ -34,7 +34,7 @@ class TestCreateCheckoutSession:
         mock_get_license.return_value = None
         mock_get_tenant.return_value = "tenant_123"
         mock_service.return_value = CreateCheckoutSessionResponse(
-            url="https://checkout.stripe.com/session"
+            stripe_checkout_url="https://checkout.stripe.com/session"
         )
 
         request = CreateCheckoutSessionRequest(billing_period="monthly")
@@ -42,7 +42,7 @@ class TestCreateCheckoutSession:
             request=request, _=MagicMock(), db_session=MagicMock()
         )
 
-        assert result.url == "https://checkout.stripe.com/session"
+        assert result.stripe_checkout_url == "https://checkout.stripe.com/session"
         mock_service.assert_called_once()
 
     @pytest.mark.asyncio
@@ -62,7 +62,7 @@ class TestCreateCheckoutSession:
         mock_get_license.return_value = "license_data_blob"
         mock_get_tenant.return_value = None
         mock_service.return_value = CreateCheckoutSessionResponse(
-            url="https://checkout.stripe.com/session"
+            stripe_checkout_url="https://checkout.stripe.com/session"
         )
 
         request = CreateCheckoutSessionRequest(
@@ -72,7 +72,7 @@ class TestCreateCheckoutSession:
             request=request, _=MagicMock(), db_session=MagicMock()
         )
 
-        assert result.url == "https://checkout.stripe.com/session"
+        assert result.stripe_checkout_url == "https://checkout.stripe.com/session"
         call_kwargs = mock_service.call_args[1]
         assert call_kwargs["billing_period"] == "annual"
         assert call_kwargs["email"] == "test@example.com"
@@ -152,14 +152,14 @@ class TestCreateCustomerPortalSession:
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
         mock_service.return_value = CreateCustomerPortalSessionResponse(
-            url="https://billing.stripe.com/portal"
+            stripe_customer_portal_url="https://billing.stripe.com/portal"
         )
 
         result = await create_customer_portal_session(
             request=None, _=MagicMock(), db_session=MagicMock()
         )
 
-        assert result.url == "https://billing.stripe.com/portal"
+        assert result.stripe_customer_portal_url == "https://billing.stripe.com/portal"
 
 
 class TestGetBillingInformation:

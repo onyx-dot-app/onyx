@@ -16,7 +16,7 @@ class CreateCheckoutSessionRequest(BaseModel):
 class CreateCheckoutSessionResponse(BaseModel):
     """Response containing the Stripe checkout session URL."""
 
-    url: str
+    stripe_checkout_url: str
 
 
 class CreateCustomerPortalSessionRequest(BaseModel):
@@ -28,7 +28,7 @@ class CreateCustomerPortalSessionRequest(BaseModel):
 class CreateCustomerPortalSessionResponse(BaseModel):
     """Response containing the Stripe customer portal URL."""
 
-    url: str
+    stripe_customer_portal_url: str
 
 
 class BillingInformationResponse(BaseModel):
