@@ -30,13 +30,13 @@ const widthClassmap: Record<Length, string> = {
   auto: "w-auto flex-shrink-0",
   fit: "w-fit flex-shrink-0",
   full: "w-full",
-  scrollable: "flex-1 overflow-x-auto overflow-y-hidden min-w-0",
+  scrollable: "w-full overflow-x-auto overflow-y-hidden min-w-0",
 };
 const heightClassmap: Record<Length, string> = {
   auto: "h-auto",
   fit: "h-fit",
   full: "h-full",
-  scrollable: "flex-1 overflow-y-auto overflow-x-hidden min-h-0",
+  scrollable: "h-full overflow-y-auto overflow-x-hidden min-h-0",
 };
 
 /**

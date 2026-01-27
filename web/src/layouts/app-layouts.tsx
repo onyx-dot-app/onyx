@@ -305,7 +305,7 @@ function AppHeader() {
       <div className="py-3 px-4 h-16 w-full">
         <Section flexDirection="row">
           {/* Left - sidebar toggle (mobile) + mode toggle (when no chat session) */}
-          <Section flexDirection="row">
+          <Section flexDirection="row" justifyContent="start">
             <IconButton
               icon={SvgSidebar}
               onClick={() => setFolded(false)}

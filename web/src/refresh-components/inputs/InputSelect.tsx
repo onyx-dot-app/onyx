@@ -17,7 +17,6 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
 import Separator, { SeparatorProps } from "@/refresh-components/Separator";
 import { WithoutStyles } from "@/types";
-import { Section } from "@/layouts/general-layouts";
 
 // ============================================================================
 // Context
@@ -166,7 +165,7 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
     );
 
     return (
-      <div className="relative w-full">
+      <div className="relative">
         <InputSelectContext.Provider value={contextValue}>
           <SelectPrimitive.Root
             {...(isControlled ? { value: currentValue } : { defaultValue })}

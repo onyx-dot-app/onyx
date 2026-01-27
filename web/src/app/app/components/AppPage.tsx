@@ -728,7 +728,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
               {/* Upper Block */}
               {queryController.classification !== "search" && (
-                <Section justifyContent="end" height="scrollable" gap={0}>
+                <div className="flex-1 min-h-0 w-full flex flex-col justify-end items-center overflow-y-auto overflow-x-hidden">
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
                     <ProjectContextPanel
@@ -802,7 +802,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <Spacer rem={1} />
                       </>
                     )}
-                </Section>
+                </div>
               )}
 
               {/* ChatInputBar - centrally laid out, always */}
@@ -845,7 +845,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {(appFocus.isNewSession() ||
                 appFocus.isAgent() ||
                 appFocus.isProject()) && (
-                <Section justifyContent="start" height="scrollable" gap={0}>
+                <div className="flex-1 min-h-0 w-full">
                   {/* SearchUI */}
                   {appFocus.isNewSession() && showSearchResults && (
                     <SearchUI
@@ -864,7 +864,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* Project Sessions */}
                   {appFocus.isProject() && <ProjectChatSessionList />}
-                </Section>
+                </div>
               )}
             </div>
           )}
