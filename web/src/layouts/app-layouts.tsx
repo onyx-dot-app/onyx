@@ -311,9 +311,10 @@ function AppHeader() {
               internal
             />
             <InputSelect
-              value={appMode}
+              value={currentChatSessionId ? "chat" : appMode}
               onValueChange={(value) => setAppMode(value as AppMode)}
               variant="secondary"
+              disabled={!!currentChatSessionId}
             >
               <InputSelect.Trigger width="fit" />
               <InputSelect.Content>
@@ -423,12 +424,14 @@ function AppFooter() {
     }](https://www.onyx.app/) - Open Source AI Platform`;
 
   return (
-    <footer className="w-full flex flex-row justify-center items-center gap-2 pb-2 mt-auto">
-      <MinimalMarkdown
-        content={customFooterContent}
-        className={cn("max-w-full text-center")}
-        components={footerMarkdownComponents}
-      />
+    <footer className="py-2">
+      <Section flexDirection="row" gap={0.5}>
+        <MinimalMarkdown
+          content={customFooterContent}
+          className={cn("max-w-full text-center")}
+          components={footerMarkdownComponents}
+        />
+      </Section>
     </footer>
   );
 }
@@ -494,7 +497,7 @@ function AppRoot({ children }: AppRootProps) {
     */
     <div className="@container flex flex-col h-full w-full">
       <AppHeader />
-      <div className="flex-1 overflow-auto h-full w-full">{children}</div>
+      <div className="flex-1 overflow-hidden h-full w-full">{children}</div>
       <AppFooter />
     </div>
   );

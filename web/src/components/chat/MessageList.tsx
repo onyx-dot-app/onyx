@@ -235,7 +235,6 @@ const MessageList = React.memo(
     );
   }
 );
-
 MessageList.displayName = "MessageList";
 
 export default MessageList;

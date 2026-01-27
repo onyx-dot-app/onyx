@@ -150,7 +150,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
     return [...remainingPending, ...fetchedSessions];
   }, [fetchedSessions, pendingSessions]);
 
-  const currentChatSessionId = appFocus.isApp() ? appFocus.getId() : null;
+  const currentChatSessionId = appFocus.isChat() ? appFocus.getId() : null;
   const currentChatSession =
     chatSessions.find(
       (chatSession) => chatSession.id === currentChatSessionId

@@ -432,11 +432,20 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [currentChatSessionId]);
 
-  // Reset query controller state when navigating between sessions
-  // Search results and classification are ephemeral and should not persist across navigation
+  // Sync query controller classification with session state
+  // When in an existing chat session, classification should be "chat"
+  // When starting fresh (no session), reset to allow classification
   useEffect(() => {
-    queryController.reset();
-  }, [currentChatSessionId, queryController.reset]);
+    if (currentChatSessionId) {
+      queryController.setClassification("chat");
+    } else {
+      queryController.reset();
+    }
+  }, [
+    currentChatSessionId,
+    queryController.setClassification,
+    queryController.reset,
+  ]);
 
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
@@ -616,8 +625,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, [currentChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
 
-  console.log({ classification: queryController.classification });
-
   // handle error case where no assistants are available
   // Only show this after agents have loaded to prevent flash during initial load
   if (noAssistants && !isLoadingAgents) {
@@ -630,6 +637,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   if (!isReady) return <OnyxInitializingLoader />;
+
+  const hasSuggestions = (liveAssistant?.starter_messages?.length ?? 0) > 0;
+  const showWelcomeMessage =
+    !queryController.classification ||
+    queryController.classification === "pending";
+  const showOnboardingUi =
+    showOnboarding ||
+    (user?.role !== UserRole.ADMIN && !user?.personalization?.name);
 
   return (
     <>
@@ -695,7 +710,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           {({ getRootProps }) => (
             <div
               className={cn(
-                "h-full w-full flex flex-col items-center outline-none relative",
+                "flex flex-col h-full items-center outline-none relative",
                 !!appBackgroundUrl && "bg-cover bg-center bg-fixed"
               )}
               style={
@@ -712,7 +727,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
               {/* Upper Block */}
               {queryController.classification !== "search" && (
-                <Section dbg>
+                <Section justifyContent="end" height="scrollable">
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
                     <ProjectContextPanel
@@ -723,10 +738,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   )}
 
                   {/* ChatUI */}
-                  {appFocus.isApp() && (
+                  {appFocus.isChat() && (
                     <ChatScrollContainer
                       ref={scrollContainerRef}
-                      sessionId={currentChatSessionId!}
+                      sessionId={appFocus.getId()!}
                       anchorSelector={anchorSelector}
                       autoScroll={autoScrollEnabled}
                       isStreaming={isStreaming}
@@ -759,104 +774,97 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       />
                     </ChatScrollContainer>
                   )}
+
+                  {/* Onboarding */}
+                  {appFocus.isNewSession() && showOnboardingUi && (
+                    <OnboardingFlow
+                      handleHideOnboarding={hideOnboarding}
+                      handleFinishOnboarding={finishOnboarding}
+                      state={onboardingState}
+                      actions={onboardingActions}
+                      llmDescriptors={llmDescriptors}
+                    />
+                  )}
+
+                  {/* Welcome Message */}
+                  {appFocus.isNewSession() && showWelcomeMessage && (
+                    <Section height="fit">
+                      <WelcomeMessage
+                        agent={liveAssistant}
+                        isDefaultAgent={isDefaultAgent}
+                      />
+                    </Section>
+                  )}
                 </Section>
               )}
 
               {/* ChatInputBar - centrally laid out, always */}
               <div className="w-[min(50rem,100%)] pointer-events-auto py-1">
-                <Section gap={0.5}>
-                  {(showOnboarding ||
-                    (user?.role !== UserRole.ADMIN &&
-                      !user?.personalization?.name)) &&
-                    currentProjectId === null && (
-                      <OnboardingFlow
-                        handleHideOnboarding={hideOnboarding}
-                        handleFinishOnboarding={finishOnboarding}
-                        state={onboardingState}
-                        actions={onboardingActions}
-                        llmDescriptors={llmDescriptors}
-                      />
-                    )}
-
-                  {appFocus.isNewSession() &&
-                    queryController.classification === null && (
-                      <Section height="fit">
-                        <WelcomeMessage
-                          agent={liveAssistant}
-                          isDefaultAgent={isDefaultAgent}
-                        />
-                      </Section>
-                    )}
-                  <ChatInputBar
-                    ref={chatInputBarRef}
-                    deepResearchEnabled={deepResearchEnabled}
-                    toggleDeepResearch={toggleDeepResearch}
-                    toggleDocumentSidebar={toggleDocumentSidebar}
-                    filterManager={filterManager}
-                    llmManager={llmManager}
-                    removeDocs={() => setSelectedDocuments([])}
-                    retrievalEnabled={retrievalEnabled}
-                    selectedDocuments={selectedDocuments}
-                    initialMessage={
-                      searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
-                    }
-                    stopGenerating={stopGenerating}
-                    onSubmit={handleChatInputSubmit}
-                    chatState={currentChatState}
-                    currentSessionFileTokenCount={
-                      currentChatSessionId
-                        ? currentSessionFileTokenCount
-                        : projectContextTokenCount
-                    }
-                    availableContextTokens={availableContextTokens}
-                    selectedAssistant={selectedAssistant || liveAssistant}
-                    handleFileUpload={handleMessageSpecificFileUpload}
-                    setPresentingDocument={setPresentingDocument}
-                    disabled={
-                      (!llmManager.isLoadingProviders &&
-                        llmManager.hasAnyProvider === false) ||
-                      (!isLoadingOnboarding &&
-                        onboardingState.currentStep !== OnboardingStep.Complete)
-                    }
-                  />
-
-                  {!!currentProjectId && <ProjectChatSessionList />}
-                </Section>
+                <ChatInputBar
+                  ref={chatInputBarRef}
+                  deepResearchEnabled={deepResearchEnabled}
+                  toggleDeepResearch={toggleDeepResearch}
+                  toggleDocumentSidebar={toggleDocumentSidebar}
+                  filterManager={filterManager}
+                  llmManager={llmManager}
+                  removeDocs={() => setSelectedDocuments([])}
+                  retrievalEnabled={retrievalEnabled}
+                  selectedDocuments={selectedDocuments}
+                  initialMessage={
+                    searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
+                  }
+                  stopGenerating={stopGenerating}
+                  onSubmit={handleChatInputSubmit}
+                  chatState={currentChatState}
+                  currentSessionFileTokenCount={
+                    currentChatSessionId
+                      ? currentSessionFileTokenCount
+                      : projectContextTokenCount
+                  }
+                  availableContextTokens={availableContextTokens}
+                  selectedAssistant={selectedAssistant || liveAssistant}
+                  handleFileUpload={handleMessageSpecificFileUpload}
+                  setPresentingDocument={setPresentingDocument}
+                  disabled={
+                    (!llmManager.isLoadingProviders &&
+                      llmManager.hasAnyProvider === false) ||
+                    (!isLoadingOnboarding &&
+                      onboardingState.currentStep !== OnboardingStep.Complete)
+                  }
+                />
               </div>
 
               {/* Lower Block */}
-              {queryController.classification !== "chat" && (
-                <Section dbg>
+              {(appFocus.isNewSession() || appFocus.isProject()) && (
+                <Section justifyContent="start" height="scrollable">
                   {/* SearchUI */}
                   {appFocus.isNewSession() && showSearchResults && (
-                    <div className="w-full flex-1 overflow-auto">
-                      <SearchResultsPanel
-                        query={queryController.query || ""}
-                        executedQueries={queryController.executedQueries}
-                        results={queryController.searchResults}
-                        llmSelectedDocIds={queryController.llmSelectedDocIds}
-                        isLoading={queryController.isSearchLoading}
-                        error={queryController.searchError}
-                        onDocumentClick={handleSearchDocumentClick}
-                      />
-                    </div>
+                    <SearchResultsPanel
+                      query={queryController.query || ""}
+                      executedQueries={queryController.executedQueries}
+                      results={queryController.searchResults}
+                      llmSelectedDocIds={queryController.llmSelectedDocIds}
+                      isLoading={queryController.isSearchLoading}
+                      error={queryController.searchError}
+                      onDocumentClick={handleSearchDocumentClick}
+                    />
                   )}
 
                   {/* Agent-Suggestions */}
-                  {appFocus.isNewSession() &&
-                    (liveAssistant?.starter_messages?.length ?? 0) > 0 && (
-                      <div className="w-[min(50rem,100%)]">
-                        <Section>
-                          {liveAssistant?.starter_messages &&
-                            liveAssistant.starter_messages.length > 0 &&
-                            messageHistory.length === 0 && (
-                              <div className="max-w-[50rem] w-full">
-                                <Suggestions onSubmit={onSubmit} />
-                              </div>
-                            )}
-                        </Section>
-                      </div>
-                    )}
+                  {appFocus.isNewSession() && hasSuggestions && (
+                    <div className="w-[min(50rem,100%)]">
+                      <Section>
+                        {liveAssistant?.starter_messages &&
+                          liveAssistant.starter_messages.length > 0 &&
+                          messageHistory.length === 0 && (
+                            <Suggestions onSubmit={onSubmit} />
+                          )}
+                      </Section>
+                    </div>
+                  )}
+
+                  {/* Project Sessions */}
+                  {appFocus.isProject() && <ProjectChatSessionList />}
                 </Section>
               )}
             </div>

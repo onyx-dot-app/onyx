@@ -8,7 +8,7 @@ import React from "react";
 export type FlexDirection = "row" | "column";
 export type JustifyContent = "start" | "center" | "end" | "between";
 export type AlignItems = "start" | "center" | "end" | "stretch";
-export type Length = "auto" | "fit" | "full";
+export type Length = "auto" | "fit" | "full" | "scrollable";
 
 const flexDirectionClassMap: Record<FlexDirection, string> = {
   row: "flex-row",
@@ -30,11 +30,13 @@ const widthClassmap: Record<Length, string> = {
   auto: "w-auto flex-shrink-0",
   fit: "w-fit flex-shrink-0",
   full: "w-full",
+  scrollable: "flex-1 overflow-scroll min-w-0",
 };
 const heightClassmap: Record<Length, string> = {
   auto: "h-auto",
   fit: "h-fit",
   full: "h-full",
+  scrollable: "flex-1 overflow-scroll min-h-0",
 };
 
 /**

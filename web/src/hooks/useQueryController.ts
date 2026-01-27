@@ -35,6 +35,8 @@ export interface UseQueryControllerReturn {
   submit: (query: string, filters?: BaseFilters) => Promise<void>;
   /** Reset all state to initial values */
   reset: () => void;
+  /** Directly set the classification (e.g., when entering an existing chat session) */
+  setClassification: (classification: QueryClassification) => void;
 }
 
 /**
@@ -275,5 +277,6 @@ export function useQueryController(
     searchError,
     submit,
     reset,
+    setClassification,
   };
 }
