@@ -37,6 +37,8 @@ export interface Persona extends MinimalPersonaSnapshot {
   users: MinimalUserSnapshot[];
   groups: number[];
   num_chunks?: number;
+  // IDs of personas that this persona can call as sub-agents
+  callable_persona_ids: number[];
 
   // Embedded prompt fields on persona
   system_prompt: string | null;

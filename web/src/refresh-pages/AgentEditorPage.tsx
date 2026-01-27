@@ -36,6 +36,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
+import Switch from "@/refresh-components/inputs/Switch";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -447,7 +448,7 @@ export default function AgentEditorPage({
   const router = useRouter();
   const appRouter = useAppRouter();
   const { popup, setPopup } = usePopup();
-  const { refresh: refreshAgents } = useAgents();
+  const { agents, refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
 
@@ -642,6 +643,9 @@ export default function AgentEditorPage({
       ])
     ),
 
+    // Callable Personas (sub-agents)
+    callable_persona_ids: existingAgent?.callable_persona_ids ?? [],
+
     // Sharing
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
     shared_group_ids: existingAgent?.groups ?? [],
@@ -711,6 +715,9 @@ export default function AgentEditorPage({
         Yup.boolean(),
       ])
     ),
+
+    // Callable personas (sub-agents)
+    callable_persona_ids: Yup.array().of(Yup.number()),
   });
 
   async function handleSubmit(values: typeof initialValues) {
@@ -800,6 +807,7 @@ export default function AgentEditorPage({
         users: values.shared_user_ids,
         groups: values.shared_group_ids,
         tool_ids: toolIds,
+        callable_persona_ids: values.callable_persona_ids,
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
         uploaded_image_id: values.uploaded_image_id,
@@ -1463,6 +1471,68 @@ export default function AgentEditorPage({
                                   <OpenApiToolCard key={tool.id} tool={tool} />
                                 ))}
                               </GeneralLayouts.Section>
+                            )}
+
+                            {/* Callable Personas (Sub-Agents) */}
+                            {agents.filter(
+                              (a) =>
+                                !a.builtin_persona &&
+                                a.id !== existingAgent?.id &&
+                                a.id !== 0
+                            ).length > 0 && (
+                              <>
+                                <Separator noPadding className="py-1" />
+                                <GeneralLayouts.Section gap={0.5}>
+                                  <InputLayouts.Label
+                                    title="Call Other Agents"
+                                    description="Allow this agent to delegate tasks to other agents as sub-agents."
+                                  />
+                                  {agents
+                                    .filter(
+                                      (a) =>
+                                        !a.builtin_persona &&
+                                        a.id !== existingAgent?.id &&
+                                        a.id !== 0
+                                    )
+                                    .map((agent) => (
+                                      <Card key={agent.id}>
+                                        <InputLayouts.Horizontal
+                                          name={`callable_agent_${agent.id}`}
+                                          title={agent.name}
+                                          description={
+                                            agent.description ||
+                                            "No description"
+                                          }
+                                          center
+                                        >
+                                          <Switch
+                                            checked={values.callable_persona_ids.includes(
+                                              agent.id
+                                            )}
+                                            onCheckedChange={(checked) => {
+                                              if (checked) {
+                                                setFieldValue(
+                                                  "callable_persona_ids",
+                                                  [
+                                                    ...values.callable_persona_ids,
+                                                    agent.id,
+                                                  ]
+                                                );
+                                              } else {
+                                                setFieldValue(
+                                                  "callable_persona_ids",
+                                                  values.callable_persona_ids.filter(
+                                                    (id) => id !== agent.id
+                                                  )
+                                                );
+                                              }
+                                            }}
+                                          />
+                                        </InputLayouts.Horizontal>
+                                      </Card>
+                                    ))}
+                                </GeneralLayouts.Section>
+                              </>
                             )}
                           </>
                         </GeneralLayouts.Section>
