@@ -401,6 +401,7 @@ def list_llm_provider_basics(
     Returns:
     - All public providers (is_public=True) - Always included
     - Restricted providers user can access via their group memberships
+    - Non-public providers with no group/persona restrictions are admin-only
 
     For anonymous users or no_auth mode: returns only public providers
     This ensures backward compatibility while providing better UX for authenticated users.
@@ -410,26 +411,14 @@ def list_llm_provider_basics(
 
     all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = fetch_user_group_ids(db_session, user) if user else set()
-    is_admin = user and user.role == UserRole.ADMIN
+    is_admin = user is not None and user.role == UserRole.ADMIN
 
-    accessible_providers = []
+    accessible_providers: list[LLMProviderDescriptor] = []
 
     for provider in all_providers:
-        # Include all public providers
-        if provider.is_public:
-            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-            continue
-
-        # Include restricted providers user has access to via groups
-        if is_admin:
-            # Admins see all providers
-            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-        elif provider.groups:
-            # User must be in at least one of the provider's groups
-            if user_group_ids.intersection({g.id for g in provider.groups}):
-                accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-        elif not provider.personas:
-            # No restrictions = accessible
+        if can_user_access_llm_provider(
+            provider, user_group_ids, persona=None, is_admin=is_admin
+        ):
             accessible_providers.append(LLMProviderDescriptor.from_model(provider))
 
     end_time = datetime.now(timezone.utc)
