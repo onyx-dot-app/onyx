@@ -49,7 +49,6 @@ from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -134,9 +133,6 @@ def add_license_enforcement_middleware(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         """Block requests when license is expired/gated."""
-        if not LICENSE_ENFORCEMENT_ENABLED:
-            return await call_next(request)
-
         path = request.url.path
         if path.startswith("/api"):
             path = path[4:]
