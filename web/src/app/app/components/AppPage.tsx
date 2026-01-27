@@ -43,7 +43,6 @@ import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
 import { useQueryController } from "@/hooks/useQueryController";
 import useAppFocus from "@/hooks/useAppFocus";
-import { SearchUI } from "@/sections/SearchUI";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import {
   useChatSessionStore,
@@ -59,6 +58,7 @@ import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/components/chat/ChatScrollContainer";
 import ChatUI from "@/sections/ChatUI";
+import SearchUI from "@/sections/SearchUI";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
@@ -840,8 +840,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SearchUI */}
                   {appFocus.isNewSession() && showSearchResults && (
                     <SearchUI
-                      query={queryController.query || ""}
-                      executedQueries={queryController.executedQueries}
                       results={queryController.searchResults}
                       llmSelectedDocIds={queryController.llmSelectedDocIds}
                       isLoading={queryController.isSearchLoading}

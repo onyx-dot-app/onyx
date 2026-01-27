@@ -2,19 +2,10 @@
 
 import { SearchDocWithContent } from "@/lib/search/searchApi";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import {
-  SearchResultCard,
-  SearchResultCardSkeleton,
-} from "@/sections/search/SearchResultCard";
-import Text from "@/refresh-components/texts/Text";
-import { SvgSearch } from "@opal/icons";
+import SearchCard from "@/sections/cards/SearchCard";
 import { Section } from "@/layouts/general-layouts";
 
 export interface SearchUIProps {
-  /** The search query that was executed */
-  query: string;
-  /** List of query expansions that were executed */
-  executedQueries?: string[];
   /** Search results to display */
   results: SearchDocWithContent[];
   /** Document IDs that the LLM selected as most relevant */
@@ -27,16 +18,12 @@ export interface SearchUIProps {
   onDocumentClick: (doc: MinimalOnyxDocument) => void;
 }
 
-const MAX_WIDTH_CLASS = "w-[var(--main-app-width)]";
-
 /**
  * Panel component for displaying search results.
  *
  * Shows a vertical list of search result cards with loading and empty states.
  */
-export function SearchUI({
-  query,
-  executedQueries,
+export default function SearchUI({
   results,
   llmSelectedDocIds,
   isLoading,
@@ -59,39 +46,13 @@ export function SearchUI({
   });
 
   return (
-    <Section alignItems="center" justifyContent="start" gap={1} padding={1}>
-      {/* Error state */}
-      {error && (
-        <div className={MAX_WIDTH_CLASS}>
-          <div className="w-full bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <Text
-              as="p"
-              mainUiBody
-              className="text-red-700 dark:text-red-300 !m-0"
-            >
-              Search failed: {error}
-            </Text>
-          </div>
-        </div>
-      )}
-
-      {/* Loading state */}
-      {isLoading && (
-        <div className={MAX_WIDTH_CLASS}>
-          <Section height="fit" gap={0.75}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <SearchResultCardSkeleton key={i} />
-            ))}
-          </Section>
-        </div>
-      )}
-
+    <Section alignItems="center" justifyContent="start" gap={1}>
       {/* Results list */}
       {!isLoading && !error && results.length > 0 && (
-        <div className={MAX_WIDTH_CLASS}>
+        <div className="w-[var(--main-app-width)]">
           <Section height="fit" gap={0.75}>
             {sortedResults.map((doc) => (
-              <SearchResultCard
+              <SearchCard
                 key={`${doc.document_id}-${doc.chunk_ind}`}
                 document={doc}
                 isLlmSelected={llmSelectedSet.has(doc.document_id)}
@@ -101,59 +62,6 @@ export function SearchUI({
           </Section>
         </div>
       )}
-
-      {/* Empty state */}
-      {!isLoading && !error && results.length === 0 && query && (
-        <EmptySearchState query={query} />
-      )}
-    </Section>
-  );
-}
-
-interface EmptySearchStateProps {
-  query: string;
-}
-
-function EmptySearchState({ query }: EmptySearchStateProps) {
-  return (
-    <div className={MAX_WIDTH_CLASS}>
-      <Section height="fit" gap={1} padding={3}>
-        <div className="w-16 h-16 rounded-full bg-background-neutral-01 flex items-center justify-center">
-          <SvgSearch className="w-8 h-8 stroke-text-02" />
-        </div>
-
-        <Section height="fit" gap={0.5}>
-          <Text as="p" headingH3 className="!m-0">
-            No results found
-          </Text>
-          <Text
-            as="p"
-            secondaryBody
-            text03
-            className="!m-0 text-center max-w-md"
-          >
-            We couldn&apos;t find any documents matching &quot;{query}&quot;.
-            Try adjusting your search terms.
-          </Text>
-        </Section>
-      </Section>
-    </div>
-  );
-}
-
-/**
- * Skeleton loading state for the entire search panel
- */
-export function SearchUISkeleton() {
-  return (
-    <Section alignItems="center" justifyContent="start" gap={1} padding={1}>
-      <div className={MAX_WIDTH_CLASS}>
-        <Section height="fit" gap={0.75}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <SearchResultCardSkeleton key={i} />
-          ))}
-        </Section>
-      </div>
     </Section>
   );
 }
