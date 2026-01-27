@@ -83,7 +83,7 @@ export default function EditableTag({
           className="p-0.5 stroke-text-02 hover:stroke-text-03"
           aria-label={`Remove ${label} filter`}
         >
-          <SvgX className="size-3 " />
+          <SvgX className="size-3" />
         </button>
       )}
     </div>

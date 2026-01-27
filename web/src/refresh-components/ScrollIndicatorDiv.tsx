@@ -63,6 +63,7 @@ export default function ScrollIndicatorDiv({
 
     throttleTimeoutRef.current = window.setTimeout(() => {
       isThrottledRef.current = false;
+      updateScrollIndicators();
     }, SCROLL_THROTTLE_MS);
   }, [updateScrollIndicators]);
 
