@@ -22,10 +22,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Drop any native PostgreSQL enum type that may have been auto-created
-    # This can happen if SQLAlchemy created the type despite native_enum=False
-    op.execute("DROP TYPE IF EXISTS processingmode CASCADE")
-
     # Convert existing lowercase values to uppercase to match enum member names
     op.execute(
         "UPDATE connector_credential_pair SET processing_mode = 'REGULAR' "
@@ -45,18 +41,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Convert back to lowercase
-    op.execute(
-        "UPDATE connector_credential_pair SET processing_mode = 'regular' "
-        "WHERE processing_mode = 'REGULAR'"
-    )
-    op.execute(
-        "UPDATE connector_credential_pair SET processing_mode = 'file_system' "
-        "WHERE processing_mode = 'FILE_SYSTEM'"
-    )
-
-    op.alter_column(
-        "connector_credential_pair",
-        "processing_mode",
-        server_default="regular",
-    )
+    # State prior to this was broken, so we don't want to revert back to it
+    pass

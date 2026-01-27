@@ -104,8 +104,7 @@ export default function ConnectorCard({
   const router = useRouter();
   const sourceMetadata = getSourceMetadata(connectorType);
   const status: ConnectorStatus = config?.status || "not_connected";
-  const isConnected =
-    status !== "not_connected" && status !== "error" && status !== "deleting";
+  const isConnected = status !== "not_connected" && status !== "deleting";
 
   const isDeleting = status === "deleting";
 
