@@ -133,28 +133,6 @@ def _get_parent_id_from_file(drive_file: GoogleDriveFileType) -> str | None:
     return None
 
 
-def _get_folder_metadata(
-    service: GoogleDriveService,
-    folder_id: str,
-) -> GoogleDriveFileType | None:
-    """Fetch metadata for a folder by ID."""
-    try:
-        return (
-            service.files()
-            .get(
-                fileId=folder_id,
-                fields="id, name, parents, webViewLink, mimeType",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-    except HttpError as e:
-        if e.resp.status in (403, 404):
-            logger.debug(f"Cannot access folder {folder_id}: {e}")
-            return None
-        raise
-
-
 class CredentialedRetrievalMethod(Protocol):
     def __call__(
         self,
@@ -444,7 +422,6 @@ class GoogleDriveConnector(
         Returns:
             List of HierarchyNode objects for new ancestors (ordered parent-first)
         """
-        service = get_drive_service(self.creds, self.primary_admin_email)
         new_nodes: list[HierarchyNode] = []
 
         for file in files:
@@ -462,7 +439,7 @@ class GoogleDriveConnector(
                     break
 
                 # Fetch folder metadata
-                folder = _get_folder_metadata(service, current_id)
+                folder = self._get_folder_metadata(current_id, file.user_email)
                 if not folder:
                     # Can't access this folder - stop climbing
                     break
@@ -488,6 +465,29 @@ class GoogleDriveConnector(
             new_nodes += ancestors_to_add
 
         return new_nodes
+
+    def _get_folder_metadata(
+        self, folder_id: str, retriever_email: str
+    ) -> GoogleDriveFileType | None:
+        """Fetch metadata for a folder by ID."""
+        for email in [retriever_email, self.primary_admin_email]:
+            service = get_drive_service(self.creds, email)
+            try:
+                return (
+                    service.files()
+                    .get(
+                        fileId=folder_id,
+                        fields="id, name, parents, webViewLink, mimeType",
+                        supportsAllDrives=True,
+                    )
+                    .execute()
+                )
+            except HttpError as e:
+                if e.resp.status in (403, 404):
+                    logger.debug(f"Cannot access folder {folder_id}: {e}")
+                else:
+                    raise e
+        return None
 
     def get_all_drive_ids(self) -> set[str]:
         return self._get_all_drives_for_user(self.primary_admin_email)
