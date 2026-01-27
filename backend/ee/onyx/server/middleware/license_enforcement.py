@@ -42,6 +42,7 @@ from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
@@ -167,15 +168,19 @@ def add_license_enforcement_middleware(
                                 logger.info(
                                     f"[license_enforcement] Loaded license from DB for tenant {tenant_id}"
                                 )
-                    except Exception as db_error:
+                    except SQLAlchemyError as db_error:
                         logger.warning(
                             f"[license_enforcement] Failed to check database for license: {db_error}"
                         )
 
                 if metadata:
                     # User HAS a license (current or expired)
-                    if metadata.status == ApplicationStatus.GATED_ACCESS:
-                        # License expired - gate the user
+                    if metadata.status in {
+                        ApplicationStatus.GATED_ACCESS,
+                        ApplicationStatus.GRACE_PERIOD,
+                        ApplicationStatus.PAYMENT_REMINDER,
+                    }:
+                        # License expired or has billing issues - gate the user
                         is_gated = True
                     else:
                         # License is active - check seat limit
@@ -223,12 +228,20 @@ def add_license_enforcement_middleware(
                 message = "Access restricted. Please check your subscription status."
             else:
                 # Determine if this is "no license" vs "expired license"
-                cached = get_cached_license_metadata(tenant_id)
-                if cached and cached.status == ApplicationStatus.GATED_ACCESS:
-                    message = (
-                        "Your subscription has expired. Please update your billing."
-                    )
-                else:
+                try:
+                    cached = get_cached_license_metadata(tenant_id)
+                    if cached and cached.status in {
+                        ApplicationStatus.GATED_ACCESS,
+                        ApplicationStatus.GRACE_PERIOD,
+                        ApplicationStatus.PAYMENT_REMINDER,
+                    }:
+                        message = (
+                            "Your subscription has expired. Please update your billing."
+                        )
+                    else:
+                        message = "A valid license is required to access this feature."
+                except RedisError:
+                    # Redis down - use generic message
                     message = "A valid license is required to access this feature."
 
             return JSONResponse(

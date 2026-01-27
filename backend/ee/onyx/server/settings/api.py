@@ -46,7 +46,7 @@ def check_ee_features_enabled() -> bool:
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
-        if metadata and metadata.status != ApplicationStatus.GATED_ACCESS:
+        if metadata and metadata.status not in _GATED_STATUSES:
             # Has a valid (non-expired) license
             return True
     except RedisError as e:
