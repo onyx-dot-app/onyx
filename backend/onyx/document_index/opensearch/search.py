@@ -15,6 +15,7 @@ from onyx.document_index.opensearch.constants import SEARCH_CONTENT_VECTOR_WEIGH
 from onyx.document_index.opensearch.constants import SEARCH_TITLE_KEYWORD_WEIGHT
 from onyx.document_index.opensearch.constants import SEARCH_TITLE_VECTOR_WEIGHT
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
+from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
 from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
@@ -174,6 +175,8 @@ class DocumentQuery:
             max_chunk_index=max_chunk_index,
             max_chunk_size=max_chunk_size,
             document_id=document_id,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
         )
         final_get_ids_query: dict[str, Any] = {
             "query": {"bool": {"filter": filter_clauses}},
@@ -288,6 +291,8 @@ class DocumentQuery:
             time_cutoff=index_filters.time_cutoff,
             min_chunk_index=None,
             max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
         )
         match_highlights_configuration = (
             DocumentQuery._get_match_highlights_configuration()
@@ -407,6 +412,9 @@ class DocumentQuery:
         max_chunk_index: int | None,
         max_chunk_size: int | None = None,
         document_id: str | None = None,
+        # Assistant knowledge filters
+        attached_document_ids: list[str] | None = None,
+        hierarchy_node_ids: list[int] | None = None,
     ) -> list[dict[str, Any]]:
         """Returns filters to be passed into the "filter" key of a search query.
 
@@ -453,6 +461,12 @@ class DocumentQuery:
                 Although it would never make sense to supply both, note that if
                 user_file_ids is supplied and does not contain document_id, no
                 matches will be retrieved.
+            attached_document_ids: Document IDs explicitly attached to the
+                assistant. If provided along with hierarchy_node_ids, documents
+                matching EITHER criteria will be retrieved (OR logic).
+            hierarchy_node_ids: Hierarchy node IDs (folders/spaces) attached to
+                the assistant. Matches chunks where ancestor_hierarchy_node_ids
+                contains any of these values.
 
         Returns:
             A list of filters to be passed into the "filter" key of a search
@@ -562,6 +576,51 @@ class DocumentQuery:
                 range_clause["range"][CHUNK_INDEX_FIELD_NAME]["lte"] = max_chunk_index
             return range_clause
 
+        def _get_attached_document_id_filter(
+            doc_ids: list[str],
+        ) -> dict[str, Any]:
+            """Filter for documents explicitly attached to an assistant."""
+            # Logical OR operator on its elements.
+            doc_id_filter: dict[str, Any] = {"bool": {"should": []}}
+            for doc_id in doc_ids:
+                doc_id_filter["bool"]["should"].append(
+                    {"term": {DOCUMENT_ID_FIELD_NAME: {"value": doc_id}}}
+                )
+            return doc_id_filter
+
+        def _get_hierarchy_node_filter(
+            node_ids: list[int],
+        ) -> dict[str, Any]:
+            """Filter for chunks whose ancestors include any of the given hierarchy nodes.
+
+            Uses a terms query to check if ancestor_hierarchy_node_ids contains
+            any of the specified node IDs.
+            """
+            return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: node_ids}}
+
+        def _get_assistant_knowledge_filter(
+            attached_doc_ids: list[str] | None,
+            node_ids: list[int] | None,
+        ) -> dict[str, Any]:
+            """Combined filter for assistant knowledge (documents OR hierarchy nodes).
+
+            When an assistant has attached knowledge, search should be scoped to:
+            - Documents explicitly attached (by document ID), OR
+            - Documents under attached hierarchy nodes (by ancestor node IDs)
+            """
+            knowledge_filter: dict[str, Any] = {
+                "bool": {"should": [], "minimum_should_match": 1}
+            }
+            if attached_doc_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_attached_document_id_filter(attached_doc_ids)
+                )
+            if node_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_hierarchy_node_filter(node_ids)
+                )
+            return knowledge_filter
+
         filter_clauses: list[dict[str, Any]] = []
 
         if not include_hidden:
@@ -630,6 +689,16 @@ class DocumentQuery:
         if max_chunk_size is not None:
             filter_clauses.append(
                 {"term": {MAX_CHUNK_SIZE_FIELD_NAME: {"value": max_chunk_size}}}
+            )
+
+        if attached_document_ids or hierarchy_node_ids:
+            # If assistant has attached knowledge, scope search to that knowledge.
+            # This is an OR filter: match documents OR hierarchy nodes.
+            # ACL is still applied separately as an AND filter.
+            filter_clauses.append(
+                _get_assistant_knowledge_filter(
+                    attached_document_ids, hierarchy_node_ids
+                )
             )
 
         if tenant_state.multitenant:
