@@ -529,10 +529,8 @@ def temporary_env(env_variables: dict[str, str]) -> Iterator[None]:
 
     try:
         for k, v in env_variables.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = str(v)
+            os.environ[k] = str(v)
+
         yield
     finally:
         # Restore original state
