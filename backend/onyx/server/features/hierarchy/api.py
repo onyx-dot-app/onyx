@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.users import current_user
+from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.hierarchy import get_accessible_hierarchy_nodes_for_source
@@ -16,7 +17,6 @@ from onyx.server.features.hierarchy.models import DocumentPageCursor
 from onyx.server.features.hierarchy.models import DocumentSummary
 from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsRequest
 from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsResponse
-from onyx.server.features.hierarchy.models import HierarchyNodesRequest
 from onyx.server.features.hierarchy.models import HierarchyNodesResponse
 from onyx.server.features.hierarchy.models import HierarchyNodeSummary
 
@@ -32,16 +32,16 @@ def _get_user_access_info(
     return user.email, get_user_external_group_ids(db_session, user)
 
 
-@router.post(HIERARCHY_NODES_LIST_PATH)
+@router.get(HIERARCHY_NODES_LIST_PATH)
 def list_accessible_hierarchy_nodes(
-    hierarchy_nodes_request: HierarchyNodesRequest,
+    source: DocumentSource,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodesResponse:
     user_email, external_group_ids = _get_user_access_info(user, db_session)
     nodes = get_accessible_hierarchy_nodes_for_source(
         db_session=db_session,
-        source=hierarchy_nodes_request.source,
+        source=source,
         user_email=user_email,
         external_group_ids=external_group_ids,
     )
