@@ -1484,6 +1484,49 @@ class SessionManager:
 
         return (content, mime_type or "application/octet-stream", filename)
 
+    def export_docx(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> tuple[bytes, str] | None:
+        """
+        Export a markdown file as DOCX.
+
+        Reads the markdown file and converts it to DOCX using pypandoc.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the markdown file
+
+        Returns:
+            Tuple of (docx_bytes, filename) or None if not found
+
+        Raises:
+            ValueError: If path traversal attempted, file is not markdown, etc.
+        """
+        result = self.download_artifact(session_id, user_id, path)
+        if result is None:
+            return None
+
+        content_bytes, _mime_type, filename = result
+
+        if not filename.lower().endswith(".md"):
+            raise ValueError("Only markdown (.md) files can be exported as DOCX")
+
+        import tempfile
+        import pypandoc
+
+        md_text = content_bytes.decode("utf-8")
+
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
+            pypandoc.convert_text(md_text, "docx", format="md", outputfile=tmp.name)
+            docx_bytes = tmp.read()
+
+        docx_filename = filename.rsplit(".", 1)[0] + ".docx"
+        return (docx_bytes, docx_filename)
+
     def get_webapp_info(
         self,
         session_id: UUID,

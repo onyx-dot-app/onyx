@@ -98,11 +98,48 @@ export function useBuildStreaming() {
   const triggerWebappRefresh = useBuildSessionStore(
     (state) => state.triggerWebappRefresh
   );
+  const triggerFilesRefresh = useBuildSessionStore(
+    (state) => state.triggerFilesRefresh
+  );
+  const openMarkdownPreview = useBuildSessionStore(
+    (state) => state.openMarkdownPreview
+  );
   const setFollowupSuggestions = useBuildSessionStore(
     (state) => state.setFollowupSuggestions
   );
   const setSuggestionsLoading = useBuildSessionStore(
     (state) => state.setSuggestionsLoading
+  );
+
+  // ── Output file detector registry ──────────────────────────────────────
+  // Ordered by priority — first match wins.
+  // To add a new output type, add an entry here + a store action.
+  const OUTPUT_FILE_DETECTORS = useMemo(
+    () => [
+      {
+        match: (fp: string, k: string) =>
+          (k === "edit" || k === "write") &&
+          (fp.includes("/web/") || fp.startsWith("web/")),
+        onDetect: (sid: string) => triggerWebappRefresh(sid),
+      },
+      {
+        match: (fp: string, k: string) =>
+          (k === "edit" || k === "write") &&
+          fp.endsWith(".md") &&
+          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
+        onDetect: (sid: string, fp: string) => {
+          openMarkdownPreview(sid, fp);
+          triggerFilesRefresh(sid);
+        },
+      },
+      {
+        match: (fp: string, k: string) =>
+          (k === "edit" || k === "write") &&
+          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
+        onDetect: (sid: string) => triggerFilesRefresh(sid),
+      },
+    ],
+    [triggerWebappRefresh, triggerFilesRefresh, openMarkdownPreview]
   );
 
   /**
@@ -315,18 +352,22 @@ export function useBuildStreaming() {
 
               updateToolCallStreamItem(sessionId, toolCallId, updates);
 
-              // Check if this is a file operation in web/ directory
-              // Match both absolute paths (/outputs/web/...) and relative paths (web/...)
-              const filePath = getFilePath(packetData);
-              const isWebFile =
-                (kind === "edit" || kind === "write") &&
-                filePath &&
-                (filePath.includes("/web/") || filePath.startsWith("web/"));
-
-              // Trigger refresh when we see a web file being edited
-              // The output panel will open when streaming ends
-              if (isWebFile) {
-                triggerWebappRefresh(sessionId);
+              // Run output file detectors — first match wins
+              // Strip everything up to /sessions/UUID/ to get session-relative path
+              // e.g. ".../sessions/ID/outputs/f.md" → "outputs/f.md"
+              // Works for both local dev and kube/docker paths
+              const rawFilePath = getFilePath(packetData);
+              const filePath = rawFilePath
+                ? rawFilePath.match(/\/sessions\/[^/]+\/(.+)$/)?.[1] ??
+                  rawFilePath
+                : null;
+              if (filePath && kind) {
+                for (const detector of OUTPUT_FILE_DETECTORS) {
+                  if (detector.match(filePath, kind)) {
+                    detector.onDetect(sessionId, filePath);
+                    break;
+                  }
+                }
               }
 
               // If task tool completed, extract output and create text StreamItem
@@ -453,12 +494,9 @@ export function useBuildStreaming() {
                 });
               }
 
-              // Check if we had a web/ file change - if so, open output panel
-              const shouldOpenPanel = session?.webappNeedsRefresh === true;
               updateSessionData(sessionId, {
                 status: "completed",
                 streamItems: [], // Clear stream items since they're now saved in the message
-                ...(shouldOpenPanel && { outputPanelOpen: true }),
               });
               break;
             }
@@ -500,7 +538,7 @@ export function useBuildStreaming() {
       clearStreamItems,
       addArtifactToSession,
       appendMessageToSession,
-      triggerWebappRefresh,
+      OUTPUT_FILE_DETECTORS,
       setFollowupSuggestions,
       setSuggestionsLoading,
     ]
