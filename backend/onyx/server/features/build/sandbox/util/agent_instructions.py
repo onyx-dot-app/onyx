@@ -28,7 +28,7 @@ CONNECTOR_DESCRIPTIONS = {
         "End files are stored as `FILE_NAME.json`."
     ),
     "gmail": (
-        "**Google Drive**: Copied over directly as is. "
+        "**Gmail**: Copied over directly as is. "
         "End files are stored as `FILE_NAME.json`."
     ),
     "linear": (
