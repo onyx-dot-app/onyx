@@ -100,13 +100,23 @@ def build_opencode_config(
         },
         "edit": "allow",
         "write": "allow",
+        # Order matters: last matching rule wins
+        # Allow all files first, then deny specific files
         "read": {
-            "opencode.json": "deny",  # Prevent reading config file with API keys
-            "**/opencode.json": "deny",  # Deny in any subdirectory as well
-            "*": "allow",  # Allow reading other files
+            "*": "allow",
+            "opencode.json": "deny",
+            "**/opencode.json": "deny",
         },
-        "grep": "allow",
-        "glob": "allow",
+        "grep": {
+            "*": "allow",
+            "opencode.json": "deny",
+            "**/opencode.json": "deny",
+        },
+        "glob": {
+            "*": "allow",
+            "opencode.json": "deny",
+            "**/opencode.json": "deny",
+        },
         "list": "allow",
         "lsp": "allow",
         "patch": "allow",
