@@ -201,12 +201,6 @@ include = ["backend"]
 exclude = ["backend/generated"]
 typeCheckingMode = "off"
 
-[tool.mypy]
-# NOTE: pypandoc doesn't provide type stubs or py.typed marker
-# See: https://github.com/JessicaTegner/pypandoc
-[tool.mypy-pypandoc]
-ignore_missing_imports = true
-
 [tool.setuptools.packages.find]
 where = ["backend"]
 include = ["onyx*", "tests*"]
