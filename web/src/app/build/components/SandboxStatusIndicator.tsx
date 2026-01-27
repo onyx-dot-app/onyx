@@ -1,15 +1,18 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
+import { useSearchParams } from "next/navigation";
 
 import {
   useSession,
+  useSessionHistory,
   useIsPreProvisioning,
   useIsPreProvisioningReady,
   useIsPreProvisioningFailed,
 } from "@/app/build/hooks/useBuildSessionStore";
 import { Card } from "@/components/ui/card";
 import Text from "@/refresh-components/texts/Text";
+import { getSessionIdFromSearchParams } from "@/app/build/services/searchParams";
 
 const STATUS_CONFIG = {
   provisioning: {
@@ -48,6 +51,11 @@ const STATUS_CONFIG = {
     pulse: true,
     label: "Finding sandbox...",
   },
+  deleted: {
+    color: "bg-status-error-05",
+    pulse: false,
+    label: "Sandbox deleted",
+  },
 } as const;
 
 type Status = keyof typeof STATUS_CONFIG;
@@ -60,10 +68,11 @@ interface SandboxStatusIndicatorProps {}
  * Priority:
  * 1. Actual sandbox status from backend (if session has sandbox info)
  * 2. Session exists but no sandbox info → "running" (optimistic for consumed pre-provisioned sessions)
- * 3. Pre-provisioning failed → "failed"
- * 4. Pre-provisioning in progress → "provisioning" (only when no session - welcome page)
- * 5. Pre-provisioning ready (not yet consumed) → "ready"
- * 6. Default → "loading" (gray, finding sandbox)
+ * 3. SessionId in URL but session not found in history → "deleted"
+ * 4. Pre-provisioning failed → "failed"
+ * 5. Pre-provisioning in progress → "provisioning" (only when no session - welcome page)
+ * 6. Pre-provisioning ready (not yet consumed) → "ready"
+ * 7. Default → "loading" (gray, finding sandbox)
  *
  * IMPORTANT: Pre-provisioning state is checked AFTER session existence because
  * pre-provisioning is for NEW sessions. When viewing an existing session, we
@@ -71,6 +80,8 @@ interface SandboxStatusIndicatorProps {}
  */
 function deriveSandboxStatus(
   session: ReturnType<typeof useSession>,
+  sessionIdFromUrl: string | null,
+  sessionHistory: ReturnType<typeof useSessionHistory>,
   isPreProvisioning: boolean,
   isReady: boolean,
   isFailed: boolean
@@ -84,19 +95,28 @@ function deriveSandboxStatus(
   if (session) {
     return "running";
   }
-  // 3. Pre-provisioning failed
+  // 3. SessionId in URL but session not found in history - deleted
+  if (sessionIdFromUrl) {
+    const sessionExists = sessionHistory.some(
+      (item) => item.id === sessionIdFromUrl
+    );
+    if (!sessionExists) {
+      return "deleted";
+    }
+  }
+  // 4. Pre-provisioning failed
   if (isFailed) {
     return "failed";
   }
-  // 4. No session - check pre-provisioning state (welcome page)
+  // 5. No session - check pre-provisioning state (welcome page)
   if (isPreProvisioning) {
     return "provisioning";
   }
-  // 5. Pre-provisioning ready but not consumed
+  // 6. Pre-provisioning ready but not consumed
   if (isReady) {
     return "ready";
   }
-  // 6. No session, no pre-provisioning state - loading
+  // 7. No session, no pre-provisioning state - loading
   return "loading";
 }
 
@@ -110,12 +130,17 @@ export default function SandboxStatusIndicator(
   _props: SandboxStatusIndicatorProps = {}
 ) {
   const session = useSession();
+  const sessionHistory = useSessionHistory();
+  const searchParams = useSearchParams();
+  const sessionIdFromUrl = getSessionIdFromSearchParams(searchParams);
   const isPreProvisioning = useIsPreProvisioning();
   const isReady = useIsPreProvisioningReady();
   const isFailed = useIsPreProvisioningFailed();
 
   const status = deriveSandboxStatus(
     session,
+    sessionIdFromUrl,
+    sessionHistory,
     isPreProvisioning,
     isReady,
     isFailed

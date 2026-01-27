@@ -30,14 +30,17 @@ import {
   SvgMoreHorizontal,
   SvgEdit,
   SvgTrash,
+  SvgCheckCircle,
+  SvgAlertCircle,
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/build/components/TypewriterText";
+import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/build/constants";
 
 // ============================================================================
-// Fun Deleting Messages with Wave Animation
+// Fun Deleting Messages
 // ============================================================================
 
 const DELETING_MESSAGES = [
@@ -98,6 +101,7 @@ interface BuildSessionButtonProps {
   onLoad: () => void;
   onRename: (newName: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  onDeleteActiveSession?: () => void;
 }
 
 function BuildSessionButton({
@@ -106,11 +110,14 @@ function BuildSessionButton({
   onLoad,
   onRename,
   onDelete,
+  onDeleteActiveSession,
 }: BuildSessionButtonProps) {
   const [renaming, setRenaming] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
   const prevTitleRef = useRef(historyItem.title);
   const [shouldAnimate, setShouldAnimate] = useState(false);
@@ -132,16 +139,38 @@ function BuildSessionButton({
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       setIsDeleting(true);
+      setDeleteError(null);
       try {
         await onDelete();
-        setIsDeleteModalOpen(false);
-        setPopoverOpen(false);
-      } finally {
+        // Show success state
         setIsDeleting(false);
+        setDeleteSuccess(true);
+        // Close modal after delay (matches store's delay for removing session)
+        setTimeout(() => {
+          setIsDeleteModalOpen(false);
+          setPopoverOpen(false);
+          setDeleteSuccess(false);
+          // If deleting the active session, redirect to base URL to start fresh
+          if (isActive && onDeleteActiveSession) {
+            onDeleteActiveSession();
+          }
+        }, DELETE_SUCCESS_DISPLAY_DURATION_MS);
+      } catch (err) {
+        setIsDeleting(false);
+        setDeleteError(
+          err instanceof Error ? err.message : "Failed to delete session"
+        );
       }
     },
-    [onDelete]
+    [onDelete, isActive, onDeleteActiveSession]
   );
+
+  const handleCloseModal = useCallback(() => {
+    setIsDeleteModalOpen(false);
+    setPopoverOpen(false);
+    setDeleteSuccess(false);
+    setDeleteError(null);
+  }, []);
 
   const rightMenu = (
     <>
@@ -227,23 +256,53 @@ function BuildSessionButton({
       </Popover>
       {isDeleteModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Build"
-          icon={SvgTrash}
-          onClose={isDeleting ? undefined : () => setIsDeleteModalOpen(false)}
-          hideCancel={isDeleting}
-          twoTone={!isDeleting}
+          title={
+            deleteSuccess
+              ? "Deleted"
+              : deleteError
+                ? "Delete Failed"
+                : "Delete Build"
+          }
+          icon={
+            deleteSuccess
+              ? SvgCheckCircle
+              : deleteError
+                ? SvgAlertCircle
+                : SvgTrash
+          }
+          onClose={isDeleting || deleteSuccess ? undefined : handleCloseModal}
+          hideCancel={isDeleting || deleteSuccess}
+          twoTone={!isDeleting && !deleteSuccess && !deleteError}
           submit={
-            <Button
-              danger
-              onClick={handleConfirmDelete}
-              disabled={isDeleting}
-              leftIcon={isDeleting ? SimpleLoader : undefined}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </Button>
+            deleteSuccess ? (
+              <Button action disabled leftIcon={SvgCheckCircle}>
+                Done
+              </Button>
+            ) : deleteError ? (
+              <Button danger onClick={handleCloseModal}>
+                Close
+              </Button>
+            ) : (
+              <Button
+                danger
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                leftIcon={isDeleting ? SimpleLoader : undefined}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            )
           }
         >
-          {isDeleting ? (
+          {deleteSuccess ? (
+            <Text as="p" text03>
+              Build deleted successfully.
+            </Text>
+          ) : deleteError ? (
+            <Text as="p" text03 className="text-status-error-02">
+              {deleteError}
+            </Text>
+          ) : isDeleting ? (
             <DeletingMessage />
           ) : (
             "Are you sure you want to delete this build? This action cannot be undone."
@@ -383,6 +442,11 @@ const MemoizedBuildSidebarInner = memo(
                       renameBuildSession(historyItem.id, newName)
                     }
                     onDelete={() => deleteBuildSession(historyItem.id)}
+                    onDeleteActiveSession={
+                      session?.id === historyItem.id
+                        ? () => router.push("/build/v1")
+                        : undefined
+                    }
                   />
                 ))
               )}

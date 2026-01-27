@@ -7,6 +7,7 @@ import {
   getBuildUserPersona,
   getBuildLlmSelection,
 } from "@/app/build/onboarding/constants";
+import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/build/constants";
 
 import {
   ApiSandboxResponse,
@@ -1410,8 +1411,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         };
       });
 
-      // Refresh session history to reflect the deletion
-      await refreshSessionHistory();
+      setTimeout(async () => {
+        await refreshSessionHistory();
+      }, DELETE_SUCCESS_DISPLAY_DURATION_MS);
     } catch (err) {
       console.error("Failed to delete session:", err);
       throw err;
