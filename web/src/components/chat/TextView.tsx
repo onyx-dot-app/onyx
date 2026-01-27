@@ -13,18 +13,14 @@ import {
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Modal from "@/refresh-components/Modal";
+import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import {
-  SvgDownloadCloud,
-  SvgFileText,
-  SvgX,
-  SvgZoomIn,
-  SvgZoomOut,
-} from "@opal/icons";
+import { SvgFileText, SvgZoomIn, SvgZoomOut } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { cn } from "@/lib/utils";
+import { Section } from "@/layouts/general-layouts";
+
 export interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
@@ -206,60 +202,40 @@ export default function TextView({
         preventAccidentalClose={false}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="relative flex flex-row items-center gap-2 p-4 shadow-01">
-          <SvgFileText className="w-[1.5rem] h-[1.5rem] stroke-text-04 shrink-0" />
-          <Text as="p" className="flex-1 min-w-0 truncate" mainUiBody>
-            {fileName || "Document"}
-          </Text>
-          <div className="flex flex-row items-center justify-end gap-1">
+        <Modal.Header
+          icon={SvgFileText}
+          title={fileName || "Document"}
+          onClose={onClose}
+        >
+          <Section flexDirection="row" gap={0.25} justifyContent="start">
             <IconButton
               internal
               onClick={handleZoomOut}
               icon={SvgZoomOut}
               tooltip="Zoom Out"
             />
-            <Text as="p" text03 mainUiBody>
-              {zoom}%
-            </Text>
+            <Text text03>{zoom}%</Text>
             <IconButton
               internal
               onClick={handleZoomIn}
               icon={SvgZoomIn}
               tooltip="Zoom In"
             />
-            <IconButton
-              internal
-              onClick={handleDownload}
-              icon={SvgDownloadCloud}
-              tooltip="Download"
-            />
-            <IconButton
-              internal
-              onClick={onClose}
-              icon={SvgX}
-              tooltip="Close"
-            />
-          </div>
-        </div>
+          </Section>
+        </Modal.Header>
 
         <Modal.Body>
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
+            <Section>
               <SimpleLoader className="h-8 w-8" />
-              <Text as="p" text03 mainUiBody>
-                Loading document...
-              </Text>
-            </div>
+            </Section>
           ) : loadError ? (
-            <div className="flex flex-col items-center justify-center flex-1 min-h-0 p-6 gap-4">
-              <Text as="p" text03 mainUiBody>
-                {loadError}
-              </Text>
-              <Button onClick={handleDownload}>Download File</Button>
-            </div>
+            <Section>
+              <Text text03>{loadError}</Text>
+            </Section>
           ) : (
             <div
-              className="flex flex-col flex-1 min-h-0 min-w-0 w-full transform origin-center transition-transform duration-300 ease-in-out"
+              className="flex flex-col flex-1 min-h-0 min-w-0 w-full transform origin-center transition-transform duration-300 ease-in-out items-center justify-center"
               style={{ transform: `scale(${zoom / 100})` }}
             >
               {isImageFormat(fileType) ? (
@@ -328,12 +304,17 @@ export default function TextView({
                   <Text as="p" text03 mainUiBody>
                     This file format is not supported for preview.
                   </Text>
-                  <Button onClick={handleDownload}>Download File</Button>
                 </div>
               )}
             </div>
           )}
         </Modal.Body>
+
+        <Modal.Footer>
+          <BasicModalFooter
+            submit={<Button onClick={handleDownload}>Download File</Button>}
+          />
+        </Modal.Footer>
       </Modal.Content>
     </Modal>
   );

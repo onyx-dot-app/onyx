@@ -7,10 +7,10 @@ import Text from "@/refresh-components/texts/Text";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import Card from "@/refresh-components/cards/Card";
 import { Section } from "@/layouts/general-layouts";
 import Hoverable from "@/refresh-components/Hoverable";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { formatRelativeTime } from "@/lib/utils";
 
 export interface SearchResultCardProps {
   /** The search result document to display */
@@ -71,13 +71,25 @@ export default function SearchCard({
           <Section alignItems="start" gap={0.25}>
             {/* Metadata */}
             <Section flexDirection="row" justifyContent="start" gap={0.25}>
-              <Text figureSmallLabel text03 className="capitalize">
-                {document.source_type.replace(/_/g, " ")}
-              </Text>
+              {document.primary_owners &&
+                document.primary_owners.length > 0 && (
+                  <Text figureSmallLabel text03>
+                    {document.primary_owners[0]}
+                  </Text>
+                )}
+              {document.metadata?.tags &&
+                (Array.isArray(document.metadata.tags)
+                  ? document.metadata.tags
+                  : [document.metadata.tags]
+                ).map((tag, index) => (
+                  <Text key={index} figureSmallLabel text03>
+                    {tag}
+                  </Text>
+                ))}
               {document.updated_at &&
                 !isNaN(new Date(document.updated_at).getTime()) && (
-                  <Text figureSmallLabel text03>
-                    Updated {new Date(document.updated_at).toLocaleDateString()}
+                  <Text secondaryBody text02>
+                    {formatRelativeTime(document.updated_at)}
                   </Text>
                 )}
             </Section>
