@@ -873,8 +873,6 @@ pyperclip==1.11.0
     # via fastmcp
 pyreadline3==3.5.4 ; sys_platform == 'win32'
     # via humanfriendly
-pyroaring==1.0.1
-    # via onyx
 pytest==8.3.5
     # via
     #   pytest-base-url

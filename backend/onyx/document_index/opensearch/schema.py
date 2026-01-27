@@ -46,8 +46,8 @@ CHUNK_CONTEXT_FIELD_NAME = "chunk_context"
 METADATA_SUFFIX_FIELD_NAME = "metadata_suffix"
 PRIMARY_OWNERS_FIELD_NAME = "primary_owners"
 SECONDARY_OWNERS_FIELD_NAME = "secondary_owners"
-# Hierarchy filtering - base64-encoded RoaringBitmap of ancestor hierarchy node IDs
-ANCESTOR_HIERARCHY_BITMAP_FIELD_NAME = "ancestor_hierarchy_bitmap"
+# Hierarchy filtering - list of ancestor hierarchy node IDs
+ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME = "ancestor_hierarchy_node_ids"
 
 
 def get_opensearch_doc_chunk_id(
@@ -136,10 +136,10 @@ class DocumentChunk(BaseModel):
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
 
-    # Base64-encoded RoaringBitmap of ancestor hierarchy node IDs.
+    # List of ancestor hierarchy node IDs for hierarchy-based filtering.
     # None means no hierarchy info (document will be excluded from
     # hierarchy-filtered searches).
-    ancestor_hierarchy_bitmap: str | None = None
+    ancestor_hierarchy_node_ids: list[int] | None = None
 
     tenant_id: TenantState = Field(
         default_factory=lambda: TenantState(
@@ -459,14 +459,12 @@ class DocumentSchema:
                 CHUNK_INDEX_FIELD_NAME: {"type": "integer"},
                 # The maximum number of tokens this chunk's content can hold.
                 MAX_CHUNK_SIZE_FIELD_NAME: {"type": "integer"},
-                # Hierarchy filtering - base64-encoded RoaringBitmap of ancestor
-                # hierarchy node IDs. Used for scoped search within folder/space
-                # hierarchies. store: true is required for terms lookup queries
-                # with value_type: "bitmap".
-                ANCESTOR_HIERARCHY_BITMAP_FIELD_NAME: {
-                    "type": "binary",
-                    "store": True,
-                },
+                # Hierarchy filtering - list of ancestor hierarchy node IDs.
+                # Used for scoped search within folder/space hierarchies.
+                # OpenSearch's terms query with value_type: "bitmap" can
+                # efficiently check if any value in this array matches a
+                # query bitmap.
+                ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: {"type": "integer"},
             },
         }
 

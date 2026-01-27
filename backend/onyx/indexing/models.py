@@ -115,7 +115,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     boost: int
     aggregated_chunk_boost_factor: float
     # Full ancestor path from root hierarchy node to document's parent.
-    # This is encoded as a RoaringBitmap when written to OpenSearch.
+    # Stored as an integer array in OpenSearch for hierarchy-based filtering.
     # Empty list means no hierarchy info (document excluded from hierarchy searches).
     ancestor_hierarchy_node_ids: list[int]
 

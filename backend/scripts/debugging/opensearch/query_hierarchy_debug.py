@@ -1,35 +1,31 @@
 #!/usr/bin/env python3
 """
-Debug utility for querying and inspecting hierarchy bitmap data in OpenSearch.
+Debug utility for querying and inspecting hierarchy data in OpenSearch.
 
 This script connects to OpenSearch and allows you to:
-- Query documents by ID and decode their hierarchy bitmap
+- Query documents by ID and view their hierarchy ancestor node IDs
 - List documents that have hierarchy data
-- Decode raw base64 bitmap values
 
 Usage:
     python query_hierarchy_debug.py --document-id <doc_id>
     python query_hierarchy_debug.py --list-with-hierarchy
-    python query_hierarchy_debug.py --decode-field <base64_value>
 
 Environment Variables:
     OPENSEARCH_HOST: OpenSearch host (default: localhost)
     OPENSEARCH_PORT: OpenSearch port (default: 9200)
 
 Dependencies:
-    pip install opensearch-py pyroaring
+    pip install opensearch-py
 """
 
 import argparse
-import base64
 import os
 import sys
 
 try:
     from opensearchpy import OpenSearch
-    from pyroaring import BitMap
 except ImportError as e:
-    print("Error: Missing dependency. Run: pip install opensearch-py pyroaring")
+    print("Error: Missing dependency. Run: pip install opensearch-py")
     print(f"Details: {e}")
     sys.exit(1)
 
@@ -45,17 +41,8 @@ def get_client() -> OpenSearch:
     )
 
 
-def decode_bitmap(encoded: str) -> list[int]:
-    """Decode base64-encoded RoaringBitmap to list of integers."""
-    if not encoded:
-        return []
-    serialized = base64.b64decode(encoded.encode("utf-8"))
-    bitmap = BitMap.deserialize(serialized)
-    return sorted(bitmap)
-
-
 def query_document(client: OpenSearch, index: str, doc_id: str) -> None:
-    """Query a specific document and decode its hierarchy bitmap."""
+    """Query a specific document and view its hierarchy ancestor node IDs."""
     query = {"query": {"term": {"document_id": doc_id}}, "size": 10}
 
     result = client.search(index=index, body=query)
@@ -69,32 +56,27 @@ def query_document(client: OpenSearch, index: str, doc_id: str) -> None:
 
     for hit in hits:
         source = hit.get("_source", {})
-        bitmap_value = source.get("ancestor_hierarchy_bitmap", "")
+        ancestor_ids = source.get("ancestor_hierarchy_node_ids", [])
 
         print(f"  Chunk Index: {source.get('chunk_index')}")
         print(f"  Semantic ID: {source.get('semantic_identifier', 'N/A')}")
 
-        if bitmap_value:
-            truncated = (
-                f"{bitmap_value[:50]}..." if len(bitmap_value) > 50 else bitmap_value
-            )
-            print(f"  Raw Bitmap: {truncated}")
-            ids = decode_bitmap(bitmap_value)
-            print(f"  Ancestor Node IDs: {ids}")
+        if ancestor_ids:
+            print(f"  Ancestor Node IDs: {ancestor_ids}")
         else:
             print("  Ancestor Node IDs: (none)")
         print()
 
 
 def list_with_hierarchy(client: OpenSearch, index: str, limit: int = 10) -> None:
-    """List documents that have hierarchy bitmap data."""
+    """List documents that have hierarchy data."""
     query = {
-        "query": {"exists": {"field": "ancestor_hierarchy_bitmap"}},
+        "query": {"exists": {"field": "ancestor_hierarchy_node_ids"}},
         "size": limit,
         "_source": [
             "document_id",
             "chunk_index",
-            "ancestor_hierarchy_bitmap",
+            "ancestor_hierarchy_node_ids",
             "semantic_identifier",
         ],
     }
@@ -106,12 +88,11 @@ def list_with_hierarchy(client: OpenSearch, index: str, limit: int = 10) -> None
 
     for hit in hits:
         source = hit.get("_source", {})
-        bitmap_value = source.get("ancestor_hierarchy_bitmap", "")
-        ids = decode_bitmap(bitmap_value) if bitmap_value else []
+        ancestor_ids = source.get("ancestor_hierarchy_node_ids", [])
 
         print(f"  {source.get('document_id')} (chunk {source.get('chunk_index')})")
         print(f"    Semantic ID: {source.get('semantic_identifier', 'N/A')}")
-        print(f"    Ancestors: {ids}\n")
+        print(f"    Ancestors: {ancestor_ids}\n")
 
 
 def list_indices(client: OpenSearch) -> None:
@@ -124,27 +105,18 @@ def list_indices(client: OpenSearch) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Debug hierarchy bitmap data in OpenSearch"
-    )
+    parser = argparse.ArgumentParser(description="Debug hierarchy data in OpenSearch")
     parser.add_argument("--document-id", help="Query a specific document by ID")
     parser.add_argument(
         "--list-with-hierarchy",
         action="store_true",
         help="List documents with hierarchy data",
     )
-    parser.add_argument("--decode-field", help="Decode a base64 bitmap value")
     parser.add_argument("--list-indices", action="store_true", help="List all indices")
     parser.add_argument("--index", default="onyx_index", help="OpenSearch index name")
     parser.add_argument("--limit", type=int, default=10, help="Limit for list queries")
 
     args = parser.parse_args()
-
-    if args.decode_field:
-        ids = decode_bitmap(args.decode_field)
-        print(f"Decoded IDs: {ids}")
-        print(f"Count: {len(ids)}")
-        return
 
     client = get_client()
 
