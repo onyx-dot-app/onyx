@@ -849,7 +849,7 @@ pynacl==1.6.2
     # via pygithub
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.6.0
+pypdf==6.6.2
     # via
     #   onyx
     #   unstructured-client
