@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
 from ee.onyx.server.documents.cc_pair import router as ee_document_cc_pair_router
@@ -86,9 +85,9 @@ def get_application() -> FastAPI:
 
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
-    elif LICENSE_ENFORCEMENT_ENABLED:
+    else:
         # License enforcement middleware for self-hosted deployments only
-        # This blocks access when license is expired/gated
+        # Checks LICENSE_ENFORCEMENT_ENABLED at runtime (can be toggled without restart)
         # MT deployments use control plane gating via is_tenant_gated() instead
         add_license_enforcement_middleware(application, logger)
 
