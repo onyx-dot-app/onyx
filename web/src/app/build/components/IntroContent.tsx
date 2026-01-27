@@ -79,7 +79,7 @@ export default function BuildModeIntroContent({
               onTryBuildMode();
             }}
           >
-            Get Crafting
+            Start Crafting
           </BigButton>
         </motion.div>
       </div>

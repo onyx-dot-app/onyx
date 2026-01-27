@@ -246,7 +246,7 @@ const MemoizedBuildSidebarInner = memo(
           folded={folded}
           onClick={handleNewBuild}
         >
-          Get Crafting
+          Start Crafting
         </SidebarTab>
       ),
       [folded, handleNewBuild]
