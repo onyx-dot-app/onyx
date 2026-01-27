@@ -19,7 +19,7 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          if echo "$PR_BODY" | grep -qiE "\\[x\\].*considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
+          if echo "$PR_BODY" | grep -qiE "\\[x\\][[:space:]]*\\[Required\\][[:space:]]*I have considered whether this PR needs to be cherry[- ]picked to the latest beta branch"; then
             echo "Cherry-pick consideration box is checked. Check passed."
             exit 0
           fi
