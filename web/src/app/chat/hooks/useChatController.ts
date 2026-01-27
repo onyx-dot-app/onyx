@@ -173,6 +173,9 @@ export function useChatController({
     (state) => state.setAbortController
   );
   const setIsReady = useChatSessionStore((state) => state.setIsReady);
+  const setStreamingStartTime = useChatSessionStore(
+    (state) => state.setStreamingStartTime
+  );
 
   // Use custom hooks for accessing store data
   const currentMessageTree = useCurrentMessageTree();
@@ -342,6 +345,7 @@ export function useChatController({
 
     // Update chat state to input immediately for good UX
     // The stream will close naturally when the backend sends the STOP packet
+    setStreamingStartTime(currentSession, null);
     updateChatStateAction(currentSession, "input");
   }, [currentMessageHistory, currentMessageTree]);
 
@@ -734,6 +738,14 @@ export function useChatController({
             // We've processed initial packets and are starting to stream content.
             // Transition from 'loading' to 'streaming'.
             updateChatStateAction(frozenSessionId, "streaming");
+            // Only set start time once (guard prevents reset on each packet)
+            // Use getState() to avoid stale closure - sessions captured at render time becomes stale in async loop
+            if (
+              !useChatSessionStore.getState().sessions.get(frozenSessionId)
+                ?.streamingStartTime
+            ) {
+              setStreamingStartTime(frozenSessionId, Date.now());
+            }
 
             if ((packet as MessageResponseIDInfo).user_message_id) {
               newUserMessageId = (packet as MessageResponseIDInfo)
@@ -861,6 +873,16 @@ export function useChatController({
                   packets: packets,
                   packetsVersion: packetsVersion,
                   packetCount: packets.length,
+                  processingDurationSeconds:
+                    finalMessage?.processing_duration_seconds ??
+                    (() => {
+                      const startTime = useChatSessionStore
+                        .getState()
+                        .getStreamingStartTime(frozenSessionId);
+                      return startTime
+                        ? Math.floor((Date.now() - startTime) / 1000)
+                        : undefined;
+                    })(),
                 },
               ],
               // Pass the latest map state
@@ -910,6 +932,7 @@ export function useChatController({
       }
 
       resetRegenerationState(frozenSessionId);
+      setStreamingStartTime(frozenSessionId, null);
       updateChatStateAction(frozenSessionId, "input");
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)

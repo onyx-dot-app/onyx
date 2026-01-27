@@ -52,6 +52,9 @@ export interface ProcessorState {
   // Unique tool names tracking (populated during packet processing)
   uniqueToolNames: Set<string>;
 
+  // Image generation status
+  isGeneratingImage: boolean;
+
   // Streaming status
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
@@ -88,6 +91,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     uniqueToolNames: new Set(),
+    isGeneratingImage: false,
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
@@ -372,6 +376,12 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
     }
+
+    // Track image generation for header display + collapsed tag
+    if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
+      state.isGeneratingImage = true;
+      state.uniqueToolNames.add("Image Generation");
+    }
   }
 
   // Handle specific packet types
@@ -391,6 +401,9 @@ export function processPackets(
     state = createInitialState(state.nodeId);
   }
 
+  // Track if we processed any new packets
+  const prevProcessedIndex = state.lastProcessedIndex;
+
   // Process only new packets
   for (let i = state.lastProcessedIndex; i < rawPackets.length; i++) {
     const packet = rawPackets[i];
@@ -401,13 +414,17 @@ export function processPackets(
 
   state.lastProcessedIndex = rawPackets.length;
 
-  // Build result arrays after processing
-  state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
-  state.potentialDisplayGroups = buildGroupsFromKeys(
-    state,
-    state.displayGroupKeys
-  );
-  state.uniqueToolNamesArray = Array.from(state.uniqueToolNames);
+  // Only rebuild result arrays if we processed new packets
+  // This prevents creating new references when nothing changed
+  if (prevProcessedIndex !== rawPackets.length) {
+    // Build result arrays after processing new packets
+    state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
+    state.potentialDisplayGroups = buildGroupsFromKeys(
+      state,
+      state.displayGroupKeys
+    );
+    state.uniqueToolNamesArray = Array.from(state.uniqueToolNames);
+  }
 
   return state;
 }

@@ -19,6 +19,7 @@ import {
 import {
   MessageRenderer,
   FullChatState,
+  RenderType,
 } from "@/app/chat/message/messageComponents/interfaces";
 import { getToolName } from "@/app/chat/message/messageComponents/toolDisplayHelpers";
 import { StepContainer } from "@/app/chat/message/messageComponents/timeline/StepContainer";
@@ -48,6 +49,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   packets,
   state,
   onComplete,
+  renderType,
   stopPacketSeen,
   isLastStep = true,
   children,
@@ -98,6 +100,16 @@ export const ResearchAgentRenderer: MessageRenderer<
 
     return { parentPackets: parent, nestedToolGroups: groups };
   }, [packets]);
+
+  // Filter nested tool groups based on renderType (COMPACT shows only latest)
+  const visibleNestedToolGroups = useMemo(() => {
+    if (renderType !== RenderType.COMPACT || nestedToolGroups.length === 0) {
+      return nestedToolGroups;
+    }
+    // COMPACT mode: show only the latest group (last in sorted array)
+    const latestGroup = nestedToolGroups[nestedToolGroups.length - 1];
+    return latestGroup ? [latestGroup] : [];
+  }, [renderType, nestedToolGroups]);
 
   // Check completion from parent packets
   const isComplete = parentPackets.some(
@@ -151,9 +163,9 @@ export const ResearchAgentRenderer: MessageRenderer<
       )}
 
       {/* Nested tool calls - using TimelineRendererComponent + StepContainer */}
-      {nestedToolGroups.map((group, index) => {
+      {visibleNestedToolGroups.map((group, index) => {
         const isLastNestedStep =
-          index === nestedToolGroups.length - 1 &&
+          index === visibleNestedToolGroups.length - 1 &&
           !fullReportContent &&
           !isComplete;
 

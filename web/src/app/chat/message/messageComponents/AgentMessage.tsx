@@ -33,6 +33,8 @@ export interface AgentMessageProps {
   onRegenerate?: RegenerationFactory;
   // Parent message needed to construct regeneration request
   parentMessage?: Message | null;
+  // Duration in seconds for processing this message (assistant messages only)
+  processingDurationSeconds?: number;
 }
 
 // TODO: Consider more robust comparisons:
@@ -58,7 +60,9 @@ function arePropsEqual(
     prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
     prev.onRegenerate === next.onRegenerate &&
     prev.parentMessage?.messageId === next.parentMessage?.messageId &&
-    prev.llmManager?.isLoadingProviders === next.llmManager?.isLoadingProviders
+    prev.llmManager?.isLoadingProviders ===
+      next.llmManager?.isLoadingProviders &&
+    prev.processingDurationSeconds === next.processingDurationSeconds
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
   );
@@ -75,6 +79,7 @@ const AgentMessage = React.memo(function AgentMessage({
   onMessageSelection,
   onRegenerate,
   parentMessage,
+  processingDurationSeconds,
 }: AgentMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +97,7 @@ const AgentMessage = React.memo(function AgentMessage({
     stopPacketSeen,
     stopReason,
     uniqueToolNames,
+    isGeneratingImage,
     isComplete,
     onRenderComplete,
   } = usePacketProcessor(rawPackets, nodeId);
@@ -151,6 +157,8 @@ const AgentMessage = React.memo(function AgentMessage({
         stopReason={stopReason}
         hasDisplayContent={displayGroups.length > 0}
         uniqueToolNames={uniqueToolNames}
+        processingDurationSeconds={processingDurationSeconds}
+        isGeneratingImage={isGeneratingImage}
       />
 
       {/* Row 2: Display content + MessageToolbar */}

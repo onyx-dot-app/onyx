@@ -855,6 +855,7 @@ def translate_db_message_to_chat_message_detail(
         files=chat_message.files or [],
         error=chat_message.error,
         current_feedback=current_feedback,
+        processing_duration_seconds=chat_message.processing_duration_seconds,
     )
 
     return chat_msg_detail

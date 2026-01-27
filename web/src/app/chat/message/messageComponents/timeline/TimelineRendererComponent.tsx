@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, JSX } from "react";
+import React, { useState, useCallback, JSX } from "react";
 import { Packet, StopReason } from "@/app/chat/services/streamingModels";
 import { FullChatState, RenderType, RendererResult } from "../interfaces";
 import { findRenderer } from "../renderMessageComponent";
@@ -68,7 +68,7 @@ export const TimelineRendererComponent = React.memo(
     children,
   }: TimelineRendererComponentProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-    const handleToggle = () => setIsExpanded((prev) => !prev);
+    const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
     const RendererFn = findRenderer({ packets });
     const renderType = isExpanded ? RenderType.FULL : RenderType.COMPACT;
 

@@ -3,6 +3,8 @@ import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
+import { useStreamingDuration } from "../hooks";
+import { formatDurationSeconds } from "@/lib/time";
 
 export interface StreamingHeaderProps {
   headerText: string;
@@ -10,6 +12,7 @@ export interface StreamingHeaderProps {
   buttonTitle?: string;
   isExpanded: boolean;
   onToggle: () => void;
+  streamingStartTime?: number;
 }
 
 /** Header during streaming - shimmer text with current activity */
@@ -19,7 +22,12 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   buttonTitle,
   isExpanded,
   onToggle,
+  streamingStartTime,
 }: StreamingHeaderProps) {
+  const elapsedSeconds = useStreamingDuration(true, streamingStartTime);
+  const showElapsedTime =
+    isExpanded && streamingStartTime && elapsedSeconds > 0;
+
   return (
     <>
       <Text
@@ -39,6 +47,16 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             aria-expanded={isExpanded}
           >
             {buttonTitle}
+          </Button>
+        ) : showElapsedTime ? (
+          <Button
+            tertiary
+            onClick={onToggle}
+            rightIcon={SvgFold}
+            aria-label="Collapse timeline"
+            aria-expanded={true}
+          >
+            {formatDurationSeconds(elapsedSeconds)}
           </Button>
         ) : (
           <IconButton
