@@ -710,7 +710,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           {({ getRootProps }) => (
             <div
               className={cn(
-                "flex flex-col h-full items-center outline-none relative",
+                "flex flex-col h-full items-center outline-none relative gap-3",
                 !!appBackgroundUrl && "bg-cover bg-center bg-fixed"
               )}
               style={
@@ -776,25 +776,27 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   )}
 
                   {/* Onboarding */}
-                  {appFocus.isNewSession() && showOnboardingUi && (
-                    <OnboardingFlow
-                      handleHideOnboarding={hideOnboarding}
-                      handleFinishOnboarding={finishOnboarding}
-                      state={onboardingState}
-                      actions={onboardingActions}
-                      llmDescriptors={llmDescriptors}
-                    />
-                  )}
+                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                    showOnboardingUi && (
+                      <OnboardingFlow
+                        handleHideOnboarding={hideOnboarding}
+                        handleFinishOnboarding={finishOnboarding}
+                        state={onboardingState}
+                        actions={onboardingActions}
+                        llmDescriptors={llmDescriptors}
+                      />
+                    )}
 
                   {/* Welcome Message */}
-                  {appFocus.isNewSession() && showWelcomeMessage && (
-                    <Section height="fit">
-                      <WelcomeMessage
-                        agent={liveAssistant}
-                        isDefaultAgent={isDefaultAgent}
-                      />
-                    </Section>
-                  )}
+                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                    showWelcomeMessage && (
+                      <Section height="fit">
+                        <WelcomeMessage
+                          agent={liveAssistant}
+                          isDefaultAgent={isDefaultAgent}
+                        />
+                      </Section>
+                    )}
                 </Section>
               )}
 
@@ -835,7 +837,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               </div>
 
               {/* Lower Block */}
-              {(appFocus.isNewSession() || appFocus.isProject()) && (
+              {(appFocus.isNewSession() ||
+                appFocus.isAgent() ||
+                appFocus.isProject()) && (
                 <Section justifyContent="start" height="scrollable">
                   {/* SearchUI */}
                   {appFocus.isNewSession() && showSearchResults && (
@@ -849,7 +853,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   )}
 
                   {/* Agent-Suggestions */}
-                  {appFocus.isNewSession() && hasSuggestions && (
+                  {appFocus.isAgent() && hasSuggestions && (
                     <Suggestions onSubmit={onSubmit} />
                   )}
 
