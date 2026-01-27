@@ -1392,28 +1392,25 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const { currentSessionId, abortSession, refreshSessionHistory } = get();
 
     try {
-      // Abort any ongoing requests for this session
       abortSession(sessionId);
-
-      // Call the API to delete the session
       await apiDeleteSession(sessionId);
 
       // Remove session from local state
       set((state) => {
         const newSessions = new Map(state.sessions);
         newSessions.delete(sessionId);
-
         return {
           sessions: newSessions,
-          // Clear current session if it's the one being deleted
           currentSessionId:
             currentSessionId === sessionId ? null : state.currentSessionId,
         };
       });
 
-      setTimeout(async () => {
-        await refreshSessionHistory();
-      }, DELETE_SUCCESS_DISPLAY_DURATION_MS);
+      // Refresh history after UI has shown success state
+      setTimeout(
+        () => refreshSessionHistory(),
+        DELETE_SUCCESS_DISPLAY_DURATION_MS
+      );
     } catch (err) {
       console.error("Failed to delete session:", err);
       throw err;

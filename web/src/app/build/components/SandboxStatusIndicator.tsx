@@ -96,7 +96,7 @@ function deriveSandboxStatus(
     return "running";
   }
   // 3. SessionId in URL but session not found in history - deleted
-  if (sessionIdFromUrl) {
+  if (sessionIdFromUrl && !session) {
     const sessionExists = sessionHistory.some(
       (item) => item.id === sessionIdFromUrl
     );

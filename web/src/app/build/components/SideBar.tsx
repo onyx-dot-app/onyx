@@ -31,13 +31,15 @@ import {
   SvgEdit,
   SvgTrash,
   SvgCheckCircle,
-  SvgAlertCircle,
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/build/components/TypewriterText";
-import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/build/constants";
+import {
+  DELETE_SUCCESS_DISPLAY_DURATION_MS,
+  DELETE_MESSAGE_ROTATION_INTERVAL_MS,
+} from "@/app/build/constants";
 
 // ============================================================================
 // Fun Deleting Messages
@@ -70,23 +72,18 @@ function DeletingMessage() {
     const interval = setInterval(() => {
       setMessageIndex((prev) => {
         let next = Math.floor(Math.random() * DELETING_MESSAGES.length);
-        // Avoid showing the same message twice in a row
         while (next === prev && DELETING_MESSAGES.length > 1) {
           next = Math.floor(Math.random() * DELETING_MESSAGES.length);
         }
         return next;
       });
-    }, 3000);
-
+    }, DELETE_MESSAGE_ROTATION_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 
-  // Safe to assert since messageIndex is always within bounds
-  const message = DELETING_MESSAGES[messageIndex]!;
-
   return (
     <Text as="p" text03 className="animate-subtle-pulse">
-      {message}
+      {DELETING_MESSAGES[messageIndex]}
     </Text>
   );
 }
@@ -118,6 +115,8 @@ function BuildSessionButton({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
   const prevTitleRef = useRef(historyItem.title);
   const [shouldAnimate, setShouldAnimate] = useState(false);
@@ -125,32 +124,41 @@ function BuildSessionButton({
   // Detect when title changes from "Fresh Craft" to a real name (auto-naming)
   useEffect(() => {
     const prevTitle = prevTitleRef.current;
-    const newTitle = historyItem.title;
-
-    // Animate only when transitioning from default name to LLM-generated name
-    if (prevTitle !== newTitle && prevTitle === "Fresh Craft" && !renaming) {
+    if (
+      prevTitle !== historyItem.title &&
+      prevTitle === "Fresh Craft" &&
+      !renaming
+    ) {
       setShouldAnimate(true);
     }
-
-    prevTitleRef.current = newTitle;
+    prevTitleRef.current = historyItem.title;
   }, [historyItem.title, renaming]);
+
+  const closeModal = useCallback(() => {
+    if (deleteTimeoutRef.current) {
+      clearTimeout(deleteTimeoutRef.current);
+      deleteTimeoutRef.current = null;
+    }
+    setIsDeleteModalOpen(false);
+    setPopoverOpen(false);
+    setDeleteSuccess(false);
+    setDeleteError(null);
+    setIsDeleting(false);
+  }, []);
 
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       setIsDeleting(true);
       setDeleteError(null);
+
       try {
         await onDelete();
-        // Show success state
         setIsDeleting(false);
         setDeleteSuccess(true);
-        // Close modal after delay (matches store's delay for removing session)
-        setTimeout(() => {
-          setIsDeleteModalOpen(false);
-          setPopoverOpen(false);
-          setDeleteSuccess(false);
-          // If deleting the active session, redirect to base URL to start fresh
+        // Show success briefly, then close and redirect if needed
+        deleteTimeoutRef.current = setTimeout(() => {
+          closeModal();
           if (isActive && onDeleteActiveSession) {
             onDeleteActiveSession();
           }
@@ -162,15 +170,8 @@ function BuildSessionButton({
         );
       }
     },
-    [onDelete, isActive, onDeleteActiveSession]
+    [onDelete, closeModal, isActive, onDeleteActiveSession]
   );
-
-  const handleCloseModal = useCallback(() => {
-    setIsDeleteModalOpen(false);
-    setPopoverOpen(false);
-    setDeleteSuccess(false);
-    setDeleteError(null);
-  }, []);
 
   const rightMenu = (
     <>
@@ -263,14 +264,8 @@ function BuildSessionButton({
                 ? "Delete Failed"
                 : "Delete Build"
           }
-          icon={
-            deleteSuccess
-              ? SvgCheckCircle
-              : deleteError
-                ? SvgAlertCircle
-                : SvgTrash
-          }
-          onClose={isDeleting || deleteSuccess ? undefined : handleCloseModal}
+          icon={deleteSuccess ? SvgCheckCircle : SvgTrash}
+          onClose={isDeleting || deleteSuccess ? undefined : closeModal}
           hideCancel={isDeleting || deleteSuccess}
           twoTone={!isDeleting && !deleteSuccess && !deleteError}
           submit={
@@ -279,7 +274,7 @@ function BuildSessionButton({
                 Done
               </Button>
             ) : deleteError ? (
-              <Button danger onClick={handleCloseModal}>
+              <Button danger onClick={closeModal}>
                 Close
               </Button>
             ) : (

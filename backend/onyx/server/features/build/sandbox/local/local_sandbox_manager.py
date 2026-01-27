@@ -507,41 +507,85 @@ class LocalSandboxManager(SandboxManager):
             session_id: The session ID (for logging)
         """
         # Try lsof first - it's the most reliable cross-platform way
+        # Timeout to prevent hanging if system is slow or unresponsive
+        LSOF_TIMEOUT_SECONDS = 5.0
         try:
             result = subprocess.run(
                 ["lsof", "-ti", f":{port}"],
                 capture_output=True,
                 text=True,
+                timeout=LSOF_TIMEOUT_SECONDS,
             )
             if result.returncode == 0 and result.stdout.strip():
-                # lsof can return multiple PIDs, get the first one
-                pid = int(result.stdout.strip().split("\n")[0])
-                logger.info(
-                    f"Stopping Next.js server (PID {pid}) on port {port} "
-                    f"for session {session_id}"
-                )
-                self._process_manager.terminate_process(pid)
-                return
+                # lsof can return multiple PIDs - stop all processes on this port
+                pids = [
+                    int(pid.strip())
+                    for pid in result.stdout.strip().split("\n")
+                    if pid.strip()
+                ]
+                if pids:
+                    logger.info(
+                        f"Found {len(pids)} process(es) on port {port} for session {session_id}, "
+                        f"stopping all"
+                    )
+                    for pid in pids:
+                        try:
+                            logger.debug(
+                                f"Stopping Next.js server (PID {pid}) on port {port} "
+                                f"for session {session_id}"
+                            )
+                            self._process_manager.terminate_process(pid)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to stop process {pid} on port {port}: {e}"
+                            )
+                    return
             else:
                 logger.debug(
                     f"No process found on port {port} for session {session_id}"
                 )
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"lsof timed out after {LSOF_TIMEOUT_SECONDS}s while looking for "
+                f"process on port {port} for session {session_id}"
+            )
         except FileNotFoundError:
             # lsof not available, try psutil
             try:
                 import psutil
 
                 # Use net_connections to find process by port
+                # Collect all PIDs on this port (handle multiple processes)
+                pids_to_stop = set()
                 for conn in psutil.net_connections(kind="inet"):
                     # laddr can be empty tuple for some connection states
-                    if conn.laddr and hasattr(conn.laddr, "port"):
-                        if conn.laddr.port == port and conn.pid:
-                            logger.info(
-                                f"Stopping Next.js server (PID {conn.pid}) on port {port} "
+                    # Check if it's a tuple with at least 2 elements (host, port)
+                    if (
+                        conn.laddr
+                        and isinstance(conn.laddr, tuple)
+                        and len(conn.laddr) >= 2
+                        and conn.pid
+                    ):
+                        if conn.laddr[1] == port:
+                            pids_to_stop.add(conn.pid)
+
+                if pids_to_stop:
+                    logger.info(
+                        f"Found {len(pids_to_stop)} process(es) on port {port} for session {session_id}, "
+                        f"stopping all"
+                    )
+                    for pid in pids_to_stop:
+                        try:
+                            logger.debug(
+                                f"Stopping Next.js server (PID {pid}) on port {port} "
                                 f"for session {session_id}"
                             )
-                            self._process_manager.terminate_process(conn.pid)
-                            return
+                            self._process_manager.terminate_process(pid)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to stop process {pid} on port {port}: {e}"
+                            )
+                    return
 
                 logger.debug(
                     f"No process found on port {port} for session {session_id}"
