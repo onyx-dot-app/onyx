@@ -1283,8 +1283,13 @@ echo "Session cleanup complete"
             FileNotFoundError: If snapshot does not exist
         """
         import tempfile
+        from typing import Any
 
         import boto3
+
+        from onyx.configs.app_configs import AWS_REGION_NAME
+        from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
+        from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
 
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
@@ -1294,8 +1299,15 @@ echo "Session cleanup complete"
 
         logger.info(f"Restoring snapshot for session {session_id} from {s3_key}")
 
-        # Download snapshot from S3 to temp file
-        s3_client = boto3.client("s3")
+        # Download snapshot from S3 - uses IAM roles (IRSA) or explicit credentials
+        client_kwargs: dict[str, Any] = {
+            "service_name": "s3",
+            "region_name": AWS_REGION_NAME,
+        }
+        if S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
+            client_kwargs["aws_access_key_id"] = S3_AWS_ACCESS_KEY_ID
+            client_kwargs["aws_secret_access_key"] = S3_AWS_SECRET_ACCESS_KEY
+        s3_client = boto3.client(**client_kwargs)
         tmp_path: str | None = None
 
         try:
