@@ -45,6 +45,8 @@ export interface TimelineUIStateInput {
   parallelActiveStepSupportsCompact: boolean;
   /** Whether image generation is in progress */
   isGeneratingImage: boolean;
+  /** Whether final answer is coming (MESSAGE_START received) */
+  finalAnswerComing: boolean;
 }
 
 export interface TimelineUIStateResult {
@@ -100,6 +102,7 @@ export function useTimelineUIState(
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCompact,
       isGeneratingImage,
+      finalAnswerComing,
     } = input;
 
     // Derive the primary UI state
@@ -153,8 +156,11 @@ export function useTimelineUIState(
       showParallelTabs && !isExpanded && parallelActiveStepSupportsCompact;
 
     // Done step: shown when expanded and completed (either normally or with display content)
+    // Also shown when finalAnswerComing is true (MESSAGE_START received)
     const showDoneStep =
-      stopPacketSeen && isExpanded && (!userStopped || hasDisplayContent);
+      (stopPacketSeen || finalAnswerComing) &&
+      isExpanded &&
+      (!userStopped || hasDisplayContent);
 
     // Stopped step: shown when user stopped without display content
     const showStoppedStep =
@@ -162,7 +168,10 @@ export function useTimelineUIState(
 
     // For stepIsLast calculation: done indicator present (excludes research agent)
     const hasDoneIndicator =
-      stopPacketSeen && isExpanded && !userStopped && !lastStepIsResearchAgent;
+      (stopPacketSeen || finalAnswerComing) &&
+      isExpanded &&
+      !userStopped &&
+      !lastStepIsResearchAgent;
 
     // Styling flags
     const showTintedBackground = isActivelyExecuting || isExpanded;

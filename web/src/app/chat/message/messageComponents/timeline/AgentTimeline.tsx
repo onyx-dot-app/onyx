@@ -202,6 +202,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepIsResearchAgent,
     parallelActiveStepSupportsCompact,
     isGeneratingImage,
+    finalAnswerComing,
   });
 
   // Determine render type override for collapsed streaming view
