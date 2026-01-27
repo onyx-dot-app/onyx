@@ -91,6 +91,8 @@ export interface AgentTimelineProps {
   isGeneratingImage?: boolean;
   /** Number of images generated */
   generatedImageCount?: number;
+  /** Tool processing duration from backend (via MESSAGE_START packet) */
+  toolProcessingDuration?: number;
 }
 
 /**
@@ -113,7 +115,8 @@ function areAgentTimelinePropsEqual(
     prev.className === next.className &&
     prev.chatState.assistant?.id === next.chatState.assistant?.id &&
     prev.isGeneratingImage === next.isGeneratingImage &&
-    prev.generatedImageCount === next.generatedImageCount
+    prev.generatedImageCount === next.generatedImageCount &&
+    prev.toolProcessingDuration === next.toolProcessingDuration
   );
 }
 
@@ -131,6 +134,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   processingDurationSeconds,
   isGeneratingImage = false,
   generatedImageCount = 0,
+  toolProcessingDuration,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
@@ -234,6 +238,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             isExpanded={isExpanded}
             onToggle={handleToggle}
             streamingStartTime={streamingStartTime}
+            toolProcessingDuration={toolProcessingDuration}
           />
         );
 
@@ -253,7 +258,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             totalSteps={totalSteps}
             collapsible={collapsible}
             onToggle={handleToggle}
-            processingDurationSeconds={processingDurationSeconds}
+            processingDurationSeconds={
+              toolProcessingDuration ?? processingDurationSeconds
+            }
             generatedImageCount={generatedImageCount}
           />
         );
@@ -263,7 +270,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           <ExpandedHeader
             collapsible={collapsible}
             onToggle={handleToggle}
-            processingDurationSeconds={processingDurationSeconds}
+            processingDurationSeconds={
+              toolProcessingDuration ?? processingDurationSeconds
+            }
           />
         );
 
@@ -285,6 +294,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     totalSteps,
     processingDurationSeconds,
     generatedImageCount,
+    toolProcessingDuration,
   ]);
 
   // Empty state: no packets, still streaming, and not stopped

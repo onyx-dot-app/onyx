@@ -1,5 +1,4 @@
 import json
-import time
 
 from sqlalchemy.orm import Session
 
@@ -159,7 +158,7 @@ def save_chat_turn(
     db_session: Session,
     assistant_message: ChatMessage,
     is_clarification: bool = False,
-    processing_start_time: float | None = None,
+    tool_processing_duration: float | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -188,18 +187,16 @@ def save_chat_turn(
         db_session: Database session for persistence
         assistant_message: The ChatMessage object to populate (should already exist in DB)
         is_clarification: Whether this assistant message is a clarification question (deep research flow)
-        processing_start_time: Start time (from time.monotonic()) for calculating processing duration
+        tool_processing_duration: Duration of tool processing before answer starts (in seconds)
     """
     # 1. Update ChatMessage with message content, reasoning tokens, and token count
     assistant_message.message = message_text
     assistant_message.reasoning_tokens = reasoning_tokens
     assistant_message.is_clarification = is_clarification
 
-    # Calculate and set processing duration if start time was provided
-    if processing_start_time is not None:
-        assistant_message.processing_duration_seconds = (
-            time.monotonic() - processing_start_time
-        )
+    # Use tool processing duration (captured when MESSAGE_START was emitted)
+    if tool_processing_duration is not None:
+        assistant_message.processing_duration_seconds = tool_processing_duration
 
     # Calculate token count using default tokenizer, when storing, this should not use the LLM
     # specific one so we use a system default tokenizer here.

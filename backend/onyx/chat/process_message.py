@@ -769,7 +769,7 @@ def llm_loop_completion_handle(
         db_session=db_session,
         assistant_message=assistant_message,
         is_clarification=state_container.is_clarification,
-        processing_start_time=processing_start_time,
+        tool_processing_duration=state_container.get_tool_processing_duration(),
     )
 
 

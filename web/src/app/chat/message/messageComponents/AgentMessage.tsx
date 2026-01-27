@@ -100,6 +100,8 @@ const AgentMessage = React.memo(function AgentMessage({
     generatedImageCount,
     isComplete,
     onRenderComplete,
+    finalAnswerComing,
+    toolProcessingDuration,
   } = usePacketProcessor(rawPackets, nodeId);
 
   // Memoize merged citations separately to avoid creating new object when neither source changed
@@ -159,6 +161,8 @@ const AgentMessage = React.memo(function AgentMessage({
         processingDurationSeconds={processingDurationSeconds}
         isGeneratingImage={isGeneratingImage}
         generatedImageCount={generatedImageCount}
+        finalAnswerComing={finalAnswerComing}
+        toolProcessingDuration={toolProcessingDuration}
       />
 
       {/* Row 2: Display content + MessageToolbar */}

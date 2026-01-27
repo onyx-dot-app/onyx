@@ -58,6 +58,7 @@ export interface MessageStart extends BaseObj {
   content: string;
 
   final_documents: OnyxDocument[] | null;
+  tool_processing_duration_seconds?: number;
 }
 
 export interface MessageDelta extends BaseObj {

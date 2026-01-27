@@ -34,6 +34,10 @@ export interface UsePacketProcessorResult {
   expectedBranchesPerTurn: Map<number, number>;
   isGeneratingImage: boolean;
   generatedImageCount: number;
+  // Whether final answer is coming (MESSAGE_START seen)
+  finalAnswerComing: boolean;
+  // Tool processing duration from backend (via MESSAGE_START packet)
+  toolProcessingDuration: number | undefined;
 
   // Completion: stopPacketSeen && renderComplete
   isComplete: boolean;
@@ -144,6 +148,8 @@ export function usePacketProcessor(
     expectedBranchesPerTurn: state.expectedBranches,
     isGeneratingImage: state.isGeneratingImage,
     generatedImageCount: state.generatedImageCount,
+    finalAnswerComing: state.finalAnswerComing,
+    toolProcessingDuration: state.toolProcessingDuration,
 
     // Completion: stopPacketSeen && renderComplete
     isComplete: state.stopPacketSeen && renderComplete,

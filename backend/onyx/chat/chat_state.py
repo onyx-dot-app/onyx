@@ -40,6 +40,8 @@ class ChatStateContainer:
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
         # Note: LLM cost tracking is now handled in multi_llm.py
+        # Tool processing duration (time before answer starts)
+        self.tool_processing_duration: float | None = None
 
     def add_tool_call(self, tool_call: ToolCallInfo) -> None:
         """Add a tool call to the accumulated state."""
@@ -90,6 +92,16 @@ class ChatStateContainer:
         """Thread-safe getter for is_clarification."""
         with self._lock:
             return self.is_clarification
+
+    def set_tool_processing_duration(self, duration: float | None) -> None:
+        """Set the tool processing duration (time before answer starts)."""
+        with self._lock:
+            self.tool_processing_duration = duration
+
+    def get_tool_processing_duration(self) -> float | None:
+        """Thread-safe getter for tool_processing_duration."""
+        with self._lock:
+            return self.tool_processing_duration
 
 
 def run_chat_loop_with_state_containers(

@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 
 from sqlalchemy.orm import Session
@@ -389,6 +390,9 @@ def run_llm_loop(
 
         initialize_litellm()
 
+        # Track processing start time for tool duration calculation
+        processing_start_time = time.monotonic()
+
         # Initialize citation processor for handling citations dynamically
         # When include_citations is True, use HYPERLINK mode to format citations as [[1]](url)
         # When include_citations is False, use REMOVE mode to strip citations from output
@@ -546,6 +550,11 @@ def run_llm_loop(
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
             tool_defs = [tool.tool_definition() for tool in final_tools]
+
+            # Calculate tool processing duration at this point
+            # This captures the time spent on tool calls before the answer starts streaming
+            tool_processing_duration = time.monotonic() - processing_start_time
+
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=truncated_message_history,
@@ -560,6 +569,7 @@ def run_llm_loop(
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
                 user_identity=user_identity,
+                tool_processing_duration=tool_processing_duration,
             )
             if has_reasoned:
                 reasoning_cycles += 1

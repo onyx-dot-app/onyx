@@ -9,6 +9,7 @@ import {
   TopLevelBranching,
   Stop,
   ImageGenerationToolDelta,
+  MessageStart,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -57,6 +58,9 @@ export interface ProcessorState {
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
 
+  // Tool processing duration from backend (captured when MESSAGE_START arrives)
+  toolProcessingDuration: number | undefined;
+
   // Result arrays (built at end of processPackets)
   toolGroups: GroupedPacket[];
   potentialDisplayGroups: GroupedPacket[];
@@ -91,6 +95,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
+    toolProcessingDuration: undefined,
     toolGroups: [],
     potentialDisplayGroups: [],
   };
@@ -239,6 +244,15 @@ function handleStreamingStatusPacket(
   // Check if final answer is coming
   if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
+  }
+
+  // Capture tool processing duration from MESSAGE_START packet
+  if (packet.obj.type === PacketType.MESSAGE_START) {
+    const messageStart = packet.obj as MessageStart;
+    if (messageStart.tool_processing_duration_seconds !== undefined) {
+      state.toolProcessingDuration =
+        messageStart.tool_processing_duration_seconds;
+    }
   }
 }
 
