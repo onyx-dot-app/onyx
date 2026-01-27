@@ -203,7 +203,9 @@ export default function ThemePage() {
           logo_display_style: values.logo_display_style || null,
           custom_nav_items: enterpriseSettings?.custom_nav_items || [],
           custom_greeting_message: values.custom_greeting_message || null,
-          help_docs_url: values.help_docs_url?.trim() || null,
+          help_docs_url: values.help_docs_url?.trim()
+            ? ensureHrefProtocol(values.help_docs_url.trim())
+            : null,
           custom_header_content: values.custom_header_content || null,
           custom_lower_disclaimer_content:
             values.custom_lower_disclaimer_content || null,
