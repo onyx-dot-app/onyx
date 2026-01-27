@@ -89,13 +89,13 @@ export const AppearanceThemeSettings = forwardRef<
       // Focus on the first field with an error, in priority order
       const fieldRefs = [
         { name: "application_name", ref: applicationNameInputRef },
-        { name: "help_docs_url", ref: helpDocsUrlInputRef },
         { name: "custom_greeting_message", ref: greetingMessageInputRef },
         { name: "custom_header_content", ref: headerContentInputRef },
         {
           name: "custom_lower_disclaimer_content",
           ref: lowerDisclaimerInputRef,
         },
+        { name: "help_docs_url", ref: helpDocsUrlInputRef },
         { name: "custom_popup_header", ref: noticeHeaderInputRef },
         { name: "custom_popup_content", ref: noticeContentInputRef },
         { name: "consent_screen_prompt", ref: consentPromptTextAreaRef },
@@ -243,27 +243,6 @@ export const AppearanceThemeSettings = forwardRef<
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.application_name as string }}
-            />
-          </FormField>
-
-          <FormField state={errors.help_docs_url ? "error" : "idle"}>
-            <FormField.Label>Help & FAQ URL</FormField.Label>
-            <FormField.Control asChild>
-              <InputTypeIn
-                ref={helpDocsUrlInputRef}
-                data-label="help-docs-url-input"
-                showClearButton
-                variant={errors.help_docs_url ? "error" : undefined}
-                value={values.help_docs_url}
-                onChange={(e) => setFieldValue("help_docs_url", e.target.value)}
-              />
-            </FormField.Control>
-            <FormField.Description>
-              Optional. Overrides the Help & FAQ link in the user menu. Leave
-              blank to use {DOCS_BASE_URL}.
-            </FormField.Description>
-            <FormField.Message
-              messages={{ error: errors.help_docs_url as string }}
             />
           </FormField>
 
@@ -462,6 +441,28 @@ export const AppearanceThemeSettings = forwardRef<
         </FormField.Description>
         <FormField.Message
           messages={{ error: errors.custom_lower_disclaimer_content as string }}
+        />
+      </FormField>
+
+      <FormField state={errors.help_docs_url ? "error" : "idle"}>
+        <FormField.Label>Help & FAQ URL</FormField.Label>
+        <FormField.Control asChild>
+          <InputTypeIn
+            ref={helpDocsUrlInputRef}
+            data-label="help-docs-url-input"
+            showClearButton
+            variant={errors.help_docs_url ? "error" : undefined}
+            value={values.help_docs_url}
+            placeholder={DOCS_BASE_URL}
+            onChange={(e) => setFieldValue("help_docs_url", e.target.value)}
+          />
+        </FormField.Control>
+        <FormField.Description>
+          Use a custom Help & FAQ link in the user menu instead of the Onyx
+          documentation.
+        </FormField.Description>
+        <FormField.Message
+          messages={{ error: errors.help_docs_url as string }}
         />
       </FormField>
 
