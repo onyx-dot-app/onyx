@@ -919,7 +919,7 @@ python-json-logger==4.0.0
     # via pydocket
 python-magic==0.4.27
     # via unstructured
-python-multipart==0.0.21
+python-multipart==0.0.22
     # via
     #   fastapi-users
     #   mcp
