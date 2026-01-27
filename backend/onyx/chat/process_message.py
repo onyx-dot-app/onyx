@@ -356,7 +356,7 @@ def handle_stream_message_objects(
         # Milestone tracking, most devs using the API don't need to understand this
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email if not user.is_anonymous else tenant_id,
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
@@ -366,7 +366,7 @@ def handle_stream_message_objects(
             attribute="event_telemetry",
             fallback=noop_fallback,
         )(
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email if not user.is_anonymous else tenant_id,
             event="user_message_sent",
             properties={
                 "origin": new_msg_req.origin.value,

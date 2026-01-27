@@ -254,15 +254,11 @@ def create_update_persona(
             if not create_persona_request.is_public:
                 raise ValueError("Cannot make a default persona non public")
 
-            if user:
-                # Curators can edit default personas, but not make them
-                if (
-                    user.role == UserRole.CURATOR
-                    or user.role == UserRole.GLOBAL_CURATOR
-                ):
-                    pass
-                elif user.role != UserRole.ADMIN:
-                    raise ValueError("Only admins can make a default persona")
+            # Curators can edit default personas, but not make them
+            if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:
+                pass
+            elif user.role != UserRole.ADMIN:
+                raise ValueError("Only admins can make a default persona")
 
         # Convert incoming string UUIDs to UUID objects for DB operations
         converted_user_file_ids = None
