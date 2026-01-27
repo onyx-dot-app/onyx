@@ -347,11 +347,6 @@ async def connect_admin_oauth(
     user: User = Depends(current_curator_or_admin_user),
 ) -> MCPUserOAuthConnectResponse:
     """Connect OAuth flow for admin MCP server authentication"""
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Must be logged in as a valid user to connect to MCP server via OAuth",
-        )
     return await _connect_oauth(request, db, is_admin=True, user=user)
 
 
@@ -361,11 +356,6 @@ async def connect_user_oauth(
     db: Session = Depends(get_session),
     user: User = Depends(current_user),
 ) -> MCPUserOAuthConnectResponse:
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Must be logged in as a valid user to connect to MCP server via OAuth",
-        )
     return await _connect_oauth(request, db, is_admin=False, user=user)
 
 
@@ -589,7 +579,7 @@ async def process_oauth_callback(
     redis_client = get_redis_client()
     state = callback_data.get("state")
     code = callback_data.get("code")
-    user_id = str(user.id) if user else ""
+    user_id = str(user.id)
     if not state:
         raise HTTPException(status_code=400, detail="Missing state parameter")
     if not code:
@@ -606,8 +596,7 @@ async def process_oauth_callback(
     except Exception:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    user.email if user else ""
-    user_id = str(user.id) if user else ""
+    user_id = str(user.id)
 
     r = get_redis_client()
 
@@ -677,7 +666,7 @@ def save_user_credentials(
             detail="Server does not require authentication",
         )
 
-    email = user.email if user else ""
+    email = user.email
 
     # Get the authentication template for this server
     auth_template = get_server_auth_template(server_id, db_session)
@@ -808,12 +797,11 @@ def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User) -> None:
     logger.info(
         f"Ensuring MCP server owner or admin: {server.name} {user} {user.role} server.owner={server.owner}"
     )
-    if not user or user.role == UserRole.ADMIN:
+    if user.role == UserRole.ADMIN:
         return
 
-    user_email = user.email if user else None
-    logger.info(f"User email: {user_email} server.owner={server.owner}")
-    if not user_email or server.owner != user_email:
+    logger.info(f"User email: {user.email} server.owner={server.owner}")
+    if server.owner != user.email:
         raise HTTPException(
             status_code=403,
             detail="Curators can only modify MCP servers that they have created.",
@@ -1037,9 +1025,8 @@ def _get_connection_config(
     ):
         connection_config = mcp_server.admin_connection_config
     else:
-        user_email = user.email if user else ""
         connection_config = get_user_connection_config(
-            server_id=mcp_server.id, user_email=user_email, db_session=db_session
+            server_id=mcp_server.id, user_email=user.email, db_session=db_session
         )
 
     if not connection_config:
@@ -1215,7 +1202,7 @@ def _list_mcp_tools_by_id(
             detail="This MCP server is not configured yet",
         )
 
-    user_id = str(user.id) if user else ""
+    user_id = str(user.id)
     # Discover tools from the MCP server
     auth = None
     headers: dict[str, str] = {}
@@ -1232,7 +1219,7 @@ def _list_mcp_tools_by_id(
         )
     elif mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
         # Pass-through OAuth: use the user's login OAuth token
-        if user and user.oauth_accounts:
+        if user.oauth_accounts:
             user_oauth_token = user.oauth_accounts[0].access_token
             headers["Authorization"] = f"Bearer {user_oauth_token}"
         else:
@@ -1367,7 +1354,7 @@ def _upsert_mcp_server(
             and request.auth_type == MCPAuthenticationType.API_TOKEN
         ):
             delete_connection_config(mcp_server.admin_connection_config_id, db_session)
-            if user and user.email:
+            if user.email:
                 delete_user_connection_configs_for_server(
                     mcp_server.id, user.email, db_session
                 )
@@ -1395,14 +1382,14 @@ def _upsert_mcp_server(
         if not normalized_url:
             raise HTTPException(status_code=400, detail="server_url is required")
 
-        if not user or not user.email:
+        if not user.email:
             raise HTTPException(
                 status_code=400,
                 detail="Authenticated user email required to create MCP servers",
             )
 
         mcp_server = create_mcp_server__no_commit(
-            owner_email=user.email if user else "",
+            owner_email=user.email,
             name=request.name,
             description=request.description,
             server_url=request.server_url,
@@ -1455,19 +1442,18 @@ def _upsert_mcp_server(
             )
 
             # seed the user config for this admin user
-            if user:
-                user_config = create_connection_config(
-                    config_data=MCPConnectionData(
-                        headers=_build_headers_from_template(
-                            template_data, request.admin_credentials, user.email
-                        ),
-                        header_substitutions=request.admin_credentials,
+            user_config = create_connection_config(
+                config_data=MCPConnectionData(
+                    headers=_build_headers_from_template(
+                        template_data, request.admin_credentials, user.email
                     ),
-                    mcp_server_id=mcp_server.id,
-                    user_email=user.email if user else "",
-                    db_session=db_session,
-                )
-                user_config.mcp_server_id = mcp_server.id
+                    header_substitutions=request.admin_credentials,
+                ),
+                mcp_server_id=mcp_server.id,
+                user_email=user.email,
+                db_session=db_session,
+            )
+            user_config.mcp_server_id = mcp_server.id
             admin_connection_config_id = template_config.id
         elif request.auth_type == MCPAuthenticationType.OAUTH:
             # Create initial admin config. If client credentials were provided,
@@ -1501,7 +1487,7 @@ def _upsert_mcp_server(
             create_connection_config(
                 config_data=cfg,
                 mcp_server_id=mcp_server.id,
-                user_email=user.email if user else "",
+                user_email=user.email,
                 db_session=db_session,
             )
     elif request.auth_performer == MCPAuthenticationPerformer.ADMIN:
@@ -1816,7 +1802,7 @@ def create_mcp_server_simple(
     """Create MCP server with minimal information - auth to be configured later"""
 
     mcp_server = create_mcp_server__no_commit(
-        owner_email=user.email if user else "",
+        owner_email=user.email,
         name=request.name,
         description=request.description,
         server_url=request.server_url,
@@ -1854,13 +1840,6 @@ def update_mcp_server_simple(
     user: User = Depends(current_curator_or_admin_user),
 ) -> MCPServer:
     """Update MCP server basic information (name, description, URL)"""
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Must be logged in as a curator or admin to update MCP server",
-        )
-
     try:
         mcp_server = get_mcp_server_by_id(server_id, db_session)
     except ValueError:

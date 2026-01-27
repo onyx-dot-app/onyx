@@ -67,7 +67,7 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> 
         )
 
     # Admins can always make changes; non-admins must own the tool.
-    if not user or user.role == UserRole.ADMIN:
+    if user.role == UserRole.ADMIN:
         return tool
 
     if tool.user_id is None or tool.user_id != user.id:

@@ -13,6 +13,8 @@ Create Date: 2026-01-15 12:49:53.802741
 
 """
 
+import os
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -89,8 +91,8 @@ BEGIN
     -- Migrate document_set
     UPDATE "document_set" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
 
-    -- Migrate persona
-    UPDATE "persona" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+    -- Migrate persona (exclude builtin personas)
+    UPDATE "persona" SET user_id = NEW.id WHERE user_id = placeholder_uuid AND builtin_persona = FALSE;
 
     -- Migrate tool (exclude builtin tools)
     UPDATE "tool" SET user_id = NEW.id WHERE user_id = placeholder_uuid AND in_code_tool_id IS NULL;
@@ -98,8 +100,8 @@ BEGIN
     -- Migrate notification
     UPDATE "notification" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
 
-    -- Migrate inputprompt
-    UPDATE "inputprompt" SET user_id = NEW.id WHERE user_id = placeholder_uuid;
+    -- Migrate inputprompt (exclude system/public prompts)
+    UPDATE "inputprompt" SET user_id = NEW.id WHERE user_id = placeholder_uuid AND is_public = FALSE;
 
     -- Make the new user an admin (they had admin access in no-auth mode)
     -- In AFTER INSERT trigger, we must UPDATE the row since it already exists
@@ -129,7 +131,7 @@ def upgrade() -> None:
     """
     Create a placeholder user and assign all NULL user_id records to it.
     Install a trigger that migrates data to the first real user and self-destructs.
-    Only runs if no real users exist (true AUTH_TYPE=disabled deployment).
+    Only runs if AUTH_TYPE is currently disabled/none.
 
     Skipped in multi-tenant mode - each tenant starts fresh with no legacy data.
     """
@@ -138,16 +140,14 @@ def upgrade() -> None:
     if MULTI_TENANT:
         return
 
-    connection = op.get_bind()
-
-    # Check if any real users exist in the database
-    # If users exist, this deployment was NOT using AUTH_TYPE=disabled
-    # and user_id=NULL data is likely from anonymous users - don't migrate
-    result = connection.execute(sa.text('SELECT 1 FROM "user" LIMIT 1'))
-    if result.fetchone():
-        print("Existing users found. This deployment was not using AUTH_TYPE=disabled.")
-        print("Skipping migration - user_id=NULL data is likely from anonymous users.")
+    # Only run if AUTH_TYPE is currently disabled/none
+    # If they've already switched to auth-enabled, NULL data is stale anyway
+    auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
+    if auth_type not in ("disabled", "none", ""):
+        print(f"AUTH_TYPE is '{auth_type}', not disabled. Skipping migration.")
         return
+
+    connection = op.get_bind()
 
     # Check if there are any NULL user_id records that need migration
     tables_to_check = [
@@ -206,6 +206,12 @@ def upgrade() -> None:
             # Exclude builtin tools (in_code_tool_id IS NOT NULL) which must remain user_id=NULL
             elif table == "tool":
                 condition += " AND in_code_tool_id IS NULL"
+            # Exclude builtin personas which must remain user_id=NULL
+            elif table == "persona":
+                condition += " AND builtin_persona = FALSE"
+            # Exclude system/public input prompts which must remain user_id=NULL
+            elif table == "inputprompt":
+                condition += " AND is_public = FALSE"
             result = connection.execute(
                 sa.text(
                     f"""

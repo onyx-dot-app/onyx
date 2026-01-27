@@ -162,9 +162,6 @@ def initiate_oauth_flow(
 
     Returns an authorization URL that the frontend should redirect the user to.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
     # Get OAuth config
     oauth_config = get_oauth_config(request.oauth_config_id, db_session)
     if not oauth_config:
@@ -203,9 +200,6 @@ def handle_oauth_callback(
     Exchanges the authorization code for an access token and stores it.
     Accepts code and state as query parameters (standard OAuth flow).
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
     try:
         # Verify state and retrieve session data
         session = verify_oauth_state(state)
@@ -264,9 +258,6 @@ def revoke_oauth_token(
     """
     Revoke (delete) the current user's OAuth token for a specific OAuth config.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
     try:
         delete_user_oauth_token(oauth_config_id, user.id, db_session)
         return {"message": "OAuth token revoked successfully"}

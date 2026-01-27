@@ -127,9 +127,9 @@ def enable_or_disable_kg(
             # If persona doesn't exist or can't be restored, create a new one below
             pass
 
-    # Create KG Beta persona
-    user_ids = [user.id] if user else []
-    is_public = len(user_ids) == 0
+    # Create KG Beta persona (private to the admin who enabled KG)
+    user_ids = [user.id]
+    is_public = False
 
     persona_request = PersonaUpsertRequest(
         name=TMP_DRALPHA_PERSONA_NAME,

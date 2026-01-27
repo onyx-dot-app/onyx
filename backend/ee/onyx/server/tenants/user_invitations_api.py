@@ -26,8 +26,6 @@ async def request_invite(
     invite_request: RequestInviteRequest,
     user: User = Depends(current_admin_user),
 ) -> None:
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not authenticated")
     try:
         invite_self_to_tenant(user.email, invite_request.tenant_id)
     except Exception as e:
@@ -62,9 +60,6 @@ async def accept_invite(
     """
     Accept an invitation to join a tenant.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     try:
         accept_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
@@ -80,9 +75,6 @@ async def deny_invite(
     """
     Deny an invitation to join a tenant.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     try:
         deny_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:

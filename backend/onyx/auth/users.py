@@ -1353,7 +1353,7 @@ def get_anonymous_user() -> User:
         is_active=True,
         is_verified=True,
         is_superuser=False,
-        role=UserRole.BASIC,
+        role=UserRole.LIMITED,
     )
     return user
 
@@ -1427,11 +1427,6 @@ async def current_user(
 async def current_curator_or_admin_user(
     user: User = Depends(current_user),
 ) -> User:
-    if not hasattr(user, "role"):
-        raise BasicAuthenticationError(
-            detail="Access denied. User lacks role information.",
-        )
-
     allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
     if user.role not in allowed_roles:
         raise BasicAuthenticationError(
@@ -1442,7 +1437,7 @@ async def current_curator_or_admin_user(
 
 
 async def current_admin_user(user: User = Depends(current_user)) -> User:
-    if not hasattr(user, "role") or user.role != UserRole.ADMIN:
+    if user.role != UserRole.ADMIN:
         raise BasicAuthenticationError(
             detail="Access denied. User must be an admin to perform this action.",
         )

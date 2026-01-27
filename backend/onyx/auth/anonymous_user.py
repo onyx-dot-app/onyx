@@ -38,9 +38,7 @@ def load_anonymous_user_preferences(store: KeyValueStore) -> UserPreferences:
         )
 
 
-def fetch_anonymous_user_info(
-    store: KeyValueStore, *, anonymous_user_enabled: bool | None = None
-) -> UserInfo:
+def fetch_anonymous_user_info(store: KeyValueStore) -> UserInfo:
     """Fetch a UserInfo object for anonymous users (used for API responses)."""
     personalization = UserPersonalization()
     try:
@@ -57,9 +55,9 @@ def fetch_anonymous_user_info(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.BASIC if anonymous_user_enabled else UserRole.ADMIN,
+        role=UserRole.LIMITED,
         preferences=load_anonymous_user_preferences(store),
         personalization=personalization,
-        is_anonymous_user=anonymous_user_enabled,
+        is_anonymous_user=True,
         password_configured=False,
     )

@@ -31,10 +31,6 @@ def get_user_oauth_token_status(
     Returns information about which OAuth configs the user has authenticated with
     and whether their tokens are expired.
     """
-    # disabled auth doesn't support user oauth tokens
-    if user is None:
-        return []
-
     user_tokens = get_all_user_oauth_tokens(user.id, db_session)
     return [
         OAuthTokenStatus(

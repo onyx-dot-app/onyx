@@ -145,10 +145,6 @@ def get_search_history(
             detail="filter_days must be greater than 0",
         )
 
-    if user.is_anonymous:
-        # Return empty list for anonymous users
-        return SearchHistoryResponse(search_queries=[])
-
     search_queries = fetch_search_queries_for_user(
         db_session=db_session,
         user_id=user.id,

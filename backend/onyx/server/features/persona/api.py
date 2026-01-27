@@ -277,7 +277,7 @@ def create_persona(
     )
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
+        distinct_id=user.email,
         event=MilestoneRecordType.CREATED_ASSISTANT,
     )
 

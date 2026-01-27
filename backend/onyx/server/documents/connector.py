@@ -1177,7 +1177,7 @@ def get_connector_indexing_status(
     # Track admin page visit for analytics
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
+        distinct_id=user.email,
         event=MilestoneRecordType.VISITED_ADMIN_PAGE,
     )
 
@@ -1392,7 +1392,7 @@ def create_connector_from_model(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email,
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
 
@@ -1471,7 +1471,7 @@ def create_connector_with_mock_credential(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email,
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
         return response

@@ -143,7 +143,7 @@ def get_llm_for_persona(
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",
-                getattr(user, "id", None),
+                user.id,
                 getattr(persona_model, "id", None),
                 provider_model.name,
             )

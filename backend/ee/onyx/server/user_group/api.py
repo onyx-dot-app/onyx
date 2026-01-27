@@ -34,7 +34,7 @@ def list_user_groups(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
-    if user is None or user.role == UserRole.ADMIN:
+    if user.role == UserRole.ADMIN:
         user_groups = fetch_user_groups(db_session, only_up_to_date=False)
     else:
         user_groups = fetch_user_groups_for_user(

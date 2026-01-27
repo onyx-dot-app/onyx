@@ -144,8 +144,8 @@ def validate_object_creation_for_user(
     if object_is_perm_sync and not target_group_ids:
         return
 
-    # Anonymous users and admins are allowed
-    if user.is_anonymous or user.role == UserRole.ADMIN:
+    # Admins are allowed
+    if user.role == UserRole.ADMIN:
         return
 
     # Allow curators and global curators to create public objects

@@ -177,8 +177,13 @@ def get_best_persona_id_for_user(
 def _get_persona_by_name(
     persona_name: str, user: User | None, db_session: Session
 ) -> Persona | None:
-    """Admins can see all, regular users can only fetch their own.
-    If user is None, assume the user is an admin or auth is disabled."""
+    """Fetch a persona by name with access control.
+
+    Access rules:
+    - user=None (system operations): can see all personas
+    - Admin users: can see all personas
+    - Non-admin users: can only see their own personas
+    """
     stmt = select(Persona).where(Persona.name == persona_name)
     if user and user.role != UserRole.ADMIN:
         stmt = stmt.where(Persona.user_id == user.id)

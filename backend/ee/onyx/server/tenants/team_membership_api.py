@@ -29,7 +29,7 @@ async def leave_organization(
 ) -> None:
     tenant_id = get_current_tenant_id()
 
-    if current_user is None or current_user.email != user_email.user_email:
+    if current_user.email != user_email.user_email:
         raise HTTPException(
             status_code=403, detail="You can only leave the organization as yourself"
         )

@@ -58,7 +58,7 @@ def upgrade() -> None:
             "is_active": True,  # Active so it can be used for anonymous access
             "is_superuser": False,
             "is_verified": True,  # Verified since no email verification needed
-            "role": "BASIC",  # Anonymous users have basic role
+            "role": "LIMITED",  # Anonymous users have limited role to restrict access
         },
     )
 

@@ -69,12 +69,11 @@ def create_input_prompt(
         db_session=db_session,
     )
 
-    if user is not None:
-        input_prompt_user = InputPrompt__User(
-            input_prompt_id=input_prompt.id, user_id=user.id
-        )
-        db_session.add(input_prompt_user)
-        db_session.commit()
+    input_prompt_user = InputPrompt__User(
+        input_prompt_id=input_prompt.id, user_id=user.id
+    )
+    db_session.add(input_prompt_user)
+    db_session.commit()
 
     return InputPromptSnapshot.from_model(input_prompt)
 
@@ -146,11 +145,4 @@ def hide_input_prompt_for_user(
     Endpoint that marks a seed (or any) prompt as disabled for the current user,
     so it won't show up in their subsequent queries.
     """
-    if user is None:
-        # if auth is disabled, just delete the prompt
-        delete_input_prompt(input_prompt_id, user, db_session, delete_public=True)
-
-    else:
-        disable_input_prompt_for_user(input_prompt_id, user.id, db_session)
-
-    return None
+    disable_input_prompt_for_user(input_prompt_id, user.id, db_session)

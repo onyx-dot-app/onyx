@@ -70,12 +70,6 @@ def create_federated_connector(
     """Create a new federated connector"""
     tenant_id = get_current_tenant_id()
 
-    if user is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required for federated retrieval.",
-        )
-
     logger.info(
         f"Creating federated connector: source={federated_connector_data.source}, "
         f"user={user.email}, tenant_id={tenant_id}"

@@ -41,14 +41,14 @@ def _post_query_chunk_censoring(
     function. If they do, it sends them to the censoring function and returns the
     censored chunks. If they don't, it returns the original chunks.
     """
-    # Anonymous users skip permission enforcement
+    sources_to_censor = _get_all_censoring_enabled_sources()
+
+    # Anonymous users can only access public (non-permission-synced) content
     if user.is_anonymous:
-        return chunks
+        return [chunk for chunk in chunks if chunk.source_type not in sources_to_censor]
 
     final_chunk_dict: dict[str, InferenceChunk] = {}
     chunks_to_process: dict[DocumentSource, list[InferenceChunk]] = {}
-
-    sources_to_censor = _get_all_censoring_enabled_sources()
     for chunk in chunks:
         # Separate out chunks that require permission post-processing by source
         if chunk.source_type in sources_to_censor:
