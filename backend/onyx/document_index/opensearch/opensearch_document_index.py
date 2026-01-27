@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
@@ -453,15 +454,28 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search pipelines.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary."
+            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if necessary, "
+            f"with embedding dimension {embedding_dim}."
         )
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
         )
         if not self._os_client.index_exists():
+            if not self._os_client.set_cluster_auto_create_index_setting(enabled=False):
+                logger.error(
+                    f"Failed to disable the auto create index setting for index {self._index_name}. "
+                    "This may cause unexpected index creation when indexing documents into an index that does not exist. "
+                    "Not taking any further action..."
+                )
+            if USING_AWS_MANAGED_OPENSEARCH:
+                index_settings = (
+                    DocumentSchema.get_index_settings_for_aws_managed_opensearch()
+                )
+            else:
+                index_settings = DocumentSchema.get_index_settings()
             self._os_client.create_index(
                 mappings=expected_mappings,
-                settings=DocumentSchema.get_index_settings(),
+                settings=index_settings,
             )
         if not self._os_client.validate_index(
             expected_mappings=expected_mappings,

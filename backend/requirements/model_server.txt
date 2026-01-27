@@ -2,6 +2,8 @@
 #    uv export --no-emit-project --no-default-groups --no-hashes --extra model_server -o backend/requirements/model_server.txt
 accelerate==1.6.0
     # via onyx
+agent-client-protocol==0.7.1
+    # via onyx
 aioboto3==15.1.0
     # via onyx
 aiobotocore==2.24.0
@@ -28,9 +30,12 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.11.0
     # via
+    #   claude-agent-sdk
     #   google-genai
     #   httpx
+    #   mcp
     #   openai
+    #   sse-starlette
     #   starlette
 attrs==25.4.0
     # via
@@ -58,10 +63,15 @@ certifi==2025.11.12
     # via
     #   httpcore
     #   httpx
+    #   kubernetes
     #   requests
     #   sentry-sdk
+cffi==2.0.0 ; platform_python_implementation != 'PyPy'
+    # via cryptography
 charset-normalizer==3.4.4
     # via requests
+claude-agent-sdk==0.1.19
+    # via onyx
 click==8.3.1
     # via
     #   celery
@@ -82,6 +92,8 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   tqdm
+cryptography==46.0.3
+    # via pyjwt
 decorator==5.2.1
     # via retry
 discord-py==2.4.0
@@ -90,6 +102,8 @@ distro==1.9.0
     # via openai
 docstring-parser==0.17.0
     # via google-cloud-aiplatform
+durationpy==0.10
+    # via kubernetes
 einops==0.8.1
     # via onyx
 fastapi==0.116.1
@@ -129,6 +143,7 @@ google-auth==2.43.0
     #   google-cloud-resource-manager
     #   google-cloud-storage
     #   google-genai
+    #   kubernetes
 google-cloud-aiplatform==1.121.0
     # via onyx
 google-cloud-bigquery==3.38.0
@@ -193,9 +208,12 @@ httpx==0.28.1
     #   cohere
     #   google-genai
     #   litellm
+    #   mcp
     #   openai
 httpx-sse==0.4.3
-    # via cohere
+    # via
+    #   cohere
+    #   mcp
 huggingface-hub==0.35.3
     # via
     #   accelerate
@@ -224,15 +242,21 @@ jmespath==1.0.1
 joblib==1.5.2
     # via scikit-learn
 jsonschema==4.25.1
-    # via litellm
+    # via
+    #   litellm
+    #   mcp
 jsonschema-specifications==2025.9.1
     # via jsonschema
 kombu==5.5.4
     # via celery
+kubernetes==31.0.0
+    # via onyx
 litellm==1.80.11
     # via onyx
 markupsafe==3.0.3
     # via jinja2
+mcp==1.25.0
+    # via claude-agent-sdk
 mpmath==1.3.0
     # via sympy
 multidict==6.7.0
@@ -290,6 +314,10 @@ nvidia-nvshmem-cu12==3.3.20 ; platform_machine == 'x86_64' and sys_platform == '
     # via torch
 nvidia-nvtx-cu12==12.8.90 ; platform_machine == 'x86_64' and sys_platform == 'linux'
     # via torch
+oauthlib==3.2.2
+    # via
+    #   kubernetes
+    #   requests-oauthlib
 openai==2.14.0
     # via
     #   litellm
@@ -351,29 +379,46 @@ pyasn1==0.6.2
     #   rsa
 pyasn1-modules==0.4.2
     # via google-auth
+pycparser==2.23 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
 pydantic==2.11.7
     # via
+    #   agent-client-protocol
     #   cohere
     #   fastapi
     #   google-cloud-aiplatform
     #   google-genai
     #   litellm
+    #   mcp
     #   onyx
     #   openai
+    #   pydantic-settings
 pydantic-core==2.33.2
     # via pydantic
+pydantic-settings==2.12.0
+    # via mcp
+pyjwt==2.10.1
+    # via mcp
 python-dateutil==2.8.2
     # via
     #   aiobotocore
     #   botocore
     #   celery
     #   google-cloud-bigquery
+    #   kubernetes
 python-dotenv==1.1.1
-    # via litellm
+    # via
+    #   litellm
+    #   pydantic-settings
+python-multipart==0.0.21
+    # via mcp
+pywin32==311 ; sys_platform == 'win32'
+    # via mcp
 pyyaml==6.0.3
     # via
     #   accelerate
     #   huggingface-hub
+    #   kubernetes
     #   transformers
 referencing==0.36.2
     # via
@@ -391,9 +436,13 @@ requests==2.32.5
     #   google-cloud-storage
     #   google-genai
     #   huggingface-hub
+    #   kubernetes
+    #   requests-oauthlib
     #   tiktoken
     #   transformers
     #   voyageai
+requests-oauthlib==1.3.1
+    # via kubernetes
 retry==0.9.2
     # via onyx
 rpds-py==0.29.0
@@ -424,14 +473,19 @@ setuptools==80.9.0 ; python_full_version >= '3.12'
 shapely==2.0.6
     # via google-cloud-aiplatform
 six==1.17.0
-    # via python-dateutil
+    # via
+    #   kubernetes
+    #   python-dateutil
 sniffio==1.3.1
     # via
     #   anyio
     #   openai
+sse-starlette==3.0.3
+    # via mcp
 starlette==0.47.2
     # via
     #   fastapi
+    #   mcp
     #   prometheus-fastapi-instrumentator
     #   sentry-sdk
 sympy==1.14.0
@@ -478,6 +532,7 @@ typing-extensions==4.15.0
     #   google-genai
     #   grpcio
     #   huggingface-hub
+    #   mcp
     #   openai
     #   pydantic
     #   pydantic-core
@@ -487,17 +542,23 @@ typing-extensions==4.15.0
     #   torch
     #   typing-inspection
 typing-inspection==0.4.2
-    # via pydantic
+    # via
+    #   mcp
+    #   pydantic
+    #   pydantic-settings
 tzdata==2025.2
     # via kombu
 urllib3==2.6.3
     # via
     #   botocore
+    #   kubernetes
     #   requests
     #   sentry-sdk
     #   types-requests
 uvicorn==0.35.0
-    # via onyx
+    # via
+    #   mcp
+    #   onyx
 vine==5.1.0
     # via
     #   amqp
@@ -507,6 +568,8 @@ voyageai==0.2.3
     # via onyx
 wcwidth==0.2.14
     # via prompt-toolkit
+websocket-client==1.9.0
+    # via kubernetes
 websockets==15.0.1
     # via google-genai
 wrapt==1.17.3

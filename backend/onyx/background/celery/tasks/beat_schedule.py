@@ -139,6 +139,27 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.MONITORING,
         },
     },
+    # Sandbox cleanup tasks
+    {
+        "name": "cleanup-idle-sandboxes",
+        "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
+        "schedule": timedelta(minutes=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.SANDBOX,
+        },
+    },
+    {
+        "name": "cleanup-old-snapshots",
+        "task": OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
+        "schedule": timedelta(hours=24),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.SANDBOX,
+        },
+    },
 ]
 
 if ENTERPRISE_EDITION_ENABLED:

@@ -1,4 +1,14 @@
-"""License API endpoints."""
+"""License API endpoints for self-hosted deployments.
+
+These endpoints allow self-hosted Onyx instances to:
+1. Claim a license after Stripe checkout (via cloud data plane proxy)
+2. Upload a license file manually (for air-gapped deployments)
+3. View license status and seat usage
+4. Refresh/delete the local license
+
+NOTE: Cloud (MULTI_TENANT) deployments do NOT use these endpoints.
+Cloud licensing is managed via the control plane and gated_tenants Redis key.
+"""
 
 import requests
 from fastapi import APIRouter
@@ -9,6 +19,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from ee.onyx.auth.users import current_admin_user
+from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import get_license_metadata
 from ee.onyx.db.license import invalidate_license_cache
@@ -20,13 +31,11 @@ from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import LicenseStatusResponse
 from ee.onyx.server.license.models import LicenseUploadResponse
 from ee.onyx.server.license.models import SeatUsageResponse
-from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.utils.license import verify_license_signature
 from onyx.auth.users import User
-from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.db.engine.sql_engine import get_session
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -79,81 +88,80 @@ async def get_seat_usage(
     )
 
 
-@router.post("/fetch")
-async def fetch_license(
+@router.post("/claim")
+async def claim_license(
+    session_id: str,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> LicenseResponse:
     """
-    Fetch license from control plane.
-    Used after Stripe checkout completion to retrieve the new license.
-    """
-    tenant_id = get_current_tenant_id()
+    Claim a license after Stripe checkout (self-hosted only).
 
-    try:
-        token = generate_data_plane_token()
-    except ValueError as e:
-        logger.error(f"Failed to generate data plane token: {e}")
+    After a user completes Stripe checkout, they're redirected back with a
+    session_id. This endpoint exchanges that session_id for a signed license
+    via the cloud data plane proxy.
+
+    Flow:
+    1. Self-hosted frontend redirects to Stripe checkout (via cloud proxy)
+    2. User completes payment
+    3. Stripe redirects back to self-hosted instance with session_id
+    4. Frontend calls this endpoint with session_id
+    5. We call cloud data plane /proxy/claim-license to get the signed license
+    6. License is stored locally and cached
+    """
+    if MULTI_TENANT:
         raise HTTPException(
-            status_code=500, detail="Authentication configuration error"
+            status_code=400,
+            detail="License claiming is only available for self-hosted deployments",
         )
 
     try:
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
-        url = f"{CONTROL_PLANE_API_BASE_URL}/license/{tenant_id}"
-        response = requests.get(url, headers=headers, timeout=10)
+        # Call cloud data plane to claim the license
+        url = f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license"
+        response = requests.post(
+            url,
+            json={"session_id": session_id},
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
         response.raise_for_status()
 
         data = response.json()
-        if not isinstance(data, dict) or "license" not in data:
-            raise HTTPException(
-                status_code=502, detail="Invalid response from control plane"
-            )
+        license_data = data.get("license")
 
-        license_data = data["license"]
         if not license_data:
-            raise HTTPException(status_code=404, detail="No license found")
+            raise HTTPException(status_code=404, detail="No license in response")
 
         # Verify signature before persisting
         payload = verify_license_signature(license_data)
 
-        # Verify the fetched license is for this tenant
-        if payload.tenant_id != tenant_id:
-            logger.error(
-                f"License tenant mismatch: expected {tenant_id}, got {payload.tenant_id}"
-            )
-            raise HTTPException(
-                status_code=400,
-                detail="License tenant ID mismatch - control plane returned wrong license",
-            )
-
-        # Persist to DB and update cache atomically
+        # Store in DB
         upsert_license(db_session, license_data)
+
         try:
             update_license_cache(payload, source=LicenseSource.AUTO_FETCH)
         except Exception as cache_error:
-            # Log but don't fail - DB is source of truth, cache will refresh on next read
             logger.warning(f"Failed to update license cache: {cache_error}")
 
+        logger.info(
+            f"License claimed: seats={payload.seats}, expires={payload.expires_at.date()}"
+        )
         return LicenseResponse(success=True, license=payload)
 
     except requests.HTTPError as e:
         status_code = e.response.status_code if e.response is not None else 502
-        logger.error(f"Control plane returned error: {status_code}")
-        raise HTTPException(
-            status_code=status_code,
-            detail="Failed to fetch license from control plane",
-        )
+        detail = "Failed to claim license"
+        try:
+            error_data = e.response.json() if e.response is not None else {}
+            detail = error_data.get("detail", detail)
+        except Exception:
+            pass
+        raise HTTPException(status_code=status_code, detail=detail)
     except ValueError as e:
-        logger.error(f"License verification failed: {type(e).__name__}")
         raise HTTPException(status_code=400, detail=str(e))
     except requests.RequestException:
-        logger.exception("Failed to fetch license from control plane")
         raise HTTPException(
-            status_code=502, detail="Failed to connect to control plane"
+            status_code=502, detail="Failed to connect to license server"
         )
 
 
@@ -164,33 +172,36 @@ async def upload_license(
     db_session: Session = Depends(get_session),
 ) -> LicenseUploadResponse:
     """
-    Upload a license file manually.
-    Used for air-gapped deployments where control plane is not accessible.
+    Upload a license file manually (self-hosted only).
+
+    Used for air-gapped deployments where the cloud data plane is not accessible.
+    The license file must be cryptographically signed by Onyx.
     """
+    if MULTI_TENANT:
+        raise HTTPException(
+            status_code=400,
+            detail="License upload is only available for self-hosted deployments",
+        )
+
     try:
         content = await license_file.read()
         license_data = content.decode("utf-8").strip()
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid license file format")
 
+    # Verify cryptographic signature - this is the only validation needed
+    # The license's tenant_id identifies the customer in control plane, not locally
     try:
         payload = verify_license_signature(license_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    tenant_id = get_current_tenant_id()
-    if payload.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=400,
-            detail=f"License tenant ID mismatch. Expected {tenant_id}, got {payload.tenant_id}",
-        )
-
     # Persist to DB and update cache
     upsert_license(db_session, license_data)
+
     try:
         update_license_cache(payload, source=LicenseSource.MANUAL_UPLOAD)
     except Exception as cache_error:
-        # Log but don't fail - DB is source of truth, cache will refresh on next read
         logger.warning(f"Failed to update license cache: {cache_error}")
 
     return LicenseUploadResponse(
@@ -205,8 +216,10 @@ async def refresh_license_cache_endpoint(
     db_session: Session = Depends(get_session),
 ) -> LicenseStatusResponse:
     """
-    Force refresh the license cache from the database.
+    Force refresh the license cache from the local database.
+
     Useful after manual database changes or to verify license validity.
+    Does NOT fetch from control plane - use /claim for that.
     """
     metadata = refresh_license_cache(db_session)
 
@@ -233,9 +246,15 @@ async def delete_license(
 ) -> dict[str, bool]:
     """
     Delete the current license.
-    Admin only - removes license and invalidates cache.
+
+    Admin only - removes license from database and invalidates cache.
     """
-    # Invalidate cache first - if DB delete fails, stale cache is worse than no cache
+    if MULTI_TENANT:
+        raise HTTPException(
+            status_code=400,
+            detail="License deletion is only available for self-hosted deployments",
+        )
+
     try:
         invalidate_license_cache()
     except Exception as cache_error:
