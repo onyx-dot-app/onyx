@@ -1,5 +1,6 @@
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -232,26 +233,13 @@ def upsert_llm_provider(
         custom_config = custom_config if custom_config else None
 
     existing_llm_provider.provider = llm_provider_upsert_request.provider
+    existing_llm_provider.api_key = llm_provider_upsert_request.api_key
+    existing_llm_provider.api_base = llm_provider_upsert_request.api_base
+    existing_llm_provider.api_version = llm_provider_upsert_request.api_version
+    existing_llm_provider.custom_config = custom_config
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
     existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
-
-    credential_keys = [
-        "api_key",
-        "api_base",
-        "api_version",
-        "deployment_name",
-        "deployment_name",
-    ]
-
-    for key in credential_keys:
-        val = getattr(llm_provider_upsert_request, key)
-        if val is not None:
-            existing_llm_provider.credentials[key] = val
-
-    if custom_config := llm_provider_upsert_request.custom_config:
-        existing_llm_provider.credentials.update(
-            {k: v for k, v in custom_config.items() if v is not None and v.strip()}
-        )
+    existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
 
     if not existing_llm_provider.id:
         # If its not already in the db, we need to generate an ID by flushing
@@ -743,3 +731,62 @@ def sync_auto_mode_models(
     changes += 1
     db_session.commit()
     return changes
+
+
+def create_new_flow_mapping(
+    db_session: Session,
+    model_configuration_id: int,
+    flow_type: ModelFlowType,
+    is_default: bool = False,
+) -> FlowMapping:
+    flow_mapping = FlowMapping(
+        model_configuration_id=model_configuration_id,
+        flow_type=flow_type,
+        is_default=is_default,
+    )
+
+    db_session.add(flow_mapping)
+    db_session.commit()
+    db_session.refresh(flow_mapping)
+    return flow_mapping
+
+
+def delete_flow_mapping(
+    db_session: Session,
+    model_configuration_id: int,
+    flow_type: ModelFlowType,
+) -> None:
+    db_session.execute(
+        delete(FlowMapping).where(
+            FlowMapping.model_configuration_id == model_configuration_id,
+            FlowMapping.flow_type == flow_type,
+        )
+    )
+    db_session.commit()
+
+
+def set_default_flow_mapping(
+    db_session: Session,
+    model_configuration_id: int,
+    flow_type: ModelFlowType,
+) -> None:
+    # Get the current default
+    current_default = db_session.scalar(
+        select(FlowMapping).where(
+            FlowMapping.flow_type == flow_type,
+            FlowMapping.is_default == True,  # noqa: E712
+        )
+    )
+    if current_default:
+        current_default.is_default = False
+        db_session.flush()
+
+    db_session.execute(
+        update(FlowMapping)
+        .where(
+            FlowMapping.model_configuration_id == model_configuration_id,
+            FlowMapping.flow_type == flow_type,
+        )
+        .values(is_default=True)
+    )
+    db_session.commit()

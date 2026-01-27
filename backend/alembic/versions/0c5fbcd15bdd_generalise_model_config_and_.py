@@ -8,7 +8,6 @@ Create Date: 2026-01-26 14:43:16.932376
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 from onyx.db.enums import ModelFlowType
 
@@ -85,103 +84,8 @@ def upgrade() -> None:
     op.drop_column("llm_provider", "is_default_vision_provider")
     op.drop_column("llm_provider", "default_vision_model")
 
-    # Credential Consolidation
-    # Create a new credentials column in LLMProvider
-    op.add_column(
-        "llm_provider",
-        sa.Column("credentials", postgresql.JSONB(), nullable=False, default={}),
-    )
-    op.execute(
-        """
-        UPDATE llm_provider
-        SET credentials = custom_config
-        WHERE custom_config IS NOT NULL;
-        """
-    )
-
-    # Drop custom_config from llm provider
-    op.drop_column("llm_provider", "custom_config")
-
-    # Move api_key, api_base, api_version, deployment_name to credentials in LLMProvider
-    op.execute(
-        """
-        UPDATE llm_provider AS lp
-        SET credentials =
-            COALESCE(lp.credentials, '{}'::jsonb)
-            || jsonb_strip_nulls(
-                jsonb_build_object(
-                    'api_key',  lp.api_key,
-                    'api_base', lp.api_base,
-                    'api_version', lp.api_version,
-                    'deployment_name', lp.deployment_name
-                )
-            )
-        WHERE lp.api_key IS NOT NULL OR lp.api_base IS NOT NULL OR lp.api_version IS NOT NULL OR lp.deployment_name IS NOT NULL;
-        """
-    )
-
-    # Drop api_key, api_base, api_version, deployment_name from llm provider
-    op.drop_column("llm_provider", "api_key")
-    op.drop_column("llm_provider", "api_base")
-    op.drop_column("llm_provider", "api_version")
-    op.drop_column("llm_provider", "deployment_name")
-
 
 def downgrade() -> None:
-    # Restore api_key, api_base, api_version, deployment_name columns
-    op.add_column("llm_provider", sa.Column("api_key", sa.String(), nullable=True))
-    op.add_column("llm_provider", sa.Column("api_base", sa.String(), nullable=True))
-    op.add_column("llm_provider", sa.Column("api_version", sa.String(), nullable=True))
-    op.add_column(
-        "llm_provider", sa.Column("deployment_name", sa.String(), nullable=True)
-    )
-
-    # Extract values from credentials JSONB back to individual columns
-    op.execute(
-        """
-        UPDATE llm_provider
-        SET
-            api_key = credentials->>'api_key',
-            api_base = credentials->>'api_base',
-            api_version = credentials->>'api_version',
-            deployment_name = credentials->>'deployment_name'
-        WHERE credentials IS NOT NULL;
-        """
-    )
-
-    # Remove extracted keys from credentials
-    op.execute(
-        """
-        UPDATE llm_provider
-        SET credentials = credentials - 'api_key' - 'api_base' - 'api_version' - 'deployment_name'
-        WHERE credentials IS NOT NULL;
-        """
-    )
-
-    # Restore custom_config column and copy remaining credentials data back
-    op.add_column(
-        "llm_provider",
-        sa.Column("custom_config", postgresql.JSONB(), nullable=True),
-    )
-    op.execute(
-        """
-        UPDATE llm_provider
-        SET custom_config = credentials
-        WHERE credentials IS NOT NULL AND credentials != '{}'::jsonb;
-        """
-    )
-    op.drop_column("llm_provider", "credentials")
-
-    # Restore vision columns
-    op.add_column(
-        "llm_provider",
-        sa.Column("is_default_vision_provider", sa.Boolean(), nullable=True),
-    )
-    op.add_column(
-        "llm_provider",
-        sa.Column("default_vision_model", sa.String(), nullable=True),
-    )
-
     # Populate vision defaults from flow_mapping
     op.execute(
         """

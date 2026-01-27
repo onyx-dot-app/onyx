@@ -53,7 +53,6 @@ from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -130,7 +129,7 @@ def test_llm_configuration(
 
     llm = get_llm(
         provider=test_llm_request.provider,
-        model=test_llm_request.default_model_name,
+        model=test_llm_request.model,
         api_key=test_api_key,
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
@@ -237,19 +236,10 @@ def put_llm_provider(
                 deduplicated_personas.append(persona_id)
         llm_provider_upsert_request.personas = deduplicated_personas
 
-    default_model_found = False
-
+    # Default model must be visible
     for model_configuration in llm_provider_upsert_request.model_configurations:
         if model_configuration.name == llm_provider_upsert_request.default_model_name:
             model_configuration.is_visible = True
-            default_model_found = True
-
-    if not default_model_found:
-        llm_provider_upsert_request.model_configurations.append(
-            ModelConfigurationUpsertRequest(
-                name=llm_provider_upsert_request.default_model_name, is_visible=True
-            )
-        )
 
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed

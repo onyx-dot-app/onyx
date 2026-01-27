@@ -2408,6 +2408,15 @@ class LLMProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
     provider: Mapped[str] = mapped_column(String)
+    api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    api_base: Mapped[str | None] = mapped_column(String, nullable=True)
+    api_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    # custom configs that should be passed to the LLM provider at inference time
+    # (e.g. `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc. for bedrock)
+    custom_config: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Accesses an API via key-value pairs
     credentials: Mapped[dict[str, str]] = mapped_column(
@@ -2473,13 +2482,22 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
+    flows: Mapped[list["FlowMapping"]] = relationship(
+        "FlowMapping",
+        back_populates="model_configuration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
 
 class FlowMapping(Base):
     __tablename__ = "flow_mapping"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    flow_type: Mapped[ModelFlowType] = mapped_column(Enum(ModelFlowType))
+    flow_type: Mapped[ModelFlowType] = mapped_column(
+        Enum(ModelFlowType), nullable=False
+    )
     model_configuration_id: Mapped[int] = mapped_column(
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
         nullable=False,
