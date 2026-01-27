@@ -3,6 +3,8 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 
 from googleapiclient.discovery import Resource  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
@@ -392,4 +394,44 @@ def get_root_folder_id(service: Resource) -> str:
         service.files()
         .get(fileId="root", fields=GoogleFields.ID.value)
         .execute()[GoogleFields.ID.value]
+    )
+
+
+def _extract_file_id_from_web_view_link(web_view_link: str) -> str:
+    parsed = urlparse(web_view_link)
+    path_parts = [part for part in parsed.path.split("/") if part]
+
+    if "d" in path_parts:
+        idx = path_parts.index("d")
+        if idx + 1 < len(path_parts):
+            return path_parts[idx + 1]
+
+    query_params = parse_qs(parsed.query)
+    for key in ("id", "fileId"):
+        value = query_params.get(key)
+        if value and value[0]:
+            return value[0]
+
+    raise ValueError(
+        f"Unable to extract Drive file id from webViewLink: {web_view_link}"
+    )
+
+
+def get_file_by_web_view_link(
+    service: GoogleDriveService,
+    web_view_link: str,
+    fields: str,
+) -> GoogleDriveFileType:
+    """
+    Retrieve a Google Drive file using its webViewLink.
+    """
+    file_id = _extract_file_id_from_web_view_link(web_view_link)
+    return (
+        service.files()
+        .get(
+            fileId=file_id,
+            supportsAllDrives=True,
+            fields=fields,
+        )
+        .execute()
     )
