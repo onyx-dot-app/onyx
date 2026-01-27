@@ -887,12 +887,12 @@ def upsert_persona(
     # Fetch callable personas (sub-agents)
     callable_personas = None
     if callable_persona_ids is not None:
-        callable_personas = (
-            db_session.query(Persona)
-            .filter(Persona.id.in_(callable_persona_ids))
-            .filter(Persona.deleted.is_(False))
-            .all()
+        stmt = select(Persona).where(
+            Persona.id.in_(callable_persona_ids),
+            Persona.deleted.is_(False),
         )
+        stmt = _add_user_filters(stmt, user, get_editable=False)
+        callable_personas = db_session.scalars(stmt).all()
         if len(callable_personas) != len(callable_persona_ids):
             raise ValueError(
                 "Some callable personas not found or have been deleted"
