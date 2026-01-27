@@ -3,7 +3,7 @@ import useSWRInfinite from "swr/infinite";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ChatSearchResponse } from "@/app/chat/chat_search/interfaces";
+import { ChatSearchResponse } from "@/app/app/chat_search/interfaces";
 import { UNNAMED_CHAT } from "@/lib/constants";
 
 export interface FilterableChat {
