@@ -50,73 +50,20 @@ from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
+from ee.onyx.configs.license_enforcement import EE_ONLY_PATH_PREFIXES
+from ee.onyx.configs.license_enforcement import LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
 from shared_configs.contextvars import get_current_tenant_id
 
-# Paths that are ALWAYS accessible, even when license is expired/gated.
-# These enable users to:
-#   /auth - Log in/out (users can't fix billing if locked out of auth)
-#   /license - Fetch, upload, or check license status
-#   /health - Health checks for load balancers/orchestrators
-#   /me - Basic user info needed for UI rendering
-#   /settings, /enterprise-settings - View app status and branding
-#   /tenants/billing-* - Manage subscription to resolve gating
-#   /proxy - Self-hosted proxy endpoints (have own license-based auth)
-ALLOWED_PATH_PREFIXES = {
-    "/auth",
-    "/license",
-    "/health",
-    "/me",
-    "/settings",
-    "/enterprise-settings",
-    # Billing endpoints (unified API for both MT and self-hosted)
-    "/billing",
-    # Proxy endpoints for self-hosted billing (no tenant context)
-    "/proxy",
-    # Legacy tenant billing endpoints (kept for backwards compatibility)
-    "/tenants/billing-information",
-    "/tenants/create-customer-portal-session",
-    "/tenants/create-subscription-session",
-    # User management - needed to remove users when seat limit exceeded
-    "/manage/users",
-    "/manage/admin/users",
-    "/manage/admin/valid-domains",
-    "/manage/admin/deactivate-user",
-    "/manage/admin/delete-user",
-    "/users",
-    # Notifications - needed for UI to load properly
-    "/notifications",
-}
-
-# EE-only paths that require a valid license.
-# Users without a license (community edition) cannot access these.
-# These are blocked even when user has never subscribed (no license).
-EE_ONLY_PATH_PREFIXES = {
-    # User groups and access control
-    "/manage/admin/user-group",
-    # Analytics and reporting
-    "/analytics",
-    # Query history (admin chat session endpoints)
-    "/admin/chat-sessions",
-    "/admin/chat-session-history",
-    "/admin/query-history",
-    # Usage reporting/export
-    "/admin/usage-report",
-    # Standard answers (canned responses)
-    "/manage/admin/standard-answer",
-    # Token rate limits
-    "/admin/token-rate-limits",
-    # Evals
-    "/evals",
-}
-
 
 def _is_path_allowed(path: str) -> bool:
     """Check if path is in allowlist (prefix match)."""
-    return any(path.startswith(prefix) for prefix in ALLOWED_PATH_PREFIXES)
+    return any(
+        path.startswith(prefix) for prefix in LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
+    )
 
 
 def _is_ee_only_path(path: str) -> bool:
@@ -187,7 +134,12 @@ def add_license_enforcement_middleware(
                         return JSONResponse(
                             status_code=402,
                             content={
-                                "detail": f"Seat limit exceeded: {metadata.used_seats} of {metadata.seats} seats used."
+                                "detail": {
+                                    "error": "seat_limit_exceeded",
+                                    "message": f"Seat limit exceeded: {metadata.used_seats} of {metadata.seats} seats used.",
+                                    "used_seats": metadata.used_seats,
+                                    "seats": metadata.seats,
+                                }
                             },
                         )
             else:
@@ -200,8 +152,11 @@ def add_license_enforcement_middleware(
                     return JSONResponse(
                         status_code=402,
                         content={
-                            "detail": "This feature requires an Enterprise license. "
-                            "Please upgrade to access this functionality.",
+                            "detail": {
+                                "error": "enterprise_license_required",
+                                "message": "This feature requires an Enterprise license. "
+                                "Please upgrade to access this functionality.",
+                            }
                         },
                     )
                 logger.debug(
@@ -217,12 +172,14 @@ def add_license_enforcement_middleware(
         if is_gated:
             logger.info(f"Blocking request for gated tenant: {tenant_id}, path={path}")
 
-            # At this point, is_gated=True means GATED_ACCESS status
-            message = "Your subscription has expired. Please update your billing."
-
             return JSONResponse(
                 status_code=402,
-                content={"detail": message},
+                content={
+                    "detail": {
+                        "error": "license_expired",
+                        "message": "Your subscription has expired. Please update your billing.",
+                    }
+                },
             )
 
         return await call_next(request)

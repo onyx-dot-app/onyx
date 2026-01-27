@@ -10,6 +10,8 @@ import pytest
 from starlette.requests import Request
 from starlette.responses import Response
 
+from ee.onyx.configs.license_enforcement import EE_ONLY_PATH_PREFIXES
+from ee.onyx.configs.license_enforcement import LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
 from ee.onyx.server.middleware.license_enforcement import _is_ee_only_path
 from ee.onyx.server.middleware.license_enforcement import _is_path_allowed
 from onyx.server.settings.models import ApplicationStatus
@@ -20,62 +22,63 @@ MiddlewareHarness = tuple[
     Callable[[Request], Awaitable[Response]],
 ]
 
+# Paths that should be blocked (core functionality requiring license)
+BLOCKED_PATHS = [
+    "/chat",
+    "/search",
+    "/admin/connectors",
+    "/connector",
+    "/persona",
+]
+
 
 class TestPathAllowlist:
-    """Tests for the path allowlist logic."""
+    """Tests for the path allowlist logic.
 
-    @pytest.mark.parametrize(
-        "path,expected",
-        [
-            # Each allowlisted prefix (one example each)
-            ("/auth", True),
-            ("/license", True),
-            ("/health", True),
-            ("/me", True),
-            ("/settings", True),
-            ("/enterprise-settings", True),
-            ("/tenants/billing-information", True),
-            ("/tenants/create-customer-portal-session", True),
-            # Verify prefix matching works (subpath of allowlisted)
-            ("/auth/callback/google", True),
-            # Blocked paths (core functionality that requires license)
-            ("/chat", False),
-            ("/search", False),
-            ("/admin", False),
-            ("/connector", False),
-            ("/persona", False),
-        ],
-    )
-    def test_path_allowlist(self, path: str, expected: bool) -> None:
-        """Verify correct paths are allowed/blocked when license is gated."""
-        assert _is_path_allowed(path) is expected
+    Uses LICENSE_ENFORCEMENT_ALLOWED_PREFIXES from the constants module
+    as the source of truth to ensure tests stay in sync with production code.
+    """
+
+    @pytest.mark.parametrize("path", list(LICENSE_ENFORCEMENT_ALLOWED_PREFIXES))
+    def test_allowed_paths_are_allowed(self, path: str) -> None:
+        """All paths in LICENSE_ENFORCEMENT_ALLOWED_PREFIXES should be allowed."""
+        assert _is_path_allowed(path) is True
+
+    def test_allowed_path_prefix_matching(self) -> None:
+        """Subpaths of allowed prefixes should also be allowed."""
+        assert _is_path_allowed("/auth/callback/google") is True
+        assert _is_path_allowed("/admin/billing/checkout") is True
+
+    @pytest.mark.parametrize("path", BLOCKED_PATHS)
+    def test_blocked_paths_are_blocked(self, path: str) -> None:
+        """Core functionality paths should be blocked when license is gated."""
+        assert _is_path_allowed(path) is False
 
 
 class TestEEOnlyPaths:
-    """Tests for EE-only path detection."""
+    """Tests for EE-only path detection.
+
+    Uses EE_ONLY_PATH_PREFIXES from the constants module as the source of truth
+    to ensure tests stay in sync with production code.
+    """
+
+    @pytest.mark.parametrize("path", list(EE_ONLY_PATH_PREFIXES))
+    def test_ee_only_paths_are_detected(self, path: str) -> None:
+        """All paths in EE_ONLY_PATH_PREFIXES should be detected as EE-only."""
+        assert _is_ee_only_path(path) is True
 
     @pytest.mark.parametrize(
-        "path,expected",
+        "path",
         [
-            # EE-only paths
-            ("/manage/admin/user-group", True),
-            ("/analytics", True),
-            ("/admin/chat-sessions", True),
-            ("/admin/query-history", True),
-            ("/admin/usage-report", True),
-            ("/manage/admin/standard-answer", True),
-            ("/admin/token-rate-limits", True),
-            ("/evals", True),
-            # Non-EE paths (community features)
-            ("/chat", False),
-            ("/search", False),
-            ("/connector", False),
-            ("/persona", False),
+            "/chat",
+            "/search",
+            "/connector",
+            "/persona",
         ],
     )
-    def test_ee_only_paths(self, path: str, expected: bool) -> None:
-        """Verify EE-only paths are correctly identified."""
-        assert _is_ee_only_path(path) is expected
+    def test_community_paths_are_not_ee_only(self, path: str) -> None:
+        """Community features should not be detected as EE-only."""
+        assert _is_ee_only_path(path) is False
 
 
 class TestLicenseEnforcementMiddleware:

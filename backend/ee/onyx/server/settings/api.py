@@ -45,8 +45,8 @@ def check_ee_features_enabled() -> bool:
             return True
     except RedisError as e:
         logger.warning(f"Failed to check license for EE features: {e}")
-        # Fail open - don't break the UI if Redis is down
-        return True
+        # Fail closed - if Redis is down, other things will break anyway
+        return False
 
     # No license or GATED_ACCESS - no EE features
     return False
