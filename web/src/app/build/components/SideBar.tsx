@@ -37,6 +37,58 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/build/components/TypewriterText";
 
 // ============================================================================
+// Fun Deleting Messages with Wave Animation
+// ============================================================================
+
+const DELETING_MESSAGES = [
+  "Mining away your blocks...",
+  "Returning diamonds to the caves...",
+  "Creeper blew up your save file...",
+  "Throwing items into lava...",
+  "Despawning your entities...",
+  "Breaking bedrock illegally...",
+  "Enderman teleported your data away...",
+  "Falling into the void...",
+  "Your build ran out of hearts...",
+  "Respawning at world spawn...",
+  "Feeding your code to the Ender Dragon...",
+  "Activating TNT chain reaction...",
+  "Zombie horde consumed your bytes...",
+  "Wither withering your session...",
+  "Herobrine deleted your world...",
+];
+
+function DeletingMessage() {
+  const [messageIndex, setMessageIndex] = useState(() =>
+    Math.floor(Math.random() * DELETING_MESSAGES.length)
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIndex((prev) => {
+        let next = Math.floor(Math.random() * DELETING_MESSAGES.length);
+        // Avoid showing the same message twice in a row
+        while (next === prev && DELETING_MESSAGES.length > 1) {
+          next = Math.floor(Math.random() * DELETING_MESSAGES.length);
+        }
+        return next;
+      });
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Safe to assert since messageIndex is always within bounds
+  const message = DELETING_MESSAGES[messageIndex]!;
+
+  return (
+    <Text as="p" text03 className="animate-subtle-pulse">
+      {message}
+    </Text>
+  );
+}
+
+// ============================================================================
 // Build Session Button
 // ============================================================================
 
@@ -179,6 +231,7 @@ function BuildSessionButton({
           icon={SvgTrash}
           onClose={isDeleting ? undefined : () => setIsDeleteModalOpen(false)}
           hideCancel={isDeleting}
+          twoTone={!isDeleting}
           submit={
             <Button
               danger
@@ -190,9 +243,11 @@ function BuildSessionButton({
             </Button>
           }
         >
-          {isDeleting
-            ? "Terminating sandbox and cleaning up session data..."
-            : "Are you sure you want to delete this build? This action cannot be undone."}
+          {isDeleting ? (
+            <DeletingMessage />
+          ) : (
+            "Are you sure you want to delete this build? This action cannot be undone."
+          )}
         </ConfirmationModalLayout>
       )}
     </>
