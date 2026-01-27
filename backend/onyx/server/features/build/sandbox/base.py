@@ -491,6 +491,27 @@ class SandboxManager(ABC):
             nextjs_port: The port the Next.js server should be listening on
         """
 
+    @abstractmethod
+    def cancel_message(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Cancel the current message/prompt operation for a session.
+
+        Sends a session/cancel notification to the ACP agent to stop the
+        currently running operation. This is a non-blocking operation that
+        signals the agent to stop but does not wait for confirmation.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID whose operation should be cancelled
+
+        Returns:
+            True if cancel was sent, False if no active session/client found
+        """
+        ...
+
 
 # Singleton instance cache for the factory
 _sandbox_manager_instance: SandboxManager | None = None
