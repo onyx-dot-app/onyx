@@ -221,18 +221,15 @@ export default function ChatSearchCommandMenu({
             {(activeFilter === "all" || activeFilter === "chats") &&
               displayedChats.length > 0 && (
                 <>
-                  {(activeFilter === "all" || activeFilter === "chats") &&
-                    searchValue.trim().length === 0 && (
-                      <CommandMenu.Filter
-                        value="recent-sessions"
-                        onSelect={() => setActiveFilter("chats")}
-                        isApplied={activeFilter === "chats"}
-                      >
-                        {activeFilter === "chats"
-                          ? "Recent"
-                          : "Recent Sessions"}
-                      </CommandMenu.Filter>
-                    )}
+                  {searchValue.trim().length === 0 && (
+                    <CommandMenu.Filter
+                      value="recent-sessions"
+                      onSelect={() => setActiveFilter("chats")}
+                      isApplied={activeFilter === "chats"}
+                    >
+                      {activeFilter === "chats" ? "Recent" : "Recent Sessions"}
+                    </CommandMenu.Filter>
+                  )}
                   {displayedChats.map((chat) => (
                     <CommandMenu.Item
                       key={chat.id}

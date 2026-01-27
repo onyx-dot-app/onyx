@@ -43,7 +43,7 @@ export function formatDisplayTime(isoDate: string): string {
 
   // X days ago (2-7 days)
   if (diffDays <= 7) {
-    return `${diffDays} days ago`;
+    return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
   }
 
   // Month Day format (e.g., "October 23")
