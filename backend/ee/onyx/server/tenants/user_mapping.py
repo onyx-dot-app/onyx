@@ -73,15 +73,41 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     """
     Add users to a tenant with proper transaction handling.
     Checks if users already have a tenant mapping to avoid duplicates.
-    If a user already has an active mapping to any tenant, the new mapping will be added as inactive.
+
+    Raises:
+        HTTPException: 400 if any user already has an active mapping to another tenant.
     """
+    from fastapi import HTTPException
+
     with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
         try:
             # Start a transaction
             db_session.begin()
 
-            for email in emails:
-                # Check if the user already has a mapping to this tenant
+            # First, check if any users already have active mappings to OTHER tenants
+            users_with_other_tenants: list[str] = []
+            for email in set(emails):  # dedupe
+                active_mapping = (
+                    db_session.query(UserTenantMapping)
+                    .filter(
+                        UserTenantMapping.email == email,
+                        UserTenantMapping.active == True,  # noqa: E712
+                        UserTenantMapping.tenant_id != tenant_id,
+                    )
+                    .first()
+                )
+                if active_mapping:
+                    users_with_other_tenants.append(email)
+
+            if users_with_other_tenants:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"The following users already belong to another tenant: "
+                    f"{', '.join(users_with_other_tenants)}",
+                )
+
+            # Now add mappings for users who don't already have one to this tenant
+            for email in set(emails):
                 existing_mapping = (
                     db_session.query(UserTenantMapping)
                     .filter(
@@ -92,23 +118,12 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
                     .first()
                 )
 
-                # If user already has an active mapping, add this one as inactive
                 if not existing_mapping:
-                    # Check if the user already has an active mapping to any tenant
-                    has_active_mapping = (
-                        db_session.query(UserTenantMapping)
-                        .filter(
-                            UserTenantMapping.email == email,
-                            UserTenantMapping.active == True,  # noqa: E712
-                        )
-                        .first()
-                    )
-
                     db_session.add(
                         UserTenantMapping(
                             email=email,
                             tenant_id=tenant_id,
-                            active=False if has_active_mapping else True,
+                            active=True,
                         )
                     )
 
@@ -119,6 +134,9 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
             # Invalidate license cache so used_seats reflects the new count
             invalidate_license_cache(tenant_id)
 
+        except HTTPException:
+            db_session.rollback()
+            raise
         except Exception:
             logger.exception(f"Failed to add users to tenant {tenant_id}")
             db_session.rollback()
