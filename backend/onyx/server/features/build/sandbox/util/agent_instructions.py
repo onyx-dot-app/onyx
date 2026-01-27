@@ -60,12 +60,6 @@ CONNECTOR_DESCRIPTIONS = {
         "**Notion**: Pages and databases are organized hierarchically. "
         "Each page is stored as `PAGE_TITLE.json`."
     ),
-    "org_info": (
-        "**Org Info**: This directory contains various pieces of information about our organization. Contains: "
-        "`AGENTS.md`: Instructions for the agent to use the organization information."
-        "`organization_structure.json`: a json with our groups, managers, and their reports. "
-        "`user_identity_profile.txt`: Your identity and profile information."
-    ),
 }
 
 
