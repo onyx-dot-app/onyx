@@ -55,6 +55,8 @@ from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -200,13 +202,18 @@ def user_needs_to_be_verified() -> bool:
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     try:
         redis_client = get_redis_client(tenant_id=tenant_id)
+        value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
     except RuntimeError as exc:
         if tenant_id is None and MULTI_TENANT and "Tenant ID is not set" in str(exc):
             # Pre-login/public endpoints may be hit before a tenant context exists.
             # Treat as disabled rather than erroring.
             return False
         raise
-    value = redis_client.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)
+    except (RedisConnectionError, RedisTimeoutError) as exc:
+        logger.warning(
+            "Redis unavailable; treating anonymous user as disabled", exc_info=exc
+        )
+        return False
 
     if value is None:
         return False

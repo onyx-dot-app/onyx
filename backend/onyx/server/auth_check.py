@@ -95,6 +95,26 @@ def is_route_in_spec_list(
     return False
 
 
+def is_request_in_spec_list(
+    path: str, method: str, public_endpoint_specs: list[tuple[str, set[str]]]
+) -> bool:
+    normalized_path = path.rstrip("/") or "/"
+    for base_path, methods in public_endpoint_specs:
+        if normalized_path == base_path and method in methods:
+            return True
+
+    processed_global_prefix = f"/{APP_API_PREFIX.strip('/')}" if APP_API_PREFIX else ""
+    if not processed_global_prefix:
+        return False
+
+    for base_path, methods in public_endpoint_specs:
+        prefixed_path = f"{processed_global_prefix}/{base_path.strip('/')}"
+        if normalized_path == prefixed_path and method in methods:
+            return True
+
+    return False
+
+
 def check_router_auth(
     application: FastAPI,
     public_endpoint_specs: list[tuple[str, set[str]]] = PUBLIC_ENDPOINT_SPECS,
