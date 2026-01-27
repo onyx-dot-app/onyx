@@ -69,6 +69,8 @@ class AgentToolConfig(BaseModel):
 
     user_selected_filters: BaseFilters | None = None
     is_connected_fn: object | None = None  # Callable[[], bool] | None
+    # Additional persona IDs to make callable at runtime (merged with DB config)
+    runtime_callable_persona_ids: list[int] | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -405,15 +407,42 @@ def construct_tools(
 
         tool_dict[search_tool_db_model.id] = [search_tool]
 
-    # Construct AgentTools for each callable persona
-    if persona.callable_personas:
+    # Construct AgentTools for callable personas
+    # Merge DB-configured callable_personas with runtime-selected ones
+    if not agent_tool_config:
+        agent_tool_config = AgentToolConfig()
+
+    # Start with DB-configured callable personas
+    callable_personas_map: dict[int, Persona] = {
+        p.id: p for p in persona.callable_personas
+    }
+
+    # Add runtime callable personas (if any)
+    if agent_tool_config.runtime_callable_persona_ids:
+        runtime_ids_to_fetch = [
+            pid
+            for pid in agent_tool_config.runtime_callable_persona_ids
+            if pid not in callable_personas_map
+        ]
+        if runtime_ids_to_fetch:
+            runtime_personas = (
+                db_session.query(Persona)
+                .filter(Persona.id.in_(runtime_ids_to_fetch))
+                .filter(Persona.deleted.is_(False))
+                .all()
+            )
+            for p in runtime_personas:
+                callable_personas_map[p.id] = p
+            logger.debug(
+                f"Added {len(runtime_personas)} runtime callable personas: "
+                f"{[p.name for p in runtime_personas]}"
+            )
+
+    if callable_personas_map:
         # Lazy import to avoid circular dependency
         from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
 
-        if not agent_tool_config:
-            agent_tool_config = AgentToolConfig()
-
-        for target_persona in persona.callable_personas:
+        for target_persona in callable_personas_map.values():
             # Use negative ID based on target persona ID to avoid collision with real tool IDs
             synthetic_tool_id = -target_persona.id
 

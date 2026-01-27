@@ -124,6 +124,9 @@ class MinimalPersonaSnapshot(BaseModel):
     # Used to display ownership
     owner: MinimalUserSnapshot | None
 
+    # IDs of personas that this persona can call as sub-agents (for chat UI)
+    callable_persona_ids: list[int]
+
     @classmethod
     def from_model(cls, persona: Persona) -> "MinimalPersonaSnapshot":
         return MinimalPersonaSnapshot(
@@ -158,6 +161,7 @@ class MinimalPersonaSnapshot(BaseModel):
                 if persona.user
                 else None
             ),
+            callable_persona_ids=[p.id for p in persona.callable_personas],
         )
 
 

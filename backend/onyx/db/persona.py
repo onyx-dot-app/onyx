@@ -417,6 +417,7 @@ def get_minimal_persona_snapshots_for_user(
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
+        selectinload(Persona.callable_personas),
     )
     results = db_session.scalars(stmt).all()
     return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
@@ -535,6 +536,7 @@ def get_minimal_persona_snapshots_paginated(
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
+        selectinload(Persona.callable_personas),
     )
 
     results = db_session.scalars(stmt).all()
@@ -967,7 +969,7 @@ def upsert_persona(
 
         if callable_persona_ids is not None:
             existing_persona.callable_personas.clear()
-            existing_persona.callable_personas = callable_personas or []
+            existing_persona.callable_personas = list(callable_personas) if callable_personas else []
 
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
