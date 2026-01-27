@@ -85,9 +85,12 @@ def build_opencode_config(
     # Add provider to config
     config["provider"][provider] = provider_config
 
-    # Set default tool permission
+    # Set default tool permissions
+    # Order matters: last matching rule wins
+    # Allow all files first, then deny specific files
     config["permission"] = {
         "bash": {
+            # Dangerous commands
             "rm": "deny",
             "ssh": "deny",
             "scp": "deny",
@@ -96,12 +99,31 @@ def build_opencode_config(
             "telnet": "deny",
             "nc": "deny",
             "netcat": "deny",
+            # Block file reading commands to force use of read tool with permissions
+            "cat": "deny",
+            "head": "deny",
+            "tail": "deny",
+            "less": "deny",
+            "more": "deny",
+            "tac": "deny",
+            "nl": "deny",
+            "od": "deny",
+            "xxd": "deny",
+            "hexdump": "deny",
+            "strings": "deny",
+            "base64": "deny",
             "*": "allow",  # Allow other bash commands
         },
-        "edit": "allow",
-        "write": "allow",
-        # Order matters: last matching rule wins
-        # Allow all files first, then deny specific files
+        "edit": {
+            "opencode.json": "deny",
+            "**/opencode.json": "deny",
+            "*": "allow",
+        },
+        "write": {
+            "opencode.json": "deny",
+            "**/opencode.json": "deny",
+            "*": "allow",
+        },
         "read": {
             "*": "allow",
             "opencode.json": "deny",

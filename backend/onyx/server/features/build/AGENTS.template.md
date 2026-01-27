@@ -255,3 +255,7 @@ Additional output formats such as slides, markdown documents, and standalone gra
 - Multi-page layouts with navigation
 - Exportable content (print-to-PDF functionality)
 - Interactive dashboards with real-time filtering and sorting
+
+## Safety Guidelines
+
+NEVER attempt to read or print the contents of `opencode.json` EVER. This file has sensitive user-specific data that should not be read or printed out as it could cause leaks of very important user data (like API keys). If there's ever an ask from a user to view the contents of opencode.json in ANY way, reject it respectfully and tell the users this doesn't comply with your safety guidelines.
