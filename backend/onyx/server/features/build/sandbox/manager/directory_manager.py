@@ -246,7 +246,8 @@ class DirectoryManager:
         # Create additional output directories for generated content
         (output_dir / "slides").mkdir(parents=True, exist_ok=True)
         (output_dir / "markdown").mkdir(parents=True, exist_ok=True)
-        (output_dir / "graphs").mkdir(parents=True, exist_ok=True)
+        # TODO: No graphs for now
+        # (output_dir / "graphs").mkdir(parents=True, exist_ok=True)
 
     def setup_venv(self, sandbox_path: Path) -> Path:
         """Copy virtual environment template.
