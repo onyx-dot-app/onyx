@@ -33,6 +33,7 @@ import {
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/build/components/TypewriterText";
 
 // ============================================================================
@@ -57,6 +58,7 @@ function BuildSessionButton({
   const [renaming, setRenaming] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
   const prevTitleRef = useRef(historyItem.title);
   const [shouldAnimate, setShouldAnimate] = useState(false);
@@ -77,9 +79,14 @@ function BuildSessionButton({
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
-      await onDelete();
-      setIsDeleteModalOpen(false);
-      setPopoverOpen(false);
+      setIsDeleting(true);
+      try {
+        await onDelete();
+        setIsDeleteModalOpen(false);
+        setPopoverOpen(false);
+      } finally {
+        setIsDeleting(false);
+      }
     },
     [onDelete]
   );
@@ -170,15 +177,22 @@ function BuildSessionButton({
         <ConfirmationModalLayout
           title="Delete Build"
           icon={SvgTrash}
-          onClose={() => setIsDeleteModalOpen(false)}
+          onClose={isDeleting ? undefined : () => setIsDeleteModalOpen(false)}
+          hideCancel={isDeleting}
           submit={
-            <Button danger onClick={handleConfirmDelete}>
-              Delete
+            <Button
+              danger
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              leftIcon={isDeleting ? SimpleLoader : undefined}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
             </Button>
           }
         >
-          Are you sure you want to delete this build? This action cannot be
-          undone.
+          {isDeleting
+            ? "Terminating sandbox and cleaning up session data..."
+            : "Are you sure you want to delete this build? This action cannot be undone."}
         </ConfirmationModalLayout>
       )}
     </>
