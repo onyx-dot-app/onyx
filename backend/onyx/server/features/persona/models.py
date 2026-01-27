@@ -61,8 +61,7 @@ class PersonaUpsertRequest(BaseModel):
     recency_bias: RecencyBiasSetting
     llm_filter_extraction: bool
     llm_relevance_filter: bool
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
+    model_configuration_id_override: int | None = None
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
     users: list[UUID] = Field(default_factory=list)
@@ -104,8 +103,7 @@ class MinimalPersonaSnapshot(BaseModel):
 
     # only show document sets in the UI that the assistant has access to
     document_sets: list[DocumentSetSummary]
-    llm_model_version_override: str | None
-    llm_model_provider_override: str | None
+    model_configuration_id_override: int | None
 
     uploaded_image_id: str | None
     icon_name: str | None
@@ -141,8 +139,7 @@ class MinimalPersonaSnapshot(BaseModel):
                 DocumentSetSummary.from_model(document_set)
                 for document_set in persona.document_sets
             ],
-            llm_model_version_override=persona.llm_model_version_override,
-            llm_model_provider_override=persona.llm_model_provider_override,
+            model_configuration_id_override=persona.model_configuration_id_override,
             uploaded_image_id=persona.uploaded_image_id,
             icon_name=persona.icon_name,
             is_public=persona.is_public,
@@ -181,8 +178,7 @@ class PersonaSnapshot(BaseModel):
     users: list[MinimalUserSnapshot]
     groups: list[int]
     document_sets: list[DocumentSetSummary]
-    llm_model_provider_override: str | None
-    llm_model_version_override: str | None
+    model_configuration_id_override: int | None
     num_chunks: float | None
 
     # Embedded prompt fields (no longer separate prompt_ids)
@@ -228,8 +224,7 @@ class PersonaSnapshot(BaseModel):
                 DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
-            llm_model_provider_override=persona.llm_model_provider_override,
-            llm_model_version_override=persona.llm_model_version_override,
+            model_configuration_id_override=persona.model_configuration_id_override,
             num_chunks=persona.num_chunks,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
@@ -293,8 +288,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             search_start_date=persona.search_start_date,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
-            llm_model_provider_override=persona.llm_model_provider_override,
-            llm_model_version_override=persona.llm_model_version_override,
+            model_configuration_id_override=persona.model_configuration_id_override,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,

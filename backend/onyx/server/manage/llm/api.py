@@ -54,6 +54,7 @@ from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -441,11 +442,11 @@ def list_llm_provider_basics(
     return accessible_providers
 
 
-def get_valid_model_names_for_persona(
+def get_valid_models_for_persona(
     persona_id: int,
     user: User | None,
     db_session: Session,
-) -> list[str]:
+) -> list[ModelConfigurationView]:
     """Get all valid model names that a user can access for this persona.
 
     Returns a list of model names (e.g., ["gpt-4o", "claude-3-5-sonnet"]) that are
@@ -469,7 +470,12 @@ def get_valid_model_names_for_persona(
             # Collect all model names from this provider
             for model_config in llm_provider_model.model_configurations:
                 if model_config.is_visible:
-                    valid_models.append(model_config.name)
+                    valid_models.append(
+                        ModelConfigurationView.from_model(
+                            model_configuration_model=model_config,
+                            provider_name=llm_provider_model.name,
+                        )
+                    )
 
     return valid_models
 

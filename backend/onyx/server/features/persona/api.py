@@ -18,6 +18,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.llm import fetch_model_configuration_view
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
@@ -48,7 +49,7 @@ from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.manage.llm.api import get_valid_model_names_for_persona
+from onyx.server.manage.llm.api import get_valid_models_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -479,13 +480,21 @@ def get_persona(
     )
 
     # Validate and fix default model if it's no longer valid for this persona's restrictions
-    if persona.llm_model_version_override:
-        valid_models = get_valid_model_names_for_persona(persona_id, user, db_session)
+    if persona.model_configuration_id_override:
+        valid_models = get_valid_models_for_persona(persona_id, user, db_session)
+
+        model_configuration = fetch_model_configuration_view(
+            db_session=db_session,
+            model_configuration_id=persona.model_configuration_id_override,
+        )
 
         # If current default model is not in the valid list, update to first valid or None
-        if persona.llm_model_version_override not in valid_models:
-            persona.llm_model_version_override = (
-                valid_models[0] if valid_models else None
+        if not (
+            model_configuration
+            and model_configuration.id in [m.id for m in valid_models]
+        ):
+            persona.model_configuration_id_override = (
+                valid_models[0].id if valid_models else None
             )
             db_session.commit()
 

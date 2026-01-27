@@ -2831,11 +2831,10 @@ class Persona(Base):
     # globablly via env variables. For flexibility, validity is not currently enforced
     # NOTE: only is applied on the actual response generation - is not used for things like
     # auto-detected time filters, relevance filters, etc.
-    llm_model_provider_override: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )
-    llm_model_version_override: Mapped[str | None] = mapped_column(
-        String, nullable=True
+    model_configuration_id_override: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("model_configuration.id", ondelete="SET NULL"),
+        nullable=True,
     )
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(
         PydanticListType(StarterMessage), nullable=True
