@@ -41,11 +41,9 @@ import { useAssistantController } from "@/app/app/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
-import useQueryClassification from "@/hooks/useQueryClassification";
-import { useDocumentSearch } from "@/app/app/hooks/useDocumentSearch";
+import { useQueryController } from "@/hooks/useQueryController";
 import useAppFocus from "@/hooks/useAppFocus";
 import { SearchResultsPanel } from "@/sections/search/SearchResultsPanel";
-import { useAppMode } from "@/providers/AppModeProvider";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import {
   useChatSessionStore,
@@ -192,32 +190,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     assistantId: selectedAssistant?.id,
   });
 
-  // Unified Search and Chat: Mode and search state
-  const { appMode } = useAppMode();
   const { appBackgroundUrl, hasBackground } = useAppBackground();
-  const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(
-    null
-  );
-  const {
-    queryClassification,
-    classify: classifyQueryType,
-    reset: resetClassification,
-  } = useQueryClassification();
-  const {
-    results: searchResults,
-    executedQueries,
-    llmSelectedDocIds,
-    isLoading: isSearchLoading,
-    error: searchError,
-    search: performSearch,
-    reset: resetSearch,
-  } = useDocumentSearch();
-
-  // Determine if we're showing search results
-  // Don't show search UI while classifying in auto mode - wait for classification result
-  const showSearchResults =
-    (appMode === "search" || queryClassification === "search") &&
-    (searchResults.length > 0 || isSearchLoading || pendingSearchQuery);
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
@@ -410,6 +383,35 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   useSendMessageToParent();
 
+  // Unified query controller - handles classification and search routing
+  const queryController = useQueryController({
+    onChat: useCallback(
+      (message: string) => {
+        onSubmit({
+          message,
+          currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+        });
+        if (showOnboarding) {
+          finishOnboarding();
+        }
+      },
+      [
+        onSubmit,
+        currentMessageFiles,
+        deepResearchEnabled,
+        showOnboarding,
+        finishOnboarding,
+      ]
+    ),
+  });
+
+  // Determine if we're showing search results
+  const showSearchResults =
+    queryController.classification === "search" &&
+    (queryController.searchResults.length > 0 ||
+      queryController.isSearchLoading);
+
   const retrievalEnabled = useMemo(() => {
     if (liveAssistant) {
       return liveAssistant.tools.some(
@@ -430,12 +432,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [currentChatSessionId]);
 
-  // Reset search state when navigating between sessions
-  // Search results are ephemeral and should not persist across navigation
+  // Reset query controller state when navigating between sessions
+  // Search results and classification are ephemeral and should not persist across navigation
   useEffect(() => {
-    resetSearch();
-    setPendingSearchQuery(null);
-  }, [currentChatSessionId, resetSearch]);
+    queryController.reset();
+  }, [currentChatSessionId, queryController.reset]);
 
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
@@ -482,55 +483,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     redirect("/auth/login");
   }
 
-  // Handle classification result in auto mode
-  // When queryClassification changes and we have a pending query, act on it
-  useEffect(() => {
-    if (!queryClassification || !pendingSearchQuery) return;
-    // Only process if we're in auto mode (not in a chat session)
-    if (currentChatSessionId) return;
-
-    if (queryClassification === "search") {
-      // Query classified as search - perform document search
-      performSearch(pendingSearchQuery);
-    } else {
-      // Query classified as chat - submit to chat
-      resetSearch();
-      setPendingSearchQuery(null);
-      onSubmit({
-        message: pendingSearchQuery,
-        currentMessageFiles: currentMessageFiles,
-        deepResearch: deepResearchEnabled,
-      });
-      if (showOnboarding) {
-        finishOnboarding();
-      }
-    }
-  }, [
-    queryClassification,
-    pendingSearchQuery,
-    currentChatSessionId,
-    performSearch,
-    resetSearch,
-    onSubmit,
-    currentMessageFiles,
-    deepResearchEnabled,
-    showOnboarding,
-    finishOnboarding,
-  ]);
-
   const handleChatInputSubmit = useCallback(
     async (message: string) => {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
-      const effectiveMode = currentChatSessionId ? "chat" : appMode;
-
-      // If mode is explicitly set to chat, skip classification
-      if (effectiveMode === "chat") {
-        resetSearch();
-        resetClassification();
+      if (currentChatSessionId) {
+        queryController.reset();
         onSubmit({
           message,
-          currentMessageFiles: currentMessageFiles,
+          currentMessageFiles,
           deepResearch: deepResearchEnabled,
         });
         if (showOnboarding) {
@@ -539,29 +500,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         return;
       }
 
-      // If mode is explicitly set to search, skip classification and go directly to search
-      if (effectiveMode === "search") {
-        setPendingSearchQuery(message);
-        await performSearch(message);
-        return;
-      }
-
-      // Auto mode: classify the query first, then useEffect handles the result
-      setPendingSearchQuery(message);
-      await classifyQueryType(message);
+      // For new sessions, let the query controller handle routing
+      await queryController.submit(message);
     },
     [
       currentChatSessionId,
-      appMode,
+      queryController,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
       showOnboarding,
       finishOnboarding,
-      classifyQueryType,
-      performSearch,
-      resetSearch,
-      resetClassification,
     ]
   );
 
@@ -667,6 +616,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, [currentChatSessionId, selectedAssistant?.id, liveAssistant?.id]);
 
+  console.log({ classification: queryController.classification });
+
   // handle error case where no assistants are available
   // Only show this after agents have loaded to prevent flash during initial load
   if (noAssistants && !isLoadingAgents) {
@@ -759,58 +710,59 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <div className="absolute inset-0 bg-background/80 pointer-events-none" />
               )}
 
-              {/* ProjectUI */}
-              {appFocus.isProject() && (
-                <ProjectContextPanel
-                  projectTokenCount={projectContextTokenCount}
-                  availableContextTokens={availableContextTokens}
-                  setPresentingDocument={setPresentingDocument}
-                />
-              )}
-
-              {/* ChatUI */}
-              {appFocus.isApp() && (
-                <ChatScrollContainer
-                  ref={scrollContainerRef}
-                  sessionId={currentChatSessionId!}
-                  anchorSelector={anchorSelector}
-                  autoScroll={autoScrollEnabled}
-                  isStreaming={isStreaming}
-                  onScrollButtonVisibilityChange={setShowScrollButton}
-                  disableFadeOverlay={hasBackground}
-                >
-                  {showScrollButton && (
-                    <div className="absolute bottom-4">
-                      <IconButton
-                        icon={SvgChevronDown}
-                        onClick={handleScrollToBottom}
-                        secondary
-                        aria-label="Scroll to bottom"
-                      />
-                    </div>
+              {/* Upper Block */}
+              {queryController.classification !== "search" && (
+                <Section dbg>
+                  {/* ProjectUI */}
+                  {appFocus.isProject() && (
+                    <ProjectContextPanel
+                      projectTokenCount={projectContextTokenCount}
+                      availableContextTokens={availableContextTokens}
+                      setPresentingDocument={setPresentingDocument}
+                    />
                   )}
 
-                  <MessageList
-                    liveAssistant={liveAssistant!}
-                    llmManager={llmManager}
-                    deepResearchEnabled={deepResearchEnabled}
-                    currentMessageFiles={currentMessageFiles}
-                    setPresentingDocument={setPresentingDocument}
-                    onSubmit={onSubmit}
-                    onMessageSelection={onMessageSelection}
-                    stopGenerating={stopGenerating}
-                    onResubmit={handleResubmitLastMessage}
-                    anchorNodeId={anchorNodeId}
-                    disableBlur={!hasBackground}
-                  />
-                </ChatScrollContainer>
+                  {/* ChatUI */}
+                  {appFocus.isApp() && (
+                    <ChatScrollContainer
+                      ref={scrollContainerRef}
+                      sessionId={currentChatSessionId!}
+                      anchorSelector={anchorSelector}
+                      autoScroll={autoScrollEnabled}
+                      isStreaming={isStreaming}
+                      onScrollButtonVisibilityChange={setShowScrollButton}
+                      disableFadeOverlay={hasBackground}
+                    >
+                      {showScrollButton && (
+                        <div className="absolute bottom-4">
+                          <IconButton
+                            icon={SvgChevronDown}
+                            onClick={handleScrollToBottom}
+                            secondary
+                            aria-label="Scroll to bottom"
+                          />
+                        </div>
+                      )}
+
+                      <MessageList
+                        liveAssistant={liveAssistant!}
+                        llmManager={llmManager}
+                        deepResearchEnabled={deepResearchEnabled}
+                        currentMessageFiles={currentMessageFiles}
+                        setPresentingDocument={setPresentingDocument}
+                        onSubmit={onSubmit}
+                        onMessageSelection={onMessageSelection}
+                        stopGenerating={stopGenerating}
+                        onResubmit={handleResubmitLastMessage}
+                        anchorNodeId={anchorNodeId}
+                        disableBlur={!hasBackground}
+                      />
+                    </ChatScrollContainer>
+                  )}
+                </Section>
               )}
 
-              {/* Spacer during classification to keep input bar centered */}
-              {appFocus.isNewSession() && !queryClassification && (
-                <div className="w-full flex-1 dbg-red" />
-              )}
-
+              {/* ChatInputBar - centrally laid out, always */}
               <div className="w-[min(50rem,100%)] pointer-events-auto py-1">
                 <Section gap={0.5}>
                   {(showOnboarding ||
@@ -826,14 +778,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       />
                     )}
 
-                  {appFocus.isNewSession() && !queryClassification && (
-                    <Section height="fit">
-                      <WelcomeMessage
-                        agent={liveAssistant}
-                        isDefaultAgent={isDefaultAgent}
-                      />
-                    </Section>
-                  )}
+                  {appFocus.isNewSession() &&
+                    queryController.classification === null && (
+                      <Section height="fit">
+                        <WelcomeMessage
+                          agent={liveAssistant}
+                          isDefaultAgent={isDefaultAgent}
+                        />
+                      </Section>
+                    )}
                   <ChatInputBar
                     ref={chatInputBarRef}
                     deepResearchEnabled={deepResearchEnabled}
@@ -871,41 +824,41 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </Section>
               </div>
 
-              {/* Search Results Panel - shown below input bar */}
-              {appFocus.isNewSession() && showSearchResults && (
-                <div className="w-full flex-1 overflow-auto dbg-red">
-                  <SearchResultsPanel
-                    query={pendingSearchQuery || ""}
-                    executedQueries={executedQueries}
-                    results={searchResults}
-                    llmSelectedDocIds={llmSelectedDocIds}
-                    isLoading={isSearchLoading}
-                    error={searchError}
-                    onDocumentClick={handleSearchDocumentClick}
-                  />
-                </div>
-              )}
+              {/* Lower Block */}
+              {queryController.classification !== "chat" && (
+                <Section dbg>
+                  {/* SearchUI */}
+                  {appFocus.isNewSession() && showSearchResults && (
+                    <div className="w-full flex-1 overflow-auto">
+                      <SearchResultsPanel
+                        query={queryController.query || ""}
+                        executedQueries={queryController.executedQueries}
+                        results={queryController.searchResults}
+                        llmSelectedDocIds={queryController.llmSelectedDocIds}
+                        isLoading={queryController.isSearchLoading}
+                        error={queryController.searchError}
+                        onDocumentClick={handleSearchDocumentClick}
+                      />
+                    </div>
+                  )}
 
-              {/* Spacer below input bar during classification */}
-              {appFocus.isNewSession() && !queryClassification && (
-                <div className="w-full flex-1 dbg-red" />
+                  {/* Agent-Suggestions */}
+                  {appFocus.isNewSession() &&
+                    (liveAssistant?.starter_messages?.length ?? 0) > 0 && (
+                      <div className="w-[min(50rem,100%)]">
+                        <Section>
+                          {liveAssistant?.starter_messages &&
+                            liveAssistant.starter_messages.length > 0 &&
+                            messageHistory.length === 0 && (
+                              <div className="max-w-[50rem] w-full">
+                                <Suggestions onSubmit={onSubmit} />
+                              </div>
+                            )}
+                        </Section>
+                      </div>
+                    )}
+                </Section>
               )}
-
-              {/* Suggestions - only show when not in search mode with results */}
-              {appFocus.isNewSession() &&
-                (liveAssistant?.starter_messages?.length ?? 0) > 0 && (
-                  <div className="w-[min(50rem,100%)] dbg-red">
-                    <Section>
-                      {liveAssistant?.starter_messages &&
-                        liveAssistant.starter_messages.length > 0 &&
-                        messageHistory.length === 0 && (
-                          <div className="max-w-[50rem] w-full">
-                            <Suggestions onSubmit={onSubmit} />
-                          </div>
-                        )}
-                    </Section>
-                  </div>
-                )}
             </div>
           )}
         </Dropzone>
