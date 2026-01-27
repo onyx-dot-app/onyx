@@ -102,6 +102,37 @@ def build_user_context(user_name: str | None, user_role: str | None) -> str:
     return f"You are assisting **{user_name}** with their work."
 
 
+# Content for the org_info section when demo data is enabled
+ORG_INFO_SECTION_CONTENT = """## Organization Info
+
+The `org_info/` directory contains information about the organization and user context:
+
+- `AGENTS.md`: Description of available organizational information files
+- `user_identity_profile.txt`: Contains the current user's name, email, and organization
+  they work for. Use this information when personalizing outputs or when the user asks
+  about their identity.
+- `organization_structure.json`: Contains a JSON representation of the organization's
+  groups, managers, and their direct reports. Use this to understand reporting
+  relationships and team structures."""
+
+
+def build_org_info_section(include_org_info: bool) -> str:
+    """Build the organization info section for AGENTS.md.
+
+    Only includes the org_info section when demo data is enabled,
+    since the org_info/ directory is only set up in that case.
+
+    Args:
+        include_org_info: Whether to include the org_info section
+
+    Returns:
+        Formatted org info section string, or empty string if not included
+    """
+    if include_org_info:
+        return ORG_INFO_SECTION_CONTENT
+    return ""
+
+
 def extract_skill_description(skill_md_path: Path) -> str:
     """Extract a brief description from a SKILL.md file.
 
@@ -313,6 +344,7 @@ def generate_agent_instructions(
     user_name: str | None = None,
     user_role: str | None = None,
     use_demo_data: bool = False,
+    include_org_info: bool = False,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
 
@@ -327,6 +359,7 @@ def generate_agent_instructions(
         user_name: User's name for personalization
         user_role: User's role/title for personalization
         use_demo_data: If True, exclude user context from AGENTS.md
+        include_org_info: Whether to include the org_info section (demo data mode)
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -352,6 +385,9 @@ def generate_agent_instructions(
     # Build available skills section
     available_skills_section = build_skills_section(skills_path)
 
+    # Build org info section (only included when demo data is enabled)
+    org_info_section = build_org_info_section(include_org_info)
+
     # Replace placeholders
     content = template_content
     content = content.replace("{{USER_CONTEXT}}", user_context)
@@ -362,6 +398,7 @@ def generate_agent_instructions(
     )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
+    content = content.replace("{{ORG_INFO_SECTION}}", org_info_section)
 
     # Only replace file-related placeholders if files_path is provided.
     # When files_path is None (e.g., Kubernetes), leave placeholders intact

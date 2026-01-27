@@ -377,6 +377,7 @@ class LocalSandboxManager(SandboxManager):
                 user_name=user_name,
                 user_role=user_role,
                 use_demo_data=use_demo_data,
+                include_org_info=use_demo_data,
             )
             logger.debug("Agent instructions ready")
 

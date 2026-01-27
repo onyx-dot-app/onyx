@@ -272,6 +272,7 @@ class DirectoryManager:
         user_name: str | None = None,
         user_role: str | None = None,
         use_demo_data: bool = False,
+        include_org_info: bool = False,
     ) -> None:
         """Generate AGENTS.md with dynamic configuration.
 
@@ -288,6 +289,7 @@ class DirectoryManager:
             user_name: User's name for personalization
             user_role: User's role/title for personalization
             use_demo_data: If True, exclude user context from AGENTS.md
+            include_org_info: Whether to include the org_info section (demo data mode)
         """
         agent_md_path = sandbox_path / "AGENTS.md"
         if agent_md_path.exists():
@@ -308,6 +310,7 @@ class DirectoryManager:
             user_name=user_name,
             user_role=user_role,
             use_demo_data=use_demo_data,
+            include_org_info=include_org_info,
         )
 
         # Write the generated content

@@ -56,13 +56,7 @@ You currently have Python 3.11.13 and Node v22.21.1.
 
 If you need additional packages, install them with `pip install <package>` (or `.venv/bin/pip install <package>` if the venv isn't active). For javascript packages, use `npm install <package>` from within the `outputs/web` directory.
 
-## Organization Info
-
-The `org_info/` directory contains information about the organization and user context:
-
-- `AGENTS.md`: Description of available organizational information files
-- `user_identity_profile.txt`: Contains the current user's name, email, and organization they work for. Use this information when personalizing outputs or when the user asks about their identity.
-- `organization_structure.json`: Contains a JSON representation of the organization's groups, managers, and their direct reports. Use this to understand reporting relationships and team structures.
+{{ORG_INFO_SECTION}}
 
 ## Available Skills
 
