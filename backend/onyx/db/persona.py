@@ -895,7 +895,7 @@ def upsert_persona(
 
     # Fetch and attach hierarchy_nodes by IDs
     hierarchy_nodes = None
-    if hierarchy_node_ids is not None:
+    if hierarchy_node_ids:
         hierarchy_nodes = (
             db_session.query(HierarchyNode)
             .filter(HierarchyNode.id.in_(hierarchy_node_ids))
