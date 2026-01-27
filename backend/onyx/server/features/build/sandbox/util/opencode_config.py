@@ -100,11 +100,6 @@ def build_opencode_config(
             "nc": "deny",
             "netcat": "deny",
             # Block file reading commands to force use of read tool with permissions
-            "cat": "deny",
-            "head": "deny",
-            "tail": "deny",
-            "less": "deny",
-            "more": "deny",
             "tac": "deny",
             "nl": "deny",
             "od": "deny",
