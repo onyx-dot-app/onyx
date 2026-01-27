@@ -1,6 +1,7 @@
 import os
 import traceback
 from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -115,6 +116,8 @@ class LitellmLLM(LLM):
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
+        self._env_variables: dict[str, str] = {}
+
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
 
@@ -139,9 +142,9 @@ class LitellmLLM(LLM):
                 # If there are any empty or null values,
                 # they MUST NOT be set in the env
                 if v is not None and v.strip():
-                    os.environ[k] = v
+                    self._env_variables[k] = v
                 else:
-                    os.environ.pop(k, None)
+                    self._env_variables.pop(k, None)
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
@@ -153,7 +156,7 @@ class LitellmLLM(LLM):
 
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
-            os.environ["OLLAMA_API_BASE"] = api_base
+            self._env_variables["OLLAMA_API_BASE"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:
@@ -385,24 +388,25 @@ class LitellmLLM(LLM):
         try:
             # NOTE: must pass in None instead of empty strings
             # otherwise litellm can have some issues with bedrock
-            response = litellm.completion(
-                mock_response=MOCK_LLM_RESPONSE,
-                model=model,
-                api_key=self._api_key or None,
-                base_url=self._api_base or None,
-                api_version=self._api_version or None,
-                custom_llm_provider=self._custom_llm_provider or None,
-                messages=_prompt_to_dicts(prompt),
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=stream,
-                temperature=temperature,
-                timeout=timeout_override or self._timeout,
-                max_tokens=max_tokens,
-                **optional_kwargs,
-                **passthrough_kwargs,
-            )
-            return response
+            with temporary_env(self._env_variables):
+                response = litellm.completion(
+                    mock_response=MOCK_LLM_RESPONSE,
+                    model=model,
+                    api_key=self._api_key or None,
+                    base_url=self._api_base or None,
+                    api_version=self._api_version or None,
+                    custom_llm_provider=self._custom_llm_provider or None,
+                    messages=_prompt_to_dicts(prompt),
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=stream,
+                    temperature=temperature,
+                    timeout=timeout_override or self._timeout,
+                    max_tokens=max_tokens,
+                    **optional_kwargs,
+                    **passthrough_kwargs,
+                )
+                return response
         except Exception as e:
             self._record_error(prompt, e)
             # for break pointing
@@ -505,3 +509,35 @@ class LitellmLLM(LLM):
                 self._track_llm_cost(model_response.usage)
 
             yield model_response
+
+
+@contextmanager
+def temporary_env(env_variables: dict[str, str]) -> Iterator[None]:
+    """
+    Temporarily sets the environment variables to the given values.
+
+    Then cleans up to the original values.
+    """
+    old: dict[str, str] = {}
+    missing = set()
+
+    for k in env_variables:
+        if k in os.environ:
+            old[k] = os.environ[k]
+        else:
+            missing.add(k)
+
+    try:
+        for k, v in env_variables.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = str(v)
+        yield
+    finally:
+        # Restore original state
+        for k in env_variables:
+            if k in missing:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = old[k]
