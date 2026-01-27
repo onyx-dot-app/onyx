@@ -1,7 +1,7 @@
 """hierarchy_nodes_v1
 
 Revision ID: 81c22b1e2e78
-Revises: 41fa44bef321
+Revises: 2020d417ec84
 Create Date: 2026-01-13 18:10:01.021451
 
 """
@@ -15,7 +15,7 @@ from onyx.configs.constants import DocumentSource
 
 # revision identifiers, used by Alembic.
 revision = "81c22b1e2e78"
-down_revision = "41fa44bef321"
+down_revision = "2020d417ec84"
 branch_labels = None
 depends_on = None
 
