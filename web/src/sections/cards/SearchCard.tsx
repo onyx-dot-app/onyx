@@ -4,6 +4,7 @@ import { SearchDocWithContent } from "@/lib/search/searchApi";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
+import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -71,21 +72,14 @@ export default function SearchCard({
           <Section alignItems="start" gap={0.25}>
             {/* Metadata */}
             <Section flexDirection="row" justifyContent="start" gap={0.25}>
-              {document.primary_owners &&
-                document.primary_owners.length > 0 && (
-                  <Text figureSmallLabel text03>
-                    {document.primary_owners[0]}
-                  </Text>
-                )}
+              {(document.primary_owners ?? []).map((owner, index) => (
+                <Chip key={index}>{owner}</Chip>
+              ))}
               {document.metadata?.tags &&
                 (Array.isArray(document.metadata.tags)
                   ? document.metadata.tags
                   : [document.metadata.tags]
-                ).map((tag, index) => (
-                  <Text key={index} figureSmallLabel text03>
-                    {tag}
-                  </Text>
-                ))}
+                ).map((tag, index) => <Chip key={index}>{tag}</Chip>)}
               {document.updated_at &&
                 !isNaN(new Date(document.updated_at).getTime()) && (
                   <Text secondaryBody text02>
