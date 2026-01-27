@@ -49,17 +49,16 @@ jobs:
         if: ${{ vars.DISABLE_MYPY_CACHE != 'true' }}
         uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
         with:
-          path: backend/.mypy_cache
+          path: .mypy_cache
           key: mypy-${{ runner.os }}-${{ hashFiles('**/*.py', '**/*.pyi', 'backend/pyproject.toml') }}
           restore-keys: |
             mypy-${{ runner.os }}-
 
       - name: Run MyPy
-        working-directory: ./backend
         env:
           MYPY_FORCE_COLOR: 1
           TERM: xterm-256color
-        run: mypy .
+        run: mypy backend/
 
       - name: Run MyPy (tools/)
         env:
