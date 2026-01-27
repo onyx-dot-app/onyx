@@ -376,7 +376,6 @@ const ChatScrollContainer = React.memo(
     }
   )
 );
-
 ChatScrollContainer.displayName = "ChatScrollContainer";
 
 export default ChatScrollContainer;

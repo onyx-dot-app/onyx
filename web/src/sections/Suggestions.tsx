@@ -3,7 +3,7 @@
 import { OnSubmitProps } from "@/app/app/hooks/useChatController";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useCurrentAgent } from "@/hooks/useAgents";
-import { cn } from "@/lib/utils";
+import { Section } from "@/layouts/general-layouts";
 
 export interface SuggestionsProps {
   onSubmit: (props: OnSubmitProps) => void;
@@ -28,12 +28,12 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   };
 
   return (
-    <div className={cn("flex flex-col w-full p-1 gap-1")}>
+    <Section padding={0.25} gap={0.25}>
       {currentAgent.starter_messages.map(({ message }, index) => (
         <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
           {message}
         </LineItem>
       ))}
-    </div>
+    </Section>
   );
 }

@@ -1,14 +1,16 @@
 "use client";
 
-import React from "react";
 import { SearchDocWithContent } from "@/lib/search/searchApi";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { SearchResultCard, SearchResultCardSkeleton } from "./SearchResultCard";
+import {
+  SearchResultCard,
+  SearchResultCardSkeleton,
+} from "@/sections/search/SearchResultCard";
 import Text from "@/refresh-components/texts/Text";
 import { SvgSearch } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
-export interface SearchResultsPanelProps {
+export interface SearchUIProps {
   /** The search query that was executed */
   query: string;
   /** List of query expansions that were executed */
@@ -25,14 +27,14 @@ export interface SearchResultsPanelProps {
   onDocumentClick: (doc: MinimalOnyxDocument) => void;
 }
 
-const MAX_WIDTH_CLASS = "w-full max-w-4xl";
+const MAX_WIDTH_CLASS = "w-[var(--main-app-width)]";
 
 /**
  * Panel component for displaying search results.
  *
  * Shows a vertical list of search result cards with loading and empty states.
  */
-export function SearchResultsPanel({
+export function SearchUI({
   query,
   executedQueries,
   results,
@@ -40,7 +42,7 @@ export function SearchResultsPanel({
   isLoading,
   error,
   onDocumentClick,
-}: SearchResultsPanelProps) {
+}: SearchUIProps) {
   // Create a set for fast lookup of LLM-selected docs
   const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
 
@@ -142,7 +144,7 @@ function EmptySearchState({ query }: EmptySearchStateProps) {
 /**
  * Skeleton loading state for the entire search panel
  */
-export function SearchResultsPanelSkeleton() {
+export function SearchUISkeleton() {
   return (
     <Section alignItems="center" justifyContent="start" gap={1} padding={1}>
       <div className={MAX_WIDTH_CLASS}>

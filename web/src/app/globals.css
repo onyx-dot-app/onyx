@@ -20,6 +20,11 @@
 @tailwind utilities;
 
 @layer base {
+  /* LAYOUT WIDTHS */
+  :root {
+    --main-app-width: min(50rem, 100%);
+  }
+
   /* BORDER RADII */
   :root {
     --border-radius-02: 0.125rem;

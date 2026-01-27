@@ -27,7 +27,7 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import MessageList from "@/components/chat/MessageList";
+import ChatUI from "@/sections/ChatUI";
 import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -356,7 +356,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   isStreaming={isStreaming}
                   disableFadeOverlay={!isSidePanel}
                 >
-                  <MessageList
+                  <ChatUI
                     liveAssistant={resolvedAssistant}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}

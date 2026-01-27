@@ -43,7 +43,7 @@ import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
 import { useQueryController } from "@/hooks/useQueryController";
 import useAppFocus from "@/hooks/useAppFocus";
-import { SearchResultsPanel } from "@/sections/search/SearchResultsPanel";
+import { SearchUI } from "@/sections/SearchUI";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import {
   useChatSessionStore,
@@ -58,7 +58,7 @@ import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/components/chat/ChatScrollContainer";
-import MessageList from "@/components/chat/MessageList";
+import ChatUI from "@/sections/ChatUI";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
@@ -759,7 +759,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
 
-                      <MessageList
+                      <ChatUI
                         liveAssistant={liveAssistant!}
                         llmManager={llmManager}
                         deepResearchEnabled={deepResearchEnabled}
@@ -799,7 +799,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               )}
 
               {/* ChatInputBar - centrally laid out, always */}
-              <div className="w-[min(50rem,100%)] pointer-events-auto py-1">
+              <div className="w-[var(--main-app-width)] pointer-events-auto py-1">
                 <ChatInputBar
                   ref={chatInputBarRef}
                   deepResearchEnabled={deepResearchEnabled}
@@ -839,7 +839,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <Section justifyContent="start" height="scrollable">
                   {/* SearchUI */}
                   {appFocus.isNewSession() && showSearchResults && (
-                    <SearchResultsPanel
+                    <SearchUI
                       query={queryController.query || ""}
                       executedQueries={queryController.executedQueries}
                       results={queryController.searchResults}
@@ -852,15 +852,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* Agent-Suggestions */}
                   {appFocus.isNewSession() && hasSuggestions && (
-                    <div className="w-[min(50rem,100%)]">
-                      <Section>
-                        {liveAssistant?.starter_messages &&
-                          liveAssistant.starter_messages.length > 0 &&
-                          messageHistory.length === 0 && (
-                            <Suggestions onSubmit={onSubmit} />
-                          )}
-                      </Section>
-                    </div>
+                    <Suggestions onSubmit={onSubmit} />
                   )}
 
                   {/* Project Sessions */}

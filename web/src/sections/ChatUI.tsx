@@ -17,7 +17,7 @@ import {
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
 
-export interface MessageListProps {
+export interface ChatUIProps {
   liveAssistant: MinimalPersonaSnapshot;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
@@ -55,7 +55,7 @@ export interface MessageListProps {
   disableBlur?: boolean;
 }
 
-const MessageList = React.memo(
+const ChatUI = React.memo(
   ({
     liveAssistant,
     llmManager,
@@ -68,7 +68,7 @@ const MessageList = React.memo(
     onResubmit,
     anchorNodeId,
     disableBlur,
-  }: MessageListProps) => {
+  }: ChatUIProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
     const messageTree = useCurrentMessageTree();
@@ -122,7 +122,7 @@ const MessageList = React.memo(
     return (
       <div
         className={cn(
-          "w-[min(50rem,100%)] h-full px-6 rounded-2xl",
+          "w-[var(--main-app-width)] h-full px-6 rounded-2xl",
           !disableBlur && "backdrop-blur-md"
         )}
       >
@@ -235,6 +235,6 @@ const MessageList = React.memo(
     );
   }
 );
-MessageList.displayName = "MessageList";
+ChatUI.displayName = "ChatUI";
 
-export default MessageList;
+export default ChatUI;
