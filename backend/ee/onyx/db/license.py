@@ -1,6 +1,7 @@
 """Database and cache operations for the license table."""
 
 from datetime import datetime
+from typing import NamedTuple
 
 from sqlalchemy import func
 from sqlalchemy import select
@@ -22,6 +23,13 @@ logger = setup_logger()
 
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
+
+
+class SeatAvailabilityResult(NamedTuple):
+    """Result of a seat availability check."""
+
+    available: bool
+    error_message: str | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -286,7 +294,7 @@ def check_seat_availability(
     db_session: Session,
     seats_needed: int = 1,
     tenant_id: str | None = None,
-) -> tuple[bool, str | None]:
+) -> SeatAvailabilityResult:
     """
     Check if there are enough seats available to add users.
 
@@ -296,25 +304,25 @@ def check_seat_availability(
         tenant_id: Tenant ID (for multi-tenant deployments)
 
     Returns:
-        (True, None) if seats are available
-        (False, error_message) if seat limit would be exceeded
-        (True, None) if no license exists (self-hosted without license = unlimited)
+        SeatAvailabilityResult with available=True if seats are available,
+        or available=False with error_message if limit would be exceeded.
+        Returns available=True if no license exists (self-hosted = unlimited).
     """
     metadata = get_license_metadata(db_session, tenant_id)
 
     # No license = no enforcement (self-hosted without license)
     if metadata is None:
-        return (True, None)
+        return SeatAvailabilityResult(available=True)
 
     # Calculate current usage directly from DB (not cache) for accuracy
     current_used = get_used_seats(tenant_id)
     total_seats = metadata.seats
 
     if current_used + seats_needed > total_seats:
-        return (
-            False,
-            f"Seat limit would be exceeded: {current_used} of {total_seats} seats used, "
+        return SeatAvailabilityResult(
+            available=False,
+            error_message=f"Seat limit would be exceeded: {current_used} of {total_seats} seats used, "
             f"cannot add {seats_needed} more user(s).",
         )
 
-    return (True, None)
+    return SeatAvailabilityResult(available=True)

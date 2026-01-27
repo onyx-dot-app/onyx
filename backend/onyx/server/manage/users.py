@@ -402,10 +402,8 @@ def bulk_invite_users(
         result = fetch_ee_implementation_or_noop(
             "onyx.db.license", "check_seat_availability", None
         )(db_session, seats_needed=len(truly_new_emails))
-        if result is not None:
-            available, error_msg = result
-            if not available:
-                raise HTTPException(status_code=402, detail=error_msg)
+        if result is not None and not result.available:
+            raise HTTPException(status_code=402, detail=result.error_message)
 
     if MULTI_TENANT:
         try:
@@ -574,10 +572,8 @@ def activate_user_api(
     result = fetch_ee_implementation_or_noop(
         "onyx.db.license", "check_seat_availability", None
     )(db_session, seats_needed=1)
-    if result is not None:
-        available, error_msg = result
-        if not available:
-            raise HTTPException(status_code=402, detail=error_msg)
+    if result is not None and not result.available:
+        raise HTTPException(status_code=402, detail=result.error_message)
 
     activate_user(user_to_activate, db_session)
 
