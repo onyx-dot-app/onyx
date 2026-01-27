@@ -352,9 +352,7 @@ def test_kubernetes_sandbox_send_message() -> None:
         # Verify health check passes before sending message
         is_healthy = False
         for _ in range(10):
-            is_healthy = manager.health_check(
-                sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START
-            )
+            is_healthy = manager.health_check(sandbox_id)
             if is_healthy:
                 break
             time.sleep(10)
@@ -471,9 +469,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         # Verify health check passes before testing webapp
         is_healthy = False
         for _ in range(10):
-            is_healthy = manager.health_check(
-                sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START
-            )
+            is_healthy = manager.health_check(sandbox_id)
             if is_healthy:
                 break
             time.sleep(10)
@@ -836,9 +832,7 @@ def test_health_check_returns_true_for_running_pod() -> None:
         # Wait for pod to be fully healthy (it may take a few seconds)
         is_healthy = False
         for _ in range(10):
-            is_healthy = manager.health_check(
-                sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
-            )
+            is_healthy = manager.health_check(sandbox_id, timeout=5.0)
             if is_healthy:
                 break
             time.sleep(2)
@@ -877,9 +871,7 @@ def test_health_check_returns_false_for_missing_pod() -> None:
     nonexistent_sandbox_id = uuid4()
 
     # health_check should return False for non-existent pod
-    is_healthy = manager.health_check(
-        nonexistent_sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
-    )
+    is_healthy = manager.health_check(nonexistent_sandbox_id, timeout=5.0)
 
     assert not is_healthy, "health_check() should return False for a non-existent pod"
 
@@ -928,9 +920,7 @@ def test_health_check_returns_false_after_termination() -> None:
     # Wait for pod to be fully healthy
     is_healthy = False
     for _ in range(10):
-        is_healthy = manager.health_check(
-            sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
-        )
+        is_healthy = manager.health_check(sandbox_id, timeout=5.0)
         if is_healthy:
             break
         time.sleep(2)
@@ -944,9 +934,7 @@ def test_health_check_returns_false_after_termination() -> None:
     time.sleep(3)
 
     # health_check should now return False
-    is_healthy_after = manager.health_check(
-        sandbox_id, nextjs_port=SANDBOX_NEXTJS_PORT_START, timeout=5.0
-    )
+    is_healthy_after = manager.health_check(sandbox_id, timeout=5.0)
 
     assert (
         not is_healthy_after
