@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   useSession,
@@ -203,6 +203,20 @@ export default function BuildChatPanel({
   const handleSuggestionSelect = useCallback((text: string) => {
     inputBarRef.current?.setMessage(text);
   }, []);
+
+  // Check if assistant has finished streaming at least one message
+  // Show banner only after first assistant message completes streaming
+  const shouldShowConnectorBanner = useMemo(() => {
+    // Don't show if currently streaming
+    if (isRunning) {
+      return false;
+    }
+    // Check if there's at least one assistant message in the session
+    const hasAssistantMessage = session?.messages?.some(
+      (msg) => msg.type === "assistant"
+    );
+    return hasAssistantMessage ?? false;
+  }, [isRunning, session?.messages]);
 
   const handleSubmit = useCallback(
     async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
@@ -446,8 +460,10 @@ export default function BuildChatPanel({
                   />
                 </div>
               )}
-              {/* Connector banners - always show above input, connector check hides when user has connectors */}
-              <ConnectorBannersRow className="" />
+              {/* Connector banners - show after first assistant message finishes streaming */}
+              {shouldShowConnectorBanner && (
+                <ConnectorBannersRow className="" />
+              )}
               <InputBar
                 ref={inputBarRef}
                 onSubmit={handleSubmit}
