@@ -453,7 +453,7 @@ const MemoizedAppSidebarInner = memo(
         <ChatSearchCommandMenu
           trigger={
             <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
-              Search chats
+              Search Chats
             </SidebarTab>
           }
         />
