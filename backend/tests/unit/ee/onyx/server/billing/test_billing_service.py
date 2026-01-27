@@ -7,6 +7,8 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from .conftest import make_mock_http_client
+from .conftest import make_mock_response
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
@@ -31,16 +33,10 @@ class TestMakeBillingRequest:
 
         mock_base_url.return_value = "https://api.example.com"
         mock_headers.return_value = {"Authorization": "Bearer token"}
+        mock_response = make_mock_response({"success": True})
+        mock_client = make_mock_http_client("post", response=mock_response)
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"success": True}
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
-                return_value=mock_response
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             result = await _make_billing_request(
                 method="POST",
                 path="/test-endpoint",
@@ -48,7 +44,6 @@ class TestMakeBillingRequest:
             )
 
         assert result == {"success": True}
-        mock_client.return_value.__aenter__.return_value.post.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.billing.service._get_headers")
@@ -63,16 +58,10 @@ class TestMakeBillingRequest:
 
         mock_base_url.return_value = "https://api.example.com"
         mock_headers.return_value = {"Authorization": "Bearer token"}
+        mock_response = make_mock_response({"data": "test"})
+        mock_client = make_mock_http_client("get", response=mock_response)
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             result = await _make_billing_request(
                 method="GET",
                 path="/test-endpoint",
@@ -94,18 +83,14 @@ class TestMakeBillingRequest:
 
         mock_base_url.return_value = "https://api.example.com"
         mock_headers.return_value = {}
-
-        mock_response = MagicMock()
+        mock_response = make_mock_response({"detail": "Bad request"})
         mock_response.status_code = 400
-        mock_response.json.return_value = {"detail": "Bad request"}
+        error = httpx.HTTPStatusError(
+            "Error", request=MagicMock(), response=mock_response
+        )
+        mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
-                side_effect=httpx.HTTPStatusError(
-                    "Error", request=MagicMock(), response=mock_response
-                )
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             with pytest.raises(BillingServiceError) as exc_info:
                 await _make_billing_request(
                     method="POST",
@@ -129,12 +114,10 @@ class TestMakeBillingRequest:
 
         mock_base_url.return_value = "https://api.example.com"
         mock_headers.return_value = {}
+        error = httpx.RequestError("Connection failed")
+        mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
-                side_effect=httpx.RequestError("Connection failed")
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             with pytest.raises(BillingServiceError) as exc_info:
                 await _make_billing_request(method="POST", path="/test")
 

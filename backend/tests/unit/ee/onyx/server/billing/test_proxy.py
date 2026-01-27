@@ -1,7 +1,5 @@
 """Tests for the billing proxy endpoints."""
 
-from datetime import datetime
-from datetime import timezone
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -9,30 +7,10 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from .conftest import make_license_payload
+from .conftest import make_mock_http_client
+from .conftest import make_mock_response
 from ee.onyx.server.license.models import LicensePayload
-from ee.onyx.server.license.models import PlanType
-
-
-def _make_license_payload(
-    tenant_id: str = "tenant_123",
-    seats: int = 10,
-    expired: bool = False,
-) -> LicensePayload:
-    """Create a LicensePayload for testing."""
-    now = datetime.now(timezone.utc)
-    if expired:
-        expires_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
-    else:
-        expires_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
-
-    return LicensePayload(
-        version="1.0",
-        tenant_id=tenant_id,
-        issued_at=now,
-        expires_at=expires_at,
-        seats=seats,
-        plan_type=PlanType.MONTHLY,
-    )
 
 
 class TestProxySeatUpdate:
@@ -55,7 +33,7 @@ class TestProxySeatUpdate:
             "message": "Seats updated",
         }
 
-        license_payload = _make_license_payload(tenant_id="tenant_123", seats=10)
+        license_payload = make_license_payload(tenant_id="tenant_123", seats=10)
 
         request = SeatUpdateRequest(new_seat_count=15)
         result = await proxy_seat_update(
@@ -114,16 +92,10 @@ class TestForwardToControlPlane:
         from ee.onyx.server.tenants.proxy import forward_to_control_plane
 
         mock_token.return_value = "jwt_token"
+        mock_response = make_mock_response({"result": "success"})
+        mock_client = make_mock_http_client("post", response=mock_response)
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"result": "success"}
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
-                return_value=mock_response
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             result = await forward_to_control_plane(
                 "POST",
                 "/test-path",
@@ -143,16 +115,10 @@ class TestForwardToControlPlane:
         from ee.onyx.server.tenants.proxy import forward_to_control_plane
 
         mock_token.return_value = "jwt_token"
+        mock_response = make_mock_response({"data": "test"})
+        mock_client = make_mock_http_client("get", response=mock_response)
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"data": "test"}
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                return_value=mock_response
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             result = await forward_to_control_plane(
                 "GET",
                 "/billing-info",
@@ -174,18 +140,14 @@ class TestForwardToControlPlane:
         from ee.onyx.server.tenants.proxy import forward_to_control_plane
 
         mock_token.return_value = "jwt_token"
-
-        mock_response = MagicMock()
+        mock_response = make_mock_response({"detail": "Bad request"})
         mock_response.status_code = 400
-        mock_response.json.return_value = {"detail": "Bad request"}
+        error = httpx.HTTPStatusError(
+            "Error", request=MagicMock(), response=mock_response
+        )
+        mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
-                side_effect=httpx.HTTPStatusError(
-                    "Error", request=MagicMock(), response=mock_response
-                )
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             with pytest.raises(HTTPException) as exc_info:
                 await forward_to_control_plane("POST", "/test")
 
@@ -204,12 +166,10 @@ class TestForwardToControlPlane:
         from ee.onyx.server.tenants.proxy import forward_to_control_plane
 
         mock_token.return_value = "jwt_token"
+        error = httpx.RequestError("Connection failed")
+        mock_client = make_mock_http_client("post", side_effect=error)
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
-                side_effect=httpx.RequestError("Connection failed")
-            )
-
+        with patch("httpx.AsyncClient", mock_client):
             with pytest.raises(HTTPException) as exc_info:
                 await forward_to_control_plane("POST", "/test")
 
@@ -232,7 +192,7 @@ class TestVerifyLicenseAuth:
         """Should return payload for valid license."""
         from ee.onyx.server.tenants.proxy import verify_license_auth
 
-        mock_payload = _make_license_payload()
+        mock_payload = make_license_payload()
         mock_verify.return_value = mock_payload
         mock_is_valid.return_value = True
 
@@ -274,7 +234,7 @@ class TestVerifyLicenseAuth:
 
         from ee.onyx.server.tenants.proxy import verify_license_auth
 
-        mock_payload = _make_license_payload(expired=True)
+        mock_payload = make_license_payload(expired=True)
         mock_verify.return_value = mock_payload
         mock_is_valid.return_value = False
 
@@ -296,7 +256,7 @@ class TestVerifyLicenseAuth:
         """Should accept expired license when allow_expired=True."""
         from ee.onyx.server.tenants.proxy import verify_license_auth
 
-        mock_payload = _make_license_payload(expired=True)
+        mock_payload = make_license_payload(expired=True)
         mock_verify.return_value = mock_payload
         mock_is_valid.return_value = False
 
