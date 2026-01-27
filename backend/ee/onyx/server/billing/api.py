@@ -13,13 +13,17 @@ License claiming is handled separately by /license/claim endpoint (self-hosted o
 
 Migration Note (ENG-3533):
 This /admin/billing/* API replaces the older /tenants/* billing endpoints:
-- /tenants/billing-information          -> /admin/billing/information
-- /tenants/create-customer-portal-session -> /admin/billing/portal-session
-- /tenants/create-subscription-session  -> /admin/billing/checkout-session
+- /tenants/billing-information            -> /admin/billing/billing-information
+- /tenants/create-customer-portal-session -> /admin/billing/create-customer-portal-session
+- /tenants/create-subscription-session    -> /admin/billing/create-checkout-session
+- /tenants/stripe-publishable-key         -> /admin/billing/stripe-publishable-key
 
 See: https://linear.app/onyx-app/issue/ENG-3533/migrate-tenantsbilling-adminbilling
 """
 
+import asyncio
+
+import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -34,6 +38,7 @@ from ee.onyx.server.billing.models import CreateCustomerPortalSessionRequest
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
 from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
+from ee.onyx.server.billing.models import StripePublishableKeyResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
 from ee.onyx.server.billing.service import BillingServiceError
 from ee.onyx.server.billing.service import (
@@ -47,6 +52,8 @@ from ee.onyx.server.billing.service import (
 )
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
 from onyx.auth.users import User
+from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
+from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.utils.logger import setup_logger
@@ -56,6 +63,10 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/admin/billing")
+
+# Cache for Stripe publishable key to avoid hitting S3 on every request
+_stripe_publishable_key_cache: str | None = None
+_stripe_key_lock = asyncio.Lock()
 
 
 def _get_license_data(db_session: Session) -> str | None:
@@ -187,3 +198,67 @@ async def update_seats(
         )
     except BillingServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.get("/stripe-publishable-key")
+async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
+    """Fetch the Stripe publishable key.
+
+    Priority: env var override (for testing) > S3 bucket (production).
+    This endpoint is public (no auth required) since publishable keys are safe to expose.
+    The key is cached in memory to avoid hitting S3 on every request.
+    """
+    global _stripe_publishable_key_cache
+
+    # Fast path: return cached value without lock
+    if _stripe_publishable_key_cache:
+        return StripePublishableKeyResponse(
+            publishable_key=_stripe_publishable_key_cache
+        )
+
+    # Use lock to prevent concurrent S3 requests
+    async with _stripe_key_lock:
+        # Double-check after acquiring lock (another request may have populated cache)
+        if _stripe_publishable_key_cache:
+            return StripePublishableKeyResponse(
+                publishable_key=_stripe_publishable_key_cache
+            )
+
+        # Check for env var override first (for local testing with pk_test_* keys)
+        if STRIPE_PUBLISHABLE_KEY_OVERRIDE:
+            key = STRIPE_PUBLISHABLE_KEY_OVERRIDE.strip()
+            if not key.startswith("pk_"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Invalid Stripe publishable key format",
+                )
+            _stripe_publishable_key_cache = key
+            return StripePublishableKeyResponse(publishable_key=key)
+
+        # Fall back to S3 bucket
+        if not STRIPE_PUBLISHABLE_KEY_URL:
+            raise HTTPException(
+                status_code=500,
+                detail="Stripe publishable key is not configured",
+            )
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(STRIPE_PUBLISHABLE_KEY_URL)
+                response.raise_for_status()
+                key = response.text.strip()
+
+                # Validate key format
+                if not key.startswith("pk_"):
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Invalid Stripe publishable key format",
+                    )
+
+                _stripe_publishable_key_cache = key
+                return StripePublishableKeyResponse(publishable_key=key)
+        except httpx.HTTPError:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to fetch Stripe publishable key",
+            )

@@ -67,3 +67,9 @@ class SeatUpdateResponse(BaseModel):
     current_seats: int
     used_seats: int
     message: str | None = None
+
+
+class StripePublishableKeyResponse(BaseModel):
+    """Response containing the Stripe publishable key."""
+
+    publishable_key: str
