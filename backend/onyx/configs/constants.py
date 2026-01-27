@@ -176,6 +176,7 @@ class DocumentSource(str, Enum):
     OUTLINE = "outline"
     CONFLUENCE = "confluence"
     JIRA = "jira"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"

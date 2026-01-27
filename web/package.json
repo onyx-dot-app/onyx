@@ -106,7 +106,7 @@
   },
   "devDependencies": {
     "@chromatic-com/playwright": "^0.10.2",
-    "@playwright/test": "^1.39.0",
+    "@playwright/test": "^1.58.0",
     "@tailwindcss/typography": "^0.5.19",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",

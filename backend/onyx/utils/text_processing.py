@@ -36,11 +36,13 @@ _INITIAL_FILTER = re.compile(
 # - \x00-\x08: Control characters (except tab \x09)
 # - \x0b-\x0c: Vertical tab and form feed
 # - \x0e-\x1f: More control characters (except newline \x0a, carriage return \x0d)
-# - \ud800-\udfff: Surrogate pairs (invalid when unpaired, causes "surrogates not allowed" errors)
+# - Surrogate pairs (U+D800 to U+DFFF) handled separately in function
 # - \ufdd0-\ufdef: Non-characters
 # - \ufffe-\uffff: Non-characters
+# Build pattern without surrogate range in regex to avoid encoding issues
 _INVALID_UNICODE_CHARS_RE = re.compile(
-    "[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufdd0-\ufdef\ufffe\uffff]"
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f"
+    r"\uFDD0-\uFDEF\uFFFE\uFFFF]"
 )
 
 
@@ -253,7 +255,13 @@ def remove_invalid_unicode_chars(text: str) -> str:
 
     This handles:
     - Control characters (except tab, newline, carriage return)
-    - Unpaired UTF-16 surrogates (e.g. \udc00) that cause 'surrogates not allowed' errors
+    - Unpaired UTF-16 surrogates (U+D800 to U+DFFF) that cause 'surrogates not allowed' errors
     - Unicode non-characters
     """
-    return _INVALID_UNICODE_CHARS_RE.sub("", text)
+    # First remove surrogates manually to avoid regex encoding issues
+    cleaned = "".join(
+        ch for ch in text 
+        if not (0xD800 <= ord(ch) <= 0xDFFF)
+    )
+    # Then remove other invalid characters using regex
+    return _INVALID_UNICODE_CHARS_RE.sub("", cleaned)
