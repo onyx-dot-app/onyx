@@ -150,9 +150,11 @@ def get_application() -> FastAPI:
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
 
-    # Self-hosted billing - available when license system is enabled
-    # Allows self-hosted users to upgrade to enterprise via cloud data plane
-    if not MULTI_TENANT and LICENSE_ENFORCEMENT_ENABLED:
+    # Unified billing API - available when license system is enabled
+    # Works for both self-hosted and cloud deployments
+    # TODO(ENG-3533): Once frontend migrates to /admin/billing/*, this becomes the
+    # primary billing API and /tenants/* billing endpoints can be removed
+    if LICENSE_ENFORCEMENT_ENABLED:
         include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:
