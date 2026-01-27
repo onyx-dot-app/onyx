@@ -20,7 +20,7 @@ import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useChatController } from "@/app/app/hooks/useChatController";
+import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
 import { useAssistantController } from "@/app/app/hooks/useAssistantController";
 import {
