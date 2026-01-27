@@ -503,6 +503,23 @@ class Persona__Tool(Base):
     )
 
 
+class Persona__CallablePersona(Base):
+    """Defines which personas a given persona can call as sub-agents.
+
+    The `caller_persona_id` is the persona that initiates the call,
+    and `callee_persona_id` is the target persona being called.
+    """
+
+    __tablename__ = "persona__callable_persona"
+
+    caller_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    callee_persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
 class StandardAnswer__StandardAnswerCategory(Base):
     __tablename__ = "standard_answer__standard_answer_category"
 
@@ -2870,6 +2887,13 @@ class Persona(Base):
         "Tool",
         secondary=Persona__Tool.__table__,
         back_populates="personas",
+    )
+    # Personas that this persona can call as sub-agents
+    callable_personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__CallablePersona.__table__,
+        primaryjoin="Persona.id == Persona__CallablePersona.caller_persona_id",
+        secondaryjoin="Persona.id == Persona__CallablePersona.callee_persona_id",
     )
     # Owner
     user: Mapped[User | None] = relationship("User", back_populates="personas")

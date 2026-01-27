@@ -128,8 +128,15 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
                 llm_facing_message=f"Maximum delegation depth reached"
             )
 
+        # Extract task from kwargs
+        task: str = kwargs.get("task", "")
+        if not task:
+            raise ToolCallException(
+                message="Missing required 'task' parameter",
+                llm_facing_message="Please provide a task to delegate"
+            )
+
         # Run sub-agent
-        task = "DUMMY TASK"
         result = self._run_sub_agent(
             task=task,
             placement=placement,

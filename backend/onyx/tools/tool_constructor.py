@@ -64,6 +64,16 @@ class CustomToolConfig(BaseModel):
     mcp_headers: dict[str, str] | None = None
 
 
+class AgentToolConfig(BaseModel):
+    """Configuration for agent-as-tool (sub-agent) calls."""
+
+    user_selected_filters: BaseFilters | None = None
+    is_connected_fn: object | None = None  # Callable[[], bool] | None
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     """Get image generation LLM config from the default image generation configuration."""
     from onyx.db.image_generation import get_default_image_generation_config
@@ -99,6 +109,7 @@ def construct_tools(
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
+    agent_tool_config: AgentToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
 ) -> dict[int, list[Tool]]:
@@ -393,6 +404,36 @@ def construct_tools(
         )
 
         tool_dict[search_tool_db_model.id] = [search_tool]
+
+    # Construct AgentTools for each callable persona
+    if persona.callable_personas:
+        # Lazy import to avoid circular dependency
+        from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
+
+        if not agent_tool_config:
+            agent_tool_config = AgentToolConfig()
+
+        for target_persona in persona.callable_personas:
+            # Use negative ID based on target persona ID to avoid collision with real tool IDs
+            synthetic_tool_id = -target_persona.id
+
+            agent_tool = AgentTool(
+                tool_id=synthetic_tool_id,
+                target_persona=target_persona,
+                db_session=db_session,
+                emitter=emitter,
+                user=user,
+                llm=llm,
+                document_index=document_index,
+                user_selected_filters=agent_tool_config.user_selected_filters,
+                is_connected_fn=agent_tool_config.is_connected_fn,  # type: ignore
+            )
+            tool_dict[synthetic_tool_id] = [agent_tool]
+
+            logger.debug(
+                f"Added AgentTool for callable persona '{target_persona.name}' "
+                f"(id={target_persona.id}) to persona '{persona.name}'"
+            )
 
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
