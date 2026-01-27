@@ -1,5 +1,6 @@
 """API endpoints for Build Mode message management."""
 
+from collections.abc import Generator
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
@@ -75,7 +77,6 @@ async def send_message(
     session_id: UUID,
     request: MessageRequest,
     user: User = Depends(current_user),
-    db_session: Session = Depends(get_session),
     _rate_limit_check: None = Depends(check_build_rate_limits),
 ) -> StreamingResponse:
     """
@@ -86,17 +87,36 @@ async def send_message(
 
     Follows the same pattern as /chat/send-message for consistency.
     """
-    # Update sandbox heartbeat - this is the only place we track activity
-    # for determining when a sandbox should be put to sleep
-    sandbox = get_sandbox_by_user_id(db_session, user.id)
-    if sandbox and sandbox.status.is_active():
-        update_sandbox_heartbeat(db_session, sandbox.id)
 
-    session_manager = SessionManager(db_session)
+    def stream_generator() -> Generator[str, None, None]:
+        """Stream generator that manages its own database session.
+
+        This is necessary because StreamingResponse consumes the generator
+        AFTER the endpoint returns, at which point FastAPI's dependency-injected
+        db_session has already been closed. By creating a new session inside
+        the generator, we ensure the session remains open for the entire
+        streaming duration.
+        """
+        # Capture user info needed for streaming (user object may not be available
+        # after the endpoint returns due to dependency cleanup)
+        user_id = user.id
+        message_content = request.content
+
+        with get_session_with_current_tenant() as db_session:
+            # Update sandbox heartbeat - this is the only place we track activity
+            # for determining when a sandbox should be put to sleep
+            sandbox = get_sandbox_by_user_id(db_session, user.id)
+            if sandbox and sandbox.status.is_active():
+                update_sandbox_heartbeat(db_session, sandbox.id)
+
+            session_manager = SessionManager(db_session)
+            yield from session_manager.send_message(
+                session_id, user_id, message_content
+            )
 
     # Stream the CLI agent's response
     return StreamingResponse(
-        session_manager.send_message(session_id, user.id, request.content),
+        stream_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
